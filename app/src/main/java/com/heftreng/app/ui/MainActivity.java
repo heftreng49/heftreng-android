@@ -63,12 +63,12 @@ public class MainActivity extends AppCompatActivity {
         setupActivityResultLaunchers();
         requestNotificationPermission();
 
-        // Kullanıcı zaten giriş yapmışsa direkt ana ekranı göster
+        // Giriş yapmışsa profili göster, yapmamışsa misafir olarak aç
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if (currentUser != null) {
             showHomeScreen(currentUser);
         } else {
-            showSignInScreen();
+            showHomeScreenGuest();
         }
     }
 
@@ -176,7 +176,7 @@ public class MainActivity extends AppCompatActivity {
     private void signOut() {
         mAuth.signOut();
         mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
-            showSignInScreen();
+            showHomeScreenGuest();
             Toast.makeText(this, "Çıkış yapıldı", Toast.LENGTH_SHORT).show();
         });
     }
@@ -193,8 +193,6 @@ public class MainActivity extends AppCompatActivity {
                 String token = task.getResult();
                 Log.d(TAG, "FCM Token: " + token);
                 runOnUiThread(() -> {
-                    // Burada token'ı Firestore/backend'e kaydedebilirsiniz
-                    // Örnek: saveTokenToBackend(token);
                     String preview = token.length() > 40
                         ? token.substring(0, 40) + "…" : token;
                     tvFcmToken.setText("FCM: " + preview);
@@ -223,6 +221,14 @@ public class MainActivity extends AppCompatActivity {
     private void showSignInScreen() {
         layoutSignIn.setVisibility(View.VISIBLE);
         layoutHome.setVisibility(View.GONE);
+    }
+
+    private void showHomeScreenGuest() {
+        layoutSignIn.setVisibility(View.GONE);
+        layoutHome.setVisibility(View.VISIBLE);
+        tvUserName.setText("Misafir");
+        tvUserEmail.setText("");
+        loadFcmToken();
     }
 
     private void showHomeScreen(FirebaseUser user) {
@@ -266,4 +272,5 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, info, Toast.LENGTH_LONG).show();
         }
     }
-}
+    }
+                
