@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Heftreng tema rengi — temadaki --pr değişkenine göre ayarlayın -->
+    <color name="brand_primary">#7C3AED</color>
+    <color name="brand_primary_dark">#5B21B6</color>
+    <color name="notification_color">#7C3AED</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="background">#0D0D0D</color>
+</resources>

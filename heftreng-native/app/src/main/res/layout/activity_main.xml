@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background">
+
+    <!-- ── Giriş Ekranı ─────────────────────────────────────────── -->
+    <LinearLayout
+        android:id="@+id/layoutSignIn"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="32dp"
+        android:visibility="visible">
+
+        <!-- Logo / Uygulama adı -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Heftreng"
+            android:textSize="36sp"
+            android:textStyle="bold"
+            android:textColor="@color/white"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Devam etmek için giriş yapın"
+            android:textSize="15sp"
+            android:textColor="#AAAAAA"
+            android:layout_marginBottom="48dp" />
+
+        <!-- Google ile Giriş Yap butonu -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnGoogleSignIn"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Google ile Giriş Yap"
+            android:textSize="15sp"
+            android:textColor="@color/black"
+            app:backgroundTint="@color/white"
+            app:cornerRadius="12dp"
+            app:icon="@drawable/ic_google"
+            app:iconGravity="textStart"
+            app:iconTint="@null" />
+
+    </LinearLayout>
+
+    <!-- ── Ana Ekran (giriş sonrası) ────────────────────────────── -->
+    <LinearLayout
+        android:id="@+id/layoutHome"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="32dp"
+        android:visibility="gone">
+
+        <!-- Profil fotoğrafı -->
+        <ImageView
+            android:id="@+id/ivUserPhoto"
+            android:layout_width="96dp"
+            android:layout_height="96dp"
+            android:layout_marginBottom="16dp"
+            android:src="@drawable/ic_account_circle"
+            android:scaleType="centerCrop" />
+
+        <!-- Kullanıcı adı -->
+        <TextView
+            android:id="@+id/tvUserName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="@color/white"
+            android:layout_marginBottom="4dp" />
+
+        <!-- E-posta -->
+        <TextView
+            android:id="@+id/tvUserEmail"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="14sp"
+            android:textColor="#AAAAAA"
+            android:layout_marginBottom="24dp" />
+
+        <!-- FCM Token (kısa gösterim) -->
+        <TextView
+            android:id="@+id/tvFcmToken"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="FCM yükleniyor…"
+            android:textSize="12sp"
+            android:textColor="#666666"
+            android:gravity="center"
+            android:layout_marginBottom="40dp" />
+
+        <!-- Çıkış Yap -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSignOut"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="Çıkış Yap"
+            android:textSize="15sp"
+            app:backgroundTint="#2A2A2A"
+            app:strokeColor="#444444"
+            app:strokeWidth="1dp"
+            app:cornerRadius="12dp" />
+
+    </LinearLayout>
+
+</FrameLayout>

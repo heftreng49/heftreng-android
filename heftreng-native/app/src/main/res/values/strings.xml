@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Heftreng</string>
+    <!-- default_web_client_id Google Sign-In için gerekli -->
+    <!-- Bu değer google-services.json'dan otomatik üretilir -->
+    <!-- Manuel girmek gerekirse: Firebase Console > Authentication > Sign-in method > Google > Web client ID -->
+</resources>

@@ -1,0 +1,3 @@
+# Bu dosyayı local.properties olarak kopyala ve sdk.dir'i güncelle
+# sdk.dir=/path/to/your/android/sdk
+# Termux için örnek: sdk.dir=/data/data/com.termux/files/home/android-sdk
