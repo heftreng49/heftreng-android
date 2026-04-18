@@ -63,42 +63,43 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
 
         PostViewHolder(@NonNull View v) {
             super(v);
-            ivAvatar      = v.findViewById(R.id.ivAvatar);
-            ivPostImage   = v.findViewById(R.id.ivPostImage);
-            tvAuthor      = v.findViewById(R.id.tvAuthor);
-            tvTime        = v.findViewById(R.id.tvTime);
-            tvContent     = v.findViewById(R.id.tvContent);
-            tvLikeCount   = v.findViewById(R.id.tvLikeCount);
+            ivAvatar       = v.findViewById(R.id.ivAvatar);
+            ivPostImage    = v.findViewById(R.id.ivPostImage);
+            tvAuthor       = v.findViewById(R.id.tvAuthor);
+            tvTime         = v.findViewById(R.id.tvTime);
+            tvContent      = v.findViewById(R.id.tvContent);
+            tvLikeCount    = v.findViewById(R.id.tvLikeCount);
             tvCommentCount = v.findViewById(R.id.tvCommentCount);
-            btnLike       = v.findViewById(R.id.btnLike);
-            btnComment    = v.findViewById(R.id.btnComment);
+            btnLike        = v.findViewById(R.id.btnLike);
+            btnComment     = v.findViewById(R.id.btnComment);
         }
 
         void bind(FeedPost post) {
-            tvAuthor.setText(post.authorName != null ? post.authorName : "Kullanıcı");
-            tvContent.setText(post.content);
-            tvLikeCount.setText(String.valueOf(post.likeCount));
-            tvCommentCount.setText(String.valueOf(post.commentCount));
+            // Web şeması: name, text, photoURL, likes, cmtCount, ts
+            tvAuthor.setText(post.name != null ? post.name : "Kullanıcı");
+            tvContent.setText(post.text != null ? post.text : "");
+            tvLikeCount.setText(String.valueOf(post.likes));
+            tvCommentCount.setText(String.valueOf(post.cmtCount));
 
             // Zaman
-            if (post.createdAt != null) {
-                long millis = post.createdAt.toDate().getTime();
+            if (post.ts != null) {
+                long millis = post.ts.toDate().getTime();
                 tvTime.setText(DateUtils.getRelativeTimeSpanString(millis,
                     System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS));
             }
 
             // Avatar
-            if (post.authorPhoto != null && !post.authorPhoto.isEmpty()) {
-                Glide.with(itemView).load(post.authorPhoto).circleCrop()
+            if (post.photoURL != null && !post.photoURL.isEmpty()) {
+                Glide.with(itemView).load(post.photoURL).circleCrop()
                     .placeholder(R.drawable.ic_account_circle).into(ivAvatar);
             } else {
                 ivAvatar.setImageResource(R.drawable.ic_account_circle);
             }
 
             // Post resmi
-            if (post.imageUrl != null && !post.imageUrl.isEmpty()) {
+            if (post.imgUrl != null && !post.imgUrl.isEmpty()) {
                 ivPostImage.setVisibility(View.VISIBLE);
-                Glide.with(itemView).load(post.imageUrl)
+                Glide.with(itemView).load(post.imgUrl)
                     .placeholder(R.drawable.ic_account_circle).into(ivPostImage);
             } else {
                 ivPostImage.setVisibility(View.GONE);
@@ -112,30 +113,28 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
 
             btnLike.setOnClickListener(v -> {
                 if (currentUser == null) return;
-                String uid = currentUser.getUid();
-                boolean isLiked = post.likedBy != null && post.likedBy.contains(uid);
+                String myUid = currentUser.getUid();
+                boolean isLiked = post.likedBy != null && post.likedBy.contains(myUid);
                 if (isLiked) {
                     db.collection("feed").document(post.id).update(
-                        "likedBy", FieldValue.arrayRemove(uid),
-                        "likeCount", Math.max(0, post.likeCount - 1));
-                    post.likeCount = Math.max(0, post.likeCount - 1);
-                    if (post.likedBy != null) post.likedBy.remove(uid);
+                        "likedBy", FieldValue.arrayRemove(myUid),
+                        "likes", Math.max(0, post.likes - 1));
+                    post.likes = Math.max(0, post.likes - 1);
+                    if (post.likedBy != null) post.likedBy.remove(myUid);
                 } else {
                     db.collection("feed").document(post.id).update(
-                        "likedBy", FieldValue.arrayUnion(uid),
-                        "likeCount", post.likeCount + 1);
-                    post.likeCount++;
-                    if (post.likedBy != null) post.likedBy.add(uid);
+                        "likedBy", FieldValue.arrayUnion(myUid),
+                        "likes", post.likes + 1);
+                    post.likes++;
+                    if (post.likedBy != null) post.likedBy.add(myUid);
                 }
                 notifyItemChanged(getAdapterPosition());
             });
 
-            // Yorum
             btnComment.setOnClickListener(v -> listener.onComment(post));
 
-            // Yazar profili
             ivAvatar.setOnClickListener(v -> {
-                if (post.authorId != null) listener.onAuthorClick(post.authorId);
+                if (post.uid != null) listener.onAuthorClick(post.uid);
             });
         }
     }
