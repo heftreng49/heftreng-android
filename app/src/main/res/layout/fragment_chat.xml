@@ -121,7 +121,7 @@
             android:layout_weight="1"
             android:layout_marginHorizontal="8dp"
             android:hint="Mesaj yaz..."
-            android:textColorHint="#555555"
+            android:hintTextColor="#555"
             android:textColor="@color/white"
             android:background="@drawable/bg_input"
             android:paddingHorizontal="16dp"
