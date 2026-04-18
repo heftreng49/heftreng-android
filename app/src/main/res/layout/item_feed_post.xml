@@ -7,19 +7,131 @@
     android:background="@color/surface"
     android:layout_marginBottom="8dp">
 
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
-        <TextView android:id="@+id/tvAuthor" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="@color/white" android:textStyle="bold" android:textSize="14sp"/>
-        <TextView android:id="@+id/tvTime" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#888" android:textSize="12sp"/>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView android:id="@+id/tvAuthor"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/white"
+            android:textStyle="bold"
+            android:textSize="14sp"/>
+        <TextView android:id="@+id/tvTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#888888"
+            android:textSize="12sp"/>
     </LinearLayout>
 
-    <TextView android:id="@+id/tvContent" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textColor="@color/white" android:textSize="15sp"/>
+    <TextView android:id="@+id/tvContent"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textColor="@color/white"
+        android:textSize="15sp"/>
 
-    <ImageView android:id="@+id/ivPostImage" android:layout_width="match_parent" android:layout_height="200dp" android:layout_marginTop="8dp" android:scaleType="centerCrop" android:visibility="gone"/>
+    <ImageView android:id="@+id/ivPostImage"
+        android:layout_width="match_parent"
+        android:layout_height="200dp"
+        android:layout_marginTop="8dp"
+        android:scaleType="centerCrop"
+        android:visibility="gone"/>
 
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
-        <ImageButton android:id="@+id/btnLike" android:layout_width="36dp" android:layout_height="36dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_heart_outline"/>
-        <TextView android:id="@+id/tvLikeCount" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textColor="#AAA" android:textSize="13sp" android:layout_marginStart="4dp" android:gravity="center_vertical" android:layout_height="36dp"/>
-        <ImageButton android:id="@+id/btnComment" android:layout_width="36dp" android:layout_height="36dp" android:layout_marginStart="16dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_send"/>
-        <TextView android:id="@+id/tvCommentCount" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textColor="#AAA" android:textSize="13sp" android:layout_marginStart="4dp" android:gravity="center_vertical" android:layout_height="36dp"/>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+        <ImageButton android:id="@+id/btnLike"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_heart_outline"/>
+        <TextView android:id="@+id/tvLikeCount"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="0"
+            android:textColor="#AAAAAA"
+            an
+cd /sdcard/Download/heftreng-android
+
+cat > app/src/main/res/layout/item_feed_post.xml << 'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="@color/surface"
+    android:layout_marginBottom="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView android:id="@+id/tvAuthor"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/white"
+            android:textStyle="bold"
+            android:textSize="14sp"/>
+        <TextView android:id="@+id/tvTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#888888"
+            android:textSize="12sp"/>
+    </LinearLayout>
+
+    <TextView android:id="@+id/tvContent"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textColor="@color/white"
+        android:textSize="15sp"/>
+
+    <ImageView android:id="@+id/ivPostImage"
+        android:layout_width="match_parent"
+        android:layout_height="200dp"
+        android:layout_marginTop="8dp"
+        android:scaleType="centerCrop"
+        android:visibility="gone"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+        <ImageButton android:id="@+id/btnLike"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_heart_outline"/>
+        <TextView android:id="@+id/tvLikeCount"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="0"
+            android:textColor="#AAAAAA"
+            android:textSize="13sp"
+            android:gravity="center_vertical"
+            android:layout_marginStart="4dp"/>
+        <ImageButton android:id="@+id/btnComment"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="16dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_send"/>
+        <TextView android:id="@+id/tvCommentCount"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="0"
+            android:textColor="#AAAAAA"
+            android:textSize="13sp"
+            android:gravity="center_vertical"
+            android:layout_marginStart="4dp"/>
     </LinearLayout>
 </LinearLayout>
