@@ -2,102 +2,39 @@ name: Build Heftreng APK & AAB
 
 on:
   push:
-    branches: [ main, master ]
-    tags:
-      - 'v*'
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      # ── 1. Kodu çek ──────────────────────────────────────────────
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # ── 2. Java 17 kur ───────────────────────────────────────────
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
 
-      # ── 3. google-services.json yaz ──────────────────────────────
-      - name: Write google-services.json
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
+      - name: Setup Gradle Wrapper
+        run: |
+          gradle wrapper --gradle-version 8.2
+          chmod +x gradlew
 
-      # ── 4. Keystore dosyasını oluştur (release imzası) ────────────
-      - name: Decode Keystore
-        if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
-        run: echo '${{ secrets.KEYSTORE_BASE64 }}' | base64 -d > app/keystore.jks
-
-      # ── 5. Gradle izinleri ────────────────────────────────────────
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      # ── 6. Debug APK build ────────────────────────────────────────
       - name: Build Debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      # ── 7. Release APK build ─────────────────────────────────────
       - name: Build Release APK
-        if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
-        run: ./gradlew assembleRelease --no-daemon
-        env:
-          KEYSTORE_PATH: keystore.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
 
-      # ── 8. AAB build (Google Play için) ───────────────────────────
-      - name: Build Release AAB
-        if: github.ref_type == 'tag'
-        run: ./gradlew bundleRelease --no-daemon
-        env:
-          KEYSTORE_PATH: keystore.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-
-      # ── 9. Artifact yükle ────────────────────────────────────────
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: Heftreng-Debug-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
+          path: app/build/outputs/apk/debug/*.apk
 
       - name: Upload Release APK
-        if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: Heftreng-Release-APK
-          path: app/build/outputs/apk/release/app-release.apk
-          retention-days: 90
-
-      - name: Upload Release AAB
-        if: github.ref_type == 'tag'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Heftreng-Release-AAB
-          path: app/build/outputs/bundle/release/app-release.aab
-          retention-days: 90
-
-      # ── 10. GitHub Release ────────────────────────────────────────
-      - name: Create GitHub Release
-        if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            app/build/outputs/apk/release/app-release.apk
-            app/build/outputs/bundle/release/app-release.aab
-          generate_release_notes: true
-          draft: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          path: app/build/outputs/apk/release/*.apk
