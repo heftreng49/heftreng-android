@@ -21,11 +21,20 @@ jobs:
           gradle wrapper --gradle-version 8.2
           chmod +x gradlew
 
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ${{ github.workspace }}/app/keystore.jks
+
       - name: Build Debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Build Release APK
         run: ./gradlew assembleRelease --no-daemon --stacktrace
+        env:
+          SIGNING_STORE_FILE: ${{ github.workspace }}/app/keystore.jks
+          SIGNING_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
