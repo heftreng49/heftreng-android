@@ -21,6 +21,7 @@ import com.google.android.material.button.MaterialButton;
 import com.google.firebase.Timestamp;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.heftreng.app.util.StorageHelper;
 import com.heftreng.app.R;
@@ -111,24 +112,25 @@ public class ComposeFragment extends Fragment {
     }
 
     private void savePost(String content, @Nullable String imageUrl) {
+        // Web şemasıyla uyumlu alan adları
         Map<String, Object> post = new HashMap<>();
-        post.put("authorId",    currentUser.getUid());
-        post.put("authorName",  currentUser.getDisplayName());
-        post.put("authorPhoto", currentUser.getPhotoUrl() != null
+        post.put("uid",      currentUser.getUid());
+        post.put("name",     currentUser.getDisplayName());
+        post.put("photoURL", currentUser.getPhotoUrl() != null
             ? currentUser.getPhotoUrl().toString() : "");
-        post.put("content",     content);
-        post.put("imageUrl",    imageUrl);
-        post.put("likeCount",   0);
-        post.put("commentCount", 0);
-        post.put("likedBy",     new ArrayList<>());
-        post.put("createdAt",   Timestamp.now());
-        post.put("type",        "post");
+        post.put("text",     content);
+        post.put("imgUrl",   imageUrl != null ? imageUrl : "");
+        post.put("ytVid",    "");
+        post.put("likes",    0);
+        post.put("saves",    0);
+        post.put("cmtCount", 0);
+        post.put("likedBy",  new ArrayList<>());
+        post.put("ts",       FieldValue.serverTimestamp());
 
         db.collection("feed").add(post)
             .addOnSuccessListener(ref -> {
-                // Kullanıcı post sayısını artır
                 db.collection("users").document(currentUser.getUid())
-                    .update("postCount", com.google.firebase.firestore.FieldValue.increment(1));
+                    .update("postCount", FieldValue.increment(1));
                 Toast.makeText(getContext(), "Paylaşıldı!", Toast.LENGTH_SHORT).show();
                 requireActivity().onBackPressed();
             })
