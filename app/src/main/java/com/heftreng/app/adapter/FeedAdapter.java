@@ -1,5 +1,6 @@
 package com.heftreng.app.adapter;
 
+import android.content.Context;
 import android.text.format.DateUtils;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -31,6 +32,7 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
     private final FirebaseUser currentUser;
     private final FirebaseFirestore db;
     private final OnPostActionListener listener;
+    private final Context context;
 
     public FeedAdapter(List<FeedPost> posts, FirebaseUser currentUser,
                        FirebaseFirestore db, OnPostActionListener listener) {
@@ -38,6 +40,7 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
         this.currentUser = currentUser;
         this.db = db;
         this.listener = listener;
+        this.context = null;
     }
 
     @NonNull
@@ -45,7 +48,7 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
     public PostViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View v = LayoutInflater.from(parent.getContext())
             .inflate(R.layout.item_feed_post, parent, false);
-        return new PostViewHolder(v);
+        return new PostViewHolder(v, parent.getContext());
     }
 
     @Override
@@ -60,9 +63,11 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
         ImageView ivAvatar, ivPostImage;
         TextView tvAuthor, tvTime, tvContent, tvLikeCount, tvCommentCount;
         ImageButton btnLike, btnComment;
+        Context ctx;
 
-        PostViewHolder(@NonNull View v) {
+        PostViewHolder(@NonNull View v, Context context) {
             super(v);
+            this.ctx = context;
             ivAvatar       = v.findViewById(R.id.ivAvatar);
             ivPostImage    = v.findViewById(R.id.ivPostImage);
             tvAuthor       = v.findViewById(R.id.tvAuthor);
@@ -75,33 +80,48 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
         }
 
         void bind(FeedPost post) {
-            // Web şeması: name, text, photoURL, likes, cmtCount, ts
             tvAuthor.setText(post.name != null ? post.name : "Kullanıcı");
             tvContent.setText(post.text != null ? post.text : "");
             tvLikeCount.setText(String.valueOf(post.likes));
             tvCommentCount.setText(String.valueOf(post.cmtCount));
 
-            // Zaman
             if (post.ts != null) {
                 long millis = post.ts.toDate().getTime();
                 tvTime.setText(DateUtils.getRelativeTimeSpanString(millis,
                     System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS));
+            } else {
+                tvTime.setText("");
             }
 
-            // Avatar
-            if (post.photoURL != null && !post.photoURL.isEmpty()) {
-                Glide.with(ivAvatar).load(post.photoURL).circleCrop()
-                    .placeholder(R.drawable.ic_account_circle).into(ivAvatar);
-            } else {
+            // Avatar - context'i onCreateViewHolder'dan alıyoruz
+            try {
+                if (post.photoURL != null && !post.photoURL.isEmpty()) {
+                    Glide.with(ctx)
+                        .load(post.photoURL)
+                        .circleCrop()
+                        .placeholder(R.drawable.ic_account_circle)
+                        .error(R.drawable.ic_account_circle)
+                        .into(ivAvatar);
+                } else {
+                    ivAvatar.setImageResource(R.drawable.ic_account_circle);
+                }
+            } catch (Exception e) {
                 ivAvatar.setImageResource(R.drawable.ic_account_circle);
             }
 
             // Post resmi
-            if (post.imgUrl != null && !post.imgUrl.isEmpty()) {
-                ivPostImage.setVisibility(View.VISIBLE);
-                Glide.with(ivPostImage).load(post.imgUrl)
-                    .placeholder(R.drawable.ic_account_circle).into(ivPostImage);
-            } else {
+            try {
+                if (post.imgUrl != null && !post.imgUrl.isEmpty()) {
+                    ivPostImage.setVisibility(View.VISIBLE);
+                    Glide.with(ctx)
+                        .load(post.imgUrl)
+                        .placeholder(R.drawable.ic_account_circle)
+                        .error(R.drawable.ic_account_circle)
+                        .into(ivPostImage);
+                } else {
+                    ivPostImage.setVisibility(View.GONE);
+                }
+            } catch (Exception e) {
                 ivPostImage.setVisibility(View.GONE);
             }
 
