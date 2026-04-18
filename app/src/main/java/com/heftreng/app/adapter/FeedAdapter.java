@@ -89,8 +89,9 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
             }
 
             // Avatar
+            if (itemView.getContext() == null) return;
             if (post.photoURL != null && !post.photoURL.isEmpty()) {
-                Glide.with(itemView).load(post.photoURL).circleCrop()
+                Glide.with(itemView.getContext()).load(post.photoURL).circleCrop()
                     .placeholder(R.drawable.ic_account_circle).into(ivAvatar);
             } else {
                 ivAvatar.setImageResource(R.drawable.ic_account_circle);
@@ -99,7 +100,7 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
             // Post resmi
             if (post.imgUrl != null && !post.imgUrl.isEmpty()) {
                 ivPostImage.setVisibility(View.VISIBLE);
-                Glide.with(itemView).load(post.imgUrl)
+                Glide.with(itemView.getContext()).load(post.imgUrl)
                     .placeholder(R.drawable.ic_account_circle).into(ivPostImage);
             } else {
                 ivPostImage.setVisibility(View.GONE);
