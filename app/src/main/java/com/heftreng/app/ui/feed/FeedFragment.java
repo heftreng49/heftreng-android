@@ -82,7 +82,7 @@ public class FeedFragment extends Fragment implements FeedAdapter.OnPostActionLi
     private void loadFeed() {
         swipeRefresh.setRefreshing(true);
         db.collection("feed")
-            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .orderBy("ts", Query.Direction.DESCENDING)
             .limit(30)
             .get()
             .addOnSuccessListener(snap -> {
@@ -97,11 +97,9 @@ public class FeedFragment extends Fragment implements FeedAdapter.OnPostActionLi
             })
             .addOnFailureListener(e -> {
                 swipeRefresh.setRefreshing(false);
-                Toast.makeText(getContext(), "Yüklenemedi", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), "Yüklenemedi: " + e.getMessage(), Toast.LENGTH_LONG).show();
             });
     }
-
-    // ── Yorum diyalogu ────────────────────────────────────────────────────
 
     @Override
     public void onComment(FeedPost post) {
@@ -128,20 +126,18 @@ public class FeedFragment extends Fragment implements FeedAdapter.OnPostActionLi
 
     private void submitComment(FeedPost post, String text) {
         Map<String, Object> comment = new HashMap<>();
-        comment.put("postId",      post.id);
-        comment.put("authorId",    currentUser.getUid());
-        comment.put("authorName",  currentUser.getDisplayName());
-        comment.put("authorPhoto", currentUser.getPhotoUrl() != null
+        comment.put("uid",        currentUser.getUid());
+        comment.put("name",       currentUser.getDisplayName());
+        comment.put("photoURL",   currentUser.getPhotoUrl() != null
             ? currentUser.getPhotoUrl().toString() : "");
-        comment.put("content",     text);
-        comment.put("createdAt",   Timestamp.now());
+        comment.put("text",       text);
+        comment.put("ts",         Timestamp.now());
 
-        db.collection("comments").add(comment)
+        db.collection("feed").document(post.id).collection("comments").add(comment)
             .addOnSuccessListener(ref -> {
-                // Yorum sayısını artır
                 db.collection("feed").document(post.id)
-                    .update("commentCount", post.commentCount + 1);
-                post.commentCount++;
+                    .update("cmtCount", com.google.firebase.firestore.FieldValue.increment(1));
+                post.cmtCount++;
                 int idx = posts.indexOf(post);
                 if (idx >= 0) adapter.notifyItemChanged(idx);
                 Toast.makeText(getContext(), "Yorum eklendi", Toast.LENGTH_SHORT).show();
