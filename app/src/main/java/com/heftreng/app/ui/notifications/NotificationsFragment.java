@@ -39,10 +39,6 @@ public class NotificationsFragment extends Fragment {
         layoutEmpty  = view.findViewById(R.id.layoutEmpty);
         swipeRefresh = view.findViewById(R.id.swipeRefresh);
 
-        // btnClearAll opsiyonel — layout'ta yoksa null gelir
-        View btnClearAll = view.findViewById(R.id.btnClearAll);
-        if (btnClearAll != null) btnClearAll.setOnClickListener(v -> clearAll());
-
         adapter = new NotifAdapter(notifs);
         recycler.setLayoutManager(new LinearLayoutManager(getContext()));
         recycler.setAdapter(adapter);
@@ -79,56 +75,7 @@ public class NotificationsFragment extends Fragment {
             });
     }
 
-    private void clearAll() {
-        if (currentUser == null) return;
-        db.collection("users").document(currentUser.getUid())
-            .collection("notifications").get()
-            .addOnSuccessListener(snap -> {
-                WriteBatch batch = db.batch();
-                for (QueryDocumentSnapshot doc : snap) batch.delete(doc.getReference());
-                batch.commit().addOnSuccessListener(v -> {
-                    notifs.clear();
-                    adapter.notifyDataSetChanged();
-                    if (layoutEmpty != null) layoutEmpty.setVisibility(View.VISIBLE);
-                });
-            });
-    }
-
     private void showEmpty() {
         if (layoutEmpty != null) layoutEmpty.setVisibility(View.VISIBLE);
-    }
-
-    // ── İç Adapter ──────────────────────────────────────
-    static class NotifAdapter extends RecyclerView.Adapter<NotifAdapter.VH> {
-        private final List<HeftNotification> list;
-        NotifAdapter(List<HeftNotification> l) { this.list = l; }
-
-        @NonNull @Override
-        public VH onCreateViewHolder(@NonNull ViewGroup p, int t) {
-            return new VH(LayoutInflater.from(p.getContext())
-                .inflate(R.layout.item_notification, p, false));
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull VH h, int pos) {
-            HeftNotification n = list.get(pos);
-            h.tvText.setText(n.text != null ? n.text : "");
-            h.tvTime.setText(n.ts != null
-                ? android.text.format.DateUtils
-                    .getRelativeTimeSpanString(n.ts.toDate().getTime()).toString()
-                : "");
-            h.itemView.setAlpha(Boolean.TRUE.equals(n.read) ? 0.6f : 1f);
-        }
-
-        @Override public int getItemCount() { return list.size(); }
-
-        static class VH extends RecyclerView.ViewHolder {
-            TextView tvText, tvTime;
-            VH(View v) {
-                super(v);
-                tvText = v.findViewById(R.id.tvNotifText);
-                tvTime = v.findViewById(R.id.tvNotifTime);
-            }
-        }
     }
 }
