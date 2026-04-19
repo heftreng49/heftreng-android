@@ -8,4 +8,31 @@
         <item name="android:statusBarColor">@color/background</item>
         <item name="android:navigationBarColor">@color/background</item>
     </style>
+
+    <style name="Widget.Heftreng.TabLayout" parent="Widget.Material3.TabLayout">
+        <item name="tabTextColor">@color/white</item>
+        <item name="tabSelectedTextColor">@color/brand_primary</item>
+        <item name="tabIndicatorColor">@color/brand_primary</item>
+        <item name="tabBackground">@color/background</item>
+    </style>
+
+    <style name="RoundedImage">
+        <item name="android:scaleType">centerCrop</item>
+        <item name="cornerRadius">12dp</item>
+    </style>
+
+    <style name="TopRoundedImage">
+        <item name="android:scaleType">centerCrop</item>
+        <item name="cornerRadius">12dp</item>
+    </style>
+
+    <style name="BubbleReceivedShape">
+        <item name="android:background">@drawable/bg_bubble_received</item>
+        <item name="android:padding">10dp</item>
+    </style>
+
+    <style name="BubbleSentShape">
+        <item name="android:background">@drawable/bg_bubble_sent</item>
+        <item name="android:padding">10dp</item>
+    </style>
 </resources>
