@@ -74,6 +74,7 @@
                 android:layout_height="match_parent"
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
+            </LinearLayout>
         </HorizontalScrollView>
 
     </com.google.android.material.appbar.AppBarLayout>
