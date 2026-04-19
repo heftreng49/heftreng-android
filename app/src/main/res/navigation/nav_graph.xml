@@ -11,31 +11,19 @@
         android:label="Akış" />
 
     <fragment
-        android:id="@+id/exploreFragment"
-        android:name="com.heftreng.app.ui.explore.ExploreFragment"
-        android:label="Keşfet" />
-
-    <fragment
-        android:id="@+id/blogFragment"
-        android:name="com.heftreng.app.ui.blog.BlogFragment"
-        android:label="Blog" />
-
-    <fragment
-        android:id="@+id/blogDetailFragment"
-        android:name="com.heftreng.app.ui.blog.BlogDetailFragment"
-        android:label="Yazı">
-        <argument android:name="postId" app:argType="string" />
-    </fragment>
-
-    <fragment
-        android:id="@+id/notificationsFragment"
-        android:name="com.heftreng.app.ui.notifications.NotificationsFragment"
-        android:label="Bildirimler" />
+        android:id="@+id/kurdiFragment"
+        android:name="com.heftreng.app.ui.kurdi.KurdiFragment"
+        android:label="Kurdî Fêrbibe" />
 
     <fragment
         android:id="@+id/messagesFragment"
         android:name="com.heftreng.app.ui.messages.MessagesFragment"
         android:label="Mesajlar" />
+
+    <fragment
+        android:id="@+id/settingsFragment"
+        android:name="com.heftreng.app.ui.settings.SettingsFragment"
+        android:label="Ayarlar" />
 
     <fragment
         android:id="@+id/profileFragment"

@@ -3,16 +3,13 @@
     <item android:id="@+id/feedFragment"
           android:title="Akış"
           android:icon="@drawable/ic_home"/>
-    <item android:id="@+id/exploreFragment"
-          android:title="Keşfet"
-          android:icon="@drawable/ic_search"/>
-    <item android:id="@+id/blogFragment"
-          android:title="Blog"
-          android:icon="@drawable/ic_blog"/>
-    <item android:id="@+id/notificationsFragment"
-          android:title="Bildirim"
-          android:icon="@drawable/ic_bell"/>
-    <item android:id="@+id/profileFragment"
-          android:title="Profil"
-          android:icon="@drawable/ic_person"/>
+    <item android:id="@+id/kurdiFragment"
+          android:title="Kurdî"
+          android:icon="@drawable/ic_kurdish"/>
+    <item android:id="@+id/messagesFragment"
+          android:title="Mesajlar"
+          android:icon="@drawable/ic_chat"/>
+    <item android:id="@+id/settingsFragment"
+          android:title="Ayarlar"
+          android:icon="@drawable/ic_settings"/>
 </menu>
