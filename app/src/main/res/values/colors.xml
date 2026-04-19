@@ -33,4 +33,25 @@
 
     <!-- Bottom nav -->
     <color name="bottom_nav_selected">#7C3AED</color>
+    <color name="bottom_nav_unselected">#666666</color>
+    <color name="bottom_nav_bg">#1A1A1A</color>
+
+    <!-- Badge -->
+    <color name="badge_bg">#7C3AED</color>
+    <color name="badge_text">#FFFFFF</color>
+
+    <!-- Ek marka rengi -->
+    <color name="brand_primary_light">#A78BFA</color>
+
+    <!-- Ek yüzey katmanı -->
+    <color name="surface4">#383838</color>
+
+    <!-- Ek metin rengi -->
+    <color name="text_muted">#888888</color>
+
+    <!-- Ek durum rengi -->
+    <color name="ok">#10B981</color>
+
+    <!-- Şeffaf -->
+    <color name="transparent">#00000000</color>
 </resources>
