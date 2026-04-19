@@ -105,20 +105,34 @@ public class FeedFragment extends Fragment implements FeedAdapter.OnPostActionLi
             chip.setText(f[1]);
             chip.setCheckable(true);
             chip.setChecked(f[0].equals(activeFilter));
-            chip.setChipBackgroundColorResource(R.color.surface2);
-            chip.setTextColor(getResources().getColor(R.color.white, null));
+            chip.setChipBackgroundColorResource(R.color.surface);
+            chip.setTextColor(getResources().getColor(R.color.text_secondary, null));
             chip.setCheckedIconVisible(false);
             chip.setChipStrokeWidth(1f);
-            chip.setChipStrokeColorResource(R.color.brand_primary);
+            chip.setChipStrokeColorResource(R.color.border_light);
+            chip.setRippleColorResource(R.color.brand_primary);
             chip.setOnClickListener(v -> {
                 activeFilter = f[0];
                 // Tüm chip'leri güncelle
                 for (int i = 0; i < chipGroupFilter.getChildCount(); i++) {
                     View c = chipGroupFilter.getChildAt(i);
-                    if (c instanceof Chip) ((Chip) c).setChecked(c == chip);
+                    if (c instanceof Chip) {
+                        boolean sel = c == chip;
+                        ((Chip) c).setChecked(sel);
+                        ((Chip) c).setTextColor(getResources().getColor(
+                            sel ? R.color.brand_primary_light : R.color.text_secondary, null));
+                        ((Chip) c).setChipStrokeColorResource(
+                            sel ? R.color.brand_primary : R.color.border_light);
+                    }
                 }
                 loadFeed();
             });
+            android.widget.LinearLayout.LayoutParams lp =
+                new android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.setMarginEnd(6);
+            chip.setLayoutParams(lp);
             chipGroupFilter.addView(chip);
         }
     }

@@ -6,7 +6,6 @@
     android:layout_height="match_parent"
     android:background="@color/background">
 
-    <!-- AppBar -->
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/appBarLayout"
         android:layout_width="match_parent"
@@ -16,16 +15,16 @@
         app:liftOnScroll="true"
         app:liftOnScrollTargetViewId="@id/recyclerFeed">
 
+        <!-- Top toolbar -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="54dp"
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:paddingStart="16dp"
             android:paddingEnd="8dp"
             app:layout_scrollFlags="scroll|enterAlways|snap">
 
-            <!-- Logo + başlık -->
             <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -37,35 +36,32 @@
                 android:letterSpacing="-0.02"
                 android:fontFamily="sans-serif-medium"/>
 
-            <!-- Arama butonu -->
             <ImageButton
                 android:id="@+id/btnSearch"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/ic_search"
-                android:tint="@color/white"
+                android:tint="@color/text_secondary"
                 android:contentDescription="Ara"/>
 
-            <!-- Mesajlar -->
             <ImageButton
                 android:id="@+id/btnMessages"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/ic_chat"
-                android:tint="@color/white"
+                android:tint="@color/text_secondary"
                 android:contentDescription="Mesajlar"/>
 
         </LinearLayout>
 
-        <!-- Filtre chipları -->
+        <!-- Filtre tab'ları -->
         <HorizontalScrollView
             android:layout_width="match_parent"
-            android:layout_height="44dp"
+            android:layout_height="42dp"
             android:scrollbars="none"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
+            android:paddingHorizontal="8dp"
             app:layout_scrollFlags="scroll|enterAlways|snap">
 
             <LinearLayout
@@ -74,13 +70,18 @@
                 android:layout_height="match_parent"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                />
+                android:paddingHorizontal="4dp"/>
 
         </HorizontalScrollView>
 
+        <!-- İnce ayırıcı -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0.5dp"
+            android:background="@color/border"/>
+
     </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- Feed listesi -->
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/swipeRefresh"
         android:layout_width="match_parent"
@@ -92,24 +93,22 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipToPadding="false"
-            android:paddingTop="4dp"
-            android:paddingBottom="88dp"/>
+            android:paddingBottom="80dp"/>
 
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-    <!-- FAB: Yeni paylaşım -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabCompose"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_marginEnd="16dp"
-        android:layout_marginBottom="80dp"
+        android:layout_marginBottom="76dp"
         android:src="@drawable/ic_edit"
         android:contentDescription="Yeni Paylaşım"
         app:backgroundTint="@color/brand_primary"
         app:tint="@color/white"
         app:fabSize="normal"
-        app:elevation="6dp"/>
+        app:elevation="8dp"/>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

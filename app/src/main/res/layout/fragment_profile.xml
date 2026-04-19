@@ -24,20 +24,17 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <!-- Header banner alanı -->
+                <!-- Header banner -->
                 <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="140dp"
-                    android:background="#1A0D2E">
+                    android:layout_height="150dp"
+                    android:background="@color/surface2">
 
-                    <!-- Arka plan gradient desen -->
                     <View
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:background="#0D7C3AED"
-                        android:alpha="0.4"/>
+                        android:background="#267C3AED"/>
 
-                    <!-- Ayarlar butonu (sağ üst) -->
                     <ImageButton
                         android:id="@+id/btnSettings"
                         android:layout_width="44dp"
@@ -46,17 +43,15 @@
                         android:layout_margin="8dp"
                         android:background="?attr/selectableItemBackgroundBorderless"
                         android:src="@drawable/ic_settings"
-                        android:tint="@color/white"
-                        android:alpha="0.8"/>
+                        android:tint="@color/white"/>
 
-                    <!-- Avatar (sol alt, banner'a taşıyor) -->
                     <de.hdodenhof.circleimageview.CircleImageView
                         android:id="@+id/ivAvatar"
-                        android:layout_width="84dp"
-                        android:layout_height="84dp"
+                        android:layout_width="88dp"
+                        android:layout_height="88dp"
                         android:layout_gravity="bottom|start"
                         android:layout_marginStart="16dp"
-                        android:layout_marginBottom="-42dp"
+                        android:layout_marginBottom="-44dp"
                         android:src="@drawable/ic_account_circle"
                         app:civ_border_color="@color/background"
                         app:civ_border_width="3dp"/>
@@ -69,9 +64,8 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:paddingHorizontal="16dp"
-                    android:paddingTop="50dp">
+                    android:paddingTop="54dp">
 
-                    <!-- Ad + düzenle/takip -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -88,40 +82,39 @@
                                 android:id="@+id/tvName"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:textColor="@color/white"
+                                android:textColor="@color/text_primary"
                                 android:textSize="20sp"
-                                android:textStyle="bold"/>
+                                android:textStyle="bold"
+                                android:letterSpacing="-0.01"/>
 
                             <TextView
                                 android:id="@+id/tvUsername"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
-                                android:textColor="@color/brand_primary"
+                                android:textColor="@color/brand_primary_light"
                                 android:textSize="13sp"/>
 
                         </LinearLayout>
 
-                        <!-- Fotoğraf değiştir (kendi profili) -->
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnChangePhoto"
                             android:layout_width="wrap_content"
                             android:layout_height="34dp"
                             android:text="Düzenle"
                             android:textSize="12sp"
-                            android:paddingHorizontal="14dp"
+                            android:paddingHorizontal="16dp"
                             style="@style/Widget.Material3.Button.OutlinedButton"
-                            app:strokeColor="@color/brand_primary"
-                            android:textColor="@color/white"/>
+                            app:strokeColor="@color/border_light"
+                            android:textColor="@color/text_primary"/>
 
-                        <!-- Takip et (başkasının profili) -->
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnFollow"
                             android:layout_width="wrap_content"
                             android:layout_height="34dp"
                             android:text="Takip Et"
                             android:textSize="12sp"
-                            android:paddingHorizontal="14dp"
+                            android:paddingHorizontal="16dp"
                             android:visibility="gone"
                             style="@style/Widget.Material3.Button"
                             app:backgroundTint="@color/brand_primary"
@@ -129,12 +122,11 @@
 
                     </LinearLayout>
 
-                    <!-- Bio -->
                     <TextView
                         android:id="@+id/tvBio"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
+                        android:layout_marginTop="12dp"
                         android:textColor="@color/text_secondary"
                         android:textSize="14sp"
                         android:lineSpacingMultiplier="1.4"/>
@@ -142,16 +134,15 @@
                     <!-- İstatistikler -->
                     <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="72dp"
                         android:orientation="horizontal"
                         android:layout_marginTop="16dp"
                         android:background="@color/surface"
-                        android:padding="14dp">
+                        android:padding="0dp">
 
-                        <!-- Paylaşımlar -->
                         <LinearLayout
                             android:layout_width="0dp"
-                            android:layout_height="wrap_content"
+                            android:layout_height="match_parent"
                             android:layout_weight="1"
                             android:orientation="vertical"
                             android:gravity="center">
@@ -160,7 +151,7 @@
                                 android:id="@+id/tvPosts"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:textColor="@color/white"
+                                android:textColor="@color/text_primary"
                                 android:textSize="20sp"
                                 android:textStyle="bold"
                                 android:text="0"/>
@@ -168,21 +159,23 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:textColor="@color/text_hint"
-                                android:textSize="11sp"
-                                android:text="PAYLAŞIM"/>
+                                android:layout_marginTop="2dp"
+                                android:textColor="@color/text_muted"
+                                android:textSize="10sp"
+                                android:text="PAYLAŞIM"
+                                android:letterSpacing="0.05"/>
 
                         </LinearLayout>
 
                         <View
-                            android:layout_width="1dp"
+                            android:layout_width="0.5dp"
                             android:layout_height="32dp"
-                            android:background="#333333"/>
+                            android:layout_gravity="center"
+                            android:background="@color/border_light"/>
 
-                        <!-- Takipçiler -->
                         <LinearLayout
                             android:layout_width="0dp"
-                            android:layout_height="wrap_content"
+                            android:layout_height="match_parent"
                             android:layout_weight="1"
                             android:orientation="vertical"
                             android:gravity="center">
@@ -191,7 +184,7 @@
                                 android:id="@+id/tvFollowers"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:textColor="@color/white"
+                                android:textColor="@color/text_primary"
                                 android:textSize="20sp"
                                 android:textStyle="bold"
                                 android:text="0"/>
@@ -199,21 +192,23 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:textColor="@color/text_hint"
-                                android:textSize="11sp"
-                                android:text="TAKİPÇİ"/>
+                                android:layout_marginTop="2dp"
+                                android:textColor="@color/text_muted"
+                                android:textSize="10sp"
+                                android:text="TAKİPÇİ"
+                                android:letterSpacing="0.05"/>
 
                         </LinearLayout>
 
                         <View
-                            android:layout_width="1dp"
+                            android:layout_width="0.5dp"
                             android:layout_height="32dp"
-                            android:background="#333333"/>
+                            android:layout_gravity="center"
+                            android:background="@color/border_light"/>
 
-                        <!-- Takip -->
                         <LinearLayout
                             android:layout_width="0dp"
-                            android:layout_height="wrap_content"
+                            android:layout_height="match_parent"
                             android:layout_weight="1"
                             android:orientation="vertical"
                             android:gravity="center">
@@ -222,7 +217,7 @@
                                 android:id="@+id/tvFollowing"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:textColor="@color/white"
+                                android:textColor="@color/text_primary"
                                 android:textSize="20sp"
                                 android:textStyle="bold"
                                 android:text="0"/>
@@ -230,66 +225,62 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:textColor="@color/text_hint"
-                                android:textSize="11sp"
-                                android:text="TAKİP"/>
+                                android:layout_marginTop="2dp"
+                                android:textColor="@color/text_muted"
+                                android:textSize="10sp"
+                                android:text="TAKİP"
+                                android:letterSpacing="0.05"/>
 
                         </LinearLayout>
 
                     </LinearLayout>
 
-                    <!-- Eylem butonları (mesaj gönder vb.) -->
+                    <!-- Butonlar -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:layout_marginTop="12dp"
-                        >
+                        android:gravity="center_vertical">
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnMessage"
                             android:layout_width="0dp"
                             android:layout_height="38dp"
                             android:layout_weight="1"
-                            android:text="Mesaj"
+                            android:text="Mesaj Gönder"
                             android:textSize="13sp"
                             android:visibility="gone"
                             style="@style/Widget.Material3.Button.OutlinedButton"
-                            app:strokeColor="#444444"
-                            android:textColor="@color/white"
+                            app:strokeColor="@color/border_light"
+                            android:textColor="@color/text_primary"
                             app:icon="@drawable/ic_chat"
-                            app:iconTint="@color/white"
+                            app:iconTint="@color/text_primary"
                             app:iconSize="16dp"/>
+
+                        <View
+                            android:layout_width="8dp"
+                            android:layout_height="0dp"/>
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnSignOut"
                             android:layout_width="wrap_content"
                             android:layout_height="38dp"
-                            android:text="Çıkış"
+                            android:text="Çıkış Yap"
                             android:textSize="12sp"
-                            android:textColor="#EF4444"
+                            android:textColor="@color/error"
                             style="@style/Widget.Material3.Button.OutlinedButton"
-                            app:strokeColor="#EF4444"/>
+                            app:strokeColor="@color/error"/>
 
                     </LinearLayout>
 
-                    <!-- Son paylaşımlar başlığı -->
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="20dp"
-                        android:layout_marginBottom="4dp"
-                        android:text="Son Paylaşımlar"
-                        android:textColor="@color/white"
-                        android:textSize="15sp"
-                        android:textStyle="bold"/>
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:background="#222222"/>
-
                 </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="0.5dp"
+                    android:layout_marginTop="16dp"
+                    android:background="@color/border"/>
 
             </LinearLayout>
 
@@ -303,23 +294,17 @@
                 android:padding="48dp"
                 android:visibility="visible">
 
-                <View
-                    android:layout_width="80dp"
-                    android:layout_height="80dp"
-                    android:background="#1A7C3AED"/>
-
                 <ImageView
-                    android:layout_width="80dp"
-                    android:layout_height="80dp"
-                    android:layout_marginTop="-80dp"
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
                     android:src="@drawable/ic_account_circle"
-                    android:alpha="0.5"/>
+                    android:alpha="0.4"/>
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="20dp"
-                    android:textColor="@color/white"
+                    android:textColor="@color/text_primary"
                     android:textSize="20sp"
                     android:textStyle="bold"
                     android:gravity="center"
@@ -328,11 +313,11 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="10dp"
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp"
                     android:gravity="center"
-                    android:lineSpacingMultiplier="1.4"
+                    android:lineSpacingMultiplier="1.5"
                     android:text="Kürtçe ve Türkçe içerik platformu.\nGiriş yaparak topluluğa katıl."/>
 
                 <com.google.android.material.button.MaterialButton
