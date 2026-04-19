@@ -8,7 +8,6 @@
         <item name="colorOnSecondary">@color/white</item>
         <item name="colorSurface">@color/surface</item>
         <item name="colorOnSurface">@color/text_primary</item>
-        <item name="colorBackground">@color/background</item>
         <item name="android:colorBackground">@color/background</item>
         <item name="colorOnBackground">@color/text_primary</item>
         <item name="colorError">@color/error</item>
