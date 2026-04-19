@@ -1,120 +1,110 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent"
     android:background="@color/background">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="16dp">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Ayarlar"
-            android:textColor="@color/text_primary"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="24dp"/>
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Ayarlar" android:textColor="@color/text_primary"
+            android:textSize="24sp" android:textStyle="bold" android:layout_marginBottom="24dp"/>
 
         <!-- Tema -->
-        <androidx.cardview.widget.CardView
-            xmlns:app="http://schemas.android.com/apk/res-auto"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            app:cardBackgroundColor="@color/surface"
-            app:cardCornerRadius="12dp"
+        <androidx.cardview.widget.CardView android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:layout_marginBottom="12dp"
+            app:cardBackgroundColor="@color/surface" app:cardCornerRadius="12dp"
             app:cardElevation="0dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:padding="16dp"
-                android:gravity="center_vertical">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Aydınlık Mod"
-                        android:textColor="@color/text_primary"
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:padding="16dp" android:gravity="center_vertical">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="Aydınlık Mod" android:textColor="@color/text_primary"
                         android:textSize="16sp"/>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
                         android:text="Tema değiştir / Teman biguhêre"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="13sp"/>
+                        android:textColor="@color/text_secondary" android:textSize="13sp"/>
                 </LinearLayout>
-
-                <Switch
-                    android:id="@+id/switchTheme"
-                    android:layout_width="wrap_content"
+                <Switch android:id="@+id/switchTheme" android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:thumbTint="@color/brand_primary"
-                    android:trackTint="@color/surface2"/>
+                    android:thumbTint="@color/brand_primary" android:trackTint="@color/surface2"/>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
         <!-- Dil -->
-        <androidx.cardview.widget.CardView
-            xmlns:app="http://schemas.android.com/apk/res-auto"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            app:cardBackgroundColor="@color/surface"
-            app:cardCornerRadius="12dp"
+        <androidx.cardview.widget.CardView android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:layout_marginBottom="12dp"
+            app:cardBackgroundColor="@color/surface" app:cardCornerRadius="12dp"
             app:cardElevation="0dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Dil / Ziman"
-                    android:textColor="@color/text_primary"
-                    android:textSize="16sp"
-                    android:layout_marginBottom="12dp"/>
-
-                <RadioGroup
-                    android:id="@+id/rgLanguage"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
-
-                    <RadioButton
-                        android:id="@+id/rbTurkish"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="🇹🇷  Türkçe"
-                        android:textColor="@color/text_primary"
-                        android:textSize="15sp"
-                        android:buttonTint="@color/brand_primary"
-                        android:layout_marginBottom="8dp"/>
-
-                    <RadioButton
-                        android:id="@+id/rbKurdish"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="🌙  Kurdî (Kurmancî)"
-                        android:textColor="@color/text_primary"
-                        android:textSize="15sp"
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" android:padding="16dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Dil / Ziman" android:textColor="@color/text_primary"
+                    android:textSize="16sp" android:layout_marginBottom="12dp"/>
+                <RadioGroup android:id="@+id/rgLanguage" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:orientation="vertical">
+                    <RadioButton android:id="@+id/rbTurkish" android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" android:text="🇹🇷  Türkçe"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/brand_primary" android:layout_marginBottom="8dp"/>
+                    <RadioButton android:id="@+id/rbKurdish" android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" android:text="🌙  Kurdî (Kurmancî)"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
                         android:buttonTint="@color/brand_primary"/>
                 </RadioGroup>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- Bildirimler -->
+        <androidx.cardview.widget.CardView android:id="@+id/rowNotifications"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp" app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="12dp" app:cardElevation="0dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:padding="16dp" android:gravity="center_vertical">
+                <ImageView android:layout_width="24dp" android:layout_height="24dp"
+                    android:src="@drawable/ic_bell" android:layout_marginEnd="12dp"/>
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:text="Bildirimler"
+                    android:textColor="@color/text_primary" android:textSize="16sp"/>
+                <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                    android:src="@drawable/ic_arrow_back" android:rotation="180"/>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- Kaydedilenler -->
+        <androidx.cardview.widget.CardView android:id="@+id/rowSaved"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp" app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="12dp" app:cardElevation="0dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:padding="16dp" android:gravity="center_vertical">
+                <ImageView android:layout_width="24dp" android:layout_height="24dp"
+                    android:src="@drawable/ic_bookmark" android:layout_marginEnd="12dp"/>
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:text="Kaydedilenler"
+                    android:textColor="@color/text_primary" android:textSize="16sp"/>
+                <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                    android:src="@drawable/ic_arrow_back" android:rotation="180"/>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- Profil -->
+        <androidx.cardview.widget.CardView android:id="@+id/rowProfile"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp" app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="12dp" app:cardElevation="0dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:padding="16dp" android:gravity="center_vertical">
+                <ImageView android:layout_width="24dp" android:layout_height="24dp"
+                    android:src="@drawable/ic_person" android:layout_marginEnd="12dp"/>
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:text="Profil"
+                    android:textColor="@color/text_primary" android:textSize="16sp"/>
+                <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                    android:src="@drawable/ic_arrow_back" android:rotation="180"/>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 

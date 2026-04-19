@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/feedFragment">
+
+    <fragment
+        android:id="@+id/feedFragment"
+        android:name="com.heftreng.app.ui.feed.FeedFragment"
+        android:label="Akış" />
+
+    <fragment
+        android:id="@+id/kurdiFragment"
+        android:name="com.heftreng.app.ui.kurdi.KurdiFragment"
+        android:label="Kurdî Fêrbibe" />
+
+    <fragment
+        android:id="@+id/messagesFragment"
+        android:name="com.heftreng.app.ui.messages.MessagesFragment"
+        android:label="Mesajlar" />
+
+    <fragment
+        android:id="@+id/settingsFragment"
+        android:name="com.heftreng.app.ui.settings.SettingsFragment"
+        android:label="Ayarlar" />
+
+    <fragment
+        android:id="@+id/profileFragment"
+        android:name="com.heftreng.app.ui.profile.ProfileFragment"
+        android:label="Profil">
+        <argument
+            android:name="uid"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="@null" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/chatFragment"
+        android:name="com.heftreng.app.ui.messages.ChatFragment"
+        android:label="Sohbet">
+        <argument android:name="convId"     app:argType="string" />
+        <argument android:name="otherUid"   app:argType="string" />
+        <argument android:name="otherName"  app:argType="string" />
+        <argument android:name="otherPhoto" app:argType="string"
+            app:nullable="true" android:defaultValue="@null"/>
+    </fragment>
+
+    <fragment
+        android:id="@+id/composeFragment"
+        android:name="com.heftreng.app.ui.compose.ComposeFragment"
+        android:label="Yeni Paylaşım" />
+
+    <fragment
+        android:id="@+id/blogDetailFragment"
+        android:name="com.heftreng.app.ui.blog.BlogDetailFragment"
+        android:label="Yazı Detayı">
+        <argument
+            android:name="postId"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="@null" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/exploreFragment"
+        android:name="com.heftreng.app.ui.explore.ExploreFragment"
+        android:label="Keşfet" />
+
+</navigation>

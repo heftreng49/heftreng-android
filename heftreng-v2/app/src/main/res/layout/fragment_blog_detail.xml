@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="#0D0D0D">
+
+    <!-- Toolbar -->
+    <LinearLayout
+        android:layout_width="match_parent" android:layout_height="56dp"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingStart="8dp" android:background="#0D0D0D">
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="40dp" android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_arrow_back"
+            android:tint="#FFFFFF"/>
+        <TextView
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:layout_marginStart="8dp"
+            android:text="Blog Yazısı"
+            android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold"/>
+        <ImageButton
+            android:id="@+id/btnShare"
+            android:layout_width="40dp" android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_send"
+            android:tint="#FFFFFF"
+            android:layout_marginEnd="8dp"/>
+    </LinearLayout>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1">
+        <LinearLayout
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Kapak görseli -->
+            <ImageView
+                android:id="@+id/ivCover"
+                android:layout_width="match_parent" android:layout_height="220dp"
+                android:scaleType="centerCrop" android:visibility="gone"/>
+
+            <LinearLayout
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" android:padding="20dp">
+
+                <!-- Kategori -->
+                <TextView
+                    android:id="@+id/tvCategory"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:background="#2A1A4E"
+                    android:paddingStart="10dp" android:paddingEnd="10dp"
+                    android:paddingTop="4dp" android:paddingBottom="4dp"
+                    android:textColor="#7C3AED" android:textSize="12sp"/>
+
+                <!-- Onay durumu -->
+                <TextView
+                    android:id="@+id/tvStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:padding="10dp"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:background="#1A1A1A"
+                    android:visibility="gone"/>
+
+                <!-- Başlık -->
+                <TextView
+                    android:id="@+id/tvTitle"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:textColor="#FFFFFF" android:textSize="26sp" android:textStyle="bold"
+                    android:lineSpacingMultiplier="1.2"/>
+
+                <!-- Yazar satırı -->
+                <LinearLayout
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:layout_marginTop="16dp"
+                    android:gravity="center_vertical">
+                    <ImageView
+                        android:id="@+id/ivAuthorPhoto"
+                        android:layout_width="36dp" android:layout_height="36dp"
+                        android:scaleType="centerCrop"/>
+                    <LinearLayout
+                        android:layout_width="0dp" android:layout_height="wrap_content"
+                        android:layout_weight="1" android:orientation="vertical"
+                        android:layout_marginStart="10dp">
+                        <TextView
+                            android:id="@+id/tvAuthorName"
+                            android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:textColor="#FFFFFF" android:textSize="14sp" android:textStyle="bold"/>
+                        <TextView
+                            android:id="@+id/tvDate"
+                            android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:textColor="#888888" android:textSize="12sp"/>
+                    </LinearLayout>
+                    <TextView
+                        android:id="@+id/tvReadTime"
+                        android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:textColor="#7C3AED" android:textSize="12sp"/>
+                </LinearLayout>
+
+                <!-- Ayırıcı -->
+                <View
+                    android:layout_width="match_parent" android:layout_height="1dp"
+                    android:background="#2A2A2A" android:layout_marginTop="16dp" android:layout_marginBottom="16dp"/>
+
+                <!-- İçerik -->
+                <TextView
+                    android:id="@+id/tvContent"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:textColor="#DDDDDD" android:textSize="16sp"
+                    android:lineSpacingMultiplier="1.7"/>
+
+                <!-- Beğeni / Yorum satırı -->
+                <LinearLayout
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:layout_marginTop="24dp"
+                    android:gravity="center_vertical">
+                    <ImageButton
+                        android:id="@+id/btnLike"
+                        android:layout_width="36dp" android:layout_height="36dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@drawable/ic_heart_outline"
+                        android:tint="#7C3AED"/>
+                    <TextView
+                        android:id="@+id/tvLikeCount"
+                        android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:textColor="#AAAAAA" android:textSize="14sp"
+                        android:text="0"/>
+                    <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
+                    <TextView
+                        android:id="@+id/tvCommentCount"
+                        android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:textColor="#888888" android:textSize="13sp"/>
+                </LinearLayout>
+
+                <!-- Yorumlar bölümü başlığı -->
+                <TextView
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="Yorumlar"
+                    android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold"/>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/recyclerComments"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:nestedScrollingEnabled="false"
+                    android:layout_marginTop="8dp"/>
+
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Yorum girişi -->
+    <LinearLayout
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:background="#1A1A1A"
+        android:padding="8dp" android:gravity="center_vertical">
+        <EditText
+            android:id="@+id/etComment"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="Yorum yaz..."
+            android:textColor="#FFFFFF" android:textColorHint="#666666"
+            android:background="@null" android:paddingStart="8dp"/>
+        <ImageButton
+            android:id="@+id/btnSendComment"
+            android:layout_width="40dp" android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_send"
+            android:tint="#7C3AED"/>
+    </LinearLayout>
+</LinearLayout>

@@ -1,0 +1,19 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Güvenlik — bunları asla commit etme!
+app/google-services.json
+app/keystore.jks
+*.jks
+*.keystore
+
+# Build çıktıları
+app/build/

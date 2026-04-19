@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Heftreng</string>
+    <string name="nav_feed">Akış</string>
+    <string name="nav_explore">Keşfet</string>
+    <string name="nav_blog">Blog</string>
+    <string name="nav_notifications">Bildirimler</string>
+    <string name="nav_profile">Profil</string>
+    <string name="nav_messages">Mesajlar</string>
+    <string name="sign_in_google">Google ile Giriş Yap</string>
+    <string name="sign_out">Çıkış Yap</string>
+    <string name="follow">Takip Et</string>
+    <string name="unfollow">Takibi Bırak</string>
+    <string name="share">Paylaş</string>
+    <string name="loading">Yükleniyor...</string>
+    <!-- Google Sign-In için zorunlu — google-services.json'dan client_id -->
+    <string name="default_web_client_id">854520441903-c8n3ugstsv6pgk6getrqo543nd0lv7qc.apps.googleusercontent.com</string>
+</resources>

@@ -1,210 +1,122 @@
 package com.heftreng.app.ui.notifications;
 
 import android.os.Bundle;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.ImageView;
-import android.widget.TextView;
-import android.widget.Toast;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import android.view.*;
+import android.widget.*;
+import androidx.annotation.*;
 import androidx.fragment.app.Fragment;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
-
-import com.bumptech.glide.Glide;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.Query;
-import com.google.firebase.firestore.QueryDocumentSnapshot;
+import androidx.recyclerview.widget.*;
+import com.google.firebase.auth.*;
+import com.google.firebase.firestore.*;
 import com.heftreng.app.R;
 import com.heftreng.app.model.HeftNotification;
-
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Locale;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
 
 public class NotificationsFragment extends Fragment {
 
     private RecyclerView recycler;
-    private SwipeRefreshLayout swipeRefresh;
-    private View layoutEmpty;
-    private NotifAdapter adapter;
-    private List<HeftNotification> notifs = new ArrayList<>();
+    private TextView tvEmpty;
     private FirebaseFirestore db;
     private FirebaseUser currentUser;
+    private List<HeftNotification> notifs = new ArrayList<>();
+    private NotifAdapter adapter;
 
-    @Nullable
-    @Override
-    public View onCreateView(@NonNull LayoutInflater inflater,
-                             @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        return inflater.inflate(R.layout.fragment_notifications, container, false);
+    @Nullable @Override
+    public View onCreateView(@NonNull LayoutInflater i, @Nullable ViewGroup c, @Nullable Bundle s) {
+        return i.inflate(R.layout.fragment_notifications, c, false);
     }
 
     @Override
-    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-        super.onViewCreated(view, savedInstanceState);
+    public void onViewCreated(@NonNull View view, @Nullable Bundle s) {
+        super.onViewCreated(view, s);
         db = FirebaseFirestore.getInstance();
         currentUser = FirebaseAuth.getInstance().getCurrentUser();
 
-        recycler      = view.findViewById(R.id.recyclerNotifications);
-        swipeRefresh  = view.findViewById(R.id.swipeRefresh);
-        layoutEmpty   = view.findViewById(R.id.layoutEmpty);
+        recycler = view.findViewById(R.id.recyclerNotifications);
+        tvEmpty  = view.findViewById(R.id.tvEmpty);
+
+        View btnClearAll = view.findViewById(R.id.btnClearAll);
+        if (btnClearAll != null) btnClearAll.setOnClickListener(v -> clearAll());
 
         adapter = new NotifAdapter(notifs);
         recycler.setLayoutManager(new LinearLayoutManager(getContext()));
         recycler.setAdapter(adapter);
 
-        swipeRefresh.setColorSchemeResources(R.color.brand_primary);
-        swipeRefresh.setOnRefreshListener(this::loadNotifications);
-
-        if (currentUser == null) {
-            Toast.makeText(getContext(),
-                "Bildirimleri görmek için giriş yapın", Toast.LENGTH_SHORT).show();
-        } else {
-            loadNotifications();
-        }
+        if (currentUser != null) loadNotifs();
+        else showEmpty();
     }
 
-    private void loadNotifications() {
-        if (currentUser == null) return;
-        swipeRefresh.setRefreshing(true);
-
-        // Tema: userNotifs/{uid}/msgs subcollection, orderBy ts
-        db.collection("userNotifs")
-            .document(currentUser.getUid())
-            .collection("msgs")
+    private void loadNotifs() {
+        db.collection("users").document(currentUser.getUid())
+            .collection("notifications")
             .orderBy("ts", Query.Direction.DESCENDING)
             .limit(50)
-            .get()
-            .addOnSuccessListener(snap -> {
+            .addSnapshotListener((snap, e) -> {
+                if (!isAdded() || snap == null) return;
                 notifs.clear();
                 for (QueryDocumentSnapshot doc : snap) {
                     HeftNotification n = doc.toObject(HeftNotification.class);
                     n.id = doc.getId();
                     notifs.add(n);
-                    // Okundu işaretle
-                    if (!n.read) {
+                    // okundu işaretle
+                    if (!Boolean.TRUE.equals(n.read)) {
                         doc.getReference().update("read", true);
                     }
                 }
                 adapter.notifyDataSetChanged();
-                swipeRefresh.setRefreshing(false);
-                if (layoutEmpty != null) {
-                    layoutEmpty.setVisibility(notifs.isEmpty() ? View.VISIBLE : View.GONE);
-                }
-            })
-            .addOnFailureListener(e -> {
-                swipeRefresh.setRefreshing(false);
-                Toast.makeText(getContext(), "Bildirimler yüklenemedi", Toast.LENGTH_SHORT).show();
+                tvEmpty.setVisibility(notifs.isEmpty() ? View.VISIBLE : View.GONE);
             });
     }
 
-    // ── Adapter ──────────────────────────────────────────────────────────
+    private void clearAll() {
+        if (currentUser == null) return;
+        db.collection("users").document(currentUser.getUid())
+            .collection("notifications")
+            .get()
+            .addOnSuccessListener(snap -> {
+                WriteBatch batch = db.batch();
+                for (QueryDocumentSnapshot doc : snap) batch.delete(doc.getReference());
+                batch.commit().addOnSuccessListener(v -> {
+                    notifs.clear();
+                    adapter.notifyDataSetChanged();
+                    tvEmpty.setVisibility(View.VISIBLE);
+                });
+            });
+    }
 
-    static class NotifAdapter extends RecyclerView.Adapter<NotifAdapter.NotifVH> {
+    private void showEmpty() {
+        if (tvEmpty != null) tvEmpty.setVisibility(View.VISIBLE);
+    }
+
+    // ── İç Adapter ──────────────────────────────────────────────────────
+    static class NotifAdapter extends RecyclerView.Adapter<NotifAdapter.VH> {
         private final List<HeftNotification> list;
-        NotifAdapter(List<HeftNotification> list) { this.list = list; }
+        NotifAdapter(List<HeftNotification> l) { this.list = l; }
 
-        @NonNull
-        @Override
-        public NotifVH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View v = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.item_notification, parent, false);
-            return new NotifVH(v);
+        @NonNull @Override
+        public VH onCreateViewHolder(@NonNull ViewGroup p, int t) {
+            View v = LayoutInflater.from(p.getContext())
+                .inflate(R.layout.item_notification, p, false);
+            return new VH(v);
         }
 
         @Override
-        public void onBindViewHolder(@NonNull NotifVH h, int pos) {
+        public void onBindViewHolder(@NonNull VH h, int pos) {
             HeftNotification n = list.get(pos);
-
-            // Başlık — tema: title (message değil)
-            h.tvMessage.setText(n.title != null ? n.title : buildMessage(n));
-
-            // Alt metin — tema: sub
-            if (h.tvSub != null) {
-                if (n.sub != null && !n.sub.isEmpty()) {
-                    h.tvSub.setVisibility(View.VISIBLE);
-                    h.tvSub.setText(n.sub);
-                } else {
-                    h.tvSub.setVisibility(View.GONE);
-                }
-            }
-
-            // Zaman — tema: ts (createdAt değil)
-            if (n.ts != null && h.tvTime != null) {
-                h.tvTime.setText(timeAgo(n.ts.toDate()));
-            }
-
-            // İkon / avatar
-            if (n.fromPhoto != null && !n.fromPhoto.isEmpty()) {
-                Glide.with(h.itemView.getContext())
-                    .load(n.fromPhoto)
-                    .circleCrop()
-                    .placeholder(R.drawable.ic_bell)
-                    .into(h.ivIcon);
-            } else {
-                int iconRes;
-                switch (n.type != null ? n.type : "") {
-                    case "like":           iconRes = R.drawable.ic_heart_filled; break;
-                    case "cmt":            iconRes = R.drawable.ic_chat;         break;
-                    case "follow":         iconRes = R.drawable.ic_person;       break;
-                    case "post_approved":  iconRes = R.drawable.ic_web;          break;
-                    default:               iconRes = R.drawable.ic_bell;         break;
-                }
-                h.ivIcon.setImageResource(iconRes);
-            }
-
-            // Okunmamış nokta
-            if (h.dotUnread != null) {
-                h.dotUnread.setVisibility(n.read ? View.GONE : View.VISIBLE);
-            }
-        }
-
-        private String buildMessage(HeftNotification n) {
-            String from = n.fromName != null ? n.fromName : "Biri";
-            switch (n.type != null ? n.type : "") {
-                case "like":           return from + " gönderini beğendi";
-                case "cmt":            return from + " gönderine yorum yaptı";
-                case "follow":         return from + " seni takip etmeye başladı";
-                case "post_approved":  return "Yazın onaylandı!";
-                case "post_rejected":  return "Yazın reddedildi.";
-                default:               return "Yeni bildirim";
-            }
-        }
-
-        private String timeAgo(Date date) {
-            long diff    = System.currentTimeMillis() - date.getTime();
-            long minutes = TimeUnit.MILLISECONDS.toMinutes(diff);
-            long hours   = TimeUnit.MILLISECONDS.toHours(diff);
-            long days    = TimeUnit.MILLISECONDS.toDays(diff);
-            if (minutes < 1)  return "az önce";
-            if (minutes < 60) return minutes + " dk önce";
-            if (hours   < 24) return hours   + " saat önce";
-            if (days    < 7)  return days    + " gün önce";
-            return new SimpleDateFormat("dd MMM", new Locale("tr")).format(date);
+            h.tvText.setText(n.text != null ? n.text : "");
+            h.tvTime.setText(n.ts != null ? android.text.format.DateUtils
+                .getRelativeTimeSpanString(n.ts.toDate().getTime()) : "");
+            h.itemView.setAlpha(Boolean.TRUE.equals(n.read) ? 0.6f : 1f);
         }
 
         @Override public int getItemCount() { return list.size(); }
 
-        static class NotifVH extends RecyclerView.ViewHolder {
-            ImageView ivIcon;
-            TextView tvMessage, tvSub, tvTime;
-            View dotUnread;
-            NotifVH(@NonNull View v) {
+        static class VH extends RecyclerView.ViewHolder {
+            TextView tvText, tvTime;
+            VH(View v) {
                 super(v);
-                ivIcon    = v.findViewById(R.id.ivIcon);
-                tvMessage = v.findViewById(R.id.tvMessage);
-                tvSub     = v.findViewById(R.id.tvSub);
-                tvTime    = v.findViewById(R.id.tvTime);
-                dotUnread = v.findViewById(R.id.dotUnread);
+                tvText = v.findViewById(R.id.tvNotifText);
+                tvTime = v.findViewById(R.id.tvNotifTime);
             }
         }
     }
