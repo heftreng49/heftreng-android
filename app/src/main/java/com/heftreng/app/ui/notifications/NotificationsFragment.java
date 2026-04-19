@@ -6,6 +6,7 @@ import android.widget.*;
 import androidx.annotation.*;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.*;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.google.firebase.auth.*;
 import com.google.firebase.firestore.*;
 import com.heftreng.app.R;
@@ -15,109 +16,82 @@ import java.util.*;
 public class NotificationsFragment extends Fragment {
 
     private RecyclerView recycler;
-    private TextView tvEmpty;
+    private SwipeRefreshLayout swipeRefresh;
+    private LinearLayout layoutEmpty;
+    private NotifAdapter adapter;
+    private final List<HeftNotification> items = new ArrayList<>();
     private FirebaseFirestore db;
     private FirebaseUser currentUser;
-    private List<HeftNotification> notifs = new ArrayList<>();
-    private NotifAdapter adapter;
 
     @Nullable @Override
-    public View onCreateView(@NonNull LayoutInflater i, @Nullable ViewGroup c, @Nullable Bundle s) {
-        return i.inflate(R.layout.fragment_notifications, c, false);
+    public View onCreateView(@NonNull LayoutInflater inflater,
+            @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        return inflater.inflate(R.layout.fragment_notifications, container, false);
     }
 
     @Override
-    public void onViewCreated(@NonNull View view, @Nullable Bundle s) {
-        super.onViewCreated(view, s);
-        db = FirebaseFirestore.getInstance();
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        db          = FirebaseFirestore.getInstance();
         currentUser = FirebaseAuth.getInstance().getCurrentUser();
 
-        recycler = view.findViewById(R.id.recyclerNotifications);
-        tvEmpty  = view.findViewById(R.id.tvEmpty);
+        recycler      = view.findViewById(R.id.recyclerNotifications);
+        swipeRefresh  = view.findViewById(R.id.swipeRefresh);
+        layoutEmpty   = view.findViewById(R.id.layoutEmpty);
 
-        View btnClearAll = view.findViewById(R.id.btnClearAll);
-        if (btnClearAll != null) btnClearAll.setOnClickListener(v -> clearAll());
+        View btnMarkAll = view.findViewById(R.id.btnMarkAll);
+        if (btnMarkAll != null) btnMarkAll.setOnClickListener(v -> markAllRead());
 
-        adapter = new NotifAdapter(notifs);
+        adapter = new NotifAdapter(items);
         recycler.setLayoutManager(new LinearLayoutManager(getContext()));
         recycler.setAdapter(adapter);
 
-        if (currentUser != null) loadNotifs();
-        else showEmpty();
+        swipeRefresh.setColorSchemeResources(R.color.brand_primary);
+        swipeRefresh.setOnRefreshListener(this::load);
+
+        if (currentUser == null) showEmpty("Giriş yapın");
+        else load();
     }
 
-    private void loadNotifs() {
-        db.collection("users").document(currentUser.getUid())
-            .collection("notifications")
-            .orderBy("ts", Query.Direction.DESCENDING)
-            .limit(50)
-            .addSnapshotListener((snap, e) -> {
-                if (!isAdded() || snap == null) return;
-                notifs.clear();
-                for (QueryDocumentSnapshot doc : snap) {
-                    HeftNotification n = doc.toObject(HeftNotification.class);
-                    n.id = doc.getId();
-                    notifs.add(n);
-                    // okundu işaretle
-                    if (!Boolean.TRUE.equals(n.read)) {
-                        doc.getReference().update("read", true);
-                    }
-                }
-                adapter.notifyDataSetChanged();
-                tvEmpty.setVisibility(notifs.isEmpty() ? View.VISIBLE : View.GONE);
-            });
-    }
-
-    private void clearAll() {
+    private void load() {
         if (currentUser == null) return;
-        db.collection("users").document(currentUser.getUid())
-            .collection("notifications")
+        swipeRefresh.setRefreshing(true);
+        db.collection("userNotifs").document(currentUser.getUid())
+            .collection("msgs")
+            .orderBy("ts", Query.Direction.DESCENDING).limit(50)
             .get()
             .addOnSuccessListener(snap -> {
-                WriteBatch batch = db.batch();
-                for (QueryDocumentSnapshot doc : snap) batch.delete(doc.getReference());
-                batch.commit().addOnSuccessListener(v -> {
-                    notifs.clear();
-                    adapter.notifyDataSetChanged();
-                    tvEmpty.setVisibility(View.VISIBLE);
-                });
-            });
+                items.clear();
+                for (QueryDocumentSnapshot d : snap) {
+                    HeftNotification n = d.toObject(HeftNotification.class);
+                    n.id = d.getId();
+                    items.add(n);
+                }
+                adapter.notifyDataSetChanged();
+                swipeRefresh.setRefreshing(false);
+                if (items.isEmpty()) showEmpty("Hîn agahdarî tune.");
+                else { layoutEmpty.setVisibility(View.GONE); recycler.setVisibility(View.VISIBLE); }
+            })
+            .addOnFailureListener(e -> swipeRefresh.setRefreshing(false));
     }
 
-    private void showEmpty() {
-        if (tvEmpty != null) tvEmpty.setVisibility(View.VISIBLE);
-    }
-
-    // ── İç Adapter ──────────────────────────────────────────────────────
-    static class NotifAdapter extends RecyclerView.Adapter<NotifAdapter.VH> {
-        private final List<HeftNotification> list;
-        NotifAdapter(List<HeftNotification> l) { this.list = l; }
-
-        @NonNull @Override
-        public VH onCreateViewHolder(@NonNull ViewGroup p, int t) {
-            View v = LayoutInflater.from(p.getContext())
-                .inflate(R.layout.item_notification, p, false);
-            return new VH(v);
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull VH h, int pos) {
-            HeftNotification n = list.get(pos);
-            h.tvText.setText(n.text != null ? n.text : "");
-            h.tvTime.setText(n.ts != null ? android.text.format.DateUtils
-                .getRelativeTimeSpanString(n.ts.toDate().getTime()) : "");
-            h.itemView.setAlpha(Boolean.TRUE.equals(n.read) ? 0.6f : 1f);
-        }
-
-        @Override public int getItemCount() { return list.size(); }
-
-        static class VH extends RecyclerView.ViewHolder {
-            TextView tvText, tvTime;
-            VH(View v) {
-                super(v);
-                tvText = v.findViewById(R.id.tvNotifText);
-                tvTime = v.findViewById(R.id.tvNotifTime);
+    private void markAllRead() {
+        if (currentUser == null) return;
+        WriteBatch batch = db.batch();
+        for (HeftNotification n : items) {
+            if (!n.read && n.id != null) {
+                batch.update(db.collection("userNotifs").document(currentUser.getUid())
+                    .collection("msgs").document(n.id), "read", true);
+                n.read = true;
             }
         }
+        batch.commit().addOnSuccessListener(v -> adapter.notifyDataSetChanged());
+    }
+
+    private void showEmpty(String msg) {
+        recycler.setVisibility(View.GONE);
+        layoutEmpty.setVisibility(View.VISIBLE);
+        TextView tv = layoutEmpty.findViewWithTag("emptyMsg");
+        if (tv != null) tv.setText(msg);
     }
 }
