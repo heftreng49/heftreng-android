@@ -52,4 +52,20 @@
         android:name="com.heftreng.app.ui.compose.ComposeFragment"
         android:label="Yeni Paylaşım" />
 
+    <fragment
+        android:id="@+id/blogDetailFragment"
+        android:name="com.heftreng.app.ui.blog.BlogDetailFragment"
+        android:label="Yazı Detayı">
+        <argument
+            android:name="postId"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="@null" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/exploreFragment"
+        android:name="com.heftreng.app.ui.explore.ExploreFragment"
+        android:label="Keşfet" />
+
 </navigation>
