@@ -2,6 +2,9 @@
 <resources>
     <color name="brand_primary">#7C3AED</color>
     <color name="brand_primary_dark">#5B21B6</color>
+    
+    <color name="brand_accent">#FF0000</color> 
+    
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
     <color name="background">#0D0D0D</color>
@@ -9,6 +12,9 @@
     <color name="surface2">#2A2A2A</color>
     <color name="text_primary">#FFFFFF</color>
     <color name="text_secondary">#AAAAAA</color>
+    
+    <color name="text_hint">#666666</color>
+
     <color name="success">#2ECC71</color>
     <color name="error">#E74C3C</color>
 </resources>
