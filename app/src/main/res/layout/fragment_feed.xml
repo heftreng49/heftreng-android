@@ -74,7 +74,6 @@
                 android:layout_height="match_parent"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:gap="8dp"/>
 
         </HorizontalScrollView>
 
