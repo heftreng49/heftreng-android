@@ -1,20 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="brand_primary">#7C3AED</color>
-    <color name="brand_primary_dark">#5B21B6</color>
-    
-    <color name="brand_accent">#FF0000</color> 
-    
+    <!-- Marka — mor/leylak (#8b5cf6 tema) -->
+    <color name="brand_primary">#8B5CF6</color>
+    <color name="brand_primary_dark">#6D28D9</color>
+    <color name="brand_primary_light">#A78BFA</color>
+    <color name="brand_accent">#F472B6</color>
+
+    <!-- Arka plan katmanları (--bg, --s1, --s2) -->
+    <color name="background">#060612</color>
+    <color name="surface">#0D0D1F</color>
+    <color name="surface2">#12122A</color>
+    <color name="surface3">#181833</color>
+
+    <!-- Metin -->
+    <color name="text_primary">#F0EEFF</color>
+    <color name="text_secondary">#C4B8FF</color>
+    <color name="text_muted">#7467A0</color>
+    <color name="text_hint">#4A3F70</color>
+
+    <!-- Kenarlık -->
+    <color name="border">#1A1440</color>
+
+    <!-- Durum -->
+    <color name="success">#10D9A0</color>
+    <color name="error">#F87171</color>
+    <color name="warning">#FBBF24</color>
+
+    <!-- Temel -->
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
-    <color name="background">#0D0D0D</color>
-    <color name="surface">#1A1A1A</color>
-    <color name="surface2">#2A2A2A</color>
-    <color name="text_primary">#FFFFFF</color>
-    <color name="text_secondary">#AAAAAA</color>
-    
-    <color name="text_hint">#666666</color>
-
-    <color name="success">#2ECC71</color>
-    <color name="error">#E74C3C</color>
+    <color name="transparent">#00000000</color>
 </resources>
