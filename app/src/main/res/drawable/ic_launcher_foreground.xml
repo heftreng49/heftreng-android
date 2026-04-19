@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Heftreng app icon - stylized bird releasing from hand -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Background circle -->
+    <path android:fillColor="#7C3AED"
+        android:pathData="M54,54m-54,0a54,54 0,1 1,108 0a54,54 0,1 1,-108 0"/>
+    <!-- Hand (open palm) -->
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.95"
+        android:pathData="M30,72 C30,72 28,60 32,55 C34,52 38,51 40,53 L42,50 C43,48 46,47 48,49 L50,47 C51,45 54,44 56,46 L58,44 C59,42 62,42 63,44 L65,50 C67,52 68,56 66,60 L64,65 C62,69 58,72 54,72 Z"/>
+    <!-- Birds flying up -->
+    <path android:fillColor="#7C3AED"
+        android:pathData="M45,42 C45,42 47,38 50,39 C50,39 48,43 45,42Z"/>
+    <path android:fillColor="#7C3AED"
+        android:pathData="M52,35 C52,35 54,31 57,32 C57,32 55,36 52,35Z"/>
+    <path android:fillColor="#7C3AED"
+        android:pathData="M59,28 C59,28 61,24 64,25 C64,25 62,29 59,28Z"/>
+    <path android:fillColor="#7C3AED"
+        android:pathData="M66,22 C66,22 68,18 71,19 C71,19 69,23 66,22Z"/>
+    <path android:fillColor="#5B21B6"
+        android:pathData="M48,38 C48,38 50,34 53,35 C53,35 51,39 48,38Z"/>
+    <path android:fillColor="#5B21B6"
+        android:pathData="M56,30 C56,30 58,26 61,27 C61,27 59,31 56,30Z"/>
+</vector>
