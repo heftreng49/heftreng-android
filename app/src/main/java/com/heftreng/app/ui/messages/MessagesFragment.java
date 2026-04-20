@@ -8,7 +8,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageView;
-import de.hdodenhof.circleimageview.CircleImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -282,7 +281,7 @@ public class MessagesFragment extends Fragment {
         @Override public int getItemCount() { return list.size(); }
 
         static class ConvVH extends RecyclerView.ViewHolder {
-            CircleImageView ivAvatar;
+            ImageView ivAvatar;
             TextView tvName, tvLastMessage, tvTime;
             ConvVH(@NonNull View v) {
                 super(v);

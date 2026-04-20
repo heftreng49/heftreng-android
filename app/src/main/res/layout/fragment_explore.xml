@@ -13,9 +13,10 @@
         android:background="@color/background"
         app:elevation="0dp">
 
+        <!-- Başlık -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="54dp"
+            android:layout_height="56dp"
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:paddingHorizontal="16dp"
@@ -26,7 +27,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="Keşfet"
-                android:textColor="@color/text_primary"
+                android:textColor="@color/white"
                 android:textSize="20sp"
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-medium"/>
@@ -37,30 +38,29 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingHorizontal="14dp"
-            android:paddingBottom="10dp"
+            android:paddingHorizontal="12dp"
+            android:paddingBottom="8dp"
             app:layout_scrollFlags="scroll|enterAlways|snap">
 
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="50dp"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-                app:boxCornerRadiusTopStart="24dp"
-                app:boxCornerRadiusTopEnd="24dp"
-                app:boxCornerRadiusBottomStart="24dp"
-                app:boxCornerRadiusBottomEnd="24dp"
-                app:boxStrokeWidth="0dp"
-                app:boxStrokeWidthFocused="0dp"
+                app:boxCornerRadiusTopStart="25dp"
+                app:boxCornerRadiusTopEnd="25dp"
+                app:boxCornerRadiusBottomStart="25dp"
+                app:boxCornerRadiusBottomEnd="25dp"
+                app:boxStrokeColor="#333333"
                 app:boxBackgroundColor="@color/surface"
                 app:startIconDrawable="@drawable/ic_search"
-                app:startIconTint="@color/text_muted">
+                app:startIconTint="@color/text_secondary">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/etSearch"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:hint="Yazı, kullanıcı ara..."
-                    android:textColor="@color/text_primary"
+                    android:textColor="@color/white"
                     android:textColorHint="@color/text_hint"
                     android:textSize="14sp"
                     android:imeOptions="actionSearch"
@@ -74,33 +74,30 @@
         <!-- Kategori chipleri -->
         <HorizontalScrollView
             android:layout_width="match_parent"
-            android:layout_height="44dp"
+            android:layout_height="48dp"
             android:scrollbars="none"
-            android:paddingHorizontal="10dp"
-            android:paddingBottom="6dp">
+            android:paddingHorizontal="12dp"
+            android:paddingBottom="8dp">
 
             <LinearLayout
                 android:id="@+id/chipGroup"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
                 android:orientation="horizontal"
-                android:gravity="center_vertical"/>
+                android:gravity="center_vertical"
+                />
 
         </HorizontalScrollView>
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="0.5dp"
-            android:background="@color/border"/>
-
     </com.google.android.material.appbar.AppBarLayout>
 
+    <!-- Keşfet listesi -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerExplore"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
-        android:paddingBottom="80dp"
+        android:paddingBottom="88dp"
         app:layout_behavior="@string/appbar_scrolling_view_behavior"/>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

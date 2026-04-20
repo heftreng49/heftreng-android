@@ -12,8 +12,6 @@ import com.heftreng.app.R;
 import com.heftreng.app.model.FeedPost;
 import java.util.*;
 
-import de.hdodenhof.circleimageview.CircleImageView;
-
 public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder> {
 
     public interface OnPostActionListener {
@@ -46,16 +44,7 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
         h.tvAuthor.setText(post.authorName != null ? post.authorName : "Kullanıcı");
         h.tvContent.setText(post.content != null ? post.content : "");
         h.tvLikeCount.setText(String.valueOf(post.likeCount));
-        h.tvCommentCount.setText(String.valueOf(post.commentCount > 0
-            ? post.commentCount : post.cmtCount));
-
-        // Repost etiketi
-        if ("repost".equals(post.type) && post.originalAuthor != null) {
-            h.tvRepostLabel.setVisibility(View.VISIBLE);
-            h.tvRepostLabel.setText("↻ " + post.originalAuthor + " adlı kişiyi yeniden paylaştı");
-        } else {
-            h.tvRepostLabel.setVisibility(View.GONE);
-        }
+        h.tvCommentCount.setText(String.valueOf(post.commentCount));
 
         // Zaman
         if (post.createdAt != null) {
@@ -83,26 +72,33 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
         boolean liked = currentUser != null && post.likedBy != null
             && post.likedBy.contains(currentUser.getUid());
         h.btnLike.setImageResource(liked ? R.drawable.ic_heart_filled : R.drawable.ic_heart_outline);
-        h.btnLike.setColorFilter(liked
-            ? 0xFFF43F5E : h.itemView.getContext().getColor(R.color.text_muted));
 
-        h.btnLike.setOnClickListener(v -> toggleLike(post, h));
+        // Beğeni tıklama
+        h.btnLike.setOnClickListener(v -> toggleLike(post, h, liked));
+
+        // Yorum
         h.btnComment.setOnClickListener(v -> listener.onComment(post));
+
+        // Yazar tıklama
         h.ivAvatar.setOnClickListener(v -> {
             if (post.authorId != null) listener.onAuthorClick(post.authorId);
         });
         h.tvAuthor.setOnClickListener(v -> {
             if (post.authorId != null) listener.onAuthorClick(post.authorId);
         });
+
+        // Repost
         h.btnRepost.setOnClickListener(v -> repost(post, h));
+
+        // Bookmark
         h.btnBookmark.setOnClickListener(v -> bookmark(post, h));
+
+        // Paylaş
         h.btnShare.setOnClickListener(v -> share(post, h));
     }
 
-    private void toggleLike(FeedPost post, PostViewHolder h) {
+    private void toggleLike(FeedPost post, PostViewHolder h, boolean currentlyLiked) {
         if (currentUser == null) return;
-        boolean currentlyLiked = post.likedBy != null
-            && post.likedBy.contains(currentUser.getUid());
         DocumentReference ref = db.collection("feed").document(post.id);
         if (currentlyLiked) {
             ref.update("likedBy", FieldValue.arrayRemove(currentUser.getUid()),
@@ -110,7 +106,6 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
             post.likeCount = Math.max(0, post.likeCount - 1);
             if (post.likedBy != null) post.likedBy.remove(currentUser.getUid());
             h.btnLike.setImageResource(R.drawable.ic_heart_outline);
-            h.btnLike.setColorFilter(h.itemView.getContext().getColor(R.color.text_muted));
         } else {
             ref.update("likedBy", FieldValue.arrayUnion(currentUser.getUid()),
                        "likeCount", FieldValue.increment(1));
@@ -118,7 +113,6 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
             if (post.likedBy == null) post.likedBy = new ArrayList<>();
             post.likedBy.add(currentUser.getUid());
             h.btnLike.setImageResource(R.drawable.ic_heart_filled);
-            h.btnLike.setColorFilter(0xFFF43F5E);
         }
         h.tvLikeCount.setText(String.valueOf(post.likeCount));
     }
@@ -134,14 +128,13 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
         repost.put("content",     post.content);
         repost.put("imageUrl",    post.imageUrl != null ? post.imageUrl : "");
         repost.put("likeCount",   0);
-        repost.put("commentCount", 0);
-        repost.put("cmtCount",    0);
+        repost.put("commentCount",0);
         repost.put("likedBy",     new ArrayList<>());
         repost.put("type",        "repost");
         repost.put("originalAuthor", post.authorName);
         repost.put("createdAt",   com.google.firebase.Timestamp.now());
         db.collection("feed").add(repost);
-        Toast.makeText(h.itemView.getContext(), "Yeniden paylaşıldı", Toast.LENGTH_SHORT).show();
+        Toast.makeText(h.itemView.getContext(), "Repost edildi", Toast.LENGTH_SHORT).show();
     }
 
     private void bookmark(FeedPost post, PostViewHolder h) {
@@ -172,9 +165,8 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
     @Override public int getItemCount() { return posts.size(); }
 
     static class PostViewHolder extends RecyclerView.ViewHolder {
-        CircleImageView ivAvatar;
-        com.google.android.material.imageview.ShapeableImageView ivPostImage;
-        TextView tvAuthor, tvTime, tvContent, tvLikeCount, tvCommentCount, tvRepostLabel;
+        ImageView ivAvatar, ivPostImage;
+        TextView tvAuthor, tvTime, tvContent, tvLikeCount, tvCommentCount;
         ImageButton btnLike, btnComment, btnRepost, btnBookmark, btnShare;
 
         PostViewHolder(View v) {
@@ -186,7 +178,6 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedAdapter.PostViewHolder
             tvContent      = v.findViewById(R.id.tvContent);
             tvLikeCount    = v.findViewById(R.id.tvLikeCount);
             tvCommentCount = v.findViewById(R.id.tvCommentCount);
-            tvRepostLabel  = v.findViewById(R.id.tvRepostLabel);
             btnLike        = v.findViewById(R.id.btnLike);
             btnComment     = v.findViewById(R.id.btnComment);
             btnRepost      = v.findViewById(R.id.btnRepost);

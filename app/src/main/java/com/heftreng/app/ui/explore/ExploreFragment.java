@@ -64,17 +64,8 @@ public class ExploreFragment extends Fragment implements FeedAdapter.OnPostActio
             chip.setText(cat);
             chip.setCheckable(true);
             chip.setCheckedIconVisible(false);
-            chip.setChipBackgroundColorResource(R.color.surface);
-            chip.setTextColor(getResources().getColor(R.color.text_secondary, null));
-            chip.setChipStrokeWidth(1f);
-            chip.setChipStrokeColorResource(R.color.border_light);
-            chip.setCheckedIconVisible(false);
-            android.widget.LinearLayout.LayoutParams lp =
-                new android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
-            lp.setMarginEnd(6);
-            chip.setLayoutParams(lp);
+            chip.setChipBackgroundColorResource(R.color.surface2);
+            chip.setTextColor(getResources().getColor(R.color.white, null));
             chip.setOnClickListener(v -> {
                 activeCategory = cat.equals("Tümü") ? null : cat;
                 loadPosts();
