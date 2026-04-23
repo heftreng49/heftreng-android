@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -21,7 +22,6 @@ import com.heftreng.app.ui.screens.profile.ProfileScreen
 import com.heftreng.app.ui.screens.profile.EditProfileScreen
 import com.heftreng.app.ui.theme.Amber
 import com.heftreng.app.ui.theme.Background
-import com.heftreng.app.ui.theme.Divider
 import com.heftreng.app.ui.theme.Muted
 import com.heftreng.app.viewmodel.AuthViewModel
 
@@ -35,23 +35,22 @@ sealed class Screen(val route: String) {
     }
     object Profile        : Screen("profile/{uid}") {
         fun go(uid: String) = "profile/$uid"
-        fun me() = "profile/me"
     }
     object EditProfile    : Screen("edit_profile")
 }
 
 data class BottomNavItem(
-    val screen: Screen,
+    val route: String,
     val label: String,
     val icon: ImageVector,
     val iconSelected: ImageVector,
 )
 
 val bottomNavItems = listOf(
-    BottomNavItem(Screen.Feed,          "Feed",       Icons.Outlined.Home,           Icons.Filled.Home),
-    BottomNavItem(Screen.Notifications, "Bildirim",   Icons.Outlined.Notifications,  Icons.Filled.Notifications),
-    BottomNavItem(Screen.Messages,      "Mesajlar",   Icons.Outlined.MailOutline,    Icons.Filled.Mail),
-    BottomNavItem(Screen.Profile.run { Screen("profile/me") }, "Profil", Icons.Outlined.Person, Icons.Filled.Person),
+    BottomNavItem(Screen.Feed.route,          "Feed",     Icons.Outlined.Home,          Icons.Filled.Home),
+    BottomNavItem(Screen.Notifications.route, "Bildirim", Icons.Outlined.Notifications, Icons.Filled.Notifications),
+    BottomNavItem(Screen.Messages.route,      "Mesajlar", Icons.Outlined.MailOutline,   Icons.Filled.Mail),
+    BottomNavItem("profile/me",               "Profil",   Icons.Outlined.Person,        Icons.Filled.Person),
 )
 
 @Composable
@@ -72,8 +71,7 @@ fun HeftrangNavHost() {
     val navBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStack?.destination?.route
 
-    val showBottomBar = bottomNavItems.any { it.screen.route == currentRoute } ||
-        currentRoute == "profile/me"
+    val showBottomBar = bottomNavItems.any { it.route == currentRoute }
 
     Scaffold(
         containerColor = Background,
@@ -84,11 +82,11 @@ fun HeftrangNavHost() {
                     tonalElevation = 0.dp,
                 ) {
                     bottomNavItems.forEach { item ->
-                        val selected = currentRoute == item.screen.route
+                        val selected = currentRoute == item.route
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
-                                navController.navigate(item.screen.route) {
+                                navController.navigate(item.route) {
                                     popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
