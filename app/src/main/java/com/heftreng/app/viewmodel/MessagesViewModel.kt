@@ -8,8 +8,12 @@ import com.heftreng.app.data.model.Conversation
 import com.heftreng.app.data.model.Message
 import com.heftreng.app.data.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
-import io.github.jan.supabase.realtime.*
+import io.github.jan.supabase.realtime.realtime
+import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.postgresChangeFlow
+import io.github.jan.supabase.realtime.PostgresAction
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -20,7 +24,7 @@ import javax.inject.Inject
 class MessagesViewModel @Inject constructor(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
-    private val supabase: io.github.jan.supabase.SupabaseClient,
+    private val supabase: SupabaseClient,
 ) : ViewModel() {
 
     private val _conversations = MutableStateFlow<List<Conversation>>(emptyList())
@@ -53,12 +57,12 @@ class MessagesViewModel @Inject constructor(
                     } else null
 
                     Conversation(
-                        id                = obj["id"]?.jsonPrimitive?.content ?: "",
-                        participantIds    = participantIds,
-                        lastMessage       = obj["last_message"]?.jsonPrimitive?.content ?: "",
-                        lastMessageAt     = obj["last_message_at"]?.jsonPrimitive?.content ?: "",
-                        otherUser         = otherUser,
-                        unreadCount       = obj["unread_count"]?.jsonPrimitive?.int ?: 0,
+                        id             = obj["id"]?.jsonPrimitive?.content ?: "",
+                        participantIds = participantIds,
+                        lastMessage    = obj["last_message"]?.jsonPrimitive?.content ?: "",
+                        lastMessageAt  = obj["last_message_at"]?.jsonPrimitive?.content ?: "",
+                        otherUser      = otherUser,
+                        unreadCount    = obj["unread_count"]?.jsonPrimitive?.int ?: 0,
                     )
                 }
                 _conversations.value = convList.sortedByDescending { it.lastMessageAt }
@@ -103,7 +107,6 @@ class MessagesViewModel @Inject constructor(
                         put("read", false)
                     }
                 )
-                // last_message güncelle
                 supabase.postgrest["conversations"].update(
                     buildJsonObject {
                         put("last_message", text)
@@ -119,15 +122,16 @@ class MessagesViewModel @Inject constructor(
     fun subscribeToMessages(conversationId: String) {
         viewModelScope.launch {
             try {
-                val channel = supabase.realtime.channel("messages:$conversationId")
+                val channel = supabase.channel("messages:$conversationId")
                 channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") {
                     table = "messages"
-                    filter = "conversation_id=eq.$conversationId"
                 }.onEach { action ->
                     val obj = action.record
+                    val convId = obj["conversation_id"]?.jsonPrimitive?.content ?: ""
+                    if (convId != conversationId) return@onEach
                     val newMsg = Message(
                         id             = obj["id"]?.jsonPrimitive?.content ?: "",
-                        conversationId = conversationId,
+                        conversationId = convId,
                         senderId       = obj["sender_id"]?.jsonPrimitive?.content ?: "",
                         text           = obj["text"]?.jsonPrimitive?.content ?: "",
                         createdAt      = obj["created_at"]?.jsonPrimitive?.content ?: "",
