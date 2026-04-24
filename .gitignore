@@ -2,3 +2,5 @@
 build/
 *.zip
 local.properties
+*.jks
+app/google-services.json

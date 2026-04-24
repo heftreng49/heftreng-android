@@ -2,7 +2,9 @@ package com.heftreng.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.Post
@@ -38,28 +40,53 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
             try {
-                // Kullanıcı bilgisi
                 val userDoc = firestore.collection("users").document(targetUid).get().await()
-                _user.value = userDoc.toObject(User::class.java)
+                val d = userDoc.data
+                if (d != null) {
+                    _user.value = User(
+                        uid            = d["uid"] as? String ?: targetUid,
+                        displayName    = d["displayName"] as? String ?: "",
+                        username       = d["username"] as? String ?: "",
+                        photoURL       = d["photoURL"] as? String ?: "",
+                        bio            = d["bio"] as? String ?: "",
+                        followersCount = (d["followersCount"] as? Long)?.toInt() ?: 0,
+                        followingCount = (d["followingCount"] as? Long)?.toInt() ?: 0,
+                        postsCount     = (d["postsCount"] as? Long)?.toInt() ?: 0,
+                    )
+                }
 
-                // Gönderiler
                 val snap = firestore.collection("feed")
                     .whereEqualTo("uid", targetUid)
                     .orderBy("ts", Query.Direction.DESCENDING)
                     .limit(20)
                     .get().await()
                 _posts.value = snap.documents.mapNotNull { doc ->
-                    doc.toObject(Post::class.java)?.copy(id = doc.id)
+                    val fd = doc.data ?: return@mapNotNull null
+                    Post(
+                        id           = doc.id,
+                        uid          = fd["uid"] as? String ?: "",
+                        displayName  = fd["displayName"] as? String ?: "",
+                        username     = fd["username"] as? String ?: "",
+                        photoURL     = fd["photoURL"] as? String ?: "",
+                        text         = fd["text"] as? String ?: "",
+                        imageURL     = fd["imageURL"] as? String ?: "",
+                        likesCount   = (fd["likes"] as? Long)?.toInt() ?: 0,
+                        commentsCount= (fd["cmtCount"] as? Long)?.toInt() ?: 0,
+                        ts           = fd["ts"] as? Timestamp,
+                    )
                 }
 
-                // Takip kontrolü
                 if (targetUid != myUid) {
+                    // follows/{fromUid}_{targetUid}
                     val followDoc = firestore.collection("follows")
                         .document("${myUid}_$targetUid").get().await()
                     _isFollowing.value = followDoc.exists()
                 }
-            } catch (_: Exception) {}
-            finally { _loading.value = false }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _loading.value = false
+            }
         }
     }
 
@@ -71,30 +98,35 @@ class ProfileViewModel @Inject constructor(
 
             if (_isFollowing.value) {
                 followDoc.delete().await()
-                targetRef.update("followersCount", com.google.firebase.firestore.FieldValue.increment(-1)).await()
-                myRef.update("followingCount", com.google.firebase.firestore.FieldValue.increment(-1)).await()
+                targetRef.update("followersCount", FieldValue.increment(-1)).await()
+                myRef.update("followingCount", FieldValue.increment(-1)).await()
                 _isFollowing.value = false
                 _user.value = _user.value?.copy(followersCount = (_user.value?.followersCount ?: 1) - 1)
             } else {
-                followDoc.set(mapOf("fromUid" to myUid, "toUid" to targetUid)).await()
-                targetRef.update("followersCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
-                myRef.update("followingCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                followDoc.set(mapOf(
+                    "fromUid"   to myUid,
+                    "targetUid" to targetUid,   // rules: targetUid bekleniyor
+                )).await()
+                targetRef.update("followersCount", FieldValue.increment(1)).await()
+                myRef.update("followingCount", FieldValue.increment(1)).await()
                 _isFollowing.value = true
                 _user.value = _user.value?.copy(followersCount = (_user.value?.followersCount ?: 0) + 1)
-                // Bildirim
-                val myDoc = firestore.collection("users").document(myUid).get().await()
-                val fromName = myDoc.getString("displayName") ?: ""
-                firestore.collection("userNotifs").add(mapOf(
-                    "userId"    to targetUid,
-                    "fromUid"   to myUid,
-                    "fromName"  to fromName,
-                    "fromPhoto" to (myDoc.getString("photoURL") ?: ""),
-                    "type"      to "follow",
-                    "message"   to "$fromName seni takip etmeye başladı",
-                    "url"       to "",
-                    "read"      to false,
-                    "ts"        to com.google.firebase.Timestamp.now(),
-                )).await()
+
+                // userNotifs/{targetUid}/msgs/{auto}
+                val myDoc     = firestore.collection("users").document(myUid).get().await()
+                val fromName  = myDoc.getString("displayName") ?: ""
+                val fromPhoto = myDoc.getString("photoURL") ?: ""
+                firestore.collection("userNotifs").document(targetUid)
+                    .collection("msgs").add(mapOf(
+                        "fromUid"   to myUid,
+                        "fromName"  to fromName,
+                        "fromPhoto" to fromPhoto,
+                        "type"      to "follow",
+                        "message"   to "$fromName seni takip etmeye başladı",
+                        "url"       to "",
+                        "read"      to false,
+                        "ts"        to Timestamp.now(),
+                    )).await()
             }
         }
     }
@@ -102,11 +134,12 @@ class ProfileViewModel @Inject constructor(
     fun updateProfile(displayName: String, bio: String) {
         viewModelScope.launch {
             try {
-                firestore.collection("users").document(myUid).update(
-                    mapOf("displayName" to displayName, "bio" to bio)
-                ).await()
+                firestore.collection("users").document(myUid)
+                    .update(mapOf("displayName" to displayName, "bio" to bio)).await()
                 _user.value = _user.value?.copy(displayName = displayName, bio = bio)
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 }
