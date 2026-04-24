@@ -10,7 +10,6 @@ import com.heftreng.app.data.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
-import io.github.jan.supabase.realtime.realtime
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.PostgresAction
@@ -33,6 +32,9 @@ class MessagesViewModel @Inject constructor(
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages = _messages.asStateFlow()
 
+    private val _otherUser = MutableStateFlow<User?>(null)
+    val otherUser = _otherUser.asStateFlow()
+
     private val _loading = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
@@ -42,104 +44,167 @@ class MessagesViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
             try {
+                // Tema yapısı: participant_a, participant_b
                 val result = supabase.postgrest["conversations"]
                     .select {
-                        filter { contains("participant_ids", listOf(uid)) }
+                        filter {
+                            or {
+                                eq("participant_a", uid)
+                                eq("participant_b", uid)
+                            }
+                        }
                     }
 
-                val convList = result.decodeList<JsonObject>().map { obj ->
-                    val participantIds = obj["participant_ids"]
-                        ?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
-                    val otherUid = participantIds.firstOrNull { it != uid } ?: ""
-                    val otherUser = if (otherUid.isNotEmpty()) {
-                        val doc = firestore.collection("users").document(otherUid).get().await()
-                        doc.toObject(User::class.java)
-                    } else null
+                val convList = result.decodeList<JsonObject>().mapNotNull { obj ->
+                    val pa = obj["participant_a"]?.jsonPrimitive?.content ?: return@mapNotNull null
+                    val pb = obj["participant_b"]?.jsonPrimitive?.content ?: return@mapNotNull null
+                    val otherUid = if (pa == uid) pb else pa
+
+                    val userDoc = try {
+                        firestore.collection("users").document(otherUid).get().await()
+                    } catch (_: Exception) { null }
+
+                    val d = userDoc?.data
+                    val other = if (d != null) User(
+                        uid         = otherUid,
+                        displayName = d["displayName"] as? String ?: d["name"] as? String ?: "",
+                        email       = d["email"] as? String ?: "",
+                        photoURL    = d["photoURL"] as? String ?: "",
+                    ) else null
 
                     Conversation(
-                        id             = obj["id"]?.jsonPrimitive?.content ?: "",
-                        participantIds = participantIds,
-                        lastMessage    = obj["last_message"]?.jsonPrimitive?.content ?: "",
-                        lastMessageAt  = obj["last_message_at"]?.jsonPrimitive?.content ?: "",
-                        otherUser      = otherUser,
-                        unreadCount    = obj["unread_count"]?.jsonPrimitive?.int ?: 0,
+                        id            = obj["id"]?.jsonPrimitive?.content ?: "",
+                        participantIds= listOf(pa, pb),
+                        lastMessage   = obj["last_msg"]?.jsonPrimitive?.content ?: obj["last_message"]?.jsonPrimitive?.content ?: "",
+                        lastMessageAt = obj["updated_at"]?.jsonPrimitive?.content ?: obj["last_message_at"]?.jsonPrimitive?.content ?: "",
+                        otherUser     = other,
+                        unreadCount   = obj["unread_count"]?.jsonPrimitive?.int ?: 0,
                     )
                 }
                 _conversations.value = convList.sortedByDescending { it.lastMessageAt }
-            } catch (_: Exception) {}
-            finally { _loading.value = false }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _loading.value = false
+            }
         }
     }
 
-    fun loadMessages(conversationId: String) {
+    fun loadMessages(convId: String) {
         viewModelScope.launch {
             _loading.value = true
             try {
                 val result = supabase.postgrest["messages"]
                     .select {
-                        filter { eq("conversation_id", conversationId) }
+                        filter { eq("conv_id", convId) }
                         order("created_at", io.github.jan.supabase.postgrest.query.Order.ASCENDING)
                     }
 
                 _messages.value = result.decodeList<JsonObject>().map { obj ->
                     Message(
                         id             = obj["id"]?.jsonPrimitive?.content ?: "",
-                        conversationId = obj["conversation_id"]?.jsonPrimitive?.content ?: "",
-                        senderId       = obj["sender_id"]?.jsonPrimitive?.content ?: "",
-                        text           = obj["text"]?.jsonPrimitive?.content ?: "",
+                        conversationId = obj["conv_id"]?.jsonPrimitive?.content ?: "",
+                        senderId       = obj["from_uid"]?.jsonPrimitive?.content ?: "",
+                        text           = obj["msg_text"]?.jsonPrimitive?.content ?: "",
                         createdAt      = obj["created_at"]?.jsonPrimitive?.content ?: "",
-                        read           = obj["read"]?.jsonPrimitive?.boolean ?: false,
+                        read           = obj["read_at"]?.jsonPrimitive?.contentOrNull != null,
                     )
                 }
-            } catch (_: Exception) {}
-            finally { _loading.value = false }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _loading.value = false
+            }
         }
     }
 
-    fun sendMessage(conversationId: String, text: String) {
+    fun sendMessage(convId: String, toUid: String, text: String) {
         viewModelScope.launch {
             try {
                 supabase.postgrest["messages"].insert(
                     buildJsonObject {
-                        put("conversation_id", conversationId)
-                        put("sender_id", uid)
-                        put("text", text)
-                        put("read", false)
+                        put("conv_id",  convId)
+                        put("from_uid", uid)
+                        put("to_uid",   toUid)
+                        put("msg_text", text)
                     }
                 )
+                // last_msg güncelle
                 supabase.postgrest["conversations"].update(
-                    buildJsonObject {
-                        put("last_message", text)
-                        put("last_message_at", kotlinx.datetime.Clock.System.now().toString())
-                    }
-                ) { filter { eq("id", conversationId) } }
+                    buildJsonObject { put("last_msg", text) }
+                ) { filter { eq("id", convId) } }
 
-                loadMessages(conversationId)
-            } catch (_: Exception) {}
+                loadMessages(convId)
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
-    fun subscribeToMessages(conversationId: String) {
+    fun startOrOpenConversation(otherUid: String, onReady: (String) -> Unit) {
         viewModelScope.launch {
             try {
-                val channel = supabase.channel("messages:$conversationId")
+                val pa = minOf(uid, otherUid)
+                val pb = maxOf(uid, otherUid)
+                // Var mı kontrol et
+                val existing = supabase.postgrest["conversations"].select {
+                    filter {
+                        eq("participant_a", pa)
+                        eq("participant_b", pb)
+                    }
+                }.decodeList<JsonObject>().firstOrNull()
+
+                val convId = if (existing != null) {
+                    existing["id"]?.jsonPrimitive?.content ?: ""
+                } else {
+                    val inserted = supabase.postgrest["conversations"].insert(
+                        buildJsonObject {
+                            put("participant_a", pa)
+                            put("participant_b", pb)
+                            put("last_msg", "")
+                        }
+                    ).decodeList<JsonObject>().firstOrNull()
+                    inserted?.get("id")?.jsonPrimitive?.content ?: ""
+                }
+                if (convId.isNotEmpty()) onReady(convId)
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun subscribeToMessages(convId: String) {
+        viewModelScope.launch {
+            try {
+                val channel = supabase.channel("msgs:$convId")
                 channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") {
                     table = "messages"
                 }.onEach { action ->
                     val obj = action.record
-                    val convId = obj["conversation_id"]?.jsonPrimitive?.content ?: ""
-                    if (convId != conversationId) return@onEach
+                    if (obj["conv_id"]?.jsonPrimitive?.content != convId) return@onEach
                     val newMsg = Message(
                         id             = obj["id"]?.jsonPrimitive?.content ?: "",
                         conversationId = convId,
-                        senderId       = obj["sender_id"]?.jsonPrimitive?.content ?: "",
-                        text           = obj["text"]?.jsonPrimitive?.content ?: "",
+                        senderId       = obj["from_uid"]?.jsonPrimitive?.content ?: "",
+                        text           = obj["msg_text"]?.jsonPrimitive?.content ?: "",
                         createdAt      = obj["created_at"]?.jsonPrimitive?.content ?: "",
                     )
                     _messages.value = _messages.value + newMsg
                 }.launchIn(viewModelScope)
                 channel.subscribe()
-            } catch (_: Exception) {}
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun loadOtherUser(convId: String) {
+        viewModelScope.launch {
+            try {
+                val conv = _conversations.value.firstOrNull { it.id == convId }
+                val otherUid = conv?.participantIds?.firstOrNull { it != uid } ?: return@launch
+                val doc = firestore.collection("users").document(otherUid).get().await()
+                val d = doc.data ?: return@launch
+                _otherUser.value = User(
+                    uid         = otherUid,
+                    displayName = d["displayName"] as? String ?: d["name"] as? String ?: "",
+                    photoURL    = d["photoURL"] as? String ?: "",
+                )
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 }

@@ -11,32 +11,27 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.NavHostController
 import androidx.navigation.compose.*
 import com.heftreng.app.ui.screens.auth.AuthScreen
 import com.heftreng.app.ui.screens.feed.FeedScreen
+import com.heftreng.app.ui.screens.kurdi.KurdiScreen
 import com.heftreng.app.ui.screens.messages.ConversationsScreen
 import com.heftreng.app.ui.screens.messages.MessageDetailScreen
 import com.heftreng.app.ui.screens.notifications.NotificationsScreen
-import com.heftreng.app.ui.screens.profile.ProfileScreen
 import com.heftreng.app.ui.screens.profile.EditProfileScreen
-import com.heftreng.app.ui.theme.Amber
-import com.heftreng.app.ui.theme.Background
-import com.heftreng.app.ui.theme.Muted
+import com.heftreng.app.ui.screens.profile.ProfileScreen
+import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
 
 sealed class Screen(val route: String) {
-    object Auth           : Screen("auth")
-    object Feed           : Screen("feed")
-    object Notifications  : Screen("notifications")
-    object Messages       : Screen("messages")
-    object MessageDetail  : Screen("message/{conversationId}") {
-        fun go(id: String) = "message/$id"
-    }
-    object Profile        : Screen("profile/{uid}") {
-        fun go(uid: String) = "profile/$uid"
-    }
-    object EditProfile    : Screen("edit_profile")
+    object Auth          : Screen("auth")
+    object Feed          : Screen("feed")
+    object Kurdi         : Screen("kurdi")
+    object Messages      : Screen("messages")
+    object MessageDetail : Screen("message/{convId}") { fun go(id: String) = "message/$id" }
+    object Notifications : Screen("notifications")
+    object Profile       : Screen("profile/{uid}") { fun go(uid: String) = "profile/$uid" }
+    object EditProfile   : Screen("edit_profile")
 }
 
 data class BottomNavItem(
@@ -47,10 +42,11 @@ data class BottomNavItem(
 )
 
 val bottomNavItems = listOf(
-    BottomNavItem(Screen.Feed.route,          "Feed",     Icons.Outlined.Home,          Icons.Filled.Home),
-    BottomNavItem(Screen.Notifications.route, "Bildirim", Icons.Outlined.Notifications, Icons.Filled.Notifications),
-    BottomNavItem(Screen.Messages.route,      "Mesajlar", Icons.Outlined.MailOutline,   Icons.Filled.Mail),
-    BottomNavItem("profile/me",               "Profil",   Icons.Outlined.Person,        Icons.Filled.Person),
+    BottomNavItem(Screen.Feed.route,          "Nivîs",      Icons.Outlined.DynamicFeed,         Icons.Filled.DynamicFeed),
+    BottomNavItem(Screen.Kurdi.route,         "Kurdî",      Icons.Outlined.Translate,            Icons.Filled.Translate),
+    BottomNavItem(Screen.Messages.route,      "Peyam",      Icons.Outlined.ChatBubbleOutline,    Icons.Filled.ChatBubble),
+    BottomNavItem(Screen.Notifications.route, "Agahdarî",   Icons.Outlined.NotificationsNone,    Icons.Filled.Notifications),
+    BottomNavItem("profile/me",               "Profîl",     Icons.Outlined.PersonOutline,        Icons.Filled.Person),
 )
 
 @Composable
@@ -70,17 +66,13 @@ fun HeftrangNavHost() {
 
     val navBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStack?.destination?.route
-
-    val showBottomBar = bottomNavItems.any { it.route == currentRoute }
+    val showBottom = bottomNavItems.any { it.route == currentRoute }
 
     Scaffold(
         containerColor = Background,
         bottomBar = {
-            if (showBottomBar) {
-                NavigationBar(
-                    containerColor = Background,
-                    tonalElevation = 0.dp,
-                ) {
+            if (showBottom) {
+                NavigationBar(containerColor = Background, tonalElevation = 0.dp) {
                     bottomNavItems.forEach { item ->
                         val selected = currentRoute == item.route
                         NavigationBarItem(
@@ -92,12 +84,7 @@ fun HeftrangNavHost() {
                                     restoreState = true
                                 }
                             },
-                            icon = {
-                                Icon(
-                                    if (selected) item.iconSelected else item.icon,
-                                    contentDescription = item.label,
-                                )
-                            },
+                            icon = { Icon(if (selected) item.iconSelected else item.icon, contentDescription = item.label) },
                             label = { Text(item.label) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor   = Amber,
@@ -112,31 +99,18 @@ fun HeftrangNavHost() {
             }
         }
     ) { innerPadding ->
-        NavHost(
-            navController    = navController,
-            startDestination = Screen.Feed.route,
-            modifier         = Modifier.padding(innerPadding),
-        ) {
-            composable(Screen.Feed.route) {
-                FeedScreen(navController = navController)
+        NavHost(navController = navController, startDestination = Screen.Feed.route, modifier = Modifier.padding(innerPadding)) {
+            composable(Screen.Feed.route)          { FeedScreen(navController) }
+            composable(Screen.Kurdi.route)         { KurdiScreen() }
+            composable(Screen.Messages.route)      { ConversationsScreen(navController) }
+            composable("message/{convId}") { back ->
+                MessageDetailScreen(convId = back.arguments?.getString("convId") ?: "", navController = navController)
             }
-            composable(Screen.Notifications.route) {
-                NotificationsScreen(navController = navController)
-            }
-            composable(Screen.Messages.route) {
-                ConversationsScreen(navController = navController)
-            }
-            composable("message/{conversationId}") { back ->
-                val convId = back.arguments?.getString("conversationId") ?: ""
-                MessageDetailScreen(conversationId = convId, navController = navController)
-            }
+            composable(Screen.Notifications.route) { NotificationsScreen(navController) }
             composable("profile/{uid}") { back ->
-                val uid = back.arguments?.getString("uid") ?: "me"
-                ProfileScreen(uid = uid, navController = navController)
+                ProfileScreen(uid = back.arguments?.getString("uid") ?: "me", navController = navController)
             }
-            composable(Screen.EditProfile.route) {
-                EditProfileScreen(navController = navController)
-            }
+            composable(Screen.EditProfile.route)   { EditProfileScreen(navController) }
         }
     }
 }

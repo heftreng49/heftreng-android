@@ -28,8 +28,8 @@ object AppModule {
 
     @Provides @Singleton
     fun provideSupabaseClient(): SupabaseClient = createSupabaseClient(
-        supabaseUrl  = "https://YOUR_PROJECT.supabase.co",   // <-- değiştir
-        supabaseKey  = "YOUR_ANON_KEY",                      // <-- değiştir
+        supabaseUrl  = "https://amjenakdiqgrcmlmeqeo.supabase.co",
+        supabaseKey  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtamVuYWtkaXFncmNtbG1lcWVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MTIwMDksImV4cCI6MjA5MDI4ODAwOX0.a8wzzfDo8wjuWa_CzhRbkVlB0t-rAi-QB820rhN4oPc",
     ) {
         install(Postgrest)
         install(Realtime)

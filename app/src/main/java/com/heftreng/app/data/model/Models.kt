@@ -86,3 +86,13 @@ data class Conversation(
     val otherUser: User? = null,
     val unreadCount: Int = 0,
 )
+
+data class KurdiLesson(
+    val id: String = "",
+    val title: String = "",
+    val subtitle: String = "",
+    val type: String = "",   // fill, mcq, build, match
+    val xpReward: Int = 10,
+    val completed: Boolean = false,
+    val order: Int = 0,
+)

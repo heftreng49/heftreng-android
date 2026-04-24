@@ -26,15 +26,13 @@ class AuthViewModel @Inject constructor(
     private val _currentUser = MutableStateFlow<FirebaseUser?>(auth.currentUser)
     val currentUser = _currentUser.asStateFlow()
 
-    private val _error = MutableStateFlow<String?>(null)
+    private val _error   = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
     private val _loading = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
-    init {
-        auth.addAuthStateListener { _currentUser.value = it.currentUser }
-    }
+    init { auth.addAuthStateListener { _currentUser.value = it.currentUser } }
 
     fun getGoogleSignInClient(context: Context) = GoogleSignIn.getClient(
         context,
@@ -49,22 +47,14 @@ class AuthViewModel @Inject constructor(
             _loading.value = true
             try {
                 val credential = GoogleAuthProvider.getCredential(idToken, null)
-                val result = auth.signInWithCredential(credential).await()
-                val user = result.user ?: return@launch
-                // Yeni kullanıcıysa Firestore'a kaydet
+                val result     = auth.signInWithCredential(credential).await()
+                val user       = result.user ?: return@launch
                 if (result.additionalUserInfo?.isNewUser == true) {
-                    firestore.collection("users").document(user.uid).set(
-                        mapOf(
-                            "uid"            to user.uid,
-                            "displayName"    to (user.displayName ?: ""),
-                            "username"       to (user.email?.substringBefore("@") ?: ""),
-                            "photoURL"       to (user.photoUrl?.toString() ?: ""),
-                            "bio"            to "",
-                            "followersCount" to 0,
-                            "followingCount" to 0,
-                            "postsCount"     to 0,
-                        )
-                    ).await()
+                    createUserDoc(user)
+                } else {
+                    // lastSeen güncelle
+                    firestore.collection("users").document(user.uid)
+                        .update("lastSeen", com.google.firebase.Timestamp.now())
                 }
                 _currentUser.value = user
             } catch (e: Exception) {
@@ -93,25 +83,33 @@ class AuthViewModel @Inject constructor(
             _loading.value = true
             try {
                 val result = auth.createUserWithEmailAndPassword(email, password).await()
-                val user = result.user ?: return@launch
-                firestore.collection("users").document(user.uid).set(
-                    mapOf(
-                        "uid"            to user.uid,
-                        "displayName"    to displayName,
-                        "username"       to email.substringBefore("@"),
-                        "photoURL"       to "",
-                        "bio"            to "",
-                        "followersCount" to 0,
-                        "followingCount" to 0,
-                        "postsCount"     to 0,
-                    )
-                ).await()
+                val user   = result.user ?: return@launch
+                createUserDoc(user, displayName)
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
                 _loading.value = false
             }
         }
+    }
+
+    private suspend fun createUserDoc(user: FirebaseUser, overrideName: String? = null) {
+        val name = overrideName ?: user.displayName ?: user.email?.substringBefore("@") ?: "Kullanıcı"
+        firestore.collection("users").document(user.uid).set(mapOf(
+            "uid"         to user.uid,
+            "displayName" to name,
+            "name"        to name,
+            "email"       to (user.email ?: ""),
+            "photoURL"    to (user.photoUrl?.toString() ?: ""),
+            "coverPhoto"  to "",
+            "bio"         to "",
+            "website"     to "",
+            "xp"          to 0,
+            "level"       to 1,
+            "streak"      to 0,
+            "createdAt"   to com.google.firebase.Timestamp.now(),
+            "lastSeen"    to com.google.firebase.Timestamp.now(),
+        )).await()
     }
 
     fun signOut() {
