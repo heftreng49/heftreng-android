@@ -269,21 +269,34 @@ fun PostCard(
             )
             Spacer(Modifier.width(10.dp))
             Column {
+                // DÜZELTME: İsim varsa ismi, yoksa kullanıcı adını, o da yoksa "Heft Reng Kullanıcısı" yazdırıyoruz.
+                val nameToDisplay = when {
+                    post.displayName.isNotBlank() -> post.displayName
+                    post.username.isNotBlank()    -> post.username
+                    else                          -> "Bikarhênerê Heftreng" 
+                }
+
                 Text(
-                    post.displayName.ifBlank { "Bênas" },
+                    text       = nameToDisplay,
                     fontWeight = FontWeight.SemiBold,
                     color      = OnBackground,
                     fontSize   = 14.sp,
                 )
-                // Show username if available, else fall back to a dash
-                val handle = post.username.trim()
-                Text(
-                    if (handle.isNotEmpty()) "@$handle" else "—",
-                    color    = Muted,
-                    fontSize = 12.sp,
-                )
+                
+                // Kullanıcı adı varsa ve görünen isimden farklıysa @handle olarak göster
+                if (post.username.isNotBlank() && post.username != nameToDisplay) {
+                    Text(
+                        text     = "@${post.username}",
+                        color    = Muted,
+                        fontSize = 12.sp,
+                    )
+                } else if (post.username.isBlank() && post.displayName.isBlank()) {
+                    // Her ikisi de boşsa en azından bir ayraç koy
+                    Text("—", color = Muted, fontSize = 12.sp)
+                }
             }
         }
+
 
         Spacer(Modifier.height(10.dp))
 
