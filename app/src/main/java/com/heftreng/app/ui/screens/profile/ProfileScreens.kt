@@ -37,10 +37,12 @@ fun ProfileScreen(
     vm: ProfileViewModel = hiltViewModel(),
     authVm: AuthViewModel = hiltViewModel(),
 ) {
-    val user by vm.user.collectAsState()
-    val posts by vm.posts.collectAsState()
-    val isFollowing by vm.isFollowing.collectAsState()
-    val loading by vm.loading.collectAsState()
+    val user           by vm.user.collectAsState()
+    val posts          by vm.posts.collectAsState()
+    val isFollowing    by vm.isFollowing.collectAsState()
+    val followersCount by vm.followersCount.collectAsState()
+    val followingCount by vm.followingCount.collectAsState()
+    val loading        by vm.loading.collectAsState()
     val isMe = uid == "me" || uid == vm.myUid
 
     LaunchedEffect(uid) { vm.load(uid) }
@@ -49,16 +51,17 @@ fun ProfileScreen(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text(user?.username ?: "", color = OnBackground, fontWeight = FontWeight.SemiBold) },
+                title = { Text(user?.username ?: user?.displayName ?: "", color = OnBackground, fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    if (!isMe) {
-                        IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = OnBackground)
-                        }
+                    if (!isMe) IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = OnBackground)
                     }
                 },
                 actions = {
                     if (isMe) {
+                        IconButton(onClick = { navController.navigate(Screen.EditProfile.route) }) {
+                            Icon(Icons.Default.Edit, contentDescription = "Düzenle", tint = Muted)
+                        }
                         IconButton(onClick = { authVm.signOut() }) {
                             Icon(Icons.Default.Logout, contentDescription = "Çıkış", tint = Muted)
                         }
@@ -69,97 +72,87 @@ fun ProfileScreen(
         }
     ) { padding ->
         if (loading && user == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Amber)
-            }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Amber) }
             return@Scaffold
         }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(bottom = 80.dp),
-        ) {
-            // Profil başlığı
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 80.dp)) {
             item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Kapak fotoğrafı
+                    Box(modifier = Modifier.fillMaxWidth().height(120.dp).background(SurfaceVar)) {
+                        if (user?.coverPhoto?.isNotBlank() == true) {
+                            AsyncImage(model = user?.coverPhoto, contentDescription = null,
+                                modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        }
+                        // Avatar
                         AsyncImage(
                             model = user?.photoURL?.ifEmpty { null },
                             contentDescription = user?.displayName,
-                            modifier = Modifier
-                                .size(80.dp)
-                                .clip(CircleShape)
-                                .background(SurfaceVar),
+                            modifier = Modifier.size(80.dp).clip(CircleShape).background(SurfaceVar)
+                                .align(Alignment.BottomStart).offset(x = 16.dp, y = 40.dp),
                             contentScale = ContentScale.Crop,
                         )
-                        Spacer(Modifier.width(16.dp))
+                    }
+
+                    Spacer(Modifier.height(48.dp))
+
+                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column {
+                                Text(user?.displayName ?: "", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
+                                if (user?.username?.isNotBlank() == true)
+                                    Text("@${user?.username}", color = Muted, fontSize = 13.sp)
+                            }
+                            if (!isMe) {
+                                Button(
+                                    onClick = { vm.toggleFollow(uid) },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isFollowing) SurfaceVar else Amber,
+                                        contentColor   = if (isFollowing) OnBackground else Color.Black,
+                                    ),
+                                ) { Text(if (isFollowing) "Takip Ediliyor" else "Takip Et", fontWeight = FontWeight.SemiBold) }
+                            }
+                        }
+
+                        if (user?.bio?.isNotBlank() == true) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(user?.bio ?: "", color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
+                        }
+                        if (user?.website?.isNotBlank() == true) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(user?.website ?: "", color = Amber, fontSize = 13.sp)
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
                         // İstatistikler
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                        ) {
-                            StatItem(user?.postsCount ?: 0, "Gönderi")
-                            StatItem(user?.followersCount ?: 0, "Takipçi")
-                            StatItem(user?.followingCount ?: 0, "Takip")
+                        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                            StatItem(posts.size, "Gönderi")
+                            StatItem(followersCount, "Takipçi")
+                            StatItem(followingCount, "Takip")
+                            if ((user?.xp ?: 0) > 0) StatItem(user?.xp ?: 0, "XP")
                         }
-                    }
 
-                    Spacer(Modifier.height(12.dp))
-                    Text(user?.displayName ?: "", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
-                    if (user?.bio?.isNotBlank() == true) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(user?.bio ?: "", color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
-                    }
-                    Spacer(Modifier.height(12.dp))
-
-                    // Aksiyon butonu
-                    if (isMe) {
-                        OutlinedButton(
-                            onClick = { navController.navigate(Screen.EditProfile.route) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = OnBackground),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Divider),
-                        ) {
-                            Text("Profili Düzenle")
+                        if (isMe) {
+                            Spacer(Modifier.height(12.dp))
+                            OutlinedButton(
+                                onClick = { navController.navigate(Screen.EditProfile.route) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = OnBackground),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Divider),
+                            ) { Text("Profili Düzenle") }
                         }
-                    } else {
-                        Button(
-                            onClick = { vm.toggleFollow(uid) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isFollowing) SurfaceVar else Amber,
-                                contentColor   = if (isFollowing) OnBackground else Color.Black,
-                            ),
-                        ) {
-                            Text(
-                                if (isFollowing) "Takip Ediliyor" else "Takip Et",
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                    }
 
-                    HorizontalDivider(modifier = Modifier.padding(top = 16.dp), color = Divider)
+                        HorizontalDivider(modifier = Modifier.padding(top = 16.dp), color = Divider)
+                    }
                 }
             }
 
-            // Gönderiler
             items(posts, key = { it.id }) { post ->
-                PostCard(
-                    post = post,
-                    onLike = {},
-                    onSave = {},
-                    onProfile = {},
-                    onComment = {},
-                )
+                PostCard(post = post, onLike = {}, onSave = {}, onProfile = {}, onComment = {}, onShare = {})
                 HorizontalDivider(color = Divider, thickness = 0.5.dp)
             }
         }
@@ -169,22 +162,18 @@ fun ProfileScreen(
 @Composable
 fun StatItem(count: Int, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(count.toString(), fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
+        Text(count.toString(), fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
         Text(label, color = Muted, fontSize = 12.sp)
     }
 }
 
-// ── Profil Düzenle ─────────────────────────────────────────────────────────────
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditProfileScreen(
-    navController: NavController,
-    vm: ProfileViewModel = hiltViewModel(),
-) {
+fun EditProfileScreen(navController: NavController, vm: ProfileViewModel = hiltViewModel()) {
     val user by vm.user.collectAsState()
     var displayName by remember(user) { mutableStateOf(user?.displayName ?: "") }
-    var bio by remember(user) { mutableStateOf(user?.bio ?: "") }
+    var bio         by remember(user) { mutableStateOf(user?.bio ?: "") }
+    var website     by remember(user) { mutableStateOf(user?.website ?: "") }
 
     LaunchedEffect(Unit) { vm.load("me") }
 
@@ -199,10 +188,7 @@ fun EditProfileScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = {
-                        vm.updateProfile(displayName, bio)
-                        navController.popBackStack()
-                    }) {
+                    TextButton(onClick = { vm.updateProfile(displayName, bio, website); navController.popBackStack() }) {
                         Text("Kaydet", color = Amber, fontWeight = FontWeight.Bold)
                     }
                 },
@@ -210,31 +196,13 @@ fun EditProfileScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            OutlinedTextField(
-                value = displayName,
-                onValueChange = { displayName = it },
-                label = { Text("Adın") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = heftrangTextFieldColors(),
-                singleLine = true,
-            )
-            OutlinedTextField(
-                value = bio,
-                onValueChange = { bio = it },
-                label = { Text("Bio") },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = heftrangTextFieldColors(),
-                maxLines = 5,
-            )
+        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text("Adın") },
+                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = heftrangTextFieldColors(), singleLine = true)
+            OutlinedTextField(value = bio, onValueChange = { bio = it }, label = { Text("Bio") },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp), shape = RoundedCornerShape(12.dp), colors = heftrangTextFieldColors(), maxLines = 5)
+            OutlinedTextField(value = website, onValueChange = { website = it }, label = { Text("Website") },
+                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = heftrangTextFieldColors(), singleLine = true)
         }
     }
 }

@@ -5,13 +5,19 @@ import com.google.firebase.Timestamp
 data class User(
     val uid: String = "",
     val displayName: String = "",
+    val name: String = "",
     val username: String = "",
+    val email: String = "",
     val photoURL: String = "",
+    val coverPhoto: String = "",
     val bio: String = "",
+    val website: String = "",
     val followersCount: Int = 0,
     val followingCount: Int = 0,
     val postsCount: Int = 0,
-    val isVerified: Boolean = false,
+    val level: Int = 1,
+    val xp: Int = 0,
+    val streak: Int = 0,
 )
 
 data class Post(
@@ -26,11 +32,9 @@ data class Post(
     val commentsCount: Int = 0,
     val repostsCount: Int = 0,
     val ts: Timestamp? = null,
-    // Quote post
     val quoteText: String = "",
     val bookName: String = "",
     val authorName: String = "",
-    // Local state
     val isLikedByMe: Boolean = false,
     val isSavedByMe: Boolean = false,
 )
@@ -58,7 +62,7 @@ data class Notification(
     val fromUid: String = "",
     val fromName: String = "",
     val fromPhoto: String = "",
-    val type: String = "",   // like, comment, follow, repost
+    val type: String = "",
     val message: String = "",
     val url: String = "",
     val read: Boolean = false,
