@@ -31,37 +31,41 @@ fun NotificationsScreen(
     vm: NotificationsViewModel = hiltViewModel(),
 ) {
     val notifications by vm.notifications.collectAsState()
-    val loading by vm.loading.collectAsState()
+    val loading       by vm.loading.collectAsState()
 
     Scaffold(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text("Bildirimler", fontWeight = FontWeight.SemiBold, color = OnBackground) },
+                title  = { Text("Agahdarî", fontWeight = FontWeight.SemiBold, color = OnBackground) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
             )
         }
     ) { padding ->
-        if (loading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Amber)
-            }
-        } else if (notifications.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.Notifications, contentDescription = null, tint = Muted, modifier = Modifier.size(48.dp))
-                    Spacer(Modifier.height(12.dp))
-                    Text("Henüz bildirim yok", color = Muted)
+        when {
+            loading -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Amber)
                 }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(bottom = 80.dp),
-            ) {
-                items(notifications, key = { it.id }) { notif ->
-                    NotifItem(notif)
-                    HorizontalDivider(color = Divider, thickness = 0.5.dp)
+            notifications.isEmpty() -> {
+                Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Notifications, contentDescription = null, tint = Muted, modifier = Modifier.size(48.dp))
+                        Spacer(Modifier.height(12.dp))
+                        Text("Agahdarî tune / Henüz bildirim yok", color = Muted)
+                    }
+                }
+            }
+            else -> {
+                LazyColumn(
+                    modifier       = Modifier.fillMaxSize().padding(padding),
+                    contentPadding = PaddingValues(bottom = 80.dp),
+                ) {
+                    items(notifications, key = { it.id }) { notif ->
+                        NotifItem(notif)
+                        HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                    }
                 }
             }
         }
@@ -71,24 +75,25 @@ fun NotificationsScreen(
 @Composable
 fun NotifItem(notif: Notification) {
     Row(
-        modifier = Modifier
+        modifier          = Modifier
             .fillMaxWidth()
             .background(if (!notif.read) SurfaceVar else Background)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Avatar + icon badge
         Box {
             AsyncImage(
-                model = notif.fromPhoto.ifEmpty { null },
+                model              = notif.fromPhoto.ifEmpty { null },
                 contentDescription = notif.fromName,
-                modifier = Modifier
-                    .size(44.dp)
+                modifier           = Modifier
+                    .size(48.dp)
                     .clip(CircleShape)
                     .background(SurfaceVar),
                 contentScale = ContentScale.Crop,
             )
             Box(
-                modifier = Modifier
+                modifier         = Modifier
                     .size(18.dp)
                     .clip(CircleShape)
                     .background(notifIconColor(notif.type))
@@ -98,28 +103,43 @@ fun NotifItem(notif: Notification) {
                 Icon(
                     notifIcon(notif.type),
                     contentDescription = null,
-                    tint = androidx.compose.ui.graphics.Color.White,
-                    modifier = Modifier.size(10.dp),
+                    tint               = androidx.compose.ui.graphics.Color.White,
+                    modifier           = Modifier.size(10.dp),
                 )
             }
         }
 
         Spacer(Modifier.width(12.dp))
 
-        Text(
-            notif.message,
-            color = OnBackground,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-            modifier = Modifier.weight(1f),
-        )
+        // Text content
+        Column(modifier = Modifier.weight(1f)) {
+            // Sender name
+            if (notif.fromName.isNotBlank()) {
+                Text(
+                    notif.fromName,
+                    fontWeight = FontWeight.SemiBold,
+                    color      = OnBackground,
+                    fontSize   = 14.sp,
+                )
+            }
+            // Notification message
+            val msg = notif.message.ifBlank { notifDefaultMessage(notif.type) }
+            Text(
+                msg,
+                color      = OnSurface,
+                fontSize   = 13.sp,
+                lineHeight = 18.sp,
+            )
+        }
 
+        // Unread dot
         if (!notif.read) {
+            Spacer(Modifier.width(8.dp))
             Box(
                 modifier = Modifier
                     .size(8.dp)
                     .clip(CircleShape)
-                    .background(Amber)
+                    .background(Amber),
             )
         }
     }
@@ -138,4 +158,12 @@ fun notifIconColor(type: String) = when (type) {
     "comment" -> androidx.compose.ui.graphics.Color(0xFF3B82F6)
     "follow"  -> androidx.compose.ui.graphics.Color(0xFF10B981)
     else      -> androidx.compose.ui.graphics.Color(0xFFF59E0B)
+}
+
+fun notifDefaultMessage(type: String) = when (type) {
+    "like"    -> "gönderinizi beğendi"
+    "comment" -> "gönderinize yorum yaptı"
+    "follow"  -> "sizi takip etmeye başladı"
+    "repost"  -> "gönderinizi paylaştı"
+    else      -> "yeni bir bildirim"
 }
