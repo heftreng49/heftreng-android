@@ -2,15 +2,19 @@ package com.heftreng.app.navigation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -23,6 +27,7 @@ import coil.compose.AsyncImage
 import com.heftreng.app.ui.screens.auth.AuthScreen
 import com.heftreng.app.ui.screens.feed.FeedScreen
 import com.heftreng.app.ui.screens.kurdi.KurdiScreen
+import com.heftreng.app.ui.screens.kurdi.LessonDetailScreen
 import com.heftreng.app.ui.screens.messages.ConversationsScreen
 import com.heftreng.app.ui.screens.messages.MessageDetailScreen
 import com.heftreng.app.ui.screens.notifications.NotificationsScreen
@@ -37,34 +42,39 @@ sealed class Screen(val route: String) {
     object Feed          : Screen("feed")
     object Kurdi         : Screen("kurdi")
     object Messages      : Screen("messages")
-    object MessageDetail : Screen("message/{convId}") { fun go(id: String) = "message/$id" }
+    object MessageDetail : Screen("message/{convId}")    { fun go(id: String)  = "message/$id" }
     object Notifications : Screen("notifications")
-    object Profile       : Screen("profile/{uid}") { fun go(uid: String) = "profile/$uid" }
+    object Profile       : Screen("profile/{uid}")       { fun go(uid: String) = "profile/$uid" }
     object EditProfile   : Screen("edit_profile")
+    object LessonDetail  : Screen("lesson/{lessonId}")   { fun go(id: String)  = "lesson/$id" }
 }
 
 data class BottomNavItem(
-    val route: String,
-    val label: String,
-    val icon: ImageVector,
+    val route       : String,
+    val label       : String,
+    val icon        : ImageVector,
     val iconSelected: ImageVector,
 )
 
 val bottomNavItems = listOf(
-    BottomNavItem(Screen.Feed.route,          "Nivîs",    Icons.Outlined.DynamicFeed,         Icons.Filled.DynamicFeed),
-    BottomNavItem(Screen.Kurdi.route,         "Kurdî",    Icons.Outlined.Translate,            Icons.Filled.Translate),
-    BottomNavItem(Screen.Messages.route,      "Peyam",    Icons.Outlined.ChatBubbleOutline,    Icons.Filled.ChatBubble),
-    BottomNavItem(Screen.Notifications.route, "Agahdarî", Icons.Outlined.NotificationsNone,    Icons.Filled.Notifications),
-    BottomNavItem("profile/me",               "Profîl",   Icons.Outlined.PersonOutline,        Icons.Filled.Person),
+    BottomNavItem(Screen.Feed.route,          "Nivîs",    Icons.Outlined.DynamicFeed,       Icons.Filled.DynamicFeed),
+    BottomNavItem(Screen.Kurdi.route,         "Kurdî",    Icons.Outlined.Translate,          Icons.Filled.Translate),
+    BottomNavItem(Screen.Messages.route,      "Peyam",    Icons.Outlined.ChatBubbleOutline,  Icons.Filled.ChatBubble),
+    BottomNavItem(Screen.Notifications.route, "Agahdarî", Icons.Outlined.NotificationsNone,  Icons.Filled.Notifications),
+    BottomNavItem("profile/me",               "Profîl",   Icons.Outlined.PersonOutline,      Icons.Filled.Person),
 )
 
 private val bottomNavRoutes = setOf(
-    Screen.Feed.route,
-    Screen.Kurdi.route,
-    Screen.Messages.route,
-    Screen.Notifications.route,
-    "profile/me",
+    Screen.Feed.route, Screen.Kurdi.route, Screen.Messages.route,
+    Screen.Notifications.route, "profile/me",
 )
+
+// ── App preferences (in-memory, survives recomposition) ──────────────────────
+object AppPrefs {
+    var darkMode   by mutableStateOf(true)
+    var accentColor by mutableStateOf(Amber)
+    var fontSize   by mutableStateOf(15)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -146,25 +156,24 @@ fun HeftrangNavHost() {
                 modifier         = Modifier.padding(innerPadding),
             ) {
                 composable(Screen.Feed.route) {
-                    FeedScreen(
+                    FeedScreen(navController = navController, onOpenDrawer = { scope.launch { drawerState.open() } })
+                }
+                composable(Screen.Kurdi.route) {
+                    KurdiScreen(navController = navController)
+                }
+                composable("lesson/{lessonId}") { back ->
+                    LessonDetailScreen(
+                        lessonId      = back.arguments?.getString("lessonId") ?: "",
                         navController = navController,
-                        onOpenDrawer  = { scope.launch { drawerState.open() } },
                     )
                 }
-                composable(Screen.Kurdi.route)         { KurdiScreen() }
                 composable(Screen.Messages.route)      { ConversationsScreen(navController) }
                 composable("message/{convId}") { back ->
-                    MessageDetailScreen(
-                        convId        = back.arguments?.getString("convId") ?: "",
-                        navController = navController,
-                    )
+                    MessageDetailScreen(convId = back.arguments?.getString("convId") ?: "", navController = navController)
                 }
                 composable(Screen.Notifications.route) { NotificationsScreen(navController) }
                 composable("profile/{uid}") { back ->
-                    ProfileScreen(
-                        uid           = back.arguments?.getString("uid") ?: "me",
-                        navController = navController,
-                    )
+                    ProfileScreen(uid = back.arguments?.getString("uid") ?: "me", navController = navController)
                 }
                 composable(Screen.EditProfile.route)   { EditProfileScreen(navController) }
             }
@@ -172,77 +181,209 @@ fun HeftrangNavHost() {
     }
 }
 
-// ── Drawer ───────────────────────────────────────────────────────────────────
+// ── Drawer ────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun DrawerContent(
-    user: com.google.firebase.auth.FirebaseUser?,
+    user        : com.google.firebase.auth.FirebaseUser?,
     currentRoute: String?,
-    onNavigate: (String) -> Unit,
-    onSignOut: () -> Unit,
+    onNavigate  : (String) -> Unit,
+    onSignOut   : () -> Unit,
 ) {
+    val scrollState = rememberScrollState()
+
     ModalDrawerSheet(
         drawerContainerColor = Surface,
         drawerShape          = RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp),
+        modifier             = Modifier.fillMaxHeight(),
     ) {
-        Spacer(Modifier.height(40.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(bottom = 16.dp),
+        ) {
+            Spacer(Modifier.height(40.dp))
 
-        // User header
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-            AsyncImage(
-                model              = user?.photoUrl,
-                contentDescription = user?.displayName,
-                modifier           = Modifier.size(64.dp).clip(CircleShape).background(SurfaceVar),
-                contentScale       = ContentScale.Crop,
-            )
-            Spacer(Modifier.height(10.dp))
-            Text(user?.displayName ?: "", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
-            if (!user?.email.isNullOrBlank())
-                Text(user?.email ?: "", color = Muted, fontSize = 13.sp)
-        }
+            // ── Kullanıcı başlığı ─────────────────────────────────────────
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+                AsyncImage(
+                    model              = user?.photoUrl,
+                    contentDescription = user?.displayName,
+                    modifier           = Modifier.size(64.dp).clip(CircleShape).background(SurfaceVar),
+                    contentScale       = ContentScale.Crop,
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(user?.displayName ?: "", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
+                if (!user?.email.isNullOrBlank())
+                    Text(user?.email ?: "", color = Muted, fontSize = 12.sp)
+            }
 
-        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), color = Divider)
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), color = Divider)
 
-        val drawerItems = listOf(
-            Triple(Screen.Feed.route,          "Nivîs",         Icons.Outlined.DynamicFeed),
-            Triple(Screen.Kurdi.route,         "Kurdî Fêrbibe", Icons.Outlined.Translate),
-            Triple(Screen.Messages.route,      "Peyam",         Icons.Outlined.ChatBubbleOutline),
-            Triple(Screen.Notifications.route, "Agahdarî",      Icons.Outlined.NotificationsNone),
-            Triple("profile/me",               "Profîla Min",   Icons.Outlined.PersonOutline),
-        )
+            // ── Ana sayfalar ──────────────────────────────────────────────
+            DrawerSectionLabel("Sayfalar", Icons.Default.Apps)
 
-        drawerItems.forEach { (route, label, icon) ->
-            val sel = currentRoute == route
+            listOf(
+                Triple(Screen.Feed.route,          "Nivîs / Feed",    Icons.Outlined.DynamicFeed),
+                Triple(Screen.Kurdi.route,         "Kurdî Fêrbibe",   Icons.Outlined.Translate),
+                Triple(Screen.Messages.route,      "Peyam",           Icons.Outlined.ChatBubbleOutline),
+                Triple(Screen.Notifications.route, "Agahdarî",        Icons.Outlined.NotificationsNone),
+                Triple("profile/me",               "Profîla Min",     Icons.Outlined.PersonOutline),
+            ).forEach { (route, label, icon) ->
+                val sel = currentRoute == route
+                NavigationDrawerItem(
+                    label    = { Text(label, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal, fontSize = 14.sp) },
+                    icon     = { Icon(icon, contentDescription = label, modifier = Modifier.size(20.dp)) },
+                    selected = sel,
+                    onClick  = { onNavigate(route) },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 1.dp),
+                    colors   = NavigationDrawerItemDefaults.colors(
+                        selectedContainerColor   = Amber.copy(alpha = 0.15f),
+                        unselectedContainerColor = Color.Transparent,
+                        selectedIconColor        = Amber,
+                        selectedTextColor        = Amber,
+                        unselectedIconColor      = Muted,
+                        unselectedTextColor      = OnBackground,
+                    ),
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Divider)
+
+            // ── Ayarlar ───────────────────────────────────────────────────
+            DrawerSectionLabel("Mîheng / Ayarlar", Icons.Default.Tune)
+
+            // Dark mode toggle
+            DrawerSettingRow(
+                label = "Moda Tarî / Karanlık Mod",
+                icon  = Icons.Default.DarkMode,
+            ) {
+                Switch(
+                    checked         = AppPrefs.darkMode,
+                    onCheckedChange = { AppPrefs.darkMode = it },
+                    colors          = SwitchDefaults.colors(checkedThumbColor = Color.Black, checkedTrackColor = Amber),
+                    modifier        = Modifier.height(24.dp),
+                )
+            }
+
+            // Font size
+            DrawerSettingRow(
+                label = "Mezinahiya Tîpan / Yazı Boyutu",
+                icon  = Icons.Default.FormatSize,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick  = { if (AppPrefs.fontSize > 12) AppPrefs.fontSize-- },
+                        modifier = Modifier.size(28.dp),
+                    ) {
+                        Text("−", color = Amber, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                    Text(
+                        "${AppPrefs.fontSize}px",
+                        color    = OnBackground,
+                        fontSize = 12.sp,
+                        modifier = Modifier.width(36.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                    IconButton(
+                        onClick  = { if (AppPrefs.fontSize < 22) AppPrefs.fontSize++ },
+                        modifier = Modifier.size(28.dp),
+                    ) {
+                        Text("+", color = Amber, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                }
+            }
+
+            // Renk seçimi
+            DrawerSectionLabel("Reng / Renk", Icons.Default.Palette)
+            Row(
+                modifier              = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                val colors = listOf(
+                    Color(0xFFF59E0B) to "Amber",
+                    Color(0xFF6366F1) to "Indigo",
+                    Color(0xFFEF4444) to "Kırmızı",
+                    Color(0xFF10B981) to "Yeşil",
+                    Color(0xFF0EA5E9) to "Mavi",
+                )
+                colors.forEach { (color, name) ->
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(color)
+                            .then(
+                                if (AppPrefs.accentColor == color)
+                                    Modifier.padding(3.dp)
+                                        .clip(CircleShape)
+                                        .background(Surface)
+                                else Modifier
+                            )
+                            .clickable { AppPrefs.accentColor = color },
+                    )
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Divider)
+
+            // ── Çıkış ─────────────────────────────────────────────────────
             NavigationDrawerItem(
-                label    = { Text(label, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) },
-                icon     = { Icon(icon, contentDescription = label) },
-                selected = sel,
-                onClick  = { onNavigate(route) },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                label    = { Text("Derketin / Çıkış Yap", color = Color(0xFFEF4444), fontSize = 14.sp) },
+                icon     = { Icon(Icons.Default.Logout, contentDescription = "Çıkış", tint = Color(0xFFEF4444), modifier = Modifier.size(20.dp)) },
+                selected = false,
+                onClick  = onSignOut,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 1.dp),
                 colors   = NavigationDrawerItemDefaults.colors(
-                    selectedContainerColor   = Amber.copy(alpha = 0.15f),
-                    unselectedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                    selectedIconColor        = Amber,
-                    selectedTextColor        = Amber,
-                    unselectedIconColor      = Muted,
-                    unselectedTextColor      = OnBackground,
+                    unselectedContainerColor = Color.Transparent,
                 ),
             )
+
+            Spacer(Modifier.height(8.dp))
+
+            // Footer
+            Text(
+                "© 2025 Heftreng",
+                color    = Muted,
+                fontSize = 10.sp,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
         }
+    }
+}
 
-        Spacer(Modifier.weight(1f))
-        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Divider)
+@Composable
+private fun DrawerSectionLabel(label: String, icon: ImageVector) {
+    Row(
+        modifier          = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = Amber, modifier = Modifier.size(13.dp))
+        Text(label, color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp)
+    }
+}
 
-        NavigationDrawerItem(
-            label    = { Text("Derketin / Çıkış Yap", color = OnBackground) },
-            icon     = { Icon(Icons.Default.Logout, contentDescription = "Çıkış", tint = Muted) },
-            selected = false,
-            onClick  = onSignOut,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-            colors   = NavigationDrawerItemDefaults.colors(
-                unselectedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-            ),
-        )
-        Spacer(Modifier.height(16.dp))
+@Composable
+private fun DrawerSettingRow(
+    label  : String,
+    icon   : ImageVector,
+    control: @Composable () -> Unit,
+) {
+    Row(
+        modifier              = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 6.dp),
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(icon, contentDescription = null, tint = Muted, modifier = Modifier.size(18.dp))
+            Text(label, color = OnBackground, fontSize = 13.sp)
+        }
+        control()
     }
 }
