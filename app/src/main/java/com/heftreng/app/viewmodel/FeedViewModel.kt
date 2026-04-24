@@ -27,16 +27,37 @@ class FeedViewModel @Inject constructor(
     private val _comments = MutableStateFlow<List<Comment>>(emptyList())
     val comments = _comments.asStateFlow()
 
-    private val _loading = MutableStateFlow(false)
+    private val _loading = MutableStateFlow(true)
     val loading = _loading.asStateFlow()
 
     val uid get() = auth.currentUser?.uid ?: ""
 
-    init { observeFeed() }
+    // Kullanıcının beğeni ve kaydetme setleri — tek seferinde çekilir
+    private val _likedIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _savedIds = MutableStateFlow<Set<String>>(emptySet())
 
-    // 1. GERÇEK ZAMANLI AKIŞ (SnapshotListener ile)
+    init {
+        viewModelScope.launch {
+            loadUserInteractions()
+            observeFeed()
+        }
+    }
+
+    // Kullanıcının TÜM beğeni ve kaydetmelerini tek sorguda çek
+    private suspend fun loadUserInteractions() {
+        if (uid.isEmpty()) return
+        try {
+            val likes = firestore.collection("feedLikes")
+                .whereEqualTo("uid", uid).get().await()
+            _likedIds.value = likes.documents.mapNotNull { it.getString("postId") }.toSet()
+
+            val saves = firestore.collection("feedSaves")
+                .whereEqualTo("uid", uid).get().await()
+            _savedIds.value = saves.documents.mapNotNull { it.getString("postId") }.toSet()
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+
     private fun observeFeed() {
-        _loading.value = true
         firestore.collection("feed")
             .orderBy("ts", Query.Direction.DESCENDING)
             .limit(50)
@@ -45,7 +66,6 @@ class FeedViewModel @Inject constructor(
                     _loading.value = false
                     return@addSnapshotListener
                 }
-
                 viewModelScope.launch {
                     val postList = snap.documents.mapNotNull { doc ->
                         val d = doc.data ?: return@mapNotNull null
@@ -64,63 +84,68 @@ class FeedViewModel @Inject constructor(
                             bookName      = d["bookName"] as? String ?: "",
                             authorName    = d["authorName"] as? String ?: "",
                             ts            = d["ts"] as? Timestamp,
+                            isLikedByMe   = doc.id in _likedIds.value,
+                            isSavedByMe   = doc.id in _savedIds.value,
                         )
                     }
-
-                    // 2. İSİM VE BEĞENİ DURUMU GÜNCELLEME (Hydration)
-                    val hydratedList = postList.map { post ->
-                        // Eğer isim boşsa users koleksiyonundan çek (Bênas FIX)
-                        var currentPost = post
-                        if (post.displayName.isBlank()) {
-                            val userDoc = firestore.collection("users").document(post.uid).get().await()
-                            currentPost = post.copy(
-                                displayName = userDoc.getString("displayName") ?: "Bikarhêner",
-                                photoURL = userDoc.getString("photoURL") ?: ""
-                            )
-                        }
-
-                        // Beğeni ve Kaydetme kontrolü
-                        if (uid.isNotEmpty()) {
-                            val isLiked = firestore.collection("feedLikes").document("${post.id}_$uid").get().await().exists()
-                            val isSaved = firestore.collection("feedSaves").document("${post.id}_$uid").get().await().exists()
-                            currentPost.copy(isLikedByMe = isLiked, isSavedByMe = isSaved)
-                        } else currentPost
-                    }
-
-                    _posts.value = hydratedList
+                    _posts.value = postList
                     _loading.value = false
                 }
             }
     }
 
+    // Anlık UI güncellemesi + Firestore yazma
     fun toggleLike(post: Post) {
         if (uid.isEmpty()) return
+        // Anında UI güncelle
+        val nowLiked = !post.isLikedByMe
+        _likedIds.value = if (nowLiked)
+            _likedIds.value + post.id
+        else
+            _likedIds.value - post.id
+
+        _posts.value = _posts.value.map {
+            if (it.id == post.id) it.copy(
+                isLikedByMe = nowLiked,
+                likesCount  = it.likesCount + if (nowLiked) 1 else -1
+            ) else it
+        }
+
         viewModelScope.launch {
             try {
                 val likeDoc = firestore.collection("feedLikes").document("${post.id}_$uid")
                 val postRef = firestore.collection("feed").document(post.id)
-                if (post.isLikedByMe) {
-                    likeDoc.delete().await()
-                    postRef.update("likes", FieldValue.increment(-1)).await()
-                } else {
+                if (nowLiked) {
                     likeDoc.set(mapOf("uid" to uid, "postId" to post.id, "ts" to Timestamp.now())).await()
                     postRef.update("likes", FieldValue.increment(1)).await()
                     if (post.uid != uid) sendNotif(post.uid, "like", "gönderini beğendi")
+                } else {
+                    likeDoc.delete().await()
+                    postRef.update("likes", FieldValue.increment(-1)).await()
                 }
-                // UI anlık güncelleme (Snapshot gelene kadar)
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
     fun toggleSave(post: Post) {
         if (uid.isEmpty()) return
+        val nowSaved = !post.isSavedByMe
+        _savedIds.value = if (nowSaved)
+            _savedIds.value + post.id
+        else
+            _savedIds.value - post.id
+
+        _posts.value = _posts.value.map {
+            if (it.id == post.id) it.copy(isSavedByMe = nowSaved) else it
+        }
+
         viewModelScope.launch {
             try {
                 val saveDoc = firestore.collection("feedSaves").document("${post.id}_$uid")
-                if (post.isSavedByMe) {
-                    saveDoc.delete().await()
-                } else {
+                if (nowSaved) {
                     saveDoc.set(mapOf("uid" to uid, "postId" to post.id, "ts" to Timestamp.now())).await()
+                } else {
+                    saveDoc.delete().await()
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -132,7 +157,7 @@ class FeedViewModel @Inject constructor(
             try {
                 val userDoc = firestore.collection("users").document(uid).get().await()
                 val displayName = userDoc.getString("displayName") ?: "Bikarhêner"
-                
+
                 firestore.collection("feed").document(post.id)
                     .collection("comments").add(mapOf(
                         "uid"         to uid,
@@ -142,10 +167,15 @@ class FeedViewModel @Inject constructor(
                         "likes"       to 0,
                         "ts"          to Timestamp.now(),
                     )).await()
-                
+
                 firestore.collection("feed").document(post.id)
                     .update("cmtCount", FieldValue.increment(1)).await()
-                
+
+                // Anlık commentsCount güncelle
+                _posts.value = _posts.value.map {
+                    if (it.id == post.id) it.copy(commentsCount = it.commentsCount + 1) else it
+                }
+
                 if (post.uid != uid) sendNotif(post.uid, "comment", "gönderini yorumladı")
                 loadComments(post.id)
             } catch (e: Exception) { e.printStackTrace() }
@@ -173,10 +203,14 @@ class FeedViewModel @Inject constructor(
                     "repostOf"    to post.id,
                     "ts"          to Timestamp.now(),
                 )).await()
-                
+
                 firestore.collection("feed").document(post.id)
                     .update("reposts", FieldValue.increment(1)).await()
-                
+
+                _posts.value = _posts.value.map {
+                    if (it.id == post.id) it.copy(repostsCount = it.repostsCount + 1) else it
+                }
+
                 if (post.uid != uid) sendNotif(post.uid, "repost", "gönderini paylaştı")
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -204,18 +238,16 @@ class FeedViewModel @Inject constructor(
 
     private suspend fun sendNotif(toUid: String, type: String, action: String) {
         try {
-            val userDoc = firestore.collection("users").document(uid).get().await()
+            val userDoc  = firestore.collection("users").document(uid).get().await()
             val fromName = userDoc.getString("displayName") ?: "Kullanıcı"
-            
             firestore.collection("userNotifs").document(toUid).collection("msgs").add(mapOf(
-                "fromUid"   to uid,
-                "fromName"  to fromName,
-                "type"      to type,
-                "message"   to "$fromName $action",
-                "read"      to false,
-                "ts"        to Timestamp.now(),
+                "fromUid"  to uid,
+                "fromName" to fromName,
+                "type"     to type,
+                "message"  to "$fromName $action",
+                "read"     to false,
+                "ts"       to Timestamp.now(),
             )).await()
-            
             firestore.collection("pushQueue").add(mapOf(
                 "targetUid" to toUid,
                 "title"     to "Heftreng",
@@ -229,8 +261,11 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val snap = firestore.collection("feed").document(postId)
-                    .collection("comments").orderBy("ts", Query.Direction.ASCENDING).get().await()
-                _comments.value = snap.documents.mapNotNull { it.toObject(Comment::class.java)?.copy(id = it.id) }
+                    .collection("comments")
+                    .orderBy("ts", Query.Direction.ASCENDING).get().await()
+                _comments.value = snap.documents.mapNotNull {
+                    it.toObject(Comment::class.java)?.copy(id = it.id)
+                }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }

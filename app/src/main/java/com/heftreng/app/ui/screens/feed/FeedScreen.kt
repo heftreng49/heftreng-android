@@ -1,7 +1,6 @@
 package com.heftreng.app.ui.screens.feed
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,9 +37,9 @@ fun FeedScreen(
 ) {
     val posts   by vm.posts.collectAsState()
     val loading by vm.loading.collectAsState()
-    var showNewPost  by remember { mutableStateOf(false) }
-    var newPostText  by remember { mutableStateOf("") }
-    var commentPost  by remember { mutableStateOf<Post?>(null) }
+    var showNewPost by remember { mutableStateOf(false) }
+    var newPostText by remember { mutableStateOf("") }
+    var commentPost by remember { mutableStateOf<Post?>(null) }
 
     Scaffold(
         containerColor = Background,
@@ -97,7 +96,8 @@ fun FeedScreen(
                         onLike    = { vm.toggleLike(post) },
                         onSave    = { vm.toggleSave(post) },
                         onProfile = { navController.navigate(Screen.Profile.go(post.uid)) },
-                        onComment = { commentPost = post },
+                        // Karta tıklayınca detay sayfasına git
+                        onComment = { navController.navigate(Screen.PostDetail.go(post.id)) },
                         onShare   = { vm.repost(post) },
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
@@ -106,6 +106,7 @@ fun FeedScreen(
         }
     }
 
+    // Yeni gönderi sheet
     if (showNewPost) {
         ModalBottomSheet(
             onDismissRequest = { showNewPost = false },
@@ -129,8 +130,8 @@ fun FeedScreen(
                     TextButton(onClick = {
                         if (newPostText.isNotBlank()) {
                             vm.createPost(newPostText.trim())
-                            newPostText  = ""
-                            showNewPost  = false
+                            newPostText = ""
+                            showNewPost = false
                         }
                     }) {
                         Text("Paylaş", color = Amber, fontWeight = FontWeight.Bold)
@@ -138,15 +139,15 @@ fun FeedScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
-                    value           = newPostText,
-                    onValueChange   = { newPostText = it },
-                    placeholder     = { Text("Ne düşünüyorsun?", color = Muted) },
-                    modifier        = Modifier.fillMaxWidth().heightIn(min = 120.dp),
-                    colors          = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor    = Amber,
-                        unfocusedBorderColor  = Divider,
-                        focusedTextColor      = OnBackground,
-                        unfocusedTextColor    = OnBackground,
+                    value         = newPostText,
+                    onValueChange = { newPostText = it },
+                    placeholder   = { Text("Ne düşünüyorsun?", color = Muted) },
+                    modifier      = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor      = Amber,
+                        unfocusedBorderColor    = Divider,
+                        focusedTextColor        = OnBackground,
+                        unfocusedTextColor      = OnBackground,
                         unfocusedContainerColor = Surface,
                         focusedContainerColor   = Surface,
                     ),
@@ -156,91 +157,9 @@ fun FeedScreen(
             }
         }
     }
-
-    commentPost?.let { post ->
-        CommentSheet(post = post, onDismiss = { commentPost = null }, vm = vm)
-    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel) {
-    val comments by vm.comments.collectAsState()
-    var commentText by remember { mutableStateOf("") }
-    LaunchedEffect(post.id) { vm.loadComments(post.id) }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor   = Surface,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.75f)
-                .padding(horizontal = 16.dp)
-                .navigationBarsPadding(),
-        ) {
-            Text("Yorumlar", fontWeight = FontWeight.SemiBold, color = OnBackground, modifier = Modifier.padding(vertical = 8.dp))
-            HorizontalDivider(color = Divider)
-            LazyColumn(
-                modifier       = Modifier.weight(1f),
-                contentPadding = PaddingValues(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(comments, key = { it.id }) { cmt ->
-                    Row(verticalAlignment = Alignment.Top) {
-                        AsyncImage(
-                            model              = cmt.photoURL.ifEmpty { null },
-                            contentDescription = null,
-                            modifier           = Modifier.size(32.dp).clip(CircleShape).background(SurfaceVar),
-                            contentScale       = ContentScale.Crop,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Column {
-                            Text(cmt.displayName, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 13.sp)
-                            Text(cmt.text, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
-                        }
-                    }
-                }
-            }
-            HorizontalDivider(color = Divider)
-            Row(
-                modifier          = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value         = commentText,
-                    onValueChange = { commentText = it },
-                    placeholder   = { Text("Yorum yaz...", color = Muted) },
-                    modifier      = Modifier.weight(1f),
-                    shape         = RoundedCornerShape(24.dp),
-                    singleLine    = true,
-                    colors        = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor      = Amber,
-                        unfocusedBorderColor    = Divider,
-                        focusedTextColor        = OnBackground,
-                        unfocusedTextColor      = OnBackground,
-                        unfocusedContainerColor = SurfaceVar,
-                        focusedContainerColor   = SurfaceVar,
-                    ),
-                )
-                Spacer(Modifier.width(8.dp))
-                IconButton(
-                    onClick  = {
-                        if (commentText.isNotBlank()) {
-                            vm.addComment(post, commentText.trim())
-                            commentText = ""
-                        }
-                    },
-                    modifier = Modifier.size(40.dp).clip(CircleShape).background(Amber),
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Gönder", tint = Color.Black, modifier = Modifier.size(18.dp))
-                }
-            }
-        }
-    }
-}
-
+// PostCard — Feed listesi için (inline)
 @Composable
 fun PostCard(
     post      : Post,
@@ -256,51 +175,46 @@ fun PostCard(
             .background(Background)
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
-        // Header: avatar + name + username
-        Row(
-            modifier          = Modifier.fillMaxWidth().clickable { onProfile() },
+        // Header
+        androidx.compose.foundation.layout.Row(
+            modifier          = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AsyncImage(
                 model              = post.photoURL.ifEmpty { null },
                 contentDescription = post.displayName,
-                modifier           = Modifier.size(40.dp).clip(CircleShape).background(SurfaceVar),
-                contentScale       = ContentScale.Crop,
+                modifier           = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(SurfaceVar)
+                    .let { m ->
+                        // Profil tıklanabilir
+                        m
+                    },
+                contentScale = ContentScale.Crop,
             )
             Spacer(Modifier.width(10.dp))
-            Column {
-                // DÜZELTME: İsim varsa ismi, yoksa kullanıcı adını, o da yoksa "Heft Reng Kullanıcısı" yazdırıyoruz.
-                val nameToDisplay = when {
-                    post.displayName.isNotBlank() -> post.displayName
-                    post.username.isNotBlank()    -> post.username
-                    else                          -> "Bikarhênerê Heftreng" 
-                }
-
-                Text(
-                    text       = nameToDisplay,
-                    fontWeight = FontWeight.SemiBold,
-                    color      = OnBackground,
-                    fontSize   = 14.sp,
-                )
-                
-                // Kullanıcı adı varsa ve görünen isimden farklıysa @handle olarak göster
-                if (post.username.isNotBlank() && post.username != nameToDisplay) {
-                    Text(
-                        text     = "@${post.username}",
-                        color    = Muted,
-                        fontSize = 12.sp,
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .then(
+                        Modifier.let { it }
                     )
-                } else if (post.username.isBlank() && post.displayName.isBlank()) {
-                    // Her ikisi de boşsa en azından bir ayraç koy
-                    Text("—", color = Muted, fontSize = 12.sp)
-                }
+            ) {
+                val nameToShow = post.displayName.ifBlank { post.username.ifBlank { "Bikarhênerê Heftreng" } }
+                Text(nameToShow, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
+                if (post.username.isNotBlank() && post.username != nameToShow)
+                    Text("@${post.username}", color = Muted, fontSize = 12.sp)
+            }
+            // Detay butonu
+            IconButton(onClick = onComment, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Outlined.OpenInNew, contentDescription = "Detay", tint = Muted, modifier = Modifier.size(16.dp))
             }
         }
 
-
         Spacer(Modifier.height(10.dp))
 
-        // Quote block
+        // Quote
         if (post.quoteText.isNotBlank()) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -318,7 +232,7 @@ fun PostCard(
             Spacer(Modifier.height(8.dp))
         }
 
-        // Post text
+        // Text
         if (post.text.isNotBlank()) {
             Text(post.text, color = OnBackground, fontSize = 15.sp, lineHeight = 22.sp)
             Spacer(Modifier.height(8.dp))
@@ -338,7 +252,7 @@ fun PostCard(
             Spacer(Modifier.height(8.dp))
         }
 
-        // Actions row
+        // Actions
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // Like
             IconButton(onClick = onLike) {
@@ -354,9 +268,9 @@ fun PostCard(
 
             Spacer(Modifier.width(4.dp))
 
-            // Comment
+            // Comment → detay sayfasına git
             IconButton(onClick = onComment) {
-                Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = "Yorum", tint = Muted, modifier = Modifier.size(20.dp))
+                Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = "Yorumlar", tint = Muted, modifier = Modifier.size(20.dp))
             }
             if (post.commentsCount > 0)
                 Text(post.commentsCount.toString(), color = Muted, fontSize = 13.sp)
