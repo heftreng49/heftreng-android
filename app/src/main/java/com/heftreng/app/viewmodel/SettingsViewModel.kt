@@ -1,12 +1,7 @@
 package com.heftreng.app.viewmodel
 
 import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,46 +10,36 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-// Top-level extension — dosyanın en üstünde, class dışında olmalı
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "hf_settings")
+// DataStore dependency olmadığı için SharedPreferences kullanıyoruz.
+// DataStore eklemek istersen build.gradle.kts'e şunu ekle:
+//   implementation("androidx.datastore:datastore-preferences:1.1.1")
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
-    companion object {
-        val KEY_DARK = booleanPreferencesKey("hf_theme_dark")
-        val KEY_LANG = stringPreferencesKey("hf_lang")
-    }
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences("hf_settings", Context.MODE_PRIVATE)
 
-    private val _darkMode = MutableStateFlow(true)
+    private val _darkMode = MutableStateFlow(prefs.getBoolean("hf_theme_dark", true))
     val darkMode = _darkMode.asStateFlow()
 
-    private val _language = MutableStateFlow("tr")   // "tr" | "ku"
+    private val _language = MutableStateFlow(prefs.getString("hf_lang", "tr") ?: "tr")
     val language = _language.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            context.dataStore.data.collect { prefs ->
-                _darkMode.value = prefs[KEY_DARK] ?: true
-                _language.value = prefs[KEY_LANG]  ?: "tr"
-            }
-        }
-    }
 
     fun toggleDarkMode() {
         viewModelScope.launch {
             val next = !_darkMode.value
             _darkMode.value = next
-            context.dataStore.edit { it[KEY_DARK] = next }
+            prefs.edit().putBoolean("hf_theme_dark", next).apply()
         }
     }
 
     fun setLanguage(lang: String) {
         viewModelScope.launch {
             _language.value = lang
-            context.dataStore.edit { it[KEY_LANG] = lang }
+            prefs.edit().putString("hf_lang", lang).apply()
         }
     }
 }
