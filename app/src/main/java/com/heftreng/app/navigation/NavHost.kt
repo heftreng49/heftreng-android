@@ -1,4 +1,5 @@
 package com.heftreng.app.navigation
+import androidx.compose.foundation.clickable
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -22,10 +23,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.*
+import androidx.navigation.navArgument
 import coil.compose.AsyncImage
 import com.heftreng.app.ui.screens.auth.AuthScreen
 import com.heftreng.app.ui.screens.feed.FeedScreen
+import com.heftreng.app.ui.screens.feed.PostDetailScreen
 import com.heftreng.app.ui.screens.kurdi.KurdiScreen
 import com.heftreng.app.ui.screens.kurdi.LessonDetailScreen
 import com.heftreng.app.ui.screens.messages.ConversationsScreen
@@ -35,6 +39,7 @@ import com.heftreng.app.ui.screens.profile.EditProfileScreen
 import com.heftreng.app.ui.screens.profile.ProfileScreen
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
+import com.heftreng.app.viewmodel.FeedViewModel
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
@@ -47,6 +52,8 @@ sealed class Screen(val route: String) {
     object Profile       : Screen("profile/{uid}")       { fun go(uid: String) = "profile/$uid" }
     object EditProfile   : Screen("edit_profile")
     object LessonDetail  : Screen("lesson/{lessonId}")   { fun go(id: String)  = "lesson/$id" }
+    // Yeni eklenen Post Detay rotası
+    object PostDetail    : Screen("post_detail/{postId}") { fun go(id: String)  = "post_detail/$id" }
 }
 
 data class BottomNavItem(
@@ -69,7 +76,6 @@ private val bottomNavRoutes = setOf(
     Screen.Notifications.route, "profile/me",
 )
 
-// ── App preferences (in-memory, survives recomposition) ──────────────────────
 object AppPrefs {
     var darkMode   by mutableStateOf(true)
     var accentColor by mutableStateOf(Amber)
@@ -81,6 +87,7 @@ object AppPrefs {
 fun HeftrangNavHost() {
     val navController         = rememberNavController()
     val authVm: AuthViewModel = hiltViewModel()
+    val feedVm: FeedViewModel = hiltViewModel() // Feed ve Detay için ortak VM
     val currentUser           by authVm.currentUser.collectAsState()
     val drawerState           = rememberDrawerState(DrawerValue.Closed)
     val scope                 = rememberCoroutineScope()
@@ -158,6 +165,16 @@ fun HeftrangNavHost() {
                 composable(Screen.Feed.route) {
                     FeedScreen(navController = navController, onOpenDrawer = { scope.launch { drawerState.open() } })
                 }
+                
+                // Yeni Post Detay Rotası
+                composable(
+                    route = Screen.PostDetail.route,
+                    arguments = listOf(navArgument("postId") { type = NavType.StringType })
+                ) { back ->
+                    val postId = back.arguments?.getString("postId") ?: ""
+                    PostDetailScreen(navController = navController, viewModel = feedVm, postId = postId)
+                }
+
                 composable(Screen.Kurdi.route) {
                     KurdiScreen(navController = navController)
                 }
@@ -181,8 +198,7 @@ fun HeftrangNavHost() {
     }
 }
 
-// ── Drawer ────────────────────────────────────────────────────────────────────
-
+// DrawerContent ve diğer yardımcı bileşenler aynı şekilde devam ediyor...
 @Composable
 private fun DrawerContent(
     user        : com.google.firebase.auth.FirebaseUser?,
@@ -205,7 +221,6 @@ private fun DrawerContent(
         ) {
             Spacer(Modifier.height(40.dp))
 
-            // ── Kullanıcı başlığı ─────────────────────────────────────────
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
                 AsyncImage(
                     model              = user?.photoUrl,
@@ -221,7 +236,6 @@ private fun DrawerContent(
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), color = Divider)
 
-            // ── Ana sayfalar ──────────────────────────────────────────────
             DrawerSectionLabel("Sayfalar", Icons.Default.Apps)
 
             listOf(
@@ -251,10 +265,8 @@ private fun DrawerContent(
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Divider)
 
-            // ── Ayarlar ───────────────────────────────────────────────────
             DrawerSectionLabel("Mîheng / Ayarlar", Icons.Default.Tune)
 
-            // Dark mode toggle
             DrawerSettingRow(
                 label = "Moda Tarî / Karanlık Mod",
                 icon  = Icons.Default.DarkMode,
@@ -267,7 +279,6 @@ private fun DrawerContent(
                 )
             }
 
-            // Font size
             DrawerSettingRow(
                 label = "Mezinahiya Tîpan / Yazı Boyutu",
                 icon  = Icons.Default.FormatSize,
@@ -295,7 +306,6 @@ private fun DrawerContent(
                 }
             }
 
-            // Renk seçimi
             DrawerSectionLabel("Reng / Renk", Icons.Default.Palette)
             Row(
                 modifier              = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
@@ -308,7 +318,7 @@ private fun DrawerContent(
                     Color(0xFF10B981) to "Yeşil",
                     Color(0xFF0EA5E9) to "Mavi",
                 )
-                colors.forEach { (color, name) ->
+                colors.forEach { (color, _) ->
                     Box(
                         modifier = Modifier
                             .size(28.dp)
@@ -328,7 +338,6 @@ private fun DrawerContent(
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Divider)
 
-            // ── Çıkış ─────────────────────────────────────────────────────
             NavigationDrawerItem(
                 label    = { Text("Derketin / Çıkış Yap", color = Color(0xFFEF4444), fontSize = 14.sp) },
                 icon     = { Icon(Icons.Default.Logout, contentDescription = "Çıkış", tint = Color(0xFFEF4444), modifier = Modifier.size(20.dp)) },
@@ -342,9 +351,8 @@ private fun DrawerContent(
 
             Spacer(Modifier.height(8.dp))
 
-            // Footer
             Text(
-                "© 2025 Heftreng",
+                "© 2026 Heftreng",
                 color    = Muted,
                 fontSize = 10.sp,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),

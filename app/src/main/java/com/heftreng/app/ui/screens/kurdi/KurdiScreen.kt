@@ -1,6 +1,7 @@
 package com.heftreng.app.ui.screens.kurdi
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.tabIndicatorOffset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
