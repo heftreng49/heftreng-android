@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset   // ✅ FIX: explicit import
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,11 +24,11 @@ import com.heftreng.app.viewmodel.KurdiViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KurdiScreen(vm: KurdiViewModel = hiltViewModel()) {
-    val lessons by vm.lessons.collectAsState()
-    val xp by vm.xp.collectAsState()
-    val streak by vm.streak.collectAsState()
-    val level by vm.level.collectAsState()
-    val loading by vm.loading.collectAsState()
+    val lessons  by vm.lessons.collectAsState()
+    val xp       by vm.xp.collectAsState()
+    val streak   by vm.streak.collectAsState()
+    val level    by vm.level.collectAsState()
+    val loading  by vm.loading.collectAsState()
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("Dersler", "Ferheng", "Rêziman")
 
@@ -41,20 +42,28 @@ fun KurdiScreen(vm: KurdiViewModel = hiltViewModel()) {
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+
             // XP & Streak kartı
             Surface(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 shape = RoundedCornerShape(14.dp),
-                color = Surface,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.surface,
             ) {
-                Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Seviye $level", fontWeight = FontWeight.Bold, color = Amber, fontSize = 12.sp)
                         Spacer(Modifier.height(4.dp))
                         LinearProgressIndicator(
                             progress = { (xp % 100) / 100f },
-                            modifier = Modifier.fillMaxWidth().height(7.dp),
-                            color = Amber,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(7.dp),
+                            color      = Amber,
                             trackColor = SurfaceVar,
                         )
                         Spacer(Modifier.height(4.dp))
@@ -72,21 +81,21 @@ fun KurdiScreen(vm: KurdiViewModel = hiltViewModel()) {
             // Sekmeler
             TabRow(
                 selectedTabIndex = selectedTab,
-                containerColor = Background,
-                contentColor = Amber,
-                indicator = { tabPositions ->
+                containerColor   = Background,
+                contentColor     = Amber,
+                indicator        = { tabPositions ->
                     TabRowDefaults.SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                        color = Amber,
+                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),  // ✅ artık resolve edilir
+                        color    = Amber,
                     )
                 }
             ) {
                 tabs.forEachIndexed { i, title ->
                     Tab(
-                        selected = selectedTab == i,
-                        onClick = { selectedTab = i },
-                        text = { Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
-                        selectedContentColor = Amber,
+                        selected             = selectedTab == i,
+                        onClick              = { selectedTab = i },
+                        text                 = { Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+                        selectedContentColor   = Amber,
                         unselectedContentColor = Muted,
                     )
                 }
@@ -97,83 +106,6 @@ fun KurdiScreen(vm: KurdiViewModel = hiltViewModel()) {
                 1 -> DictionaryTab()
                 2 -> GrammarTab()
             }
-        }
-    }
-}
-
-@Composable
-fun LessonsTab(lessons: List<com.heftreng.app.data.model.KurdiLesson>, loading: Boolean, vm: KurdiViewModel) {
-    if (loading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Amber) }
-        return
-    }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        items(lessons, key = { it.id }) { lesson ->
-            LessonCard(lesson) { vm.startLesson(lesson) }
-        }
-    }
-}
-
-@Composable
-fun LessonCard(lesson: com.heftreng.app.data.model.KurdiLesson, onClick: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
-        shape = RoundedCornerShape(14.dp),
-        color = Surface,
-    ) {
-        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier.size(44.dp).background(
-                    if (lesson.completed) Amber else SurfaceVar,
-                    RoundedCornerShape(12.dp),
-                ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    if (lesson.completed) Icons.Default.CheckCircle else Icons.Default.Book,
-                    contentDescription = null,
-                    tint = if (lesson.completed) Color.Black else Muted,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(lesson.title, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
-                Text(lesson.subtitle, color = Muted, fontSize = 12.sp)
-            }
-            if (lesson.xpReward > 0) {
-                Surface(shape = RoundedCornerShape(8.dp), color = SurfaceVar) {
-                    Text("+${lesson.xpReward} XP", color = Amber, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun DictionaryTab() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("📚", fontSize = 48.sp)
-            Spacer(Modifier.height(12.dp))
-            Text("Ferheng", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
-            Text("Yakında", color = Muted, fontSize = 14.sp)
-        }
-    }
-}
-
-@Composable
-fun GrammarTab() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("🎓", fontSize = 48.sp)
-            Spacer(Modifier.height(12.dp))
-            Text("Rêziman", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
-            Text("Yakında", color = Muted, fontSize = 14.sp)
         }
     }
 }

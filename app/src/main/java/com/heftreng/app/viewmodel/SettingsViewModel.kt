@@ -1,6 +1,8 @@
 package com.heftreng.app.viewmodel
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -13,7 +15,8 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-private val Context.dataStore by preferencesDataStore("hf_settings")
+// Top-level extension — dosyanın en üstünde, class dışında olmalı
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "hf_settings")
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
