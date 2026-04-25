@@ -1,5 +1,4 @@
 package com.heftreng.app.ui.screens.kurdi
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background

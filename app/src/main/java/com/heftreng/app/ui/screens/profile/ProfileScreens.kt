@@ -24,7 +24,7 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.screens.auth.heftrangTextFieldColors
-import com.heftreng.app.ui.component.PostCard
+import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
 import com.heftreng.app.viewmodel.ProfileViewModel
