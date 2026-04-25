@@ -46,6 +46,8 @@ fun ProfileScreen(
     val isMe = uid == "me" || uid == vm.myUid
 
     LaunchedEffect(uid) { vm.load(uid) }
+    // myUid gecikirse (Firebase Auth async) tekrar dene
+    LaunchedEffect(vm.myUid) { if (vm.myUid.isNotEmpty()) vm.load(uid) }
 
     Scaffold(
         containerColor = Background,

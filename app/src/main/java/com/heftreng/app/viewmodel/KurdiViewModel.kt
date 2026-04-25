@@ -41,7 +41,12 @@ class KurdiViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
             try {
-                // Kullanıcı XP/streak
+                // Oncelikle sample dersleri yukle, Firestore beklenmeden gorunsun
+                if (_lessons.value.isEmpty()) {
+                    _lessons.value = sampleLessons
+                    _loading.value = false
+                }
+                // Kullanici XP/streak
                 if (uid.isNotEmpty()) {
                     val userDoc = firestore.collection("users").document(uid).get().await()
                     _xp.value     = (userDoc.getLong("xp") ?: 0).toInt()

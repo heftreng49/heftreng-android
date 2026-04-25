@@ -47,7 +47,6 @@ fun FeedScreen(
     val posts   by vm.posts.collectAsState()
     val loading by vm.loading.collectAsState()
     var showNewPost by remember { mutableStateOf(false) }
-    var newPostText by remember { mutableStateOf("") }
     var commentPost by remember { mutableStateOf<Post?>(null) }
 
     Scaffold(
@@ -129,6 +128,7 @@ fun FeedScreen(
 
     // Yeni gönderi sheet
     if (showNewPost) {
+        var text       by remember { mutableStateOf("") }
         var showQuote  by remember { mutableStateOf(false) }
         var quoteText  by remember { mutableStateOf("") }
         var authorName by remember { mutableStateOf("") }
@@ -158,12 +158,12 @@ fun FeedScreen(
                     Text("Yeni Gönderi", fontWeight = FontWeight.Bold, color = OnBackground)
                     Button(
                         onClick = {
-                            if (newPostText.isNotBlank() || quoteText.isNotBlank()) {
-                                vm.createPost(newPostText.trim(), quoteText.trim(), authorName.trim(), bookName.trim())
+                            if (text.isNotBlank() || quoteText.isNotBlank()) {
+                                vm.createPost(text.trim(), quoteText.trim(), authorName.trim(), bookName.trim())
                                 showNewPost = false
                             }
                         },
-                        enabled = newPostText.isNotBlank() || quoteText.isNotBlank(),
+                        enabled = text.isNotBlank() || quoteText.isNotBlank(),
                         shape   = RoundedCornerShape(10.dp),
                         colors  = ButtonDefaults.buttonColors(
                             containerColor = Amber, contentColor = Color.Black,
@@ -174,8 +174,8 @@ fun FeedScreen(
                 }
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
-                    value         = newPostText,
-                    onValueChange = { newPostText = it },
+                    value         = text,
+                    onValueChange = { text = it },
                     placeholder   = { Text("Ne düşünüyorsun?", color = Muted, fontSize = 14.sp) },
                     modifier      = Modifier.fillMaxWidth().heightIn(min = 100.dp),
                     colors        = OutlinedTextFieldDefaults.colors(

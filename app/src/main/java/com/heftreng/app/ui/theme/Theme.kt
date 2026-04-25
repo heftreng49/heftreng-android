@@ -32,10 +32,24 @@ private val DarkColors = darkColorScheme(
     error            = Color(0xFFEF4444),
 )
 
+// Acik tema renkleri
+private val LightColors = androidx.compose.material3.lightColorScheme(
+    primary          = Amber,
+    onPrimary        = Color(0xFF000000),
+    background       = Color(0xFFFAFAFA),
+    onBackground     = Color(0xFF09090B),
+    surface          = Color(0xFFFFFFFF),
+    onSurface        = Color(0xFF18181B),
+    surfaceVariant   = Color(0xFFE4E4E7),
+    outline          = Color(0xFFD4D4D8),
+    error            = Color(0xFFEF4444),
+)
+
 @Composable
 fun HeftrangTheme(content: @Composable () -> Unit) {
+    val colorScheme = if (com.heftreng.app.navigation.AppPrefs.darkMode) DarkColors else LightColors
     MaterialTheme(
-        colorScheme = DarkColors,
+        colorScheme = colorScheme,
         content     = content,
     )
 }
