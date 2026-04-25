@@ -1,7 +1,6 @@
 package com.heftreng.app.ui.screens.kurdi
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.material3.tabIndicatorOffset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -79,12 +78,7 @@ fun KurdiScreen(
             TabRow(
                 selectedTabIndex = selectedTab,
                 containerColor = Background, contentColor = Amber,
-                indicator = { tabPositions ->
-                    TabRowDefaults.SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                        color = Amber,
-                    )
-                }
+
             ) {
                 tabs.forEachIndexed { i, title ->
                     Tab(
