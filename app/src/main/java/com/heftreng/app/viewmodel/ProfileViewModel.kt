@@ -43,7 +43,6 @@ class ProfileViewModel @Inject constructor(
 
     fun load(uid: String) {
         val targetUid = if (uid == "me") myUid else uid
-        if (targetUid.isEmpty()) return // Auth henuz hazir degil
         viewModelScope.launch {
             _loading.value = true
             try {

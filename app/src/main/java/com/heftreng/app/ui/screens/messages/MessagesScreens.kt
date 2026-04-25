@@ -131,25 +131,35 @@ fun MessageDetailScreen(
     navController: NavController,
     vm           : MessagesViewModel = hiltViewModel(),
 ) {
-    val messages  by vm.messages.collectAsState()
-    val otherUser by vm.otherUser.collectAsState()
-    val listState = rememberLazyListState()
-    var inputText by remember { mutableStateOf("") }
-    // otherUid: otherUser yuklenince al, yoksa convId'den parse et
-    val otherUid by remember(otherUser) {
-        derivedStateOf { otherUser?.uid ?: "" }
+    val messages      by vm.messages.collectAsState()
+    val otherUser     by vm.otherUser.collectAsState()
+    val conversations by vm.conversations.collectAsState()
+    val listState     = rememberLazyListState()
+    var inputText     by remember { mutableStateOf("") }
+
+    // Derive otherUid from conversation participants
+    val otherUid = remember(conversations, convId) {
+        conversations.firstOrNull { it.id == convId }
+            ?.participantIds?.firstOrNull { it != vm.uid } ?: ""
     }
 
     LaunchedEffect(convId) {
+        // Make sure conversations are loaded so otherUid resolution works
+        if (conversations.isEmpty()) vm.loadConversations()
         vm.loadMessages(convId)
         vm.subscribeToMessages(convId)
-        vm.loadOtherUser(convId) // Supabase'den direkt ceker artik
+        vm.loadOtherUser(convId)
+    }
+
+    // Re-try loadOtherUser once conversations are populated
+    LaunchedEffect(conversations) {
+        if (conversations.isNotEmpty() && otherUser == null) {
+            vm.loadOtherUser(convId)
+        }
     }
 
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            try { listState.animateScrollToItem(messages.size - 1) } catch (_: Exception) {}
-        }
+        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
 
     Scaffold(

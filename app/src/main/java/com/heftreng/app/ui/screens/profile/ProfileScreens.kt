@@ -24,9 +24,10 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.screens.auth.heftrangTextFieldColors
-import com.heftreng.app.ui.component.PostCard
+import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
+import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.ProfileViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,6 +37,7 @@ fun ProfileScreen(
     navController: NavController,
     vm           : ProfileViewModel = hiltViewModel(),
     authVm       : AuthViewModel    = hiltViewModel(),
+    feedVm       : FeedViewModel    = hiltViewModel(),
 ) {
     val user           by vm.user.collectAsState()
     val posts          by vm.posts.collectAsState()
@@ -46,8 +48,6 @@ fun ProfileScreen(
     val isMe = uid == "me" || uid == vm.myUid
 
     LaunchedEffect(uid) { vm.load(uid) }
-    // myUid gecikirse (Firebase Auth async) tekrar dene
-    LaunchedEffect(vm.myUid) { if (vm.myUid.isNotEmpty()) vm.load(uid) }
 
     Scaffold(
         containerColor = Background,
@@ -55,7 +55,7 @@ fun ProfileScreen(
             TopAppBar(
                 title = {
                     Text(
-                        user?.username?.ifBlank { user?.displayName ?: "" } ?: "",
+                        user?.username?.let { "@$it" } ?: user?.displayName ?: "",
                         color      = OnBackground,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -63,17 +63,20 @@ fun ProfileScreen(
                 navigationIcon = {
                     if (!isMe) {
                         IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = OnBackground)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = OnBackground)
                         }
                     }
                 },
                 actions = {
                     if (isMe) {
                         IconButton(onClick = { navController.navigate(Screen.EditProfile.route) }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Düzenle", tint = Muted)
+                            Icon(Icons.Default.Edit, "Düzenle", tint = Muted)
+                        }
+                        IconButton(onClick = { navController.navigate(Screen.Settings.route) }) {
+                            Icon(Icons.Default.Settings, "Ayarlar", tint = Muted)
                         }
                         IconButton(onClick = { authVm.signOut() }) {
-                            Icon(Icons.Default.Logout, contentDescription = "Çıkış", tint = Muted)
+                            Icon(Icons.Default.Logout, "Çıkış", tint = Muted)
                         }
                     }
                 },
@@ -92,12 +95,10 @@ fun ProfileScreen(
             modifier       = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(bottom = 80.dp),
         ) {
-
-            // ── Profile header ────────────────────────────────────────────
+            // ── Profil başlığı ────────────────────────────────────────────
             item {
                 Column(modifier = Modifier.fillMaxWidth()) {
-
-                    // Cover photo
+                    // Kapak fotoğrafı
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -106,56 +107,51 @@ fun ProfileScreen(
                     ) {
                         if (user?.coverPhoto?.isNotBlank() == true) {
                             AsyncImage(
-                                model              = user?.coverPhoto,
-                                contentDescription = null,
-                                modifier           = Modifier.fillMaxSize(),
-                                contentScale       = ContentScale.Crop,
+                                model = user?.coverPhoto, contentDescription = null,
+                                modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
                             )
                         }
                     }
 
-                    // Avatar — floats over cover bottom
+                    // Avatar
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                             .offset(y = (-36).dp),
                     ) {
-                        AsyncImage(
-                            model              = user?.photoURL?.ifEmpty { null },
-                            contentDescription = user?.displayName,
-                            modifier           = Modifier
-                                .size(76.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
                                 .clip(CircleShape)
-                                .background(SurfaceVar)
+                                .background(Background)
                                 .align(Alignment.CenterStart),
-                            contentScale = ContentScale.Crop,
-                        )
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            AsyncImage(
+                                model = user?.photoURL?.ifEmpty { null }, contentDescription = user?.displayName,
+                                modifier = Modifier.size(76.dp).clip(CircleShape).background(SurfaceVar),
+                                contentScale = ContentScale.Crop,
+                            )
+                        }
                     }
 
-                    // Info block — negative top margin to pull up after avatar offset
+                    // Bilgi bloğu
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .offset(y = (-28).dp)
+                            .offset(y = (-24).dp)
                             .padding(horizontal = 16.dp),
                     ) {
-                        // Name + follow button row
                         Row(
                             modifier              = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment     = Alignment.CenterVertically,
                         ) {
                             Column {
-                                Text(
-                                    user?.displayName ?: "",
-                                    fontWeight = FontWeight.Bold,
-                                    color      = OnBackground,
-                                    fontSize   = 18.sp,
-                                )
-                                if (user?.username?.isNotBlank() == true) {
+                                Text(user?.displayName ?: "", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
+                                if (user?.username?.isNotBlank() == true)
                                     Text("@${user?.username}", color = Muted, fontSize = 13.sp)
-                                }
                             }
                             if (!isMe) {
                                 Button(
@@ -168,36 +164,29 @@ fun ProfileScreen(
                                 ) {
                                     Text(
                                         if (isFollowing) "Tê şopandin" else "Bişopîne",
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize   = 13.sp,
+                                        fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
                                     )
                                 }
                             }
                         }
 
-                        // Bio
                         if (user?.bio?.isNotBlank() == true) {
                             Spacer(Modifier.height(8.dp))
                             Text(user?.bio ?: "", color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
                         }
-
-                        // Website
                         if (user?.website?.isNotBlank() == true) {
                             Spacer(Modifier.height(4.dp))
                             Text(user?.website ?: "", color = Amber, fontSize = 13.sp)
                         }
 
                         Spacer(Modifier.height(12.dp))
-
-                        // Stats row
                         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                            StatItem(posts.size,      "Nivîs")
-                            StatItem(followersCount,  "Şopîner")
-                            StatItem(followingCount,  "Tê şopandin")
+                            StatItem(posts.size,     "Nivîs")
+                            StatItem(followersCount, "Şopîner")
+                            StatItem(followingCount, "Tê şopandin")
                             if ((user?.xp ?: 0) > 0) StatItem(user?.xp ?: 0, "XP")
                         }
 
-                        // Edit profile button (own profile)
                         if (isMe) {
                             Spacer(Modifier.height(12.dp))
                             OutlinedButton(
@@ -206,9 +195,7 @@ fun ProfileScreen(
                                 shape    = RoundedCornerShape(10.dp),
                                 colors   = ButtonDefaults.outlinedButtonColors(contentColor = OnBackground),
                                 border   = androidx.compose.foundation.BorderStroke(1.dp, Divider),
-                            ) {
-                                Text("Profili Düzenle / Profîlê Biguherîne")
-                            }
+                            ) { Text("Profili Düzenle / Profîlê Biguherîne") }
                         }
 
                         HorizontalDivider(modifier = Modifier.padding(top = 16.dp), color = Divider)
@@ -216,7 +203,7 @@ fun ProfileScreen(
                 }
             }
 
-            // ── Posts ─────────────────────────────────────────────────────
+            // ── Gönderiler ────────────────────────────────────────────────
             if (posts.isEmpty() && !loading) {
                 item {
                     Box(
@@ -224,7 +211,7 @@ fun ProfileScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.Article, contentDescription = null, tint = Muted, modifier = Modifier.size(40.dp))
+                            Icon(Icons.Default.Article, null, tint = Muted, modifier = Modifier.size(40.dp))
                             Spacer(Modifier.height(10.dp))
                             Text("Henüz gönderi yok / Nivîs tune", color = Muted, fontSize = 14.sp)
                         }
@@ -234,11 +221,14 @@ fun ProfileScreen(
                 items(posts, key = { it.id }) { post ->
                     PostCard(
                         post      = post,
-                        onLike    = {},          // profil sayfasında like devre dışı
-                        onSave    = {},
+                        onLike    = { feedVm.toggleLike(post) },
+                        onSave    = { feedVm.toggleSave(post) },
                         onProfile = {},
                         onComment = {},
-                        onShare   = {},
+                        onShare   = { feedVm.repost(post) },
+                        onDelete  = if (isMe) ({ feedVm.deletePost(post.id); vm.load(uid) }) else null,
+                        onEdit    = if (isMe) ({ newText -> feedVm.editPost(post.id, newText) }) else null,
+                        onTap     = { navController.navigate(Screen.PostDetail.go(post.id)) },
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                 }
@@ -275,7 +265,7 @@ fun EditProfileScreen(
                 title = { Text("Profili Düzenle", color = OnBackground, fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = OnBackground)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = OnBackground)
                     }
                 },
                 actions = {
@@ -295,31 +285,22 @@ fun EditProfileScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             OutlinedTextField(
-                value         = displayName,
-                onValueChange = { displayName = it },
-                label         = { Text("Adın / Nav") },
-                modifier      = Modifier.fillMaxWidth(),
-                shape         = RoundedCornerShape(12.dp),
-                colors        = heftrangTextFieldColors(),
-                singleLine    = true,
+                value = displayName, onValueChange = { displayName = it },
+                label = { Text("Adın / Nav") },
+                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                colors = heftrangTextFieldColors(), singleLine = true,
             )
             OutlinedTextField(
-                value         = bio,
-                onValueChange = { bio = it },
-                label         = { Text("Bio") },
-                modifier      = Modifier.fillMaxWidth().heightIn(min = 100.dp),
-                shape         = RoundedCornerShape(12.dp),
-                colors        = heftrangTextFieldColors(),
-                maxLines      = 5,
+                value = bio, onValueChange = { bio = it },
+                label = { Text("Bio") },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
+                shape = RoundedCornerShape(12.dp), colors = heftrangTextFieldColors(), maxLines = 5,
             )
             OutlinedTextField(
-                value         = website,
-                onValueChange = { website = it },
-                label         = { Text("Website") },
-                modifier      = Modifier.fillMaxWidth(),
-                shape         = RoundedCornerShape(12.dp),
-                colors        = heftrangTextFieldColors(),
-                singleLine    = true,
+                value = website, onValueChange = { website = it },
+                label = { Text("Website") },
+                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                colors = heftrangTextFieldColors(), singleLine = true,
             )
         }
     }

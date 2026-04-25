@@ -16,7 +16,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class NotificationsViewModel @Inject constructor(
-    private val auth: FirebaseAuth,
+    private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
 ) : ViewModel() {
 
@@ -34,7 +34,6 @@ class NotificationsViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
             try {
-                // userNotifs/{uid}/msgs — rules yapısıyla uyumlu
                 val snap = firestore.collection("userNotifs")
                     .document(uid)
                     .collection("msgs")
@@ -47,26 +46,50 @@ class NotificationsViewModel @Inject constructor(
                     Notification(
                         id        = doc.id,
                         userId    = uid,
-                        fromUid   = d["fromUid"] as? String ?: "",
-                        fromName  = d["fromName"] as? String ?: "",
-                        fromPhoto = d["fromPhoto"] as? String ?: "",
-                        type      = d["type"] as? String ?: "",
-                        message   = d["message"] as? String ?: "",
-                        url       = d["url"] as? String ?: "",
-                        read      = d["read"] as? Boolean ?: false,
-                        ts        = d["ts"] as? Timestamp,
+                        fromUid   = d["fromUid"]   as? String  ?: "",
+                        fromName  = d["fromName"]  as? String  ?: "",
+                        fromPhoto = d["fromPhoto"] as? String  ?: "",
+                        type      = d["type"]      as? String  ?: "",
+                        message   = d["message"]   as? String  ?: "",
+                        postId    = d["postId"]    as? String,
+                        url       = d["url"]       as? String  ?: "",
+                        read      = d["read"]      as? Boolean ?: false,
+                        ts        = d["ts"]        as? Timestamp,
                     )
-                }
-
-                // Okunmamışları okundu yap
-                snap.documents.filter { it.getBoolean("read") == false }.forEach { doc ->
-                    doc.reference.update("read", true)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
                 _loading.value = false
             }
+        }
+    }
+
+    /** Tek bildirimi okundu yap (ekranda göster, Firestore'a yaz) */
+    fun markRead(notifId: String) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("userNotifs")
+                    .document(uid).collection("msgs")
+                    .document(notifId)
+                    .update("read", true).await()
+
+                _notifications.value = _notifications.value.map { n ->
+                    if (n.id == notifId) n.copy(read = true) else n
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    /** Tüm okunmamışları okundu yap */
+    fun markAllRead() {
+        viewModelScope.launch {
+            try {
+                val unread = _notifications.value.filter { !it.read }
+                val col    = firestore.collection("userNotifs").document(uid).collection("msgs")
+                unread.forEach { n -> col.document(n.id).update("read", true) }
+                _notifications.value = _notifications.value.map { it.copy(read = true) }
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 }

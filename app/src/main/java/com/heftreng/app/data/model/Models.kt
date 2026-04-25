@@ -20,6 +20,24 @@ data class User(
     val streak: Int = 0,
 )
 
+data class Post(
+    val id: String = "",
+    val uid: String = "",
+    val displayName: String = "",
+    val username: String = "",
+    val photoURL: String = "",
+    val text: String = "",
+    val imageURL: String = "",
+    val likesCount: Int = 0,
+    val commentsCount: Int = 0,
+    val repostsCount: Int = 0,
+    val ts: Timestamp? = null,
+    val quoteText: String = "",
+    val bookName: String = "",
+    val authorName: String = "",
+    val isLikedByMe: Boolean = false,
+    val isSavedByMe: Boolean = false,
+)
 
 data class Comment(
     val id: String = "",
@@ -32,32 +50,6 @@ data class Comment(
     val replyTo: ReplyTo? = null,
     val ts: Timestamp? = null,
 )
-data class Post(
-    val id: String = "",
-    val uid: String = "",           
-    val text: String = "",
-    val imageURL: String = "",
-    val quoteText: String = "",
-    val authorName: String = "",    // Alıntı yazar
-    val bookName: String = "",      // Alıntı kitap
-    val ts: Timestamp? = null,
-
-    
-    // Yorum ve Beğeni Sayaçları
-    val likesCount: Int = 0,
-    val commentsCount: Int = 0,
-    val repostsCount: Int = 0,
-    
-    // Yerel Durumlar (Kullanıcının beğenip beğenmediği vb.)
-    val isLikedByMe: Boolean = false,
-    val isSavedByMe: Boolean = false,
-
-    // DİKKAT: Bu 3 alan Users koleksiyonundan anlık doldurulacak!
-    val displayName: String = "",
-    val username: String = "",
-    val photoURL: String = ""
-)
-
 
 data class ReplyTo(
     val uid: String = "",
@@ -72,6 +64,7 @@ data class Notification(
     val fromPhoto: String = "",
     val type: String = "",
     val message: String = "",
+    val postId: String? = null,   // beğeni/yorum/repost için
     val url: String = "",
     val read: Boolean = false,
     val ts: Timestamp? = null,

@@ -1,11 +1,13 @@
 package com.heftreng.app.ui.screens.notifications
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,6 +23,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.data.model.Notification
+import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.NotificationsViewModel
 
@@ -32,12 +35,31 @@ fun NotificationsScreen(
 ) {
     val notifications by vm.notifications.collectAsState()
     val loading       by vm.loading.collectAsState()
+    val unreadCount   = notifications.count { !it.read }
 
     Scaffold(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title  = { Text("Agahdarî", fontWeight = FontWeight.SemiBold, color = OnBackground) },
+                title = {
+                    Column {
+                        Text("Agahdarî", fontWeight = FontWeight.SemiBold, color = OnBackground)
+                        if (unreadCount > 0)
+                            Text("$unreadCount okunmamış", color = Muted, fontSize = 11.sp)
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = OnBackground)
+                    }
+                },
+                actions = {
+                    if (unreadCount > 0) {
+                        TextButton(onClick = { vm.markAllRead() }) {
+                            Text("Tümünü oku", color = Amber, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
             )
         }
@@ -51,9 +73,10 @@ fun NotificationsScreen(
             notifications.isEmpty() -> {
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Notifications, contentDescription = null, tint = Muted, modifier = Modifier.size(48.dp))
+                        Icon(Icons.Default.Notifications, contentDescription = null, tint = Muted, modifier = Modifier.size(52.dp))
                         Spacer(Modifier.height(12.dp))
-                        Text("Agahdarî tune / Henüz bildirim yok", color = Muted)
+                        Text("Henüz bildirim yok", color = Muted, fontSize = 15.sp)
+                        Text("Agahdarî tune", color = Muted, fontSize = 12.sp)
                     }
                 }
             }
@@ -63,7 +86,21 @@ fun NotificationsScreen(
                     contentPadding = PaddingValues(bottom = 80.dp),
                 ) {
                     items(notifications, key = { it.id }) { notif ->
-                        NotifItem(notif)
+                        NotifItem(
+                            notif   = notif,
+                            onClick = {
+                                vm.markRead(notif.id)
+                                // Bildirim tipine göre yönlendir
+                                when (notif.type) {
+                                    "follow"  -> navController.navigate(Screen.Profile.go(notif.fromUid))
+                                    "like",
+                                    "comment",
+                                    "repost"  -> notif.postId?.let { pid ->
+                                        navController.navigate(Screen.PostDetail.go(pid))
+                                    }
+                                }
+                            },
+                        )
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     }
                 }
@@ -73,28 +110,26 @@ fun NotificationsScreen(
 }
 
 @Composable
-fun NotifItem(notif: Notification) {
+fun NotifItem(notif: Notification, onClick: () -> Unit = {}) {
     Row(
-        modifier          = Modifier
+        modifier = Modifier
             .fillMaxWidth()
             .background(if (!notif.read) SurfaceVar else Background)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Avatar + icon badge
+        // Avatar + badge
         Box {
             AsyncImage(
                 model              = notif.fromPhoto.ifEmpty { null },
                 contentDescription = notif.fromName,
-                modifier           = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(SurfaceVar),
-                contentScale = ContentScale.Crop,
+                modifier           = Modifier.size(50.dp).clip(CircleShape).background(SurfaceVar),
+                contentScale       = ContentScale.Crop,
             )
             Box(
                 modifier         = Modifier
-                    .size(18.dp)
+                    .size(20.dp)
                     .clip(CircleShape)
                     .background(notifIconColor(notif.type))
                     .align(Alignment.BottomEnd),
@@ -103,44 +138,28 @@ fun NotifItem(notif: Notification) {
                 Icon(
                     notifIcon(notif.type),
                     contentDescription = null,
-                    tint               = androidx.compose.ui.graphics.Color.White,
-                    modifier           = Modifier.size(10.dp),
+                    tint     = androidx.compose.ui.graphics.Color.White,
+                    modifier = Modifier.size(11.dp),
                 )
             }
         }
 
         Spacer(Modifier.width(12.dp))
 
-        // Text content
         Column(modifier = Modifier.weight(1f)) {
-            // Sender name
             if (notif.fromName.isNotBlank()) {
-                Text(
-                    notif.fromName,
-                    fontWeight = FontWeight.SemiBold,
-                    color      = OnBackground,
-                    fontSize   = 14.sp,
-                )
+                Text(notif.fromName, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
             }
-            // Notification message
-            val msg = notif.message.ifBlank { notifDefaultMessage(notif.type) }
             Text(
-                msg,
-                color      = OnSurface,
-                fontSize   = 13.sp,
-                lineHeight = 18.sp,
+                notif.message.ifBlank { notifDefaultMessage(notif.type) },
+                color = OnSurface, fontSize = 13.sp, lineHeight = 18.sp,
             )
         }
 
-        // Unread dot
+        // Okunmamış nokta
         if (!notif.read) {
             Spacer(Modifier.width(8.dp))
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(Amber),
-            )
+            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Amber))
         }
     }
 }
