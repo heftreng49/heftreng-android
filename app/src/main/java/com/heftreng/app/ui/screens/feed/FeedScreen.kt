@@ -167,6 +167,14 @@ fun FeedScreen(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
+
+                // Seçili alıntı varsa göster
+                QuoteInputSection(
+                    quote    = quotePayload,
+                    onRemove = { quotePayload = null },
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+
                 OutlinedTextField(
                     value           = newPostText,
                     onValueChange   = { newPostText = it },
@@ -182,7 +190,36 @@ fun FeedScreen(
                     ),
                     shape = RoundedCornerShape(12.dp),
                 )
-                Spacer(Modifier.height(16.dp))
+                // Alt araç çubuğu — alıntı ve görsel ekleme
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Alıntı butonu
+                    IconButton(onClick = { showQuoteDialog = true }) {
+                        Icon(
+                            Icons.Default.FormatQuote,
+                            contentDescription = "Alıntı Ekle",
+                            tint     = if (quotePayload != null) Amber else Muted,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                    Text(
+                        "Alıntı ekle",
+                        color    = if (quotePayload != null) Amber else Muted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.clickable { showQuoteDialog = true },
+                    )
+                    Spacer(Modifier.weight(1f))
+                    // Karakter sayacı
+                    Text(
+                        "${newPostText.length}/1000",
+                        color    = if (newPostText.length > 900) Error else Muted,
+                        fontSize = 11.sp,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
             }
         }
     }

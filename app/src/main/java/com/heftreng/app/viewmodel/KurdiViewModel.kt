@@ -54,15 +54,15 @@ class KurdiViewModel @Inject constructor(
                     _level.value  = (userDoc.getLong("level") ?: 1).toInt()
                 }
 
-                // Dersler — kurdiLessons koleksiyonu
-                val snap = firestore.collection("kurdiLessons")
-                    .orderBy("order", Query.Direction.ASCENDING)
-                    .get().await()
+                // Dersler — XML temasıyla aynı: kf_lessons koleksiyonu
+                // orderBy index gerektiriyor, client-side sort yapıyoruz
+                val snap = firestore.collection("kf_lessons")
+                    .limit(100).get().await()
 
                 // Tamamlanan dersler
                 val completedIds = if (uid.isNotEmpty()) {
-                    firestore.collection("kurdiProgress").document(uid)
-                        .collection("completed").get().await()
+                    firestore.collection("users").document(uid)
+                        .collection("kf_progress").get().await()
                         .documents.map { it.id }.toSet()
                 } else emptySet()
 
