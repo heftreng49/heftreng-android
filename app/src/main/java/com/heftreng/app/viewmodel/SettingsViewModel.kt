@@ -10,10 +10,6 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-// DataStore dependency olmadığı için SharedPreferences kullanıyoruz.
-// DataStore eklemek istersen build.gradle.kts'e şunu ekle:
-//   implementation("androidx.datastore:datastore-preferences:1.1.1")
-
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
