@@ -196,6 +196,7 @@ fun HeftrangNavHost() {
                         MessageDetailScreen(
                             convId        = back.arguments?.getString("convId") ?: "",
                             navController = navController,
+                            language      = language,
                         )
                     }
                     composable(Screen.Notifications.route) { NotificationsScreen(navController) }

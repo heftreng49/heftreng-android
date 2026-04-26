@@ -130,6 +130,7 @@ fun ConvItem(conv: Conversation, onClick: () -> Unit) {
 fun MessageDetailScreen(
     convId       : String,
     navController: NavController,
+    language     : String = "tr",
     vm           : MessagesViewModel = hiltViewModel(),
 ) {
     val messages      by vm.messages.collectAsState()

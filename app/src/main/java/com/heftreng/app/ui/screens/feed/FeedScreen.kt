@@ -246,7 +246,7 @@ fun PostCard(
                         )
                     } else {
                         DropdownMenuItem(
-                            text        = { Text(if (language == "ku") "Parve bike" else "Paylaş", color = OnBackground) },
+                            text        = { Text("Paylaş", color = OnBackground) },
                             leadingIcon = { Icon(Icons.Default.Repeat, null, tint = Muted) },
                             onClick     = { menuExpanded = false; onShare() },
                         )
