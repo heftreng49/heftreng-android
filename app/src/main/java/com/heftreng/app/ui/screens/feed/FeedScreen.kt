@@ -28,6 +28,7 @@ import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
+import com.heftreng.app.ui.component.QuoteButton
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
 
@@ -173,10 +174,12 @@ fun PostCard(
     onSave    : () -> Unit,
     onProfile : () -> Unit,
     onComment : () -> Unit,
-    onShare   : () -> Unit,
-    onDelete  : (() -> Unit)? = null,
-    onEdit    : ((String) -> Unit)? = null,
-    onTap     : (() -> Unit)? = null,
+    onShare      : () -> Unit,
+    onDelete     : (() -> Unit)? = null,
+    onEdit       : ((String) -> Unit)? = null,
+    onTap        : (() -> Unit)? = null,
+    onQuote      : (() -> Unit)? = null,
+    onStoryShare : (() -> Unit)? = null,
 ) {
     val myUid            = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     val isOwn            = post.uid == myUid
@@ -236,6 +239,12 @@ fun PostCard(
                             text        = { Text("Paylaş", color = OnBackground) },
                             leadingIcon = { Icon(Icons.Default.Repeat, null, tint = Muted) },
                             onClick     = { menuExpanded = false; onShare() },
+                        if (onStoryShare != null)
+                            DropdownMenuItem(
+                                text        = { Text("Hikaye Olarak Paylaş") },
+                                leadingIcon = { Icon(Icons.Outlined.Wallpaper, null) },
+                                onClick     = { menuExpanded = false; onStoryShare() },
+                            )
                         )
                         DropdownMenuItem(
                             text        = { Text("Şikayet et", color = Color(0xFFEF4444)) },

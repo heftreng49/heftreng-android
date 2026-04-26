@@ -33,6 +33,8 @@ import com.heftreng.app.ui.screens.post.SinglePostScreen
 import com.heftreng.app.ui.screens.profile.EditProfileScreen
 import com.heftreng.app.ui.screens.profile.ProfileScreen
 import com.heftreng.app.ui.screens.settings.SettingsScreen
+import com.heftreng.app.ui.screens.admin.AdminScreen
+import com.heftreng.app.ui.screens.search.SearchScreen
 import com.heftreng.app.ui.screens.readinglist.ReadingListScreen
 import com.heftreng.app.ui.screens.serials.ChapterReadScreen
 import com.heftreng.app.ui.screens.serials.SerialDetailScreen
@@ -66,7 +68,7 @@ data class BottomNavItem(
 
 val bottomNavItems = listOf(
     BottomNavItem(Screen.Feed.route,          "Nivîs",    Icons.Outlined.DynamicFeed,      Icons.Filled.DynamicFeed),
-    BottomNavItem(Screen.Kurdi.route,         "Kurdî",    Icons.Outlined.Translate,         Icons.Filled.Translate),
+    BottomNavItem("search",                   "Bigere",   Icons.Outlined.Search,            Icons.Filled.Search),
     BottomNavItem(Screen.Messages.route,      "Peyam",    Icons.Outlined.ChatBubbleOutline, Icons.Filled.ChatBubble),
     BottomNavItem(Screen.Notifications.route, "Agahdarî", Icons.Outlined.NotificationsNone, Icons.Filled.Notifications),
     BottomNavItem("profile/me",               "Profîl",   Icons.Outlined.PersonOutline,     Icons.Filled.Person),
@@ -74,7 +76,7 @@ val bottomNavItems = listOf(
 
 private val bottomNavRoutes = setOf(
     Screen.Feed.route,
-    Screen.Kurdi.route,
+    "search",
     Screen.Messages.route,
     Screen.Notifications.route,
     "profile/me",
@@ -201,6 +203,9 @@ fun HeftrangNavHost() {
                             navController = navController,
                         )
                     }
+                    
+                    composable("search") { SearchScreen(navController) }
+                    composable("admin")  { AdminScreen(navController)  }
                     composable(Screen.Settings.route) {
                         SettingsScreen(navController = navController)
                     }
@@ -266,7 +271,8 @@ private fun DrawerContent(
             val navItems = listOf(
                 Triple(Icons.Outlined.Home,             "Feed / Nivîs",           Screen.Feed.route),
                 Triple(Icons.Outlined.Person,           "Profil / Profîl",         "profile/me"),
-                Triple(Icons.Outlined.Bookmark,         "Kaydedilenler",           "bookmarks"),
+                Triple(Icons.Outlined.Translate,        "Kurdî Fêrbibe",           "kurdi"),
+                Triple(Icons.Outlined.AutoStories,      "Seriler",                 "serials"),
                 Triple(Icons.Outlined.Settings,         "Ayarlar / Mîheng",        Screen.Settings.route),
             )
             navItems.forEach { (icon, label, route) ->
