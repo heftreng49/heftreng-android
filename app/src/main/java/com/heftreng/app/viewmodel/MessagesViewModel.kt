@@ -41,14 +41,15 @@ class MessagesViewModel @Inject constructor(
 
     val uid get() = auth.currentUser?.uid ?: ""
 
+    // ── init: konuşmaları hemen yükle ─────────────────────────────────────────
+    init { if (uid.isNotEmpty()) loadConversations() }
+
     // ── Konuşma listesi ────────────────────────────────────────────────────────
-    // Supabase tablo: conversations (id, participant_a, participant_b, last_msg, updated_at)
     fun loadConversations() {
         if (uid.isEmpty()) return
         viewModelScope.launch {
             _loading.value = true
             try {
-                // Supabase 3.x: or() filter
                 val result = supabase.postgrest["conversations"]
                     .select {
                         filter {
@@ -68,7 +69,6 @@ class MessagesViewModel @Inject constructor(
                     val pb     = obj["participant_b"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
                     val otherUid = if (pa == uid) pb else pa
 
-                    // Karşı tarafın Firestore user bilgisini çek
                     val other = try {
                         val doc = firestore.collection("users").document(otherUid).get().await()
                         val d = doc.data
@@ -100,7 +100,6 @@ class MessagesViewModel @Inject constructor(
     }
 
     // ── Mesaj listesi ──────────────────────────────────────────────────────────
-    // Supabase tablo: messages (id, conv_id, from_uid, to_uid, msg_text, created_at, read_at)
     fun loadMessages(convId: String) {
         viewModelScope.launch {
             _loading.value = true
@@ -141,7 +140,6 @@ class MessagesViewModel @Inject constructor(
                         put("msg_text", text)
                     }
                 )
-                // last_msg güncelle
                 supabase.postgrest["conversations"].update(
                     buildJsonObject { put("last_msg", text) }
                 ) { filter { eq("id", convId) } }
@@ -220,6 +218,7 @@ class MessagesViewModel @Inject constructor(
                     uid         = otherUid,
                     displayName = d["displayName"] as? String ?: d["name"] as? String ?: "",
                     photoURL    = d["photoURL"] as? String ?: "",
+                    email       = d["email"] as? String ?: "",
                 )
             } catch (e: Exception) { e.printStackTrace() }
         }

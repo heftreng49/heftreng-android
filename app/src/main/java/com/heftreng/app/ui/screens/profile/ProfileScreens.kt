@@ -42,6 +42,7 @@ import com.heftreng.app.viewmodel.*
 fun ProfileScreen(
     uid          : String,
     navController: NavController,
+    language     : String = "tr",
     vm           : ProfileViewModel     = hiltViewModel(),
     feedVm       : FeedViewModel        = hiltViewModel(),
     serialsVm    : SerialsViewModel     = hiltViewModel(),

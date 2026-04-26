@@ -29,6 +29,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.component.QuoteButton
+import com.heftreng.app.ui.component.QuoteInputSection
+import com.heftreng.app.ui.component.QuotePayload
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
 
@@ -37,6 +39,7 @@ import com.heftreng.app.viewmodel.FeedViewModel
 fun FeedScreen(
     navController: NavController,
     onOpenDrawer : () -> Unit = {},
+    language     : String = "tr",
     vm           : FeedViewModel = hiltViewModel(),
 ) {
     val posts   by vm.posts.collectAsState()
@@ -44,6 +47,8 @@ fun FeedScreen(
     var showNewPost by remember { mutableStateOf(false) }
     var newPostText by remember { mutableStateOf("") }
     var commentPost by remember { mutableStateOf<Post?>(null) }
+    var quotePayload by remember { mutableStateOf<QuotePayload?>(null) }
+    var showQuoteInput by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = Background,
@@ -128,15 +133,20 @@ fun FeedScreen(
                     TextButton(onClick = { showNewPost = false }) {
                         Text("İptal", color = Muted)
                     }
-                    Text("Yeni Gönderi", fontWeight = FontWeight.SemiBold, color = OnBackground)
+                    Text(if (language == "ku") "Nivîsek Nû" else "Yeni Gönderi", fontWeight = FontWeight.SemiBold, color = OnBackground)
                     TextButton(onClick = {
                         if (newPostText.isNotBlank()) {
-                            vm.createPost(newPostText.trim())
+                            vm.createPost(
+                                text       = newPostText.trim(),
+                                quoteText  = quotePayload?.text ?: "",
+                                authorName = quotePayload?.authorName ?: "",
+                                bookName   = quotePayload?.bookName ?: "",
+                            )
                             newPostText = ""
                             showNewPost = false
                         }
                     }) {
-                        Text("Paylaş", color = Amber, fontWeight = FontWeight.Bold)
+                        Text(if (language == "ku") "Parve bike" else "Paylaş", color = Amber, fontWeight = FontWeight.Bold)
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -236,7 +246,7 @@ fun PostCard(
                         )
                     } else {
                         DropdownMenuItem(
-                            text        = { Text("Paylaş", color = OnBackground) },
+                            text        = { Text(if (language == "ku") "Parve bike" else "Paylaş", color = OnBackground) },
                             leadingIcon = { Icon(Icons.Default.Repeat, null, tint = Muted) },
                             onClick     = { menuExpanded = false; onShare() },
                         )

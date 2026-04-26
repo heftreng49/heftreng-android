@@ -45,7 +45,7 @@ fun PostDetailScreen(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text("Mijar", color = OnBackground, fontSize = 18.sp) },
+                title = { Text("Gönderi", color = OnBackground, fontSize = 18.sp) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = OnBackground)

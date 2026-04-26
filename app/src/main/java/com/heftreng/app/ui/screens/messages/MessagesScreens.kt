@@ -36,7 +36,8 @@ import com.heftreng.app.viewmodel.MessagesViewModel
 @Composable
 fun ConversationsScreen(
     navController: NavController,
-    vm: MessagesViewModel = hiltViewModel(),
+    language     : String = "tr",
+    vm           : MessagesViewModel = hiltViewModel(),
 ) {
     val conversations by vm.conversations.collectAsState()
     val loading       by vm.loading.collectAsState()
@@ -47,7 +48,7 @@ fun ConversationsScreen(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title  = { Text("Peyam", fontWeight = FontWeight.SemiBold, color = OnBackground) },
+                title  = { Text(if (language == "ku") "Peyam" else "Mesajlar", fontWeight = FontWeight.SemiBold, color = OnBackground) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
             )
         }
@@ -63,7 +64,7 @@ fun ConversationsScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Muted, modifier = Modifier.size(48.dp))
                         Spacer(Modifier.height(12.dp))
-                        Text("Henüz mesajın yok", color = Muted)
+                        Text(if (language == "ku") "Peyam tune" else "Henüz mesajın yok", color = Muted)
                     }
                 }
             }
@@ -203,7 +204,7 @@ fun MessageDetailScreen(
                     OutlinedTextField(
                         value         = inputText,
                         onValueChange = { inputText = it },
-                        placeholder   = { Text("Peyamê binivîse...", color = Muted) },
+                        placeholder   = { Text(if (language == "ku") "Peyamê binivîse..." else "Mesajınızı yazın...", color = Muted) },
                         modifier      = Modifier.weight(1f),
                         shape         = RoundedCornerShape(24.dp),
                         singleLine    = true,

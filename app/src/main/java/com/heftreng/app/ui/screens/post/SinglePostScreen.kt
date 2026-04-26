@@ -45,7 +45,7 @@ fun SinglePostScreen(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text("Mijar", fontWeight = FontWeight.SemiBold, color = OnBackground) },
+                title = { Text("Gönderi", fontWeight = FontWeight.SemiBold, color = OnBackground) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = OnBackground)

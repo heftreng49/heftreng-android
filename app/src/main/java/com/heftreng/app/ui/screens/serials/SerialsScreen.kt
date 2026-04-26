@@ -34,6 +34,7 @@ import com.heftreng.app.viewmodel.SerialsViewModel
 @Composable
 fun SerialsScreen(
     navController : NavController,
+    language      : String = "tr",
     vm            : SerialsViewModel = hiltViewModel(),
 ) {
     val serials by vm.serials.collectAsState()
@@ -46,7 +47,7 @@ fun SerialsScreen(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text("Seriler", fontWeight = FontWeight.Bold, color = OnBackground) },
+                title = { Text(if (language == "ku") "Nivîsandina Pirtûkê" else "Kitap Yazma", fontWeight = FontWeight.Bold, color = OnBackground) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
                 actions = {
                     IconButton(onClick = { showCreate = true }) {
