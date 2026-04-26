@@ -269,6 +269,7 @@ private fun DrawerContent(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .background(if (selected) Primary.copy(alpha = 0.15f) else Color.Transparent)
+                        .clickable { onNavigate(route) }
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -279,13 +280,8 @@ private fun DrawerContent(
                         color      = if (selected) Primary else OnBackground,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                         fontSize   = 14.sp,
-                        modifier   = Modifier
-                            .fillMaxWidth()
-                            .padding(0.dp)
-                            .also { _ -> androidx.compose.foundation.clickable { onNavigate(route) } }
                     )
                 }
-                // clickable'ı Row'a ekliyoruz
                 Spacer(Modifier.height(2.dp))
             }
 
