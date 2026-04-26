@@ -294,20 +294,12 @@ fun PostCard(
                 Modifier.fillMaxWidth()
         ) {
             if (post.quoteText.isNotBlank()) {
-                    QuoteCard(
-                        quoteText  = post.quoteText,
-                        bookName   = post.bookName,
-                        authorName = post.authorName,
-                        modifier   = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    )
-                }"", color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
-                        if (post.bookName.isNotBlank()) {
-                            Spacer(Modifier.height(4.dp))
-                            Text("— ${post.authorName}, ${post.bookName}", color = Muted, fontSize = 12.sp)
-                        }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
+                QuoteCard(
+                    quoteText  = post.quoteText,
+                    bookName   = post.bookName,
+                    authorName = post.authorName,
+                    modifier   = Modifier.padding(bottom = 8.dp),
+                )
             }
             if (post.text.isNotBlank()) {
                 Text(post.text, color = OnBackground, fontSize = 15.sp, lineHeight = 22.sp)
