@@ -73,10 +73,11 @@ class ProfileViewModel @Inject constructor(
                 _followingCount.value = followingSnap.size()
 
                 // Gönderiler
+                // orderBy kaldırıldı — composite index gerektirmez
+                // XML temasıyla aynı: where + limit, sonra client-side sort
                 val snap = firestore.collection("feed")
                     .whereEqualTo("uid", targetUid)
-                    .orderBy("ts", Query.Direction.DESCENDING)
-                    .limit(20).get().await()
+                    .limit(30).get().await()
                 _posts.value = snap.documents.mapNotNull { doc ->
                     val fd = doc.data ?: return@mapNotNull null
                     Post(
@@ -92,7 +93,7 @@ class ProfileViewModel @Inject constructor(
                         repostsCount  = (fd["reposts"] as? Long)?.toInt() ?: 0,
                         ts            = fd["ts"] as? Timestamp,
                     )
-                }
+                }.sortedByDescending { it.ts?.seconds ?: 0L }
 
                 // Takip durumu
                 if (targetUid != myUid) {
