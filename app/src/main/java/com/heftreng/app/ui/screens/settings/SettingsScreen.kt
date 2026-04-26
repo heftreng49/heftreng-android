@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -16,21 +15,23 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.heftreng.app.navigation.AppPrefs
 import com.heftreng.app.ui.theme.*
+import com.heftreng.app.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(navController: NavController) {
-    var pushEnabled    by remember { mutableStateOf(true) }
-    var emailEnabled   by remember { mutableStateOf(false) }
-    var privateAccount by remember { mutableStateOf(false) }
+fun SettingsScreen(
+    navController : NavController,
+    vm            : SettingsViewModel = hiltViewModel(),
+) {
+    val isDark   by vm.darkMode.collectAsState()
+    val language by vm.language.collectAsState()
 
     Scaffold(
         containerColor = Background,
@@ -39,7 +40,7 @@ fun SettingsScreen(navController: NavController) {
                 title = { Text("Mîheng / Ayarlar", fontWeight = FontWeight.SemiBold, color = OnBackground) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = OnBackground)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = OnBackground)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
@@ -47,176 +48,174 @@ fun SettingsScreen(navController: NavController) {
         }
     ) { padding ->
         LazyColumn(
-            modifier            = Modifier.fillMaxSize().padding(padding),
-            contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            modifier       = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-
-            // ── Görünüm ──────────────────────────────────────────────────────
+            // ── Görünüm ──────────────────────────────────────────────────
             item {
-                SettingsSection("Görünüm / Xuyangeh") {
+                SettingsSection(title = "Görünüm / Xuyangeh") {
                     // Karanlık / Aydınlık mod
                     Row(
                         modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(if (AppPrefs.darkMode) Icons.Filled.DarkMode else Icons.Outlined.LightMode, null,
-                            tint = AppPrefs.accentColor, modifier = Modifier.size(22.dp))
+                        Icon(
+                            if (isDark) Icons.Filled.DarkMode else Icons.Outlined.LightMode,
+                            contentDescription = null,
+                            tint               = Amber,
+                            modifier           = Modifier.size(22.dp),
+                        )
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(if (AppPrefs.darkMode) "Karanlık Mod" else "Aydınlık Mod",
-                                color = OnBackground, fontWeight = FontWeight.Medium)
-                            Text(if (AppPrefs.darkMode) "Moda Tarî" else "Moda Ronahî", color = Muted, fontSize = 12.sp)
+                            Text(if (isDark) "Karanlık Mod" else "Aydınlık Mod", color = OnBackground, fontWeight = FontWeight.Medium)
+                            Text(if (isDark) "Rêya Tarî" else "Rêya Ronahî", color = Muted, fontSize = 12.sp)
                         }
                         Switch(
-                            checked         = AppPrefs.darkMode,
-                            onCheckedChange = { AppPrefs.darkMode = it },
+                            checked         = isDark,
+                            onCheckedChange = { vm.toggleDarkMode() },
                             colors          = SwitchDefaults.colors(
-                                checkedThumbColor   = Color.Black,
-                                checkedTrackColor   = AppPrefs.accentColor,
+                                checkedThumbColor  = Amber,
+                                checkedTrackColor  = Amber.copy(alpha = 0.3f),
                                 uncheckedThumbColor = Muted,
-                                uncheckedTrackColor = SurfaceVar,
+                                uncheckedTrackColor = Muted.copy(alpha = 0.2f),
                             ),
                         )
                     }
 
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
 
-                    // Yazı boyutu
-                    Row(
-                        modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Default.FormatSize, null, tint = AppPrefs.accentColor, modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Yazı Boyutu / Mezinahiya Tîpan", color = OnBackground, fontWeight = FontWeight.Medium)
-                            Text("Şu an: ${AppPrefs.fontSize}sp", color = Muted, fontSize = 12.sp)
-                        }
+                    // Dil seçimi
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { if (AppPrefs.fontSize > 12) AppPrefs.fontSize-- }, modifier = Modifier.size(32.dp)) {
-                                Text("−", color = AppPrefs.accentColor, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            }
-                            Text("${AppPrefs.fontSize}", color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                            IconButton(onClick = { if (AppPrefs.fontSize < 22) AppPrefs.fontSize++ }, modifier = Modifier.size(32.dp)) {
-                                Text("+", color = AppPrefs.accentColor, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            }
-                        }
-                    }
-
-                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
-
-                    // Renk seçici
-                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Palette, null, tint = AppPrefs.accentColor, modifier = Modifier.size(22.dp))
+                            Icon(Icons.Outlined.Translate, null, tint = Amber, modifier = Modifier.size(22.dp))
                             Spacer(Modifier.width(14.dp))
-                            Text("Vurgu Rengi / Reng", color = OnBackground, fontWeight = FontWeight.Medium)
-                        }
-                        Spacer(Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            listOf(
-                                Color(0xFFF59E0B) to "Amber",
-                                Color(0xFF6366F1) to "Indigo",
-                                Color(0xFFEF4444) to "Kırmızı",
-                                Color(0xFF10B981) to "Yeşil",
-                                Color(0xFF0EA5E9) to "Mavi",
-                            ).forEach { (color, label) ->
-                                val selected = AppPrefs.accentColor == color
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Box(
-                                        modifier         = Modifier
-                                            .size(38.dp).clip(CircleShape).background(color)
-                                            .clickable { AppPrefs.accentColor = color },
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        if (selected) Icon(Icons.Default.Check, null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                                    }
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(label, color = if (selected) AppPrefs.accentColor else Muted, fontSize = 10.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
-                                }
+                            Column(Modifier.weight(1f)) {
+                                Text("Dil / Ziman", color = OnBackground, fontWeight = FontWeight.Medium)
+                                Text("Uygulama dilini seç", color = Muted, fontSize = 12.sp)
                             }
-                        }
-                    }
-
-                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
-
-                    // Dil
-                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Translate, null, tint = AppPrefs.accentColor, modifier = Modifier.size(22.dp))
-                            Spacer(Modifier.width(14.dp))
-                            Text("Dil / Ziman", color = OnBackground, fontWeight = FontWeight.Medium)
                         }
                         Spacer(Modifier.height(10.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf("tr" to "Türkçe", "ku" to "Kurdî").forEach { (code, label) ->
-                                val sel = AppPrefs.language == code
+                                val selected = language == code
                                 Button(
-                                    onClick  = { AppPrefs.language = code },
+                                    onClick  = { vm.setLanguage(code) },
                                     modifier = Modifier.weight(1f),
                                     shape    = RoundedCornerShape(10.dp),
                                     colors   = ButtonDefaults.buttonColors(
-                                        containerColor = if (sel) AppPrefs.accentColor else SurfaceVar,
-                                        contentColor   = if (sel) Color.Black else Muted,
+                                        containerColor = if (selected) Amber else SurfaceVar,
+                                        contentColor   = if (selected) androidx.compose.ui.graphics.Color.Black else Muted,
                                     ),
-                                ) { Text(label, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal) }
+                                ) { Text(label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) }
                             }
                         }
                     }
                 }
             }
 
-            // ── Hesap ─────────────────────────────────────────────────────────
+            // ── Hesap ────────────────────────────────────────────────────
             item {
-                SettingsSection("Hesap / Hesab") {
-                    SettingsRow(Icons.Outlined.Person, "Profili Düzenle", "Profîlê biguherîne") { navController.navigate("edit_profile") }
+                SettingsSection(title = "Hesap / Hesab") {
+                    SettingsRow(icon = Icons.Outlined.Person, label = "Profili Düzenle", sub = "Profîlê biguherîne") {
+                        navController.navigate("edit_profile")
+                    }
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
-                    SettingsRow(Icons.Outlined.Lock, "Şifre Değiştir", "Şîfreya nû") {}
+                    SettingsRow(icon = Icons.Outlined.Lock, label = "Şifre Değiştir", sub = "Şîfreya nû") {}
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
-                    SettingsRow(Icons.Outlined.Email, "E-posta Güncelle", "Email nû") {}
+                    SettingsRow(icon = Icons.Outlined.Email, label = "E-posta", sub = "Email biguherîne") {}
                 }
             }
 
-            // ── Bildirimler ───────────────────────────────────────────────────
+            // ── Bildirimler ──────────────────────────────────────────────
             item {
-                SettingsSection("Bildirimler / Agahdarî") {
-                    SettingsSwitchRow(Icons.Outlined.Notifications, "Push Bildirimleri", "Agahdariyên push", pushEnabled) { pushEnabled = it }
-                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
-                    SettingsSwitchRow(Icons.Outlined.Email, "E-posta Bildirimleri", "Agahdariyên email", emailEnabled) { emailEnabled = it }
-                }
-            }
+                SettingsSection(title = "Bildirimler / Agahdarî") {
+                    var pushEnabled by remember { mutableStateOf(true) }
+                    var emailEnabled by remember { mutableStateOf(false) }
 
-            // ── Gizlilik ──────────────────────────────────────────────────────
-            item {
-                SettingsSection("Gizlilik / Nepenî") {
-                    SettingsSwitchRow(Icons.Outlined.Lock, "Gizli Hesap", "Tenê şopîner dikarin bibînin", privateAccount) { privateAccount = it }
-                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
-                    SettingsRow(Icons.Outlined.Block, "Engellenen Kullanıcılar", "Bikarhênerên astengkirî") {}
-                }
-            }
-
-            // ── Diğer ─────────────────────────────────────────────────────────
-            item {
-                SettingsSection("Diğer / Yên Din") {
-                    SettingsRow(Icons.Outlined.Info, "Heftreng Hakkında", "v4.0 — civaka nivîskar") {}
-                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
-                    SettingsRow(Icons.Outlined.Description, "Kullanım Koşulları", "Şert û mercên bikarhanînê") {}
-                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
-                    SettingsRow(Icons.Outlined.Shield, "Gizlilik Politikası", "Siyaseta nepeniyê") {}
-                }
-            }
-
-            // ── Çıkış ─────────────────────────────────────────────────────────
-            item {
-                Surface(shape = RoundedCornerShape(16.dp), color = Surface) {
                     Row(
-                        modifier          = Modifier.fillMaxWidth().clickable {}.padding(horizontal = 16.dp, vertical = 14.dp),
+                        modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, null, tint = Color(0xFFEF4444), modifier = Modifier.size(22.dp))
+                        Icon(Icons.Outlined.Notifications, null, tint = Amber, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(14.dp))
-                        Text("Çıkış Yap / Derketin", color = Color(0xFFEF4444), fontWeight = FontWeight.Medium)
+                        Column(Modifier.weight(1f)) {
+                            Text("Push Bildirimleri", color = OnBackground, fontWeight = FontWeight.Medium)
+                            Text("Agahdariyên push", color = Muted, fontSize = 12.sp)
+                        }
+                        Switch(
+                            checked         = pushEnabled,
+                            onCheckedChange = { pushEnabled = it },
+                            colors          = SwitchDefaults.colors(checkedThumbColor = Amber, checkedTrackColor = Amber.copy(alpha = 0.3f)),
+                        )
+                    }
+                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
+                    Row(
+                        modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Outlined.Email, null, tint = Amber, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("E-posta Bildirimleri", color = OnBackground, fontWeight = FontWeight.Medium)
+                            Text("Agahdariyên email", color = Muted, fontSize = 12.sp)
+                        }
+                        Switch(
+                            checked         = emailEnabled,
+                            onCheckedChange = { emailEnabled = it },
+                            colors          = SwitchDefaults.colors(checkedThumbColor = Amber, checkedTrackColor = Amber.copy(alpha = 0.3f)),
+                        )
+                    }
+                }
+            }
+
+            // ── Gizlilik ─────────────────────────────────────────────────
+            item {
+                SettingsSection(title = "Gizlilik / Nepenî") {
+                    var privateAccount by remember { mutableStateOf(false) }
+                    Row(
+                        modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Outlined.Lock, null, tint = Amber, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Gizli Hesap", color = OnBackground, fontWeight = FontWeight.Medium)
+                            Text("Tenê şopîner dikarin bibînin", color = Muted, fontSize = 12.sp)
+                        }
+                        Switch(
+                            checked         = privateAccount,
+                            onCheckedChange = { privateAccount = it },
+                            colors          = SwitchDefaults.colors(checkedThumbColor = Amber, checkedTrackColor = Amber.copy(alpha = 0.3f)),
+                        )
+                    }
+                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
+                    SettingsRow(icon = Icons.Outlined.Block, label = "Engellenen Kullanıcılar", sub = "Bikarhênerên astengkirî") {}
+                }
+            }
+
+            // ── Diğer ────────────────────────────────────────────────────
+            item {
+                SettingsSection(title = "Diğer / Yên Din") {
+                    SettingsRow(icon = Icons.Outlined.Info, label = "Heftreng Hakkında", sub = "Derbarê heftreng") {}
+                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
+                    SettingsRow(icon = Icons.Outlined.Description, label = "Kullanım Koşulları", sub = "Şert û mercên bikarhanînê") {}
+                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
+                    SettingsRow(icon = Icons.Outlined.Shield, label = "Gizlilik Politikası", sub = "Siyaseta nepeniyê") {}
+                }
+            }
+
+            // ── Çıkış ────────────────────────────────────────────────────
+            item {
+                SettingsSection {
+                    Row(
+                        modifier          = Modifier.fillMaxWidth().clickable { }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Logout, null, tint = androidx.compose.ui.graphics.Color(0xFFEF4444), modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(14.dp))
+                        Text("Çıkış Yap / Derketin", color = androidx.compose.ui.graphics.Color(0xFFEF4444), fontWeight = FontWeight.Medium)
                     }
                 }
                 Spacer(Modifier.height(16.dp))
@@ -226,11 +225,22 @@ fun SettingsScreen(navController: NavController) {
 }
 
 @Composable
-private fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+private fun SettingsSection(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
     Column {
-        Text(title, color = Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp), letterSpacing = 0.5.sp)
-        Surface(shape = RoundedCornerShape(16.dp), color = Surface) {
+        if (title != null) {
+            Text(
+                title,
+                color    = Muted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+                letterSpacing = 0.5.sp,
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = HeftSurface,
+        ) {
             Column(modifier = Modifier.fillMaxWidth(), content = content)
         }
     }
@@ -239,40 +249,16 @@ private fun SettingsSection(title: String, content: @Composable ColumnScope.() -
 @Composable
 private fun SettingsRow(icon: ImageVector, label: String, sub: String, onClick: () -> Unit) {
     Row(
-        modifier          = Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier          = Modifier.fillMaxWidth().clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, null, tint = AppPrefs.accentColor, modifier = Modifier.size(22.dp))
+        Icon(icon, null, tint = Amber, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(label, color = OnBackground, fontWeight = FontWeight.Medium)
             Text(sub, color = Muted, fontSize = 12.sp)
         }
         Icon(Icons.Default.ChevronRight, null, tint = Muted, modifier = Modifier.size(18.dp))
-    }
-}
-
-@Composable
-private fun SettingsSwitchRow(icon: ImageVector, label: String, sub: String, checked: Boolean, onChecked: (Boolean) -> Unit) {
-    Row(
-        modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, null, tint = AppPrefs.accentColor, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(label, color = OnBackground, fontWeight = FontWeight.Medium)
-            Text(sub, color = Muted, fontSize = 12.sp)
-        }
-        Switch(
-            checked         = checked,
-            onCheckedChange = onChecked,
-            colors          = SwitchDefaults.colors(
-                checkedThumbColor   = Color.Black,
-                checkedTrackColor   = AppPrefs.accentColor,
-                uncheckedThumbColor = Muted,
-                uncheckedTrackColor = SurfaceVar,
-            ),
-        )
     }
 }

@@ -209,6 +209,6 @@ fun heftrangTextFieldColors() = OutlinedTextFieldDefaults.colors(
     cursorColor          = Amber,
     focusedTextColor     = OnBackground,
     unfocusedTextColor   = OnBackground,
-    unfocusedContainerColor = Surface,
-    focusedContainerColor   = Surface,
+    unfocusedContainerColor = HeftSurface,
+    focusedContainerColor   = HeftSurface,
 )

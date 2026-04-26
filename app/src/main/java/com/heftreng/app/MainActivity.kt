@@ -14,7 +14,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            HeftrangTheme {
+            // Tema NavHost içinde isDark flow'una göre dinamik wrap ediliyor.
+            // Burada sadece başlangıç wrapper — dark default.
+            HeftrangTheme(darkMode = true) {
                 HeftrangNavHost()
             }
         }

@@ -1,5 +1,5 @@
 package com.heftreng.app.ui.component
 
-// Bu dosya artık kullanılmıyor.
-// PostCard composable'ı com.heftreng.app.ui.screens.feed.PostCard olarak tanımlıdır.
-// Tüm ekranlar oradan import etmelidir.
+// PostCard, FeedScreen içinde tanımlıdır.
+// Bu dosya geriye dönük uyumluluk için korunmaktadır.
+// Yeni kullanımlarda: import com.heftreng.app.ui.screens.feed.PostCard

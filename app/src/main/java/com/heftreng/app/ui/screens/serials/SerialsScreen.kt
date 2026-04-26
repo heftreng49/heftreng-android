@@ -101,7 +101,7 @@ fun SerialCard(
             .fillMaxWidth()
             .clickable { onClick() },
         shape = RoundedCornerShape(14.dp),
-        color = Surface,
+        color = HeftSurface,
     ) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
             // Kapak fotoğrafı
@@ -289,7 +289,7 @@ private fun SerialHeader(serial: Serial, onLike: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(Surface)
+            .background(HeftSurface)
             .padding(14.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -340,7 +340,7 @@ private fun ChapterRow(chapter: Chapter, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(Surface)
+            .background(HeftSurface)
             .clickable { onClick() }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -419,7 +419,7 @@ private fun CreateSerialDialog(onDismiss: () -> Unit, onCreate: (String, String,
     var genre by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor   = Surface,
+        containerColor   = HeftSurface,
         title = { Text("Yeni Seri", color = OnBackground, fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -464,7 +464,7 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
     var body  by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor   = Surface,
+        containerColor   = HeftSurface,
         title = { Text("Yeni Bölüm", color = OnBackground, fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

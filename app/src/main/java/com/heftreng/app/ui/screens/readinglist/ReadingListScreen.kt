@@ -142,7 +142,7 @@ private fun ReadingListBookCard(
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(Surface)
+            .background(HeftSurface)
             .clickable { onClick() }
             .padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -192,7 +192,7 @@ private fun ReadingListBookCard(
                 DropdownMenu(
                     expanded         = showMenu,
                     onDismissRequest = { showMenu = false },
-                    containerColor   = Surface,
+                    containerColor   = HeftSurface,
                 ) {
                     DropdownMenuItem(
                         text    = { Text("Listeden Çıkar", color = Color(0xFFEF4444)) },
@@ -228,7 +228,7 @@ fun ReadingListStatusSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor   = Surface,
+        containerColor   = HeftSurface,
     ) {
         Column(modifier = Modifier.padding(bottom = 32.dp)) {
             Text(
