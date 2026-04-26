@@ -29,6 +29,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.component.QuoteButton
+import com.heftreng.app.ui.component.QuoteCard
+import com.heftreng.app.ui.component.QuoteDialog
 import com.heftreng.app.ui.component.QuoteInputSection
 import com.heftreng.app.ui.component.QuotePayload
 import com.heftreng.app.ui.theme.*
@@ -48,7 +50,22 @@ fun FeedScreen(
     var newPostText by remember { mutableStateOf("") }
     var commentPost by remember { mutableStateOf<Post?>(null) }
     var quotePayload by remember { mutableStateOf<QuotePayload?>(null) }
+    var showQuoteDialog by remember { mutableStateOf(false) }
     var showQuoteInput by remember { mutableStateOf(false) }
+
+    // ── Alıntı oluşturma dialog ──────────────────────────────────────────────
+    if (showQuoteDialog) {
+        QuoteDialog(
+            initialText   = quotePayload?.text ?: "",
+            initialBook   = quotePayload?.bookName ?: "",
+            initialAuthor = quotePayload?.authorName ?: "",
+            onDismiss     = { showQuoteDialog = false },
+            onConfirm     = { payload ->
+                quotePayload = payload
+                showQuoteDialog = false
+            },
+        )
+    }
 
     Scaffold(
         containerColor = Background,
@@ -277,9 +294,13 @@ fun PostCard(
                 Modifier.fillMaxWidth()
         ) {
             if (post.quoteText.isNotBlank()) {
-                Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), color = SurfaceVar) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text("\"${post.quoteText}\"", color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
+                    QuoteCard(
+                        quoteText  = post.quoteText,
+                        bookName   = post.bookName,
+                        authorName = post.authorName,
+                        modifier   = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }"", color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
                         if (post.bookName.isNotBlank()) {
                             Spacer(Modifier.height(4.dp))
                             Text("— ${post.authorName}, ${post.bookName}", color = Muted, fontSize = 12.sp)

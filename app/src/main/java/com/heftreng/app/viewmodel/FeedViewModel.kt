@@ -62,9 +62,23 @@ class FeedViewModel @Inject constructor(
                             likesCount    = (d["likes"] as? Long)?.toInt() ?: 0,
                             commentsCount = (d["cmtCount"] as? Long)?.toInt() ?: 0,
                             repostsCount  = (d["reposts"] as? Long)?.toInt() ?: 0,
-                            quoteText     = d["quoteText"] as? String ?: "",
-                            bookName      = d["bookName"] as? String ?: "",
-                            authorName    = d["authorName"] as? String ?: "",
+                            quoteText     = run {
+                                // XML tema: quote: {text, book, author} nested
+                                // Android: quoteText flat — ikisini destekle
+                                val nested = d["quote"] as? Map<*, *>
+                                (nested?.get("text") as? String)?.takeIf { it.isNotBlank() }
+                                    ?: d["quoteText"] as? String ?: ""
+                            },
+                            bookName      = run {
+                                val nested = d["quote"] as? Map<*, *>
+                                (nested?.get("book") as? String)?.takeIf { it.isNotBlank() }
+                                    ?: d["bookName"] as? String ?: ""
+                            },
+                            authorName    = run {
+                                val nested = d["quote"] as? Map<*, *>
+                                (nested?.get("author") as? String)?.takeIf { it.isNotBlank() }
+                                    ?: d["authorName"] as? String ?: ""
+                            },
                             ts            = d["ts"] as? Timestamp,
                             isLikedByMe   = doc.id in likedIds,
                             isSavedByMe   = doc.id in savedIds,
@@ -219,6 +233,12 @@ class FeedViewModel @Inject constructor(
                     "quoteText"   to quoteText,
                     "authorName"  to authorName,
                     "bookName"    to bookName,
+                    // XML tema uyumlu nested quote objesi
+                    "quote"       to if (quoteText.isNotBlank()) mapOf(
+                        "text"   to quoteText,
+                        "book"   to bookName,
+                        "author" to authorName,
+                    ) else null,
                     "likes"       to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
                     "ts"          to Timestamp.now(),
                 )).await()
