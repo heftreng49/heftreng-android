@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.heftreng.app.navigation.AppPrefs
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
@@ -32,14 +33,12 @@ fun PostDetailScreen(
     viewModel    : FeedViewModel,
     postId       : String,
 ) {
-    val posts    by viewModel.posts.collectAsState()
-    val comments by viewModel.comments.collectAsState()
-    val post = posts.find { it.id == postId }
+    val posts       by viewModel.posts.collectAsState()
+    val comments    by viewModel.comments.collectAsState()
+    val post        = posts.find { it.id == postId }
     var commentText by remember { mutableStateOf("") }
 
-    LaunchedEffect(postId) {
-        viewModel.loadComments(postId)
-    }
+    LaunchedEffect(postId) { viewModel.loadComments(postId) }
 
     Scaffold(
         containerColor = Background,
@@ -48,7 +47,7 @@ fun PostDetailScreen(
                 title = { Text("Mijar", color = OnBackground, fontSize = 18.sp) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = OnBackground)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = OnBackground)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
@@ -57,21 +56,17 @@ fun PostDetailScreen(
     ) { padding ->
         if (post == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Amber)
+                CircularProgressIndicator(color = AppPrefs.accentColor)
             }
             return@Scaffold
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(
-                modifier = Modifier.weight(1f),
+                modifier       = Modifier.weight(1f),
                 contentPadding = PaddingValues(bottom = 8.dp),
             ) {
-                // Post içeriği
+                // Post — silme/düzenleme destekli
                 item {
                     PostCard(
                         post      = post,
@@ -80,6 +75,8 @@ fun PostDetailScreen(
                         onProfile = { navController.navigate(Screen.Profile.go(post.uid)) },
                         onComment = {},
                         onShare   = { viewModel.repost(post) },
+                        onDelete  = { viewModel.deletePost(post.id); navController.popBackStack() },
+                        onEdit    = { newText -> viewModel.editPost(post.id, newText) },
                     )
                     HorizontalDivider(color = SurfaceVar, thickness = 6.dp)
                 }
@@ -87,50 +84,30 @@ fun PostDetailScreen(
                 // Beğeni sayısı
                 if (post.likesCount > 0) {
                     item {
-                        Text(
-                            "${post.likesCount} Beğeni",
-                            modifier   = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                            color      = OnBackground,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize   = 14.sp,
-                        )
+                        Text("${post.likesCount} Beğeni", modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         HorizontalDivider(color = Divider)
                     }
                 }
 
                 // Yorumlar başlığı
                 item {
-                    Text(
-                        "Yorumlar (${post.commentsCount})",
-                        modifier  = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                        color     = Muted,
-                        fontSize  = 13.sp,
-                    )
+                    Text("Yorumlar (${post.commentsCount})", modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        color = Muted, fontSize = 13.sp)
                 }
 
-                // Yorum listesi
                 if (comments.isEmpty()) {
                     item {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(32.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                             Text("Henüz yorum yok", color = Muted, fontSize = 14.sp)
                         }
                     }
                 } else {
                     items(comments, key = { it.id }) { cmt ->
-                        Row(
-                            modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.Top,
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.Top) {
                             AsyncImage(
-                                model              = cmt.photoURL.ifEmpty { null },
-                                contentDescription = null,
-                                modifier           = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(SurfaceVar),
+                                model = cmt.photoURL.ifEmpty { null }, contentDescription = null,
+                                modifier = Modifier.size(34.dp).clip(CircleShape).background(SurfaceVar),
                                 contentScale = ContentScale.Crop,
                             )
                             Spacer(Modifier.width(10.dp))
@@ -145,7 +122,7 @@ fun PostDetailScreen(
                 }
             }
 
-            // Yorum yazma alanı
+            // Yorum yazma
             HorizontalDivider(color = Divider)
             Row(
                 modifier          = Modifier
@@ -163,7 +140,7 @@ fun PostDetailScreen(
                     shape         = RoundedCornerShape(24.dp),
                     singleLine    = true,
                     colors        = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor      = Amber,
+                        focusedBorderColor      = AppPrefs.accentColor,
                         unfocusedBorderColor    = Divider,
                         focusedTextColor        = OnBackground,
                         unfocusedTextColor      = OnBackground,
@@ -179,17 +156,12 @@ fun PostDetailScreen(
                             commentText = ""
                         }
                     },
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(if (commentText.isNotBlank()) Amber else SurfaceVar),
+                    modifier = Modifier.size(42.dp).clip(CircleShape)
+                        .background(if (commentText.isNotBlank()) AppPrefs.accentColor else SurfaceVar),
                 ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Gönder",
+                    Icon(Icons.AutoMirrored.Filled.Send, "Gönder",
                         tint     = if (commentText.isNotBlank()) Color.Black else Muted,
-                        modifier = Modifier.size(18.dp),
-                    )
+                        modifier = Modifier.size(18.dp))
                 }
             }
         }

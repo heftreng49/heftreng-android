@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.serialization.json.*
+import kotlinx.serialization.json.jsonPrimitive
 import javax.inject.Inject
 
 @HiltViewModel
@@ -195,14 +196,30 @@ class MessagesViewModel @Inject constructor(
     fun loadOtherUser(convId: String) {
         viewModelScope.launch {
             try {
-                val conv = _conversations.value.firstOrNull { it.id == convId }
-                val otherUid = conv?.participantIds?.firstOrNull { it != uid } ?: return@launch
+                // Once conversations'dan dene
+                var otherUid = _conversations.value
+                    .firstOrNull { it.id == convId }
+                    ?.participantIds?.firstOrNull { it != uid } ?: ""
+
+                // Bulamazsa Supabase'den direkt cek
+                if (otherUid.isEmpty()) {
+                    val result = supabase.postgrest["conversations"].select {
+                        filter { eq("id", convId) }
+                    }.decodeList<kotlinx.serialization.json.JsonObject>().firstOrNull()
+                    val pa = result?.get("participant_a")?.jsonPrimitive?.content ?: ""
+                    val pb = result?.get("participant_b")?.jsonPrimitive?.content ?: ""
+                    otherUid = if (pa == uid) pb else pa
+                }
+
+                if (otherUid.isEmpty()) return@launch
+
                 val doc = firestore.collection("users").document(otherUid).get().await()
                 val d = doc.data ?: return@launch
                 _otherUser.value = User(
                     uid         = otherUid,
                     displayName = d["displayName"] as? String ?: d["name"] as? String ?: "",
                     photoURL    = d["photoURL"] as? String ?: "",
+                    email       = d["email"] as? String ?: "",
                 )
             } catch (e: Exception) { e.printStackTrace() }
         }

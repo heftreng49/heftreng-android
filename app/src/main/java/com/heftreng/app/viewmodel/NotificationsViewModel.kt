@@ -35,11 +35,9 @@ class NotificationsViewModel @Inject constructor(
             _loading.value = true
             try {
                 val snap = firestore.collection("userNotifs")
-                    .document(uid)
-                    .collection("msgs")
+                    .document(uid).collection("msgs")
                     .orderBy("ts", Query.Direction.DESCENDING)
-                    .limit(50)
-                    .get().await()
+                    .limit(50).get().await()
 
                 _notifications.value = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
@@ -65,15 +63,12 @@ class NotificationsViewModel @Inject constructor(
         }
     }
 
-    /** Tek bildirimi okundu yap (ekranda göster, Firestore'a yaz) */
     fun markRead(notifId: String) {
         viewModelScope.launch {
             try {
-                firestore.collection("userNotifs")
-                    .document(uid).collection("msgs")
-                    .document(notifId)
+                firestore.collection("userNotifs").document(uid)
+                    .collection("msgs").document(notifId)
                     .update("read", true).await()
-
                 _notifications.value = _notifications.value.map { n ->
                     if (n.id == notifId) n.copy(read = true) else n
                 }
@@ -81,13 +76,13 @@ class NotificationsViewModel @Inject constructor(
         }
     }
 
-    /** Tüm okunmamışları okundu yap */
     fun markAllRead() {
         viewModelScope.launch {
             try {
-                val unread = _notifications.value.filter { !it.read }
-                val col    = firestore.collection("userNotifs").document(uid).collection("msgs")
-                unread.forEach { n -> col.document(n.id).update("read", true) }
+                val col = firestore.collection("userNotifs").document(uid).collection("msgs")
+                _notifications.value.filter { !it.read }.forEach { n ->
+                    col.document(n.id).update("read", true)
+                }
                 _notifications.value = _notifications.value.map { it.copy(read = true) }
             } catch (e: Exception) { e.printStackTrace() }
         }
