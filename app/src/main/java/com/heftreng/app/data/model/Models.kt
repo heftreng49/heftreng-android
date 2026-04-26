@@ -97,3 +97,37 @@ data class KurdiLesson(
     val completed: Boolean = false,
     val order: Int = 0,
 )
+
+data class ReadingListEntry(
+    val id       : String = "",
+    val uid      : String = "",
+    val title    : String = "",
+    val coverImg : String = "",
+    val author   : String = "",
+    val addedAt  : com.google.firebase.Timestamp? = null,
+)
+
+data class Serial(
+    val id           : String = "",
+    val uid          : String = "",
+    val title        : String = "",
+    val desc         : String = "",
+    val coverImg     : String = "",
+    val genre        : String = "",
+    val photoURL     : String = "",
+    val name         : String = "",
+    val chapterCount : Int    = 0,
+    val likes        : Int    = 0,
+    val isLikedByMe  : Boolean = false,
+    val ts           : com.google.firebase.Timestamp? = null,
+)
+
+data class Chapter(
+    val id        : String = "",
+    val serialId  : String = "",
+    val title     : String = "",
+    val body      : String = "",
+    val order     : Int    = 0,
+    val wordCount : Int    = 0,
+    val ts        : com.google.firebase.Timestamp? = null,
+)

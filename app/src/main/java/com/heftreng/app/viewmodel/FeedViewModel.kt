@@ -272,9 +272,7 @@ class FeedViewModel @Inject constructor(
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
-}
 
-    // ── Silme ────────────────────────────────────────────────────────────────
     fun deletePost(postId: String) {
         viewModelScope.launch {
             try {
@@ -284,7 +282,6 @@ class FeedViewModel @Inject constructor(
         }
     }
 
-    // ── Düzenleme ─────────────────────────────────────────────────────────────
     fun editPost(postId: String, newText: String) {
         viewModelScope.launch {
             try {
@@ -297,5 +294,5 @@ class FeedViewModel @Inject constructor(
         }
     }
 
-    // ── markRead / markAllRead (bildirimler buradan değil NotifVM'den) ─────────
     fun getPostById(postId: String): Post? = _posts.value.find { it.id == postId }
+}
