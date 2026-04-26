@@ -80,14 +80,22 @@ class ProfileViewModel @Inject constructor(
                     .limit(30).get().await()
                 _posts.value = snap.documents.mapNotNull { doc ->
                     val fd = doc.data ?: return@mapNotNull null
+                    val postText = fd["text"] as? String ?: ""
+                    // Boş gönderileri atla
+                    if (postText.isBlank() && (fd["imageURL"] as? String).isNullOrBlank()) return@mapNotNull null
+                    val dName = (fd["displayName"] as? String)
+                        ?.takeIf { it.isNotBlank() }
+                        ?: (fd["name"] as? String)
+                        ?.takeIf { it.isNotBlank() }
+                        ?: ""
                     Post(
                         id            = doc.id,
                         uid           = fd["uid"] as? String ?: "",
-                        displayName   = fd["displayName"] as? String ?: "",
+                        displayName   = dName,
                         username      = fd["username"] as? String ?: "",
                         photoURL      = fd["photoURL"] as? String ?: "",
-                        text          = fd["text"] as? String ?: "",
-                        imageURL      = fd["imageURL"] as? String ?: "",
+                        text          = postText,
+                        imageURL      = fd["imageURL"] as? String ?: fd["imgUrl"] as? String ?: "",
                         likesCount    = (fd["likes"] as? Long)?.toInt() ?: 0,
                         commentsCount = (fd["cmtCount"] as? Long)?.toInt() ?: 0,
                         repostsCount  = (fd["reposts"] as? Long)?.toInt() ?: 0,
