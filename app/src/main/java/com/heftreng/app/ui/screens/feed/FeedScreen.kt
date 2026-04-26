@@ -239,13 +239,14 @@ fun PostCard(
                             text        = { Text("Paylaş", color = OnBackground) },
                             leadingIcon = { Icon(Icons.Default.Repeat, null, tint = Muted) },
                             onClick     = { menuExpanded = false; onShare() },
-                        if (onStoryShare != null)
+                        )
+                        if (onStoryShare != null) {
                             DropdownMenuItem(
                                 text        = { Text("Hikaye Olarak Paylaş") },
                                 leadingIcon = { Icon(Icons.Outlined.Wallpaper, null) },
                                 onClick     = { menuExpanded = false; onStoryShare() },
                             )
-                        )
+                        }
                         DropdownMenuItem(
                             text        = { Text("Şikayet et", color = Color(0xFFEF4444)) },
                             leadingIcon = { Icon(Icons.Default.Flag, null, tint = Color(0xFFEF4444)) },
