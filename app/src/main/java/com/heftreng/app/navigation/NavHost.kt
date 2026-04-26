@@ -206,6 +206,28 @@ fun HeftrangNavHost() {
                     
                     composable("search") { SearchScreen(navController) }
                     composable("admin")  { AdminScreen(navController)  }
+                    
+                    composable("serials") { SerialsScreen(navController) }
+                    composable("serial/{serialId}") { back ->
+                        SerialDetailScreen(
+                            serialId      = back.arguments?.getString("serialId") ?: "",
+                            navController = navController,
+                        )
+                    }
+                    composable("chapter/{serialId}/{chapterId}") { back ->
+                        ChapterReadScreen(
+                            serialId      = back.arguments?.getString("serialId") ?: "",
+                            chapterId     = back.arguments?.getString("chapterId") ?: "",
+                            navController = navController,
+                        )
+                    }
+                    composable("reading_list/{uid}") { back ->
+                        ReadingListScreen(
+                            uid           = back.arguments?.getString("uid") ?: "",
+                            navController = navController,
+                        )
+                    }
+                    composable("kurdi") { KurdiScreen() }
                     composable(Screen.Settings.route) {
                         SettingsScreen(navController = navController)
                     }
