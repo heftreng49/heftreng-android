@@ -94,17 +94,19 @@ fun HeftrangNavHost() {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope       = rememberCoroutineScope()
 
-    // ── Tema buradan wrap ediliyor — isDark flow'u gerçek zamanlı ──
-    HeftrangTheme(darkMode = isDark) {
-
-        if (currentUser == null) {
+    // Auth kontrolü tema dışında — route graph her zaman tam oluşur
+    if (currentUser == null) {
+        HeftrangTheme(darkMode = isDark) {
             AuthScreen(onAuthSuccess = {
                 navController.navigate(Screen.Feed.route) {
                     popUpTo(Screen.Auth.route) { inclusive = true }
                 }
             })
-            return@HeftrangTheme
         }
+        return
+    }
+
+    HeftrangTheme(darkMode = isDark) {
 
         val navBackStack by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStack?.destination?.route
