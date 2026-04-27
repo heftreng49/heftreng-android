@@ -92,7 +92,7 @@ private val bottomNavRoutes = setOf(
 // ── NavHost ───────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HeftrangNavHost() {
+fun HeftrangNavHost(initialRoute: String? = null) {
     val navController              = rememberNavController()
     val authVm   : AuthViewModel   = hiltViewModel()
     val settingsVm: SettingsViewModel = hiltViewModel()
@@ -118,6 +118,14 @@ fun HeftrangNavHost() {
         val navBackStack by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStack?.destination?.route
         val showBottom   = currentRoute in bottomNavRoutes
+
+
+        // Bildirimden gelen deep link
+        LaunchedEffect(initialRoute) {
+            initialRoute?.let { target ->
+                try { navController.navigate(target) } catch (_: Exception) {}
+            }
+        }
 
         ModalNavigationDrawer(
             drawerState   = drawerState,

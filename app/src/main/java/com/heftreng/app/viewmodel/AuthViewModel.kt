@@ -57,6 +57,19 @@ class AuthViewModel @Inject constructor(
                         .update("lastSeen", com.google.firebase.Timestamp.now())
                 }
                 _currentUser.value = user
+            // FCM token'ı güncelle
+            try {
+                com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                    .addOnSuccessListener { token ->
+                        if (token.isNotEmpty()) {
+                            firestore.collection("users").document(user.uid)
+                                .update(mapOf(
+                                    "fcmToken"     to token,
+                                    "fcmUpdatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                                ))
+                        }
+                    }
+            } catch (_: Exception) {}
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
