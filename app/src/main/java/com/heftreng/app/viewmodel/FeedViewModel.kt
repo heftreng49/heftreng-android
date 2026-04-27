@@ -15,6 +15,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
+// Tema (heftreng-optimized-4-3.xml) ile tam senkron:
+// feedLikes  → feedId alan adı  (postId değil)
+// feedSaves  → feedId alan adı  (postId değil)
+// feed/comments → name alan adı (displayName değil)
+// userNotifs → feedId alan adı  (postId değil)
+// feed gönderi → name + imgUrl alan adları (displayName/imageURL ek olarak)
+// quote → nested {text,book,author} objesi + flat alanlar ikisi birden
+
 @HiltViewModel
 class FeedViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
@@ -32,7 +40,6 @@ class FeedViewModel @Inject constructor(
 
     val uid get() = auth.currentUser?.uid ?: ""
 
-    // Kullanıcının etkileşimleri — 2 sabit sorgu (N*2 değil)
     private var likedIds = emptySet<String>()
     private var savedIds = emptySet<String>()
 
@@ -46,39 +53,37 @@ class FeedViewModel @Inject constructor(
             .addSnapshotListener { snap, err ->
                 if (err != null || snap == null) { _loading.value = false; return@addSnapshotListener }
                 viewModelScope.launch {
-                    if (uid.isNotEmpty() && likedIds.isEmpty() && savedIds.isEmpty()) {
-                        loadInteractions()
-                    }
+                    if (uid.isNotEmpty() && likedIds.isEmpty() && savedIds.isEmpty()) loadInteractions()
                     _posts.value = snap.documents.mapNotNull { doc ->
                         val d = doc.data ?: return@mapNotNull null
+                        // Tema: "name", Android: "displayName" — ikisini destekle
+                        val displayName = (d["displayName"] as? String)?.takeIf { it.isNotBlank() }
+                            ?: d["name"] as? String ?: ""
+                        // Tema: quote nested {text,book,author}, Android: flat alanlar
+                        val quoteObj    = d["quote"] as? Map<*, *>
+                        val quoteText   = (quoteObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
+                            ?: d["quoteText"] as? String ?: ""
+                        val bookName    = (quoteObj?.get("book") as? String)?.takeIf { it.isNotBlank() }
+                            ?: d["bookName"] as? String ?: ""
+                        val authorName  = (quoteObj?.get("author") as? String)?.takeIf { it.isNotBlank() }
+                            ?: d["authorName"] as? String ?: ""
+                        // Tema: "imgUrl", Android: "imageURL"
+                        val imageURL    = (d["imageURL"] as? String)?.takeIf { it.isNotBlank() }
+                            ?: d["imgUrl"] as? String ?: ""
                         Post(
                             id            = doc.id,
-                            uid           = d["uid"] as? String ?: "",
-                            displayName   = ((d["displayName"] as? String)?.takeIf { it.isNotBlank() } ?: (d["name"] as? String)?.takeIf { it.isNotBlank() } ?: ""),
+                            uid           = d["uid"]      as? String ?: "",
+                            displayName   = displayName,
                             username      = d["username"] as? String ?: "",
                             photoURL      = d["photoURL"] as? String ?: "",
-                            text          = d["text"] as? String ?: "",
-                            imageURL      = d["imageURL"] as? String ?: "",
-                            likesCount    = (d["likes"] as? Long)?.toInt() ?: 0,
+                            text          = d["text"]     as? String ?: "",
+                            imageURL      = imageURL,
+                            likesCount    = (d["likes"]    as? Long)?.toInt() ?: 0,
                             commentsCount = (d["cmtCount"] as? Long)?.toInt() ?: 0,
-                            repostsCount  = (d["reposts"] as? Long)?.toInt() ?: 0,
-                            quoteText     = run {
-                                // XML tema: quote: {text, book, author} nested
-                                // Android: quoteText flat — ikisini destekle
-                                val nested = d["quote"] as? Map<*, *>
-                                (nested?.get("text") as? String)?.takeIf { it.isNotBlank() }
-                                    ?: d["quoteText"] as? String ?: ""
-                            },
-                            bookName      = run {
-                                val nested = d["quote"] as? Map<*, *>
-                                (nested?.get("book") as? String)?.takeIf { it.isNotBlank() }
-                                    ?: d["bookName"] as? String ?: ""
-                            },
-                            authorName    = run {
-                                val nested = d["quote"] as? Map<*, *>
-                                (nested?.get("author") as? String)?.takeIf { it.isNotBlank() }
-                                    ?: d["authorName"] as? String ?: ""
-                            },
+                            repostsCount  = (d["reposts"]  as? Long)?.toInt() ?: 0,
+                            quoteText     = quoteText,
+                            bookName      = bookName,
+                            authorName    = authorName,
                             ts            = d["ts"] as? Timestamp,
                             isLikedByMe   = doc.id in likedIds,
                             isSavedByMe   = doc.id in savedIds,
@@ -89,13 +94,18 @@ class FeedViewModel @Inject constructor(
             }
     }
 
+    // Tema: feedLikes query → "feedId" alan adı
     private suspend fun loadInteractions() {
         if (uid.isEmpty()) return
         try {
             likedIds = firestore.collection("feedLikes").whereEqualTo("uid", uid)
-                .get().await().documents.mapNotNull { it.getString("postId") }.toSet()
+                .get().await().documents.mapNotNull {
+                    it.getString("feedId") ?: it.getString("postId") // geriye dönük uyum
+                }.toSet()
             savedIds = firestore.collection("feedSaves").whereEqualTo("uid", uid)
-                .get().await().documents.mapNotNull { it.getString("postId") }.toSet()
+                .get().await().documents.mapNotNull {
+                    it.getString("feedId") ?: it.getString("postId")
+                }.toSet()
         } catch (e: Exception) { e.printStackTrace() }
     }
 
@@ -114,9 +124,18 @@ class FeedViewModel @Inject constructor(
                 val likeRef = firestore.collection("feedLikes").document("${post.id}_$uid")
                 val postRef = firestore.collection("feed").document(post.id)
                 if (nowLiked) {
-                    likeRef.set(mapOf("uid" to uid, "postId" to post.id, "ts" to Timestamp.now())).await()
+                    val myName  = auth.currentUser?.displayName ?: ""
+                    val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
+                    // Tema alan yapısı: uid, feedId, name, photoURL, ts
+                    likeRef.set(mapOf(
+                        "uid"      to uid,
+                        "feedId"   to post.id,   // tema: feedId
+                        "name"     to myName,     // tema: name
+                        "photoURL" to myPhoto,
+                        "ts"       to Timestamp.now(),
+                    )).await()
                     postRef.update("likes", FieldValue.increment(1)).await()
-                    if (post.uid != uid) sendNotif(post.uid, "like", "gönderini beğendi", post.id)
+                    if (post.uid != uid) sendNotif(post.uid, "like", "$myName gönderini beğendi", post.text.take(60), post.id)
                 } else {
                     likeRef.delete().await()
                     postRef.update("likes", FieldValue.increment(-1)).await()
@@ -136,14 +155,18 @@ class FeedViewModel @Inject constructor(
             try {
                 val saveRef = firestore.collection("feedSaves").document("${post.id}_$uid")
                 if (nowSaved) {
-                    saveRef.set(mapOf("uid" to uid, "postId" to post.id, "ts" to Timestamp.now())).await()
+                    // Tema alan yapısı: uid, feedId, ts
+                    saveRef.set(mapOf("uid" to uid, "feedId" to post.id, "ts" to Timestamp.now())).await()
+                    firestore.collection("feed").document(post.id).update("saves", FieldValue.increment(1)).await()
                 } else {
                     saveRef.delete().await()
+                    firestore.collection("feed").document(post.id).update("saves", FieldValue.increment(-1)).await()
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
+    // Tema: feed/{postId}/comments alt koleksiyonu, "name" alanı
     fun loadComments(postId: String) {
         viewModelScope.launch {
             try {
@@ -154,12 +177,12 @@ class FeedViewModel @Inject constructor(
                     Comment(
                         id          = doc.id,
                         postId      = postId,
-                        uid         = d["uid"] as? String ?: "",
-                        displayName = d["displayName"] as? String ?: "",
+                        uid         = d["uid"]      as? String ?: "",
+                        displayName = (d["displayName"] as? String)?.takeIf { it.isNotBlank() } ?: d["name"] as? String ?: "",
                         photoURL    = d["photoURL"] as? String ?: "",
-                        text        = d["text"] as? String ?: "",
-                        likesCount  = (d["likes"] as? Long)?.toInt() ?: 0,
-                        ts          = d["ts"] as? Timestamp,
+                        text        = d["text"]     as? String ?: "",
+                        likesCount  = (d["likes"]   as? Long)?.toInt() ?: 0,
+                        ts          = d["ts"]       as? Timestamp,
                     )
                 }
             } catch (e: Exception) { e.printStackTrace() }
@@ -171,21 +194,26 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val userDoc = firestore.collection("users").document(uid).get().await()
-                val name    = userDoc.getString("displayName") ?: auth.currentUser?.displayName ?: "Bikarhêner"
+                val myName  = userDoc.getString("displayName") ?: userDoc.getString("name")
+                    ?: auth.currentUser?.displayName ?: "Bikarhêner"
+                val myPhoto = userDoc.getString("photoURL") ?: ""
+                // Tema alan yapısı: uid, name, photoURL, text, likes, replyTo, replyToCmtId, ts
                 firestore.collection("feed").document(post.id).collection("comments").add(mapOf(
-                    "uid"         to uid,
-                    "displayName" to name,
-                    "photoURL"    to (userDoc.getString("photoURL") ?: ""),
-                    "text"        to text,
-                    "likes"       to 0,
-                    "ts"          to Timestamp.now(),
+                    "uid"          to uid,
+                    "name"         to myName,    // tema: name
+                    "displayName"  to myName,    // Android uyumu
+                    "photoURL"     to myPhoto,
+                    "text"         to text,
+                    "likes"        to 0,
+                    "replyTo"      to "",
+                    "replyToCmtId" to "",
+                    "ts"           to Timestamp.now(),
                 )).await()
-                firestore.collection("feed").document(post.id)
-                    .update("cmtCount", FieldValue.increment(1)).await()
+                firestore.collection("feed").document(post.id).update("cmtCount", FieldValue.increment(1)).await()
                 _posts.value = _posts.value.map {
                     if (it.id == post.id) it.copy(commentsCount = it.commentsCount + 1) else it
                 }
-                if (post.uid != uid) sendNotif(post.uid, "comment", "gönderini yorumladı", post.id)
+                if (post.uid != uid) sendNotif(post.uid, "cmt", "$myName gönderine yorum yaptı", text.take(60), post.id)
                 loadComments(post.id)
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -196,51 +224,64 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val userDoc = firestore.collection("users").document(uid).get().await()
+                val myName  = userDoc.getString("displayName") ?: userDoc.getString("name") ?: ""
+                val myPhoto = userDoc.getString("photoURL") ?: ""
+                // Tema + Android alan uyumu
                 firestore.collection("feed").add(mapOf(
                     "uid"         to uid,
-                    "displayName" to (userDoc.getString("displayName") ?: ""),
+                    "name"        to myName,
+                    "displayName" to myName,
                     "username"    to (userDoc.getString("username") ?: ""),
-                    "photoURL"    to (userDoc.getString("photoURL") ?: ""),
+                    "photoURL"    to myPhoto,
                     "text"        to post.text,
+                    "imgUrl"      to post.imageURL,
                     "imageURL"    to post.imageURL,
+                    "quote"       to if (post.quoteText.isNotBlank()) mapOf(
+                        "text" to post.quoteText, "book" to post.bookName, "author" to post.authorName,
+                    ) else null,
                     "quoteText"   to post.quoteText,
                     "bookName"    to post.bookName,
                     "authorName"  to post.authorName,
                     "likes"       to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
-                    "repostOf"    to post.id, "repostUid" to post.uid,
+                    "repostType"  to "feed",
+                    "repostId"    to post.id,
+                    "repostUid"   to post.uid,
                     "ts"          to Timestamp.now(),
                 )).await()
-                firestore.collection("feed").document(post.id)
-                    .update("reposts", FieldValue.increment(1)).await()
-                if (post.uid != uid) sendNotif(post.uid, "repost", "gönderini paylaştı", post.id)
+                firestore.collection("feed").document(post.id).update("reposts", FieldValue.increment(1)).await()
+                if (post.uid != uid) sendNotif(post.uid, "repost", "$myName gönderini paylaştı", post.text.take(60), post.id)
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
-    fun createPost(text: String, imageURL: String = "", quoteText: String = "",
-                   authorName: String = "", bookName: String = "") {
+    fun createPost(text: String, imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "") {
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
                 val userDoc = firestore.collection("users").document(uid).get().await()
+                val myName  = userDoc.getString("displayName") ?: userDoc.getString("name") ?: auth.currentUser?.displayName ?: ""
+                val myPhoto = userDoc.getString("photoURL") ?: auth.currentUser?.photoUrl?.toString() ?: ""
+                val myUser  = userDoc.getString("username") ?: ""
+                val myEmail = userDoc.getString("email") ?: auth.currentUser?.email ?: ""
+                // Tema + Android uyumu — ikisini birden yaz
                 firestore.collection("feed").add(mapOf(
-                    "uid"         to uid,
-                    "displayName" to (userDoc.getString("displayName") ?: auth.currentUser?.displayName ?: ""),
-                    "username"    to (userDoc.getString("username") ?: ""),
-                    "photoURL"    to (userDoc.getString("photoURL") ?: auth.currentUser?.photoUrl?.toString() ?: ""),
-                    "text"        to text,
-                    "imageURL"    to imageURL,
-                    "quoteText"   to quoteText,
-                    "authorName"  to authorName,
-                    "bookName"    to bookName,
-                    // XML tema uyumlu nested quote objesi
-                    "quote"       to if (quoteText.isNotBlank()) mapOf(
-                        "text"   to quoteText,
-                        "book"   to bookName,
-                        "author" to authorName,
+                    "uid"          to uid,
+                    "name"         to myName,
+                    "displayName"  to myName,
+                    "username"     to myUser,
+                    "photoURL"     to myPhoto,
+                    "authorEmail"  to myEmail,
+                    "text"         to text,
+                    "imgUrl"       to imageURL,
+                    "imageURL"     to imageURL,
+                    "quote"        to if (quoteText.isNotBlank()) mapOf(
+                        "text" to quoteText, "book" to bookName, "author" to authorName,
                     ) else null,
-                    "likes"       to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
-                    "ts"          to Timestamp.now(),
+                    "quoteText"    to quoteText,
+                    "authorName"   to authorName,
+                    "bookName"     to bookName,
+                    "likes"        to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
+                    "ts"           to Timestamp.now(),
                 )).await()
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -248,48 +289,49 @@ class FeedViewModel @Inject constructor(
 
     fun deletePost(postId: String) {
         viewModelScope.launch {
-            try {
-                firestore.collection("feed").document(postId).delete().await()
-                _posts.value = _posts.value.filter { it.id != postId }
+            try { firestore.collection("feed").document(postId).delete().await()
+                  _posts.value = _posts.value.filter { it.id != postId }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
     fun editPost(postId: String, newText: String) {
         viewModelScope.launch {
-            try {
-                firestore.collection("feed").document(postId).update("text", newText.trim()).await()
-                _posts.value = _posts.value.map {
-                    if (it.id == postId) it.copy(text = newText.trim()) else it
-                }
+            try { firestore.collection("feed").document(postId).update("text", newText.trim()).await()
+                  _posts.value = _posts.value.map { if (it.id == postId) it.copy(text = newText.trim()) else it }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
     fun getPostById(postId: String): Post? = _posts.value.find { it.id == postId }
 
-    private suspend fun sendNotif(toUid: String, type: String, action: String, postId: String = "") {
+    // Tema: userNotifs/{uid}/msgs, alan: feedId, title, sub, ico
+    private suspend fun sendNotif(toUid: String, type: String, title: String, sub: String = "", feedId: String = "") {
         try {
             val userDoc  = firestore.collection("users").document(uid).get().await()
-            val fromName = userDoc.getString("displayName") ?: auth.currentUser?.displayName ?: "Kullanıcı"
+            val fromName = userDoc.getString("displayName") ?: userDoc.getString("name")
+                ?: auth.currentUser?.displayName ?: "Kullanıcı"
             val fromPhoto= userDoc.getString("photoURL") ?: ""
+            val ico = when (type) { "like" -> "favorite"; "cmt" -> "chat_bubble"; "follow" -> "person_add"; "repost" -> "repeat"; else -> "notifications" }
+            // Tema alan yapısı
             firestore.collection("userNotifs").document(toUid).collection("msgs").add(mapOf(
                 "fromUid"   to uid,
                 "fromName"  to fromName,
                 "fromPhoto" to fromPhoto,
                 "type"      to type,
-                "postId"    to postId,
-                "message"   to "$fromName $action",
+                "feedId"    to feedId,   // tema: feedId
+                "postId"    to feedId,   // Android uyumu (NotificationsScreen bunu okuyor)
+                "title"     to title,
+                "sub"       to sub,
+                "ico"       to ico,
+                "message"   to title,
                 "url"       to "",
                 "read"      to false,
                 "ts"        to Timestamp.now(),
             )).await()
             firestore.collection("pushQueue").add(mapOf(
-                "targetUid" to toUid,
-                "title"     to "Heftreng",
-                "body"      to "$fromName $action",
-                "postId"    to postId,
-                "ts"        to Timestamp.now(),
+                "targetUid" to toUid, "title" to "Heftreng", "body" to title,
+                "feedId"    to feedId, "ts"   to Timestamp.now(),
             )).await()
         } catch (e: Exception) { e.printStackTrace() }
     }

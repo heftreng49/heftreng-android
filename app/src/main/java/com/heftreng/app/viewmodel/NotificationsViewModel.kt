@@ -14,6 +14,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
+// Tema: userNotifs/{uid}/msgs
+// Alan yapısı: fromUid, fromName, fromPhoto, type, feedId, title, sub, ico, read, ts
+// feedId → PostDetail navigasyonu için kullanılır
+// type: like, cmt, follow, repost, bm (bookmark)
+
 @HiltViewModel
 class NotificationsViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
@@ -31,33 +36,43 @@ class NotificationsViewModel @Inject constructor(
     init { load() }
 
     fun load() {
+        if (uid.isEmpty()) return
         viewModelScope.launch {
             _loading.value = true
             try {
-                val snap = firestore.collection("userNotifs")
+                // Realtime için SnapshotListener kullan
+                firestore.collection("userNotifs")
                     .document(uid).collection("msgs")
                     .orderBy("ts", Query.Direction.DESCENDING)
-                    .limit(50).get().await()
-
-                _notifications.value = snap.documents.mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    Notification(
-                        id        = doc.id,
-                        userId    = uid,
-                        fromUid   = d["fromUid"]   as? String  ?: "",
-                        fromName  = d["fromName"]  as? String  ?: "",
-                        fromPhoto = d["fromPhoto"] as? String  ?: "",
-                        type      = d["type"]      as? String  ?: "",
-                        message   = d["message"]   as? String  ?: "",
-                        postId    = d["postId"]    as? String,
-                        url       = d["url"]       as? String  ?: "",
-                        read      = d["read"]      as? Boolean ?: false,
-                        ts        = d["ts"]        as? Timestamp,
-                    )
-                }
+                    .limit(60)
+                    .addSnapshotListener { snap, err ->
+                        if (err != null || snap == null) {
+                            viewModelScope.launch { _loading.value = false }
+                            return@addSnapshotListener
+                        }
+                        _notifications.value = snap.documents.mapNotNull { doc ->
+                            val d = doc.data ?: return@mapNotNull null
+                            Notification(
+                                id        = doc.id,
+                                userId    = uid,
+                                fromUid   = d["fromUid"]   as? String  ?: "",
+                                fromName  = d["fromName"]  as? String  ?: "",
+                                fromPhoto = d["fromPhoto"] as? String  ?: "",
+                                type      = d["type"]      as? String  ?: "",
+                                message   = (d["message"] as? String)?.takeIf { it.isNotBlank() }
+                                    ?: d["title"] as? String ?: "",
+                                // feedId → postId olarak map et (tema feedId, Android postId kullanıyor)
+                                postId    = (d["feedId"] as? String)?.takeIf { it.isNotBlank() }
+                                    ?: d["postId"] as? String,
+                                url       = d["url"]   as? String  ?: "",
+                                read      = d["read"]  as? Boolean ?: false,
+                                ts        = d["ts"]    as? Timestamp,
+                            )
+                        }
+                        viewModelScope.launch { _loading.value = false }
+                    }
             } catch (e: Exception) {
                 e.printStackTrace()
-            } finally {
                 _loading.value = false
             }
         }

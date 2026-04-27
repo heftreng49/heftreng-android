@@ -35,7 +35,7 @@ import com.heftreng.app.ui.screens.kurdi.KurdiScreen
 import com.heftreng.app.ui.screens.messages.ConversationsScreen
 import com.heftreng.app.ui.screens.messages.MessageDetailScreen
 import com.heftreng.app.ui.screens.notifications.NotificationsScreen
-import com.heftreng.app.ui.screens.post.SinglePostScreen
+import com.heftreng.app.ui.screens.feed.PostDetailScreen
 import com.heftreng.app.ui.screens.profile.EditProfileScreen
 import com.heftreng.app.ui.screens.profile.ProfileScreen
 import com.heftreng.app.ui.screens.readinglist.ReadingListScreen
@@ -211,9 +211,10 @@ fun HeftrangNavHost() {
                     composable(Screen.EditProfile.route) { EditProfileScreen(navController) }
                     composable("post/{postId}",
                         arguments = listOf(navArgument("postId") { type = NavType.StringType })) { back ->
-                        SinglePostScreen(
+                        PostDetailScreen(
                             postId        = back.arguments?.getString("postId") ?: "",
                             navController = navController,
+                            viewModel     = hiltViewModel(), // FeedViewModel
                         )
                     }
                     composable(Screen.Search.route) { SearchScreen(navController) }

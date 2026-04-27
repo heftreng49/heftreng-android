@@ -138,6 +138,11 @@ class ProfileViewModel @Inject constructor(
                         "fromName"  to fromName,
                         "fromPhoto" to fromPhoto,
                         "type"      to "follow",
+                        "feedId"    to "",          // tema: feedId (follow'da boş)
+                        "postId"    to "",          // Android uyumu
+                        "title"     to "$fromName seni takip etmeye başladı",
+                        "sub"       to "",
+                        "ico"       to "person_add",
                         "message"   to "$fromName seni takip etmeye başladı",
                         "url"       to "",
                         "read"      to false,
