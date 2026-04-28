@@ -50,6 +50,11 @@ fun ConversationsScreen(
             TopAppBar(
                 title  = { Text(if (language == "ku") "Peyam" else "Mesajlar", fontWeight = FontWeight.SemiBold, color = OnBackground) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                actions = {
+                    IconButton(onClick = { navController.navigate("search") }) {
+                        Icon(Icons.Default.EditNote, "Yeni Mesaj", tint = Amber)
+                    }
+                },
             )
         }
     ) { padding ->
@@ -62,7 +67,7 @@ fun ConversationsScreen(
             conversations.isEmpty() -> {
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Muted, modifier = Modifier.size(48.dp))
+                        Icon(Icons.Default.ChatBubbleOutline, contentDescription = null, tint = Muted, modifier = Modifier.size(52.dp))
                         Spacer(Modifier.height(12.dp))
                         Text(if (language == "ku") "Peyam tune" else "Henüz mesajın yok", color = Muted)
                     }
