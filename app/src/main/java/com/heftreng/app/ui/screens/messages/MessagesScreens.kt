@@ -53,7 +53,7 @@ fun ConversationsScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
                 actions = {
                     IconButton(onClick = { navController.navigate("search") }) {
-                        Icon(Icons.Default.Create, "Yeni Mesaj", tint = Amber)
+                        Icon(Icons.Default.Edit, "Yeni Mesaj", tint = Amber)
                     }
                 },
             )
