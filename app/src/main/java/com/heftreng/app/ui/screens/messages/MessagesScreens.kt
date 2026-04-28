@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -52,7 +53,7 @@ fun ConversationsScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
                 actions = {
                     IconButton(onClick = { navController.navigate("search") }) {
-                        Icon(Icons.Default.EditNote, "Yeni Mesaj", tint = Amber)
+                        Icon(Icons.Default.Create, "Yeni Mesaj", tint = Amber)
                     }
                 },
             )
@@ -67,7 +68,7 @@ fun ConversationsScreen(
             conversations.isEmpty() -> {
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.ChatBubbleOutline, contentDescription = null, tint = Muted, modifier = Modifier.size(52.dp))
+                        Icon(Icons.Outlined.Chat, contentDescription = null, tint = Muted, modifier = Modifier.size(52.dp))
                         Spacer(Modifier.height(12.dp))
                         Text(if (language == "ku") "Peyam tune" else "Henüz mesajın yok", color = Muted)
                     }
