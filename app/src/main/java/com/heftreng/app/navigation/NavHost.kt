@@ -46,6 +46,7 @@ import com.heftreng.app.ui.screens.serials.SerialsScreen
 import com.heftreng.app.ui.screens.settings.SettingsScreen
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
+import com.heftreng.app.viewmodel.MessagesViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 
@@ -119,6 +120,11 @@ fun HeftrangNavHost(initialRoute: String? = null) {
         val currentRoute = navBackStack?.destination?.route
         val showBottom   = currentRoute in bottomNavRoutes
 
+        // Mesaj badge — okunmamış sayısı
+        val messagesVm: MessagesViewModel = hiltViewModel()
+        val totalUnread by messagesVm.totalUnread.collectAsState()
+        LaunchedEffect(Unit) { messagesVm.listenConversations() }
+
 
         // Bildirimden gelen deep link
         LaunchedEffect(initialRoute) {
@@ -170,7 +176,20 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                                             restoreState    = true
                                         }
                                     },
-                                    icon   = { Icon(if (selected) item.iconSelected else item.icon, label) },
+                                    icon   = {
+                                if (item.route == Screen.Messages.route && totalUnread > 0) {
+                                    BadgedBox(badge = {
+                                        Badge(containerColor = Error) {
+                                            Text(if (totalUnread > 9) "9+" else totalUnread.toString(),
+                                                color = Color.White, fontSize = 9.sp)
+                                        }
+                                    }) {
+                                        Icon(if (selected) item.iconSelected else item.icon, label)
+                                    }
+                                } else {
+                                    Icon(if (selected) item.iconSelected else item.icon, label)
+                                }
+                            },
                                     label  = { Text(label, fontSize = 10.sp) },
                                     colors = NavigationBarItemDefaults.colors(
                                         selectedIconColor   = Amber,
