@@ -56,6 +56,11 @@ class MessagesViewModel @Inject constructor(
     private val _loading   = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
+    // Toplam okunmamış — bottom nav badge
+    val totalUnread: StateFlow<Int> = _conversations
+        .map { list -> list.sumOf { it.unreadCount } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
     val uid get() = auth.currentUser?.uid ?: ""
 
     private var convListener: ListenerRegistration? = null
