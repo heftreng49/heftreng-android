@@ -56,6 +56,11 @@ class MessagesViewModel @Inject constructor(
     private val _loading   = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
+    // Toplam okunmamış — bottom nav badge
+    val totalUnread: StateFlow<Int> = _conversations
+        .map { list -> list.sumOf { it.unreadCount } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
     val uid get() = auth.currentUser?.uid ?: ""
 
     private var convListener: ListenerRegistration? = null
@@ -234,17 +239,9 @@ class MessagesViewModel @Inject constructor(
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
-                // Kendi mesajları hariç okunmamışları işaretle
-                val unread = firestore.collection("convMessages").document(convId)
-                    .collection("msgs")
-                    .whereEqualTo("read", false)
-                    .whereNotEqualTo("senderUid", uid)
-                    .get().await()
-                val batch = firestore.batch()
-                unread.documents.forEach { batch.update(it.reference, "read", true) }
-                batch.commit().await()
+                // unread sayacını sıfırla (index gerektirmez)
                 firestore.collection("conversations").document(convId)
-                    .update("unread_$uid", 0).await()
+                    .update("unread_$uid", 0L).await()
             } catch (_: Exception) {}
         }
     }

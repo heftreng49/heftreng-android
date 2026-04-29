@@ -30,6 +30,7 @@ import androidx.navigation.navArgument
 import coil.compose.AsyncImage
 import com.heftreng.app.ui.screens.admin.AdminScreen
 import com.heftreng.app.ui.screens.auth.AuthScreen
+import com.heftreng.app.ui.screens.blog.BlogScreen
 import com.heftreng.app.ui.screens.feed.FeedScreen
 import com.heftreng.app.ui.screens.kurdi.KurdiScreen
 import com.heftreng.app.ui.screens.messages.ConversationsScreen
@@ -46,6 +47,7 @@ import com.heftreng.app.ui.screens.serials.SerialsScreen
 import com.heftreng.app.ui.screens.settings.SettingsScreen
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
+import com.heftreng.app.viewmodel.MessagesViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 
@@ -61,6 +63,7 @@ sealed class Screen(val route: String) {
     object EditProfile   : Screen("edit_profile")
     object PostDetail    : Screen("post/{postId}")   { fun go(id: String)  = "post/$id" }
     object Settings      : Screen("settings")
+    object Blog          : Screen("blog")
     object Admin         : Screen("admin")
     object Serials       : Screen("serials")
     object SerialDetail  : Screen("serial/{serialId}") { fun go(id: String) = "serial/$id" }
@@ -77,16 +80,16 @@ data class BottomNavItem(
 )
 
 val bottomNavItems = listOf(
-    BottomNavItem(Screen.Feed.route,          "Feed",        "Nivîs",    Icons.Outlined.DynamicFeed,      Icons.Filled.DynamicFeed),
-    BottomNavItem(Screen.Search.route,        "Ara",         "Bigere",   Icons.Outlined.Search,            Icons.Filled.Search),
-    BottomNavItem(Screen.Messages.route,      "Mesajlar",    "Peyam",    Icons.Outlined.ChatBubbleOutline, Icons.Filled.ChatBubble),
-    BottomNavItem(Screen.Notifications.route, "Bildirimler", "Agahdarî", Icons.Outlined.NotificationsNone, Icons.Filled.Notifications),
-    BottomNavItem("profile/me",               "Profil",      "Profîl",   Icons.Outlined.PersonOutline,     Icons.Filled.Person),
+    BottomNavItem(Screen.Feed.route,    "Nivîs",   "Nivîs",   Icons.Outlined.DynamicFeed,  Icons.Filled.DynamicFeed),
+    BottomNavItem(Screen.Blog.route,    "Blog",    "Blog",    Icons.Outlined.Article,       Icons.Filled.Article),
+    BottomNavItem(Screen.Search.route,  "Bigere",  "Bigere",  Icons.Outlined.Search,        Icons.Filled.Search),
+    BottomNavItem(Screen.Serials.route, "Pirtûk",  "Pirtûk",  Icons.Outlined.AutoStories,   Icons.Filled.AutoStories),
+    BottomNavItem("profile/me",         "Profîl",  "Profîl",  Icons.Outlined.PersonOutline, Icons.Filled.Person),
 )
 
 private val bottomNavRoutes = setOf(
-    Screen.Feed.route, Screen.Search.route, Screen.Messages.route,
-    Screen.Notifications.route, "profile/me",
+    Screen.Feed.route, Screen.Blog.route, Screen.Search.route,
+    Screen.Serials.route, "profile/me",
 )
 
 // ── NavHost ───────────────────────────────────────────────────────────────────
@@ -118,6 +121,11 @@ fun HeftrangNavHost(initialRoute: String? = null) {
         val navBackStack by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStack?.destination?.route
         val showBottom   = currentRoute in bottomNavRoutes
+
+        // Mesaj badge — okunmamış sayısı
+        val messagesVm: MessagesViewModel = hiltViewModel()
+        val totalUnread by messagesVm.totalUnread.collectAsState()
+        LaunchedEffect(Unit) { messagesVm.listenConversations() }
 
 
         // Bildirimden gelen deep link
@@ -170,7 +178,20 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                                             restoreState    = true
                                         }
                                     },
-                                    icon   = { Icon(if (selected) item.iconSelected else item.icon, label) },
+                                    icon   = {
+                                if (item.route == Screen.Messages.route && totalUnread > 0) {
+                                    BadgedBox(badge = {
+                                        Badge(containerColor = Error) {
+                                            Text(if (totalUnread > 9) "9+" else totalUnread.toString(),
+                                                color = Color.White, fontSize = 9.sp)
+                                        }
+                                    }) {
+                                        Icon(if (selected) item.iconSelected else item.icon, label)
+                                    }
+                                } else {
+                                    Icon(if (selected) item.iconSelected else item.icon, label)
+                                }
+                            },
                                     label  = { Text(label, fontSize = 10.sp) },
                                     colors = NavigationBarItemDefaults.colors(
                                         selectedIconColor   = Amber,
@@ -190,6 +211,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     startDestination = Screen.Feed.route,
                     modifier         = Modifier.padding(innerPadding),
                 ) {
+                    composable(Screen.Blog.route)    { BlogScreen(navController) }
                     composable(Screen.Feed.route) {
                         FeedScreen(
                             navController = navController,
