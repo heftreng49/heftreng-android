@@ -30,7 +30,4 @@ object AppModule {
 
     @Provides @Singleton
     fun provideContext(@ApplicationContext context: Context): Context = context
-
-    // (kaldırılınca build bozuluyor, ilerleyen versiyonda temizlenir)
-    @Provides @Singleton
 }
