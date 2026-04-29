@@ -38,22 +38,33 @@ class FeedViewModel @Inject constructor(
     private val _loading  = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
+    private val _hasMore  = MutableStateFlow(true)
+    val hasMore = _hasMore.asStateFlow()
+
+    private val _loadingMore = MutableStateFlow(false)
+    val loadingMore = _loadingMore.asStateFlow()
+
     val uid get() = auth.currentUser?.uid ?: ""
 
     private var likedIds = emptySet<String>()
     private var savedIds = emptySet<String>()
+    private var lastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
+    private val PAGE_SIZE = 20L
 
     init { observeFeed() }
 
+    // İlk sayfa — realtime listener (son 20 gönderi)
     private fun observeFeed() {
         _loading.value = true
         firestore.collection("feed")
             .orderBy("ts", Query.Direction.DESCENDING)
-            .limit(40)
+            .limit(PAGE_SIZE)
             .addSnapshotListener { snap, err ->
                 if (err != null || snap == null) { _loading.value = false; return@addSnapshotListener }
                 viewModelScope.launch {
                     if (uid.isNotEmpty() && likedIds.isEmpty() && savedIds.isEmpty()) loadInteractions()
+                    if (snap.documents.isNotEmpty()) lastDoc = snap.documents.last()
+                    _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
                     _posts.value = snap.documents.mapNotNull { doc ->
                         val d = doc.data ?: return@mapNotNull null
                         // Tema: "name", Android: "displayName" — ikisini destekle
@@ -300,6 +311,59 @@ class FeedViewModel @Inject constructor(
             try { firestore.collection("feed").document(postId).update("text", newText.trim()).await()
                   _posts.value = _posts.value.map { if (it.id == postId) it.copy(text = newText.trim()) else it }
             } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Daha Fazla Yükle (pagination) ────────────────────────────────────────────
+    fun loadMore() {
+        val last = lastDoc ?: return
+        if (_loadingMore.value || !_hasMore.value) return
+        viewModelScope.launch {
+            _loadingMore.value = true
+            try {
+                val snap = firestore.collection("feed")
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .startAfter(last)
+                    .limit(PAGE_SIZE)
+                    .get().await()
+                if (snap.documents.isNotEmpty()) lastDoc = snap.documents.last()
+                _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
+                val newPosts = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    val displayName = (d["displayName"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: d["name"] as? String ?: ""
+                    val quoteObj   = d["quote"] as? Map<*, *>
+                    val quoteText  = (quoteObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
+                        ?: d["quoteText"] as? String ?: ""
+                    val bookName   = (quoteObj?.get("book") as? String)?.takeIf { it.isNotBlank() }
+                        ?: d["bookName"] as? String ?: ""
+                    val authorName = (quoteObj?.get("author") as? String)?.takeIf { it.isNotBlank() }
+                        ?: d["authorName"] as? String ?: ""
+                    val imageURL   = (d["imageURL"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: d["imgUrl"] as? String ?: ""
+                    Post(
+                        id            = doc.id,
+                        uid           = d["uid"]      as? String ?: "",
+                        displayName   = displayName,
+                        username      = d["username"] as? String ?: "",
+                        photoURL      = d["photoURL"] as? String ?: "",
+                        text          = d["text"]     as? String ?: "",
+                        imageURL      = imageURL,
+                        likesCount    = (d["likes"]    as? Long)?.toInt() ?: 0,
+                        commentsCount = (d["cmtCount"] as? Long)?.toInt() ?: 0,
+                        repostsCount  = (d["reposts"]  as? Long)?.toInt() ?: 0,
+                        quoteText     = quoteText,
+                        bookName      = bookName,
+                        authorName    = authorName,
+                        ts            = d["ts"] as? com.google.firebase.Timestamp,
+                        isLikedByMe   = doc.id in likedIds,
+                        isSavedByMe   = doc.id in savedIds,
+                    )
+                }
+                val existingIds = _posts.value.map { it.id }.toSet()
+                _posts.value = _posts.value + newPosts.filter { it.id !in existingIds }
+            } catch (e: Exception) { e.printStackTrace() }
+            finally { _loadingMore.value = false }
         }
     }
 
