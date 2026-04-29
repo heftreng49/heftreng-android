@@ -2,28 +2,46 @@ package com.heftreng.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.*
 import com.heftreng.app.data.model.Conversation
 import com.heftreng.app.data.model.Message
 import com.heftreng.app.data.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.github.jan.supabase.SupabaseClient
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
-// Mesajlar Supabase'den Firestore'a taşındı.
-// SupabaseClient inject edilmeye devam ediyor (AppModule bağımlılığı korunuyor)
-// ancak artık kullanılmıyor.
+// ═══════════════════════════════════════════════════════════════
+//  MessagesViewModel — Firestore tabanlı
+//
+//  Koleksiyon yapısı (temadakiyle birebir):
+//  conversations/{convId}
+//    participants : [uid_a, uid_b]
+//    last_msg     : String
+//    updated_at   : Timestamp
+//    unread_{uid} : Int
+//
+//  convMessages/{convId}/msgs/{msgId}
+//    senderUid    : String
+//    text         : String
+//    image_url    : String
+//    createdAt    : Timestamp (serverTimestamp)
+//    read         : Boolean
+//    deleted      : Boolean
+//    edited       : Boolean
+//    liked_by     : List<String>
+//    reply_to_id  : String
+//    reply_to_text: String
+//    reply_to_name: String
+// ═══════════════════════════════════════════════════════════════
 
 @HiltViewModel
 class MessagesViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
-    @Suppress("UNUSED_PARAMETER")
-    private val supabase : SupabaseClient,   // bağımlılık korunuyor
 ) : ViewModel() {
 
     private val _conversations = MutableStateFlow<List<Conversation>>(emptyList())
@@ -43,20 +61,23 @@ class MessagesViewModel @Inject constructor(
     private var convListener: ListenerRegistration? = null
     private var msgListener : ListenerRegistration? = null
 
-    // ── Konuşma listesi — Firestore realtime ──────────────────────────────────
+    // ── Konuşma listesi — realtime ────────────────────────────
     fun listenConversations() {
         if (uid.isEmpty()) return
+        _loading.value = true
         convListener?.remove()
         convListener = firestore.collection("conversations")
             .whereArrayContains("participants", uid)
+            .orderBy("updated_at", Query.Direction.DESCENDING)
+            .limit(50)
             .addSnapshotListener { snap, _ ->
-                if (snap == null) return@addSnapshotListener
+                if (snap == null) { _loading.value = false; return@addSnapshotListener }
                 viewModelScope.launch {
                     val list = snap.documents.mapNotNull { doc ->
-                        val d  = doc.data ?: return@mapNotNull null
-                        val pa = d["participant_a"] as? String ?: return@mapNotNull null
-                        val pb = d["participant_b"] as? String ?: return@mapNotNull null
-                        val otherUid = if (pa == uid) pb else pa
+                        val d = doc.data ?: return@mapNotNull null
+                        val parts = (d["participants"] as? List<*>)
+                            ?.filterIsInstance<String>() ?: emptyList()
+                        val otherUid = parts.firstOrNull { it != uid } ?: return@mapNotNull null
 
                         val other = try {
                             val ud = firestore.collection("users").document(otherUid).get().await().data
@@ -64,131 +85,224 @@ class MessagesViewModel @Inject constructor(
                                 uid         = otherUid,
                                 displayName = ud["displayName"] as? String ?: ud["name"] as? String ?: "",
                                 photoURL    = ud["photoURL"] as? String ?: "",
+                                email       = ud["email"]    as? String ?: "",
                             ) else null
                         } catch (_: Exception) { null }
 
                         Conversation(
                             id             = doc.id,
-                            participantIds = listOf(pa, pb),
-                            lastMessage    = d["last_msg"] as? String ?: "",
-                            lastMessageAt  = d["last_at"]?.toString() ?: "",
+                            participantIds = parts,
+                            lastMessage    = d["last_msg"]   as? String ?: "",
+                            lastMessageAt  = (d["updated_at"] as? Timestamp)?.toDate()?.time?.toString() ?: "",
                             otherUser      = other,
                             unreadCount    = (d["unread_$uid"] as? Long)?.toInt() ?: 0,
                         )
-                    }.sortedByDescending { it.lastMessageAt }
+                    }
                     _conversations.value = list
+                    _loading.value = false
                 }
             }
     }
 
-    // ── Mesaj listesi — Firestore realtime ────────────────────────────────────
+    // ── Mesaj listesi — realtime ──────────────────────────────
     fun listenMessages(convId: String) {
         msgListener?.remove()
-        msgListener = firestore.collection("conversations")
-            .document(convId)
-            .collection("messages")
-            .orderBy("ts", Query.Direction.ASCENDING)
+        _loading.value = true
+        msgListener = firestore.collection("convMessages").document(convId)
+            .collection("msgs")
+            .orderBy("createdAt", Query.Direction.ASCENDING)
             .addSnapshotListener { snap, _ ->
-                if (snap == null) return@addSnapshotListener
+                if (snap == null) { _loading.value = false; return@addSnapshotListener }
                 _messages.value = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
+                    if (d["deleted"] as? Boolean == true) return@mapNotNull null
                     Message(
                         id             = doc.id,
                         conversationId = convId,
-                        senderId       = d["from_uid"]  as? String  ?: "",
-                        text           = d["msg_text"]  as? String  ?: "",
-                        createdAt      = d["ts"]?.toString()        ?: "",
-                        read           = d["read"]      as? Boolean ?: false,
+                        senderId       = d["senderUid"]     as? String ?: "",
+                        text           = d["text"]          as? String ?: "",
+                        imageUrl       = d["image_url"]     as? String ?: "",
+                        createdAt      = (d["createdAt"] as? Timestamp)?.toDate()?.time?.toString() ?: "",
+                        read           = d["read"]          as? Boolean ?: false,
+                        deleted        = d["deleted"]       as? Boolean ?: false,
+                        edited         = d["edited"]        as? Boolean ?: false,
+                        likedBy        = (d["liked_by"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                        replyToId      = d["reply_to_id"]   as? String ?: "",
+                        replyToText    = d["reply_to_text"] as? String ?: "",
+                        replyToName    = d["reply_to_name"] as? String ?: "",
                     )
                 }
+                _loading.value = false
                 markRead(convId)
             }
-        loadOtherUser(convId)
     }
 
-    // ── Mesaj gönder ───────────────────────────────────────────────────────────
-    fun sendMessage(convId: String, toUid: String, text: String) {
-        if (uid.isEmpty() || text.isBlank()) return
+    // ── Mesaj gönder ──────────────────────────────────────────
+    fun sendMessage(
+        convId     : String,
+        toUid      : String,
+        text       : String,
+        imageUrl   : String = "",
+        replyToId  : String = "",
+        replyToText: String = "",
+        replyToName: String = "",
+    ) {
+        if (uid.isEmpty() || (text.isBlank() && imageUrl.isBlank())) return
         viewModelScope.launch {
             try {
-                val convRef = firestore.collection("conversations").document(convId)
-                convRef.collection("messages").add(mapOf(
-                    "conv_id"  to convId,
-                    "from_uid" to uid,
-                    "to_uid"   to toUid,
-                    "msg_text" to text,
-                    "ts"       to FieldValue.serverTimestamp(),
-                    "read"     to false,
-                )).await()
-                convRef.update(mapOf(
-                    "last_msg"      to text,
-                    "last_at"       to FieldValue.serverTimestamp(),
+                val msgData = mutableMapOf<String, Any>(
+                    "senderUid" to uid,
+                    "text"      to text,
+                    "image_url" to imageUrl,
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "read"      to false,
+                    "deleted"   to false,
+                    "edited"    to false,
+                    "liked_by"  to emptyList<String>(),
+                )
+                if (replyToId.isNotBlank()) {
+                    msgData["reply_to_id"]   = replyToId
+                    msgData["reply_to_text"] = replyToText
+                    msgData["reply_to_name"] = replyToName
+                }
+                // convMessages/{convId}/msgs
+                firestore.collection("convMessages").document(convId)
+                    .collection("msgs").add(msgData).await()
+                // conversations güncelle
+                val convUpd = mutableMapOf<String, Any>(
+                    "last_msg"      to (text.ifBlank { "📷 Görsel" }),
+                    "updated_at"    to FieldValue.serverTimestamp(),
                     "unread_$toUid" to FieldValue.increment(1),
-                )).await()
+                    "unread_$uid"   to 0L,
+                )
+                firestore.collection("conversations").document(convId)
+                    .set(convUpd, SetOptions.merge()).await()
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
+    // ── Mesaj beğen/beğenmekten vazgeç ───────────────────────
+    fun toggleLike(msg: Message) {
+        if (uid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val ref = firestore.collection("convMessages")
+                    .document(msg.conversationId)
+                    .collection("msgs").document(msg.id)
+                val likes = msg.likedBy.toMutableList()
+                if (uid in likes) likes.remove(uid) else likes.add(uid)
+                ref.update("liked_by", likes).await()
+                _messages.value = _messages.value.map {
+                    if (it.id == msg.id) it.copy(likedBy = likes) else it
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Mesaj sil (soft delete) ───────────────────────────────
+    fun deleteMessage(msg: Message) {
+        if (uid.isEmpty() || msg.senderId != uid) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("convMessages")
+                    .document(msg.conversationId)
+                    .collection("msgs").document(msg.id)
+                    .update("deleted", true).await()
+                _messages.value = _messages.value.filter { it.id != msg.id }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Mesaj düzenle ─────────────────────────────────────────
+    fun editMessage(msg: Message, newText: String) {
+        if (uid.isEmpty() || msg.senderId != uid || newText.isBlank()) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("convMessages")
+                    .document(msg.conversationId)
+                    .collection("msgs").document(msg.id)
+                    .update(mapOf("text" to newText, "edited" to true)).await()
+                _messages.value = _messages.value.map {
+                    if (it.id == msg.id) it.copy(text = newText, edited = true) else it
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Okundu işaretleme ─────────────────────────────────────
     private fun markRead(convId: String) {
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
+                // Kendi mesajları hariç okunmamışları işaretle
+                val unread = firestore.collection("convMessages").document(convId)
+                    .collection("msgs")
+                    .whereEqualTo("read", false)
+                    .whereNotEqualTo("senderUid", uid)
+                    .get().await()
+                val batch = firestore.batch()
+                unread.documents.forEach { batch.update(it.reference, "read", true) }
+                batch.commit().await()
                 firestore.collection("conversations").document(convId)
                     .update("unread_$uid", 0).await()
             } catch (_: Exception) {}
         }
     }
 
+    // ── Konuşma başlat veya mevcut aç ────────────────────────
+    // ID deterministik: minOf(uid, otherUid) + "__" + maxOf(...)
     fun startOrOpenConversation(otherUid: String, onReady: (String) -> Unit) {
         viewModelScope.launch {
             try {
                 val pa = minOf(uid, otherUid)
                 val pb = maxOf(uid, otherUid)
+                val convId = "${pa}__${pb}"
+
                 val existing = firestore.collection("conversations")
-                    .whereEqualTo("participant_a", pa)
-                    .whereEqualTo("participant_b", pb)
-                    .limit(1).get().await()
-                val convId = if (!existing.isEmpty) {
-                    existing.documents.first().id
-                } else {
-                    firestore.collection("conversations").add(mapOf(
-                        "participant_a" to pa,
-                        "participant_b" to pb,
-                        "participants"  to listOf(pa, pb),
-                        "last_msg"      to "",
-                        "last_at"       to FieldValue.serverTimestamp(),
-                        "unread_$pa"    to 0,
-                        "unread_$pb"    to 0,
-                    )).await().id
+                    .document(convId).get().await()
+
+                if (!existing.exists()) {
+                    firestore.collection("conversations").document(convId).set(
+                        mapOf(
+                            "participants"    to listOf(pa, pb),
+                            "last_msg"        to "",
+                            "updated_at"      to FieldValue.serverTimestamp(),
+                            "unread_$pa"      to 0,
+                            "unread_$pb"      to 0,
+                        )
+                    ).await()
                 }
                 onReady(convId)
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
+    // ── Karşı kullanıcı bilgisi ───────────────────────────────
     fun loadOtherUser(convId: String) {
         viewModelScope.launch {
             try {
-                val doc    = firestore.collection("conversations").document(convId).get().await()
-                val pa     = doc.getString("participant_a") ?: return@launch
-                val pb     = doc.getString("participant_b") ?: return@launch
-                val other  = if (pa == uid) pb else pa
-                val ud     = firestore.collection("users").document(other).get().await().data ?: return@launch
+                val conv     = _conversations.value.firstOrNull { it.id == convId }
+                val otherUid = conv?.participantIds?.firstOrNull { it != uid }
+                    ?: firestore.collection("conversations").document(convId).get().await()
+                        .let { doc ->
+                            val parts = (doc.data?.get("participants") as? List<*>)
+                                ?.filterIsInstance<String>() ?: emptyList()
+                            parts.firstOrNull { it != uid }
+                        } ?: return@launch
+                val ud = firestore.collection("users").document(otherUid).get().await().data ?: return@launch
                 _otherUser.value = User(
-                    uid         = other,
+                    uid         = otherUid,
                     displayName = ud["displayName"] as? String ?: ud["name"] as? String ?: "",
-                    photoURL    = ud["photoURL"] as? String ?: "",
+                    photoURL    = ud["photoURL"]    as? String ?: "",
+                    email       = ud["email"]       as? String ?: "",
                 )
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
-
-
-
-    // MessagesScreens uyumluluğu için alias'lar
-    fun loadConversations()              = listenConversations()
-    fun loadMessages(convId: String)     = listenMessages(convId)
+    // Alias'lar
+    fun loadConversations()             = listenConversations()
+    fun loadMessages(convId: String)    = listenMessages(convId)
     fun subscribeToMessages(convId: String) = listenMessages(convId)
 
     override fun onCleared() {

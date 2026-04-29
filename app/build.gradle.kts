@@ -79,8 +79,5 @@ dependencies {
 
     implementation(libs.coil.compose)
 
-    implementation(libs.supabase.postgrest)
-    implementation(libs.supabase.realtime)
-    implementation(libs.supabase.auth)
     implementation(libs.ktor.client.android)
 }

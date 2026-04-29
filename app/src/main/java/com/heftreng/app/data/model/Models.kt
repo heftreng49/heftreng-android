@@ -90,13 +90,19 @@ data class Notification(
 // ─── MESAJ / KONUŞMA ───────────────────────────────────
 // Supabase tabanlı — conversations + messages tabloları
 data class Message(
-    val id             : String  = "",
-    val conversationId : String  = "",
-    val senderId       : String  = "",
-    val text           : String  = "",
-    val createdAt      : String  = "",
-    val read           : Boolean = false,
-    val deleted        : Boolean = false,
+    val id             : String       = "",
+    val conversationId : String       = "",
+    val senderId       : String       = "",   // senderUid (Firestore alanı)
+    val text           : String       = "",
+    val imageUrl       : String       = "",   // image_url
+    val createdAt      : String       = "",
+    val read           : Boolean      = false,
+    val deleted        : Boolean      = false,
+    val edited         : Boolean      = false,
+    val likedBy        : List<String> = emptyList(),  // liked_by[]
+    val replyToId      : String       = "",
+    val replyToText    : String       = "",
+    val replyToName    : String       = "",
 )
 
 data class Conversation(
