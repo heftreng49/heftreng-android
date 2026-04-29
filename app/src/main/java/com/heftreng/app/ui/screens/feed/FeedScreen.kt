@@ -44,8 +44,10 @@ fun FeedScreen(
     language     : String = "tr",
     vm           : FeedViewModel = hiltViewModel(),
 ) {
-    val posts   by vm.posts.collectAsState()
-    val loading by vm.loading.collectAsState()
+    val posts       by vm.posts.collectAsState()
+    val loading     by vm.loading.collectAsState()
+    val hasMore     by vm.hasMore.collectAsState()
+    val loadingMore by vm.loadingMore.collectAsState()
     var showNewPost by remember { mutableStateOf(false) }
     var newPostText by remember { mutableStateOf("") }
     var commentPost by remember { mutableStateOf<Post?>(null) }
@@ -126,6 +128,33 @@ fun FeedScreen(
                         onTap     = { navController.navigate(Screen.PostDetail.go(post.id)) },
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                }
+                // ── Daha Fazla Yükle ──────────────────────────────────────
+                if (hasMore) {
+                    item {
+                        Box(
+                            modifier         = Modifier.fillMaxWidth().padding(16.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (loadingMore) {
+                                CircularProgressIndicator(
+                                    color    = Amber,
+                                    modifier = Modifier.size(28.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            } else {
+                                OutlinedButton(
+                                    onClick = { vm.loadMore() },
+                                    shape   = RoundedCornerShape(20.dp),
+                                    border  = androidx.compose.foundation.BorderStroke(1.dp, Divider),
+                                ) {
+                                    Icon(Icons.Default.ExpandMore, null, tint = Muted, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(if (language == "ku") "Zêdetir Nîşan Bide" else "Daha Fazla Göster", color = Muted, fontSize = 13.sp)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

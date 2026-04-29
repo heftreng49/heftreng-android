@@ -1,20 +1,13 @@
 package com.heftreng.app.ui.screens.messages
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.*
+import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -22,29 +15,29 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.heftreng.app.data.model.Conversation
 import com.heftreng.app.data.model.Message
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.MessagesViewModel
-import com.heftreng.app.viewmodel.SearchViewModel
+import java.text.SimpleDateFormat
+import java.util.*
 
-// ════════════════════════════════════════════════════════════════
-//  CONVERSATIONS LIST
-// ════════════════════════════════════════════════════════════════
+// ── Konuşma Listesi ─────────────────────────────────────────────────────────
+// Tema: .msgp-wrap, .msgp-hd, .msgp-conv-item, .msgp-conv-av, .msgp-unread-dot
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationsScreen(
@@ -55,227 +48,193 @@ fun ConversationsScreen(
     val conversations by vm.conversations.collectAsState()
     val loading       by vm.loading.collectAsState()
     var searchQuery   by remember { mutableStateOf("") }
-    var showNewChat   by remember { mutableStateOf(false) }
+    var showSearch    by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.loadConversations() }
 
-    val filtered = remember(conversations, searchQuery) {
-        if (searchQuery.isBlank()) conversations
-        else conversations.filter {
-            val name = it.otherUser?.displayName?.lowercase() ?: ""
-            val last = it.lastMessage.lowercase()
-            val q    = searchQuery.lowercase()
-            name.contains(q) || last.contains(q)
-        }
+    val filtered = if (searchQuery.isBlank()) conversations
+    else conversations.filter {
+        it.otherUser?.displayName?.contains(searchQuery, ignoreCase = true) == true ||
+        it.otherUser?.email?.contains(searchQuery, ignoreCase = true) == true ||
+        it.lastMessage.contains(searchQuery, ignoreCase = true)
     }
 
     Scaffold(
         containerColor = Background,
         topBar = {
+            // Tema: .msgp-hd stili
             TopAppBar(
-                title  = { Text(if (language == "ku") "Peyam" else "Mesajlar", fontWeight = FontWeight.SemiBold, color = OnBackground) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
-                actions = {
-                    IconButton(onClick = { showNewChat = true }) {
-                        Icon(Icons.Default.EditNote, "Yeni Mesaj", tint = Primary)
+                title = {
+                    if (showSearch) {
+                        // Tema: .msgp-search-bar, .msgp-search-inp stili
+                        OutlinedTextField(
+                            value         = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder   = { Text(if (language == "ku") "Peyaman bigere..." else "Mesajlarda ara...", color = Muted, fontSize = 13.sp) },
+                            singleLine    = true,
+                            modifier      = Modifier.fillMaxWidth(),
+                            shape         = RoundedCornerShape(20.dp),
+                            colors        = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor      = Primary,
+                                unfocusedBorderColor    = Divider,
+                                focusedTextColor        = OnBackground,
+                                unfocusedTextColor      = OnBackground,
+                                unfocusedContainerColor = SurfaceVar,
+                                focusedContainerColor   = SurfaceVar,
+                            ),
+                        )
+                    } else {
+                        Text(
+                            if (language == "ku") "Peyam" else "Mesajlar",
+                            fontWeight = FontWeight.ExtraBold,
+                            color      = OnBackground,
+                            fontSize   = 17.sp,
+                        )
                     }
                 },
+                actions = {
+                    // Arama toggle — tema: .msgp-search-bar
+                    IconButton(onClick = {
+                        showSearch = !showSearch
+                        if (!showSearch) searchQuery = ""
+                    }) {
+                        Icon(if (showSearch) Icons.Default.Close else Icons.Outlined.Search,
+                            null, tint = if (showSearch) Primary else Muted)
+                    }
+                    // Yeni konuşma — tema: .msgp-new-btn
+                    IconButton(onClick = { /* Kullanıcı ara ve konuşma başlat */ }) {
+                        Icon(Icons.Default.Edit, null, tint = Primary)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = HeftSurface),
             )
         }
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // Arama
-            OutlinedTextField(
-                value         = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder   = { Text(if (language == "ku") "Lêbigere..." else "Ara...", color = Muted, fontSize = 13.sp) },
-                leadingIcon   = { Icon(Icons.Default.Search, null, tint = Muted, modifier = Modifier.size(18.dp)) },
-                trailingIcon  = if (searchQuery.isNotBlank()) ({
-                    IconButton(onClick = { searchQuery = "" }) {
-                        Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
-                    }
-                }) else null,
-                modifier      = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                shape         = RoundedCornerShape(14.dp),
-                singleLine    = true,
-                colors        = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor      = Primary,
-                    unfocusedBorderColor    = Divider,
-                    focusedTextColor        = OnBackground,
-                    unfocusedTextColor      = OnBackground,
-                    unfocusedContainerColor = SurfaceVar,
-                    focusedContainerColor   = SurfaceVar,
-                ),
-            )
-
-            when {
-                loading && conversations.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Primary, modifier = Modifier.size(32.dp))
-                    }
-                }
-                filtered.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Muted, modifier = Modifier.size(52.dp))
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                if (searchQuery.isNotBlank()) "Sonuç bulunamadı"
-                                else if (language == "ku") "Peyam tune" else "Henüz mesajın yok",
-                                color = Muted,
-                            )
-                            if (searchQuery.isBlank()) {
-                                Spacer(Modifier.height(8.dp))
-                                TextButton(onClick = { showNewChat = true }) {
-                                    Text("Yeni konuşma başlat", color = Primary)
-                                }
-                            }
-                        }
-                    }
-                }
-                else -> {
-                    LazyColumn(
-                        modifier       = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 80.dp),
-                    ) {
-                        items(filtered, key = { it.id }) { conv ->
-                            ConvItem(conv) { navController.navigate(Screen.MessageDetail.go(conv.id)) }
-                            HorizontalDivider(color = Divider, thickness = 0.5.dp)
-                        }
+        when {
+            loading && conversations.isEmpty() -> {
+                // Tema: .msgp-loading
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CircularProgressIndicator(color = Primary, modifier = Modifier.size(28.dp))
+                        Text(if (language == "ku") "Tê barkirin..." else "Yükleniyor...", color = Muted, fontSize = 12.sp)
                     }
                 }
             }
-        }
-    }
-
-    if (showNewChat) {
-        NewChatSheet(
-            onDismiss = { showNewChat = false },
-            onSelect  = { uid, _, _ ->
-                showNewChat = false
-                vm.startOrOpenConversation(uid) { convId ->
-                    navController.navigate(Screen.MessageDetail.go(convId))
+            filtered.isEmpty() -> {
+                // Tema: .msgp-empty stili
+                Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Divider, modifier = Modifier.size(52.dp))
+                        Text(
+                            if (language == "ku") "Peyam tune" else "Henüz mesajın yok",
+                            color = OnSurface, fontWeight = FontWeight.Bold, fontSize = 14.sp
+                        )
+                        Text(
+                            if (language == "ku") "Peyamek nû dest pê bike" else "Yeni bir konuşma başlat",
+                            color = Muted, fontSize = 12.sp
+                        )
+                    }
                 }
-            },
-        )
-    }
-}
-
-// ── Konuşma öğesi ─────────────────────────────────────────────
-@Composable
-fun ConvItem(conv: Conversation, onClick: () -> Unit) {
-    val other  = conv.otherUser
-    val unread = conv.unreadCount > 0
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(if (unread) Primary.copy(alpha = 0.07f) else Color.Transparent)
-            .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(modifier = Modifier.size(50.dp).clip(CircleShape).background(SurfaceVar), contentAlignment = Alignment.Center) {
-            if (other?.photoURL?.isNotBlank() == true) {
-                AsyncImage(model = other.photoURL, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            } else {
-                Text(other?.displayName?.firstOrNull()?.uppercase() ?: "?", color = Primary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                other?.displayName?.ifBlank { other.email }?.ifBlank { "Kullanıcı" } ?: "Kullanıcı",
-                fontWeight = if (unread) FontWeight.Bold else FontWeight.SemiBold,
-                color      = OnBackground, fontSize = 14.sp,
-                maxLines   = 1, overflow = TextOverflow.Ellipsis,
-            )
-            if (conv.lastMessage.isNotBlank())
-                Text(
-                    conv.lastMessage,
-                    color      = if (unread) OnSurface else Muted,
-                    fontSize   = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    fontWeight = if (unread) FontWeight.Medium else FontWeight.Normal,
-                )
-        }
-        if (unread) {
-            Box(modifier = Modifier.size(20.dp).clip(CircleShape).background(Primary), contentAlignment = Alignment.Center) {
-                Text(if (conv.unreadCount > 99) "99+" else conv.unreadCount.toString(), color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-// ── Yeni konuşma sheet ────────────────────────────────────────
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun NewChatSheet(
-    onDismiss: () -> Unit,
-    onSelect : (uid: String, name: String, photo: String) -> Unit,
-    searchVm : SearchViewModel = hiltViewModel(),
-) {
-    val results by searchVm.results.collectAsState()
-    val loading by searchVm.loading.collectAsState()
-    var query   by remember { mutableStateOf("") }
-
-    LaunchedEffect(query) {
-        if (query.length >= 2) searchVm.search(query) else searchVm.search("")
-    }
-
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).navigationBarsPadding()) {
-            Text("Yeni Mesaj", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = query, onValueChange = { query = it },
-                placeholder = { Text("İsim ara...", color = Muted, fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, null, tint = Muted) },
-                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Primary, unfocusedBorderColor = Divider,
-                    focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
-                    unfocusedContainerColor = SurfaceVar, focusedContainerColor = SurfaceVar,
-                ),
-            )
-            Spacer(Modifier.height(8.dp))
-            if (loading) {
-                Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Primary, modifier = Modifier.size(24.dp))
-                }
-            } else {
-                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp)) {
-                    items(results, key = { it.uid }) { user ->
+            else -> {
+                LazyColumn(
+                    modifier       = Modifier.fillMaxSize().padding(padding),
+                    contentPadding = PaddingValues(bottom = 80.dp),
+                ) {
+                    items(filtered, key = { it.id }) { conv ->
+                        val unread = conv.unreadCount > 0
+                        // Tema: .msgp-conv-item, .msgp-conv-item.unread
                         Row(
-                            modifier = Modifier.fillMaxWidth()
-                                .clickable { onSelect(user.uid, user.displayName, user.photoURL) }
-                                .padding(vertical = 10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (unread) Primary.copy(alpha = 0.08f) else Color.Transparent
+                                )
+                                .then(
+                                    if (unread) Modifier.startBorder(Primary, 3.dp) else Modifier
+                                )
+                                .clickable { navController.navigate(Screen.MessageDetail.go(conv.id)) }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Box(modifier = Modifier.size(38.dp).clip(CircleShape).background(SurfaceVar), contentAlignment = Alignment.Center) {
-                                if (user.photoURL.isNotBlank()) {
-                                    AsyncImage(model = user.photoURL, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                            // Tema: .msgp-conv-av — gradient avatar
+                            Box(
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(CircleShape)
+                                    .background(Brush.linearGradient(listOf(Primary, Accent))),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                val photo = conv.otherUser?.photoURL
+                                if (!photo.isNullOrBlank()) {
+                                    AsyncImage(model = photo, contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                                 } else {
-                                    Text(user.displayName.firstOrNull()?.uppercase() ?: "?", color = Primary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text(
+                                        conv.otherUser?.displayName?.firstOrNull()?.uppercase() ?: "?",
+                                        color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp
+                                    )
                                 }
                             }
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(user.displayName.ifBlank { "Kullanıcı" }, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                if (user.email.isNotBlank()) Text(user.email, color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+
+                            // Tema: .msgp-conv-body
+                            Column(modifier = Modifier.weight(1f)) {
+                                // .msgp-conv-name, .msgp-conv-name.unread
+                                Text(
+                                    conv.otherUser?.displayName?.ifBlank { conv.otherUser?.email } ?: "Kullanıcı",
+                                    fontWeight = if (unread) FontWeight.ExtraBold else FontWeight.Bold,
+                                    color      = OnBackground,
+                                    fontSize   = 14.sp,
+                                    maxLines   = 1,
+                                    overflow   = TextOverflow.Ellipsis,
+                                )
+                                // .msgp-conv-last, .msgp-conv-last.unread
+                                if (conv.lastMessage.isNotBlank())
+                                    Text(
+                                        conv.lastMessage,
+                                        color    = if (unread) OnBackground else Muted,
+                                        fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Normal,
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
                             }
-                            Icon(Icons.AutoMirrored.Filled.Send, null, tint = Primary, modifier = Modifier.size(18.dp))
+
+                            // Tema: .msgp-conv-meta — sağ taraf
+                            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                if (conv.lastMessageAt.isNotBlank()) {
+                                    // .msgp-conv-time
+                                    Text(formatTime(conv.lastMessageAt), color = Muted, fontSize = 10.sp)
+                                }
+                                // .msgp-unread-dot
+                                if (unread) {
+                                    Box(
+                                        modifier         = Modifier
+                                            .defaultMinSize(minWidth = 19.dp)
+                                            .height(19.dp)
+                                            .clip(RoundedCornerShape(99.dp))
+                                            .background(Primary),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(conv.unreadCount.toString(), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
+                                    }
+                                }
+                            }
                         }
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
         }
     }
 }
 
-// ════════════════════════════════════════════════════════════════
-//  MESSAGE DETAIL
-// ════════════════════════════════════════════════════════════════
+
+
+// ── Mesaj Detay Ekranı ────────────────────────────────────────────────────────
+// Tema: .msg-chat-ov, .msg-chat-hd, .msg-chat-body, .msg-inp-bar
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageDetailScreen(
@@ -289,10 +248,11 @@ fun MessageDetailScreen(
     val conversations by vm.conversations.collectAsState()
     val listState     = rememberLazyListState()
 
-    var inputText     by remember { mutableStateOf("") }
-    var replyTo       by remember { mutableStateOf<Message?>(null) }
-    var editMsg       by remember { mutableStateOf<Message?>(null) }
-    var ctxMsg        by remember { mutableStateOf<Message?>(null) }  // context menu
+    var inputText   by remember { mutableStateOf("") }
+    var replyTo     by remember { mutableStateOf<Message?>(null) }
+    var editMsg     by remember { mutableStateOf<Message?>(null) }
+    var ctxMsg      by remember { mutableStateOf<Message?>(null) }
+    var ctxOffset   by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
 
     val otherUid = remember(conversations, convId) {
         conversations.firstOrNull { it.id == convId }
@@ -302,6 +262,7 @@ fun MessageDetailScreen(
     LaunchedEffect(convId) {
         if (conversations.isEmpty()) vm.loadConversations()
         vm.loadMessages(convId)
+        vm.subscribeToMessages(convId)
         vm.loadOtherUser(convId)
     }
     LaunchedEffect(conversations) {
@@ -310,92 +271,143 @@ fun MessageDetailScreen(
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
-    // Düzenleme modunda input'u doldur
     LaunchedEffect(editMsg) {
-        inputText = editMsg?.text ?: ""
+        if (editMsg != null) inputText = editMsg!!.text
     }
 
     Scaffold(
         containerColor = Background,
         topBar = {
+            // Tema: .msg-chat-hd
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { }) {
-                        Box(modifier = Modifier.size(34.dp).clip(CircleShape).background(SurfaceVar), contentAlignment = Alignment.Center) {
-                            if (otherUser?.photoURL?.isNotBlank() == true) {
-                                AsyncImage(model = otherUser?.photoURL, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                            } else {
-                                Text(otherUser?.displayName?.firstOrNull()?.uppercase() ?: "…", color = Primary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Row(
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        // Tema: .msg-chat-hd-av-wrap + .msg-chat-hd-online
+                        Box {
+                            // Tema: .msg-chat-hd-av
+                            Box(
+                                modifier = Modifier.size(36.dp).clip(CircleShape)
+                                    .background(Brush.linearGradient(listOf(Primary, Accent))),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                val photo = otherUser?.photoURL
+                                if (!photo.isNullOrBlank())
+                                    AsyncImage(model = photo, contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                else Text(otherUser?.displayName?.firstOrNull()?.uppercase() ?: "?",
+                                    color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
+                            // Tema: .msg-chat-hd-online — yeşil nokta
+                            Box(
+                                modifier = Modifier.size(9.dp).clip(CircleShape)
+                                    .background(Color(0xFF22C55E))
+                                    .border(2.dp, HeftSurface, CircleShape)
+                                    .align(Alignment.BottomEnd)
+                            )
                         }
-                        Spacer(Modifier.width(10.dp))
-                        Text(otherUser?.displayName?.ifBlank { otherUser?.email ?: "…" } ?: "…", color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1)
+                        Column {
+                            // Tema: .msg-chat-hd-name
+                            Text(
+                                otherUser?.displayName?.ifBlank { otherUser?.email ?: "…" } ?: "…",
+                                color      = OnBackground,
+                                fontWeight = FontWeight.Bold,
+                                fontSize   = 14.sp,
+                                maxLines   = 1,
+                                overflow   = TextOverflow.Ellipsis,
+                            )
+                            // Tema: .msg-chat-hd-sub.online
+                            Text(if (language == "ku") "serhêl" else "çevrimiçi",
+                                color = Color(0xFF22C55E), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = OnBackground)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                actions = {
+                    IconButton(onClick = { }) {
+                        Icon(Icons.Default.MoreVert, null, tint = Muted)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = HeftSurface),
             )
         },
         bottomBar = {
             Column {
-                // Yanıt çubuğu
-                AnimatedVisibility(visible = replyTo != null) {
-                    Surface(color = SurfaceVar) {
-                        Row(
-                            modifier          = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(modifier = Modifier.width(3.dp).height(36.dp).background(Primary, RoundedCornerShape(2.dp)))
-                            Spacer(Modifier.width(10.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(replyTo?.replyToName?.ifBlank { "Yanıt" } ?: "Yanıt", color = Primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                Text(replyTo?.text?.take(50) ?: "", color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                            IconButton(onClick = { replyTo = null }, modifier = Modifier.size(28.dp)) {
-                                Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    }
-                }
-                // Düzenleme çubuğu
-                AnimatedVisibility(visible = editMsg != null) {
-                    Surface(color = Primary.copy(alpha = 0.1f)) {
-                        Row(
-                            modifier          = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(Icons.Default.Edit, null, tint = Primary, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Mesaj düzenleniyor", color = Primary, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                            IconButton(onClick = { editMsg = null; inputText = "" }, modifier = Modifier.size(28.dp)) {
-                                Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    }
-                }
-                // Input alanı
-                Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
+                // Tema: .msg-reply-bar
+                AnimatedVisibility(visible = replyTo != null,
+                    enter = slideInVertically { it } + fadeIn(),
+                    exit  = slideOutVertically { it } + fadeOut()) {
                     Row(
-                        modifier          = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                            .background(SurfaceVar)
+                            .border(BorderStroke(Dp.Hairline, Divider))
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        // .msg-reply-bar-line
+                        Box(modifier = Modifier.size(3.dp, 32.dp).clip(RoundedCornerShape(2.dp)).background(Primary))
+                        Column(modifier = Modifier.weight(1f)) {
+                            // .msg-reply-bar-name
+                            Text(if (replyTo?.senderId == vm.uid) "Sen" else otherUser?.displayName ?: "",
+                                color = Primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            // .msg-reply-bar-txt
+                            Text(replyTo?.text ?: "", color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        // .msg-reply-bar-close
+                        IconButton(onClick = { replyTo = null }, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+
+                // Tema: .msg-edit-bar
+                AnimatedVisibility(visible = editMsg != null,
+                    enter = slideInVertically { it } + fadeIn(),
+                    exit  = slideOutVertically { it } + fadeOut()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .background(Color(0xFFFBBF24).copy(alpha = 0.08f))
+                            .border(BorderStroke(Dp.Hairline, Color(0xFFFBBF24).copy(alpha = 0.25f)))
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(Icons.Default.Edit, null, tint = Color(0xFFFBBF24), modifier = Modifier.size(16.dp))
+                        Text(if (language == "ku") "Peyamê biguherîne" else "Mesajı düzenle",
+                            color = OnBackground, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { editMsg = null; inputText = "" }, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+
+                // Tema: .msg-inp-bar
+                Surface(color = HeftSurface, tonalElevation = 0.dp) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().navigationBarsPadding()
+                            .padding(horizontal = 9.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        // Tema: .msg-inp-wrap + .msg-inp
                         OutlinedTextField(
                             value         = inputText,
                             onValueChange = { inputText = it },
-                            placeholder   = { Text(if (language == "ku") "Peyamê binivîse..." else "Mesaj yaz...", color = Muted, fontSize = 13.sp) },
-                            modifier      = Modifier.weight(1f),
-                            shape         = RoundedCornerShape(24.dp),
-                            singleLine    = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                            keyboardActions = KeyboardActions(onSend = {
-                                handleSend(vm, convId, otherUid, inputText, replyTo, editMsg,
-                                    onDone = { inputText = ""; replyTo = null; editMsg = null })
-                            }),
-                            colors = OutlinedTextFieldDefaults.colors(
+                            placeholder   = {
+                                Text(if (language == "ku") "Peyamê binivîse..." else "Mesaj yaz...",
+                                    color = Muted, fontSize = 13.sp)
+                            },
+                            modifier  = Modifier.weight(1f),
+                            shape     = RoundedCornerShape(20.dp),
+                            maxLines  = 4,
+                            colors    = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor      = Primary,
                                 unfocusedBorderColor    = Divider,
                                 focusedTextColor        = OnBackground,
@@ -404,17 +416,37 @@ fun MessageDetailScreen(
                                 focusedContainerColor   = SurfaceVar,
                             ),
                         )
-                        Spacer(Modifier.width(8.dp))
-                        IconButton(
-                            onClick  = {
-                                handleSend(vm, convId, otherUid, inputText, replyTo, editMsg,
-                                    onDone = { inputText = ""; replyTo = null; editMsg = null })
-                            },
-                            modifier = Modifier.size(44.dp).clip(CircleShape).background(if (inputText.isNotBlank()) Primary else SurfaceVar),
+                        // Tema: .msg-send-btn — gradient, circular
+                        Box(
+                            modifier = Modifier.size(36.dp).clip(CircleShape)
+                                .background(
+                                    if (inputText.isNotBlank())
+                                        Brush.linearGradient(listOf(PrimaryLight, Primary))
+                                    else Brush.linearGradient(listOf(Divider, Divider))
+                                )
+                                .clickable(enabled = inputText.isNotBlank()) {
+                                    if (editMsg != null) {
+                                        vm.editMessage(editMsg!!, inputText.trim())
+                                        editMsg = null
+                                    } else {
+                                        vm.sendMessage(
+                                            convId      = convId,
+                                            toUid       = otherUid,
+                                            text        = inputText.trim(),
+                                            replyToId   = replyTo?.id ?: "",
+                                            replyToText = replyTo?.text ?: "",
+                                            replyToName = if (replyTo?.senderId == vm.uid) "Sen"
+                                                          else otherUser?.displayName ?: "",
+                                        )
+                                        replyTo = null
+                                    }
+                                    inputText = ""
+                                },
+                            contentAlignment = Alignment.Center,
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.Send, "Gönder",
-                                tint     = if (inputText.isNotBlank()) Color.Black else Muted,
-                                modifier = Modifier.size(20.dp))
+                            Icon(Icons.AutoMirrored.Filled.Send, null,
+                                tint = if (inputText.isNotBlank()) Color.White else Muted,
+                                modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -423,219 +455,263 @@ fun MessageDetailScreen(
     ) { padding ->
         if (messages.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Muted, modifier = Modifier.size(44.dp))
-                    Spacer(Modifier.height(10.dp))
-                    Text(if (language == "ku") "Peyam tune" else "Henüz mesaj yok", color = Muted)
-                    Text("İlk mesajı gönder!", color = Primary, fontSize = 12.sp)
-                }
+                Text(if (language == "ku") "Peyam tune, dest bi axaftinê bike!" else "Henüz mesaj yok, konuşmayı başlat!",
+                    color = Muted, fontSize = 13.sp)
             }
         } else {
+            // Tema: .msg-chat-body
             LazyColumn(
                 state               = listState,
                 modifier            = Modifier.fillMaxSize().padding(padding),
                 contentPadding      = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 items(messages, key = { it.id }) { msg ->
-                    MsgBubble(
+                    val isMine = msg.senderId == vm.uid
+                    MsgRow(
                         msg      = msg,
-                        isMine   = msg.senderId == vm.uid,
+                        isMine   = isMine,
                         myUid    = vm.uid,
+                        otherPhotoURL = otherUser?.photoURL ?: "",
+                        otherName     = otherUser?.displayName ?: "",
+                        language = language,
+                        onReply  = { replyTo = msg; ctxMsg = null },
+                        onEdit   = { editMsg = msg; ctxMsg = null },
+                        onDelete = { vm.deleteMessage(msg); ctxMsg = null },
                         onLike   = { vm.toggleLike(msg) },
-                        onReply  = { replyTo = msg },
-                        onDelete = { vm.deleteMessage(msg) },
-                        onEdit   = { editMsg = msg },
-                        onLongPress = { ctxMsg = msg },
+                        onLongPress = { offset ->
+                            ctxMsg    = msg
+                            ctxOffset = offset
+                        },
                     )
                 }
             }
         }
-    }
 
-    // Context menu dialog
-    ctxMsg?.let { msg ->
-        MsgContextMenu(
-            msg    = msg,
-            isMine = msg.senderId == vm.uid,
-            onDismiss = { ctxMsg = null },
-            onReply  = { replyTo = msg; ctxMsg = null },
-            onLike   = { vm.toggleLike(msg); ctxMsg = null },
-            onEdit   = { editMsg = msg; ctxMsg = null },
-            onDelete = { vm.deleteMessage(msg); ctxMsg = null },
-        )
+        // Tema: .msg-ctx-menu — uzun basma menüsü
+        if (ctxMsg != null) {
+            Box(modifier = Modifier.fillMaxSize().clickable { ctxMsg = null }.background(Color.Black.copy(alpha = 0.35f))) {
+                Surface(
+                    shape          = RoundedCornerShape(14.dp),
+                    color          = HeftSurface,
+                    tonalElevation = 0.dp,
+                    modifier       = Modifier.align(Alignment.Center).width(180.dp),
+                    shadowElevation = 24.dp,
+                    border          = BorderStroke(1.dp, Divider),
+                ) {
+                    Column(modifier = Modifier.padding(5.dp)) {
+                        MsgCtxItem(Icons.Default.Reply, if (language == "ku") "Bersiv bide" else "Yanıtla", false) { replyTo = ctxMsg; ctxMsg = null }
+                        if (ctxMsg?.senderId == vm.uid) {
+                            MsgCtxItem(Icons.Default.Edit, if (language == "ku") "Biguherîne" else "Düzenle", false) { editMsg = ctxMsg; ctxMsg = null }
+                            MsgCtxItem(Icons.Default.Delete, if (language == "ku") "Jê bibe" else "Sil", true) { vm.deleteMessage(ctxMsg!!); ctxMsg = null }
+                        }
+                        MsgCtxItem(Icons.Default.FavoriteBorder, if (language == "ku") "Hez bike" else "Beğen", false) { vm.toggleLike(ctxMsg!!); ctxMsg = null }
+                    }
+                }
+            }
+        }
     }
 }
 
-// ── Gönder/Düzenle logic ─────────────────────────────────────
-private fun handleSend(
-    vm      : MessagesViewModel,
-    convId  : String,
-    toUid   : String,
-    text    : String,
-    replyTo : Message?,
-    editMsg : Message?,
-    onDone  : () -> Unit,
-) {
-    if (text.isBlank()) return
-    if (editMsg != null) {
-        vm.editMessage(editMsg, text.trim())
-    } else if (toUid.isNotEmpty()) {
-        vm.sendMessage(
-            convId      = convId,
-            toUid       = toUid,
-            text        = text.trim(),
-            replyToId   = replyTo?.id ?: "",
-            replyToText = replyTo?.text ?: "",
-            replyToName = replyTo?.senderId?.take(8) ?: "",
-        )
-    }
-    onDone()
-}
-
-// ── Mesaj balonu ──────────────────────────────────────────────
+// Tema: .msg-ctx-item, .msg-ctx-item.danger
 @Composable
-fun MsgBubble(
-    msg        : Message,
-    isMine     : Boolean,
-    myUid      : String,
-    onLike     : () -> Unit,
-    onReply    : () -> Unit,
-    onDelete   : () -> Unit,
-    onEdit     : () -> Unit,
-    onLongPress: () -> Unit,
+private fun MsgCtxItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, danger: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp))
+            .clickable { onClick() }.padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        Icon(icon, null, tint = if (danger) Color(0xFFF43F5E) else Primary, modifier = Modifier.size(17.dp))
+        Text(label, color = if (danger) Color(0xFFF43F5E) else OnBackground, fontSize = 13.sp)
+    }
+}
+
+// ── Mesaj Satırı ─────────────────────────────────────────────────────────────
+// Tema: .msg-row, .msg-row.me, .msg-row.them, .msg-row-av, .msg-bubble
+
+@Composable
+private fun MsgRow(
+    msg           : Message,
+    isMine        : Boolean,
+    myUid         : String,
+    otherPhotoURL : String,
+    otherName     : String,
+    language      : String,
+    onReply       : () -> Unit,
+    onEdit        : () -> Unit,
+    onDelete      : () -> Unit,
+    onLike        : () -> Unit,
+    onLongPress   : (androidx.compose.ui.geometry.Offset) -> Unit,
 ) {
     if (msg.text.isBlank() && msg.imageUrl.isBlank()) return
     val iLiked = myUid in msg.likedBy
 
-    Column(
-        modifier            = Modifier.fillMaxWidth(),
-        horizontalAlignment = if (isMine) Alignment.End else Alignment.Start,
+    // Tema: .msg-row, .msg-row.me / .msg-row.them
+    Row(
+        modifier              = Modifier.fillMaxWidth().pointerInput(msg.id) {
+            detectTapGestures(onLongPress = { onLongPress(it) })
+        },
+        horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
+        verticalAlignment     = Alignment.Bottom,
     ) {
-        // Yanıt önizlemesi
-        if (msg.replyToId.isNotBlank() && msg.replyToText.isNotBlank()) {
-            Surface(
-                shape  = RoundedCornerShape(8.dp),
-                color  = Primary.copy(alpha = 0.12f),
-                modifier = Modifier.widthIn(max = 260.dp).padding(bottom = 2.dp),
+        // Tema: .msg-row-av (karşı taraf için)
+        if (!isMine) {
+            Box(
+                modifier = Modifier.size(24.dp).clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(Primary, Accent))),
+                contentAlignment = Alignment.Center,
             ) {
-                Row(modifier = Modifier.padding(6.dp)) {
-                    Box(modifier = Modifier.width(2.dp).height(28.dp).background(Primary, RoundedCornerShape(1.dp)))
-                    Spacer(Modifier.width(6.dp))
+                if (otherPhotoURL.isNotBlank())
+                    AsyncImage(model = otherPhotoURL, contentDescription = null,
+                        modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                else Text(otherName.firstOrNull()?.uppercase() ?: "?",
+                    color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(6.dp))
+        }
+
+        Column(
+            horizontalAlignment = if (isMine) Alignment.End else Alignment.Start,
+        ) {
+            // Tema: reply preview — .msg-reply-preview
+            if (msg.replyToId.isNotBlank() && msg.replyToText.isNotBlank()) {
+                Box(
+                    modifier = Modifier
+                        .widthIn(max = 250.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(
+                            if (isMine) Color.Black.copy(alpha = 0.15f)
+                            else Primary.copy(alpha = 0.1f)
+                        )
+                        .startBorder(
+                            color = if (isMine) Color.White.copy(alpha = 0.5f) else Primary,
+                            width = 3.dp,
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
                     Column {
                         if (msg.replyToName.isNotBlank())
-                            Text(msg.replyToName, color = Primary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        Text(msg.replyToText.take(50), color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            // .msg-reply-preview-name
+                            Text(msg.replyToName, color = if (isMine) Color.White.copy(alpha = 0.9f) else Primary,
+                                fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        // .msg-reply-preview-txt
+                        Text(msg.replyToText, color = if (isMine) Color.White.copy(alpha = 0.75f) else Muted,
+                            fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                Spacer(Modifier.height(2.dp))
+            }
+
+            // Tema: .msg-bubble — ana balon
+            // .msg-row.me .msg-bubble → gradient, .msg-row.them .msg-bubble → s3
+            Box(
+                modifier = Modifier
+                    .widthIn(max = 250.dp)
+                    .clip(
+                        RoundedCornerShape(
+                            topStart    = 16.dp,
+                            topEnd      = 16.dp,
+                            bottomStart = if (isMine) 16.dp else 3.dp,
+                            bottomEnd   = if (isMine) 3.dp  else 16.dp,
+                        )
+                    )
+                    .then(
+                        if (msg.deleted)
+                        // Tema: .msg-bubble.deleted
+                            Modifier.background(SurfaceVar).border(1.dp, Divider, RoundedCornerShape(16.dp))
+                        else if (isMine)
+                            Modifier.background(Brush.linearGradient(listOf(PrimaryLight, Primary)))
+                        else
+                            Modifier.background(SurfaceVar).border(1.dp, Divider, RoundedCornerShape(
+                                topStart = 16.dp, topEnd = 16.dp, bottomStart = 3.dp, bottomEnd = 16.dp))
+                    )
+                    .padding(horizontal = 11.dp, vertical = 7.dp)
+            ) {
+                if (msg.deleted) {
+                    Text(if (language == "ku") "Peyam hat jêbirin" else "Bu mesaj silindi",
+                        color = Muted, fontSize = 13.sp, fontStyle = FontStyle.Italic)
+                } else {
+                    Column {
+                        if (msg.imageUrl.isNotBlank()) {
+                            // Tema: .msg-bubble-img
+                            AsyncImage(model = msg.imageUrl, contentDescription = null,
+                                modifier = Modifier.widthIn(max = 200.dp).clip(RoundedCornerShape(10.dp)),
+                                contentScale = ContentScale.Crop)
+                            Spacer(Modifier.height(4.dp))
+                        }
+                        if (msg.text.isNotBlank())
+                            Text(msg.text, color = if (isMine) Color.White else OnBackground, fontSize = 13.sp, lineHeight = 19.sp)
+                        if (msg.edited)
+                            Text(if (language == "ku") "(guherî)" else "(düzenlendi)",
+                                color = if (isMine) Color.White.copy(alpha = 0.55f) else Muted,
+                                fontSize = 9.sp)
                     }
                 }
             }
-        }
 
-        // Balon
-        Surface(
-            shape = RoundedCornerShape(
-                topStart    = 16.dp, topEnd = 16.dp,
-                bottomStart = if (isMine) 16.dp else 4.dp,
-                bottomEnd   = if (isMine) 4.dp  else 16.dp,
-            ),
-            color    = if (isMine) Primary else SurfaceVar,
-            modifier = Modifier
-                .widthIn(max = 280.dp)
-                .pointerInput(Unit) {
-                    detectTapGestures(onLongPress = { onLongPress() })
-                },
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                if (msg.text.isNotBlank()) {
-                    Text(
-                        msg.text,
-                        color    = if (isMine) Color.Black else OnBackground,
-                        fontSize = 14.sp,
+            // Tema: .msg-meta — saat + okundu
+            Row(
+                modifier              = Modifier.padding(top = 2.dp, start = 3.dp, end = 3.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
+            ) {
+                Text(formatTime(msg.createdAt), color = Muted, fontSize = 9.sp)
+                if (isMine) {
+                    Spacer(Modifier.width(3.dp))
+                    // Tema: .msg-read.read → mavi, .msg-read.sent → soluk
+                    Icon(
+                        Icons.Default.DoneAll, null,
+                        tint     = if (msg.read) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.55f),
+                        modifier = Modifier.size(13.dp),
                     )
                 }
             }
-        }
 
-        // Meta — saat + okundu + düzenlendi + beğeni
-        Row(
-            verticalAlignment     = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            modifier              = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-        ) {
-            if (msg.edited)
-                Text("düzenlendi", color = Muted, fontSize = 9.sp, fontStyle = FontStyle.Italic)
-            val time = remember(msg.createdAt) {
-                msg.createdAt.toLongOrNull()?.let {
-                    java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it))
-                } ?: ""
-            }
-            if (time.isNotBlank()) Text(time, color = Muted, fontSize = 10.sp)
-            if (isMine) {
-                Icon(
-                    if (msg.read) Icons.Default.DoneAll else Icons.Default.Done,
-                    null,
-                    tint     = if (msg.read) Primary else Muted,
-                    modifier = Modifier.size(12.dp),
-                )
-            }
-        }
-
-        // Beğeni badge
-        if (msg.likedBy.isNotEmpty()) {
-            Surface(
-                shape = RoundedCornerShape(99.dp),
-                color = if (iLiked) Primary.copy(alpha = 0.15f) else SurfaceVar,
-                modifier = Modifier.clickable { onLike() }.padding(top = 2.dp),
-            ) {
-                Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (iLiked) "♥" else "♡", color = if (iLiked) Primary else Muted, fontSize = 12.sp)
-                    Spacer(Modifier.width(3.dp))
-                    Text(msg.likedBy.size.toString(), color = Muted, fontSize = 11.sp)
-                }
-            }
-        }
-    }
-}
-
-// ── Context menu dialog ───────────────────────────────────────
-@Composable
-fun MsgContextMenu(
-    msg      : Message,
-    isMine   : Boolean,
-    onDismiss: () -> Unit,
-    onReply  : () -> Unit,
-    onLike   : () -> Unit,
-    onEdit   : () -> Unit,
-    onDelete : () -> Unit,
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface) {
-            Column(modifier = Modifier.padding(8.dp)) {
-                listOfNotNull(
-                    Triple(Icons.AutoMirrored.Filled.Reply, "Yanıtla",  onReply),
-                    Triple(Icons.Default.FavoriteBorder,   "Beğen",    onLike),
-                    if (isMine) Triple(Icons.Default.Edit, "Düzenle",  onEdit)  else null,
-                    if (isMine) Triple(Icons.Default.Delete,"Sil",     onDelete) else null,
-                ).forEach { (icon, label, action) ->
-                    Row(
-                        modifier          = Modifier.fillMaxWidth().clickable { action(); onDismiss() }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+            // Tema: .msg-like-badge
+            if (msg.likedBy.isNotEmpty()) {
+                Surface(
+                    shape  = RoundedCornerShape(99.dp),
+                    color  = if (iLiked) Color(0xFFF43F5E).copy(alpha = 0.1f) else SurfaceVar,
+                    border = BorderStroke(1.dp, if (iLiked) Color(0xFFF43F5E) else Divider),
+                    modifier = Modifier.clickable { onLike() }.padding(top = 3.dp),
+                ) {
+                    Row(modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Icon(
-                            icon, null,
-                            tint     = if (label == "Sil") Color(0xFFEF4444) else Primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Text(
-                            label,
-                            color    = if (label == "Sil") Color(0xFFEF4444) else OnBackground,
-                            fontSize = 14.sp,
-                        )
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Icon(Icons.Default.Favorite, null,
+                            tint = if (iLiked) Color(0xFFF43F5E) else Muted,
+                            modifier = Modifier.size(11.dp))
+                        Text("${msg.likedBy.size}", color = if (iLiked) Color(0xFFF43F5E) else Muted, fontSize = 10.sp)
                     }
                 }
             }
         }
+
+        if (isMine) Spacer(Modifier.width(6.dp))
     }
 }
+
+// ── Yardımcı ─────────────────────────────────────────────────────────────────
+private fun formatTime(ts: String): String {
+    if (ts.isBlank()) return ""
+    return try {
+        val ms = ts.toLongOrNull() ?: return ts.take(5)
+        val cal  = Calendar.getInstance().apply { timeInMillis = ms }
+        val now  = Calendar.getInstance()
+        if (cal.get(Calendar.DAY_OF_YEAR) == now.get(Calendar.DAY_OF_YEAR))
+            SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ms))
+        else
+            SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(ms))
+    } catch (_: Exception) { ts.take(5) }
+}
+
+// ── Sol kenarlık yardımcısı ──────────────────────────────────────────────────
+private fun Modifier.startBorder(color: Color, width: androidx.compose.ui.unit.Dp): Modifier =
+    this.drawBehind {
+        drawRect(
+            color    = color,
+            topLeft  = Offset.Zero,
+            size     = Size(width.toPx(), this.size.height),
+        )
+    }
