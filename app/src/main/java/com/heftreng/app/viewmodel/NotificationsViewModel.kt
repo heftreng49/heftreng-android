@@ -28,6 +28,9 @@ class NotificationsViewModel @Inject constructor(
     private val _notifications = MutableStateFlow<List<Notification>>(emptyList())
     val notifications = _notifications.asStateFlow()
 
+    private val _unreadCount = MutableStateFlow(0)
+    val unreadCount = _unreadCount.asStateFlow()
+
     private val _loading = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
@@ -50,7 +53,7 @@ class NotificationsViewModel @Inject constructor(
                             viewModelScope.launch { _loading.value = false }
                             return@addSnapshotListener
                         }
-                        _notifications.value = snap.documents.mapNotNull { doc ->
+                        val notifs = snap.documents.mapNotNull { doc ->
                             val d = doc.data ?: return@mapNotNull null
                             Notification(
                                 id        = doc.id,
@@ -69,7 +72,11 @@ class NotificationsViewModel @Inject constructor(
                                 ts        = d["ts"]    as? Timestamp,
                             )
                         }
-                        viewModelScope.launch { _loading.value = false }
+                        viewModelScope.launch {
+                            _notifications.value = notifs.sortedByDescending { it.ts?.seconds ?: 0L }
+                            _unreadCount.value = notifs.count { !it.read }
+                            _loading.value = false
+                        }
                     }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -84,7 +91,7 @@ class NotificationsViewModel @Inject constructor(
                 firestore.collection("userNotifs").document(uid)
                     .collection("msgs").document(notifId)
                     .update("read", true).await()
-                _notifications.value = _notifications.value.map { n ->
+                val notifs = _notifications.value.map { n ->
                     if (n.id == notifId) n.copy(read = true) else n
                 }
             } catch (e: Exception) { e.printStackTrace() }
@@ -98,7 +105,7 @@ class NotificationsViewModel @Inject constructor(
                 _notifications.value.filter { !it.read }.forEach { n ->
                     col.document(n.id).update("read", true)
                 }
-                _notifications.value = _notifications.value.map { it.copy(read = true) }
+                val notifs = _notifications.value.map { it.copy(read = true) }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
