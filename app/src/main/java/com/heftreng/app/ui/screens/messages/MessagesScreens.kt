@@ -50,7 +50,7 @@ fun ConversationsScreen(
     var searchQuery   by remember { mutableStateOf("") }
     var showSearch    by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { vm.loadConversations() }
+    LaunchedEffect(Unit) { vm.listenConversations() }
 
     val filtered = if (searchQuery.isBlank()) conversations
     else conversations.filter {
@@ -103,7 +103,7 @@ fun ConversationsScreen(
                     }
                     // Yeni konuşma — tema: .msgp-new-btn
                     IconButton(onClick = { /* Kullanıcı ara ve konuşma başlat */ }) {
-                        Icon(Icons.Default.Edit, null, tint = Primary)
+                        Icon(Icons.Default.Create, null, tint = Primary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = HeftSurface),
@@ -230,8 +230,6 @@ fun ConversationsScreen(
     }
 }
 
-
-
 // ── Mesaj Detay Ekranı ────────────────────────────────────────────────────────
 // Tema: .msg-chat-ov, .msg-chat-hd, .msg-chat-body, .msg-inp-bar
 
@@ -260,9 +258,9 @@ fun MessageDetailScreen(
     }
 
     LaunchedEffect(convId) {
-        if (conversations.isEmpty()) vm.loadConversations()
-        vm.loadMessages(convId)
-        vm.subscribeToMessages(convId)
+        if (conversations.isEmpty()) vm.listenConversations()
+        vm.listenMessages(convId)
+        
         vm.loadOtherUser(convId)
     }
     LaunchedEffect(conversations) {
@@ -379,7 +377,7 @@ fun MessageDetailScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(Icons.Default.Edit, null, tint = Color(0xFFFBBF24), modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Create, null, tint = Color(0xFFFBBF24), modifier = Modifier.size(16.dp))
                         Text(if (language == "ku") "Peyamê biguherîne" else "Mesajı düzenle",
                             color = OnBackground, fontSize = 12.sp, modifier = Modifier.weight(1f))
                         IconButton(onClick = { editMsg = null; inputText = "" }, modifier = Modifier.size(28.dp)) {
@@ -502,7 +500,7 @@ fun MessageDetailScreen(
                     Column(modifier = Modifier.padding(5.dp)) {
                         MsgCtxItem(Icons.Default.Reply, if (language == "ku") "Bersiv bide" else "Yanıtla", false) { replyTo = ctxMsg; ctxMsg = null }
                         if (ctxMsg?.senderId == vm.uid) {
-                            MsgCtxItem(Icons.Default.Edit, if (language == "ku") "Biguherîne" else "Düzenle", false) { editMsg = ctxMsg; ctxMsg = null }
+                            MsgCtxItem(Icons.Default.Create, if (language == "ku") "Biguherîne" else "Düzenle", false) { editMsg = ctxMsg; ctxMsg = null }
                             MsgCtxItem(Icons.Default.Delete, if (language == "ku") "Jê bibe" else "Sil", true) { vm.deleteMessage(ctxMsg!!); ctxMsg = null }
                         }
                         MsgCtxItem(Icons.Default.FavoriteBorder, if (language == "ku") "Hez bike" else "Beğen", false) { vm.toggleLike(ctxMsg!!); ctxMsg = null }

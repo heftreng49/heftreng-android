@@ -295,7 +295,7 @@ fun PostCard(
                     if (isOwn) {
                         DropdownMenuItem(
                             text        = { Text("Düzenle", color = OnBackground) },
-                            leadingIcon = { Icon(Icons.Default.Edit, null, tint = Muted) },
+                            leadingIcon = { Icon(Icons.Default.Create, null, tint = Muted) },
                             onClick     = { menuExpanded = false; showEditDialog = true },
                         )
                         DropdownMenuItem(
