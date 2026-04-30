@@ -1,12 +1,15 @@
 package com.heftreng.app.ui.screens.feed
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
@@ -16,9 +19,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -26,9 +32,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
-import com.heftreng.app.ui.component.QuoteButton
 import com.heftreng.app.ui.component.QuoteCard
 import com.heftreng.app.ui.component.QuoteDialog
 import com.heftreng.app.ui.component.QuoteInputSection
@@ -47,23 +53,39 @@ fun FeedScreen(
     val loading     by vm.loading.collectAsState()
     val hasMore     by vm.hasMore.collectAsState()
     val loadingMore by vm.loadingMore.collectAsState()
-    var showNewPost by remember { mutableStateOf(false) }
-    var newPostText by remember { mutableStateOf("") }
-    var commentPost by remember { mutableStateOf<Post?>(null) }
-    var quotePayload by remember { mutableStateOf<QuotePayload?>(null) }
-    var showQuoteDialog by remember { mutableStateOf(false) }
-    var showQuoteInput by remember { mutableStateOf(false) }
 
-    // ── Alıntı oluşturma dialog ──────────────────────────────────────────────
-    if (showQuoteDialog) {
+    var showComposeSheet by remember { mutableStateOf(false) }
+    var commentPost      by remember { mutableStateOf<Post?>(null) }
+    var fabExpanded      by remember { mutableStateOf(false) }
+    var inlineText       by remember { mutableStateOf("") }
+    var inlineQuote      by remember { mutableStateOf<QuotePayload?>(null) }
+    var showInlineQuote  by remember { mutableStateOf(false) }
+
+    val currentUser = FirebaseAuth.getInstance().currentUser
+
+    if (showInlineQuote) {
         QuoteDialog(
-            initialText   = quotePayload?.text ?: "",
-            initialBook   = quotePayload?.bookName ?: "",
-            initialAuthor = quotePayload?.authorName ?: "",
-            onDismiss     = { showQuoteDialog = false },
-            onConfirm     = { payload ->
-                quotePayload = payload
-                showQuoteDialog = false
+            initialText   = inlineQuote?.text ?: "",
+            initialBook   = inlineQuote?.bookName ?: "",
+            initialAuthor = inlineQuote?.authorName ?: "",
+            onDismiss     = { showInlineQuote = false },
+            onConfirm     = { p -> inlineQuote = p; showInlineQuote = false },
+        )
+    }
+
+    if (showComposeSheet) {
+        ComposeBottomSheet(
+            language    = language,
+            currentUser = currentUser,
+            onDismiss   = { showComposeSheet = false },
+            onPost      = { text, quote ->
+                vm.createPost(
+                    text       = text,
+                    quoteText  = quote?.text ?: "",
+                    authorName = quote?.authorName ?: "",
+                    bookName   = quote?.bookName ?: "",
+                )
+                showComposeSheet = false
             },
         )
     }
@@ -71,13 +93,36 @@ fun FeedScreen(
     Box(modifier = Modifier.fillMaxSize().background(Background)) {
         if (loading && posts.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Amber)
+                CircularProgressIndicator(color = Primary)
             }
         } else {
             LazyColumn(
                 modifier       = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 100.dp),
             ) {
+                item {
+                    InlineComposeBox(
+                        text         = inlineText,
+                        onTextChange = { inlineText = it },
+                        quote        = inlineQuote,
+                        onQuoteAdd   = { showInlineQuote = true },
+                        onQuoteRemove = { inlineQuote = null },
+                        onSend       = {
+                            if (inlineText.isNotBlank() || inlineQuote != null) {
+                                vm.createPost(
+                                    text       = inlineText.trim(),
+                                    quoteText  = inlineQuote?.text ?: "",
+                                    authorName = inlineQuote?.authorName ?: "",
+                                    bookName   = inlineQuote?.bookName ?: "",
+                                )
+                                inlineText = ""
+                                inlineQuote = null
+                            }
+                        },
+                        photoURL = currentUser?.photoUrl?.toString() ?: "",
+                        language = language,
+                    )
+                }
                 items(posts, key = { it.id }) { post ->
                     PostCard(
                         post      = post,
@@ -92,7 +137,6 @@ fun FeedScreen(
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                 }
-                // ── Daha Fazla Yükle ──────────────────────────────────────
                 if (hasMore) {
                     item {
                         Box(
@@ -100,11 +144,7 @@ fun FeedScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             if (loadingMore) {
-                                CircularProgressIndicator(
-                                    color    = Amber,
-                                    modifier = Modifier.size(28.dp),
-                                    strokeWidth = 2.dp,
-                                )
+                                CircularProgressIndicator(color = Primary, modifier = Modifier.size(28.dp), strokeWidth = 2.dp)
                             } else {
                                 OutlinedButton(
                                     onClick = { vm.loadMore() },
@@ -121,97 +161,37 @@ fun FeedScreen(
                 }
             }
         }
-    }
 
-    if (showNewPost) {
-        ModalBottomSheet(
-            onDismissRequest = { showNewPost = false },
-            containerColor   = HeftSurface,
+        // FAB — tema: kp-fab-main
+        Column(
+            modifier            = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-                    .navigationBarsPadding(),
+            AnimatedVisibility(
+                visible = fabExpanded,
+                enter   = fadeIn() + slideInVertically { it },
+                exit    = fadeOut() + slideOutVertically { it },
             ) {
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment     = Alignment.CenterVertically,
-                ) {
-                    TextButton(onClick = { showNewPost = false }) {
-                        Text("İptal", color = Muted)
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FabMenuItem(if (language == "ku") "Nivîsek Nû" else "Yeni Gönderi", Icons.Default.Create) {
+                        fabExpanded = false; showComposeSheet = true
                     }
-                    Text(if (language == "ku") "Nivîsek Nû" else "Yeni Gönderi", fontWeight = FontWeight.SemiBold, color = OnBackground)
-                    TextButton(onClick = {
-                        if (newPostText.isNotBlank()) {
-                            vm.createPost(
-                                text       = newPostText.trim(),
-                                quoteText  = quotePayload?.text ?: "",
-                                authorName = quotePayload?.authorName ?: "",
-                                bookName   = quotePayload?.bookName ?: "",
-                            )
-                            newPostText = ""
-                            showNewPost = false
-                        }
-                    }) {
-                        Text(if (language == "ku") "Parve bike" else "Paylaş", color = Amber, fontWeight = FontWeight.Bold)
+                    FabMenuItem(if (language == "ku") "Alıntı" else "Alıntı Ekle", Icons.Default.FormatQuote) {
+                        fabExpanded = false; showComposeSheet = true
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-
-                // Seçili alıntı varsa göster
-                QuoteInputSection(
-                    quote    = quotePayload,
-                    onRemove = { quotePayload = null },
-                    modifier = Modifier.padding(bottom = 8.dp),
+            }
+            Box(
+                modifier = Modifier.size(52.dp).clip(RoundedCornerShape(14.dp))
+                    .background(Brush.linearGradient(listOf(Primary, PrimaryLight)))
+                    .clickable { fabExpanded = !fabExpanded },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (fabExpanded) Icons.Default.Close else Icons.Default.Add,
+                    null, tint = Color.White, modifier = Modifier.size(24.dp),
                 )
-
-                OutlinedTextField(
-                    value           = newPostText,
-                    onValueChange   = { newPostText = it },
-                    placeholder     = { Text("Ne düşünüyorsun?", color = Muted) },
-                    modifier        = Modifier.fillMaxWidth().heightIn(min = 120.dp),
-                    colors          = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor      = Amber,
-                        unfocusedBorderColor    = Divider,
-                        focusedTextColor        = OnBackground,
-                        unfocusedTextColor      = OnBackground,
-                        unfocusedContainerColor = HeftSurface,
-                        focusedContainerColor   = HeftSurface,
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                )
-                // Alt araç çubuğu — alıntı ve görsel ekleme
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Alıntı butonu
-                    IconButton(onClick = { showQuoteDialog = true }) {
-                        Icon(
-                            Icons.Default.FormatQuote,
-                            contentDescription = "Alıntı Ekle",
-                            tint     = if (quotePayload != null) Amber else Muted,
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
-                    Text(
-                        "Alıntı ekle",
-                        color    = if (quotePayload != null) Amber else Muted,
-                        fontSize = 12.sp,
-                        modifier = Modifier.clickable { showQuoteDialog = true },
-                    )
-                    Spacer(Modifier.weight(1f))
-                    // Karakter sayacı
-                    Text(
-                        "${newPostText.length}/1000",
-                        color    = if (newPostText.length > 900) Error else Muted,
-                        fontSize = 11.sp,
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
             }
         }
     }
@@ -220,6 +200,178 @@ fun FeedScreen(
         CommentSheet(post = post, onDismiss = { commentPost = null }, vm = vm)
     }
 }
+
+// ── InlineComposeBox — tema: .compose ────────────────────────────────────────
+@Composable
+private fun InlineComposeBox(
+    text          : String,
+    onTextChange  : (String) -> Unit,
+    quote         : QuotePayload?,
+    onQuoteAdd    : () -> Unit,
+    onQuoteRemove : () -> Unit,
+    onSend        : () -> Unit,
+    photoURL      : String,
+    language      : String,
+) {
+    Surface(
+        modifier       = Modifier.fillMaxWidth().padding(12.dp),
+        shape          = RoundedCornerShape(14.dp),
+        color          = HeftSurface,
+        border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
+        tonalElevation = 0.dp,
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                AsyncImage(
+                    model = photoURL.ifEmpty { null }, contentDescription = null,
+                    modifier     = Modifier.size(36.dp).clip(CircleShape).background(SurfaceVar),
+                    contentScale = ContentScale.Crop,
+                )
+                OutlinedTextField(
+                    value         = text,
+                    onValueChange = onTextChange,
+                    placeholder   = { Text(if (language == "ku") "Tu çi difikire?" else "Ne düşünüyorsun?", color = Muted, fontSize = 14.sp) },
+                    modifier      = Modifier.fillMaxWidth().heightIn(min = 60.dp, max = 200.dp),
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor      = Primary,
+                        unfocusedBorderColor    = Color.Transparent,
+                        focusedTextColor        = OnBackground,
+                        unfocusedTextColor      = OnBackground,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedContainerColor   = Color.Transparent,
+                        cursorColor             = Primary,
+                    ),
+                    shape           = RoundedCornerShape(8.dp),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    maxLines        = 8,
+                )
+            }
+            if (quote != null) {
+                Spacer(Modifier.height(8.dp))
+                QuoteInputSection(quote = quote, onRemove = onQuoteRemove)
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onQuoteAdd, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.FormatQuote, null, tint = if (quote != null) Primary else Muted, modifier = Modifier.size(18.dp))
+                }
+                Text(if (language == "ku") "Alıntı" else "Alıntı ekle", color = if (quote != null) Primary else Muted, fontSize = 11.sp, modifier = Modifier.clickable { onQuoteAdd() })
+                Spacer(Modifier.weight(1f))
+                Text("${text.length}/1000", color = if (text.length > 900) Error else Muted, fontSize = 11.sp)
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick        = onSend,
+                    enabled        = text.isNotBlank() || quote != null,
+                    shape          = RoundedCornerShape(99.dp),
+                    colors         = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Color.White, disabledContainerColor = Divider, disabledContentColor = Muted),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 7.dp),
+                    modifier       = Modifier.height(34.dp),
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text(if (language == "ku") "Parve bike" else "Paylaş", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+// ── FabMenuItem ───────────────────────────────────────────────────────────────
+@Composable
+private fun FabMenuItem(label: String, icon: ImageVector, onClick: () -> Unit) {
+    Row(
+        modifier          = Modifier.clip(RoundedCornerShape(10.dp)).background(HeftSurface)
+            .border(1.dp, Divider, RoundedCornerShape(10.dp)).clickable { onClick() }.padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Icon(icon, null, tint = Primary, modifier = Modifier.size(16.dp))
+        Text(label, color = OnBackground, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+// ── ComposeBottomSheet ────────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ComposeBottomSheet(
+    language    : String,
+    currentUser : FirebaseUser?,
+    onDismiss   : () -> Unit,
+    onPost      : (String, QuotePayload?) -> Unit,
+) {
+    var text         by remember { mutableStateOf("") }
+    var quotePayload by remember { mutableStateOf<QuotePayload?>(null) }
+    var showQuote    by remember { mutableStateOf(false) }
+
+    if (showQuote) {
+        QuoteDialog(
+            initialText   = quotePayload?.text ?: "",
+            initialBook   = quotePayload?.bookName ?: "",
+            initialAuthor = quotePayload?.authorName ?: "",
+            onDismiss     = { showQuote = false },
+            onConfirm     = { p -> quotePayload = p; showQuote = false },
+        )
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        dragHandle       = { BottomSheetDefaults.DragHandle(color = Divider) },
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp).navigationBarsPadding(),
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onDismiss) { Text(if (language == "ku") "Betal bike" else "İptal", color = Muted) }
+                Text(if (language == "ku") "Nivîsek Nû" else "Yeni Gönderi", fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 15.sp)
+                TextButton(
+                    onClick  = { if (text.isNotBlank() || quotePayload != null) onPost(text.trim(), quotePayload) },
+                    enabled  = text.isNotBlank() || quotePayload != null,
+                ) {
+                    Text(if (language == "ku") "Parve bike" else "Paylaş", color = if (text.isNotBlank() || quotePayload != null) Primary else Muted, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                AsyncImage(
+                    model = currentUser?.photoUrl, contentDescription = null,
+                    modifier     = Modifier.size(40.dp).clip(CircleShape).background(SurfaceVar),
+                    contentScale = ContentScale.Crop,
+                )
+                OutlinedTextField(
+                    value         = text,
+                    onValueChange = { text = it },
+                    placeholder   = { Text(if (language == "ku") "Tu çi difikire?" else "Ne düşünüyorsun?", color = Muted) },
+                    modifier      = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Primary, unfocusedBorderColor = Divider,
+                        focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
+                        unfocusedContainerColor = HeftSurface, focusedContainerColor = HeftSurface, cursorColor = Primary,
+                    ),
+                    shape           = RoundedCornerShape(12.dp),
+                    maxLines        = 12,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                )
+            }
+            if (quotePayload != null) {
+                Spacer(Modifier.height(10.dp))
+                QuoteInputSection(quote = quotePayload, onRemove = { quotePayload = null })
+            }
+            Spacer(Modifier.height(10.dp))
+            HorizontalDivider(color = Divider, thickness = 0.5.dp)
+            Spacer(Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { showQuote = true }) {
+                    Icon(Icons.Default.FormatQuote, null, tint = if (quotePayload != null) Primary else Muted, modifier = Modifier.size(22.dp))
+                }
+                Text(if (language == "ku") "Alıntı" else "Alıntı ekle", color = if (quotePayload != null) Primary else Muted, fontSize = 12.sp, modifier = Modifier.clickable { showQuote = true })
+                Spacer(Modifier.weight(1f))
+                Text("${text.length}/1000", color = if (text.length > 900) Error else Muted, fontSize = 11.sp)
+            }
+        }
+    }
+}
+
 
 // ── PostCard ──────────────────────────────────────────────────────────────────
 
