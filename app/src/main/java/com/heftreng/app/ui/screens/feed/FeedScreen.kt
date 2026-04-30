@@ -40,7 +40,6 @@ import com.heftreng.app.viewmodel.FeedViewModel
 @Composable
 fun FeedScreen(
     navController: NavController,
-    onOpenDrawer : () -> Unit = {},
     language     : String = "tr",
     vm           : FeedViewModel = hiltViewModel(),
 ) {
@@ -71,30 +70,7 @@ fun FeedScreen(
 
     Scaffold(
         containerColor = Background,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "heftreng",
-                        fontWeight    = FontWeight.Bold,
-                        color         = Amber,
-                        fontSize      = 22.sp,
-                        letterSpacing = (-0.5).sp,
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onOpenDrawer) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menü", tint = OnBackground)
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { navController.navigate(Screen.Notifications.route) }) {
-                        Icon(Icons.Outlined.NotificationsNone, contentDescription = "Bildirimler", tint = OnBackground)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
-            )
-        },
+        // topBar NavHost tarafından yönetiliyor
         floatingActionButton = {
             FloatingActionButton(
                 onClick        = { showNewPost = true },

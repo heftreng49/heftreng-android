@@ -154,9 +154,9 @@ fun HeftrangNavHost(initialRoute: String? = null) {
         ) {
             Scaffold(
                 containerColor = Background,
-                // ── ÜST BAR — tema header: menu | logo | [ara] | bildirim | mesaj | avatar ──
+                // ── ÜST BAR — sadece Feed ekranında NavHost yönetir ──
                 topBar = {
-                    if (showBottom) {
+                    if (currentRoute == Screen.Feed.route) {
                         TopAppBar(
                             title = {
                                 Text(
