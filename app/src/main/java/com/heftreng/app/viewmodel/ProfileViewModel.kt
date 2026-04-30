@@ -77,28 +77,43 @@ class ProfileViewModel @Inject constructor(
                 // XML temasıyla aynı: where + limit, sonra client-side sort
                 val snap = firestore.collection("feed")
                     .whereEqualTo("uid", targetUid)
-                    .limit(30).get().await()
+                    .limit(50).get().await()
                 _posts.value = snap.documents.mapNotNull { doc ->
                     val fd = doc.data ?: return@mapNotNull null
-                    val postText = fd["text"] as? String ?: ""
-                    // Boş gönderileri atla
-                    if (postText.isBlank() && (fd["imageURL"] as? String).isNullOrBlank()) return@mapNotNull null
-                    val dName = (fd["displayName"] as? String)
-                        ?.takeIf { it.isNotBlank() }
-                        ?: (fd["name"] as? String)
-                        ?.takeIf { it.isNotBlank() }
-                        ?: ""
+                    val postText  = fd["text"]     as? String ?: ""
+                    val imageURL  = fd["imageURL"] as? String ?: fd["imgUrl"] as? String ?: ""
+
+                    // quote alanları — tema: d.quote objesi veya düz alanlar
+                    val quoteObj   = fd["quote"] as? Map<*, *>
+                    val quoteText  = (quoteObj?.get("text")   as? String)?.takeIf { it.isNotBlank() }
+                        ?: fd["quoteText"]  as? String ?: ""
+                    val bookName   = (quoteObj?.get("book")   as? String)?.takeIf { it.isNotBlank() }
+                        ?: fd["bookName"]   as? String ?: ""
+                    val authorName = (quoteObj?.get("author") as? String)?.takeIf { it.isNotBlank() }
+                        ?: fd["authorName"] as? String ?: ""
+
+                    // Gerçekten boş gönderiyi atla (text, resim, alıntı, repost yok)
+                    val repostOf = fd["repostOf"] as? String ?: fd["repostType"] as? String ?: ""
+                    if (postText.isBlank() && imageURL.isBlank() && quoteText.isBlank() && repostOf.isBlank())
+                        return@mapNotNull null
+
+                    val dName = (fd["displayName"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: (fd["name"] as? String)?.takeIf { it.isNotBlank() } ?: ""
+
                     Post(
                         id            = doc.id,
-                        uid           = fd["uid"] as? String ?: "",
+                        uid           = fd["uid"]      as? String ?: "",
                         displayName   = dName,
                         username      = fd["username"] as? String ?: "",
                         photoURL      = fd["photoURL"] as? String ?: "",
                         text          = postText,
-                        imageURL      = fd["imageURL"] as? String ?: fd["imgUrl"] as? String ?: "",
-                        likesCount    = (fd["likes"] as? Long)?.toInt() ?: 0,
+                        imageURL      = imageURL,
+                        quoteText     = quoteText,
+                        bookName      = bookName,
+                        authorName    = authorName,
+                        likesCount    = (fd["likes"]    as? Long)?.toInt() ?: 0,
                         commentsCount = (fd["cmtCount"] as? Long)?.toInt() ?: 0,
-                        repostsCount  = (fd["reposts"] as? Long)?.toInt() ?: 0,
+                        repostsCount  = (fd["reposts"]  as? Long)?.toInt() ?: 0,
                         ts            = fd["ts"] as? Timestamp,
                     )
                 }.sortedByDescending { it.ts?.seconds ?: 0L }

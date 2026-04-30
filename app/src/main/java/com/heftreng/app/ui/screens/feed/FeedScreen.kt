@@ -68,28 +68,15 @@ fun FeedScreen(
         )
     }
 
-    Scaffold(
-        containerColor = Background,
-        // topBar NavHost tarafından yönetiliyor
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick        = { showNewPost = true },
-                containerColor = Amber,
-                contentColor   = Color.Black,
-                shape          = RoundedCornerShape(16.dp),
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Yeni gönderi")
-            }
-        }
-    ) { padding ->
+    Box(modifier = Modifier.fillMaxSize().background(Background)) {
         if (loading && posts.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Amber)
             }
         } else {
             LazyColumn(
-                modifier       = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(bottom = 80.dp),
+                modifier       = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 100.dp),
             ) {
                 items(posts, key = { it.id }) { post ->
                     PostCard(

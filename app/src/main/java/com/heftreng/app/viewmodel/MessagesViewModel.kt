@@ -237,9 +237,12 @@ class MessagesViewModel @Inject constructor(
     // ── Okundu işaretleme ─────────────────────────────────────
     private fun markRead(convId: String) {
         if (uid.isEmpty()) return
+        // Yerel state anında sıfırla — badge hemen güncellensin
+        _conversations.value = _conversations.value.map { conv ->
+            if (conv.id == convId) conv.copy(unreadCount = 0) else conv
+        }
         viewModelScope.launch {
             try {
-                // unread sayacını sıfırla (index gerektirmez)
                 firestore.collection("conversations").document(convId)
                     .update("unread_$uid", 0L).await()
             } catch (_: Exception) {}

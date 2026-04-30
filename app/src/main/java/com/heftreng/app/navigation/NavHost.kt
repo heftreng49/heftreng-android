@@ -232,10 +232,24 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                                         }
                                     },
                                     icon = {
-                                        Icon(
-                                            if (selected) item.iconSel else item.icon,
-                                            contentDescription = item.label,
-                                        )
+                                        val msgBadge   = item.route == Screen.Messages.route && totalUnread > 0
+                                        val notifBadge = item.route == Screen.Notifications.route && unreadNotif > 0
+                                        if (msgBadge || notifBadge) {
+                                            val cnt = if (msgBadge) totalUnread else unreadNotif
+                                            BadgedBox(badge = {
+                                                Badge(containerColor = Error) {
+                                                    Text(
+                                                        if (cnt > 9) "9+" else cnt.toString(),
+                                                        color    = Color.White,
+                                                        fontSize = 9.sp,
+                                                    )
+                                                }
+                                            }) {
+                                                Icon(if (selected) item.iconSel else item.icon, item.label)
+                                            }
+                                        } else {
+                                            Icon(if (selected) item.iconSel else item.icon, item.label)
+                                        }
                                     },
                                     label = {
                                         Text(item.label, fontSize = 10.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
