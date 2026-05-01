@@ -32,16 +32,7 @@ fun KurdiScreen(vm: KurdiViewModel = hiltViewModel()) {
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("Dersler", "Ferheng", "Rêziman")
 
-    Scaffold(
-        containerColor = Background,
-        topBar = {
-            TopAppBar(
-                title = { Text("Kurdî Fêrbibe", fontWeight = FontWeight.Bold, color = OnBackground) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
-            )
-        }
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+    Column(modifier = Modifier.fillMaxSize().background(Background)) {
             // XP & Streak kartı
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -99,7 +90,6 @@ fun KurdiScreen(vm: KurdiViewModel = hiltViewModel()) {
                 2 -> GrammarTab()
             }
         }
-    }
 }
 
 @Composable

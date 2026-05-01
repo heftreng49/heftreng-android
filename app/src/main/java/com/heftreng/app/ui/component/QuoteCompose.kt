@@ -133,7 +133,7 @@ fun QuoteDialog(
         containerColor   = HeftSurface,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.FormatQuote, null, tint = Amber, modifier = Modifier.size(22.dp))
+                Icon(Icons.Default.FormatQuote, null, tint = Primary, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Alıntı Ekle", color = OnBackground, fontWeight = FontWeight.Bold)
             }
@@ -166,24 +166,31 @@ fun QuoteDialog(
                     colors        = quoteTextFieldColors(),
                 )
 
-                // Önizleme
-                if (text.isNotBlank()) {
+                // Önizleme — metin, kitap veya yazar girilince göster
+                if (text.isNotBlank() || book.isNotBlank() || author.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     Spacer(Modifier.height(4.dp))
                     Text("Önizleme", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    QuoteCard(quoteText = text, bookName = book, authorName = author)
+                    Spacer(Modifier.height(4.dp))
+                    QuoteCard(
+                        quoteText  = text.ifBlank { "..." },
+                        bookName   = book,
+                        authorName = author,
+                    )
                 }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (text.isNotBlank()) {
+                    if (text.isNotBlank() || book.isNotBlank()) {
                         onConfirm(QuotePayload(text = text, bookName = book, authorName = author))
                     }
                 },
-                enabled = text.isNotBlank(),
+                enabled = text.isNotBlank() || book.isNotBlank(),
             ) {
-                Text("Ekle", color = Amber, fontWeight = FontWeight.Bold)
+                Text("Ekle", color = Primary, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
@@ -194,13 +201,13 @@ fun QuoteDialog(
 
 @Composable
 private fun quoteTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor      = Amber,
+    focusedBorderColor      = Primary,
     unfocusedBorderColor    = Divider,
     focusedTextColor        = OnBackground,
     unfocusedTextColor      = OnBackground,
     unfocusedContainerColor = SurfaceVar,
     focusedContainerColor   = SurfaceVar,
-    focusedLabelColor       = Amber,
+    focusedLabelColor       = Primary,
     unfocusedLabelColor     = Muted,
-    cursorColor             = Amber,
+    cursorColor             = Primary,
 )

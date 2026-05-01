@@ -322,7 +322,9 @@ private fun ProfileHeader(
                 verticalAlignment = Alignment.Bottom,
             ) {
                 AsyncImage(
-                    model             = user?.photoURL,
+                    model             = user?.photoURL?.ifEmpty {
+                        com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.photoUrl?.toString()
+                    } ?: com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.photoUrl,
                     contentDescription = null,
                     contentScale      = ContentScale.Crop,
                     modifier          = Modifier

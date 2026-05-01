@@ -73,6 +73,7 @@ class MessagesViewModel @Inject constructor(
         convListener?.remove()
         convListener = firestore.collection("conversations")
             .whereArrayContains("participants", uid)
+            // Not: Eğer Firestore'da "members" kullanıyorsan yukarıdaki satırı değiştir
             .orderBy("updated_at", Query.Direction.DESCENDING)
             .limit(50)
             .addSnapshotListener { snap, _ ->
@@ -80,7 +81,9 @@ class MessagesViewModel @Inject constructor(
                 viewModelScope.launch {
                     val list = snap.documents.mapNotNull { doc ->
                         val d = doc.data ?: return@mapNotNull null
-                        val parts = (d["participants"] as? List<*>)
+                        val parts = ((d["participants"] as? List<*>)
+                            ?: (d["participantIds"] as? List<*>)
+                            ?: (d["members"] as? List<*>))
                             ?.filterIsInstance<String>() ?: emptyList()
                         val otherUid = parts.firstOrNull { it != uid } ?: return@mapNotNull null
 
