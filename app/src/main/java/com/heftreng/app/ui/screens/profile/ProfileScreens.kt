@@ -321,18 +321,36 @@ private fun ProfileHeader(
                 modifier          = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Bottom,
             ) {
-                AsyncImage(
-                    model             = user?.photoURL?.ifEmpty {
-                        com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.photoUrl?.toString()
-                    } ?: com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.photoUrl,
-                    contentDescription = null,
-                    contentScale      = ContentScale.Crop,
-                    modifier          = Modifier
+                // Avatar — Firestore'dan güncel photoURL (ProfileViewModel bunu çekiyor)
+                val avatarUrl = user?.photoURL?.ifEmpty { null }
+                Box(
+                    modifier = Modifier
                         .size(76.dp)
                         .offset(y = (-28).dp)
                         .clip(CircleShape)
-                        .background(SurfaceVar),
-                )
+                        .background(
+                            androidx.compose.ui.graphics.Brush.linearGradient(
+                                listOf(Primary, PrimaryLight)
+                            )
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (avatarUrl != null) {
+                        AsyncImage(
+                            model              = avatarUrl,
+                            contentDescription = null,
+                            contentScale       = ContentScale.Crop,
+                            modifier           = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Text(
+                            user?.displayName?.firstOrNull()?.uppercase() ?: "?",
+                            color      = androidx.compose.ui.graphics.Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize   = 26.sp,
+                        )
+                    }
+                }
                 Spacer(Modifier.weight(1f))
                 Spacer(Modifier.height(12.dp))
                 if (isMe) {

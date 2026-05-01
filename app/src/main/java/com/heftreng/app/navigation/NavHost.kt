@@ -114,6 +114,14 @@ fun HeftrangNavHost(initialRoute: String? = null) {
         return
     }
 
+    // Mesaj badge için app açılır açılmaz conversations dinle
+    LaunchedEffect(currentUser?.uid) {
+        if (currentUser != null) {
+            msgsVm.listenConversations()
+            notifVm.load()
+        }
+    }
+
     HeftrangTheme(darkMode = isDark) {
 
         LaunchedEffect(initialRoute) {

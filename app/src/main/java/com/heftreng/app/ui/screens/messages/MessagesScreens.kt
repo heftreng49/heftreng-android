@@ -102,7 +102,7 @@ fun ConversationsScreen(
                             null, tint = if (showSearch) Primary else Muted)
                     }
                     // Yeni konuşma — tema: .msgp-new-btn
-                    IconButton(onClick = { /* Kullanıcı ara ve konuşma başlat */ }) {
+                    IconButton(onClick = { navController.navigate("search") }) {
                         Icon(Icons.Default.Create, null, tint = Primary)
                     }
                 },

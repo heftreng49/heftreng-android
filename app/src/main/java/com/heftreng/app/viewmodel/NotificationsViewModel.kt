@@ -86,26 +86,28 @@ class NotificationsViewModel @Inject constructor(
     }
 
     fun markRead(notifId: String) {
+        _notifications.value = _notifications.value.map { n ->
+            if (n.id == notifId) n.copy(read = true) else n
+        }
+        _unreadCount.value = _notifications.value.count { !it.read }
         viewModelScope.launch {
             try {
                 firestore.collection("userNotifs").document(uid)
                     .collection("msgs").document(notifId)
                     .update("read", true).await()
-                val notifs = _notifications.value.map { n ->
-                    if (n.id == notifId) n.copy(read = true) else n
-                }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
     fun markAllRead() {
+        _notifications.value = _notifications.value.map { it.copy(read = true) }
+        _unreadCount.value = 0
         viewModelScope.launch {
             try {
                 val col = firestore.collection("userNotifs").document(uid).collection("msgs")
-                _notifications.value.filter { !it.read }.forEach { n ->
+                _notifications.value.forEach { n ->
                     col.document(n.id).update("read", true)
                 }
-                val notifs = _notifications.value.map { it.copy(read = true) }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
