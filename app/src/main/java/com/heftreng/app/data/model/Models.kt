@@ -46,6 +46,9 @@ data class Post(
     val authorName    : String     = "",
     val repostOf      : String     = "",
     val repostUid     : String     = "",
+    val name          : String     = "",   // tema: name (displayName alternatifi)
+    val repostType    : String     = "",   // tema: repostType
+    val repostId      : String     = "",   // tema: repostId
     val isLikedByMe   : Boolean    = false,
     val isSavedByMe   : Boolean    = false,
 )
@@ -101,8 +104,6 @@ data class Notification(
 )
 
 // ─── TAKİP ─────────────────────────────────────────────
-// Firestore: follows/{id}
-// Alanlar: fromUid, fromName, fromPhoto, targetUid, targetName, targetPhoto, ts
 data class FollowRelation(
     val id          : String     = "",
     val fromUid     : String     = "",
@@ -169,8 +170,7 @@ data class Chapter(
     val ts       : Timestamp? = null,
 )
 
-// ─── KİTAP (books koleksiyonu — site temasındaki kitap sistemi) ─────────────
-// Firestore: books/{bookId}
+// ─── KİTAP ─────────────────────────────────────────────
 data class Book(
     val id           : String     = "",
     val uid          : String     = "",
@@ -189,7 +189,6 @@ data class Book(
 )
 
 // ─── KİTAP BÖLÜMÜ ──────────────────────────────────────
-// Firestore: books/{bookId}/chapters/{chapterId}
 data class BookChapter(
     val id        : String     = "",
     val bookId    : String     = "",
