@@ -1,5 +1,7 @@
 package com.heftreng.app.ui.screens.messages
 
+import androidx.compose.material3.AlertDialog
+
 import androidx.compose.foundation.layout.imeNestedScroll
 
 import androidx.compose.animation.*
@@ -142,6 +144,29 @@ fun ConversationsScreen(
                 }
             }
             else -> {
+                var convToDelete by remember { mutableStateOf<String?>(null) }
+
+                // Sil onay dialog'u
+                convToDelete?.let { cid ->
+                    AlertDialog(
+                        onDismissRequest = { convToDelete = null },
+                        title = { Text(if (language == "ku") "Sohbet Sil" else "Sohbeti Sil", color = OnBackground) },
+                        text  = { Text(if (language == "ku") "Ev sohbet bê silîn?" else "Bu sohbeti silmek istiyor musun?", color = Muted) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                vm.deleteConversation(cid)
+                                convToDelete = null
+                            }) { Text(if (language == "ku") "Jêbibe" else "Sil", color = MaterialTheme.colorScheme.error) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { convToDelete = null }) {
+                                Text(if (language == "ku") "Betal" else "İptal", color = Muted)
+                            }
+                        },
+                        containerColor = HeftSurface,
+                    )
+                }
+
                 LazyColumn(
                     modifier       = Modifier.fillMaxSize().padding(padding),
                     contentPadding = PaddingValues(bottom = 80.dp),
@@ -158,7 +183,10 @@ fun ConversationsScreen(
                                 .then(
                                     if (unread) Modifier.startBorder(Primary, 3.dp) else Modifier
                                 )
-                                .clickable { navController.navigate(Screen.MessageDetail.go(conv.id)) }
+                                .combinedClickable(
+                                    onClick      = { navController.navigate(Screen.MessageDetail.go(conv.id)) },
+                                    onLongClick  = { convToDelete = conv.id },
+                                )
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),

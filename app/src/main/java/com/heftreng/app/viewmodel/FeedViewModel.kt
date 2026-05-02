@@ -282,6 +282,24 @@ class FeedViewModel @Inject constructor(
         }
     }
 
+    // ── Draft kaydet/yükle ────────────────────────────────────────────────────
+    // Tema: localStorage'da "hfDraft" — Android: SharedPreferences
+    private var _draftPrefs: android.content.SharedPreferences? = null
+
+    fun initDraftPrefs(context: android.content.Context) {
+        _draftPrefs = context.getSharedPreferences("heft_drafts", android.content.Context.MODE_PRIVATE)
+    }
+
+    fun saveDraft(text: String) {
+        _draftPrefs?.edit()?.putString("feed_draft", text)?.apply()
+    }
+
+    fun loadDraft(): String = _draftPrefs?.getString("feed_draft", "") ?: ""
+
+    fun clearDraft() {
+        _draftPrefs?.edit()?.remove("feed_draft")?.apply()
+    }
+
     fun createPost(text: String, imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "") {
         if (uid.isEmpty()) return
         viewModelScope.launch {

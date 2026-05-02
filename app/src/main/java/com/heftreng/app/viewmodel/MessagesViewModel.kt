@@ -10,6 +10,7 @@ import com.heftreng.app.data.model.Message
 import com.heftreng.app.data.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
@@ -61,10 +62,22 @@ class MessagesViewModel @Inject constructor(
         .map { list -> list.sumOf { it.unreadCount } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
-    val uid get() = auth.currentUser?.uid ?: ""
+    private val _uid = MutableStateFlow(auth.currentUser?.uid ?: "")
+    val uid get() = _uid.value
 
     private var convListener: ListenerRegistration? = null
     private var msgListener : ListenerRegistration? = null
+
+    init {
+        // Auth state değişince uid güncelle ve conversations'ı yeniden dinle
+        auth.addAuthStateListener { firebaseAuth ->
+            val newUid = firebaseAuth.currentUser?.uid ?: ""
+            if (newUid != _uid.value) {
+                _uid.value = newUid
+                if (newUid.isNotEmpty()) listenConversations()
+            }
+        }
+    }
 
     // ── Konuşma listesi — realtime ────────────────────────────
     fun listenConversations() {
@@ -164,7 +177,6 @@ class MessagesViewModel @Inject constructor(
                     "image_url" to imageUrl,
                     "createdAt" to FieldValue.serverTimestamp(),
                     "read"      to false,
-                    "seen"      to false,   // XML: .where('seen','==',false) uyumu
                     "deleted"   to false,
                     "edited"    to false,
                     "liked_by"  to emptyList<String>(),
@@ -308,6 +320,32 @@ class MessagesViewModel @Inject constructor(
     fun loadConversations()             = listenConversations()
     fun loadMessages(convId: String)    = listenMessages(convId)
     fun subscribeToMessages(convId: String) = listenMessages(convId)
+
+    // ── Konuşma sil ──────────────────────────────────────────────────────────
+    // Tema: _msgDelConvConfirm — kendi mesajlarını sil, conv listesinden çıkar
+    fun deleteConversation(convId: String, onDone: () -> Unit = {}) {
+        if (uid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                // Sadece kendi gönderdiği mesajları sil (soft delete)
+                val msgs = firestore.collection("convMessages")
+                    .document(convId).collection("msgs")
+                    .whereEqualTo("senderUid", uid)
+                    .get().await()
+                val batch = firestore.batch()
+                msgs.documents.forEach { doc ->
+                    batch.update(doc.reference, mapOf(
+                        "deleted"   to true,
+                        "deletedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    ))
+                }
+                batch.commit().await()
+                // Lokal listeden kaldır
+                _conversations.value = _conversations.value.filter { it.id != convId }
+                onDone()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
 
     override fun onCleared() {
         super.onCleared()
