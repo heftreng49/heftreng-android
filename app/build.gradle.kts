@@ -21,6 +21,7 @@ android {
 
     signingConfigs {
         create("release") {
+            // GitHub Actions veya yerel ortamdaki Keystore ayarları
             storeFile = file(System.getenv("KEYSTORE_PATH") ?: "keystore.jks")
             storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
             keyAlias = System.getenv("KEY_ALIAS") ?: ""
@@ -50,10 +51,13 @@ android {
 }
 
 dependencies {
+    // Android Core & Lifecycle
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
+    
+    // Compose
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
@@ -63,10 +67,12 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     debugImplementation(libs.androidx.ui.tooling)
 
+    // Hilt (Dependency Injection)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
 
+    // Firebase
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
@@ -74,10 +80,15 @@ dependencies {
     implementation(libs.firebase.storage)
     implementation(libs.play.services.auth)
 
+    // Coroutines
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
 
+    // Networking & Images
     implementation(libs.coil.compose)
-
     implementation(libs.ktor.client.android)
+
+    // --- TEMAYI KURTARAN KRİTİK EKLEME ---
+    // Themes.xml'deki "Theme.Material3..." hatasını bu satır çözer.
+    implementation(libs.google.material)
 }
