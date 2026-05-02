@@ -1,5 +1,6 @@
-package com.heftreng.app
-import androidx.compose.foundation.layout.Box.ui.screens.search
+package com.heftreng.app.ui.screens.search
+
+import androidx.compose.foundation.layout.Box
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

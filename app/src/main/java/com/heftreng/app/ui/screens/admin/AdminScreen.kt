@@ -1,5 +1,6 @@
-package com.heftreng.app
-import androidx.compose.foundation.background.ui.screens.admin
+package com.heftreng.app.ui.screens.admin
+
+import androidx.compose.foundation.background
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn

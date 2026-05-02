@@ -1,5 +1,4 @@
-package com.heftreng.app
-import androidx.compose.foundation.layout.Box.ui.screens.kurdi
+package com.heftreng.app.ui.screens.kurdi
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
