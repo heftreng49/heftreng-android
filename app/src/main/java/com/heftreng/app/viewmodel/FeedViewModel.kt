@@ -172,6 +172,35 @@ class FeedViewModel @Inject constructor(
         }
     }
 
+    fun toggleCommentLike(postId: String, comment: Comment) {
+        if (uid.isEmpty()) return
+        val nowLiked = !comment.isLikedByMe
+        _comments.value = _comments.value.map {
+            if (it.id == comment.id) it.copy(
+                isLikedByMe = nowLiked,
+                likesCount  = it.likesCount + if (nowLiked) 1 else -1,
+            ) else it
+        }
+        viewModelScope.launch {
+            try {
+                val likeRef = firestore
+                    .collection("feed").document(postId)
+                    .collection("comments").document(comment.id)
+                    .collection("likes").document(uid)
+                val cmtRef  = firestore
+                    .collection("feed").document(postId)
+                    .collection("comments").document(comment.id)
+                if (nowLiked) {
+                    likeRef.set(mapOf("uid" to uid, "ts" to Timestamp.now())).await()
+                    cmtRef.update("likes", FieldValue.increment(1)).await()
+                } else {
+                    likeRef.delete().await()
+                    cmtRef.update("likes", FieldValue.increment(-1)).await()
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
     fun toggleSave(post: Post) {
         if (uid.isEmpty()) return
         val nowSaved = !post.isSavedByMe
@@ -283,7 +312,6 @@ class FeedViewModel @Inject constructor(
     }
 
     // ── Draft kaydet/yükle ────────────────────────────────────────────────────
-    // Tema: localStorage'da "hfDraft" — Android: SharedPreferences
     private var _draftPrefs: android.content.SharedPreferences? = null
 
     fun initDraftPrefs(context: android.content.Context) {
@@ -309,7 +337,6 @@ class FeedViewModel @Inject constructor(
                 val myPhoto = userDoc.getString("photoURL") ?: auth.currentUser?.photoUrl?.toString() ?: ""
                 val myUser  = userDoc.getString("username") ?: ""
                 val myEmail = userDoc.getString("email") ?: auth.currentUser?.email ?: ""
-                // Tema + Android uyumu — ikisini birden yaz
                 firestore.collection("feed").add(mapOf(
                     "uid"          to uid,
                     "name"         to myName,
@@ -349,7 +376,7 @@ class FeedViewModel @Inject constructor(
         }
     }
 
-    // ── Daha Fazla Yükle (pagination) ────────────────────────────────────────────
+    // ── Daha Fazla Yükle (pagination) ─────────────────────────────────────────
     fun loadMore() {
         val last = lastDoc ?: return
         if (_loadingMore.value || !_hasMore.value) return
@@ -412,14 +439,13 @@ class FeedViewModel @Inject constructor(
                 ?: auth.currentUser?.displayName ?: "Kullanıcı"
             val fromPhoto= userDoc.getString("photoURL") ?: ""
             val ico = when (type) { "like" -> "favorite"; "cmt" -> "chat_bubble"; "follow" -> "person_add"; "repost" -> "repeat"; else -> "notifications" }
-            // Tema alan yapısı
             firestore.collection("userNotifs").document(toUid).collection("msgs").add(mapOf(
                 "fromUid"   to uid,
                 "fromName"  to fromName,
                 "fromPhoto" to fromPhoto,
                 "type"      to type,
-                "feedId"    to feedId,   // tema: feedId
-                "postId"    to feedId,   // Android uyumu (NotificationsScreen bunu okuyor)
+                "feedId"    to feedId,
+                "postId"    to feedId,
                 "title"     to title,
                 "sub"       to sub,
                 "ico"       to ico,
