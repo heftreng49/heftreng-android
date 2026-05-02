@@ -1,0 +1,326 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════
+//  HEFTRENG — Firestore Security Rules
+//  Proje: bloggerheftreng
+//  Güncelleme: v5 — light/dark tema uyumlu, uygulama koleksiyonları eklendi
+//
+//  Değişiklikler (v4→v5):
+//  + books/chapters koleksiyonu eklendi (kitap sistemi)
+//  + serialLikes update kuralı eklendi
+//  + readingLists/books: coverImg, bg, title alanlarına izin verildi (zaten vardı)
+//  + sessions: güvenli biçimde açık bırakıldı (anonim dahil)
+// ═══════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuth() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+    function isAdmin() {
+      return isAuth() && request.auth.token.email == 'siirgibi49@gmail.com';
+    }
+    function onlyChanging(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+    function maxLen(field, n) {
+      return request.resource.data[field] is string
+          && request.resource.data[field].size() <= n;
+    }
+    function notBanned() {
+      return !exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('banned', false) == false;
+    }
+
+    // ─── USERS ────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read: if true;
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid) || isAdmin();
+      allow delete: if isOwner(uid) || isAdmin();
+      match /kf_progress/{doc} {
+        allow read:  if isOwner(uid) || isAdmin();
+        allow write: if isOwner(uid) || isAdmin();
+      }
+    }
+
+    // ─── FEED ─────────────────────────────────────────────────
+    match /feed/{postId} {
+      allow read: if true;
+      allow create: if isAuth() && notBanned()
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.likes == 0
+          && request.resource.data.saves == 0
+          && request.resource.data.cmtCount == 0;
+      allow update: if isAdmin()
+        || (isAuth() && notBanned() && resource.data.uid == request.auth.uid && onlyChanging(['text']))
+        || (isAuth() && onlyChanging(['likes']))
+        || (isAuth() && onlyChanging(['saves']))
+        || (isAuth() && onlyChanging(['cmtCount']))
+        || (isAuth() && onlyChanging(['repostsCount']));
+      allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
+
+      match /comments/{cmtId} {
+        allow read: if true;
+        allow create: if isAuth() && notBanned()
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.text is string
+            && request.resource.data.text.size() >= 1
+            && request.resource.data.text.size() <= 500;
+        allow update: if isAuth() && onlyChanging(['likes']);
+        allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
+      }
+    }
+
+    // ─── BLOG YORUMLARI ───────────────────────────────────────
+    match /comments/{postId} {
+      allow read:  if true;
+      allow write: if false;
+      match /msgs/{msgId} {
+        allow read: if true;
+        allow create: if (isAuth()
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.text is string
+            && request.resource.data.text.size() >= 1
+            && request.resource.data.text.size() <= 1000
+            && request.resource.data.likes == 0)
+            || (!isAuth()
+            && request.resource.data.uid is string
+            && request.resource.data.uid.matches('guest_[0-9]+')
+            && request.resource.data.name is string
+            && request.resource.data.name.size() >= 1
+            && request.resource.data.name.size() <= 60
+            && request.resource.data.text is string
+            && request.resource.data.text.size() >= 1
+            && request.resource.data.text.size() <= 1000
+            && request.resource.data.likes == 0
+            && request.resource.data.photoURL == '');
+        allow update: if isAuth() && onlyChanging(['likes']);
+        allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
+      }
+    }
+
+    // ─── LIKES & SAVES ────────────────────────────────────────
+    match /commentLikes/{likeId} {
+      allow read:   if isAuth();
+      allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+    }
+    match /chapterLikes/{likeId} {
+      allow read:   if true;
+      allow create: if isAuth() && notBanned()
+          && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+    }
+    match /feedLikes/{likeId} {
+      allow read:   if true;
+      allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+    }
+    match /feedSaves/{saveId} {
+      allow read:   if isAuth();
+      allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+    }
+    match /likes/{likeId} {
+      allow read:   if true;
+      allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+    }
+
+    // ─── FOLLOWS & POSTS ──────────────────────────────────────
+    match /follows/{followId} {
+      allow read: if true;
+      allow create: if isAuth() && notBanned()
+          && request.resource.data.fromUid == request.auth.uid
+          && request.resource.data.fromUid != request.resource.data.targetUid;
+      allow delete: if isAuth() && resource.data.fromUid == request.auth.uid;
+    }
+    match /posts/{postId} {
+      allow read:   if true;
+      allow create: if isAuth() && notBanned();
+      allow update: if isAdmin()
+          || (isAuth() && notBanned() && resource.data.uid == request.auth.uid)
+          || (isAuth() && onlyChanging(['likes']));
+      allow delete: if isAdmin()
+          || (isAuth() && resource.data.uid == request.auth.uid);
+    }
+
+    // ─── SERIALS & CHAPTERS ───────────────────────────────────
+    match /serials/{serialId} {
+      allow read: if true;
+      allow create: if isAuth() && notBanned()
+          && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
+
+      match /chapters/{chapterId} {
+        allow read: if true;
+        allow create: if isAuth() && notBanned()
+            && request.resource.data.uid == request.auth.uid;
+        allow update, delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
+
+        match /comments/{cmtId} {
+          allow read: if true;
+          allow create: if isAuth() && notBanned()
+              && request.resource.data.uid == request.auth.uid
+              && request.resource.data.text is string
+              && request.resource.data.text.size() >= 1
+              && request.resource.data.text.size() <= 500;
+          allow update: if false;
+          allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
+        }
+      }
+    }
+
+    // ─── KİTAPLAR (books koleksiyonu) ────────────────────────
+    // Android uygulamasındaki Books modeli ile uyumlu
+    match /books/{bookId} {
+      allow read: if true;
+      allow create: if isAuth() && notBanned()
+          && request.resource.data.uid == request.auth.uid;
+      allow update: if (isAuth() && notBanned() && resource.data.uid == request.auth.uid)
+          || isAdmin();
+      allow delete: if (isAuth() && resource.data.uid == request.auth.uid)
+          || isAdmin();
+
+      // Kitap bölümleri (books/{bookId}/chapters)
+      match /chapters/{chapterId} {
+        allow read: if true;
+        allow create: if isAuth() && notBanned()
+            && request.resource.data.uid == request.auth.uid;
+        allow update, delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
+      }
+    }
+
+    // ─── SERİ BEĞENİLERİ ──────────────────────────────────────
+    match /serialLikes/{likeId} {
+      allow read:   if true;
+      allow create: if isAuth() && notBanned()
+          && request.resource.data.uid == request.auth.uid;
+      allow update: if isAuth() && resource.data.uid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+    }
+
+    // ─── NOTIFICATIONS ────────────────────────────────────────
+    match /notifications/{notifId} {
+      allow read:   if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth() && onlyChanging(['read']);
+      allow delete: if isAuth() || isAdmin();
+    }
+    match /userNotifs/{uid} {
+      allow read:  if isOwner(uid) || isAdmin();
+      allow write: if isAdmin();
+      match /msgs/{notifId} {
+        allow read:   if isOwner(uid) || isAdmin();
+        allow create: if isAuth();
+        allow update: if isOwner(uid) && onlyChanging(['read']);
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+    }
+
+    // ─── SESSIONS ─────────────────────────────────────────────
+    match /sessions/{sessionId} {
+      allow read, delete: if isAdmin();
+      allow create: if true;
+      allow update: if true;
+    }
+
+    match /pendingPosts/{postId} {
+      allow read:   if isAdmin() || (isAuth() && resource.data.authorId == request.auth.uid);
+      allow create: if isAuth() && request.resource.data.authorId == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if isAdmin() || (isAuth() && resource.data.authorId == request.auth.uid);
+    }
+
+    // ─── CONVERSATIONS ────────────────────────────────────────
+    match /conversations/{convId} {
+      allow read:   if isAuth() && request.auth.uid in resource.data.participants;
+      allow create: if isAuth()
+          && request.auth.uid in request.resource.data.participants;
+      allow update: if isAuth() && request.auth.uid in resource.data.participants;
+      allow delete: if isAdmin();
+
+      match /msgs/{msgId} {
+        allow read, write: if isAuth()
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants;
+      }
+      match /typing/{uid} {
+        allow read:  if isAuth();
+        allow write: if isOwner(uid);
+      }
+    }
+
+    match /convMessages/{convId} {
+      allow read, write: if false;
+      match /msgs/{msgId} {
+        allow read: if isAuth()
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants;
+        allow create: if isAuth()
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants
+            && request.resource.data.senderUid == request.auth.uid;
+        allow update: if isAuth()
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants
+            && onlyChanging(['seen', 'seenAt', 'seenByPhoto', 'seenByName',
+                             'read_at', 'readAt', 'deleted', 'deletedAt',
+                             'read',        // okundu (Android)
+                             'liked_by',    // beğeni toggle (Android + Web)
+                             'edited', 'text']);  // mesaj düzenleme
+        allow delete: if isAdmin();
+      }
+    }
+
+    // ─── PRESENCE & TYPING ────────────────────────────────────
+    match /presence/{uid} {
+      allow read:   if isAuth();
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid)
+          && onlyChanging(['online', 'lastSeen', 'uid']);
+      allow delete: if isOwner(uid) || isAdmin();
+    }
+    match /typing/{docId} {
+      allow read:   if isAuth();
+      allow create: if isAuth()
+          && request.resource.data.uid == request.auth.uid;
+      allow update: if isAuth()
+          && resource.data.uid == request.auth.uid;
+      allow delete: if isAuth()
+          && resource.data.uid == request.auth.uid;
+    }
+
+    // ─── OKUMA LİSTESİ ────────────────────────────────────────
+    match /readingLists/{uid} {
+      allow read: if true;
+      allow write: if false;
+      match /books/{sid} {
+        allow read: if true;
+        allow create: if isOwner(uid)
+            && request.resource.data.sid is string
+            && request.resource.data.status in ['okuyorum','okumak_istiyorum','okudum','biraktim'];
+        allow update: if isOwner(uid)
+            && onlyChanging(['status', 'updatedAt', 'title', 'coverImg', 'bg']);
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+    }
+
+    // ─── KURDİ FÊRBIBE ────────────────────────────────────────
+    match /kf_units/{id}      { allow read: if true; allow write: if isAdmin(); }
+    match /kf_lessons/{id}    { allow read: if true; allow write: if isAdmin(); }
+    match /kf_words/{id}      { allow read: if true; allow write: if isAdmin(); }
+    match /kf_vocab/{id}      { allow read: if true; allow write: if isAdmin(); }
+    match /kf_sentences/{id}  { allow read: if true; allow write: if isAdmin(); }
+    match /kf_exercises/{id}  { allow read: if true; allow write: if isAdmin(); }
+    match /kf_verbs/{id}      { allow read: if true; allow write: if isAdmin(); }
+    match /kf_grammar/{id}    { allow read: if true; allow write: if isAdmin(); }
+    match /kf_cats/{id}       { allow read: if true; allow write: if isAdmin(); }
+
+    match /kf_reports/{reportId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if isAuth() && maxLen('reason', 500);
+    }
+  }
+}
