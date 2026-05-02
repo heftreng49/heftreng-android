@@ -163,11 +163,13 @@ class AdminViewModel @Inject constructor(
                 val users   = firestore.collection("users").get().await().size()
                 val posts   = firestore.collection("feed").limit(500).get().await().size()
                 val serials = firestore.collection("serials").get().await().size()
+                val books   = firestore.collection("books").get().await().size()
                 val pending = firestore.collection("pendingPosts").get().await().size()
                 _stats.value = mapOf(
                     "users"   to users,
                     "posts"   to posts,
                     "serials" to serials,
+                    "books"   to books,
                     "pending" to pending,
                 )
             } catch (e: Exception) { e.printStackTrace() }

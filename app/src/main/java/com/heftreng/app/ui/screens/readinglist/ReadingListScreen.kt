@@ -118,7 +118,13 @@ fun ReadingListScreen(
                             ReadingListBookCard(
                                 entry    = entry,
                                 status   = selectedStatus,
-                                onClick  = { navController.navigate("serial/${entry.sid}") },
+                                onClick  = {
+                            if (entry.sid.startsWith("book_")) {
+                                navController.navigate("book/${entry.sid.removePrefix("book_")}")
+                            } else {
+                                navController.navigate("serial/${entry.sid}")
+                            }
+                        },
                                 onRemove = { vm.remove(entry.sid) },
                             )
                         }

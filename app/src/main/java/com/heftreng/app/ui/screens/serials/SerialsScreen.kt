@@ -26,6 +26,7 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.data.model.Chapter
 import com.heftreng.app.data.model.Serial
+import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.SerialsViewModel
 
@@ -44,7 +45,6 @@ fun SerialsScreen(
     LaunchedEffect(Unit) { vm.loadSerials() }
 
     Scaffold(
-        modifier = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(
@@ -206,17 +206,20 @@ fun SerialCard(
 fun SerialDetailScreen(
     serialId      : String,
     navController : NavController,
-    vm            : SerialsViewModel = hiltViewModel(),
+    vm            : SerialsViewModel  = hiltViewModel(),
+    socialVm      : com.heftreng.app.viewmodel.SocialViewModel = hiltViewModel(),
 ) {
     val serial   by vm.selectedSerial.collectAsState()
     val chapters by vm.chapters.collectAsState()
     val loading  by vm.loading.collectAsState()
+    val likers   by socialVm.likers.collectAsState()
+    val socialLoading by socialVm.loading.collectAsState()
     var showAddChapter by remember { mutableStateOf(false) }
+    var showLikers by remember { mutableStateOf(false) }
 
     LaunchedEffect(serialId) { vm.loadSerial(serialId) }
 
     Scaffold(
-        modifier = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(
@@ -243,7 +246,14 @@ fun SerialDetailScreen(
             // Kapak + bilgi başlığı
             item {
                 serial?.let { s ->
-                    SerialHeader(s, onLike = { vm.toggleLikeSerial(s) })
+                    SerialHeader(
+                        serial       = s,
+                        onLike       = { vm.toggleLikeSerial(s) },
+                        onShowLikers = {
+                            socialVm.loadSerialLikers(s.id)
+                            showLikers = true
+                        },
+                    )
                 }
             }
 
@@ -275,6 +285,16 @@ fun SerialDetailScreen(
         }
     }
 
+    if (showLikers) {
+        LikerListSheet(
+            title     = "Beğenenler",
+            likers    = likers,
+            loading   = socialLoading,
+            onDismiss = { showLikers = false; socialVm.clearLikers() },
+            onProfile = { uid -> showLikers = false; navController.navigate("profile/$uid") },
+        )
+    }
+
     if (showAddChapter) {
         AddChapterDialog(
             onDismiss = { showAddChapter = false },
@@ -287,7 +307,7 @@ fun SerialDetailScreen(
 }
 
 @Composable
-private fun SerialHeader(serial: Serial, onLike: () -> Unit) {
+private fun SerialHeader(serial: Serial, onLike: () -> Unit, onShowLikers: (() -> Unit)? = null) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -377,7 +397,6 @@ fun ChapterReadScreen(
     LaunchedEffect(chapterId) { vm.loadChapter(serialId, chapterId) }
 
     Scaffold(
-        modifier = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(

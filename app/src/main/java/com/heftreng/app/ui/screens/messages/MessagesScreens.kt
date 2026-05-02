@@ -36,6 +36,7 @@ import com.heftreng.app.data.model.Message
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.MessagesViewModel
+import com.heftreng.app.viewmodel.PresenceViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -272,7 +273,8 @@ fun MessageDetailScreen(
     convId       : String,
     navController: NavController,
     language     : String = "tr",
-    vm           : MessagesViewModel = hiltViewModel(),
+    vm           : MessagesViewModel  = hiltViewModel(),
+    presenceVm   : PresenceViewModel  = hiltViewModel(),
 ) {
     val messages      by vm.messages.collectAsState()
     val otherUser     by vm.otherUser.collectAsState()
@@ -295,7 +297,19 @@ fun MessageDetailScreen(
         vm.listenMessages(convId)
         
         vm.loadOtherUser(convId)
+        presenceVm.goOnline()
     }
+
+    val otherUidForPresence = remember(otherUser) { otherUser?.uid ?: "" }
+    LaunchedEffect(otherUidForPresence) {
+        if (otherUidForPresence.isNotEmpty()) {
+            presenceVm.listenPresence(otherUidForPresence)
+            presenceVm.listenTyping(convId, otherUidForPresence)
+        }
+    }
+    val isOtherOnline = presenceVm.isOnline(otherUser?.uid ?: "")
+    val isOtherTyping = presenceVm.isTyping(otherUser?.uid ?: "")
+
     LaunchedEffect(conversations) {
         if (conversations.isNotEmpty() && otherUser == null) vm.loadOtherUser(convId)
     }
@@ -341,13 +355,15 @@ fun MessageDetailScreen(
                                 else Text(otherUser?.displayName?.firstOrNull()?.uppercase() ?: "?",
                                     color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
-                            // Tema: .msg-chat-hd-online — yeşil nokta
-                            Box(
-                                modifier = Modifier.size(9.dp).clip(CircleShape)
-                                    .background(Color(0xFF22C55E))
-                                    .border(2.dp, HeftSurface, CircleShape)
-                                    .align(Alignment.BottomEnd)
-                            )
+                            // Online durumu — gerçek presence
+                            if (isOtherOnline) {
+                                Box(
+                                    modifier = Modifier.size(9.dp).clip(CircleShape)
+                                        .background(Color(0xFF22C55E))
+                                        .border(2.dp, HeftSurface, CircleShape)
+                                        .align(Alignment.BottomEnd)
+                                )
+                            }
                         }
                         Column {
                             // Tema: .msg-chat-hd-name
@@ -359,9 +375,21 @@ fun MessageDetailScreen(
                                 maxLines   = 1,
                                 overflow   = TextOverflow.Ellipsis,
                             )
-                            // Tema: .msg-chat-hd-sub.online
-                            Text(if (language == "ku") "serhêl" else "çevrimiçi",
-                                color = Color(0xFF22C55E), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            // Gerçek presence + typing durumu
+                            when {
+                                isOtherTyping -> Text(
+                                    if (language == "ku") "dinivîse..." else "yazıyor...",
+                                    color = Amber, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                                )
+                                isOtherOnline -> Text(
+                                    if (language == "ku") "serhêl" else "çevrimiçi",
+                                    color = Color(0xFF22C55E), fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                                )
+                                else -> Text(
+                                    if (language == "ku") "nediyar" else "çevrimdışı",
+                                    color = Muted, fontSize = 11.sp,
+                                )
+                            }
                         }
                     }
                 },
@@ -440,7 +468,9 @@ fun MessageDetailScreen(
                         // Tema: .msg-inp-wrap + .msg-inp
                         OutlinedTextField(
                             value         = inputText,
-                            onValueChange = { inputText = it },
+                            onValueChange = { inputText = it
+                                presenceVm.setTyping(convId, it.isNotEmpty())
+                            },
                             placeholder   = {
                                 Text(if (language == "ku") "Peyamê binivîse..." else "Mesaj yaz...",
                                     color = Muted, fontSize = 13.sp)

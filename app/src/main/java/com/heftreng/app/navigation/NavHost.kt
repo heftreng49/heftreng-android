@@ -404,6 +404,7 @@ fun DrawerContent(
                 Triple(Icons.Outlined.DynamicFeed,    "Nivîs / Feed",           Screen.Feed.route),
                 Triple(Icons.Outlined.Search,         "Bigere / Ara",           Screen.Search.route),
                 Triple(Icons.Outlined.AutoStories,    "Pirtûk / Seriler",       Screen.Serials.route),
+                Triple(Icons.Outlined.MenuBook,       "Kitaplar / Pirtûk",      Screen.Books.route),
                 Triple(Icons.Outlined.Translate,      "Kurdî Fêrbibe",          Screen.Kurdi.route),
                 Triple(Icons.Outlined.NotificationsNone, "Agahdarî / Bildirimler (${if (unreadNotif>0) unreadNotif else ""})", Screen.Notifications.route),
                 Triple(Icons.Outlined.ChatBubbleOutline, "Peyam / Mesajlar (${if (totalUnread>0) totalUnread else ""})", Screen.Messages.route),

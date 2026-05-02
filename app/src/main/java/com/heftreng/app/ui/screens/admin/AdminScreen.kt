@@ -300,6 +300,7 @@ fun AdminScreen(
                             "Toplam Kullanıcı" to (stats["users"]?.toString() ?: "—"),
                             "Toplam Gönderi"   to (stats["posts"]?.toString() ?: "—"),
                             "Toplam Seri"      to (stats["serials"]?.toString() ?: "—"),
+                            "Toplam Kitap"     to (stats["books"]?.toString() ?: "—"),
                             "Bekleyen"         to (stats["pending"]?.toString() ?: "—"),
                         ).forEach { (label, value) ->
                             Row(
