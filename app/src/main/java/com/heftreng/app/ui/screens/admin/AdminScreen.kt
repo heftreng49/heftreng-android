@@ -69,6 +69,7 @@ fun AdminScreen(
     }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(

@@ -53,6 +53,7 @@ fun BooksScreen(
     LaunchedEffect(Unit) { vm.loadBooks() }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(
@@ -131,6 +132,7 @@ fun BookDetailScreen(
     LaunchedEffect(bookId) { vm.loadBook(bookId) }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(
@@ -235,6 +237,7 @@ fun BookChapterReadScreen(
     val nextChapter  = if (currentIndex >= 0 && currentIndex < chapters.size - 1) chapters[currentIndex + 1] else null
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(

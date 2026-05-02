@@ -44,6 +44,7 @@ fun SerialsScreen(
     LaunchedEffect(Unit) { vm.loadSerials() }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(
@@ -215,6 +216,7 @@ fun SerialDetailScreen(
     LaunchedEffect(serialId) { vm.loadSerial(serialId) }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(
@@ -375,6 +377,7 @@ fun ChapterReadScreen(
     LaunchedEffect(chapterId) { vm.loadChapter(serialId, chapterId) }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(

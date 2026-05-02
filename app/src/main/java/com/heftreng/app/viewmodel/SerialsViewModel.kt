@@ -201,6 +201,68 @@ class SerialsViewModel @Inject constructor(
         }
     }
 
+    // ── Bölüm beğeni toggle ────────────────────────────────────────────────────
+    // Tema: chapterLikes/{chId}_{uid} — {chapterId, serialId, uid, ts}
+    fun toggleLikeChapter(serialId: String, chapterId: String) {
+        if (uid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val docId = "${chapterId}_$uid"
+                val ref   = firestore.collection("chapterLikes").document(docId)
+                val chRef = firestore.collection("serials").document(serialId)
+                    .collection("chapters").document(chapterId)
+                val exists = ref.get().await().exists()
+                if (exists) {
+                    ref.delete().await()
+                    chRef.update("likes", com.google.firebase.firestore.FieldValue.increment(-1)).await()
+                } else {
+                    ref.set(mapOf(
+                        "chapterId" to chapterId,
+                        "serialId"  to serialId,
+                        "uid"       to uid,
+                        "ts"        to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    )).await()
+                    chRef.update("likes", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // Bölüm beğeni durumu sorgula
+    fun isChapterLiked(chapterId: String, callback: (Boolean) -> Unit) {
+        if (uid.isEmpty()) { callback(false); return }
+        viewModelScope.launch {
+            try {
+                val exists = firestore.collection("chapterLikes")
+                    .document("${chapterId}_$uid").get().await().exists()
+                callback(exists)
+            } catch (e: Exception) { callback(false) }
+        }
+    }
+
+    // ── Bölüm okuma ilerlemesi ──────────────────────────────────────────────
+    // Tema: localStorage["hf_rp_"+sid+"_"+chId] = Math.round(pct*1000)
+    // Android: SharedPreferences aynı mantıkla
+    private var _readPrefs: android.content.SharedPreferences? = null
+
+    fun initReadPrefs(context: android.content.Context) {
+        _readPrefs = context.getSharedPreferences("heft_read_progress", android.content.Context.MODE_PRIVATE)
+    }
+
+    fun saveReadProgress(serialId: String, chapterId: String, scrollPct: Float) {
+        val pct = (scrollPct * 1000).toInt().coerceIn(0, 1000)
+        _readPrefs?.edit()?.putInt("rp_${serialId}_$chapterId", pct)?.apply()
+    }
+
+    fun loadReadProgress(serialId: String, chapterId: String): Float {
+        val raw = _readPrefs?.getInt("rp_${serialId}_$chapterId", 0) ?: 0
+        return raw / 1000f
+    }
+
+    fun clearReadProgress(serialId: String, chapterId: String) {
+        _readPrefs?.edit()?.remove("rp_${serialId}_$chapterId")?.apply()
+    }
+
     private suspend fun loadLikedSerials() {
         try {
             likedSerialIds = firestore.collection("serialLikes").whereEqualTo("uid", uid)

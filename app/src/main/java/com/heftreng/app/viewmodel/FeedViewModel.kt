@@ -81,6 +81,14 @@ class FeedViewModel @Inject constructor(
                         // Tema: "imgUrl", Android: "imageURL"
                         val imageURL    = (d["imageURL"] as? String)?.takeIf { it.isNotBlank() }
                             ?: d["imgUrl"] as? String ?: ""
+                        val ytVid       = d["ytVid"]       as? String ?: ""
+                        val repostTitle = d["repostTitle"] as? String ?: ""
+                        val repostUrl   = d["repostUrl"]   as? String ?: ""
+                        val repostImg   = d["repostImg"]   as? String ?: ""
+                        val repostType  = d["repostType"]  as? String ?: ""
+                        val repostId    = d["repostId"]    as? String ?: ""
+                        @Suppress("UNCHECKED_CAST")
+                        val badges      = (d["badges"] as? List<*>)?.filterIsInstance<String>() ?: emptyList<String>()
                         Post(
                             id            = doc.id,
                             uid           = d["uid"]      as? String ?: "",
@@ -88,7 +96,16 @@ class FeedViewModel @Inject constructor(
                             username      = d["username"] as? String ?: "",
                             photoURL      = d["photoURL"] as? String ?: "",
                             text          = d["text"]     as? String ?: "",
+                            name          = d["name"]      as? String ?: displayName,
+                            imgUrl        = d["imgUrl"]    as? String ?: "",
                             imageURL      = imageURL,
+                            ytVid         = ytVid,
+                            badges        = badges,
+                            repostTitle   = repostTitle,
+                            repostUrl     = repostUrl,
+                            repostImg     = repostImg,
+                            repostType    = repostType,
+                            repostId      = repostId,
                             likesCount    = (d["likes"]    as? Long)?.toInt() ?: 0,
                             commentsCount = (d["cmtCount"] as? Long)?.toInt() ?: 0,
                             repostsCount  = (d["reposts"]  as? Long)?.toInt() ?: 0,
@@ -195,40 +212,6 @@ class FeedViewModel @Inject constructor(
                         likesCount  = (d["likes"]   as? Long)?.toInt() ?: 0,
                         ts          = d["ts"]       as? Timestamp,
                     )
-                    // Note: isLikedByMe for comments loaded lazily via SocialViewModel
-                }
-            } catch (e: Exception) { e.printStackTrace() }
-        }
-    }
-
-    fun toggleCommentLike(postId: String, comment: Comment) {
-        if (uid.isEmpty()) return
-        val nowLiked = !comment.isLikedByMe
-        _comments.value = _comments.value.map {
-            if (it.id == comment.id) it.copy(
-                isLikedByMe = nowLiked,
-                likesCount  = it.likesCount + if (nowLiked) 1 else -1,
-            ) else it
-        }
-        viewModelScope.launch {
-            try {
-                val likeRef = firestore.collection("commentLikes").document("${comment.id}_$uid")
-                val cmtRef  = firestore.collection("feed").document(postId)
-                    .collection("comments").document(comment.id)
-                if (nowLiked) {
-                    val myName  = auth.currentUser?.displayName ?: ""
-                    val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
-                    likeRef.set(mapOf(
-                        "uid"      to uid,
-                        "cmtId"    to comment.id,  // tema: cmtId
-                        "name"     to myName,
-                        "photoURL" to myPhoto,
-                        "ts"       to com.google.firebase.Timestamp.now(),
-                    )).await()
-                    cmtRef.update("likes", com.google.firebase.firestore.FieldValue.increment(1)).await()
-                } else {
-                    likeRef.delete().await()
-                    cmtRef.update("likes", com.google.firebase.firestore.FieldValue.increment(-1)).await()
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -297,6 +280,24 @@ class FeedViewModel @Inject constructor(
                 if (post.uid != uid) sendNotif(post.uid, "repost", "$myName gönderini paylaştı", post.text.take(60), post.id)
             } catch (e: Exception) { e.printStackTrace() }
         }
+    }
+
+    // ── Draft kaydet/yükle ────────────────────────────────────────────────────
+    // Tema: localStorage'da "hfDraft" — Android: SharedPreferences
+    private var _draftPrefs: android.content.SharedPreferences? = null
+
+    fun initDraftPrefs(context: android.content.Context) {
+        _draftPrefs = context.getSharedPreferences("heft_drafts", android.content.Context.MODE_PRIVATE)
+    }
+
+    fun saveDraft(text: String) {
+        _draftPrefs?.edit()?.putString("feed_draft", text)?.apply()
+    }
+
+    fun loadDraft(): String = _draftPrefs?.getString("feed_draft", "") ?: ""
+
+    fun clearDraft() {
+        _draftPrefs?.edit()?.remove("feed_draft")?.apply()
     }
 
     fun createPost(text: String, imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "") {

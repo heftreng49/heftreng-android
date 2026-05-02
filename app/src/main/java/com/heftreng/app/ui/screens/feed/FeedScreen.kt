@@ -121,7 +121,7 @@ fun FeedScreen(
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Background)) {
+    Box(modifier = Modifier.fillMaxSize().background(Background).imePadding()) {
         if (loading && posts.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Primary)

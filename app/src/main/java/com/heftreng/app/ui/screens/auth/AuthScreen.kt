@@ -62,7 +62,8 @@ fun AuthScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background),
+            .background(Background)
+            .imePadding(),
         contentAlignment = Alignment.Center,
     ) {
         Column(

@@ -80,6 +80,7 @@ fun ProfileScreen(
     }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(
@@ -513,6 +514,7 @@ fun EditProfileScreen(
     LaunchedEffect(Unit) { vm.load("me") }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(

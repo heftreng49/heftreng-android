@@ -30,6 +30,12 @@ data class Post(
     val username      : String     = "",
     val photoURL      : String     = "",
     val text          : String     = "",
+    val imgUrl        : String     = "",   // tema: imgUrl
+    val ytVid         : String     = "",   // tema: ytVid
+    val badges        : List<String> = emptyList(),
+    val repostTitle   : String     = "",
+    val repostUrl     : String     = "",
+    val repostImg     : String     = "",
     val imageURL      : String     = "",
     val likesCount    : Int        = 0,
     val commentsCount : Int        = 0,
@@ -92,6 +98,20 @@ data class Notification(
     val url       : String     = "",
     val read      : Boolean    = false,
     val ts        : Timestamp? = null,
+)
+
+// ─── TAKİP ─────────────────────────────────────────────
+// Firestore: follows/{id}
+// Alanlar: fromUid, fromName, fromPhoto, targetUid, targetName, targetPhoto, ts
+data class FollowRelation(
+    val id          : String     = "",
+    val fromUid     : String     = "",
+    val fromName    : String     = "",
+    val fromPhoto   : String     = "",
+    val targetUid   : String     = "",
+    val targetName  : String     = "",
+    val targetPhoto : String     = "",
+    val ts          : Timestamp? = null,
 )
 
 // ─── MESAJ / KONUŞMA ───────────────────────────────────

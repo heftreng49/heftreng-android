@@ -57,6 +57,7 @@ fun PostDetailScreen(
     LaunchedEffect(postId) { viewModel.loadComments(postId) }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(

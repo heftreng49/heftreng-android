@@ -1,5 +1,9 @@
 package com.heftreng.app.ui.screens.messages
 
+import androidx.compose.material3.AlertDialog
+
+import androidx.compose.foundation.layout.imeNestedScroll
+
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -38,7 +42,7 @@ import java.util.*
 // ── Konuşma Listesi ─────────────────────────────────────────────────────────
 // Tema: .msgp-wrap, .msgp-hd, .msgp-conv-item, .msgp-conv-av, .msgp-unread-dot
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ConversationsScreen(
     navController: NavController,
@@ -50,7 +54,10 @@ fun ConversationsScreen(
     var searchQuery   by remember { mutableStateOf("") }
     var showSearch    by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { vm.listenConversations() }
+    val uid = vm.uid
+    LaunchedEffect(uid) {
+        if (uid.isNotEmpty()) vm.listenConversations()
+    }
 
     val filtered = if (searchQuery.isBlank()) conversations
     else conversations.filter {
@@ -137,6 +144,29 @@ fun ConversationsScreen(
                 }
             }
             else -> {
+                var convToDelete by remember { mutableStateOf<String?>(null) }
+
+                // Sil onay dialog'u
+                convToDelete?.let { cid ->
+                    AlertDialog(
+                        onDismissRequest = { convToDelete = null },
+                        title = { Text(if (language == "ku") "Sohbet Sil" else "Sohbeti Sil", color = OnBackground) },
+                        text  = { Text(if (language == "ku") "Ev sohbet bê silîn?" else "Bu sohbeti silmek istiyor musun?", color = Muted) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                vm.deleteConversation(cid)
+                                convToDelete = null
+                            }) { Text(if (language == "ku") "Jêbibe" else "Sil", color = MaterialTheme.colorScheme.error) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { convToDelete = null }) {
+                                Text(if (language == "ku") "Betal" else "İptal", color = Muted)
+                            }
+                        },
+                        containerColor = HeftSurface,
+                    )
+                }
+
                 LazyColumn(
                     modifier       = Modifier.fillMaxSize().padding(padding),
                     contentPadding = PaddingValues(bottom = 80.dp),
@@ -153,7 +183,10 @@ fun ConversationsScreen(
                                 .then(
                                     if (unread) Modifier.startBorder(Primary, 3.dp) else Modifier
                                 )
-                                .clickable { navController.navigate(Screen.MessageDetail.go(conv.id)) }
+                                .combinedClickable(
+                                    onClick      = { navController.navigate(Screen.MessageDetail.go(conv.id)) },
+                                    onLongClick  = { convToDelete = conv.id },
+                                )
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -233,7 +266,7 @@ fun ConversationsScreen(
 // ── Mesaj Detay Ekranı ────────────────────────────────────────────────────────
 // Tema: .msg-chat-ov, .msg-chat-hd, .msg-chat-body, .msg-inp-bar
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun MessageDetailScreen(
     convId       : String,
@@ -269,11 +302,21 @@ fun MessageDetailScreen(
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
+    // Klavye açıldığında da son mesaja scroll et
+    val imeVisible = androidx.compose.foundation.layout.WindowInsets.ime
+        .getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+    LaunchedEffect(imeVisible) {
+        if (imeVisible && messages.isNotEmpty()) {
+            kotlinx.coroutines.delay(100)
+            listState.animateScrollToItem(messages.size - 1)
+        }
+    }
     LaunchedEffect(editMsg) {
         if (editMsg != null) inputText = editMsg!!.text
     }
 
     Scaffold(
+        modifier       = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             // Tema: .msg-chat-hd
@@ -460,9 +503,13 @@ fun MessageDetailScreen(
             // Tema: .msg-chat-body
             LazyColumn(
                 state               = listState,
-                modifier            = Modifier.fillMaxSize().padding(padding),
+                modifier            = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .imeNestedScroll(),
                 contentPadding      = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(3.dp),
+                reverseLayout       = false,
             ) {
                 items(messages, key = { it.id }) { msg ->
                     val isMine = msg.senderId == vm.uid

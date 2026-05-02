@@ -51,6 +51,7 @@ android {
 }
 
 dependencies {
+    implementation("com.google.android.material:material:1.11.0")
     // Android Core & Lifecycle
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
