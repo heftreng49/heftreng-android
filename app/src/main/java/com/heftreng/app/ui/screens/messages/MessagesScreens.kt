@@ -44,6 +44,7 @@ import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 fun ConversationsScreen(
     navController: NavController,
     language     : String = "tr",
@@ -268,6 +269,7 @@ fun ConversationsScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 fun MessageDetailScreen(
     convId       : String,
     navController: NavController,

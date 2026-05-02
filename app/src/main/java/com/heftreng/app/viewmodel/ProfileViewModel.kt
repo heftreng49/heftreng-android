@@ -144,14 +144,14 @@ class ProfileViewModel @Inject constructor(
                     val me = firestore.collection("users").document(myUid).get().await()
                     val myName  = me.getString("name") ?: me.getString("displayName") ?: ""
                     val myPhoto = me.getString("photoURL") ?: ""
-                    val tgt = _profile.value
+                    val tgt = _user.value
                     followDoc.set(mapOf(
                         "fromUid"    to myUid,
                         "fromName"   to myName,
                         "fromPhoto"  to myPhoto,
                         "targetUid"  to targetUid,
                         "targetName" to (tgt?.name ?: tgt?.displayName ?: ""),
-                        "targetPhoto"to (tgt?.photoURL ?: ""),
+                        "targetPhoto" to (tgt?.photoURL ?: ""),
                         "ts"         to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                     )).await()
                     _isFollowing.value = true

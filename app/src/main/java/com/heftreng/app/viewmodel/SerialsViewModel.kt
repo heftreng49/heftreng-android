@@ -215,9 +215,6 @@ class SerialsViewModel @Inject constructor(
                 if (exists) {
                     ref.delete().await()
                     chRef.update("likes", com.google.firebase.firestore.FieldValue.increment(-1)).await()
-                    _currentChapter.value = _currentChapter.value?.let { ch ->
-                        if (ch.id == chapterId) ch else ch
-                    }
                 } else {
                     ref.set(mapOf(
                         "chapterId" to chapterId,
