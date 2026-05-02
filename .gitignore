@@ -4,3 +4,6 @@ build/
 local.properties
 *.jks
 app/google-services.json
+firebase-debug.log
+*.bak
+setup_chat.sh
