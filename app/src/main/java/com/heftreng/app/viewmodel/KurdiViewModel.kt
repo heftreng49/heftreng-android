@@ -60,19 +60,32 @@ class KurdiViewModel @Inject constructor(
                 // Eski web verisi fallback: "kf_xp","kf_streak" — her ikisini de oku
                 if (uid.isNotEmpty()) {
                     val userDoc = firestore.collection("users").document(uid).get().await()
-                    val xpVal   = ((userDoc.getLong("xp") ?: 0) +
-                                   (userDoc.getLong("kf_xp") ?: 0)).toInt()
+                    // XML: kf_xp alanı, Android: xp alanı — ikisinin büyüğünü al
+                    val xpVal   = maxOf(
+                        (userDoc.getLong("xp")    ?: 0).toInt(),
+                        (userDoc.getLong("kf_xp") ?: 0).toInt(),
+                    )
                     _xp.value     = xpVal
                     _streak.value = ((userDoc.getLong("streak") ?: 0)
                         .coerceAtLeast(userDoc.getLong("kf_streak") ?: 0)).toInt()
                     _level.value  = (userDoc.getLong("level") ?: 1).toInt().coerceAtLeast((xpVal / 100) + 1)
                 }
 
-                // Tamamlanan dersler — tema: users/{uid}/kf_progress
+                // Tamamlanan dersler — iki kaynaktan topla:
+                // 1) users/{uid}.kf_done array (XML temasıyla uyumlu)
+                // 2) users/{uid}/kf_progress/{id} subcollection (Android)
                 val completedIds = if (uid.isNotEmpty()) {
-                    firestore.collection("users").document(uid)
-                        .collection("kf_progress").get().await()
-                        .documents.map { it.id }.toSet()
+                    val userDoc = firestore.collection("users").document(uid).get().await()
+                    // kf_done array — XML teması bu alanı kullanıyor
+                    val kfDoneArray = (userDoc.get("kf_done") as? List<*>)
+                        ?.filterIsInstance<String>()?.toSet() ?: emptySet()
+                    // kf_progress subcollection — Android tarafı
+                    val kfProgressIds = try {
+                        firestore.collection("users").document(uid)
+                            .collection("kf_progress").get().await()
+                            .documents.map { it.id }.toSet()
+                    } catch (_: Exception) { emptySet() }
+                    kfDoneArray + kfProgressIds
                 } else emptySet()
 
                 // Ders listesi — tema: kf_lessons koleksiyonu
@@ -128,16 +141,18 @@ class KurdiViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                // Tema: users/{uid}/kf_progress/{lessonId}
+                // 1) users/{uid}/kf_progress/{lessonId} — Android yapısı
                 firestore.collection("users").document(uid)
                     .collection("kf_progress").document(lessonId)
                     .set(mapOf("ts" to Timestamp.now(), "xpEarned" to gained)).await()
 
-                // users/{uid} güncelle — hem yeni (xp) hem eski web (kf_xp) alanlarını yaz
+                // 2) kf_done array — XML temasıyla uyum (FieldValue.arrayUnion)
+                // 3) kf_xp, kf_streak — XML teması bu alanları kullanıyor
                 firestore.collection("users").document(uid).update(mapOf(
                     "xp"     to newXp,
-                    "kf_xp"  to newXp,
+                    "kf_xp"  to newXp,        // XML tema uyumu
                     "level"  to newLevel,
+                    "kf_done" to com.google.firebase.firestore.FieldValue.arrayUnion(lessonId),
                 )).await()
 
                 // Streak güncelle
@@ -158,10 +173,10 @@ class KurdiViewModel @Inject constructor(
                 else                             -> _streak.value
             }
             _streak.value = newStreak
-            // kf_streak de yaz — web temasıyla uyum
+            // kf_streak de yaz — XML temasıyla uyum
             firestore.collection("users").document(uid).update(mapOf(
                 "streak"        to newStreak,
-                "kf_streak"     to newStreak,
+                "kf_streak"     to newStreak,  // XML: localStorage.setItem('kf_streak',...)
                 "lastKurdiDate" to now,
             )).await()
         } catch (e: Exception) { e.printStackTrace() }

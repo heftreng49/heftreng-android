@@ -164,6 +164,7 @@ class MessagesViewModel @Inject constructor(
                     "image_url" to imageUrl,
                     "createdAt" to FieldValue.serverTimestamp(),
                     "read"      to false,
+                    "seen"      to false,   // XML: .where('seen','==',false) uyumu
                     "deleted"   to false,
                     "edited"    to false,
                     "liked_by"  to emptyList<String>(),

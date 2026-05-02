@@ -24,14 +24,20 @@ import com.heftreng.app.viewmodel.KurdiViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KurdiScreen(vm: KurdiViewModel = hiltViewModel()) {
+fun KurdiScreen(
+    language: String = "tr",
+    vm: KurdiViewModel = hiltViewModel(),
+) {
     val lessons    by vm.lessons.collectAsState()
     val xp         by vm.xp.collectAsState()
     val streak     by vm.streak.collectAsState()
     val level      by vm.level.collectAsState()
     val loading    by vm.loading.collectAsState()
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("Dersler", "Ferheng", "Rêziman")
+    val tabs = if (language == "ku")
+        listOf("Ders", "Ferheng", "Rêziman")
+    else
+        listOf("Dersler", "Ferheng", "Rêziman")
 
     Column(modifier = Modifier.fillMaxSize().background(Background)) {
 
@@ -96,15 +102,15 @@ fun KurdiScreen(vm: KurdiViewModel = hiltViewModel()) {
 
         // İçerik
         when (selectedTab) {
-            0 -> LessonsTab(lessons, loading, vm)
-            1 -> DictionaryTab()
-            2 -> GrammarTab()
+            0 -> LessonsTab(lessons, loading, vm, language)
+            1 -> DictionaryTab(language)
+            2 -> GrammarTab(language)
         }
     }
 }
 
 @Composable
-fun LessonsTab(lessons: List<KurdiLesson>, loading: Boolean, vm: KurdiViewModel) {
+fun LessonsTab(lessons: List<KurdiLesson>, loading: Boolean, vm: KurdiViewModel, language: String = "tr") {
     if (loading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = Primary)
@@ -165,25 +171,25 @@ fun LessonCard(lesson: KurdiLesson, onClick: () -> Unit) {
 }
 
 @Composable
-fun DictionaryTab() {
+fun DictionaryTab(language: String = "tr") {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("📚", fontSize = 48.sp)
             Spacer(Modifier.height(12.dp))
             Text("Ferheng", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
-            Text("Yakında", color = Muted, fontSize = 14.sp)
+            Text(if (language == "ku") "Zû tê" else "Yakında", color = Muted, fontSize = 14.sp)
         }
     }
 }
 
 @Composable
-fun GrammarTab() {
+fun GrammarTab(language: String = "tr") {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("🎓", fontSize = 48.sp)
             Spacer(Modifier.height(12.dp))
             Text("Rêziman", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
-            Text("Yakında", color = Muted, fontSize = 14.sp)
+            Text(if (language == "ku") "Zû tê" else "Yakında", color = Muted, fontSize = 14.sp)
         }
     }
 }
