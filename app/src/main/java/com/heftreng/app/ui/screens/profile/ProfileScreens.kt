@@ -35,6 +35,8 @@ import com.heftreng.app.ui.screens.auth.heftrangTextFieldColors
 import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.ui.screens.serials.SerialCard
 import com.heftreng.app.ui.theme.*
+import com.heftreng.app.ui.screens.social.FollowListSheet
+import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.viewmodel.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,6 +50,7 @@ fun ProfileScreen(
     serialsVm    : SerialsViewModel     = hiltViewModel(),
     rlVm         : ReadingListViewModel = hiltViewModel(),
     msgsVm       : com.heftreng.app.viewmodel.MessagesViewModel = hiltViewModel(),
+    socialVm     : SocialViewModel = hiltViewModel(),
 ) {
     val user           by vm.user.collectAsState()
     val posts          by vm.posts.collectAsState()
@@ -57,6 +60,12 @@ fun ProfileScreen(
     val loading        by vm.loading.collectAsState()
     val mySerials      by serialsVm.mySerials.collectAsState()
     val rlEntries      by rlVm.entries.collectAsState()
+
+    val followers  by socialVm.followers.collectAsState()
+    val following  by socialVm.following.collectAsState()
+    val socialLoading by socialVm.loading.collectAsState()
+    var showFollowers  by remember { mutableStateOf(false) }
+    var showFollowing  by remember { mutableStateOf(false) }
 
     val isMe      = uid == "me" || uid == vm.myUid
     val targetUid = if (uid == "me") vm.myUid else uid
@@ -122,6 +131,14 @@ fun ProfileScreen(
                 postsCount     = posts.size,
                 onFollow       = { vm.toggleFollow(targetUid) },
                 onEditProfile  = { navController.navigate(Screen.EditProfile.route) },
+                onFollowers    = {
+                    socialVm.loadFollowers(targetUid)
+                    showFollowers = true
+                },
+                onFollowing    = {
+                    socialVm.loadFollowing(targetUid)
+                    showFollowing = true
+                },
                 onMessage      = {
                     // Mesaj başlat — direkt konuşmayı aç (yoksa oluştur)
                     if (!isMe && targetUid.isNotBlank()) {
@@ -289,6 +306,32 @@ fun ProfileScreen(
             }
         }
     }
+
+    // ── Takipçi/Takip sheet'leri ──────────────────────────────────────────────
+    if (showFollowers) {
+        FollowListSheet(
+            title     = "Şopîner ($followersCount)",
+            entries   = followers,
+            loading   = socialLoading,
+            onDismiss = { showFollowers = false; socialVm.clearFollowers() },
+            onProfile = { uid ->
+                showFollowers = false
+                navController.navigate("profile/$uid")
+            },
+        )
+    }
+    if (showFollowing) {
+        FollowListSheet(
+            title     = "Şopandî ($followingCount)",
+            entries   = following,
+            loading   = socialLoading,
+            onDismiss = { showFollowing = false; socialVm.clearFollowing() },
+            onProfile = { uid ->
+                showFollowing = false
+                navController.navigate("profile/$uid")
+            },
+        )
+    }
 }
 
 // ── Profil başlık bileşeni ────────────────────────────────────────────────────
@@ -302,6 +345,8 @@ private fun ProfileHeader(
     postsCount    : Int,
     onFollow      : () -> Unit,
     onEditProfile : () -> Unit,
+    onFollowers   : () -> Unit = {},
+    onFollowing   : () -> Unit = {},
     onMessage     : () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -403,10 +448,10 @@ private fun ProfileHeader(
             Spacer(Modifier.height(12.dp))
             // İstatistikler
             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                StatItem(postsCount,     "Nivîs")
-                StatItem(followersCount, "Şopîner")
-                StatItem(followingCount, "Şopandî")
-                if ((user?.xp ?: 0) > 0) StatItem(user?.xp ?: 0, "XP")
+                StatItem(postsCount,     "Nivîs",    onClick = null)
+                StatItem(followersCount, "Şopîner",  onClick = onFollowers)
+                StatItem(followingCount, "Şopandî",  onClick = onFollowing)
+                if ((user?.xp ?: 0) > 0) StatItem(user?.xp ?: 0, "XP", onClick = null)
             }
             Spacer(Modifier.height(12.dp))
             HorizontalDivider(color = Divider)
@@ -444,10 +489,13 @@ private fun RlEntryRow(entry: ReadingListEntry, onClick: () -> Unit) {
 }
 
 @Composable
-fun StatItem(count: Int, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+fun StatItem(count: Int, label: String, onClick: (() -> Unit)? = null) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = if (onClick != null) Modifier.clickable { onClick() } else Modifier,
+    ) {
         Text(count.toString(), fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
-        Text(label, color = Muted, fontSize = 11.sp)
+        Text(label, color = if (onClick != null) Primary else Muted, fontSize = 11.sp)
     }
 }
 

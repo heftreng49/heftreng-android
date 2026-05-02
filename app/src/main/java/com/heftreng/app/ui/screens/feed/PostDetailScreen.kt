@@ -1,6 +1,7 @@
 package com.heftreng.app.ui.screens.feed
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,6 +10,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,11 +23,16 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.google.firebase.auth.FirebaseAuth
+import com.heftreng.app.data.model.Comment
 import com.heftreng.app.navigation.Screen
+import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
+import com.heftreng.app.viewmodel.SocialViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,24 +40,30 @@ fun PostDetailScreen(
     navController: NavController,
     viewModel    : FeedViewModel,
     postId       : String,
+    socialVm     : SocialViewModel = hiltViewModel(),
 ) {
     val posts    by viewModel.posts.collectAsState()
     val comments by viewModel.comments.collectAsState()
-    val post = posts.find { it.id == postId }
-    var commentText by remember { mutableStateOf("") }
+    val likers   by socialVm.likers.collectAsState()
+    val socialLoading by socialVm.loading.collectAsState()
 
-    LaunchedEffect(postId) {
-        viewModel.loadComments(postId)
-    }
+    val post = posts.find { it.id == postId }
+    val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+
+    var commentText  by remember { mutableStateOf("") }
+    var showLikers   by remember { mutableStateOf(false) }
+    var showCmtLikers by remember { mutableStateOf<String?>(null) } // cmtId
+
+    LaunchedEffect(postId) { viewModel.loadComments(postId) }
 
     Scaffold(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text("Gönderi", color = OnBackground, fontSize = 18.sp) },
+                title = { Text("Gönderi", color = OnBackground, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = OnBackground)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
@@ -62,50 +77,69 @@ fun PostDetailScreen(
             return@Scaffold
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(bottom = 8.dp),
             ) {
-                // Post içeriği
+                // Post kartı
                 item {
                     PostCard(
-                        post      = post,
-                        onLike    = { viewModel.toggleLike(post) },
-                        onSave    = { viewModel.toggleSave(post) },
-                        onProfile = { navController.navigate(Screen.Profile.go(post.uid)) },
-                        onComment = {},
-                        onShare   = { viewModel.repost(post) },
+                        post         = post,
+                        onLike       = { viewModel.toggleLike(post) },
+                        onSave       = { viewModel.toggleSave(post) },
+                        onProfile    = { navController.navigate(Screen.Profile.go(post.uid)) },
+                        onComment    = {},
+                        onShare      = { viewModel.repost(post) },
+                        onShowLikers = {
+                            socialVm.loadPostLikers(post.id)
+                            showLikers = true
+                        },
                     )
                     HorizontalDivider(color = SurfaceVar, thickness = 6.dp)
                 }
 
-                // Beğeni sayısı
+                // Beğeni satırı — tıklanabilir
                 if (post.likesCount > 0) {
                     item {
-                        Text(
-                            "${post.likesCount} Beğeni",
-                            modifier   = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                            color      = OnBackground,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize   = 14.sp,
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    socialVm.loadPostLikers(post.id)
+                                    showLikers = true
+                                }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Filled.Favorite, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "${post.likesCount} beğeni",
+                                color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
+                            )
+                        }
                         HorizontalDivider(color = Divider)
                     }
                 }
 
                 // Yorumlar başlığı
                 item {
-                    Text(
-                        "Yorumlar (${post.commentsCount})",
-                        modifier  = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                        color     = Muted,
-                        fontSize  = 13.sp,
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Yorumlar",
+                            color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        )
+                        if (post.commentsCount > 0) {
+                            Spacer(Modifier.width(6.dp))
+                            Box(
+                                Modifier.clip(RoundedCornerShape(10.dp)).background(SurfaceVar).padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) { Text("${post.commentsCount}", color = Muted, fontSize = 11.sp) }
+                        }
+                    }
                 }
 
                 // Yorum listesi
@@ -114,32 +148,20 @@ fun PostDetailScreen(
                         Box(
                             modifier = Modifier.fillMaxWidth().padding(32.dp),
                             contentAlignment = Alignment.Center,
-                        ) {
-                            Text("Henüz yorum yok", color = Muted, fontSize = 14.sp)
-                        }
+                        ) { Text("Henüz yorum yok", color = Muted, fontSize = 14.sp) }
                     }
                 } else {
                     items(comments, key = { it.id }) { cmt ->
-                        Row(
-                            modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.Top,
-                        ) {
-                            AsyncImage(
-                                model              = cmt.photoURL.ifEmpty { null },
-                                contentDescription = null,
-                                modifier           = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(SurfaceVar),
-                                contentScale = ContentScale.Crop,
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Column {
-                                Text(cmt.displayName, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 13.sp)
-                                Spacer(Modifier.height(2.dp))
-                                Text(cmt.text, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
-                            }
-                        }
+                        CommentRow(
+                            comment   = cmt,
+                            myUid     = myUid,
+                            onLike    = { viewModel.toggleCommentLike(postId, cmt) },
+                            onProfile = { navController.navigate("profile/${cmt.uid}") },
+                            onShowLikers = {
+                                socialVm.loadCommentLikers(cmt.id)
+                                showCmtLikers = cmt.id
+                            },
+                        )
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     }
                 }
@@ -148,7 +170,7 @@ fun PostDetailScreen(
             // Yorum yazma alanı
             HorizontalDivider(color = Divider)
             Row(
-                modifier          = Modifier
+                modifier = Modifier
                     .fillMaxWidth()
                     .background(HeftSurface)
                     .padding(horizontal = 12.dp, vertical = 8.dp)
@@ -158,7 +180,7 @@ fun PostDetailScreen(
                 OutlinedTextField(
                     value         = commentText,
                     onValueChange = { commentText = it },
-                    placeholder   = { Text("Yorum yaz...", color = Muted) },
+                    placeholder   = { Text("Yorum yaz...", color = Muted, fontSize = 14.sp) },
                     modifier      = Modifier.weight(1f),
                     shape         = RoundedCornerShape(24.dp),
                     singleLine    = true,
@@ -179,18 +201,104 @@ fun PostDetailScreen(
                             commentText = ""
                         }
                     },
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(if (commentText.isNotBlank()) Amber else SurfaceVar),
+                    enabled  = commentText.isNotBlank(),
                 ) {
                     Icon(
-                        Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Gönder",
-                        tint     = if (commentText.isNotBlank()) Color.Black else Muted,
-                        modifier = Modifier.size(18.dp),
+                        Icons.AutoMirrored.Filled.Send, null,
+                        tint = if (commentText.isNotBlank()) Amber else Muted,
                     )
                 }
+            }
+        }
+    }
+
+    // Gönderi beğenenler sheet
+    if (showLikers) {
+        LikerListSheet(
+            likers    = likers,
+            loading   = socialLoading,
+            onDismiss = { showLikers = false; socialVm.clearLikers() },
+            onProfile = { uid -> showLikers = false; navController.navigate("profile/$uid") },
+        )
+    }
+
+    // Yorum beğenenler sheet
+    if (showCmtLikers != null) {
+        LikerListSheet(
+            title     = "Yorum Beğenenler",
+            likers    = likers,
+            loading   = socialLoading,
+            onDismiss = { showCmtLikers = null; socialVm.clearLikers() },
+            onProfile = { uid -> showCmtLikers = null; navController.navigate("profile/$uid") },
+        )
+    }
+}
+
+// ── Yorum satırı ─────────────────────────────────────────────────────────────
+@Composable
+private fun CommentRow(
+    comment      : Comment,
+    myUid        : String,
+    onLike       : () -> Unit,
+    onProfile    : () -> Unit,
+    onShowLikers : () -> Unit,
+) {
+    Row(
+        modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        // Avatar — tıklanabilir
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(SurfaceVar)
+                .clickable { onProfile() },
+        ) {
+            if (comment.photoURL.isNotBlank()) {
+                AsyncImage(
+                    model = comment.photoURL, contentDescription = null,
+                    modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
+                )
+            } else {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        comment.displayName.firstOrNull()?.uppercase() ?: "?",
+                        color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                comment.displayName,
+                fontWeight = FontWeight.SemiBold,
+                color      = OnBackground,
+                fontSize   = 13.sp,
+                modifier   = Modifier.clickable { onProfile() },
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(comment.text, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
+        }
+        Spacer(Modifier.width(8.dp))
+        // Beğeni butonu + sayacı
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            IconButton(onClick = onLike, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    if (comment.isLikedByMe) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                    null,
+                    tint     = if (comment.isLikedByMe) Color(0xFFEF4444) else Muted,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            if (comment.likesCount > 0) {
+                Text(
+                    "${comment.likesCount}",
+                    color    = Muted,
+                    fontSize = 11.sp,
+                    modifier = Modifier.clickable { onShowLikers() },
+                )
             }
         }
     }

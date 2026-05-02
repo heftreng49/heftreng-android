@@ -8,6 +8,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
@@ -15,6 +18,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.heftreng.app.navigation.HeftrangNavHost
 import com.heftreng.app.ui.theme.HeftrangTheme
+import com.heftreng.app.viewmodel.SettingsViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -22,6 +26,9 @@ class MainActivity : ComponentActivity() {
 
     // Bildirimden gelen deep link hedefi
     private var pendingNavTarget: String? = null
+
+    // SettingsViewModel — darkMode tercihi için
+    private val settingsVm: SettingsViewModel by viewModels()
 
     // POST_NOTIFICATIONS izin launcher (Android 13+)
     private val notifPermLauncher = registerForActivityResult(
@@ -33,14 +40,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // Klavye açılınca Compose imePadding çalışsın diye
-        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
 
         // Bildirimden gelen intent'i al
         pendingNavTarget = intent?.getStringExtra("navigate_to")
 
         setContent {
-            HeftrangTheme(darkMode = true) {
+            // SettingsViewModel'dan reactive dark/light modu oku
+            val isDark by settingsVm.darkMode.collectAsState()
+
+            HeftrangTheme(darkMode = isDark) {
                 HeftrangNavHost(initialRoute = pendingNavTarget)
             }
         }

@@ -150,6 +150,26 @@ class SearchViewModel @Inject constructor(
             }
         } catch (e: Exception) { e.printStackTrace() }
 
+        // Books — title prefix
+        try {
+            val bSnap = firestore.collection("books")
+                .orderBy("title")
+                .startAt(q).endAt(q + "")
+                .limit(10).get().await()
+            results += bSnap.documents.mapNotNull { doc ->
+                val d = doc.data ?: return@mapNotNull null
+                val title = d["title"] as? String ?: return@mapNotNull null
+                if (title.isBlank()) return@mapNotNull null
+                SearchResult(
+                    id       = doc.id,
+                    type     = "book",
+                    title    = title,
+                    subtitle = (d["displayName"] as? String)?.takeIf { it.isNotBlank() } ?: d["name"] as? String ?: "",
+                    imageUrl = d["coverImg"] as? String ?: "",
+                )
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+
         // Alıntı (feed quoteText prefix)
         try {
             val qSnap = firestore.collection("feed")

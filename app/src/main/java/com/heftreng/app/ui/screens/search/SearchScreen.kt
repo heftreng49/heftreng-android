@@ -57,7 +57,8 @@ fun SearchScreen(
         Triple("Hepsi",      Icons.Outlined.Search,        0),
         Triple("Kişi",       Icons.Outlined.PersonOutline, 1),
         Triple("Gönderi",    Icons.Outlined.DynamicFeed,   2),
-        Triple("Kitap",      Icons.Outlined.AutoStories,   3),
+        Triple("Seri",       Icons.Outlined.AutoStories,   3),
+        Triple("Kitap",      Icons.Outlined.MenuBook,      4),
     )
 
     LaunchedEffect(Unit) { vm.loadSuggestions() }
@@ -146,6 +147,7 @@ fun SearchScreen(
                         1    -> searchResults.filter { it.type == "user" }
                         2    -> searchResults.filter { it.type == "post" }
                         3    -> searchResults.filter { it.type == "serial" }
+                        4    -> searchResults.filter { it.type == "book" }
                         else -> searchResults
                     }
 
@@ -172,6 +174,7 @@ fun SearchScreen(
                                     "user"   -> navController.navigate("profile/${result.uid}")
                                     "post"   -> navController.navigate(Screen.PostDetail.go(result.id))
                                     "serial" -> navController.navigate(Screen.SerialDetail.go(result.id))
+                                    "book"   -> navController.navigate("book/${result.id}")
                                 }
                             })
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
@@ -246,7 +249,7 @@ private fun SearchResultRow(result: SearchResult, onClick: () -> Unit) {
             color = typeColor.copy(alpha = 0.12f),
         ) {
             Text(
-                when (result.type) { "post" -> "Gönderi"; "serial" -> "Kitap"; else -> "Kişi" },
+                when (result.type) { "post" -> "Gönderi"; "serial" -> "Seri"; "book" -> "Kitap"; else -> "Kişi" },
                 color    = typeColor,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,

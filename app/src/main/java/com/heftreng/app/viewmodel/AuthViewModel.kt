@@ -108,55 +108,21 @@ class AuthViewModel @Inject constructor(
 
     private suspend fun createUserDoc(user: FirebaseUser, overrideName: String? = null) {
         val name = overrideName ?: user.displayName ?: user.email?.substringBefore("@") ?: "Kullanıcı"
-        // Tema: _generateHandle → benzersiz username oluştur
-        val username = generateUniqueUsername(name)
         firestore.collection("users").document(user.uid).set(mapOf(
             "uid"         to user.uid,
             "displayName" to name,
             "name"        to name,
-            "username"    to username,
             "email"       to (user.email ?: ""),
             "photoURL"    to (user.photoUrl?.toString() ?: ""),
             "coverPhoto"  to "",
             "bio"         to "",
             "website"     to "",
-            "xp"          to 0,  "kf_xp"     to 0,
+            "xp"          to 0,
             "level"       to 1,
-            "streak"      to 0,  "kf_streak" to 0,
-            "banned"      to false,
+            "streak"      to 0,
             "createdAt"   to com.google.firebase.Timestamp.now(),
             "lastSeen"    to com.google.firebase.Timestamp.now(),
-        ), com.google.firebase.firestore.SetOptions.merge()).await()
-        // Tema: usernames/{handle} → uid eşleme (benzersizlik garantisi)
-        firestore.collection("usernames").document(username).set(
-            mapOf("uid" to user.uid)
-        ).await()
-    }
-
-    // Tema: _generateHandle — displayName'den handle üret, çakışma kontrolü yap
-    private suspend fun generateUniqueUsername(displayName: String): String {
-        // Mevcut kullanıcının username'i varsa değiştirme
-        val existing = try {
-            firestore.collection("users")
-                .whereEqualTo("email", auth.currentUser?.email ?: "")
-                .limit(1).get().await()
-                .documents.firstOrNull()?.getString("username")
-        } catch (e: Exception) { null }
-        if (!existing.isNullOrBlank()) return existing
-
-        var handle = displayName.lowercase()
-            .replace(Regex("[^a-z0-9_]"), "")
-            .take(20)
-            .ifBlank { "user" }
-        // Çakışma kontrolü
-        var attempt = 0
-        while (attempt < 5) {
-            val taken = firestore.collection("usernames").document(handle).get().await().exists()
-            if (!taken) break
-            handle = handle.take(16) + (1000..9999).random()
-            attempt++
-        }
-        return handle
+        )).await()
     }
 
     fun signOut() {

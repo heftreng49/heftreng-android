@@ -41,7 +41,9 @@ import com.heftreng.app.ui.component.QuoteDialog
 import com.heftreng.app.ui.component.QuoteInputSection
 import com.heftreng.app.ui.component.QuotePayload
 import com.heftreng.app.ui.theme.*
+import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.viewmodel.FeedViewModel
+import com.heftreng.app.viewmodel.SocialViewModel
 import kotlinx.coroutines.tasks.await
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,7 +51,8 @@ import kotlinx.coroutines.tasks.await
 fun FeedScreen(
     navController: NavController,
     language     : String = "tr",
-    vm           : FeedViewModel = hiltViewModel(),
+    vm           : FeedViewModel  = hiltViewModel(),
+    socialVm     : SocialViewModel = hiltViewModel(),
 ) {
     val posts       by vm.posts.collectAsState()
     val loading     by vm.loading.collectAsState()
@@ -57,6 +60,9 @@ fun FeedScreen(
     val loadingMore by vm.loadingMore.collectAsState()
 
     var showComposeSheet by remember { mutableStateOf(false) }
+    var likersPostId     by remember { mutableStateOf<String?>(null) }
+    val likers           by socialVm.likers.collectAsState()
+    val socialLoading    by socialVm.loading.collectAsState()
     var commentPost      by remember { mutableStateOf<Post?>(null) }
     var fabExpanded      by remember { mutableStateOf(false) }
     var inlineText       by remember { mutableStateOf("") }
@@ -84,6 +90,17 @@ fun FeedScreen(
             initialAuthor = inlineQuote?.authorName ?: "",
             onDismiss     = { showInlineQuote = false },
             onConfirm     = { p -> inlineQuote = p; showInlineQuote = false },
+        )
+    }
+
+    // Beğenenler sheet
+    if (likersPostId != null) {
+        LikerListSheet(
+            title     = "Beğenenler",
+            likers    = likers,
+            loading   = socialLoading,
+            onDismiss = { likersPostId = null; socialVm.clearLikers() },
+            onProfile = { uid -> likersPostId = null; navController.navigate("profile/$uid") },
         )
     }
 
@@ -149,7 +166,11 @@ fun FeedScreen(
                         onShare   = { vm.repost(post) },
                         onDelete  = { vm.deletePost(post.id) },
                         onEdit    = { newText -> vm.editPost(post.id, newText) },
-                        onTap     = { navController.navigate(Screen.PostDetail.go(post.id)) },
+                        onTap        = { navController.navigate(Screen.PostDetail.go(post.id)) },
+                        onShowLikers = {
+                            socialVm.loadPostLikers(post.id)
+                            likersPostId = post.id
+                        },
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                 }
@@ -502,6 +523,7 @@ fun PostCard(
     onTap        : (() -> Unit)? = null,
     onQuote      : (() -> Unit)? = null,
     onStoryShare : (() -> Unit)? = null,
+    onShowLikers : (() -> Unit)? = null,
 ) {
     val myUid            = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     val isOwn            = post.uid == myUid
@@ -621,7 +643,12 @@ fun PostCard(
                     modifier           = Modifier.size(20.dp),
                 )
             }
-            if (post.likesCount > 0) Text(post.likesCount.toString(), color = Muted, fontSize = 13.sp)
+            if (post.likesCount > 0) {
+                Text(
+                    post.likesCount.toString(), color = Muted, fontSize = 13.sp,
+                    modifier = if (onShowLikers != null) Modifier.clickable { onShowLikers() } else Modifier,
+                )
+            }
             Spacer(Modifier.width(4.dp))
             IconButton(onClick = onComment) {
                 Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Muted, modifier = Modifier.size(20.dp))

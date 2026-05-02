@@ -37,6 +37,9 @@ import com.heftreng.app.ui.screens.profile.EditProfileScreen
 import com.heftreng.app.ui.screens.profile.ProfileScreen
 import com.heftreng.app.ui.screens.readinglist.ReadingListScreen
 import com.heftreng.app.ui.screens.search.SearchScreen
+import com.heftreng.app.ui.screens.books.BookChapterReadScreen
+import com.heftreng.app.ui.screens.books.BookDetailScreen
+import com.heftreng.app.ui.screens.books.BooksScreen
 import com.heftreng.app.ui.screens.serials.ChapterReadScreen
 import com.heftreng.app.ui.screens.serials.SerialDetailScreen
 import com.heftreng.app.ui.screens.serials.SerialsScreen
@@ -66,6 +69,9 @@ sealed class Screen(val route: String) {
     object SerialDetail  : Screen("serial/{id}")      { fun go(id: String) = "serial/$id" }
     object Chapter       : Screen("chapter/{sid}/{cid}") { fun go(s: String, c: String) = "chapter/$s/$c" }
     object ReadingList   : Screen("reading_list/{uid}") { fun go(uid: String) = "reading_list/$uid" }
+    object Books         : Screen("books")
+    object BookDetail    : Screen("book/{bookId}")         { fun go(id: String) = "book/$id" }
+    object BookChapter   : Screen("book_chapter/{bid}/{cid}") { fun go(b: String, c: String) = "book_chapter/$b/$c" }
 }
 
 // ── Alt bar — temadaki gibi: Nivîs | Bigere | Pirtûk | Profîl ───────────────
@@ -104,13 +110,12 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val scope       = rememberCoroutineScope()
 
     if (currentUser == null) {
-        HeftrangTheme(darkMode = isDark) {
-            AuthScreen(onAuthSuccess = {
-                navController.navigate(Screen.Feed.route) {
-                    popUpTo(Screen.Auth.route) { inclusive = true }
-                }
-            })
-        }
+        // Tema MainActivity'de zaten uygulanıyor
+        AuthScreen(onAuthSuccess = {
+            navController.navigate(Screen.Feed.route) {
+                popUpTo(Screen.Auth.route) { inclusive = true }
+            }
+        })
         return
     }
 
@@ -122,216 +127,224 @@ fun HeftrangNavHost(initialRoute: String? = null) {
         }
     }
 
-    HeftrangTheme(darkMode = isDark) {
+    // Tema MainActivity'de uygulanıyor, burada tekrar sarmalamaya gerek yok
+    LaunchedEffect(initialRoute) {
+        initialRoute?.let { try { navController.navigate(it) } catch (_: Exception) {} }
+    }
 
-        LaunchedEffect(initialRoute) {
-            initialRoute?.let { try { navController.navigate(it) } catch (_: Exception) {} }
-        }
+    val navBackStack  by navController.currentBackStackEntryAsState()
+    val currentRoute  = navBackStack?.destination?.route
+    val showBottom    = currentRoute in bottomNavRoutes
+    val isAdmin       = settingsVm.isAdmin
 
-        val navBackStack  by navController.currentBackStackEntryAsState()
-        val currentRoute  = navBackStack?.destination?.route
-        val showBottom    = currentRoute in bottomNavRoutes
-        val isAdmin       = settingsVm.isAdmin
-
-        ModalNavigationDrawer(
-            drawerState   = drawerState,
-            drawerContent = {
-                DrawerContent(
-                    currentUser  = currentUser,
-                    isDark       = isDark,
-                    language     = language,
-                    isAdmin      = isAdmin,
-                    totalUnread  = totalUnread,
-                    unreadNotif  = unreadNotif,
-                    onNavigate   = { route ->
-                        scope.launch { drawerState.close() }
-                        navController.navigate(route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState    = true
+    ModalNavigationDrawer(
+        drawerState   = drawerState,
+        drawerContent = {
+            DrawerContent(
+                currentUser  = currentUser,
+                isDark       = isDark,
+                language     = language,
+                isAdmin      = isAdmin,
+                totalUnread  = totalUnread,
+                unreadNotif  = unreadNotif,
+                onNavigate   = { route ->
+                    scope.launch { drawerState.close() }
+                    navController.navigate(route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
                         }
-                    },
-                    onSignOut = {
-                        scope.launch { drawerState.close() }
-                        authVm.signOut()
-                    },
-                )
-            }
-        ) {
-            Scaffold(
-                containerColor = Background,
-                // ── ÜST BAR — sadece Feed ekranında NavHost yönetir ──
-                topBar = {
-                    if (currentRoute == Screen.Feed.route) {
-                        TopAppBar(
-                            title = {
-                                Text(
-                                    "Heftreng",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color      = Primary,
-                                    fontSize   = 20.sp,
-                                )
-                            },
-                            navigationIcon = {
-                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                    Icon(Icons.Default.Menu, null, tint = OnBackground)
-                                }
-                            },
-                            actions = {
-                                // Bildirim butonu — badge ile
-                                BadgedBox(
-                                    badge = {
-                                        if (unreadNotif > 0) Badge {
-                                            Text(if (unreadNotif > 9) "9+" else unreadNotif.toString())
-                                        }
-                                    }
-                                ) {
-                                    IconButton(onClick = { navController.navigate(Screen.Notifications.route) }) {
-                                        Icon(Icons.Outlined.NotificationsNone, null, tint = OnBackground)
-                                    }
-                                }
-                                // Mesaj butonu — badge ile
-                                BadgedBox(
-                                    badge = {
-                                        if (totalUnread > 0) Badge {
-                                            Text(if (totalUnread > 9) "9+" else totalUnread.toString())
-                                        }
-                                    }
-                                ) {
-                                    IconButton(onClick = { navController.navigate(Screen.Messages.route) }) {
-                                        Icon(Icons.Outlined.ChatBubbleOutline, null, tint = OnBackground)
-                                    }
-                                }
-                                // Avatar
-                                IconButton(onClick = { navController.navigate("profile/me") }) {
-                                    AsyncImage(
-                                        model              = currentUser?.photoUrl,
-                                        contentDescription = null,
-                                        modifier           = Modifier.size(32.dp).clip(CircleShape).background(SurfaceVar),
-                                        contentScale       = ContentScale.Crop,
-                                    )
-                                }
-                            },
-                            colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
-                        )
+                        launchSingleTop = true
+                        restoreState    = true
                     }
                 },
-                // ── ALT BAR — temadaki gibi ──────────────────────────────────
-                bottomBar = {
-                    if (showBottom) {
-                        NavigationBar(
-                            containerColor = HeftSurface,
-                            tonalElevation = 0.dp,
-                        ) {
-                            bottomNavItems.forEach { item ->
-                                val selected = currentRoute == item.route ||
-                                    (item.route == "profile/me" && currentRoute?.startsWith("profile/") == true)
-                                NavigationBarItem(
-                                    selected = selected,
-                                    onClick  = {
-                                        navController.navigate(item.route) {
-                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                saveState = true
-                                            }
-                                            launchSingleTop = true
-                                            restoreState    = true
+                onSignOut = {
+                    scope.launch { drawerState.close() }
+                    authVm.signOut()
+                },
+            )
+        }
+    ) {
+        Scaffold(
+            containerColor = Background,
+            // ── ÜST BAR — sadece Feed ekranında NavHost yönetir ──
+            topBar = {
+                if (currentRoute == Screen.Feed.route) {
+                    TopAppBar(
+                        title = {
+                            Text(
+                                "Heftreng",
+                                fontWeight = FontWeight.ExtraBold,
+                                color      = Primary,
+                                fontSize   = 20.sp,
+                            )
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, null, tint = OnBackground)
+                            }
+                        },
+                        actions = {
+                            // Bildirim butonu — badge ile
+                            BadgedBox(
+                                badge = {
+                                    if (unreadNotif > 0) Badge {
+                                        Text(if (unreadNotif > 9) "9+" else unreadNotif.toString())
+                                    }
+                                }
+                            ) {
+                                IconButton(onClick = { navController.navigate(Screen.Notifications.route) }) {
+                                    Icon(Icons.Outlined.NotificationsNone, null, tint = OnBackground)
+                                }
+                            }
+                            // Mesaj butonu — badge ile
+                            BadgedBox(
+                                badge = {
+                                    if (totalUnread > 0) Badge {
+                                        Text(if (totalUnread > 9) "9+" else totalUnread.toString())
+                                    }
+                                }
+                            ) {
+                                IconButton(onClick = { navController.navigate(Screen.Messages.route) }) {
+                                    Icon(Icons.Outlined.ChatBubbleOutline, null, tint = OnBackground)
+                                }
+                            }
+                            // Avatar
+                            IconButton(onClick = { navController.navigate("profile/me") }) {
+                                AsyncImage(
+                                    model              = currentUser?.photoUrl,
+                                    contentDescription = null,
+                                    modifier           = Modifier.size(32.dp).clip(CircleShape).background(SurfaceVar),
+                                    contentScale       = ContentScale.Crop,
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                    )
+                }
+            },
+            // ── ALT BAR — temadaki gibi ──────────────────────────────────
+            bottomBar = {
+                if (showBottom) {
+                    NavigationBar(
+                        containerColor = HeftSurface,
+                        tonalElevation = 0.dp,
+                    ) {
+                        bottomNavItems.forEach { item ->
+                            val selected = currentRoute == item.route ||
+                                (item.route == "profile/me" && currentRoute?.startsWith("profile/") == true)
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick  = {
+                                    navController.navigate(item.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
                                         }
-                                    },
-                                    icon = {
-                                        val msgBadge   = item.route == Screen.Messages.route && totalUnread > 0
-                                        val notifBadge = item.route == Screen.Notifications.route && unreadNotif > 0
-                                        if (msgBadge || notifBadge) {
-                                            val cnt = if (msgBadge) totalUnread else unreadNotif
-                                            BadgedBox(badge = {
-                                                Badge(containerColor = Error) {
-                                                    Text(
-                                                        if (cnt > 9) "9+" else cnt.toString(),
-                                                        color    = Color.White,
-                                                        fontSize = 9.sp,
-                                                    )
-                                                }
-                                            }) {
-                                                Icon(if (selected) item.iconSel else item.icon, item.label)
+                                        launchSingleTop = true
+                                        restoreState    = true
+                                    }
+                                },
+                                icon = {
+                                    val msgBadge   = item.route == Screen.Messages.route && totalUnread > 0
+                                    val notifBadge = item.route == Screen.Notifications.route && unreadNotif > 0
+                                    if (msgBadge || notifBadge) {
+                                        val cnt = if (msgBadge) totalUnread else unreadNotif
+                                        BadgedBox(badge = {
+                                            Badge(containerColor = Error) {
+                                                Text(
+                                                    if (cnt > 9) "9+" else cnt.toString(),
+                                                    color    = Color.White,
+                                                    fontSize = 9.sp,
+                                                )
                                             }
-                                        } else {
+                                        }) {
                                             Icon(if (selected) item.iconSel else item.icon, item.label)
                                         }
-                                    },
-                                    label = {
-                                        Text(item.label, fontSize = 10.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
-                                    },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor   = Amber,
-                                        selectedTextColor   = Amber,
-                                        unselectedIconColor = Muted,
-                                        unselectedTextColor = Muted,
-                                        indicatorColor      = Amber.copy(alpha = 0.15f),
-                                    ),
-                                )
-                            }
+                                    } else {
+                                        Icon(if (selected) item.iconSel else item.icon, item.label)
+                                    }
+                                },
+                                label = {
+                                    Text(item.label, fontSize = 10.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                                },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor   = Amber,
+                                    selectedTextColor   = Amber,
+                                    unselectedIconColor = Muted,
+                                    unselectedTextColor = Muted,
+                                    indicatorColor      = Amber.copy(alpha = 0.15f),
+                                ),
+                            )
                         }
                     }
-                },
-            ) { innerPadding ->
-                NavHost(
-                    navController    = navController,
-                    startDestination = Screen.Feed.route,
-                    modifier         = Modifier.padding(innerPadding),
-                ) {
-                    composable(Screen.Feed.route) {
-                        FeedScreen(navController = navController)
-                    }
-                    composable(Screen.Search.route) { SearchScreen(navController) }
-                    composable(Screen.Serials.route) { SerialsScreen(navController, language) }
-                    composable(Screen.Kurdi.route)   { KurdiScreen(language = language) }
-                    composable("profile/{uid}") { back ->
-                        ProfileScreen(
-                            uid           = back.arguments?.getString("uid") ?: "me",
-                            navController = navController,
-                        )
-                    }
-                    composable(Screen.Messages.route) {
-                        ConversationsScreen(navController, language)
-                    }
-                    composable("message/{convId}") { back ->
-                        MessageDetailScreen(
-                            convId        = back.arguments?.getString("convId") ?: "",
-                            navController = navController,
-                        )
-                    }
-                    composable(Screen.Notifications.route) {
-                        NotificationsScreen(navController)
-                    }
-                    composable(Screen.EditProfile.route) { EditProfileScreen(navController) }
-                    composable(Screen.Admin.route)    { AdminScreen(navController) }
-                    composable(Screen.Settings.route) { SettingsScreen(navController) }
-                    composable("post/{postId}") { back ->
-                        SinglePostScreen(
-                            postId        = back.arguments?.getString("postId") ?: "",
-                            navController = navController,
-                        )
-                    }
-                    composable("serial/{id}") { back ->
-                        SerialDetailScreen(
-                            serialId      = back.arguments?.getString("id") ?: "",
-                            navController = navController,
-                        )
-                    }
-                    composable("chapter/{sid}/{cid}") { back ->
-                        ChapterReadScreen(
-                            serialId      = back.arguments?.getString("sid") ?: "",
-                            chapterId     = back.arguments?.getString("cid") ?: "",
-                            navController = navController,
-                        )
-                    }
-                    composable("reading_list/{uid}") { back ->
-                        ReadingListScreen(
-                            uid           = back.arguments?.getString("uid") ?: "",
-                            navController = navController,
-                        )
-                    }
+                }
+            },
+        ) { innerPadding ->
+            NavHost(
+                navController    = navController,
+                startDestination = Screen.Feed.route,
+                modifier         = Modifier.padding(innerPadding),
+            ) {
+                composable(Screen.Feed.route) {
+                    FeedScreen(navController = navController)
+                }
+                composable(Screen.Search.route) { SearchScreen(navController) }
+                composable(Screen.Serials.route) { SerialsScreen(navController, language) }
+                composable(Screen.Kurdi.route)   { KurdiScreen(language = language) }
+                composable("profile/{uid}") { back ->
+                    ProfileScreen(
+                        uid           = back.arguments?.getString("uid") ?: "me",
+                        navController = navController,
+                    )
+                }
+                composable(Screen.Messages.route) {
+                    ConversationsScreen(navController, language)
+                }
+                composable("message/{convId}") { back ->
+                    MessageDetailScreen(
+                        convId        = back.arguments?.getString("convId") ?: "",
+                        navController = navController,
+                    )
+                }
+                composable(Screen.Notifications.route) {
+                    NotificationsScreen(navController)
+                }
+                composable(Screen.EditProfile.route) { EditProfileScreen(navController) }
+                composable(Screen.Admin.route)    { AdminScreen(navController) }
+                composable(Screen.Settings.route) { SettingsScreen(navController) }
+                composable("post/{postId}") { back ->
+                    SinglePostScreen(
+                        postId        = back.arguments?.getString("postId") ?: "",
+                        navController = navController,
+                    )
+                }
+                composable("serial/{id}") { back ->
+                    SerialDetailScreen(
+                        serialId      = back.arguments?.getString("id") ?: "",
+                        navController = navController,
+                    )
+                }
+                composable("chapter/{sid}/{cid}") { back ->
+                    ChapterReadScreen(
+                        serialId      = back.arguments?.getString("sid") ?: "",
+                        chapterId     = back.arguments?.getString("cid") ?: "",
+                        navController = navController,
+                    )
+                }
+                composable(Screen.Books.route) { BooksScreen(navController, language) }
+                composable("book/{bookId}") { back ->
+                    val bookId = back.arguments?.getString("bookId") ?: ""
+                    BookDetailScreen(bookId = bookId, navController = navController, language = language)
+                }
+                composable("book_chapter/{bid}/{cid}") { back ->
+                    val bid = back.arguments?.getString("bid") ?: ""
+                    val cid = back.arguments?.getString("cid") ?: ""
+                    BookChapterReadScreen(bookId = bid, chapterId = cid, navController = navController)
+                }
+                composable("reading_list/{uid}") { back ->
+                    ReadingListScreen(
+                        uid           = back.arguments?.getString("uid") ?: "",
+                        navController = navController,
+                    )
                 }
             }
         }
