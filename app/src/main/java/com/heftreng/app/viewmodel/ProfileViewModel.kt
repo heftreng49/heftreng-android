@@ -141,26 +141,25 @@ class ProfileViewModel @Inject constructor(
                     _isFollowing.value = false
                     _followersCount.value = (_followersCount.value - 1).coerceAtLeast(0)
                 } else {
-                    // XML: follows/{fromUid_targetUid} şeması —
-                    // fromUid, fromName, fromPhoto, targetUid, targetName, targetPhoto, ts
-                    val myDoc       = firestore.collection("users").document(myUid).get().await()
-                    val fromName    = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
-                    val fromPhoto   = myDoc.getString("photoURL") ?: ""
-                    val targetDoc   = firestore.collection("users").document(targetUid).get().await()
-                    val targetName  = targetDoc.getString("displayName") ?: targetDoc.getString("name") ?: ""
-                    val targetPhoto = targetDoc.getString("photoURL") ?: ""
+                    val me = firestore.collection("users").document(myUid).get().await()
+                    val myName  = me.getString("name") ?: me.getString("displayName") ?: ""
+                    val myPhoto = me.getString("photoURL") ?: ""
+                    val tgt = _profile.value
                     followDoc.set(mapOf(
-                        "fromUid"     to myUid,
-                        "fromName"    to fromName,
-                        "fromPhoto"   to fromPhoto,
-                        "targetUid"   to targetUid,
-                        "targetName"  to targetName,
-                        "targetPhoto" to targetPhoto,
-                        "ts"          to Timestamp.now(),
+                        "fromUid"    to myUid,
+                        "fromName"   to myName,
+                        "fromPhoto"  to myPhoto,
+                        "targetUid"  to targetUid,
+                        "targetName" to (tgt?.name ?: tgt?.displayName ?: ""),
+                        "targetPhoto"to (tgt?.photoURL ?: ""),
+                        "ts"         to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                     )).await()
                     _isFollowing.value = true
                     _followersCount.value += 1
                     // Bildirim
+                    val myDoc     = firestore.collection("users").document(myUid).get().await()
+                    val fromName  = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
+                    val fromPhoto = myDoc.getString("photoURL") ?: ""
                     firestore.collection("userNotifs").document(targetUid).collection("msgs").add(mapOf(
                         "fromUid"   to myUid,
                         "fromName"  to fromName,

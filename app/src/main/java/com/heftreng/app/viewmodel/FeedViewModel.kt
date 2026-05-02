@@ -81,6 +81,14 @@ class FeedViewModel @Inject constructor(
                         // Tema: "imgUrl", Android: "imageURL"
                         val imageURL    = (d["imageURL"] as? String)?.takeIf { it.isNotBlank() }
                             ?: d["imgUrl"] as? String ?: ""
+                        val ytVid       = d["ytVid"]       as? String ?: ""
+                        val repostTitle = d["repostTitle"] as? String ?: ""
+                        val repostUrl   = d["repostUrl"]   as? String ?: ""
+                        val repostImg   = d["repostImg"]   as? String ?: ""
+                        val repostType  = d["repostType"]  as? String ?: ""
+                        val repostId    = d["repostId"]    as? String ?: ""
+                        @Suppress("UNCHECKED_CAST")
+                        val badges      = (d["badges"] as? List<*>)?.filterIsInstance<String>() ?: emptyList<String>()
                         Post(
                             id            = doc.id,
                             uid           = d["uid"]      as? String ?: "",
@@ -88,7 +96,16 @@ class FeedViewModel @Inject constructor(
                             username      = d["username"] as? String ?: "",
                             photoURL      = d["photoURL"] as? String ?: "",
                             text          = d["text"]     as? String ?: "",
+                            name          = d["name"]      as? String ?: displayName,
+                            imgUrl        = d["imgUrl"]    as? String ?: "",
                             imageURL      = imageURL,
+                            ytVid         = ytVid,
+                            badges        = badges,
+                            repostTitle   = repostTitle,
+                            repostUrl     = repostUrl,
+                            repostImg     = repostImg,
+                            repostType    = repostType,
+                            repostId      = repostId,
                             likesCount    = (d["likes"]    as? Long)?.toInt() ?: 0,
                             commentsCount = (d["cmtCount"] as? Long)?.toInt() ?: 0,
                             repostsCount  = (d["reposts"]  as? Long)?.toInt() ?: 0,

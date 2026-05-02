@@ -31,11 +31,18 @@ data class User(
 data class Post(
     val id            : String     = "",
     val uid           : String     = "",
+    val name          : String     = "",   // tema: name (displayName fallback)
     val displayName   : String     = "",
     val username      : String     = "",
     val photoURL      : String     = "",
     val text          : String     = "",
-    val imageURL      : String     = "",
+    val imgUrl        : String     = "",   // tema: imgUrl
+    val imageURL      : String     = "",   // Android uyumu
+    val ytVid         : String     = "",   // tema: ytVid (YouTube embed)
+    val badges        : List<String> = emptyList(), // tema: badges[]
+    val repostTitle   : String     = "",   // tema: repostTitle
+    val repostUrl     : String     = "",   // tema: repostUrl
+    val repostImg     : String     = "",   // tema: repostImg
     val likesCount    : Int        = 0,
     val commentsCount : Int        = 0,
     val repostsCount  : Int        = 0,
@@ -43,8 +50,10 @@ data class Post(
     val quoteText     : String     = "",
     val bookName      : String     = "",
     val authorName    : String     = "",
-    val repostOf      : String     = "",   // repost ise orijinal postId
+    val repostOf      : String     = "",
     val repostUid     : String     = "",
+    val repostType    : String     = "",   // tema: repostType
+    val repostId      : String     = "",   // tema: repostId
     val isLikedByMe   : Boolean    = false,
     val isSavedByMe   : Boolean    = false,
 )
@@ -85,6 +94,20 @@ data class Notification(
     val url       : String     = "",
     val read      : Boolean    = false,
     val ts        : Timestamp? = null,
+)
+
+// ─── TAKİP ─────────────────────────────────────────────
+// Firestore: follows/{id}
+// Alanlar: fromUid, fromName, fromPhoto, targetUid, targetName, targetPhoto, ts
+data class FollowRelation(
+    val id          : String     = "",
+    val fromUid     : String     = "",
+    val fromName    : String     = "",
+    val fromPhoto   : String     = "",
+    val targetUid   : String     = "",
+    val targetName  : String     = "",
+    val targetPhoto : String     = "",
+    val ts          : Timestamp? = null,
 )
 
 // ─── MESAJ / KONUŞMA ───────────────────────────────────
