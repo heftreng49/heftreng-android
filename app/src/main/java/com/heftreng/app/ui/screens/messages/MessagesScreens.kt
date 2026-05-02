@@ -42,9 +42,8 @@ import java.util.*
 // ── Konuşma Listesi ─────────────────────────────────────────────────────────
 // Tema: .msgp-wrap, .msgp-hd, .msgp-conv-item, .msgp-conv-av, .msgp-unread-dot
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 fun ConversationsScreen(
     navController: NavController,
     language     : String = "tr",
@@ -267,9 +266,8 @@ fun ConversationsScreen(
 // ── Mesaj Detay Ekranı ────────────────────────────────────────────────────────
 // Tema: .msg-chat-ov, .msg-chat-hd, .msg-chat-body, .msg-inp-bar
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 fun MessageDetailScreen(
     convId       : String,
     navController: NavController,
