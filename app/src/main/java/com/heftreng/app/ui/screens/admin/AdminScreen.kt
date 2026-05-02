@@ -1,4 +1,5 @@
-package com.heftreng.app.ui.screens.admin
+package com.heftreng.app
+import androidx.compose.foundation.background.ui.screens.admin
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -88,10 +89,7 @@ fun AdminScreen(
                 contentColor     = Amber,
                 edgePadding      = 0.dp,
                 indicator        = { tabPositions ->
-                    TabRowDefaults.SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                        color    = Amber,
-                    )
+                    Box(Modifier.tabIndicatorOffset(tabPositions[selectedTab]).height(2.dp).background(Amber))
                 },
             ) {
                 tabs.forEachIndexed { i, title ->

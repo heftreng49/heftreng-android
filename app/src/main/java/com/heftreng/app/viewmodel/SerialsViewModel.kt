@@ -152,17 +152,21 @@ class SerialsViewModel @Inject constructor(
                 // Feed'e paylaş
                 val userDoc = firestore.collection("users").document(uid).get().await()
                 val serial  = _selectedSerial.value
+                val myName = userDoc.getString("displayName") ?: userDoc.getString("name") ?: ""
                 firestore.collection("feed").add(mapOf(
                     "uid"         to uid,
-                    "displayName" to (userDoc.getString("displayName") ?: ""),
+                    "name"        to myName,          // tema: name alanı
+                    "displayName" to myName,           // Android uyumu
                     "username"    to (userDoc.getString("username") ?: ""),
                     "photoURL"    to (userDoc.getString("photoURL") ?: ""),
                     "text"        to "📖 ${serial?.title ?: ""} — Bölüm $order: $title",
-                    "imageURL"    to (serial?.coverImg ?: ""),
+                    "imgUrl"      to (serial?.coverImg ?: ""),   // tema: imgUrl
+                    "imageURL"    to (serial?.coverImg ?: ""),   // Android uyumu
                     "bookName"    to (serial?.title ?: ""),
-                    "authorName"  to (userDoc.getString("displayName") ?: ""),
+                    "authorName"  to myName,
+                    "repostType"  to "serial",         // tema: repostType
                     "serialId"    to serialId,
-                    "chapterId"   to "",   // chRef.id henüz yok, sonra update edilebilir
+                    "chapterId"   to "",
                     "likes"       to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
                     "ts"          to FieldValue.serverTimestamp(),
                 )).await()

@@ -1,4 +1,5 @@
-package com.heftreng.app.ui.screens.search
+package com.heftreng.app
+import androidx.compose.foundation.layout.Box.ui.screens.search
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -111,10 +112,7 @@ fun SearchScreen(
                     containerColor   = Background,
                     contentColor     = Amber,
                     indicator = { positions ->
-                        TabRowDefaults.SecondaryIndicator(
-                            modifier = Modifier.tabIndicatorOffset(positions[activeTab]),
-                            color    = Amber,
-                        )
+                        Box(Modifier.tabIndicatorOffset(positions[activeTab]).height(2.dp).background(Amber))
                     }
                 ) {
                     tabs.forEach { (label, icon, idx) ->

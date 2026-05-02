@@ -56,11 +56,15 @@ class KurdiViewModel @Inject constructor(
 
             try {
                 // Kullanıcı XP/streak/level
+                // Tema: users dokümanında "xp","streak","level" alanları
+                // Eski web verisi fallback: "kf_xp","kf_streak" — her ikisini de oku
                 if (uid.isNotEmpty()) {
                     val userDoc = firestore.collection("users").document(uid).get().await()
-                    val xpVal   = (userDoc.getLong("xp") ?: 0).toInt()
+                    val xpVal   = ((userDoc.getLong("xp") ?: 0) +
+                                   (userDoc.getLong("kf_xp") ?: 0)).toInt()
                     _xp.value     = xpVal
-                    _streak.value = (userDoc.getLong("streak") ?: 0).toInt()
+                    _streak.value = ((userDoc.getLong("streak") ?: 0)
+                        .coerceAtLeast(userDoc.getLong("kf_streak") ?: 0)).toInt()
                     _level.value  = (userDoc.getLong("level") ?: 1).toInt().coerceAtLeast((xpVal / 100) + 1)
                 }
 
@@ -129,10 +133,11 @@ class KurdiViewModel @Inject constructor(
                     .collection("kf_progress").document(lessonId)
                     .set(mapOf("ts" to Timestamp.now(), "xpEarned" to gained)).await()
 
-                // users/{uid} güncelle
+                // users/{uid} güncelle — hem yeni (xp) hem eski web (kf_xp) alanlarını yaz
                 firestore.collection("users").document(uid).update(mapOf(
-                    "xp"    to newXp,
-                    "level" to newLevel,
+                    "xp"     to newXp,
+                    "kf_xp"  to newXp,
+                    "level"  to newLevel,
                 )).await()
 
                 // Streak güncelle
@@ -153,8 +158,10 @@ class KurdiViewModel @Inject constructor(
                 else                             -> _streak.value
             }
             _streak.value = newStreak
+            // kf_streak de yaz — web temasıyla uyum
             firestore.collection("users").document(uid).update(mapOf(
-                "streak"       to newStreak,
+                "streak"        to newStreak,
+                "kf_streak"     to newStreak,
                 "lastKurdiDate" to now,
             )).await()
         } catch (e: Exception) { e.printStackTrace() }

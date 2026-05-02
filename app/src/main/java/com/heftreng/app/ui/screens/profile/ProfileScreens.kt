@@ -47,6 +47,7 @@ fun ProfileScreen(
     feedVm       : FeedViewModel        = hiltViewModel(),
     serialsVm    : SerialsViewModel     = hiltViewModel(),
     rlVm         : ReadingListViewModel = hiltViewModel(),
+    msgsVm       : com.heftreng.app.viewmodel.MessagesViewModel = hiltViewModel(),
 ) {
     val user           by vm.user.collectAsState()
     val posts          by vm.posts.collectAsState()
@@ -122,8 +123,12 @@ fun ProfileScreen(
                 onFollow       = { vm.toggleFollow(targetUid) },
                 onEditProfile  = { navController.navigate(Screen.EditProfile.route) },
                 onMessage      = {
-                    // Mesaj başlat — NavHost'ta messages rotasına git
-                    navController.navigate(Screen.Messages.route)
+                    // Mesaj başlat — direkt konuşmayı aç (yoksa oluştur)
+                    if (!isMe && targetUid.isNotBlank()) {
+                        msgsVm.startOrOpenConversation(targetUid) { convId ->
+                            navController.navigate("message/$convId")
+                        }
+                    }
                 },
             )
 
@@ -132,10 +137,7 @@ fun ProfileScreen(
                 containerColor   = Background,
                 contentColor     = Amber,
                 indicator = { tabPositions ->
-                    TabRowDefaults.SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                        color    = Amber,
-                    )
+                    Box(Modifier.tabIndicatorOffset(tabPositions[selectedTab]).height(2.dp).background(Amber))
                 }
             ) {
                 tabs.forEachIndexed { i, title ->

@@ -1,4 +1,5 @@
-package com.heftreng.app.ui.screens.kurdi
+package com.heftreng.app
+import androidx.compose.foundation.layout.Box.ui.screens.kurdi
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -41,7 +42,7 @@ fun KurdiScreen(vm: KurdiViewModel = hiltViewModel()) {
             fontWeight = FontWeight.Bold,
             color      = OnBackground,
             fontSize   = 18.sp,
-            modifier   = Modifier.padding(horizontal = 16.dp, top = 16.dp, bottom = 8.dp),
+            modifier   = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 8.dp),
         )
 
         // XP & Streak kartı
@@ -80,10 +81,7 @@ fun KurdiScreen(vm: KurdiViewModel = hiltViewModel()) {
             containerColor   = Background,
             contentColor     = Primary,
             indicator        = { tabPositions ->
-                TabRowDefaults.SecondaryIndicator(
-                    modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                    color    = Primary,
-                )
+                Box(Modifier.tabIndicatorOffset(tabPositions[selectedTab]).height(2.dp).background(Primary))
             },
         ) {
             tabs.forEachIndexed { i, title ->

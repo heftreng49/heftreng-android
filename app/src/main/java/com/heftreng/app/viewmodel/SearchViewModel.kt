@@ -142,8 +142,10 @@ class SearchViewModel @Inject constructor(
                     id       = doc.id,
                     type     = "serial",
                     title    = title,
-                    subtitle = d["authorName"] as? String ?: d["author"] as? String ?: "",
-                    imageUrl = d["coverURL"] as? String ?: d["cover"] as? String ?: "",
+                    // Tema: serials dokümanında yazar adı "name" alanında
+                    subtitle = d["name"] as? String ?: d["authorName"] as? String ?: "",
+                    // Tema: serials dokümanında kapak "coverImg" alanında (coverURL değil)
+                    imageUrl = d["coverImg"] as? String ?: "",
                 )
             }
         } catch (e: Exception) { e.printStackTrace() }
