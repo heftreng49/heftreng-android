@@ -33,6 +33,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Klavye açılınca Compose imePadding çalışsın diye
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
 
         // Bildirimden gelen intent'i al
         pendingNavTarget = intent?.getStringExtra("navigate_to")

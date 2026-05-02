@@ -1,5 +1,7 @@
 package com.heftreng.app.ui.screens.messages
 
+import androidx.compose.foundation.layout.imeNestedScroll
+
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -50,7 +52,10 @@ fun ConversationsScreen(
     var searchQuery   by remember { mutableStateOf("") }
     var showSearch    by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { vm.listenConversations() }
+    val uid = vm.uid
+    LaunchedEffect(uid) {
+        if (uid.isNotEmpty()) vm.listenConversations()
+    }
 
     val filtered = if (searchQuery.isBlank()) conversations
     else conversations.filter {
@@ -269,11 +274,21 @@ fun MessageDetailScreen(
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
+    // Klavye açıldığında da son mesaja scroll et
+    val imeVisible = androidx.compose.foundation.layout.WindowInsets.ime
+        .getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+    LaunchedEffect(imeVisible) {
+        if (imeVisible && messages.isNotEmpty()) {
+            kotlinx.coroutines.delay(100)
+            listState.animateScrollToItem(messages.size - 1)
+        }
+    }
     LaunchedEffect(editMsg) {
         if (editMsg != null) inputText = editMsg!!.text
     }
 
     Scaffold(
+        modifier       = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             // Tema: .msg-chat-hd
@@ -460,9 +475,13 @@ fun MessageDetailScreen(
             // Tema: .msg-chat-body
             LazyColumn(
                 state               = listState,
-                modifier            = Modifier.fillMaxSize().padding(padding),
+                modifier            = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .imeNestedScroll(),
                 contentPadding      = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(3.dp),
+                reverseLayout       = false,
             ) {
                 items(messages, key = { it.id }) { msg ->
                     val isMine = msg.senderId == vm.uid
