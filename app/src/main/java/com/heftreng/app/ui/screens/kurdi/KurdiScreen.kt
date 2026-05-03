@@ -37,9 +37,9 @@ fun KurdiScreen(
 
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = if (language == "ku")
-        listOf("Ders", "Ferheng", "Rêziman")
+        listOf("Ders", "Ferheng", "Rêziman", "AI Ders")
     else
-        listOf("Dersler", "Ferheng", "Rêziman")
+        listOf("Dersler", "Ferheng", "Rêziman", "AI Ders")
 
     Column(modifier = Modifier.fillMaxSize().background(Background)) {
 
@@ -132,6 +132,7 @@ fun KurdiScreen(
             0    -> LessonsTab(lessons, loading, vm)
             1    -> DictionaryTab(language)
             2    -> GrammarTab(language)
+            3    -> AiLessonTab(language, vm)
             else -> LessonsTab(lessons, loading, vm)
         }
     }
@@ -267,6 +268,90 @@ fun GrammarTab(language: String = "tr") {
                 color    = Muted,
                 fontSize = 14.sp,
             )
+        }
+    }
+}
+
+@Composable
+fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
+    val aiLesson  by vm.aiLesson.collectAsState()
+    val aiLoading by vm.aiLoading.collectAsState()
+    val aiError   by vm.aiError.collectAsState()
+    var apiKey by remember { mutableStateOf("") }
+    var topic  by remember { mutableStateOf("") }
+    var level  by remember { mutableStateOf("destpêk") }
+    val levels = listOf("destpêk" to "🌱 Başlangıç", "navîn" to "🌿 Orta", "pêşketî" to "🌳 İleri")
+
+    androidx.compose.foundation.lazy.LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Text("AI ile Kurdî Ders Üret", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("OpenRouter API anahtarını gir, konu belirle.", color = Muted, fontSize = 12.sp)
+        }
+        item {
+            OutlinedTextField(value = apiKey, onValueChange = { apiKey = it },
+                label = { Text("OpenRouter API Key", color = Muted, fontSize = 12.sp) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar, focusedTextColor = OnBackground, unfocusedTextColor = OnBackground))
+        }
+        item {
+            OutlinedTextField(value = topic, onValueChange = { topic = it },
+                label = { Text(if (language=="ku") "Mijar" else "Konu", color = Muted, fontSize = 12.sp) },
+                placeholder = { Text("Renkler, Sayılar…", color = Muted, fontSize = 12.sp) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar, focusedTextColor = OnBackground, unfocusedTextColor = OnBackground))
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                levels.forEach { (lv, label) ->
+                    val sel = level == lv
+                    Surface(modifier = Modifier.clickable { level = lv },
+                        shape = RoundedCornerShape(20.dp), color = if (sel) Primary else SurfaceVar) {
+                        Text(label, color = if (sel) Color.White else Muted, fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+                    }
+                }
+            }
+        }
+        item {
+            Button(onClick = { vm.generateAiLesson(apiKey, topic, level) },
+                enabled = !aiLoading && apiKey.isNotBlank() && topic.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                shape = RoundedCornerShape(12.dp)) {
+                if (aiLoading) { CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp); Spacer(Modifier.width(8.dp)) }
+                Text(if (aiLoading) "Üretiliyor…" else "✨ Ders Oluştur", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+        aiError?.let { err ->
+            item {
+                Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.errorContainer) {
+                    Text(err, color = MaterialTheme.colorScheme.onErrorContainer, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
+                }
+            }
+        }
+        aiLesson?.let { lesson ->
+            item { Text("📚 ${lesson.topic} — ${lesson.level}", fontWeight = FontWeight.Bold, color = Primary, fontSize = 14.sp) }
+            items(lesson.exercises) { ex ->
+                Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(ex.ku, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
+                        Text(ex.tr, color = Muted, fontSize = 12.sp)
+                        if (ex.options.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            ex.options.forEach { opt ->
+                                Text("• $opt", color = if (opt == ex.answer) Primary else OnBackground,
+                                    fontSize = 12.sp, fontWeight = if (opt == ex.answer) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    }
+                }
+            }
+            item { TextButton(onClick = { vm.clearAiLesson() }) { Text("Temizle", color = Muted) } }
         }
     }
 }

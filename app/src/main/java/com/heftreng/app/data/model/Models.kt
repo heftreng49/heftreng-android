@@ -220,3 +220,18 @@ data class KurdiLesson(
     val completed : Boolean = false,
     val order     : Int     = 0,
 )
+
+// ─── KURDİ AI DERS ──────────────────────────────────────
+data class AiLesson(
+    val topic    : String           = "",
+    val level    : String           = "destpêk",
+    val exercises: List<AiExercise> = emptyList(),
+)
+
+data class AiExercise(
+    val type    : String       = "mcq",
+    val ku      : String       = "",
+    val tr      : String       = "",
+    val options : List<String> = emptyList(),
+    val answer  : String       = "",
+)

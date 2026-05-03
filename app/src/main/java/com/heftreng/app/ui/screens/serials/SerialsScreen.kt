@@ -407,6 +407,19 @@ fun ChapterReadScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                actions = {
+                    var chapterLiked by remember { mutableStateOf(false) }
+                    LaunchedEffect(chapterId) { vm.isChapterLiked(chapterId) { chapterLiked = it } }
+                    IconButton(onClick = {
+                        vm.toggleLikeChapter(serialId, chapterId)
+                        chapterLiked = !chapterLiked
+                    }) {
+                        Icon(
+                            if (chapterLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            null, tint = if (chapterLiked) Color(0xFFEF4444) else Muted
+                        )
+                    }
+                },
             )
         }
     ) { padding ->

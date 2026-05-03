@@ -194,4 +194,91 @@ class ProfileViewModel @Inject constructor(
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
+    fun toggleLikePost(post: com.heftreng.app.data.model.Post) {
+        if (myUid.isEmpty()) return
+        val nowLiked = !post.isLikedByMe
+        _posts.value = _posts.value.map {
+            if (it.id == post.id) it.copy(isLikedByMe = nowLiked, likesCount = it.likesCount + if (nowLiked) 1 else -1) else it
+        }
+        viewModelScope.launch {
+            try {
+                val ref = firestore.collection("feedLikes").document("${post.id}_$myUid")
+                val pRef = firestore.collection("feed").document(post.id)
+                if (nowLiked) {
+                    val me = firestore.collection("users").document(myUid).get().await()
+                    ref.set(mapOf("uid" to myUid, "feedId" to post.id,
+                        "name" to (me.getString("name") ?: ""), "photoURL" to (me.getString("photoURL") ?: ""),
+                        "ts" to com.google.firebase.Timestamp.now())).await()
+                    pRef.update("likes", FieldValue.increment(1)).await()
+                } else {
+                    ref.delete().await()
+                    pRef.update("likes", FieldValue.increment(-1)).await()
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun deleteOwnPost(postId: String) {
+        _posts.value = _posts.value.filter { it.id != postId }
+        viewModelScope.launch {
+            try { firestore.collection("feed").document(postId).delete().await() }
+            catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun editOwnPost(postId: String, newText: String) {
+        _posts.value = _posts.value.map { if (it.id == postId) it.copy(text = newText) else it }
+        viewModelScope.launch {
+            try { firestore.collection("feed").document(postId).update("text", newText).await() }
+            catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun updateProfilePhoto(imageUri: android.net.Uri, storage: com.google.firebase.storage.FirebaseStorage, onDone: (String) -> Unit = {}) {
+        if (myUid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val ref = storage.reference.child("profile_photos/${myUid}.jpg")
+                ref.putFile(imageUri).await()
+                val url = ref.downloadUrl.await().toString()
+                firestore.collection("users").document(myUid).update("photoURL", url).await()
+                _user.value = _user.value?.copy(photoURL = url)
+                onDone(url)
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun updateCoverPhoto(imageUri: android.net.Uri, storage: com.google.firebase.storage.FirebaseStorage, onDone: (String) -> Unit = {}) {
+        if (myUid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val ref = storage.reference.child("cover_photos/${myUid}.jpg")
+                ref.putFile(imageUri).await()
+                val url = ref.downloadUrl.await().toString()
+                firestore.collection("users").document(myUid).update("coverPhoto", url).await()
+                _user.value = _user.value?.copy(coverPhoto = url)
+                onDone(url)
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun updateUsername(newUsername: String, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
+        if (myUid.isEmpty() || newUsername.isBlank()) return
+        val handle = newUsername.lowercase().trim()
+        viewModelScope.launch {
+            try {
+                val taken = firestore.collection("usernames").document(handle).get().await().exists()
+                if (taken) { onError("Bu kullanıcı adı alınmış"); return@launch }
+                val batch = firestore.batch()
+                val oldUsername = _user.value?.username ?: ""
+                if (oldUsername.isNotBlank()) batch.delete(firestore.collection("usernames").document(oldUsername))
+                batch.set(firestore.collection("usernames").document(handle), mapOf("uid" to myUid, "createdAt" to FieldValue.serverTimestamp()))
+                batch.update(firestore.collection("users").document(myUid), mapOf("username" to handle))
+                batch.commit().await()
+                _user.value = _user.value?.copy(username = handle)
+                onSuccess()
+            } catch (e: Exception) { onError(e.message ?: "Hata") }
+        }
+    }
+
 }
