@@ -266,7 +266,10 @@ service cloud.firestore {
         allow update: if isAuth()
             && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants
             && onlyChanging(['seen', 'seenAt', 'seenByPhoto', 'seenByName',
-                             'read_at', 'readAt', 'deleted', 'deletedAt']);
+                             'read_at', 'readAt', 'deleted', 'deletedAt',
+                             'read',        // okundu (Android)
+                             'liked_by',    // beğeni toggle (Android + Web)
+                             'edited', 'text']);  // mesaj düzenleme
         allow delete: if isAdmin();
       }
     }

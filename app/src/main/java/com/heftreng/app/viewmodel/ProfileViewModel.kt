@@ -50,18 +50,29 @@ class ProfileViewModel @Inject constructor(
                 val userDoc = firestore.collection("users").document(targetUid).get().await()
                 val d = userDoc.data ?: return@launch
                 _user.value = User(
-                    uid        = d["uid"] as? String ?: targetUid,
-                    displayName= d["displayName"] as? String ?: d["name"] as? String ?: "",
-                    name       = d["name"] as? String ?: "",
-                    username   = d["username"] as? String ?: (d["email"] as? String)?.substringBefore("@") ?: "",
-                    email      = d["email"] as? String ?: "",
-                    photoURL   = d["photoURL"] as? String ?: "",
-                    coverPhoto = d["coverPhoto"] as? String ?: "",
-                    bio        = d["bio"] as? String ?: "",
-                    website    = d["website"] as? String ?: "",
-                    level      = (d["level"] as? Long)?.toInt() ?: 1,
-                    xp         = (d["xp"] as? Long)?.toInt() ?: 0,
-                    streak     = (d["streak"] as? Long)?.toInt() ?: 0,
+                    uid           = d["uid"] as? String ?: targetUid,
+                    displayName   = d["displayName"] as? String ?: d["name"] as? String ?: "",
+                    name          = d["name"] as? String ?: "",
+                    username      = d["username"] as? String ?: (d["email"] as? String)?.substringBefore("@") ?: "",
+                    email         = d["email"] as? String ?: "",
+                    photoURL      = d["photoURL"] as? String ?: "",
+                    coverPhoto    = d["coverPhoto"] as? String ?: "",
+                    bio           = d["bio"] as? String ?: "",
+                    website       = d["website"] as? String ?: "",
+                    level         = (d["level"] as? Long)?.toInt() ?: 1,
+                    xp            = maxOf(
+                        (d["xp"]    as? Long ?: 0L).toInt(),
+                        (d["kf_xp"] as? Long ?: 0L).toInt(),
+                    ),
+                    streak        = maxOf(
+                        (d["streak"]    as? Long ?: 0L).toInt(),
+                        (d["kf_streak"] as? Long ?: 0L).toInt(),
+                    ),
+                    kfXp          = (d["kf_xp"]    as? Long ?: 0L).toInt(),
+                    kfStreak      = (d["kf_streak"] as? Long ?: 0L).toInt(),
+                    kfDone        = (d["kf_done"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                    badges        = (d["badges"]  as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                    banned        = d["banned"] as? Boolean ?: false,
                 )
 
                 // Takipçi sayıları — follows koleksiyonundan say
