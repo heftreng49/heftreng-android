@@ -184,16 +184,9 @@ class KurdiViewModel @Inject constructor(
 
     private suspend fun loadUnitsAndLessons(doneIds: Set<String>) {
         try {
-            val (unitsSnap, lessonsSnap) = kotlinx.coroutines.coroutineScope {
-                val u = kotlinx.coroutines.async {
-                    firestore.collection("kf_units")
-                        .orderBy("order", Query.Direction.ASCENDING).get().await()
-                }
-                val l = kotlinx.coroutines.async {
-                    firestore.collection("kf_lessons").get().await()
-                }
-                u.await() to l.await()
-            }
+            val unitsSnap   = firestore.collection("kf_units")
+                .orderBy("order", Query.Direction.ASCENDING).get().await()
+            val lessonsSnap = firestore.collection("kf_lessons").get().await()
 
             val units = unitsSnap.documents.mapNotNull { doc ->
                 val d = doc.data ?: return@mapNotNull null
@@ -253,51 +246,53 @@ class KurdiViewModel @Inject constructor(
                 val lesson = _lessons.value.find { it.id == lessonId }
                     ?: run { _loading.value = false; return@launch }
 
-                // kf_vocab + kf_exercises paralel yükle
-                val (vocabSnap, exSnap) = kotlinx.coroutines.coroutineScope {
-                    val v = kotlinx.coroutines.async {
-                        try { firestore.collection("kf_vocab")
-                            .whereEqualTo("lessonId", lessonId).get().await() }
-                        catch (_: Exception) { null }
+                // kf_vocab yükle
+                val vocabList: List<KfVocab> = try {
+                    val snap = firestore.collection("kf_vocab")
+                        .whereEqualTo("lessonId", lessonId).get().await()
+                    snap.documents.mapNotNull { doc ->
+                        val d = doc.data ?: return@mapNotNull null
+                        KfVocab(
+                            id = doc.id,
+                            ku = d["ku"] as? String ?: "",
+                            kp = d["kp"] as? String ?: "",
+                            tr = d["tr"] as? String ?: "",
+                            e  = d["e"]  as? String ?: "📖",
+                        )
                     }
-                    val e = kotlinx.coroutines.async {
-                        try { firestore.collection("kf_exercises")
-                            .whereEqualTo("lessonId", lessonId).get().await() }
-                        catch (_: Exception) { null }
+                } catch (_: Exception) { emptyList() }
+
+                // kf_exercises yükle
+                val exerciseList: List<KfExercise> = try {
+                    val snap = firestore.collection("kf_exercises")
+                        .whereEqualTo("lessonId", lessonId).get().await()
+                    snap.documents.mapNotNull { doc ->
+                        val d = doc.data ?: return@mapNotNull null
+                        KfExercise(
+                            id       = doc.id,
+                            type     = d["type"]     as? String ?: "mcq",
+                            question = d["question"] as? String ?: "",
+                            optA     = d["optA"]     as? String ?: "",
+                            optB     = d["optB"]     as? String ?: "",
+                            optC     = d["optC"]     as? String ?: "",
+                            optD     = d["optD"]     as? String ?: "",
+                            answer   = d["answer"]   as? String ?: "",
+                            wrong    = (d["wrong"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+                        )
                     }
-                    v.await() to e.await()
+                } catch (_: Exception) { emptyList() }
+
+                val finalVocab: List<KfVocab> = vocabList.ifEmpty {
+                    MOCK_VOCAB[lessonId] ?: emptyList()
                 }
-
-                val vocab = vocabSnap?.documents?.mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    KfVocab(
-                        id = doc.id,
-                        ku = d["ku"] as? String ?: "",
-                        kp = d["kp"] as? String ?: "",
-                        tr = d["tr"] as? String ?: "",
-                        e  = d["e"]  as? String ?: "📖",
-                    )
-                } ?: emptyList()
-
-                val exercises = exSnap?.documents?.mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    KfExercise(
-                        id       = doc.id,
-                        type     = d["type"]     as? String ?: "mcq",
-                        question = d["question"] as? String ?: "",
-                        optA     = d["optA"]     as? String ?: "",
-                        optB     = d["optB"]     as? String ?: "",
-                        optC     = d["optC"]     as? String ?: "",
-                        optD     = d["optD"]     as? String ?: "",
-                        answer   = d["answer"]   as? String ?: "",
-                        wrong    = (d["wrong"]   as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
-                    )
-                } ?: emptyList()
+                val finalExercises: List<KfExercise> = exerciseList.ifEmpty {
+                    MOCK_EXERCISES[lessonId] ?: emptyList()
+                }
 
                 _activeLesson.value = ActiveLesson(
                     lesson    = lesson,
-                    vocab     = vocab.ifEmpty { MOCK_VOCAB[lessonId] ?: emptyList() },
-                    exercises = exercises.ifEmpty { MOCK_EXERCISES[lessonId] ?: emptyList() },
+                    vocab     = finalVocab,
+                    exercises = finalExercises,
                 )
 
             } catch (e: Exception) {
