@@ -10,12 +10,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import com.heftreng.app.data.model.AiLesson
+import com.heftreng.app.data.model.AiExercise
 import org.json.JSONObject
 import org.json.JSONArray
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
-import com.heftreng.app.data.model.AiLesson
-import com.heftreng.app.data.model.AiExercise
 import javax.inject.Inject
 
 @HiltViewModel
@@ -161,64 +161,55 @@ class KurdiViewModel @Inject constructor(
     }
     // ── KurdiAI — OpenRouter API ─────────────────────────────────────────────
     private val _aiLesson  = MutableStateFlow<AiLesson?>(null)
-    val aiLesson = _aiLesson.asStateFlow()
-
+    val aiLesson  = _aiLesson.asStateFlow()
     private val _aiLoading = MutableStateFlow(false)
     val aiLoading = _aiLoading.asStateFlow()
-
     private val _aiError   = MutableStateFlow<String?>(null)
-    val aiError = _aiError.asStateFlow()
+    val aiError   = _aiError.asStateFlow()
 
     fun generateAiLesson(apiKey: String, topic: String, level: String = "destpêk") {
         if (apiKey.isBlank() || topic.isBlank()) return
-        _aiLoading.value = true
-        _aiError.value   = null
+        _aiLoading.value = true; _aiError.value = null
         viewModelScope.launch {
             try {
                 val payload = JSONObject().apply {
                     put("model", "google/gemini-2.0-flash-001")
                     put("messages", JSONArray().apply {
-                        put(JSONObject().apply { put("role","system"); put("content","Kürtçe (Kurmancî) öğretmenisin. JSON formatında ders üret: {topic,exercises:[{type,ku,tr,options,answer}]}. Sadece JSON döndür.") })
+                        put(JSONObject().apply {
+                            put("role","system")
+                            put("content","Kürtçe (Kurmancî) öğretmenisin. JSON formatında ders üret: {topic,exercises:[{type,ku,tr,options,answer}]}. Sadece JSON döndür.")
+                        })
                         put(JSONObject().apply { put("role","user"); put("content","Konu: $topic | Seviye: $level") })
                     })
                     put("max_tokens", 1500)
                 }
                 val url  = URL("https://openrouter.ai/api/v1/chat/completions")
-                val conn = url.openConnection() as HttpsURLConnection
-                conn.apply {
-                    requestMethod = "POST"
-                    setRequestProperty("Content-Type","application/json")
-                    setRequestProperty("Authorization","Bearer $apiKey")
-                    setRequestProperty("HTTP-Referer","https://heft-reng.blogspot.com")
-                    setRequestProperty("X-Title","Heftreng Kurdî")
-                    doOutput = true; connectTimeout = 15000; readTimeout = 30000
+                val conn = (url.openConnection() as HttpsURLConnection).also {
+                    it.requestMethod = "POST"
+                    it.setRequestProperty("Content-Type","application/json")
+                    it.setRequestProperty("Authorization","Bearer $apiKey")
+                    it.setRequestProperty("HTTP-Referer","https://heft-reng.blogspot.com")
+                    it.setRequestProperty("X-Title","Heftreng Kurdî")
+                    it.doOutput = true; it.connectTimeout = 15000; it.readTimeout = 30000
                 }
                 conn.outputStream.use { it.write(payload.toString().toByteArray()) }
                 val raw = conn.inputStream.bufferedReader().readText()
                 val txt = JSONObject(raw).getJSONArray("choices")
                     .getJSONObject(0).getJSONObject("message").getString("content")
                     .trim().removePrefix("```json").removePrefix("```").removeSuffix("```")
-                val lj  = JSONObject(txt)
-                val ea  = lj.optJSONArray("exercises") ?: JSONArray()
-                _aiLesson.value = AiLesson(
-                    topic     = topic, level = level,
+                val lj = JSONObject(txt)
+                val ea = lj.optJSONArray("exercises") ?: JSONArray()
+                _aiLesson.value = AiLesson(topic = topic, level = level,
                     exercises = (0 until ea.length()).map { i ->
                         val ex = ea.getJSONObject(i)
                         val op = ex.optJSONArray("options")
-                        AiExercise(
-                            type    = ex.optString("type","mcq"),
-                            ku      = ex.optString("ku",""),
-                            tr      = ex.optString("tr",""),
-                            options = if (op!=null) (0 until op.length()).map { op.getString(it) } else emptyList(),
-                            answer  = ex.optString("answer",""),
-                        )
-                    }
-                )
-            } catch (e: Exception) {
-                _aiError.value = e.message ?: "Hata"
-            } finally {
-                _aiLoading.value = false
-            }
+                        AiExercise(type=ex.optString("type","mcq"), ku=ex.optString("ku",""),
+                            tr=ex.optString("tr",""),
+                            options=if(op!=null)(0 until op.length()).map{op.getString(it)}else emptyList(),
+                            answer=ex.optString("answer",""))
+                    })
+            } catch (e: Exception) { _aiError.value = e.message ?: "Hata"
+            } finally { _aiLoading.value = false }
         }
     }
 

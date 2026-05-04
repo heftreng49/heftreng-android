@@ -282,28 +282,29 @@ fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
     var level  by remember { mutableStateOf("destpêk") }
     val levels = listOf("destpêk" to "🌱 Başlangıç", "navîn" to "🌿 Orta", "pêşketî" to "🌳 İleri")
 
-    androidx.compose.foundation.lazy.LazyColumn(
+    LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Text("AI ile Kurdî Ders Üret", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
-            Spacer(Modifier.height(4.dp))
-            Text("OpenRouter API anahtarını gir, konu belirle.", color = Muted, fontSize = 12.sp)
+            Text("AI ile Kurdî Ders", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
+            Text("OpenRouter API anahtarını gir.", color = Muted, fontSize = 12.sp)
         }
         item {
             OutlinedTextField(value = apiKey, onValueChange = { apiKey = it },
-                label = { Text("OpenRouter API Key", color = Muted, fontSize = 12.sp) },
+                label = { Text("API Key", color = Muted, fontSize = 12.sp) },
                 modifier = Modifier.fillMaxWidth(), singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar, focusedTextColor = OnBackground, unfocusedTextColor = OnBackground))
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar,
+                    focusedTextColor = OnBackground, unfocusedTextColor = OnBackground))
         }
         item {
             OutlinedTextField(value = topic, onValueChange = { topic = it },
                 label = { Text(if (language=="ku") "Mijar" else "Konu", color = Muted, fontSize = 12.sp) },
                 placeholder = { Text("Renkler, Sayılar…", color = Muted, fontSize = 12.sp) },
                 modifier = Modifier.fillMaxWidth(), singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar, focusedTextColor = OnBackground, unfocusedTextColor = OnBackground))
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar,
+                    focusedTextColor = OnBackground, unfocusedTextColor = OnBackground))
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -323,7 +324,7 @@ fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Primary),
                 shape = RoundedCornerShape(12.dp)) {
-                if (aiLoading) { CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp); Spacer(Modifier.width(8.dp)) }
+                if (aiLoading) { CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp); Spacer(Modifier.width(8.dp)) }
                 Text(if (aiLoading) "Üretiliyor…" else "✨ Ders Oluştur", color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
@@ -338,14 +339,14 @@ fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
             item { Text("📚 ${lesson.topic} — ${lesson.level}", fontWeight = FontWeight.Bold, color = Primary, fontSize = 14.sp) }
             items(lesson.exercises) { ex ->
                 Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface, modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+                    Column(Modifier.padding(14.dp)) {
                         Text(ex.ku, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
                         Text(ex.tr, color = Muted, fontSize = 12.sp)
                         if (ex.options.isNotEmpty()) {
                             Spacer(Modifier.height(8.dp))
                             ex.options.forEach { opt ->
-                                Text("• $opt", color = if (opt == ex.answer) Primary else OnBackground,
-                                    fontSize = 12.sp, fontWeight = if (opt == ex.answer) FontWeight.Bold else FontWeight.Normal)
+                                Text("• $opt", color = if (opt==ex.answer) Primary else OnBackground,
+                                    fontSize = 12.sp, fontWeight = if (opt==ex.answer) FontWeight.Bold else FontWeight.Normal)
                             }
                         }
                     }

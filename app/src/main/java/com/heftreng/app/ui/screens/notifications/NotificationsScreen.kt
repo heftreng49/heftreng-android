@@ -97,10 +97,7 @@ fun NotificationsScreen(
                                     "cmt",
                                     "comment",
                                     "repost"  -> notif.postId?.let { pid ->
-                                        if (pid.isNotBlank()) navController.navigate(Screen.PostDetail.go(pid))
-                                    }
-                                    else -> notif.postId?.let { pid ->
-                                        if (pid.isNotBlank()) navController.navigate(Screen.PostDetail.go(pid))
+                                        navController.navigate(Screen.PostDetail.go(pid))
                                     }
                                 }
                             },

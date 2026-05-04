@@ -194,25 +194,33 @@ class ProfileViewModel @Inject constructor(
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
+    // ── Profil gönderilerinde beğeni / silme / düzenleme ─────────────────────
     fun toggleLikePost(post: com.heftreng.app.data.model.Post) {
         if (myUid.isEmpty()) return
         val nowLiked = !post.isLikedByMe
         _posts.value = _posts.value.map {
-            if (it.id == post.id) it.copy(isLikedByMe = nowLiked, likesCount = it.likesCount + if (nowLiked) 1 else -1) else it
+            if (it.id == post.id) it.copy(
+                isLikedByMe = nowLiked,
+                likesCount  = it.likesCount + if (nowLiked) 1 else -1
+            ) else it
         }
         viewModelScope.launch {
             try {
-                val ref = firestore.collection("feedLikes").document("${post.id}_$myUid")
+                val ref  = firestore.collection("feedLikes").document("${post.id}_$myUid")
                 val pRef = firestore.collection("feed").document(post.id)
                 if (nowLiked) {
                     val me = firestore.collection("users").document(myUid).get().await()
-                    ref.set(mapOf("uid" to myUid, "feedId" to post.id,
-                        "name" to (me.getString("name") ?: ""), "photoURL" to (me.getString("photoURL") ?: ""),
-                        "ts" to com.google.firebase.Timestamp.now())).await()
-                    pRef.update("likes", FieldValue.increment(1)).await()
+                    ref.set(mapOf(
+                        "uid"     to myUid,
+                        "feedId"  to post.id,
+                        "name"    to (me.getString("name") ?: ""),
+                        "photoURL"to (me.getString("photoURL") ?: ""),
+                        "ts"      to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    )).await()
+                    pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(1)).await()
                 } else {
                     ref.delete().await()
-                    pRef.update("likes", FieldValue.increment(-1)).await()
+                    pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(-1)).await()
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -234,6 +242,7 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
+    // ── Profil / Kapak fotoğrafı güncelle ────────────────────────────────────
     fun updateProfilePhoto(imageUri: android.net.Uri, storage: com.google.firebase.storage.FirebaseStorage, onDone: (String) -> Unit = {}) {
         if (myUid.isEmpty()) return
         viewModelScope.launch {
@@ -262,6 +271,7 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
+    // ── Username güncelle ─────────────────────────────────────────────────────
     fun updateUsername(newUsername: String, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
         if (myUid.isEmpty() || newUsername.isBlank()) return
         val handle = newUsername.lowercase().trim()
@@ -270,9 +280,10 @@ class ProfileViewModel @Inject constructor(
                 val taken = firestore.collection("usernames").document(handle).get().await().exists()
                 if (taken) { onError("Bu kullanıcı adı alınmış"); return@launch }
                 val batch = firestore.batch()
-                val oldUsername = _user.value?.username ?: ""
-                if (oldUsername.isNotBlank()) batch.delete(firestore.collection("usernames").document(oldUsername))
-                batch.set(firestore.collection("usernames").document(handle), mapOf("uid" to myUid, "createdAt" to FieldValue.serverTimestamp()))
+                val old   = _user.value?.username ?: ""
+                if (old.isNotBlank()) batch.delete(firestore.collection("usernames").document(old))
+                batch.set(firestore.collection("usernames").document(handle),
+                    mapOf("uid" to myUid, "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()))
                 batch.update(firestore.collection("users").document(myUid), mapOf("username" to handle))
                 batch.commit().await()
                 _user.value = _user.value?.copy(username = handle)

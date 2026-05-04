@@ -517,14 +517,13 @@ fun EditProfileScreen(
     var username    by remember(user) { mutableStateOf(user?.username ?: "") }
     var usernameErr by remember { mutableStateOf<String?>(null) }
 
-    val storage   = com.google.firebase.storage.FirebaseStorage.getInstance()
+    val storage     = com.google.firebase.storage.FirebaseStorage.getInstance()
     val photoPicker = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+        androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri -> uri?.let { vm.updateProfilePhoto(it, storage) } }
     val coverPicker = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+        androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri -> uri?.let { vm.updateCoverPhoto(it, storage) } }
-
     LaunchedEffect(Unit) { vm.load("me") }
 
     Scaffold(
@@ -545,11 +544,8 @@ fun EditProfileScreen(
                         if (usernameChanged) {
                             vm.updateUsername(username,
                                 onSuccess = { navController.popBackStack() },
-                                onError   = { usernameErr = it }
-                            )
-                        } else {
-                            navController.popBackStack()
-                        }
+                                onError   = { usernameErr = it })
+                        } else { navController.popBackStack() }
                     }) {
                         Text("Kaydet", color = Amber, fontWeight = FontWeight.Bold)
                     }
@@ -562,21 +558,13 @@ fun EditProfileScreen(
             modifier            = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // Fotoğraf butonları
-            androidx.compose.foundation.layout.Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                androidx.compose.material3.OutlinedButton(
-                    onClick = { photoPicker.launch("image/*") },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp),
-                ) { androidx.compose.material3.Text("📷 Profil Foto", fontSize = 12.sp) }
-                androidx.compose.material3.OutlinedButton(
-                    onClick = { coverPicker.launch("image/*") },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp),
-                ) { androidx.compose.material3.Text("🖼 Kapak Foto", fontSize = 12.sp) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { photoPicker.launch("image/*") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp)) {
+                    Text("📷 Profil Foto", fontSize = 12.sp)
+                }
+                OutlinedButton(onClick = { coverPicker.launch("image/*") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp)) {
+                    Text("🖼 Kapak Foto", fontSize = 12.sp)
+                }
             }
             OutlinedTextField(
                 value = displayName, onValueChange = { displayName = it },
@@ -591,7 +579,6 @@ fun EditProfileScreen(
                 isError = usernameErr != null,
                 modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
                 colors = heftrangTextFieldColors(),
-                supportingText = { usernameErr?.let { androidx.compose.material3.Text(it, color = androidx.compose.material3.MaterialTheme.colorScheme.error, fontSize = 11.sp) } }
             )
             OutlinedTextField(
                 value = bio, onValueChange = { bio = it },

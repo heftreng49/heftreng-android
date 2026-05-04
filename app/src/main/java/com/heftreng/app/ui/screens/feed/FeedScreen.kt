@@ -622,24 +622,18 @@ fun PostCard(
                 Text(post.text, color = OnBackground, fontSize = 15.sp, lineHeight = 22.sp)
                 Spacer(Modifier.height(8.dp))
             }
-            // repostType badge
-            if (post.repostType.isNotBlank() && post.repostType != "feed") {
-                androidx.compose.material3.Surface(
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
-                    color = Primary.copy(alpha = 0.12f),
-                    modifier = Modifier.padding(bottom = 6.dp),
-                ) {
-                    androidx.compose.material3.Text(
-                        when (post.repostType) { "serial" -> "📖 Serial"; "chapter" -> "📄 Bölüm"; else -> post.repostType },
+                        if (post.repostType.isNotBlank() && post.repostType != "feed") {
+                Surface(shape = RoundedCornerShape(6.dp), color = Primary.copy(alpha = 0.12f),
+                    modifier = Modifier.padding(bottom = 6.dp)) {
+                    Text(when(post.repostType){"serial"->"📖 Serial";"chapter"->"📄 Bölüm";else->post.repostType},
                         color = Primary, fontSize = 11.sp,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                    )
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                 }
             }
-            val displayImage = post.imgUrl.ifBlank { post.imageURL }
-            if (displayImage.isNotBlank()) {
+            val displayImg = post.imgUrl.ifBlank { post.imageURL }
+            if (displayImg.isNotBlank()) {
                 AsyncImage(
-                    model              = displayImage,
+                    model              = displayImg,
                     contentDescription = null,
                     modifier           = Modifier.fillMaxWidth().heightIn(max = 300.dp).clip(RoundedCornerShape(12.dp)),
                     contentScale       = ContentScale.Crop,
