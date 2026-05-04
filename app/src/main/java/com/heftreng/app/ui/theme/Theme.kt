@@ -73,14 +73,6 @@ val Primary       @Composable get() = LocalHeftrangColors.current.primary
 val PrimaryLight  @Composable get() = LocalHeftrangColors.current.primaryLight
 val Muted         @Composable get() = LocalHeftrangColors.current.muted
 val Divider       @Composable get() = LocalHeftrangColors.current.divider
-val OnBackground  @Composable get() = LocalHeftrangColors.current.onBackground
-
-// Alias'lar — Surface, OnBackground kısayolları
-val Surface       @Composable get() = LocalHeftrangColors.current.surface
-val ErrorColor    = androidx.compose.ui.graphics.Color(0xFFEF4444)
-val OkColor       = androidx.compose.ui.graphics.Color(0xFF22C55E)
-val PrimaryDark   = androidx.compose.ui.graphics.Color(0xFF6D28D9)
-val PrimaryVar    = androidx.compose.ui.graphics.Color(0xFFA78BFA)
 
 // ── MaterialTheme color scheme'leri ───────────────────
 private fun darkScheme() = darkColorScheme(

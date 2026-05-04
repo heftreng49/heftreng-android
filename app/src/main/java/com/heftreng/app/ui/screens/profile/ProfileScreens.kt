@@ -458,67 +458,6 @@ private fun ProfileHeader(
                 StatItem(followingCount, "Şopandî",  onClick = onFollowing)
                 if ((user?.xp ?: 0) > 0) StatItem(user?.xp ?: 0, "XP", onClick = null)
             }
-            // Badges
-            if ((user?.badges?.size ?: 0) > 0) {
-                Spacer(Modifier.height(8.dp))
-                val badgeEmoji = mapOf(
-                    "admin"      to "👑", "verified" to "✅", "author"     to "✍️",
-                    "reader"     to "📖", "poet"     to "🖋️",  "translator" to "🌐",
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    user?.badges?.take(5)?.forEach { b ->
-                        Box(
-                            Modifier
-                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
-                                .background(SurfaceVar)
-                                .padding(horizontal = 6.dp, vertical = 3.dp)
-                        ) {
-                            Text("${badgeEmoji[b] ?: "🏷"} $b", fontSize = 11.sp, color = OnSurface)
-                        }
-                    }
-                }
-            }
-            // XP bar + Streak + Kurdî
-            val userXp = user?.xp ?: 0
-            if (userXp > 0 || (user?.streak ?: 0) > 0) {
-                Spacer(Modifier.height(10.dp))
-                val userLevel  = user?.level ?: 1
-                val xpInLevel  = userXp % 100
-                val userStreak = user?.streak ?: 0
-                val kfCount    = user?.kfDone?.size ?: 0
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                        .background(SurfaceVar)
-                        .padding(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalAlignment     = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Row {
-                            Text("Lv.$userLevel", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = Primary, fontSize = 13.sp)
-                            Spacer(Modifier.width(6.dp))
-                            Text("$userXp XP", color = Muted, fontSize = 12.sp)
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        androidx.compose.material3.LinearProgressIndicator(
-                            progress   = { xpInLevel / 100f },
-                            color      = Primary,
-                            trackColor = Divider,
-                            modifier   = Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(99.dp)),
-                        )
-                    }
-                    if (userStreak > 0) Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("🔥", fontSize = 18.sp)
-                        Text(userStreak.toString(), fontSize = 11.sp, color = Muted)
-                    }
-                    if (kfCount > 0) Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("📚", fontSize = 18.sp)
-                        Text(kfCount.toString(), fontSize = 11.sp, color = Muted)
-                    }
-                }
-            }
             Spacer(Modifier.height(12.dp))
             HorizontalDivider(color = Divider)
         }
