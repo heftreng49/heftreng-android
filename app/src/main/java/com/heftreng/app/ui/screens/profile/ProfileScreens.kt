@@ -371,24 +371,43 @@ fun ProfileScreen(
                 3 -> {
                     // ── Beğendikleri ─────────────────────────────────────────
                     if (savedLoading) {
-                        item {
-                            Box(Modifier.fillMaxWidth().padding(32.dp), Alignment.Center) {
-                                CircularProgressIndicator(color = Amber, modifier = Modifier.size(24.dp))
-                            }
+                        item(key = "saved_loading") {
+                            Box(
+                                Modifier.fillMaxWidth().height(200.dp),
+                                contentAlignment = Alignment.Center,
+                            ) { CircularProgressIndicator(color = Amber, modifier = Modifier.size(24.dp)) }
                         }
                     } else if (savedPosts.isEmpty()) {
-                        item { EmptyTab("Henüz kaydedilen gönderi yok") }
+                        item(key = "saved_empty") {
+                            Box(
+                                Modifier.fillMaxWidth().height(200.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Outlined.Bookmark, null,
+                                        tint     = Muted,
+                                        modifier = Modifier.size(44.dp),
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    Text("Henüz kaydedilen gönderi yok", color = Muted)
+                                }
+                            }
+                        }
                     } else {
-                        items(savedPosts, key = { it.id }) { post ->
+                        items(savedPosts, key = { "saved_${it.id}" }) { post ->
                             PostCard(
                                 post      = post,
-                                myUid     = vm.myUid,
                                 onLike    = { vm.toggleLikePost(post) },
-                                onDelete  = { vm.deleteOwnPost(post.id) },
-                                onEdit    = { vm.editOwnPost(post.id, it) },
-                                onComment = { navController.navigate("post/${post.id}") },
-                                onProfile = { navController.navigate("profile/$it") },
+                                onSave    = { /* zaten kayıtlı */ },
+                                onProfile = { navController.navigate(Screen.Profile.go(post.uid)) },
+                                onComment = { navController.navigate(Screen.PostDetail.go(post.id)) },
+                                onShare   = { },
+                                onDelete  = if (vm.myUid == post.uid) ({ vm.deleteOwnPost(post.id) }) else null,
+                                onEdit    = if (vm.myUid == post.uid) ({ newText -> vm.editOwnPost(post.id, newText) }) else null,
+                                onTap     = { navController.navigate(Screen.PostDetail.go(post.id)) },
                             )
+                            HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         }
                     }
                 }
