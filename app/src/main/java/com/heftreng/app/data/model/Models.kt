@@ -207,6 +207,7 @@ data class Book(
     val likes       : Int        = 0,
     val ts          : Timestamp? = null,
     val updatedAt   : Timestamp? = null,
+    val isLikedByMe : Boolean    = false,
 )
 
 data class BookChapter(

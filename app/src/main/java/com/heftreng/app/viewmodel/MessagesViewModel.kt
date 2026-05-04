@@ -133,7 +133,7 @@ class MessagesViewModel @Inject constructor(
                         "last_msg"        to "",
                         "updated_at"      to FieldValue.serverTimestamp(),
                         "unread_$uid"     to 0,
-                        "unread_$otherUid"to 0,
+                        "unread_$otherUid" to 0,
                     )).await()
                 }
                 onReady(convId)
@@ -270,7 +270,6 @@ class MessagesViewModel @Inject constructor(
                 val unread = firestore.collection("convMessages").document(convId)
                     .collection("msgs")
                     .whereEqualTo("read", false)
-                    .whereNotEqualTo("senderUid", uid)
                     .limit(50).get().await()
                 val batch = firestore.batch()
                 unread.documents.forEach { d ->

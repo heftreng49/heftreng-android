@@ -225,7 +225,7 @@ class ProfileViewModel @Inject constructor(
                         "uid"     to myUid,
                         "feedId"  to post.id,
                         "name"    to (me.getString("name") ?: ""),
-                        "photoURL"to (me.getString("photoURL") ?: ""),
+                        "photoURL" to (me.getString("photoURL") ?: ""),
                         "ts"      to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                     )).await()
                     pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(1)).await()

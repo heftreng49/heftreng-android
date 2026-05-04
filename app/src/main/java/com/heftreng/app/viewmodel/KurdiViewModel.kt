@@ -184,7 +184,7 @@ class KurdiViewModel @Inject constructor(
                     .collection("kf_progress").document(lessonId)
                     .set(mapOf(
                         "ts"      to Timestamp.now(),
-                        "xpEarned"to gained,
+                        "xpEarned" to gained,
                     )).await()
 
                 // 2) kf_done arrayUnion + kf_xp + xp (web tema uyumu)
