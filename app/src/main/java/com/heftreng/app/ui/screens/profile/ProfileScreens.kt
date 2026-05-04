@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -36,7 +37,6 @@ import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.ui.screens.serials.SerialCard
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.FollowListSheet
-import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.viewmodel.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,8 +49,8 @@ fun ProfileScreen(
     feedVm       : FeedViewModel        = hiltViewModel(),
     serialsVm    : SerialsViewModel     = hiltViewModel(),
     rlVm         : ReadingListViewModel = hiltViewModel(),
-    msgsVm       : com.heftreng.app.viewmodel.MessagesViewModel = hiltViewModel(),
-    socialVm     : SocialViewModel = hiltViewModel(),
+    msgsVm       : MessagesViewModel    = hiltViewModel(),
+    socialVm     : SocialViewModel      = hiltViewModel(),
 ) {
     val user           by vm.user.collectAsState()
     val posts          by vm.posts.collectAsState()
@@ -61,8 +61,8 @@ fun ProfileScreen(
     val mySerials      by serialsVm.mySerials.collectAsState()
     val rlEntries      by rlVm.entries.collectAsState()
 
-    val followers  by socialVm.followers.collectAsState()
-    val following  by socialVm.following.collectAsState()
+    val followers     by socialVm.followers.collectAsState()
+    val following     by socialVm.following.collectAsState()
     val socialLoading by socialVm.loading.collectAsState()
     var showFollowers  by remember { mutableStateOf(false) }
     var showFollowing  by remember { mutableStateOf(false) }
@@ -73,6 +73,16 @@ fun ProfileScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Gönderiler", "Seriler", "Okuma Listesi")
 
+    // Mesaj navigate state — composable dışında navigate yapabilmek için
+    var navigateToConv by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(navigateToConv) {
+        navigateToConv?.let { convId ->
+            navController.navigate("message/$convId")
+            navigateToConv = null
+        }
+    }
+
     LaunchedEffect(uid) {
         vm.load(uid)
         serialsVm.loadMySerials(targetUid)
@@ -80,7 +90,7 @@ fun ProfileScreen(
     }
 
     Scaffold(
-        modifier = Modifier.imePadding(),
+        modifier       = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(
@@ -110,134 +120,166 @@ fun ProfileScreen(
     ) { padding ->
 
         if (loading && user == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
                 CircularProgressIndicator(color = Amber)
             }
             return@Scaffold
         }
 
-        // ── Dış yapı: Column — stickyHeader yerine Column + TabRow + LazyColumn ──
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            // Profil başlığı + Tab bar — kaydırılmaz kısım
-            ProfileHeader(
-                user           = user,
-                isMe           = isMe,
-                isFollowing    = isFollowing,
-                followersCount = followersCount,
-                followingCount = followingCount,
-                postsCount     = posts.size,
-                onFollow       = { vm.toggleFollow(targetUid) },
-                onEditProfile  = { navController.navigate(Screen.EditProfile.route) },
-                onFollowers    = {
-                    socialVm.loadFollowers(targetUid)
-                    showFollowers = true
-                },
-                onFollowing    = {
-                    socialVm.loadFollowing(targetUid)
-                    showFollowing = true
-                },
-                onMessage      = {
-                    // Mesaj başlat — direkt konuşmayı aç (yoksa oluştur)
-                    if (!isMe && targetUid.isNotBlank()) {
-                        msgsVm.startOrOpenConversation(targetUid) { convId ->
-                            navController.navigate("message/$convId")
-                        }
-                    }
-                },
-            )
+        // ── TEK LazyColumn — header + sticky tabbar + içerik hepsi scroll ──
+        val listState = rememberLazyListState()
 
-            TabRow(
-                selectedTabIndex = selectedTab,
-                containerColor   = Background,
-                contentColor     = Amber,
-                indicator = { tabPositions ->
-                    Box(Modifier.tabIndicatorOffset(tabPositions[selectedTab]).height(2.dp).background(Amber))
-                }
-            ) {
-                tabs.forEachIndexed { i, title ->
-                    Tab(
-                        selected               = selectedTab == i,
-                        onClick                = { selectedTab = i },
-                        text                   = { Text(title, fontSize = 12.sp) },
-                        selectedContentColor   = Amber,
-                        unselectedContentColor = Muted,
-                    )
+        // Tab'ın sticky olması için: header kaç item — 1 item (header), 1 item (tabbar), sonra içerik
+        LazyColumn(
+            state          = listState,
+            modifier       = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(bottom = 80.dp),
+        ) {
+
+            // ── 1. Profil başlığı ────────────────────────────────────────
+            item(key = "profile_header") {
+                ProfileHeader(
+                    user           = user,
+                    isMe           = isMe,
+                    isFollowing    = isFollowing,
+                    followersCount = followersCount,
+                    followingCount = followingCount,
+                    postsCount     = posts.size,
+                    onFollow       = { vm.toggleFollow(targetUid) },
+                    onEditProfile  = { navController.navigate(Screen.EditProfile.route) },
+                    onFollowers    = {
+                        socialVm.loadFollowers(targetUid)
+                        showFollowers = true
+                    },
+                    onFollowing    = {
+                        socialVm.loadFollowing(targetUid)
+                        showFollowing = true
+                    },
+                    onMessage      = {
+                        if (!isMe && targetUid.isNotBlank()) {
+                            msgsVm.startOrOpenConversation(targetUid) { convId ->
+                                // onReady callback — UI thread'de navigate et
+                                navigateToConv = convId
+                            }
+                        }
+                    },
+                )
+            }
+
+            // ── 2. Tab bar — stickyHeader ────────────────────────────────
+            stickyHeader(key = "tab_bar") {
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor   = Background,
+                    contentColor     = Amber,
+                    indicator = { tabPositions ->
+                        Box(
+                            Modifier
+                                .tabIndicatorOffset(tabPositions[selectedTab])
+                                .height(2.dp)
+                                .background(Amber)
+                        )
+                    }
+                ) {
+                    tabs.forEachIndexed { i, title ->
+                        Tab(
+                            selected               = selectedTab == i,
+                            onClick                = { selectedTab = i },
+                            text                   = { Text(title, fontSize = 12.sp) },
+                            selectedContentColor   = Amber,
+                            unselectedContentColor = Muted,
+                        )
+                    }
                 }
             }
 
-            // ── Tab içerikleri — her biri kendi LazyColumn'ına sahip ──
+            // ── 3. Tab içerikleri — inline items ─────────────────────────
             when (selectedTab) {
 
-                // ─── Gönderiler ───────────────────────────────────────
+                // ─── Gönderiler ───────────────────────────────────────────
                 0 -> {
                     if (loading && posts.isEmpty()) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = Amber, modifier = Modifier.size(32.dp))
+                        item(key = "posts_loading") {
+                            Box(
+                                Modifier.fillMaxWidth().height(200.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(
+                                    color    = Amber,
+                                    modifier = Modifier.size(32.dp),
+                                )
+                            }
                         }
                     } else if (posts.isEmpty()) {
-                        Box(
-                            Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Outlined.Article, null, tint = Muted, modifier = Modifier.size(44.dp))
-                                Spacer(Modifier.height(10.dp))
-                                Text("Henüz gönderi yok", color = Muted)
+                        item(key = "posts_empty") {
+                            Box(
+                                Modifier.fillMaxWidth().height(200.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Outlined.Article, null,
+                                        tint     = Muted,
+                                        modifier = Modifier.size(44.dp),
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    Text("Henüz gönderi yok", color = Muted)
+                                }
                             }
                         }
                     } else {
-                        LazyColumn(
-                            modifier       = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = 80.dp),
-                        ) {
-                            items(posts, key = { it.id }) { post ->
-                                PostCard(
-                                    post      = post,
-                                    onLike    = { vm.toggleLikePost(post) },
-                                    onSave    = { feedVm.toggleSave(post) },
-                                    onProfile = { if (!isMe) navController.navigate(Screen.Profile.go(post.uid)) },
-                                    onComment = { navController.navigate(Screen.PostDetail.go(post.id)) },
-                                    onShare   = { feedVm.repost(post) },
-                                    onDelete  = if (isMe) ({ vm.deleteOwnPost(post.id) }) else null,
-                                    onEdit    = if (isMe) ({ newText -> vm.editOwnPost(post.id, newText) }) else null,
-                                    onTap     = { navController.navigate(Screen.PostDetail.go(post.id)) },
-                                )
-                                HorizontalDivider(color = Divider, thickness = 0.5.dp)
-                            }
+                        items(posts, key = { "post_${it.id}" }) { post ->
+                            PostCard(
+                                post      = post,
+                                onLike    = { vm.toggleLikePost(post) },
+                                onSave    = { feedVm.toggleSave(post) },
+                                onProfile = {
+                                    if (!isMe) navController.navigate(Screen.Profile.go(post.uid))
+                                },
+                                onComment = { navController.navigate(Screen.PostDetail.go(post.id)) },
+                                onShare   = { feedVm.repost(post) },
+                                onDelete  = if (isMe) ({ vm.deleteOwnPost(post.id) }) else null,
+                                onEdit    = if (isMe) ({ newText -> vm.editOwnPost(post.id, newText) }) else null,
+                                onTap     = { navController.navigate(Screen.PostDetail.go(post.id)) },
+                            )
+                            HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         }
                     }
                 }
 
-                // ─── Seriler ──────────────────────────────────────────
+                // ─── Seriler ──────────────────────────────────────────────
                 1 -> {
                     if (mySerials.isEmpty()) {
-                        Box(
-                            Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Outlined.AutoStories, null, tint = Muted, modifier = Modifier.size(44.dp))
-                                Spacer(Modifier.height(10.dp))
-                                Text("Henüz seri yok", color = Muted)
-                                if (isMe) {
-                                    Spacer(Modifier.height(8.dp))
-                                    TextButton(onClick = { navController.navigate("serials") }) {
-                                        Text("+ Yeni Seri", color = Amber)
+                        item(key = "serials_empty") {
+                            Box(
+                                Modifier.fillMaxWidth().height(200.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Outlined.AutoStories, null,
+                                        tint     = Muted,
+                                        modifier = Modifier.size(44.dp),
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    Text("Henüz seri yok", color = Muted)
+                                    if (isMe) {
+                                        Spacer(Modifier.height(8.dp))
+                                        TextButton(
+                                            onClick = { navController.navigate("serials") },
+                                        ) {
+                                            Text("+ Yeni Seri", color = Amber)
+                                        }
                                     }
                                 }
                             }
                         }
                     } else {
-                        LazyColumn(
-                            modifier       = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            items(mySerials) { serial ->
+                        items(mySerials, key = { "serial_${it.id}" }) { serial ->
+                            Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
                                 SerialCard(
                                     serial  = serial,
                                     onClick = { navController.navigate("serial/${serial.id}") },
@@ -248,61 +290,76 @@ fun ProfileScreen(
                     }
                 }
 
-                // ─── Okuma Listesi ────────────────────────────────────
+                // ─── Okuma Listesi ────────────────────────────────────────
                 2 -> {
                     val allEmpty = rlEntries.values.all { it.isEmpty() }
                     if (allEmpty) {
-                        Box(
-                            Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.LibraryBooks, null, tint = Muted, modifier = Modifier.size(44.dp))
-                                Spacer(Modifier.height(10.dp))
-                                Text("Okuma listesi boş", color = Muted)
+                        item(key = "rl_empty") {
+                            Box(
+                                Modifier.fillMaxWidth().height(200.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Default.LibraryBooks, null,
+                                        tint     = Muted,
+                                        modifier = Modifier.size(44.dp),
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    Text("Okuma listesi boş", color = Muted)
+                                }
                             }
                         }
                     } else {
-                        LazyColumn(
-                            modifier       = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(12.dp),
-                        ) {
-                            val statuses = listOf(
-                                "okuyorum"         to "Okuyorum",
-                                "okumak_istiyorum" to "Okumak İstiyorum",
-                                "okudum"           to "Okudum",
-                                "biraktim"         to "Bıraktım",
-                            )
-                            val statusColors = mapOf(
-                                "okuyorum"         to Color(0xFF2563EB),
-                                "okumak_istiyorum" to Color(0xFF7C3AED),
-                                "okudum"           to Color(0xFF059669),
-                                "biraktim"         to Color(0xFFDC2626),
-                            )
-                            statuses.forEach { (key, label) ->
-                                val list = rlEntries[key] ?: emptyList()
-                                if (list.isNotEmpty()) {
-                                    val color = statusColors[key] ?: Amber
-                                    item(key = "header_$key") {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(vertical = 8.dp),
-                                        ) {
-                                            Box(
-                                                Modifier.size(8.dp)
-                                                    .clip(RoundedCornerShape(2.dp))
-                                                    .background(color)
-                                            )
-                                            Spacer(Modifier.width(8.dp))
-                                            Text("$label (${list.size})", color = color, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                        }
+                        val statuses = listOf(
+                            "okuyorum"         to "Okuyorum",
+                            "okumak_istiyorum" to "Okumak İstiyorum",
+                            "okudum"           to "Okudum",
+                            "biraktim"         to "Bıraktım",
+                        )
+                        val statusColors = mapOf(
+                            "okuyorum"         to Color(0xFF2563EB),
+                            "okumak_istiyorum" to Color(0xFF7C3AED),
+                            "okudum"           to Color(0xFF059669),
+                            "biraktim"         to Color(0xFFDC2626),
+                        )
+                        statuses.forEach { (key, label) ->
+                            val list = rlEntries[key] ?: emptyList()
+                            if (list.isNotEmpty()) {
+                                val color = statusColors[key] ?: Amber
+                                item(key = "rl_header_$key") {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier          = Modifier.padding(
+                                            horizontal = 12.dp, vertical = 8.dp
+                                        ),
+                                    ) {
+                                        Box(
+                                            Modifier
+                                                .size(8.dp)
+                                                .clip(RoundedCornerShape(2.dp))
+                                                .background(color)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            "$label (${list.size})",
+                                            color      = color,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize   = 13.sp,
+                                        )
                                     }
-                                    items(list, key = { "rl_${it.sid}" }) { entry ->
-                                        RlEntryRow(entry, onClick = { navController.navigate("serial/${entry.sid}") })
-                                    }
-                                    item(key = "div_$key") {
-                                        HorizontalDivider(color = Divider, modifier = Modifier.padding(vertical = 4.dp))
-                                    }
+                                }
+                                items(list, key = { "rl_${it.sid}" }) { entry ->
+                                    RlEntryRow(
+                                        entry   = entry,
+                                        onClick = { navController.navigate("serial/${entry.sid}") },
+                                    )
+                                }
+                                item(key = "rl_div_$key") {
+                                    HorizontalDivider(
+                                        color    = Divider,
+                                        modifier = Modifier.padding(vertical = 4.dp),
+                                    )
                                 }
                             }
                         }
@@ -312,16 +369,16 @@ fun ProfileScreen(
         }
     }
 
-    // ── Takipçi/Takip sheet'leri ──────────────────────────────────────────────
+    // ── Takipçi/Takip sheet'leri ─────────────────────────────────────────────
     if (showFollowers) {
         FollowListSheet(
             title     = "Şopîner ($followersCount)",
             entries   = followers,
             loading   = socialLoading,
             onDismiss = { showFollowers = false; socialVm.clearFollowers() },
-            onProfile = { uid ->
+            onProfile = { u ->
                 showFollowers = false
-                navController.navigate("profile/$uid")
+                navController.navigate("profile/$u")
             },
         )
     }
@@ -331,9 +388,9 @@ fun ProfileScreen(
             entries   = following,
             loading   = socialLoading,
             onDismiss = { showFollowing = false; socialVm.clearFollowing() },
-            onProfile = { uid ->
+            onProfile = { u ->
                 showFollowing = false
-                navController.navigate("profile/$uid")
+                navController.navigate("profile/$u")
             },
         )
     }
@@ -357,12 +414,17 @@ private fun ProfileHeader(
     Column(modifier = Modifier.fillMaxWidth()) {
         // Kapak fotoğrafı
         Box(
-            Modifier.fillMaxWidth().height(100.dp).background(SurfaceVar)
+            Modifier
+                .fillMaxWidth()
+                .height(100.dp)
+                .background(SurfaceVar)
         ) {
             if (user?.coverPhoto?.isNotEmpty() == true) {
                 AsyncImage(
-                    model = user.coverPhoto, contentDescription = null,
-                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+                    model              = user.coverPhoto,
+                    contentDescription = null,
+                    contentScale       = ContentScale.Crop,
+                    modifier           = Modifier.fillMaxSize(),
                 )
             }
         }
@@ -373,7 +435,6 @@ private fun ProfileHeader(
                 modifier          = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Bottom,
             ) {
-                // Avatar — Firestore'dan güncel photoURL (ProfileViewModel bunu çekiyor)
                 val avatarUrl = user?.photoURL?.ifEmpty { null }
                 Box(
                     modifier = Modifier
@@ -397,7 +458,7 @@ private fun ProfileHeader(
                     } else {
                         Text(
                             user?.displayName?.firstOrNull()?.uppercase() ?: "?",
-                            color      = androidx.compose.ui.graphics.Color.White,
+                            color      = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize   = 26.sp,
                         )
@@ -431,13 +492,23 @@ private fun ProfileHeader(
                                 containerColor = if (isFollowing) SurfaceVar else Amber,
                                 contentColor   = if (isFollowing) OnBackground else Color.Black,
                             ),
-                        ) { Text(if (isFollowing) "Takip Ediliyor" else "Takip Et", fontSize = 13.sp) }
+                        ) {
+                            Text(
+                                if (isFollowing) "Takip Ediliyor" else "Takip Et",
+                                fontSize = 13.sp,
+                            )
+                        }
                     }
                 }
             }
 
             // İsim & kullanıcı adı
-            Text(user?.displayName ?: "", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
+            Text(
+                user?.displayName ?: "",
+                fontWeight = FontWeight.Bold,
+                color      = OnBackground,
+                fontSize   = 18.sp,
+            )
             if (user?.username?.isNotBlank() == true) {
                 Text("@${user.username}", color = Muted, fontSize = 13.sp)
             }
@@ -453,9 +524,9 @@ private fun ProfileHeader(
             Spacer(Modifier.height(12.dp))
             // İstatistikler
             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                StatItem(postsCount,     "Nivîs",    onClick = null)
-                StatItem(followersCount, "Şopîner",  onClick = onFollowers)
-                StatItem(followingCount, "Şopandî",  onClick = onFollowing)
+                StatItem(postsCount,     "Nivîs",   onClick = null)
+                StatItem(followersCount, "Şopîner", onClick = onFollowers)
+                StatItem(followingCount, "Şopandî", onClick = onFollowing)
                 if ((user?.xp ?: 0) > 0) StatItem(user?.xp ?: 0, "XP", onClick = null)
             }
             Spacer(Modifier.height(12.dp))
@@ -470,26 +541,39 @@ private fun RlEntryRow(entry: ReadingListEntry, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(vertical = 6.dp, horizontal = 4.dp),
+            .padding(vertical = 6.dp, horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (entry.coverImg.isNotEmpty()) {
             AsyncImage(
-                model        = entry.coverImg,
+                model              = entry.coverImg,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier     = Modifier.size(36.dp, 50.dp).clip(RoundedCornerShape(5.dp)).background(SurfaceVar),
+                contentScale       = ContentScale.Crop,
+                modifier           = Modifier
+                    .size(36.dp, 50.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(SurfaceVar),
             )
         } else {
             Box(
-                Modifier.size(36.dp, 50.dp).clip(RoundedCornerShape(5.dp)).background(SurfaceVar),
+                Modifier
+                    .size(36.dp, 50.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(SurfaceVar),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Default.AutoStories, null, tint = Muted, modifier = Modifier.size(18.dp))
             }
         }
         Spacer(Modifier.width(10.dp))
-        Text(entry.title, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(
+            entry.title,
+            color      = OnBackground,
+            fontSize   = 13.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines   = 2,
+            overflow   = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -499,8 +583,17 @@ fun StatItem(count: Int, label: String, onClick: (() -> Unit)? = null) {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = if (onClick != null) Modifier.clickable { onClick() } else Modifier,
     ) {
-        Text(count.toString(), fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
-        Text(label, color = if (onClick != null) Primary else Muted, fontSize = 11.sp)
+        Text(
+            count.toString(),
+            fontWeight = FontWeight.Bold,
+            color      = OnBackground,
+            fontSize   = 16.sp,
+        )
+        Text(
+            label,
+            color    = if (onClick != null) Primary else Muted,
+            fontSize = 11.sp,
+        )
     }
 }
 
@@ -510,7 +603,7 @@ fun EditProfileScreen(
     navController: NavController,
     vm           : ProfileViewModel = hiltViewModel(),
 ) {
-    val user by vm.user.collectAsState()
+    val user        by vm.user.collectAsState()
     var displayName by remember(user) { mutableStateOf(user?.displayName ?: "") }
     var bio         by remember(user) { mutableStateOf(user?.bio ?: "") }
     var website     by remember(user) { mutableStateOf(user?.website ?: "") }
@@ -524,14 +617,21 @@ fun EditProfileScreen(
     val coverPicker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri -> uri?.let { vm.updateCoverPhoto(it, storage) } }
+
     LaunchedEffect(Unit) { vm.load("me") }
 
     Scaffold(
-        modifier = Modifier.imePadding(),
+        modifier       = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text("Profili Düzenle", color = OnBackground, fontWeight = FontWeight.SemiBold) },
+                title = {
+                    Text(
+                        "Profili Düzenle",
+                        color      = OnBackground,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
@@ -540,12 +640,16 @@ fun EditProfileScreen(
                 actions = {
                     TextButton(onClick = {
                         vm.updateProfile(displayName, bio, website)
-                        val usernameChanged = username.isNotBlank() && username != (user?.username ?: "")
+                        val usernameChanged = username.isNotBlank() &&
+                            username != (user?.username ?: "")
                         if (usernameChanged) {
                             vm.updateUsername(username,
                                 onSuccess = { navController.popBackStack() },
-                                onError   = { usernameErr = it })
-                        } else { navController.popBackStack() }
+                                onError   = { usernameErr = it },
+                            )
+                        } else {
+                            navController.popBackStack()
+                        }
                     }) {
                         Text("Kaydet", color = Amber, fontWeight = FontWeight.Bold)
                     }
@@ -555,42 +659,69 @@ fun EditProfileScreen(
         }
     ) { padding ->
         Column(
-            modifier            = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            modifier            = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(onClick = { photoPicker.launch("image/*") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp)) {
-                    Text("📷 Profil Foto", fontSize = 12.sp)
-                }
-                OutlinedButton(onClick = { coverPicker.launch("image/*") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp)) {
-                    Text("🖼 Kapak Foto", fontSize = 12.sp)
-                }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier              = Modifier.fillMaxWidth(),
+            ) {
+                OutlinedButton(
+                    onClick  = { photoPicker.launch("image/*") },
+                    modifier = Modifier.weight(1f),
+                    shape    = RoundedCornerShape(10.dp),
+                ) { Text("📷 Profil Foto", fontSize = 12.sp) }
+                OutlinedButton(
+                    onClick  = { coverPicker.launch("image/*") },
+                    modifier = Modifier.weight(1f),
+                    shape    = RoundedCornerShape(10.dp),
+                ) { Text("🖼 Kapak Foto", fontSize = 12.sp) }
             }
             OutlinedTextField(
-                value = displayName, onValueChange = { displayName = it },
-                label = { Text("Adın / Nav") }, singleLine = true,
-                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-                colors = heftrangTextFieldColors(),
+                value         = displayName,
+                onValueChange = { displayName = it },
+                label         = { Text("Adın / Nav") },
+                singleLine    = true,
+                modifier      = Modifier.fillMaxWidth(),
+                shape         = RoundedCornerShape(12.dp),
+                colors        = heftrangTextFieldColors(),
             )
             OutlinedTextField(
-                value = username,
-                onValueChange = { username = it.lowercase().filter { c -> c.isLetterOrDigit() || c == '_' }; usernameErr = null },
-                label = { Text("@kullanıcı adı") }, singleLine = true,
-                isError = usernameErr != null,
-                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-                colors = heftrangTextFieldColors(),
+                value         = username,
+                onValueChange = {
+                    username    = it.lowercase().filter { c -> c.isLetterOrDigit() || c == '_' }
+                    usernameErr = null
+                },
+                label         = { Text("@kullanıcı adı") },
+                singleLine    = true,
+                isError       = usernameErr != null,
+                modifier      = Modifier.fillMaxWidth(),
+                shape         = RoundedCornerShape(12.dp),
+                colors        = heftrangTextFieldColors(),
+            )
+            if (usernameErr != null) {
+                Text(usernameErr!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            }
+            OutlinedTextField(
+                value         = bio,
+                onValueChange = { bio = it },
+                label         = { Text("Bio") },
+                maxLines      = 5,
+                modifier      = Modifier.fillMaxWidth().heightIn(min = 100.dp),
+                shape         = RoundedCornerShape(12.dp),
+                colors        = heftrangTextFieldColors(),
             )
             OutlinedTextField(
-                value = bio, onValueChange = { bio = it },
-                label = { Text("Bio") }, maxLines = 5,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
-                shape = RoundedCornerShape(12.dp), colors = heftrangTextFieldColors(),
-            )
-            OutlinedTextField(
-                value = website, onValueChange = { website = it },
-                label = { Text("Website") }, singleLine = true,
-                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-                colors = heftrangTextFieldColors(),
+                value         = website,
+                onValueChange = { website = it },
+                label         = { Text("Website") },
+                singleLine    = true,
+                modifier      = Modifier.fillMaxWidth(),
+                shape         = RoundedCornerShape(12.dp),
+                colors        = heftrangTextFieldColors(),
             )
         }
     }
