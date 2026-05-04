@@ -49,6 +49,14 @@ data class Post(
     val name          : String     = "",   // tema: name (displayName alternatifi)
     val repostType    : String     = "",   // tema: repostType
     val repostId      : String     = "",   // tema: repostId
+    val repostText       : String     = "",   // tema: orijinal post metni
+    val repostAuthor     : String     = "",   // tema: orijinal yazar adı
+    val repostAuthorPhoto: String     = "",   // tema: orijinal yazar fotoğrafı
+    val repostAuthorUid  : String     = "",   // tema: orijinal yazar uid
+    val serialTitle      : String     = "",   // tema: serial başlığı
+    val serialCover      : String     = "",   // tema: serial kapak
+    val chapterTitle     : String     = "",   // tema: bölüm başlığı
+    val chapterOrder     : Int        = 0,    // tema: bölüm sırası
     val isLikedByMe   : Boolean    = false,
     val isSavedByMe   : Boolean    = false,
 )

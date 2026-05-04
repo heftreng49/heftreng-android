@@ -96,7 +96,10 @@ fun NotificationsScreen(
                                     "like",
                                     "cmt",
                                     "comment",
-                                    "repost"  -> notif.postId?.let { pid ->
+                                    "repost",
+                                    "chapter",
+                                    "post_approved",
+                                    "post_rejected"  -> notif.postId?.let { pid ->
                                         navController.navigate(Screen.PostDetail.go(pid))
                                     }
                                 }

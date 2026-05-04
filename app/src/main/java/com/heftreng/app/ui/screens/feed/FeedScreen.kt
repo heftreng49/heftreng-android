@@ -630,6 +630,24 @@ fun PostCard(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                 }
             }
+            // Repost kartı — tema: repostType ile farklı içerik tipleri
+            if (post.repostType.isNotBlank()) {
+                Surface(shape = RoundedCornerShape(10.dp), color = SurfaceVar,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(when(post.repostType){"serial"->"📖 Serial";"blog"->"📄 Blog";"feed"->"🔁 Gönderi";else->"🔁"},
+                            color = Primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        if (post.repostTitle.isNotBlank()) Text(post.repostTitle, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                        if (post.serialTitle.isNotBlank()) Text(post.serialTitle, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                        if (post.chapterTitle.isNotBlank()) Text("Bölüm ${post.chapterOrder}: ${post.chapterTitle}", color = Muted, fontSize = 12.sp)
+                        if (post.repostText.isNotBlank()) Text(post.repostText, color = Muted, fontSize = 12.sp, maxLines = 3)
+                        if (post.repostAuthor.isNotBlank()) Text("— ${post.repostAuthor}", color = Muted, fontSize = 11.sp)
+                        val rImg = listOf(post.repostImg, post.serialCover).firstOrNull { it.isNotBlank() } ?: ""
+                        if (rImg.isNotBlank()) AsyncImage(model = rImg, contentDescription = null,
+                            modifier = Modifier.fillMaxWidth().height(120.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                    }
+                }
+            }
             val displayImg = post.imgUrl.ifBlank { post.imageURL }
             if (displayImg.isNotBlank()) {
                 AsyncImage(
