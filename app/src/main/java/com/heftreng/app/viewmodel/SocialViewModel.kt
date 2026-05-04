@@ -1,14 +1,14 @@
 package com.heftreng.app.viewmodel
 
 // ═══════════════════════════════════════════════════════════════
-//  SocialViewModel — Takipçi/Takip/Beğenen listeleri
+//  SocialViewModel — Takipçi / Takip / Beğenen listeleri
 //
-//  Tema (site) ile tam uyumlu Firestore yapısı:
-//  - follows/{fromUid_targetUid}  → fromUid, fromName, fromPhoto,
-//                                    targetUid, targetName, targetPhoto, ts
-//  - feedLikes/{postId_uid}       → uid, feedId, name, photoURL, ts
-//  - commentLikes/{cmtId_uid}     → uid, name, photoURL, ts
-//  - serialLikes/{serialId_uid}   → uid, name, photoURL, ts
+//  Site (heft-reng.blogspot.com) Firestore yapısı:
+//  feedLikes/{postId_uid}    → { uid, feedId, name, photoURL, ts }
+//  commentLikes/{cmtId_uid}  → { uid, cmtId, name, photoURL, ts }
+//  serialLikes/{sid_uid}     → { uid, serialId, name, photoURL, ts }
+//  follows/{fromUid_toUid}   → { fromUid, fromName, fromPhoto,
+//                                targetUid, targetName, targetPhoto, ts }
 // ═══════════════════════════════════════════════════════════════
 
 import androidx.lifecycle.ViewModel
@@ -30,152 +30,238 @@ class SocialViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
 ) : ViewModel() {
 
-    private val _followers  = MutableStateFlow<List<FollowEntry>>(emptyList())
+    private val _followers = MutableStateFlow<List<FollowEntry>>(emptyList())
     val followers = _followers.asStateFlow()
 
-    private val _following  = MutableStateFlow<List<FollowEntry>>(emptyList())
+    private val _following = MutableStateFlow<List<FollowEntry>>(emptyList())
     val following = _following.asStateFlow()
 
-    private val _likers     = MutableStateFlow<List<LikeEntry>>(emptyList())
+    private val _likers    = MutableStateFlow<List<LikeEntry>>(emptyList())
     val likers = _likers.asStateFlow()
 
-    private val _loading    = MutableStateFlow(false)
+    private val _loading   = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
     val uid get() = auth.currentUser?.uid ?: ""
 
-    // ── Takipçi listesi ─────────────────────────────────
-    fun loadFollowers(targetUid: String) {
-        viewModelScope.launch {
-            _loading.value = true
-            try {
-                val snap = firestore.collection("follows")
-                    .whereEqualTo("targetUid", targetUid)
-                    .orderBy("ts", Query.Direction.DESCENDING)
-                    .limit(200).get().await()
-                _followers.value = snap.documents.mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    FollowEntry(
-                        uid      = d["fromUid"]   as? String ?: "",
-                        name     = (d["fromName"] as? String)?.takeIf { it.isNotBlank() }
-                                 ?: d["fromDisplayName"] as? String ?: "",
-                        photoURL = d["fromPhoto"] as? String ?: "",
-                        ts       = d["ts"]        as? com.google.firebase.Timestamp,
-                    )
-                }.filter { it.uid.isNotBlank() }
-            } catch (e: Exception) { e.printStackTrace() }
-            finally { _loading.value = false }
-        }
-    }
-
-    // ── Takip edilenler listesi ──────────────────────────
-    fun loadFollowing(targetUid: String) {
-        viewModelScope.launch {
-            _loading.value = true
-            try {
-                val snap = firestore.collection("follows")
-                    .whereEqualTo("fromUid", targetUid)
-                    .orderBy("ts", Query.Direction.DESCENDING)
-                    .limit(200).get().await()
-                _following.value = snap.documents.mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    FollowEntry(
-                        uid      = d["targetUid"]   as? String ?: "",
-                        name     = (d["targetName"] as? String)?.takeIf { it.isNotBlank() }
-                                 ?: d["targetDisplayName"] as? String ?: "",
-                        photoURL = d["targetPhoto"] as? String ?: "",
-                        ts       = d["ts"]          as? com.google.firebase.Timestamp,
-                    )
-                }.filter { it.uid.isNotBlank() }
-            } catch (e: Exception) { e.printStackTrace() }
-            finally { _loading.value = false }
-        }
-    }
-
-    // ── Gönderi beğenenleri ──────────────────────────────
-    // feedLikes: uid, feedId, name, photoURL, ts
+    // ── Gönderi beğenenleri ──────────────────────────────────────────────────
+    // Site: feedLikes/{postId}_{uid} → { uid, feedId, name, photoURL, ts }
+    // Sorgu: feedId == postId  (orderBy YOK — composite index gerektirmez)
     fun loadPostLikers(postId: String) {
         viewModelScope.launch {
             _loading.value = true
+            _likers.value  = emptyList()
             try {
+                // Birincil sorgu: feedId alanı (site yazım formatı)
                 val snap = firestore.collection("feedLikes")
                     .whereEqualTo("feedId", postId)
-                    .orderBy("ts", Query.Direction.DESCENDING)
-                    .limit(200).get().await()
-                // Geriye dönük uyum: feedId yoksa postId
-                val snap2 = if (snap.isEmpty) {
-                    firestore.collection("feedLikes")
-                        .whereEqualTo("postId", postId)
-                        .orderBy("ts", Query.Direction.DESCENDING)
-                        .limit(200).get().await()
-                } else snap
-                _likers.value = snap2.documents.mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    LikeEntry(
-                        uid      = d["uid"]      as? String ?: "",
-                        name     = (d["name"]    as? String)?.takeIf { it.isNotBlank() }
-                                 ?: d["displayName"] as? String ?: "",
-                        photoURL = d["photoURL"] as? String ?: "",
-                        ts       = d["ts"]       as? com.google.firebase.Timestamp,
-                    )
+                    .limit(200)
+                    .get().await()
+
+                val results = snap.documents.mapNotNull { doc ->
+                    mapToLikeEntry(doc.data ?: return@mapNotNull null)
                 }.filter { it.uid.isNotBlank() }
-            } catch (e: Exception) { e.printStackTrace() }
-            finally { _loading.value = false }
+
+                if (results.isNotEmpty()) {
+                    _likers.value = results
+                    return@launch
+                }
+
+                // Fallback: belge ID'si "{postId}_{uid}" formatından uid'leri çek
+                // ve users koleksiyonundan isim/foto al
+                val prefixSnap = firestore.collection("feedLikes")
+                    .orderBy(com.google.firebase.firestore.FieldPath.documentId())
+                    .startAt("${postId}_")
+                    .endAt("${postId}_\uF8FF")
+                    .limit(200)
+                    .get().await()
+
+                if (prefixSnap.isEmpty) {
+                    _likers.value = emptyList()
+                    return@launch
+                }
+
+                val fromDocs = prefixSnap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    // feedId alanı belge ID'den türetilmiş olabilir
+                    val likeUid = d["uid"] as? String
+                        ?: doc.id.substringAfter("${postId}_").takeIf { it.isNotBlank() }
+                        ?: return@mapNotNull null
+                    val name    = (d["name"] as? String)?.takeIf { it.isNotBlank() }
+                                ?: (d["displayName"] as? String)?.takeIf { it.isNotBlank() }
+                                ?: ""
+                    val photo   = d["photoURL"] as? String ?: ""
+                    LikeEntry(uid = likeUid, name = name, photoURL = photo,
+                        ts = d["ts"] as? com.google.firebase.Timestamp)
+                }.filter { it.uid.isNotBlank() }
+
+                // Eksik isim varsa users'tan tamamla
+                val needFetch = fromDocs.filter { it.name.isBlank() }.map { it.uid }
+                if (needFetch.isEmpty()) {
+                    _likers.value = fromDocs
+                    return@launch
+                }
+
+                val enriched = fromDocs.toMutableList()
+                needFetch.chunked(10).forEach { chunk ->
+                    try {
+                        val userSnap = firestore.collection("users")
+                            .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                            .get().await()
+                        userSnap.documents.forEach { userDoc ->
+                            val idx = enriched.indexOfFirst { it.uid == userDoc.id }
+                            if (idx >= 0) {
+                                val uData = userDoc.data ?: return@forEach
+                                enriched[idx] = enriched[idx].copy(
+                                    name     = (uData["displayName"] as? String)
+                                               ?: uData["name"] as? String ?: "",
+                                    photoURL = uData["photoURL"] as? String ?: "",
+                                )
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+                _likers.value = enriched
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _loading.value = false
+            }
         }
     }
 
-    // ── Yorum beğenenleri ────────────────────────────────
-    // commentLikes: uid, cmtId, name, photoURL, ts
+    // ── Yorum beğenenleri ────────────────────────────────────────────────────
+    // Site: commentLikes/{cmtId}_{uid} → { uid, cmtId, name, photoURL, ts }
     fun loadCommentLikers(commentId: String) {
         viewModelScope.launch {
             _loading.value = true
+            _likers.value  = emptyList()
             try {
                 val snap = firestore.collection("commentLikes")
-                    .whereEqualTo("uid", "") // uid boş olamaz — cmtId alanıyla sorgula
-                // commentLikes belge ID'si "cmtId_uid" şeklinde — whereEqualTo("cmtId", commentId)
-                val snap2 = firestore.collection("commentLikes")
                     .whereEqualTo("cmtId", commentId)
-                    .limit(200).get().await()
-                _likers.value = snap2.documents.mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    LikeEntry(
-                        uid      = d["uid"]      as? String ?: "",
-                        name     = (d["name"]    as? String)?.takeIf { it.isNotBlank() }
-                                 ?: d["displayName"] as? String ?: "",
-                        photoURL = d["photoURL"] as? String ?: "",
-                        ts       = d["ts"]       as? com.google.firebase.Timestamp,
-                    )
+                    .limit(200)
+                    .get().await()
+
+                val results = snap.documents.mapNotNull { doc ->
+                    mapToLikeEntry(doc.data ?: return@mapNotNull null)
                 }.filter { it.uid.isNotBlank() }
-            } catch (e: Exception) { e.printStackTrace() }
-            finally { _loading.value = false }
+
+                _likers.value = if (results.isNotEmpty()) results else {
+                    // Belge ID prefix fallback
+                    firestore.collection("commentLikes")
+                        .orderBy(com.google.firebase.firestore.FieldPath.documentId())
+                        .startAt("${commentId}_")
+                        .endAt("${commentId}_\uF8FF")
+                        .limit(200).get().await()
+                        .documents.mapNotNull { doc ->
+                            mapToLikeEntry(doc.data ?: return@mapNotNull null)
+                        }.filter { it.uid.isNotBlank() }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _loading.value = false
+            }
         }
     }
 
-    // ── Seri beğenenleri ─────────────────────────────────
+    // ── Seri beğenenleri ─────────────────────────────────────────────────────
     fun loadSerialLikers(serialId: String) {
         viewModelScope.launch {
             _loading.value = true
+            _likers.value  = emptyList()
             try {
                 val snap = firestore.collection("serialLikes")
                     .whereEqualTo("serialId", serialId)
-                    .orderBy("ts", Query.Direction.DESCENDING)
-                    .limit(200).get().await()
+                    .limit(200)
+                    .get().await()
+
                 _likers.value = snap.documents.mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    LikeEntry(
-                        uid      = d["uid"]      as? String ?: "",
-                        name     = (d["name"]    as? String)?.takeIf { it.isNotBlank() }
-                                 ?: d["displayName"] as? String ?: "",
-                        photoURL = d["photoURL"] as? String ?: "",
-                        ts       = d["ts"]       as? com.google.firebase.Timestamp,
-                    )
+                    mapToLikeEntry(doc.data ?: return@mapNotNull null)
                 }.filter { it.uid.isNotBlank() }
-            } catch (e: Exception) { e.printStackTrace() }
-            finally { _loading.value = false }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _loading.value = false
+            }
         }
     }
 
-    fun clearLikers() { _likers.value = emptyList() }
+    // ── Takipçiler ───────────────────────────────────────────────────────────
+    // Site: follows/{fromUid_targetUid} → { fromUid, fromName, fromPhoto, targetUid, … }
+    fun loadFollowers(targetUid: String) {
+        viewModelScope.launch {
+            _loading.value  = true
+            _followers.value = emptyList()
+            try {
+                val snap = firestore.collection("follows")
+                    .whereEqualTo("targetUid", targetUid)
+                    .limit(200)
+                    .get().await()
+                _followers.value = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    FollowEntry(
+                        uid      = d["fromUid"]  as? String ?: "",
+                        name     = (d["fromName"] as? String)?.takeIf { it.isNotBlank() }
+                                 ?: d["fromDisplayName"] as? String ?: "",
+                        photoURL = d["fromPhoto"] as? String
+                                 ?: d["fromPhotoURL"] as? String ?: "",
+                        ts       = d["ts"] as? com.google.firebase.Timestamp,
+                    )
+                }.filter { it.uid.isNotBlank() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _loading.value = false
+            }
+        }
+    }
+
+    // ── Takip edilenler ──────────────────────────────────────────────────────
+    fun loadFollowing(targetUid: String) {
+        viewModelScope.launch {
+            _loading.value  = true
+            _following.value = emptyList()
+            try {
+                val snap = firestore.collection("follows")
+                    .whereEqualTo("fromUid", targetUid)
+                    .limit(200)
+                    .get().await()
+                _following.value = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    FollowEntry(
+                        uid      = d["targetUid"]  as? String ?: "",
+                        name     = (d["targetName"] as? String)?.takeIf { it.isNotBlank() }
+                                 ?: d["targetDisplayName"] as? String ?: "",
+                        photoURL = d["targetPhoto"] as? String
+                                 ?: d["targetPhotoURL"] as? String ?: "",
+                        ts       = d["ts"] as? com.google.firebase.Timestamp,
+                    )
+                }.filter { it.uid.isNotBlank() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _loading.value = false
+            }
+        }
+    }
+
+    // ── Temizle ──────────────────────────────────────────────────────────────
+    fun clearLikers()    { _likers.value    = emptyList() }
     fun clearFollowers() { _followers.value = emptyList() }
     fun clearFollowing() { _following.value = emptyList() }
+
+    // ── Yardımcı ─────────────────────────────────────────────────────────────
+    private fun mapToLikeEntry(d: Map<String, Any?>): LikeEntry {
+        return LikeEntry(
+            uid      = d["uid"]         as? String ?: "",
+            name     = (d["name"]       as? String)?.takeIf { it.isNotBlank() }
+                     ?: (d["displayName"] as? String)?.takeIf { it.isNotBlank() }
+                     ?: "",
+            photoURL = d["photoURL"]    as? String ?: "",
+            ts       = d["ts"]          as? com.google.firebase.Timestamp,
+        )
+    }
 }
