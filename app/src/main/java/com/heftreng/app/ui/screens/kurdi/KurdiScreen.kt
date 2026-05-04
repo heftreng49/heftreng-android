@@ -1,100 +1,96 @@
 package com.heftreng.app.ui.screens.kurdi
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+// ═══════════════════════════════════════════════════════════════════════════
+//  KurdiScreen — Site teması (heft-reng.blogspot.com) ile tam uyumlu
+//
+//  Site yapısı:
+//  - kf_units   → Üniteler (Destpêk, Jimare, Reng…)
+//  - kf_lessons → Her üniteye ait dersler
+//  - kf_vocab   → Kelime kartları
+//  - kf_exercises → Sorular (mcq / fill / match)
+//
+//  Ekranlar:
+//  1. Ana ekran  → XP kartı + günlük hedef + ünite yol haritası
+//  2. Ders ekranı → Kelime flash cards + sorular + XP ödülü
+//  3. Ferheng    → Sözlük (Yakında)
+//  4. Rêziman    → Dilbilgisi (Yakında)
+//  5. AI Ders    → OpenRouter Gemini ile üretilen ders
+// ═══════════════════════════════════════════════════════════════════════════
+
+import androidx.compose.animation.*
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.*
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.*
+import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.heftreng.app.data.model.KurdiLesson
 import com.heftreng.app.ui.theme.*
-import com.heftreng.app.viewmodel.KurdiViewModel
+import com.heftreng.app.viewmodel.*
 
+// ── Ana ekran ────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KurdiScreen(
     language : String = "tr",
     vm       : KurdiViewModel = hiltViewModel(),
 ) {
-    // collectAsState ile null gelmez — MutableStateFlow emptyList() ile başlıyor
-    val lessons  by vm.lessons.collectAsState()
-    val xp       by vm.xp.collectAsState()
-    val streak   by vm.streak.collectAsState()
-    val level    by vm.level.collectAsState()
-    val loading  by vm.loading.collectAsState()
+    val units       by vm.units.collectAsState()
+    val lessons     by vm.lessons.collectAsState()
+    val doneIds     by vm.doneIds.collectAsState()
+    val xp          by vm.xp.collectAsState()
+    val streak      by vm.streak.collectAsState()
+    val level       by vm.level.collectAsState()
+    val loading     by vm.loading.collectAsState()
+    val activeLesson by vm.activeLesson.collectAsState()
+    val toast       by vm.toast.collectAsState()
 
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = if (language == "ku")
-        listOf("Ders", "Ferheng", "Rêziman", "AI Ders")
-    else
-        listOf("Dersler", "Ferheng", "Rêziman", "AI Ders")
+    val tabs = listOf("Dersler", "Ferheng", "Rêziman", "AI Ders")
 
-    Column(modifier = Modifier.fillMaxSize().background(Background)) {
+    // Toast
+    LaunchedEffect(toast) {
+        if (toast != null) kotlinx.coroutines.delay(2000)
+        vm.clearToast()
+    }
 
+    // Aktif ders varsa ders ekranını göster
+    if (activeLesson != null) {
+        LessonScreen(
+            activeLesson = activeLesson!!,
+            onComplete   = { vm.completeLesson(activeLesson!!.lesson.id); vm.closeLesson() },
+            onClose      = { vm.closeLesson() },
+        )
+        return
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Background)
+            .statusBarsPadding()
+    ) {
         // Başlık
         Text(
             "Kurdî Fêrbibe",
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             color      = OnBackground,
-            fontSize   = 18.sp,
+            fontSize   = 20.sp,
             modifier   = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 8.dp),
         )
 
         // XP & Streak kartı
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            shape = RoundedCornerShape(14.dp),
-            color = HeftSurface,
-        ) {
-            Row(
-                modifier            = Modifier.padding(14.dp),
-                verticalAlignment   = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        if (language == "ku") "Asta $level" else "Seviye $level",
-                        fontWeight = FontWeight.Bold,
-                        color      = Primary,
-                        fontSize   = 12.sp,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    val progress = if (xp <= 0) 0f else ((xp % 100) / 100f).coerceIn(0f, 1f)
-                    LinearProgressIndicator(
-                        progress   = { progress },
-                        modifier   = Modifier.fillMaxWidth().height(7.dp),
-                        color      = Primary,
-                        trackColor = SurfaceVar,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text("$xp XP", color = Muted, fontSize = 11.sp)
-                }
-                Spacer(Modifier.width(16.dp))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("🔥", fontSize = 24.sp)
-                    Text(
-                        "$streak",
-                        fontWeight = FontWeight.Black,
-                        color      = Primary,
-                        fontSize   = 13.sp,
-                    )
-                    Text("Streak", color = Muted, fontSize = 10.sp)
-                }
-            }
-        }
+        XpStreakCard(xp = xp, streak = streak, level = level, language = language)
 
         Spacer(Modifier.height(8.dp))
 
@@ -118,9 +114,7 @@ fun KurdiScreen(
                 Tab(
                     selected               = selectedTab == i,
                     onClick                = { selectedTab = i },
-                    text                   = {
-                        Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    },
+                    text                   = { Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
                     selectedContentColor   = Primary,
                     unselectedContentColor = Muted,
                 )
@@ -129,162 +123,757 @@ fun KurdiScreen(
 
         // İçerik
         when (selectedTab) {
-            0    -> LessonsTab(lessons, loading, vm)
-            1    -> DictionaryTab(language)
-            2    -> GrammarTab(language)
-            3    -> AiLessonTab(language, vm)
-            else -> LessonsTab(lessons, loading, vm)
+            0 -> UnitsTab(
+                units    = units,
+                lessons  = lessons,
+                doneIds  = doneIds,
+                loading  = loading,
+                language = language,
+                onNext   = { vm.getNextLesson()?.let { vm.openLesson(it.id) } },
+                onOpen   = { lessonId -> vm.openLesson(lessonId) },
+            )
+            1 -> DictionaryTab(language)
+            2 -> GrammarTab(language)
+            3 -> AiLessonTab(language, vm)
         }
     }
-}
 
-@Composable
-fun LessonsTab(
-    lessons : List<KurdiLesson>,
-    loading : Boolean,
-    vm      : KurdiViewModel,
-) {
-    when {
-        loading -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Primary)
-            }
-        }
-        lessons.isEmpty() -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("📚", fontSize = 40.sp)
-                    Spacer(Modifier.height(8.dp))
-                    Text("Ders bulunamadı", color = Muted, fontSize = 14.sp)
-                }
-            }
-        }
-        else -> {
-            LazyColumn(
-                modifier            = Modifier.fillMaxSize(),
-                contentPadding      = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+    // Toast snackbar
+    if (toast != null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            Surface(
+                modifier = Modifier.padding(24.dp).navigationBarsPadding(),
+                shape    = RoundedCornerShape(24.dp),
+                color    = Primary,
             ) {
-                items(lessons, key = { it.id }) { lesson ->
-                    LessonCard(lesson) { vm.startLesson(lesson) }
-                }
+                Text(
+                    toast ?: "",
+                    color      = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 14.sp,
+                    modifier   = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                )
             }
         }
     }
 }
 
+// ── XP / Streak kartı ────────────────────────────────────────────────────────
 @Composable
-fun LessonCard(lesson: KurdiLesson, onClick: () -> Unit) {
+private fun XpStreakCard(xp: Int, streak: Int, level: Int, language: String) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
-        shape = RoundedCornerShape(14.dp),
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(16.dp),
         color = HeftSurface,
     ) {
         Row(
             modifier          = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(
-                        if (lesson.completed) Primary else SurfaceVar,
-                        RoundedCornerShape(12.dp),
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector        = if (lesson.completed) Icons.Default.CheckCircle
-                                        else Icons.Default.Book,
-                    contentDescription = null,
-                    tint               = if (lesson.completed) Color.White else Muted,
-                    modifier           = Modifier.size(22.dp),
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    if (language == "ku") "Asta $level" else "Seviye $level",
+                    fontWeight = FontWeight.Bold,
+                    color      = Primary,
+                    fontSize   = 13.sp,
+                )
+                Spacer(Modifier.height(6.dp))
+                val progress = if (xp <= 0) 0f else ((xp % 100) / 100f).coerceIn(0f, 1f)
+                LinearProgressIndicator(
+                    progress   = { progress },
+                    modifier   = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                    color      = Primary,
+                    trackColor = SurfaceVar,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text("$xp XP", color = Muted, fontSize = 11.sp)
+            }
+            Spacer(Modifier.width(20.dp))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("🔥", fontSize = 26.sp)
+                Text(
+                    "$streak",
+                    fontWeight = FontWeight.Black,
+                    color      = Amber,
+                    fontSize   = 15.sp,
+                )
+                Text("Streak", color = Muted, fontSize = 10.sp)
+            }
+        }
+    }
+}
+
+// ── Ünite yol haritası sekmesi ───────────────────────────────────────────────
+@Composable
+private fun UnitsTab(
+    units    : List<KfUnit>,
+    lessons  : List<KfLesson>,
+    doneIds  : Set<String>,
+    loading  : Boolean,
+    language : String,
+    onNext   : () -> Unit,
+    onOpen   : (String) -> Unit,
+) {
+    when {
+        loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Primary)
+        }
+        units.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("📚", fontSize = 40.sp)
+                Spacer(Modifier.height(8.dp))
+                Text(if (language == "ku") "Ders tune" else "Ders bulunamadı", color = Muted, fontSize = 14.sp)
+            }
+        }
+        else -> LazyColumn(
+            modifier       = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 32.dp),
+        ) {
+            // Günlük hedef kartı
+            item {
+                DailyNudgeCard(
+                    language = language,
+                    lessons  = lessons,
+                    doneIds  = doneIds,
+                    onClick  = onNext,
                 )
             }
+
+            // Her ünite
+            units.forEach { unit ->
+                val unitLessons = lessons
+                    .filter { it.unitId == unit.id }
+                    .sortedBy { it.order }
+                val done  = unitLessons.count { it.id in doneIds }
+                val total = unitLessons.size
+                val pct   = if (total > 0) done * 100 / total else 0
+                val color = parseColor(unit.color)
+
+                item(key = "unit_${unit.id}") {
+                    UnitHeader(unit = unit, done = done, total = total, pct = pct, color = color)
+                }
+
+                if (unitLessons.isNotEmpty()) {
+                    item(key = "path_${unit.id}") {
+                        LessonPath(
+                            lessons  = unitLessons,
+                            doneIds  = doneIds,
+                            color    = color,
+                            onOpen   = onOpen,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Günlük hedef kartı (site: .kp-daily-nudge) ──────────────────────────────
+@Composable
+private fun DailyNudgeCard(
+    language : String,
+    lessons  : List<KfLesson>,
+    doneIds  : Set<String>,
+    onClick  : () -> Unit,
+) {
+    val hasNext = lessons.any { it.id !in doneIds }
+    if (!hasNext) return
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0xFF1A1333),
+        border = BorderStroke(1.dp, Primary.copy(alpha = 0.3f)),
+    ) {
+        Row(
+            modifier          = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("🎯", fontSize = 26.sp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    lesson.title,
-                    fontWeight = FontWeight.SemiBold,
+                    if (language == "ku") "Armanca rojane" else "Günlük hedef",
+                    fontWeight = FontWeight.Bold,
                     color      = OnBackground,
                     fontSize   = 14.sp,
                 )
-                if (lesson.subtitle.isNotBlank()) {
-                    Text(lesson.subtitle, color = Muted, fontSize = 12.sp)
+                Text(
+                    if (language == "ku") "Îro 1 ders temam bike!" else "Bugün 1 ders tamamla!",
+                    color    = Muted,
+                    fontSize = 12.sp,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = Primary,
+            ) {
+                Text(
+                    if (language == "ku") "Destpê Bike" else "Başla",
+                    color      = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 12.sp,
+                    modifier   = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
+        }
+    }
+}
+
+// ── Ünite başlık kartı ───────────────────────────────────────────────────────
+@Composable
+private fun UnitHeader(
+    unit  : KfUnit,
+    done  : Int,
+    total : Int,
+    pct   : Int,
+    color : Color,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = HeftSurface,
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Ünite ikonu
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(color.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
+                        .border(1.5.dp, color.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(unit.icon, fontSize = 22.sp)
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(unit.ttl, fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 15.sp)
+                    if (unit.descTr.isNotBlank()) {
+                        Text(unit.descTr, color = Muted, fontSize = 12.sp)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("$done/$total ders tamamlandı", color = Muted, fontSize = 11.sp)
+                }
+                Text(
+                    "$pct%",
+                    color      = color,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 13.sp,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            // Progress bar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(SurfaceVar)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(pct / 100f)
+                        .height(6.dp)
+                        .background(color, RoundedCornerShape(3.dp))
+                )
+            }
+        }
+    }
+}
+
+// ── Ders yolu (site: .kp-lesson-path — daireler yol şeklinde) ────────────────
+@Composable
+private fun LessonPath(
+    lessons : List<KfLesson>,
+    doneIds : Set<String>,
+    color   : Color,
+    onOpen  : (String) -> Unit,
+) {
+    val firstNotDone = lessons.indexOfFirst { it.id !in doneIds }
+        .let { if (it == -1) lessons.size else it }
+
+    Column(
+        modifier            = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(0.dp),
+    ) {
+        lessons.forEachIndexed { index, lesson ->
+            val isDone   = lesson.id in doneIds
+            val isActive = index == firstNotDone
+            val isLocked = index > firstNotDone
+
+            LessonPathNode(
+                lesson   = lesson,
+                isDone   = isDone,
+                isActive = isActive,
+                isLocked = isLocked,
+                color    = color,
+                index    = index,
+                total    = lessons.size,
+                onClick  = {
+                    if (!isLocked) onOpen(lesson.id)
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun LessonPathNode(
+    lesson   : KfLesson,
+    isDone   : Boolean,
+    isActive : Boolean,
+    isLocked : Boolean,
+    color    : Color,
+    index    : Int,
+    total    : Int,
+    onClick  : () -> Unit,
+) {
+    // Zigzag offset — site temasındaki gibi sola-ortaya-sağa sıralanır
+    val offsets = listOf(0.3f, 0.5f, 0.7f, 0.5f)
+    val hAlign  = offsets[index % offsets.size]
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Start,
+    ) {
+        Spacer(Modifier.fillMaxWidth(hAlign - 0.1f))
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // Üstten bağlantı çizgisi
+            if (index > 0) {
+                Box(
+                    Modifier
+                        .width(2.dp)
+                        .height(20.dp)
+                        .background(if (isDone) color else Divider)
+                )
+            }
+
+            // Ders dairesi butonu
+            Box(
+                modifier = Modifier
+                    .size(68.dp)
+                    .clip(CircleShape)
+                    .background(
+                        when {
+                            isDone || isActive -> color
+                            isLocked           -> SurfaceVar
+                            else               -> SurfaceVar
+                        }
+                    )
+                    .border(
+                        width = if (isActive) 3.dp else 2.dp,
+                        color = if (isLocked) Divider else color.copy(alpha = 0.7f),
+                        shape = CircleShape,
+                    )
+                    .shadow(if (isDone || isActive) 6.dp else 0.dp, CircleShape)
+                    .clickable(enabled = !isLocked) { onClick() },
+                contentAlignment = Alignment.Center,
+            ) {
+                when {
+                    isDone   -> Text("⭐", fontSize = 26.sp)
+                    isLocked -> Icon(Icons.Default.Lock, null, tint = Muted, modifier = Modifier.size(22.dp))
+                    isActive -> Text(lesson.emoji, fontSize = 26.sp)
+                    else     -> Text(lesson.emoji, fontSize = 26.sp)
                 }
             }
-            if (lesson.xpReward > 0) {
-                Surface(shape = RoundedCornerShape(8.dp), color = SurfaceVar) {
+
+            // "BAŞLA!" chip — sadece aktif derse
+            if (isActive) {
+                Spacer(Modifier.height(4.dp))
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = color,
+                ) {
                     Text(
-                        "+${lesson.xpReward} XP",
-                        color      = Primary,
-                        fontSize   = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier   = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        "BAŞLA!",
+                        color      = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize   = 10.sp,
+                        modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                     )
                 }
             }
+
+            // Ders adı
+            Spacer(Modifier.height(if (isActive) 4.dp else 6.dp))
+            Text(
+                lesson.nameTr,
+                color      = if (isLocked) Muted else OnBackground,
+                fontSize   = 11.sp,
+                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                textAlign  = TextAlign.Center,
+                maxLines   = 2,
+                overflow   = TextOverflow.Ellipsis,
+                modifier   = Modifier.width(80.dp),
+            )
+
+            // Altta bağlantı çizgisi
+            if (index < total - 1) {
+                Box(
+                    Modifier
+                        .width(2.dp)
+                        .height(20.dp)
+                        .background(if (isDone) color else Divider)
+                )
+            }
         }
     }
 }
 
+// ── Ders yapma ekranı ─────────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DictionaryTab(language: String = "tr") {
+fun LessonScreen(
+    activeLesson : ActiveLesson,
+    onComplete   : () -> Unit,
+    onClose      : () -> Unit,
+) {
+    var step          by remember { mutableStateOf(0) }
+    var showVocab     by remember { mutableStateOf(true) }  // önce kelimeler, sonra sorular
+    var selectedAns   by remember { mutableStateOf<String?>(null) }
+    var showResult    by remember { mutableStateOf(false) }
+    var correctCount  by remember { mutableStateOf(0) }
+    var fillAnswer    by remember { mutableStateOf("") }
+
+    val lesson    = activeLesson.lesson
+    val vocab     = activeLesson.vocab
+    val exercises = activeLesson.exercises
+
+    // Vocab aşaması bitti mi?
+    val vocabDone = step >= vocab.size
+
+    // Soru adımı
+    val exStep = if (vocabDone) step - vocab.size else 0
+    val exDone = exStep >= exercises.size
+    val currentEx = if (vocabDone && !exDone) exercises.getOrNull(exStep) else null
+
+    // Tüm adımlar bitti
+    val allDone = vocabDone && exDone
+
+    Scaffold(
+        containerColor = Background,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(lesson.nameTr, fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 15.sp)
+                        val totalSteps = vocab.size + exercises.size
+                        if (totalSteps > 0) {
+                            LinearProgressIndicator(
+                                progress   = { step.toFloat() / totalSteps },
+                                modifier   = Modifier.fillMaxWidth().height(4.dp).padding(top = 2.dp),
+                                color      = Primary,
+                                trackColor = SurfaceVar,
+                            )
+                        }
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.Default.Close, null, tint = OnBackground)
+                    }
+                },
+                actions = {
+                    // XP rozeti
+                    Surface(shape = RoundedCornerShape(20.dp), color = Amber.copy(alpha = 0.15f)) {
+                        Text("+${lesson.xp} XP", color = Amber, fontWeight = FontWeight.Bold, fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+            )
+        }
+    ) { padding ->
+
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            when {
+                // ── Tamamlandı ────────────────────────────────────────────────
+                allDone -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Text("🎉", fontSize = 72.sp)
+                            Text("Ders Tamamlandı!", fontWeight = FontWeight.ExtraBold, color = OnBackground, fontSize = 22.sp)
+                            Surface(shape = RoundedCornerShape(20.dp), color = Amber.copy(0.15f)) {
+                                Text("+${lesson.xp} XP kazandın!", color = Amber, fontWeight = FontWeight.Bold, fontSize = 16.sp,
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Button(
+                                onClick = onComplete,
+                                modifier = Modifier.fillMaxWidth(0.7f),
+                                shape    = RoundedCornerShape(14.dp),
+                                colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                            ) {
+                                Text("Devam", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            }
+                        }
+                    }
+                }
+
+                // ── Kelime kartı ──────────────────────────────────────────────
+                !vocabDone -> {
+                    val voc = vocab[step]
+                    Spacer(Modifier.height(32.dp))
+                    // Kelime kartı
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                            .clickable { /* flip */ },
+                        shape = RoundedCornerShape(20.dp),
+                        color = HeftSurface,
+                    ) {
+                        Column(
+                            modifier            = Modifier.padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(voc.e, fontSize = 56.sp)
+                            Spacer(Modifier.height(16.dp))
+                            Text(voc.ku, fontWeight = FontWeight.ExtraBold, color = OnBackground, fontSize = 28.sp)
+                            if (voc.kp.isNotBlank()) {
+                                Text("/${voc.kp}/", color = Muted, fontSize = 14.sp)
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            HorizontalDivider(color = Divider)
+                            Spacer(Modifier.height(12.dp))
+                            Text(voc.tr, fontWeight = FontWeight.SemiBold, color = Primary, fontSize = 22.sp)
+                        }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    // İleri butonu
+                    Button(
+                        onClick  = { step++ },
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        shape    = RoundedCornerShape(14.dp),
+                        colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                    ) {
+                        Text(
+                            if (step < vocab.size - 1) "Sonraki Kelime" else "Sorulara Geç →",
+                            color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                        )
+                    }
+                    Spacer(Modifier.navigationBarsPadding())
+                }
+
+                // ── Egzersiz ──────────────────────────────────────────────────
+                currentEx != null -> {
+                    val ex = currentEx
+                    // Reset state on step change
+                    LaunchedEffect(step) {
+                        selectedAns = null
+                        showResult  = false
+                        fillAnswer  = ""
+                    }
+
+                    Spacer(Modifier.height(24.dp))
+                    // Soru
+                    Text(
+                        ex.question,
+                        fontWeight = FontWeight.Bold,
+                        color      = OnBackground,
+                        fontSize   = 18.sp,
+                        textAlign  = TextAlign.Center,
+                        modifier   = Modifier.padding(horizontal = 24.dp),
+                    )
+                    Spacer(Modifier.height(24.dp))
+
+                    when (ex.type) {
+                        "mcq" -> {
+                            // Çoktan seçmeli
+                            val options = listOf(ex.optA, ex.optB, ex.optC, ex.optD).filter { it.isNotBlank() }
+                            Column(
+                                modifier            = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                options.forEach { opt ->
+                                    val isSel     = selectedAns == opt
+                                    val isCorrect = opt == ex.answer
+                                    val bgColor   = when {
+                                        !showResult -> if (isSel) Primary.copy(0.15f) else HeftSurface
+                                        isCorrect   -> Color(0xFF22C55E).copy(0.15f)
+                                        isSel       -> Color(0xFFEF4444).copy(0.15f)
+                                        else        -> HeftSurface
+                                    }
+                                    val borderColor = when {
+                                        !showResult -> if (isSel) Primary else Divider
+                                        isCorrect   -> Color(0xFF22C55E)
+                                        isSel       -> Color(0xFFEF4444)
+                                        else        -> Divider
+                                    }
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable(enabled = !showResult) {
+                                                selectedAns = opt
+                                                showResult  = true
+                                                if (opt == ex.answer) correctCount++
+                                            },
+                                        shape  = RoundedCornerShape(12.dp),
+                                        color  = bgColor,
+                                        border = BorderStroke(1.5.dp, borderColor),
+                                    ) {
+                                        Row(
+                                            modifier          = Modifier.padding(14.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(opt, color = OnBackground, fontWeight = FontWeight.Medium, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                                            if (showResult) {
+                                                Icon(
+                                                    if (isCorrect) Icons.Default.CheckCircle else if (isSel) Icons.Default.Cancel else Icons.Default.RadioButtonUnchecked,
+                                                    null,
+                                                    tint = if (isCorrect) Color(0xFF22C55E) else if (isSel) Color(0xFFEF4444) else Divider,
+                                                    modifier = Modifier.size(20.dp),
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        "fill" -> {
+                            // Boşluk doldurma
+                            Column(
+                                modifier            = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                OutlinedTextField(
+                                    value         = fillAnswer,
+                                    onValueChange = { if (!showResult) fillAnswer = it },
+                                    placeholder   = { Text("Cevabını yaz…", color = Muted) },
+                                    modifier      = Modifier.fillMaxWidth(),
+                                    shape         = RoundedCornerShape(12.dp),
+                                    singleLine    = true,
+                                    colors        = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor      = Primary,
+                                        unfocusedBorderColor    = Divider,
+                                        focusedTextColor        = OnBackground,
+                                        unfocusedTextColor      = OnBackground,
+                                        unfocusedContainerColor = HeftSurface,
+                                        focusedContainerColor   = HeftSurface,
+                                    ),
+                                )
+                                if (showResult) {
+                                    Spacer(Modifier.height(12.dp))
+                                    val correct = fillAnswer.trim().equals(ex.answer, ignoreCase = true)
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = if (correct) Color(0xFF22C55E).copy(0.15f) else Color(0xFFEF4444).copy(0.15f),
+                                    ) {
+                                        Row(
+                                            modifier          = Modifier.padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Icon(
+                                                if (correct) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                                null,
+                                                tint     = if (correct) Color(0xFF22C55E) else Color(0xFFEF4444),
+                                                modifier = Modifier.size(20.dp),
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(
+                                                if (correct) "Doğru! ✓" else "Doğru cevap: ${ex.answer}",
+                                                color      = if (correct) Color(0xFF22C55E) else Color(0xFFEF4444),
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize   = 14.sp,
+                                            )
+                                        }
+                                    }
+                                    if (!correct && selectedAns == null) correctCount.let { }
+                                } else {
+                                    Spacer(Modifier.height(12.dp))
+                                    Button(
+                                        onClick  = {
+                                            showResult  = true
+                                            selectedAns = fillAnswer
+                                            if (fillAnswer.trim().equals(ex.answer, ignoreCase = true)) correctCount++
+                                        },
+                                        enabled  = fillAnswer.isNotBlank(),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape    = RoundedCornerShape(12.dp),
+                                        colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                                    ) {
+                                        Text("Kontrol Et", color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.weight(1f))
+
+                    // İleri / Sonraki butonu (cevap verildikten sonra)
+                    if (showResult) {
+                        Button(
+                            onClick  = { step++ },
+                            modifier = Modifier.fillMaxWidth().padding(24.dp),
+                            shape    = RoundedCornerShape(14.dp),
+                            colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                        ) {
+                            Text(
+                                if (exStep < exercises.size - 1) "Devam" else "Dersi Tamamla 🎉",
+                                color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.navigationBarsPadding())
+                }
+            }
+        }
+    }
+}
+
+// ── Sözlük sekmesi ───────────────────────────────────────────────────────────
+@Composable
+private fun DictionaryTab(language: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("📖", fontSize = 48.sp)
-            Spacer(Modifier.height(12.dp))
-            Text(
-                "Ferheng",
-                fontWeight = FontWeight.Bold,
-                color      = OnBackground,
-                fontSize   = 18.sp,
-            )
-            Text(
-                if (language == "ku") "Zû tê" else "Yakında",
-                color    = Muted,
-                fontSize = 14.sp,
-            )
+            Text("Ferheng", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
+            Text(if (language == "ku") "Zû tê" else "Yakında", color = Muted, fontSize = 14.sp)
         }
     }
 }
 
+// ── Dilbilgisi sekmesi ───────────────────────────────────────────────────────
 @Composable
-fun GrammarTab(language: String = "tr") {
+private fun GrammarTab(language: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("🎓", fontSize = 48.sp)
-            Spacer(Modifier.height(12.dp))
-            Text(
-                "Rêziman",
-                fontWeight = FontWeight.Bold,
-                color      = OnBackground,
-                fontSize   = 18.sp,
-            )
-            Text(
-                if (language == "ku") "Zû tê" else "Yakında",
-                color    = Muted,
-                fontSize = 14.sp,
-            )
+            Text("Rêziman", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
+            Text(if (language == "ku") "Zû tê" else "Yakında", color = Muted, fontSize = 14.sp)
         }
     }
 }
 
+// ── AI Ders sekmesi ──────────────────────────────────────────────────────────
 @Composable
 fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
     val aiLesson  by vm.aiLesson.collectAsState()
     val aiLoading by vm.aiLoading.collectAsState()
     val aiError   by vm.aiError.collectAsState()
-    var apiKey by remember { mutableStateOf("") }
-    var topic  by remember { mutableStateOf("") }
-    var level  by remember { mutableStateOf("destpêk") }
-    val levels = listOf("destpêk" to "🌱 Başlangıç", "navîn" to "🌿 Orta", "pêşketî" to "🌳 İleri")
+    var apiKey    by remember { mutableStateOf("") }
+    var topic     by remember { mutableStateOf("") }
+    var level     by remember { mutableStateOf("destpêk") }
+    val levels    = listOf("destpêk" to "🌱 Başlangıç", "navîn" to "🌿 Orta", "pêşketî" to "🌳 İleri")
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        modifier            = Modifier.fillMaxSize(),
+        contentPadding      = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
@@ -292,26 +881,35 @@ fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
             Text("OpenRouter API anahtarını gir.", color = Muted, fontSize = 12.sp)
         }
         item {
-            OutlinedTextField(value = apiKey, onValueChange = { apiKey = it },
-                label = { Text("API Key", color = Muted, fontSize = 12.sp) },
+            OutlinedTextField(
+                value = apiKey, onValueChange = { apiKey = it },
+                label    = { Text("API Key", color = Muted, fontSize = 12.sp) },
                 modifier = Modifier.fillMaxWidth(), singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar,
-                    focusedTextColor = OnBackground, unfocusedTextColor = OnBackground))
+                colors   = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar,
+                    focusedTextColor = OnBackground, unfocusedTextColor = OnBackground),
+            )
         }
         item {
-            OutlinedTextField(value = topic, onValueChange = { topic = it },
-                label = { Text(if (language=="ku") "Mijar" else "Konu", color = Muted, fontSize = 12.sp) },
+            OutlinedTextField(
+                value = topic, onValueChange = { topic = it },
+                label       = { Text(if (language == "ku") "Mijar" else "Konu", color = Muted, fontSize = 12.sp) },
                 placeholder = { Text("Renkler, Sayılar…", color = Muted, fontSize = 12.sp) },
-                modifier = Modifier.fillMaxWidth(), singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar,
-                    focusedTextColor = OnBackground, unfocusedTextColor = OnBackground))
+                modifier    = Modifier.fillMaxWidth(), singleLine = true,
+                colors      = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar,
+                    focusedTextColor = OnBackground, unfocusedTextColor = OnBackground),
+            )
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 levels.forEach { (lv, label) ->
                     val sel = level == lv
-                    Surface(modifier = Modifier.clickable { level = lv },
-                        shape = RoundedCornerShape(20.dp), color = if (sel) Primary else SurfaceVar) {
+                    Surface(
+                        modifier = Modifier.clickable { level = lv },
+                        shape    = RoundedCornerShape(20.dp),
+                        color    = if (sel) Primary else SurfaceVar,
+                    ) {
                         Text(label, color = if (sel) Color.White else Muted, fontSize = 11.sp,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
                     }
@@ -319,11 +917,13 @@ fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
             }
         }
         item {
-            Button(onClick = { vm.generateAiLesson(apiKey, topic, level) },
-                enabled = !aiLoading && apiKey.isNotBlank() && topic.isNotBlank(),
+            Button(
+                onClick  = { vm.generateAiLesson(apiKey, topic, level) },
+                enabled  = !aiLoading && apiKey.isNotBlank() && topic.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Primary),
-                shape = RoundedCornerShape(12.dp)) {
+                colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                shape    = RoundedCornerShape(12.dp),
+            ) {
                 if (aiLoading) { CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp); Spacer(Modifier.width(8.dp)) }
                 Text(if (aiLoading) "Üretiliyor…" else "✨ Ders Oluştur", color = Color.White, fontWeight = FontWeight.Bold)
             }
@@ -345,8 +945,8 @@ fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
                         if (ex.options.isNotEmpty()) {
                             Spacer(Modifier.height(8.dp))
                             ex.options.forEach { opt ->
-                                Text("• $opt", color = if (opt==ex.answer) Primary else OnBackground,
-                                    fontSize = 12.sp, fontWeight = if (opt==ex.answer) FontWeight.Bold else FontWeight.Normal)
+                                Text("• $opt", color = if (opt == ex.answer) Primary else OnBackground,
+                                    fontSize = 12.sp, fontWeight = if (opt == ex.answer) FontWeight.Bold else FontWeight.Normal)
                             }
                         }
                     }
@@ -356,3 +956,11 @@ fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
         }
     }
 }
+
+// ── Yardımcılar ───────────────────────────────────────────────────────────────
+private fun parseColor(hex: String): Color {
+    return try { Color(android.graphics.Color.parseColor(hex)) }
+    catch (_: Exception) { Color(0xFF8B5CF6) }
+}
+
+private fun Modifier.shadow(elevation: Dp, shape: Shape): Modifier = this
