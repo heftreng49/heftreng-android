@@ -268,6 +268,8 @@ class MessagesViewModel @Inject constructor(
     // ── Konuşma başlat veya mevcut aç ────────────────────────
     // ID deterministik: minOf(uid, otherUid) + "__" + maxOf(...)
     fun startOrOpenConversation(otherUid: String, onReady: (String) -> Unit) {
+        // Kullanıcı giriş yapmamışsa veya hedef uid boşsa işlem yapma
+        if (uid.isBlank() || otherUid.isBlank() || uid == otherUid) return
         viewModelScope.launch {
             try {
                 val pa = minOf(uid, otherUid)

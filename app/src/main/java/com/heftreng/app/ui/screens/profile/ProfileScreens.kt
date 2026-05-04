@@ -54,6 +54,8 @@ fun ProfileScreen(
 ) {
     val user           by vm.user.collectAsState()
     val posts          by vm.posts.collectAsState()
+    val savedPosts     by vm.savedPosts.collectAsState()
+    val savedLoading   by vm.savedLoading.collectAsState()
     val isFollowing    by vm.isFollowing.collectAsState()
     val followersCount by vm.followersCount.collectAsState()
     val followingCount by vm.followingCount.collectAsState()
@@ -71,7 +73,7 @@ fun ProfileScreen(
     val targetUid = if (uid == "me") vm.myUid else uid
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Gönderiler", "Seriler", "Okuma Listesi")
+    val tabs = listOf("Gönderiler", "Seriler", "Okuma Listesi", "Beğendikleri")
 
     // Mesaj navigate state — composable dışında navigate yapabilmek için
     var navigateToConv by remember { mutableStateOf<String?>(null) }
@@ -159,9 +161,9 @@ fun ProfileScreen(
                         showFollowing = true
                     },
                     onMessage      = {
-                        if (!isMe && targetUid.isNotBlank()) {
+                        val myUid = vm.myUid
+                        if (!isMe && targetUid.isNotBlank() && myUid.isNotBlank()) {
                             msgsVm.startOrOpenConversation(targetUid) { convId ->
-                                // onReady callback — UI thread'de navigate et
                                 navigateToConv = convId
                             }
                         }
@@ -365,7 +367,32 @@ fun ProfileScreen(
                         }
                     }
                 }
-            }
+            
+                3 -> {
+                    // ── Beğendikleri ─────────────────────────────────────────
+                    if (savedLoading) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(32.dp), Alignment.Center) {
+                                CircularProgressIndicator(color = Amber, modifier = Modifier.size(24.dp))
+                            }
+                        }
+                    } else if (savedPosts.isEmpty()) {
+                        item { EmptyTab("Henüz kaydedilen gönderi yok") }
+                    } else {
+                        items(savedPosts, key = { it.id }) { post ->
+                            PostCard(
+                                post      = post,
+                                myUid     = vm.myUid,
+                                onLike    = { vm.toggleLikePost(post) },
+                                onDelete  = { vm.deleteOwnPost(post.id) },
+                                onEdit    = { vm.editOwnPost(post.id, it) },
+                                onComment = { navController.navigate("post/${post.id}") },
+                                onProfile = { navController.navigate("profile/$it") },
+                            )
+                        }
+                    }
+                }
+}
         }
     }
 

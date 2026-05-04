@@ -200,7 +200,7 @@ class SocialViewModel @Inject constructor(
                     .whereEqualTo("targetUid", targetUid)
                     .limit(200)
                     .get().await()
-                _followers.value = snap.documents.mapNotNull { doc ->
+                val rawFollowers = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     FollowEntry(
                         uid      = d["fromUid"]  as? String ?: "",
@@ -211,6 +211,19 @@ class SocialViewModel @Inject constructor(
                         ts       = d["ts"] as? com.google.firebase.Timestamp,
                     )
                 }.filter { it.uid.isNotBlank() }
+                // Avatar boş olanları users koleksiyonundan tamamla
+                _followers.value = rawFollowers.map { entry ->
+                    if (entry.photoURL.isNotBlank()) entry
+                    else {
+                        try {
+                            val uDoc = firestore.collection("users").document(entry.uid).get().await()
+                            entry.copy(
+                                photoURL = uDoc.getString("photoURL") ?: "",
+                                name = entry.name.ifBlank { uDoc.getString("name") ?: uDoc.getString("displayName") ?: "" }
+                            )
+                        } catch (e: Exception) { entry }
+                    }
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -229,7 +242,7 @@ class SocialViewModel @Inject constructor(
                     .whereEqualTo("fromUid", targetUid)
                     .limit(200)
                     .get().await()
-                _following.value = snap.documents.mapNotNull { doc ->
+                val rawFollowing = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     FollowEntry(
                         uid      = d["targetUid"]  as? String ?: "",
@@ -240,6 +253,19 @@ class SocialViewModel @Inject constructor(
                         ts       = d["ts"] as? com.google.firebase.Timestamp,
                     )
                 }.filter { it.uid.isNotBlank() }
+                // Avatar boş olanları users koleksiyonundan tamamla
+                _following.value = rawFollowing.map { entry ->
+                    if (entry.photoURL.isNotBlank()) entry
+                    else {
+                        try {
+                            val uDoc = firestore.collection("users").document(entry.uid).get().await()
+                            entry.copy(
+                                photoURL = uDoc.getString("photoURL") ?: "",
+                                name = entry.name.ifBlank { uDoc.getString("name") ?: uDoc.getString("displayName") ?: "" }
+                            )
+                        } catch (e: Exception) { entry }
+                    }
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {

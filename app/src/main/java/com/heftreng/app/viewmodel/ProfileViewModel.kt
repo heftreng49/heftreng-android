@@ -39,6 +39,12 @@ class ProfileViewModel @Inject constructor(
     private val _loading = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
+    private val _savedPosts = MutableStateFlow<List<Post>>(emptyList())
+    val savedPosts = _savedPosts.asStateFlow()
+
+    private val _savedLoading = MutableStateFlow(false)
+    val savedLoading = _savedLoading.asStateFlow()
+
     val myUid get() = auth.currentUser?.uid ?: ""
 
     fun load(uid: String) {
@@ -239,6 +245,59 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             try { firestore.collection("feed").document(postId).update("text", newText).await() }
             catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Kaydedilen gönderiler (Beğendikleri tab) ─────────────────────────────
+    fun loadSavedPosts() {
+        val uid = myUid
+        if (uid.isEmpty()) return
+        viewModelScope.launch {
+            _savedLoading.value = true
+            try {
+                // feedSaves/{postId_uid} — site ile aynı koleksiyon
+                val savesSnap = firestore.collection("feedSaves")
+                    .whereEqualTo("uid", uid)
+                    .limit(30).get().await()
+
+                val postIds = savesSnap.documents.mapNotNull { it.getString("feedId") }
+                    .filter { it.isNotBlank() }.distinct()
+
+                if (postIds.isEmpty()) { _savedPosts.value = emptyList(); return@launch }
+
+                // Batch: 10'ar 10'ar (Firestore in-query limiti)
+                val posts = mutableListOf<Post>()
+                postIds.chunked(10).forEach { chunk ->
+                    val snap = firestore.collection("feed")
+                        .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                        .get().await()
+                    snap.documents.forEach { doc ->
+                        val fd = doc.data ?: return@forEach
+                        val quoteObj   = fd["quote"] as? Map<*, *>
+                        posts.add(Post(
+                            id            = doc.id,
+                            uid           = fd["uid"]      as? String ?: "",
+                            displayName   = (fd["name"]    as? String)?.takeIf { it.isNotBlank() } ?: "",
+                            username      = fd["username"] as? String ?: "",
+                            photoURL      = fd["photoURL"] as? String ?: "",
+                            text          = fd["text"]     as? String ?: "",
+                            imageURL      = fd["imgUrl"]   as? String ?: fd["imageURL"] as? String ?: "",
+                            quoteText     = (quoteObj?.get("text")   as? String) ?: fd["quoteText"]  as? String ?: "",
+                            bookName      = (quoteObj?.get("book")   as? String) ?: fd["bookName"]   as? String ?: "",
+                            authorName    = (quoteObj?.get("author") as? String) ?: fd["authorName"] as? String ?: "",
+                            likesCount    = (fd["likes"]    as? Long)?.toInt() ?: 0,
+                            commentsCount = (fd["cmtCount"] as? Long)?.toInt() ?: 0,
+                            repostsCount  = (fd["reposts"]  as? Long)?.toInt() ?: 0,
+                            ts            = fd["ts"] as? com.google.firebase.Timestamp,
+                        ))
+                    }
+                }
+                _savedPosts.value = posts.sortedByDescending { it.ts?.seconds ?: 0L }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _savedLoading.value = false
+            }
         }
     }
 
