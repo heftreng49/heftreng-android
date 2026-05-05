@@ -1,6 +1,5 @@
 package com.heftreng.app.ui.component
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -210,10 +209,7 @@ fun QuoteDialog(
                         }} else null,
                     )
                     // Kitap öneri dropdown
-                    AnimatedVisibility(
-                        visible = showBookDrop,
-                        modifier = Modifier.fillMaxWidth().padding(top = 56.dp),
-                    ) {
+                    if (showBookDrop) {
                         Surface(
                             shape  = RoundedCornerShape(10.dp),
                             color  = HeftSurface,
@@ -277,10 +273,7 @@ fun QuoteDialog(
                         }} else null,
                     )
                     // Yazar öneri dropdown
-                    AnimatedVisibility(
-                        visible = showAuthorDrop,
-                        modifier = Modifier.fillMaxWidth().padding(top = 56.dp),
-                    ) {
+                    if (showAuthorDrop) {
                         Surface(
                             shape  = RoundedCornerShape(10.dp),
                             color  = HeftSurface,

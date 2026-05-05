@@ -37,6 +37,9 @@ import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.ui.screens.serials.SerialCard
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.FollowListSheet
+import com.heftreng.app.ui.component.QuoteDialog
+import com.heftreng.app.ui.component.QuoteInputSection
+import com.heftreng.app.ui.component.QuotePayload
 import com.heftreng.app.viewmodel.*
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -57,8 +60,12 @@ fun ProfileScreen(
     val savedPosts     by vm.savedPosts.collectAsState()
     val savedLoading   by vm.savedLoading.collectAsState()
 
-    val currentUser  = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-    val myPhotoURL   = currentUser?.photoURL?.toString() ?: ""
+    val myPhotoURL   by remember {
+        mutableStateOf(
+            com.google.firebase.auth.FirebaseAuth.getInstance()
+                .currentUser?.photoURL?.toString() ?: ""
+        )
+    }
     var composeText  by remember { mutableStateOf("") }
     var composeQuote by remember { mutableStateOf<QuotePayload?>(null) }
     var showQuoteDlg by remember { mutableStateOf(false) }
@@ -100,7 +107,7 @@ fun ProfileScreen(
     if (showQuoteDlg) {
         QuoteDialog(
             onDismiss = { showQuoteDlg = false },
-            onConfirm = { composeQuote = it; showQuoteDlg = false },
+            onConfirm = { payload -> composeQuote = payload; showQuoteDlg = false },
         )
     }
 
@@ -195,11 +202,12 @@ fun ProfileScreen(
                         onQuoteRemove = { composeQuote = null },
                         onSend        = {
                             if (composeText.isNotBlank() || composeQuote != null) {
+                                val q = composeQuote
                                 feedVm.createPost(
                                     text       = composeText.trim(),
-                                    quoteText  = composeQuote?.text ?: "",
-                                    authorName = composeQuote?.authorName ?: "",
-                                    bookName   = composeQuote?.bookName ?: "",
+                                    quoteText  = q?.text ?: "",
+                                    authorName = q?.authorName ?: "",
+                                    bookName   = q?.bookName ?: "",
                                 )
                                 composeText  = ""
                                 composeQuote = null
@@ -915,7 +923,7 @@ private fun ProfileComposeBox(
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 7.dp),
                     modifier       = Modifier.height(34.dp),
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(14.dp))
+                    Icon(androidx.compose.material.icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(5.dp))
                     Text(
                         if (language == "ku") "Parve bike" else "Paylaş",
