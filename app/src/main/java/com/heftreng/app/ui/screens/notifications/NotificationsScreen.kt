@@ -102,9 +102,11 @@ fun NotificationsScreen(
                                                 navController.navigate(Screen.PostDetail.go(pid))
                                             // url'den postId çıkar: /post/ABC123 veya ?pid=ABC123
                                             notif.url.isNotBlank() -> {
-                                                val fromUrl = Regex("post/([\w-]+)").find(notif.url)?.groupValues?.get(1)
-                                                    ?: Regex("[?&]pid=([\w-]+)").find(notif.url)?.groupValues?.get(1)
-                                                    ?: Regex("[?&]feedId=([\w-]+)").find(notif.url)?.groupValues?.get(1)
+                                                // DÜZELTME: Regex ifadeleri Raw String (""") içine alındı
+                                                val fromUrl = Regex("""post/([\w-]+)""").find(notif.url)?.groupValues?.get(1)
+                                                    ?: Regex("""[?&]pid=([\w-]+)""").find(notif.url)?.groupValues?.get(1)
+                                                    ?: Regex("""[?&]feedId=([\w-]+)""").find(notif.url)?.groupValues?.get(1)
+                                                
                                                 if (!fromUrl.isNullOrBlank())
                                                     navController.navigate(Screen.PostDetail.go(fromUrl))
                                             }
@@ -112,7 +114,8 @@ fun NotificationsScreen(
                                     }
                                     // Seri bildirimi
                                     "serial" -> notif.url.isNotBlank().let {
-                                        val sid = Regex("serial/([\w-]+)").find(notif.url)?.groupValues?.get(1)
+                                        // DÜZELTME: Regex ifadesi Raw String (""") içine alındı
+                                        val sid = Regex("""serial/([\w-]+)""").find(notif.url)?.groupValues?.get(1)
                                         if (!sid.isNullOrBlank()) navController.navigate("serial/$sid")
                                     }
                                     // Bilinmeyen tür ama fromUid varsa profile git
