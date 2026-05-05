@@ -56,6 +56,12 @@ fun ProfileScreen(
     val posts          by vm.posts.collectAsState()
     val savedPosts     by vm.savedPosts.collectAsState()
     val savedLoading   by vm.savedLoading.collectAsState()
+
+    val currentUser  = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+    val myPhotoURL   = currentUser?.photoURL?.toString() ?: ""
+    var composeText  by remember { mutableStateOf("") }
+    var composeQuote by remember { mutableStateOf<QuotePayload?>(null) }
+    var showQuoteDlg by remember { mutableStateOf(false) }
     val isFollowing    by vm.isFollowing.collectAsState()
     val followersCount by vm.followersCount.collectAsState()
     val followingCount by vm.followingCount.collectAsState()
@@ -89,6 +95,13 @@ fun ProfileScreen(
         vm.load(uid)
         serialsVm.loadMySerials(targetUid)
         rlVm.load(targetUid)
+    }
+
+    if (showQuoteDlg) {
+        QuoteDialog(
+            onDismiss = { showQuoteDlg = false },
+            onConfirm = { composeQuote = it; showQuoteDlg = false },
+        )
     }
 
     Scaffold(
@@ -169,6 +182,33 @@ fun ProfileScreen(
                         }
                     },
                 )
+            }
+
+            // ── 1.5 Compose alanı — sadece kendi profilde ────────────
+            if (isMe) {
+                item(key = "prof_compose") {
+                    ProfileComposeBox(
+                        text          = composeText,
+                        onTextChange  = { composeText = it },
+                        quote         = composeQuote,
+                        onQuoteAdd    = { showQuoteDlg = true },
+                        onQuoteRemove = { composeQuote = null },
+                        onSend        = {
+                            if (composeText.isNotBlank() || composeQuote != null) {
+                                feedVm.createPost(
+                                    text       = composeText.trim(),
+                                    quoteText  = composeQuote?.text ?: "",
+                                    authorName = composeQuote?.authorName ?: "",
+                                    bookName   = composeQuote?.bookName ?: "",
+                                )
+                                composeText  = ""
+                                composeQuote = null
+                            }
+                        },
+                        photoURL = myPhotoURL,
+                        language = language,
+                    )
+                }
             }
 
             // ── 2. Tab bar — stickyHeader ────────────────────────────────
@@ -769,6 +809,121 @@ fun EditProfileScreen(
                 shape         = RoundedCornerShape(12.dp),
                 colors        = heftrangTextFieldColors(),
             )
+        }
+    }
+}
+
+
+// ── Profil compose alanı ──────────────────────────────────────────────────────
+@Composable
+private fun ProfileComposeBox(
+    text          : String,
+    onTextChange  : (String) -> Unit,
+    quote         : QuotePayload?,
+    onQuoteAdd    : () -> Unit,
+    onQuoteRemove : () -> Unit,
+    onSend        : () -> Unit,
+    photoURL      : String,
+    language      : String,
+) {
+    Surface(
+        modifier       = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        shape          = RoundedCornerShape(14.dp),
+        color          = HeftSurface,
+        border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
+        tonalElevation = 0.dp,
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                verticalAlignment     = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                coil.compose.AsyncImage(
+                    model              = photoURL.ifEmpty { null },
+                    contentDescription = null,
+                    modifier           = Modifier.size(36.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(SurfaceVar),
+                    contentScale       = androidx.compose.ui.layout.ContentScale.Crop,
+                )
+                OutlinedTextField(
+                    value           = text,
+                    onValueChange   = onTextChange,
+                    placeholder     = {
+                        Text(
+                            if (language == "ku") "Tu çi difikire?" else "Bir şeyler paylaş...",
+                            color = Muted, fontSize = 14.sp,
+                        )
+                    },
+                    modifier        = Modifier.fillMaxWidth().heightIn(min = 56.dp, max = 160.dp),
+                    colors          = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor      = Primary,
+                        unfocusedBorderColor    = androidx.compose.ui.graphics.Color.Transparent,
+                        focusedTextColor        = OnBackground,
+                        unfocusedTextColor      = OnBackground,
+                        unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+                        focusedContainerColor   = androidx.compose.ui.graphics.Color.Transparent,
+                        cursorColor             = Primary,
+                    ),
+                    shape           = RoundedCornerShape(8.dp),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
+                    ),
+                    maxLines        = 6,
+                )
+            }
+            if (quote != null) {
+                Spacer(Modifier.height(8.dp))
+                QuoteInputSection(quote = quote, onRemove = onQuoteRemove)
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier          = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onQuoteAdd, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Default.FormatQuote, null,
+                        tint     = if (quote != null) Primary else Muted,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Text(
+                    if (language == "ku") "Alıntî" else "Alıntı ekle",
+                    color    = if (quote != null) Primary else Muted,
+                    fontSize = 11.sp,
+                    modifier = Modifier.clickable { onQuoteAdd() },
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "${text.length}/1000",
+                    color    = if (text.length > 900) Error else Muted,
+                    fontSize = 11.sp,
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick        = onSend,
+                    enabled        = text.isNotBlank() || quote != null,
+                    shape          = RoundedCornerShape(99.dp),
+                    colors         = ButtonDefaults.buttonColors(
+                        containerColor         = Primary,
+                        contentColor           = androidx.compose.ui.graphics.Color.White,
+                        disabledContainerColor = Divider,
+                        disabledContentColor   = Muted,
+                    ),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 7.dp),
+                    modifier       = Modifier.height(34.dp),
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        if (language == "ku") "Parve bike" else "Paylaş",
+                        fontSize   = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
         }
     }
 }

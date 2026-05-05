@@ -19,7 +19,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -59,12 +58,10 @@ fun FeedScreen(
     val hasMore     by vm.hasMore.collectAsState()
     val loadingMore by vm.loadingMore.collectAsState()
 
-    var showComposeSheet by remember { mutableStateOf(false) }
     var likersPostId     by remember { mutableStateOf<String?>(null) }
     val likers           by socialVm.likers.collectAsState()
     val socialLoading    by socialVm.loading.collectAsState()
     var commentPost      by remember { mutableStateOf<Post?>(null) }
-    var fabExpanded      by remember { mutableStateOf(false) }
     var inlineText       by remember { mutableStateOf("") }
     var inlineQuote      by remember { mutableStateOf<QuotePayload?>(null) }
     var showInlineQuote  by remember { mutableStateOf(false) }
@@ -101,23 +98,6 @@ fun FeedScreen(
             loading   = socialLoading,
             onDismiss = { likersPostId = null; socialVm.clearLikers() },
             onProfile = { uid -> likersPostId = null; navController.navigate("profile/$uid") },
-        )
-    }
-
-    if (showComposeSheet) {
-        ComposeBottomSheet(
-            language    = language,
-            currentUser = currentUser,
-            onDismiss   = { showComposeSheet = false },
-            onPost      = { text, quote ->
-                vm.createPost(
-                    text       = text,
-                    quoteText  = quote?.text ?: "",
-                    authorName = quote?.authorName ?: "",
-                    bookName   = quote?.bookName ?: "",
-                )
-                showComposeSheet = false
-            },
         )
     }
 
@@ -200,51 +180,6 @@ fun FeedScreen(
             }
         }
 
-        // ── FAB — sağ alt köşe ────────────────────────────────────────────
-        Column(
-            modifier            = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = 16.dp),
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            AnimatedVisibility(
-                visible = fabExpanded,
-                enter   = fadeIn() + slideInVertically { it },
-                exit    = fadeOut() + slideOutVertically { it },
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    FabMenuItem(
-                        label   = if (language == "ku") "Nivîsek Nû" else "Yeni Gönderi",
-                        icon    = Icons.Default.Create,
-                        onClick = { fabExpanded = false; showComposeSheet = true },
-                    )
-                    FabMenuItem(
-                        label   = if (language == "ku") "Alıntî Zêde Bike" else "Alıntı Ekle",
-                        icon    = Icons.Default.FormatQuote,
-                        onClick = { fabExpanded = false; showComposeSheet = true },
-                    )
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Brush.linearGradient(listOf(Primary, PrimaryLight)))
-                    .clickable { fabExpanded = !fabExpanded },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector        = if (fabExpanded) Icons.Default.Close else Icons.Default.Add,
-                    contentDescription = "Compose",
-                    tint               = Color.White,
-                    modifier           = Modifier.size(24.dp),
-                )
-            }
-        }
     }
 
     commentPost?.let { post ->
@@ -359,24 +294,6 @@ private fun InlineComposeBox(
                 }
             }
         }
-    }
-}
-
-// ── FabMenuItem ───────────────────────────────────────────────────────────────
-@Composable
-private fun FabMenuItem(label: String, icon: ImageVector, onClick: () -> Unit) {
-    Row(
-        modifier              = Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(HeftSurface)
-            .border(1.dp, Divider, RoundedCornerShape(10.dp))
-            .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment     = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        Icon(icon, null, tint = Primary, modifier = Modifier.size(16.dp))
-        Text(label, color = OnBackground, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }
 
