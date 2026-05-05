@@ -57,7 +57,10 @@ fun SinglePostScreen(
     var showLikers    by remember { mutableStateOf(false) }
     var cmtLikersId   by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(postId) { vm.loadComments(postId) }
+    LaunchedEffect(postId) {
+        vm.ensurePost(postId)   // Feed'de yoksa Firestore'dan çek
+        vm.loadComments(postId)
+    }
 
     Scaffold(
         containerColor = Background,
@@ -97,6 +100,12 @@ fun SinglePostScreen(
                         onShowLikers = {
                             socialVm.loadPostLikers(post.id)
                             showLikers = true
+                        },
+                        onTapAuthor = { author ->
+                            navController.navigate("author_quotes/${java.net.URLEncoder.encode(author, "UTF-8")}")
+                        },
+                        onTapBook = { book ->
+                            navController.navigate("book_quotes/${java.net.URLEncoder.encode(book, "UTF-8")}")
                         },
                     )
                     HorizontalDivider(color = SurfaceVar, thickness = 6.dp)

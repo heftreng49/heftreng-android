@@ -40,6 +40,8 @@ import com.heftreng.app.ui.screens.search.SearchScreen
 import com.heftreng.app.ui.screens.books.BookChapterReadScreen
 import com.heftreng.app.ui.screens.books.BookDetailScreen
 import com.heftreng.app.ui.screens.books.BooksScreen
+import com.heftreng.app.ui.screens.quotes.AuthorQuotesScreen
+import com.heftreng.app.ui.screens.quotes.BookQuotesScreen
 import com.heftreng.app.ui.screens.serials.ChapterReadScreen
 import com.heftreng.app.ui.screens.serials.SerialDetailScreen
 import com.heftreng.app.ui.screens.serials.SerialsScreen
@@ -329,6 +331,16 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                         chapterId     = back.arguments?.getString("cid") ?: "",
                         navController = navController,
                     )
+                }
+                composable("author_quotes/{author}") { back ->
+                    val author = java.net.URLDecoder.decode(
+                        back.arguments?.getString("author") ?: "", "UTF-8")
+                    AuthorQuotesScreen(authorName = author, onBack = { navController.popBackStack() })
+                }
+                composable("book_quotes/{book}") { back ->
+                    val book = java.net.URLDecoder.decode(
+                        back.arguments?.getString("book") ?: "", "UTF-8")
+                    BookQuotesScreen(bookName = book, onBack = { navController.popBackStack() })
                 }
                 composable(Screen.Books.route) { BooksScreen(navController, language) }
                 composable("book/{bookId}") { back ->

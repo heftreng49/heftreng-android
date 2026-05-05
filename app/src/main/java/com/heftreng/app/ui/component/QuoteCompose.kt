@@ -43,10 +43,12 @@ data class QuoteSuggestion(
 // ── Gönderi kartında alıntı gösterimi ─────────────────────────────────────────
 @Composable
 fun QuoteCard(
-    quoteText  : String,
-    bookName   : String = "",
-    authorName : String = "",
-    modifier   : Modifier = Modifier,
+    quoteText   : String,
+    bookName    : String = "",
+    authorName  : String = "",
+    onTapBook   : ((String) -> Unit)? = null,
+    onTapAuthor : ((String) -> Unit)? = null,
+    modifier    : Modifier = Modifier,
 ) {
     if (quoteText.isBlank()) return
     Row(
@@ -70,9 +72,30 @@ fun QuoteCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.AutoStories, null, tint = Amber, modifier = Modifier.size(12.dp))
                     Spacer(Modifier.width(4.dp))
-                    if (bookName.isNotBlank()) Text(bookName, color = Amber, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                    if (bookName.isNotBlank() && authorName.isNotBlank()) Text(" — ", color = Muted, fontSize = 10.sp)
-                    if (authorName.isNotBlank()) Text(authorName, color = Muted, fontSize = 10.sp)
+                    if (bookName.isNotBlank()) {
+                        Text(
+                            bookName,
+                            color      = Amber,
+                            fontSize   = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier   = if (onTapBook != null)
+                                Modifier.clickable { onTapBook(bookName) }
+                            else Modifier,
+                        )
+                    }
+                    if (bookName.isNotBlank() && authorName.isNotBlank()) {
+                        Text(" — ", color = Muted, fontSize = 10.sp)
+                    }
+                    if (authorName.isNotBlank()) {
+                        Text(
+                            authorName,
+                            color    = Muted,
+                            fontSize = 10.sp,
+                            modifier = if (onTapAuthor != null)
+                                Modifier.clickable { onTapAuthor(authorName) }
+                            else Modifier,
+                        )
+                    }
                 }
                 Spacer(Modifier.height(4.dp))
             }

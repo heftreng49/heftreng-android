@@ -150,6 +150,53 @@ class SearchViewModel @Inject constructor(
             }
         } catch (e: Exception) { e.printStackTrace() }
 
+        // Alıntı yazar — "quote.author" nested field (site formatı)
+        try {
+            val authorSnap = firestore.collection("feed")
+                .whereEqualTo("quote.author", q)
+                .limit(10).get().await()
+            // Ayrıca flat authorName field
+            val authorSnap2 = firestore.collection("feed")
+                .orderBy("authorName")
+                .startAt(q).endAt(q + "")
+                .limit(10).get().await()
+            val allAuthorDocs = (authorSnap.documents + authorSnap2.documents)
+                .distinctBy { it.id }
+            val authorNames = allAuthorDocs.mapNotNull { doc ->
+                val d = doc.data ?: return@mapNotNull null
+                val name = (d["quote"] as? Map<*, *>)?.get("author") as? String
+                           ?: d["authorName"] as? String ?: return@mapNotNull null
+                name.takeIf { it.isNotBlank() }
+            }.distinct().take(5)
+            results += authorNames.map { name ->
+                SearchResult(id = name, type = "author", title = name,
+                    subtitle = "Yazar Alıntıları", imageUrl = "")
+            }
+        } catch (_: Exception) {}
+
+        // Alıntı kitap — "quote.book" nested field (site formatı)
+        try {
+            val bookSnap = firestore.collection("feed")
+                .whereEqualTo("quote.book", q)
+                .limit(10).get().await()
+            val bookSnap2 = firestore.collection("feed")
+                .orderBy("bookName")
+                .startAt(q).endAt(q + "")
+                .limit(10).get().await()
+            val allBookDocs = (bookSnap.documents + bookSnap2.documents)
+                .distinctBy { it.id }
+            val bookNames = allBookDocs.mapNotNull { doc ->
+                val d = doc.data ?: return@mapNotNull null
+                val name = (d["quote"] as? Map<*, *>)?.get("book") as? String
+                           ?: d["bookName"] as? String ?: return@mapNotNull null
+                name.takeIf { it.isNotBlank() }
+            }.distinct().take(5)
+            results += bookNames.map { name ->
+                SearchResult(id = name, type = "book_quote", title = name,
+                    subtitle = "Kitap Alıntıları", imageUrl = "")
+            }
+        } catch (_: Exception) {}
+
         // Alıntı (feed quoteText prefix)
         try {
             val qSnap = firestore.collection("feed")

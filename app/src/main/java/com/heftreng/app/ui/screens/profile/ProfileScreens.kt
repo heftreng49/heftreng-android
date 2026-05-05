@@ -15,6 +15,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
+import java.net.URLEncoder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -291,7 +292,9 @@ fun ProfileScreen(
                                 onShare   = { feedVm.repost(post) },
                                 onDelete  = if (isMe) ({ vm.deleteOwnPost(post.id) }) else null,
                                 onEdit    = if (isMe) ({ newText -> vm.editOwnPost(post.id, newText) }) else null,
-                                onTap     = { navController.navigate(Screen.PostDetail.go(post.id)) },
+                                onTap       = { navController.navigate(Screen.PostDetail.go(post.id)) },
+                                onTapAuthor = { author -> navController.navigate("author_quotes/${URLEncoder.encode(author, \"UTF-8\")}") },
+                                onTapBook   = { book   -> navController.navigate("book_quotes/${URLEncoder.encode(book, \"UTF-8\")}") },
                             )
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         }
@@ -451,7 +454,9 @@ fun ProfileScreen(
                                 onShare   = { },
                                 onDelete  = if (vm.myUid == post.uid) ({ vm.deleteOwnPost(post.id) }) else null,
                                 onEdit    = if (vm.myUid == post.uid) ({ newText -> vm.editOwnPost(post.id, newText) }) else null,
-                                onTap     = { navController.navigate(Screen.PostDetail.go(post.id)) },
+                                onTap       = { navController.navigate(Screen.PostDetail.go(post.id)) },
+                                onTapAuthor = { author -> navController.navigate("author_quotes/${URLEncoder.encode(author, \"UTF-8\")}") },
+                                onTapBook   = { book   -> navController.navigate("book_quotes/${URLEncoder.encode(book, \"UTF-8\")}") },
                             )
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         }

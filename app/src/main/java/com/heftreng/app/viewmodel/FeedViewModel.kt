@@ -447,6 +447,49 @@ class FeedViewModel @Inject constructor(
 
     fun getPostById(postId: String): Post? = _posts.value.find { it.id == postId }
 
+    // Tekil gönderi — feed'de yoksa Firestore'dan çek
+    fun ensurePost(postId: String) {
+        if (_posts.value.any { it.id == postId }) return
+        viewModelScope.launch {
+            try {
+                val doc = firestore.collection("feed").document(postId).get().await()
+                val d   = doc.data ?: return@launch
+                val quoteObj   = d["quote"] as? Map<*, *>
+                val quoteText  = (quoteObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
+                                 ?: d["quoteText"] as? String ?: ""
+                val bookName   = (quoteObj?.get("book") as? String)?.takeIf { it.isNotBlank() }
+                                 ?: d["bookName"] as? String ?: ""
+                val authorName = (quoteObj?.get("author") as? String)?.takeIf { it.isNotBlank() }
+                                 ?: d["authorName"] as? String ?: ""
+                val post = Post(
+                    id            = doc.id,
+                    uid           = d["uid"]          as? String ?: "",
+                    displayName   = (d["name"]        as? String)?.takeIf { it.isNotBlank() }
+                                   ?: d["displayName"] as? String ?: "",
+                    photoURL      = d["photoURL"]     as? String ?: "",
+                    text          = d["text"]         as? String ?: "",
+                    imgUrl        = d["imgUrl"]        as? String ?: d["imageURL"] as? String ?: "",
+                    imageURL      = d["imageURL"]      as? String ?: d["imgUrl"] as? String ?: "",
+                    likesCount    = (d["likes"]        as? Long)?.toInt() ?: 0,
+                    commentsCount = (d["cmtC"]         as? Long)?.toInt()
+                                   ?: (d["commentsCount"] as? Long)?.toInt() ?: 0,
+                    repostsCount  = (d["reposts"]      as? Long)?.toInt() ?: 0,
+                    ts            = d["ts"]            as? com.google.firebase.Timestamp,
+                    quoteText     = quoteText,
+                    bookName      = bookName,
+                    authorName    = authorName,
+                    repostType    = d["repostType"]    as? String ?: "",
+                    repostTitle   = d["repostTitle"]   as? String ?: "",
+                    repostText    = d["repostText"]    as? String ?: "",
+                    serialTitle   = d["serialTitle"]   as? String ?: "",
+                    isLikedByMe   = doc.id in likedIds,
+                    isSavedByMe   = doc.id in savedIds,
+                )
+                _posts.value = _posts.value + post
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
     // Tema: userNotifs/{uid}/msgs, alan: feedId, title, sub, ico
     private suspend fun sendNotif(toUid: String, type: String, title: String, sub: String = "", feedId: String = "") {
         try {

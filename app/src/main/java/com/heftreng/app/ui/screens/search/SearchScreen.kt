@@ -174,7 +174,9 @@ fun SearchScreen(
                                     "user"   -> navController.navigate("profile/${result.uid}")
                                     "post"   -> navController.navigate(Screen.PostDetail.go(result.id))
                                     "serial" -> navController.navigate(Screen.SerialDetail.go(result.id))
-                                    "book"   -> navController.navigate("book/${result.id}")
+                                    "book"       -> navController.navigate("book/${result.id}")
+                                    "author"     -> navController.navigate("author_quotes/${java.net.URLEncoder.encode(result.id, "UTF-8")}")
+                                    "book_quote" -> navController.navigate("book_quotes/${java.net.URLEncoder.encode(result.id, "UTF-8")}")
                                 }
                             })
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
@@ -249,7 +251,7 @@ private fun SearchResultRow(result: SearchResult, onClick: () -> Unit) {
             color = typeColor.copy(alpha = 0.12f),
         ) {
             Text(
-                when (result.type) { "post" -> "Gönderi"; "serial" -> "Seri"; "book" -> "Kitap"; else -> "Kişi" },
+                when (result.type) { "post" -> "Gönderi"; "serial" -> "Seri"; "book" -> "Kitap"; "author" -> "Yazar"; "book_quote" -> "Kitap Alıntısı"; else -> "Kişi" },
                 color    = typeColor,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,

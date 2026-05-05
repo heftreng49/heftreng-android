@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import java.net.URLEncoder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -150,6 +151,12 @@ fun FeedScreen(
                         onShowLikers = {
                             socialVm.loadPostLikers(post.id)
                             likersPostId = post.id
+                        },
+                        onTapAuthor = { author ->
+                            navController.navigate("author_quotes/${URLEncoder.encode(author, "UTF-8")}")
+                        },
+                        onTapBook = { book ->
+                            navController.navigate("book_quotes/${URLEncoder.encode(book, "UTF-8")}")
                         },
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
@@ -441,6 +448,8 @@ fun PostCard(
     onQuote      : (() -> Unit)? = null,
     onStoryShare : (() -> Unit)? = null,
     onShowLikers : (() -> Unit)? = null,
+    onTapAuthor  : ((String) -> Unit)? = null,
+    onTapBook    : ((String) -> Unit)? = null,
 ) {
     val myUid            = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     val isOwn            = post.uid == myUid
@@ -529,10 +538,12 @@ fun PostCard(
         ) {
             if (post.quoteText.isNotBlank()) {
                 QuoteCard(
-                    quoteText  = post.quoteText,
-                    bookName   = post.bookName,
-                    authorName = post.authorName,
-                    modifier   = Modifier.padding(bottom = 8.dp),
+                    quoteText   = post.quoteText,
+                    bookName    = post.bookName,
+                    authorName  = post.authorName,
+                    onTapBook   = onTapBook,
+                    onTapAuthor = onTapAuthor,
+                    modifier    = Modifier.padding(bottom = 8.dp),
                 )
             }
             if (post.text.isNotBlank()) {
