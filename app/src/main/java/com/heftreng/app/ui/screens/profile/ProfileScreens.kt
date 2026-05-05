@@ -37,7 +37,6 @@ import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.ui.screens.serials.SerialCard
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.FollowListSheet
-import androidx.compose.material.icons.Icons
 import com.heftreng.app.ui.component.QuoteDialog
 import com.heftreng.app.ui.component.QuoteInputSection
 import com.heftreng.app.ui.component.QuotePayload
@@ -63,7 +62,7 @@ fun ProfileScreen(
 
     val myPhotoURL   by remember {
         val u = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-        mutableStateOf(u?.photoURL?.toString() ?: "")
+        mutableStateOf(u?.photoUrl?.toString() ?: "")
     }
     var composeText  by remember { mutableStateOf("") }
     var composeQuote by remember { mutableStateOf<QuotePayload?>(null) }
