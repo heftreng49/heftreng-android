@@ -15,7 +15,6 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
-import java.net.URLEncoder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,7 +27,6 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.data.model.ReadingListEntry
 import com.heftreng.app.data.model.Serial
@@ -39,12 +37,9 @@ import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.ui.screens.serials.SerialCard
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.FollowListSheet
-import com.heftreng.app.ui.component.QuoteDialog
-import com.heftreng.app.ui.component.QuoteInputSection
-import com.heftreng.app.ui.component.QuotePayload
 import com.heftreng.app.viewmodel.*
 
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     uid          : String,
@@ -59,16 +54,6 @@ fun ProfileScreen(
 ) {
     val user           by vm.user.collectAsState()
     val posts          by vm.posts.collectAsState()
-    val savedPosts     by vm.savedPosts.collectAsState()
-    val savedLoading   by vm.savedLoading.collectAsState()
-
-    val myPhotoURL   by remember {
-        val u = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-        mutableStateOf(u?.photoUrl?.toString() ?: "")
-    }
-    var composeText  by remember { mutableStateOf("") }
-    var composeQuote by remember { mutableStateOf<QuotePayload?>(null) }
-    var showQuoteDlg by remember { mutableStateOf(false) }
     val isFollowing    by vm.isFollowing.collectAsState()
     val followersCount by vm.followersCount.collectAsState()
     val followingCount by vm.followingCount.collectAsState()
@@ -86,7 +71,7 @@ fun ProfileScreen(
     val targetUid = if (uid == "me") vm.myUid else uid
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Gönderiler", "Seriler", "Okuma Listesi", "Beğendikleri")
+    val tabs = listOf("Gönderiler", "Seriler", "Okuma Listesi")
 
     // Mesaj navigate state — composable dışında navigate yapabilmek için
     var navigateToConv by remember { mutableStateOf<String?>(null) }
@@ -102,13 +87,6 @@ fun ProfileScreen(
         vm.load(uid)
         serialsVm.loadMySerials(targetUid)
         rlVm.load(targetUid)
-    }
-
-    if (showQuoteDlg) {
-        QuoteDialog(
-            onDismiss = { showQuoteDlg = false },
-            onConfirm = { payload -> composeQuote = payload; showQuoteDlg = false },
-        )
     }
 
     Scaffold(
@@ -181,42 +159,14 @@ fun ProfileScreen(
                         showFollowing = true
                     },
                     onMessage      = {
-                        val myUid = vm.myUid
-                        if (!isMe && targetUid.isNotBlank() && myUid.isNotBlank()) {
+                        if (!isMe && targetUid.isNotBlank()) {
                             msgsVm.startOrOpenConversation(targetUid) { convId ->
+                                // onReady callback — UI thread'de navigate et
                                 navigateToConv = convId
                             }
                         }
                     },
                 )
-            }
-
-            // ── 1.5 Compose alanı — sadece kendi profilde ────────────
-            if (isMe) {
-                item(key = "prof_compose") {
-                    ProfileComposeBox(
-                        text          = composeText,
-                        onTextChange  = { composeText = it },
-                        quote         = composeQuote,
-                        onQuoteAdd    = { showQuoteDlg = true },
-                        onQuoteRemove = { composeQuote = null },
-                        onSend        = {
-                            if (composeText.isNotBlank() || composeQuote != null) {
-                                val q = composeQuote
-                                feedVm.createPost(
-                                    text       = composeText.trim(),
-                                    quoteText  = q?.text ?: "",
-                                    authorName = q?.authorName ?: "",
-                                    bookName   = q?.bookName ?: "",
-                                )
-                                composeText  = ""
-                                composeQuote = null
-                            }
-                        },
-                        photoURL = myPhotoURL,
-                        language = language,
-                    )
-                }
             }
 
             // ── 2. Tab bar — stickyHeader ────────────────────────────────
@@ -293,9 +243,7 @@ fun ProfileScreen(
                                 onShare   = { feedVm.repost(post) },
                                 onDelete  = if (isMe) ({ vm.deleteOwnPost(post.id) }) else null,
                                 onEdit    = if (isMe) ({ newText -> vm.editOwnPost(post.id, newText) }) else null,
-                                onTap       = { navController.navigate(Screen.PostDetail.go(post.id)) },
-                                onTapAuthor = { author -> val enc = URLEncoder.encode(author, "UTF-8"); navController.navigate("author_quotes/$enc") },
-                                onTapBook   = { book   -> val enc = URLEncoder.encode(book, "UTF-8"); navController.navigate("book_quotes/$enc") },
+                                onTap     = { navController.navigate(Screen.PostDetail.go(post.id)) },
                             )
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         }
@@ -417,53 +365,7 @@ fun ProfileScreen(
                         }
                     }
                 }
-            
-                3 -> {
-                    // ── Beğendikleri ─────────────────────────────────────────
-                    if (savedLoading) {
-                        item(key = "saved_loading") {
-                            Box(
-                                Modifier.fillMaxWidth().height(200.dp),
-                                contentAlignment = Alignment.Center,
-                            ) { CircularProgressIndicator(color = Amber, modifier = Modifier.size(24.dp)) }
-                        }
-                    } else if (savedPosts.isEmpty()) {
-                        item(key = "saved_empty") {
-                            Box(
-                                Modifier.fillMaxWidth().height(200.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        Icons.Outlined.Bookmark, null,
-                                        tint     = Muted,
-                                        modifier = Modifier.size(44.dp),
-                                    )
-                                    Spacer(Modifier.height(10.dp))
-                                    Text("Henüz kaydedilen gönderi yok", color = Muted)
-                                }
-                            }
-                        }
-                    } else {
-                        items(savedPosts, key = { "saved_${it.id}" }) { post ->
-                            PostCard(
-                                post      = post,
-                                onLike    = { vm.toggleLikePost(post) },
-                                onSave    = { /* zaten kayıtlı */ },
-                                onProfile = { navController.navigate(Screen.Profile.go(post.uid)) },
-                                onComment = { navController.navigate(Screen.PostDetail.go(post.id)) },
-                                onShare   = { },
-                                onDelete  = if (vm.myUid == post.uid) ({ vm.deleteOwnPost(post.id) }) else null,
-                                onEdit    = if (vm.myUid == post.uid) ({ newText -> vm.editOwnPost(post.id, newText) }) else null,
-                                onTap       = { navController.navigate(Screen.PostDetail.go(post.id)) },
-                                onTapAuthor = { author -> val enc = URLEncoder.encode(author, "UTF-8"); navController.navigate("author_quotes/$enc") },
-                                onTapBook   = { book   -> val enc = URLEncoder.encode(book, "UTF-8"); navController.navigate("book_quotes/$enc") },
-                            )
-                            HorizontalDivider(color = Divider, thickness = 0.5.dp)
-                        }
-                    }
-                }
-}
+            }
         }
     }
 
@@ -548,9 +450,7 @@ private fun ProfileHeader(
                 ) {
                     if (avatarUrl != null) {
                         AsyncImage(
-                            model = coil.request.ImageRequest.Builder(
-                                androidx.compose.ui.platform.LocalContext.current
-                            ).data(avatarUrl).crossfade(true).build(),
+                            model              = avatarUrl,
                             contentDescription = null,
                             contentScale       = ContentScale.Crop,
                             modifier           = Modifier.fillMaxSize(),
@@ -823,123 +723,6 @@ fun EditProfileScreen(
                 shape         = RoundedCornerShape(12.dp),
                 colors        = heftrangTextFieldColors(),
             )
-        }
-    }
-}
-
-
-// ── Profil compose alanı ──────────────────────────────────────────────────────
-@Composable
-private fun ProfileComposeBox(
-    text          : String,
-    onTextChange  : (String) -> Unit,
-    quote         : QuotePayload?,
-    onQuoteAdd    : () -> Unit,
-    onQuoteRemove : () -> Unit,
-    onSend        : () -> Unit,
-    photoURL      : String,
-    language      : String,
-) {
-    Surface(
-        modifier       = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-        shape          = RoundedCornerShape(14.dp),
-        color          = HeftSurface,
-        border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
-        tonalElevation = 0.dp,
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier              = Modifier.fillMaxWidth(),
-                verticalAlignment     = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                coil.compose.AsyncImage(
-                    model = coil.request.ImageRequest.Builder(
-                        androidx.compose.ui.platform.LocalContext.current
-                    ).data(photoURL.ifEmpty { null }).crossfade(true).build(),
-                    contentDescription = null,
-                    modifier           = Modifier.size(36.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape)
-                        .background(SurfaceVar),
-                    contentScale       = androidx.compose.ui.layout.ContentScale.Crop,
-                )
-                OutlinedTextField(
-                    value           = text,
-                    onValueChange   = onTextChange,
-                    placeholder     = {
-                        Text(
-                            if (language == "ku") "Tu çi difikire?" else "Bir şeyler paylaş...",
-                            color = Muted, fontSize = 14.sp,
-                        )
-                    },
-                    modifier        = Modifier.fillMaxWidth().heightIn(min = 56.dp, max = 160.dp),
-                    colors          = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor      = Primary,
-                        unfocusedBorderColor    = androidx.compose.ui.graphics.Color.Transparent,
-                        focusedTextColor        = OnBackground,
-                        unfocusedTextColor      = OnBackground,
-                        unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                        focusedContainerColor   = androidx.compose.ui.graphics.Color.Transparent,
-                        cursorColor             = Primary,
-                    ),
-                    shape           = RoundedCornerShape(8.dp),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
-                    ),
-                    maxLines        = 6,
-                )
-            }
-            if (quote != null) {
-                Spacer(Modifier.height(8.dp))
-                QuoteInputSection(quote = quote, onRemove = onQuoteRemove)
-            }
-            Spacer(Modifier.height(6.dp))
-            Row(
-                modifier          = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onQuoteAdd, modifier = Modifier.size(32.dp)) {
-                    Icon(
-                        Icons.Default.FormatQuote, null,
-                        tint     = if (quote != null) Primary else Muted,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-                Text(
-                    if (language == "ku") "Alıntî" else "Alıntı ekle",
-                    color    = if (quote != null) Primary else Muted,
-                    fontSize = 11.sp,
-                    modifier = Modifier.clickable { onQuoteAdd() },
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    "${text.length}/1000",
-                    color    = if (text.length > 900) Error else Muted,
-                    fontSize = 11.sp,
-                )
-                Spacer(Modifier.width(8.dp))
-                Button(
-                    onClick        = onSend,
-                    enabled        = text.isNotBlank() || quote != null,
-                    shape          = RoundedCornerShape(99.dp),
-                    colors         = ButtonDefaults.buttonColors(
-                        containerColor         = Primary,
-                        contentColor           = androidx.compose.ui.graphics.Color.White,
-                        disabledContainerColor = Divider,
-                        disabledContentColor   = Muted,
-                    ),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 7.dp),
-                    modifier       = Modifier.height(34.dp),
-                ) {
-                    Icon(Icons.Filled.Send, null, modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text(
-                        if (language == "ku") "Parve bike" else "Paylaş",
-                        fontSize   = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
         }
     }
 }
