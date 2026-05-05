@@ -469,12 +469,31 @@ fun PostCard(
                 modifier          = Modifier.weight(1f).clickable { onProfile() },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AsyncImage(
-                    model              = post.photoURL.ifEmpty { null },
-                    contentDescription = post.displayName,
-                    modifier           = Modifier.size(40.dp).clip(CircleShape).background(SurfaceVar),
-                    contentScale       = ContentScale.Crop,
-                )
+                Box(
+                    modifier = Modifier.size(40.dp).clip(CircleShape).background(SurfaceVar),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (post.photoURL.isNotBlank()) {
+                        AsyncImage(
+                            model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                                .data(post.photoURL)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = post.displayName,
+                            modifier           = Modifier.fillMaxSize(),
+                            contentScale       = ContentScale.Crop,
+                        )
+                    }
+                    // Fotoğraf yoksa / yüklenemezse baş harf
+                    if (post.photoURL.isBlank()) {
+                        Text(
+                            post.displayName.firstOrNull()?.uppercase() ?: "?",
+                            color      = OnBackground,
+                            fontWeight = FontWeight.Bold,
+                            fontSize   = 15.sp,
+                        )
+                    }
+                }
                 Spacer(Modifier.width(10.dp))
                 Column {
                     Text(post.displayName.ifBlank { "Bênas" }, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)

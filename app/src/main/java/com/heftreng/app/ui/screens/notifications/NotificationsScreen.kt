@@ -92,16 +92,32 @@ fun NotificationsScreen(
                                 vm.markRead(notif.id)
                                 // Bildirim tipine göre yönlendir
                                 when (notif.type) {
-                                    "follow"  -> navController.navigate(Screen.Profile.go(notif.fromUid))
-                                    "like",
-                                    "cmt",
-                                    "comment",
-                                    "repost",
-                                    "chapter",
-                                    "post_approved",
-                                    "post_rejected"  -> notif.postId?.let { pid ->
-                                        navController.navigate(Screen.PostDetail.go(pid))
+                                    "follow" -> navController.navigate(Screen.Profile.go(notif.fromUid))
+                                    "like", "cmt", "comment", "repost",
+                                    "chapter", "post_approved", "post_rejected" -> {
+                                        val pid = notif.postId
+                                        when {
+                                            // postId direkt varsa
+                                            !pid.isNullOrBlank() ->
+                                                navController.navigate(Screen.PostDetail.go(pid))
+                                            // url'den postId çıkar: /post/ABC123 veya ?pid=ABC123
+                                            notif.url.isNotBlank() -> {
+                                                val fromUrl = Regex("post/([\w-]+)").find(notif.url)?.groupValues?.get(1)
+                                                    ?: Regex("[?&]pid=([\w-]+)").find(notif.url)?.groupValues?.get(1)
+                                                    ?: Regex("[?&]feedId=([\w-]+)").find(notif.url)?.groupValues?.get(1)
+                                                if (!fromUrl.isNullOrBlank())
+                                                    navController.navigate(Screen.PostDetail.go(fromUrl))
+                                            }
+                                        }
                                     }
+                                    // Seri bildirimi
+                                    "serial" -> notif.url.isNotBlank().let {
+                                        val sid = Regex("serial/([\w-]+)").find(notif.url)?.groupValues?.get(1)
+                                        if (!sid.isNullOrBlank()) navController.navigate("serial/$sid")
+                                    }
+                                    // Bilinmeyen tür ama fromUid varsa profile git
+                                    else -> if (notif.fromUid.isNotBlank())
+                                        navController.navigate(Screen.Profile.go(notif.fromUid))
                                 }
                             },
                         )

@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.data.model.ReadingListEntry
 import com.heftreng.app.data.model.Serial
@@ -547,7 +548,9 @@ private fun ProfileHeader(
                 ) {
                     if (avatarUrl != null) {
                         AsyncImage(
-                            model              = avatarUrl,
+                            model = coil.request.ImageRequest.Builder(
+                                androidx.compose.ui.platform.LocalContext.current
+                            ).data(avatarUrl).crossfade(true).build(),
                             contentDescription = null,
                             contentScale       = ContentScale.Crop,
                             modifier           = Modifier.fillMaxSize(),
@@ -851,7 +854,9 @@ private fun ProfileComposeBox(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 coil.compose.AsyncImage(
-                    model              = photoURL.ifEmpty { null },
+                    model = coil.request.ImageRequest.Builder(
+                        androidx.compose.ui.platform.LocalContext.current
+                    ).data(photoURL.ifEmpty { null }).crossfade(true).build(),
                     contentDescription = null,
                     modifier           = Modifier.size(36.dp)
                         .clip(androidx.compose.foundation.shape.CircleShape)

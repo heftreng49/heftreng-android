@@ -207,7 +207,9 @@ fun UserAvatar(name: String, photoURL: String, size: Int = 40) {
     ) {
         if (photoURL.isNotBlank()) {
             AsyncImage(
-                model              = photoURL,
+                model = coil.request.ImageRequest.Builder(
+                    androidx.compose.ui.platform.LocalContext.current
+                ).data(photoURL).crossfade(true).build(),
                 contentDescription = null,
                 contentScale       = ContentScale.Crop,
                 modifier           = Modifier.fillMaxSize(),

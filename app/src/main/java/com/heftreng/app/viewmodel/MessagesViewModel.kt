@@ -268,30 +268,41 @@ class MessagesViewModel @Inject constructor(
     // ── Konuşma başlat veya mevcut aç ────────────────────────
     // ID deterministik: minOf(uid, otherUid) + "__" + maxOf(...)
     fun startOrOpenConversation(otherUid: String, onReady: (String) -> Unit) {
-        // Kullanıcı giriş yapmamışsa veya hedef uid boşsa işlem yapma
-        if (uid.isBlank() || otherUid.isBlank() || uid == otherUid) return
+        if (otherUid.isBlank()) return
+
+        // uid henüz yüklenmediyse Firebase Auth'dan al
+        val myUid = uid.ifBlank {
+            com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""
+        }
+        if (myUid.isBlank() || myUid == otherUid) return
+
         viewModelScope.launch {
             try {
-                val pa = minOf(uid, otherUid)
-                val pb = maxOf(uid, otherUid)
+                val pa     = minOf(myUid, otherUid)
+                val pb     = maxOf(myUid, otherUid)
                 val convId = "${pa}__${pb}"
 
-                val existing = firestore.collection("conversations")
-                    .document(convId).get().await()
-
-                if (!existing.exists()) {
-                    firestore.collection("conversations").document(convId).set(
+                // get() yerine set(merge) kullan — varsa günceller, yoksa oluşturur
+                firestore.collection("conversations").document(convId)
+                    .set(
                         mapOf(
-                            "participants"    to listOf(pa, pb),
-                            "last_msg"        to "",
-                            "updated_at"      to FieldValue.serverTimestamp(),
-                            "unread_$pa"      to 0,
-                            "unread_$pb"      to 0,
-                        )
+                            "participants" to listOf(pa, pb),
+                            "updated_at"   to FieldValue.serverTimestamp(),
+                            "unread_$pa"   to 0,
+                            "unread_$pb"   to 0,
+                            "last_msg"     to "",
+                        ),
+                        com.google.firebase.firestore.SetOptions.merge()
                     ).await()
-                }
+
                 onReady(convId)
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // Hata olsa bile convId'yi dene
+                val pa = minOf(myUid, otherUid)
+                val pb = maxOf(myUid, otherUid)
+                onReady("${pa}__${pb}")
+            }
         }
     }
 
