@@ -37,6 +37,7 @@ import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.ui.screens.serials.SerialCard
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.FollowListSheet
+import androidx.compose.material.icons.Icons
 import com.heftreng.app.ui.component.QuoteDialog
 import com.heftreng.app.ui.component.QuoteInputSection
 import com.heftreng.app.ui.component.QuotePayload
@@ -61,10 +62,8 @@ fun ProfileScreen(
     val savedLoading   by vm.savedLoading.collectAsState()
 
     val myPhotoURL   by remember {
-        mutableStateOf(
-            com.google.firebase.auth.FirebaseAuth.getInstance()
-                .currentUser?.photoURL?.toString() ?: ""
-        )
+        val u = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+        mutableStateOf(u?.photoURL?.toString() ?: "")
     }
     var composeText  by remember { mutableStateOf("") }
     var composeQuote by remember { mutableStateOf<QuotePayload?>(null) }
@@ -923,7 +922,7 @@ private fun ProfileComposeBox(
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 7.dp),
                     modifier       = Modifier.height(34.dp),
                 ) {
-                    Icon(androidx.compose.material.icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Filled.Send, null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(5.dp))
                     Text(
                         if (language == "ku") "Parve bike" else "Paylaş",
