@@ -1,0 +1,5 @@
+-keep class com.heftreng.app.data.model.** { *; }
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.firebase.**
+-dontwarn io.github.jan.supabase.**
