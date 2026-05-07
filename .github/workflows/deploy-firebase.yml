@@ -26,6 +26,6 @@ jobs:
         run: cd functions && npm install
 
       - name: Deploy to Firebase
-        run: firebase deploy --only functions,hosting --token "$FIREBASE_TOKEN"
+        run: firebase deploy --only functions,hosting --project bloggerheftreng --token "$FIREBASE_TOKEN"
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
