@@ -294,7 +294,7 @@ class SerialsViewModel @Inject constructor(
     fun updateChapter(serialId: String, chapterId: String, newTitle: String, newBody: String) {
         viewModelScope.launch {
             try {
-                val wc = newBody.trim().split("\s+".toRegex()).count { it.isNotBlank() }
+                val wc = newBody.trim().split("\\s+".toRegex()).count { it.isNotBlank() }
                 firestore.collection("serials").document(serialId)
                     .collection("chapters").document(chapterId)
                     .update(mapOf("title" to newTitle.trim(), "body" to newBody.trim(), "wordCount" to wc)).await()
