@@ -18,6 +18,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.heftreng.app.navigation.HeftrangNavHost
 import com.heftreng.app.ui.theme.HeftrangTheme
+import com.heftreng.app.viewmodel.AuthViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -29,12 +30,16 @@ class MainActivity : ComponentActivity() {
 
     // SettingsViewModel — darkMode tercihi için
     private val settingsVm: SettingsViewModel by viewModels()
+    private val authVm: AuthViewModel by viewModels()
 
     // POST_NOTIFICATIONS izin launcher (Android 13+)
     private val notifPermLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) initFcm()
+        // İzin reddedilse bile token'ı senkronize et (sessiz push çalışır)
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        if (uid != null) authVm.syncFcmTokenWithContext(this, uid)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -8,6 +8,7 @@ import android.content.Intent
 import android.graphics.Color
 import androidx.core.app.NotificationCompat
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -20,22 +21,44 @@ class HeftrangMessagingService : FirebaseMessagingService() {
         const val CHANNEL_ID_DEFAULT  = "heftreng_default"
         const val CHANNEL_ID_MESSAGES = "heftreng_messages"
         const val CHANNEL_ID_LIKES    = "heftreng_likes"
+
+        // Kullanıcı henüz giriş yapmamışsa token'ı burada sakla;
+        // AuthViewModel login sonrasında bu değeri okuyup Firestore'a yazar.
+        private const val PREFS_NAME  = "hf_prefs"
+        private const val KEY_PENDING_TOKEN = "pending_fcm_token"
+
+        fun savePendingToken(context: Context, token: String) {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putString(KEY_PENDING_TOKEN, token).apply()
+        }
+
+        fun consumePendingToken(context: Context): String? {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val token = prefs.getString(KEY_PENDING_TOKEN, null)
+            if (token != null) prefs.edit().remove(KEY_PENDING_TOKEN).apply()
+            return token
+        }
     }
 
     // ── Token yenilenince Firestore'a kaydet ──────────────────────────────────
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        saveTokenToFirestore(token)
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        if (uid != null) {
+            saveTokenToFirestore(uid, token)
+        } else {
+            // Kullanıcı giriş yapmamış — token'ı beklet
+            savePendingToken(applicationContext, token)
+        }
     }
 
-    private fun saveTokenToFirestore(token: String) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+    private fun saveTokenToFirestore(uid: String, token: String) {
         FirebaseFirestore.getInstance()
             .collection("users")
             .document(uid)
             .update(mapOf(
                 "fcmToken"     to token,
-                "fcmUpdatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                "fcmUpdatedAt" to FieldValue.serverTimestamp(),
             ))
     }
 
@@ -43,15 +66,15 @@ class HeftrangMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
-        val data     = message.data
-        val notif    = message.notification
+        val data    = message.data
+        val notif   = message.notification
 
-        val title    = notif?.title ?: data["title"] ?: "Heftreng"
-        val body     = notif?.body  ?: data["body"]  ?: ""
-        val type     = data["type"] ?: "default"
-        val postId   = data["postId"] ?: ""
-        val fromUid  = data["fromUid"] ?: ""
-        val convId   = data["convId"] ?: ""
+        val title   = notif?.title ?: data["title"] ?: "Heftreng"
+        val body    = notif?.body  ?: data["body"]  ?: ""
+        val type    = data["type"]    ?: "default"
+        val postId  = data["postId"]  ?: ""
+        val fromUid = data["fromUid"] ?: ""
+        val convId  = data["convId"]  ?: ""
 
         // Bildirim tipine göre deep link intent
         val intent = Intent(this, MainActivity::class.java).apply {
@@ -59,12 +82,15 @@ class HeftrangMessagingService : FirebaseMessagingService() {
             when (type) {
                 "like", "comment", "repost" -> {
                     if (postId.isNotBlank()) putExtra("navigate_to", "post/$postId")
+                    else putExtra("navigate_to", "notifications")
                 }
                 "follow" -> {
                     if (fromUid.isNotBlank()) putExtra("navigate_to", "profile/$fromUid")
+                    else putExtra("navigate_to", "notifications")
                 }
                 "message" -> {
                     if (convId.isNotBlank()) putExtra("navigate_to", "message/$convId")
+                    else putExtra("navigate_to", "messages")
                 }
                 else -> putExtra("navigate_to", "notifications")
             }
@@ -77,11 +103,10 @@ class HeftrangMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        // Bildirim tipine göre kanal
         val channelId = when (type) {
-            "message"             -> CHANNEL_ID_MESSAGES
-            "like", "repost"      -> CHANNEL_ID_LIKES
-            else                  -> CHANNEL_ID_DEFAULT
+            "message"            -> CHANNEL_ID_MESSAGES
+            "like", "repost"     -> CHANNEL_ID_LIKES
+            else                 -> CHANNEL_ID_DEFAULT
         }
 
         ensureChannels()
@@ -106,7 +131,6 @@ class HeftrangMessagingService : FirebaseMessagingService() {
     // ── Bildirim kanallarını oluştur ──────────────────────────────────────────
     private fun ensureChannels() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
         listOf(
             Triple(CHANNEL_ID_DEFAULT,  "Genel Bildirimler",  NotificationManager.IMPORTANCE_HIGH),
             Triple(CHANNEL_ID_MESSAGES, "Mesajlar",           NotificationManager.IMPORTANCE_HIGH),

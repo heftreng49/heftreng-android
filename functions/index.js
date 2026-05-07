@@ -1,7 +1,5 @@
 /**
  * Heftreng — Cloud Functions
- * Tema tarafından httpsCallable ile çağrılır.
- *
  * Deploy: firebase deploy --only functions
  */
 
@@ -15,12 +13,11 @@ initializeApp();
 exports.sendPush = onCall(
   { region: "europe-west1" },
   async (request) => {
-    /* Sadece giriş yapmış kullanıcılar çağırabilir */
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Giriş gerekli.");
     }
 
-    const { targetUid, title, body, url } = request.data;
+    const { targetUid, title, body, type, postId, fromUid, convId, url } = request.data;
     if (!targetUid) throw new HttpsError("invalid-argument", "targetUid gerekli.");
 
     const db = getFirestore();
@@ -39,10 +36,41 @@ exports.sendPush = onCall(
 
     const pushUrl = url || "https://heft-reng.blogspot.com/";
 
+    // Bildirim tipine göre kanal seç
+    const channelId = type === "message"
+      ? "heftreng_messages"
+      : (type === "like" || type === "repost")
+        ? "heftreng_likes"
+        : "heftreng_default";
+
     try {
       await getMessaging().send({
         token: fcmToken,
-        notification: { title: title || "Heftreng", body: body || "" },
+
+        // Başlık ve gövde — hem Android hem web için
+        notification: {
+          title: title || "Heftreng",
+          body:  body  || "",
+        },
+
+        // ── Android native push ────────────────────────────────────────────
+        android: {
+          priority: "high",
+          notification: {
+            channelId: channelId,
+            icon:      "ic_notif",
+            color:     "#8B5CF6",
+          },
+          // HeftrangMessagingService.onMessageReceived tarafından okunur
+          data: {
+            type:    type    || "default",
+            postId:  postId  || "",
+            fromUid: fromUid || "",
+            convId:  convId  || "",
+          },
+        },
+
+        // ── Web push (Blogger PWA) ─────────────────────────────────────────
         webpush: {
           notification: {
             icon:         "https://heft-reng.blogspot.com/favicon.ico",
@@ -52,8 +80,10 @@ exports.sendPush = onCall(
           fcmOptions: { link: pushUrl },
         },
       });
-      console.log(`[HF Push] ✓ Gönderildi → uid:${targetUid}`);
+
+      console.log(`[HF Push] ✓ Gönderildi → uid:${targetUid} type:${type}`);
       return { success: true };
+
     } catch (err) {
       const STALE = [
         "messaging/registration-token-not-registered",

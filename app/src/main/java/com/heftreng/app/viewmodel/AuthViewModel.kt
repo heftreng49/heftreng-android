@@ -8,8 +8,11 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.messaging.FirebaseMessaging
 import com.heftreng.app.R
+import com.heftreng.app.utils.HeftrangMessagingService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,24 +55,11 @@ class AuthViewModel @Inject constructor(
                 if (result.additionalUserInfo?.isNewUser == true) {
                     createUserDoc(user)
                 } else {
-                    // lastSeen güncelle
                     firestore.collection("users").document(user.uid)
                         .update("lastSeen", com.google.firebase.Timestamp.now())
                 }
                 _currentUser.value = user
-            // FCM token'ı güncelle
-            try {
-                com.google.firebase.messaging.FirebaseMessaging.getInstance().token
-                    .addOnSuccessListener { token ->
-                        if (token.isNotEmpty()) {
-                            firestore.collection("users").document(user.uid)
-                                .update(mapOf(
-                                    "fcmToken"     to token,
-                                    "fcmUpdatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                                ))
-                        }
-                    }
-            } catch (_: Exception) {}
+                syncFcmToken(user.uid)
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -82,7 +72,8 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
             try {
-                auth.signInWithEmailAndPassword(email, password).await()
+                val result = auth.signInWithEmailAndPassword(email, password).await()
+                result.user?.let { syncFcmToken(it.uid) }
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -98,6 +89,7 @@ class AuthViewModel @Inject constructor(
                 val result = auth.createUserWithEmailAndPassword(email, password).await()
                 val user   = result.user ?: return@launch
                 createUserDoc(user, displayName)
+                syncFcmToken(user.uid)
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -106,9 +98,44 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    // ── FCM token senkronizasyonu ─────────────────────────────────────────────
+    // 1. Önce SharedPreferences'taki pending token'a bak (uygulama ilk açılışta
+    //    kullanıcı giriş yapmadan önce token yenilenmişse buraya yazılmış olur)
+    // 2. Yoksa Firebase'den taze token al
+    // Her iki durumda da Firestore'a yaz
+    private fun syncFcmToken(uid: String) {
+        viewModelScope.launch {
+            try {
+                // Taze token her zaman al — pending olanı da üzerine yazar
+                val token = FirebaseMessaging.getInstance().token.await()
+                if (token.isNotEmpty()) {
+                    firestore.collection("users").document(uid)
+                        .update(mapOf(
+                            "fcmToken"     to token,
+                            "fcmUpdatedAt" to FieldValue.serverTimestamp(),
+                        ))
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    // Context gerektiren varyant — MainActivity'den çağrılabilir
+    fun syncFcmTokenWithContext(context: Context, uid: String) {
+        // Önce pending token'ı dene (daha hızlı)
+        val pending = HeftrangMessagingService.consumePendingToken(context)
+        if (pending != null) {
+            firestore.collection("users").document(uid)
+                .update(mapOf(
+                    "fcmToken"     to pending,
+                    "fcmUpdatedAt" to FieldValue.serverTimestamp(),
+                ))
+        }
+        // Ardından taze token ile güncelle
+        syncFcmToken(uid)
+    }
+
     private suspend fun createUserDoc(user: FirebaseUser, overrideName: String? = null) {
-        val name = overrideName ?: user.displayName ?: user.email?.substringBefore("@") ?: "Kullanıcı"
-        // Tema: _generateHandle → benzersiz username oluştur
+        val name     = overrideName ?: user.displayName ?: user.email?.substringBefore("@") ?: "Kullanıcı"
         val username = generateUniqueUsername(name)
         firestore.collection("users").document(user.uid).set(mapOf(
             "uid"         to user.uid,
@@ -127,15 +154,12 @@ class AuthViewModel @Inject constructor(
             "createdAt"   to com.google.firebase.Timestamp.now(),
             "lastSeen"    to com.google.firebase.Timestamp.now(),
         ), com.google.firebase.firestore.SetOptions.merge()).await()
-        // Tema: usernames/{handle} → uid eşleme (benzersizlik garantisi)
         firestore.collection("usernames").document(username).set(
             mapOf("uid" to user.uid)
         ).await()
     }
 
-    // Tema: _generateHandle — displayName'den handle üret, çakışma kontrolü yap
     private suspend fun generateUniqueUsername(displayName: String): String {
-        // Mevcut kullanıcının username'i varsa değiştirme
         val existing = try {
             firestore.collection("users")
                 .whereEqualTo("email", auth.currentUser?.email ?: "")
@@ -148,7 +172,6 @@ class AuthViewModel @Inject constructor(
             .replace(Regex("[^a-z0-9_]"), "")
             .take(20)
             .ifBlank { "user" }
-        // Çakışma kontrolü
         var attempt = 0
         while (attempt < 5) {
             val taken = firestore.collection("usernames").document(handle).get().await().exists()
