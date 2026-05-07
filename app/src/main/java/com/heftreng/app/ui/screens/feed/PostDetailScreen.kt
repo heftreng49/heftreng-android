@@ -11,7 +11,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -50,8 +53,9 @@ fun PostDetailScreen(
     val post = posts.find { it.id == postId }
     val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
-    var commentText  by remember { mutableStateOf("") }
-    var showLikers   by remember { mutableStateOf(false) }
+    var commentText   by remember { mutableStateOf("") }
+    var showLikers    by remember { mutableStateOf(false) }
+    var cmtToDelete   by remember { mutableStateOf<Comment?>(null) }
     var showCmtLikers by remember { mutableStateOf<String?>(null) } // cmtId
 
     LaunchedEffect(postId) { viewModel.loadComments(postId) }
@@ -154,14 +158,13 @@ fun PostDetailScreen(
                 } else {
                     items(comments, key = { it.id }) { cmt ->
                         CommentRow(
-                            comment   = cmt,
-                            myUid     = myUid,
-                            onLike    = { viewModel.toggleCommentLike(postId, cmt) },
-                            onProfile = { navController.navigate("profile/${cmt.uid}") },
-                            onShowLikers = {
-                                socialVm.loadCommentLikers(cmt.id)
-                                showCmtLikers = cmt.id
-                            },
+                            comment      = cmt,
+                            myUid        = myUid,
+                            postUid      = post.uid,
+                            onLike       = { viewModel.toggleCommentLike(postId, cmt) },
+                            onProfile    = { navController.navigate("profile/${cmt.uid}") },
+                            onShowLikers = { socialVm.loadCommentLikers(cmt.id); showCmtLikers = cmt.id },
+                            onDelete     = { cmtToDelete = cmt },
                         )
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     }
@@ -213,6 +216,22 @@ fun PostDetailScreen(
         }
     }
 
+    // Yorum silme onay dialogu
+    cmtToDelete?.let { cmt ->
+        AlertDialog(
+            onDismissRequest = { cmtToDelete = null },
+            containerColor   = HeftSurface,
+            title = { Text("Yorumu Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            text  = { Text("Bu yorumu silmek istediğine emin misin?", color = Muted) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.deleteComment(postId, cmt.id); cmtToDelete = null }) {
+                    Text("Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = { TextButton(onClick = { cmtToDelete = null }) { Text("İptal", color = Muted) } },
+        )
+    }
+
     // Gönderi beğenenler sheet
     if (showLikers) {
         LikerListSheet(
@@ -240,10 +259,14 @@ fun PostDetailScreen(
 private fun CommentRow(
     comment      : Comment,
     myUid        : String,
+    postUid      : String,
     onLike       : () -> Unit,
     onProfile    : () -> Unit,
     onShowLikers : () -> Unit,
+    onDelete     : () -> Unit,
 ) {
+    val canDelete    = myUid == comment.uid || myUid == postUid
+    var menuExpanded by remember { mutableStateOf(false) }
     Row(
         modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top,
@@ -300,6 +323,28 @@ private fun CommentRow(
                     fontSize = 11.sp,
                     modifier = Modifier.clickable { onShowLikers() },
                 )
+            }
+            if (canDelete) {
+                Box {
+                    IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.MoreVert, null, tint = Muted, modifier = Modifier.size(15.dp))
+                    }
+                    DropdownMenu(
+                        expanded         = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                        containerColor   = HeftSurface,
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444), modifier = Modifier.size(15.dp))
+                                    Text("Sil", color = Color(0xFFEF4444), fontSize = 13.sp)
+                                }
+                            },
+                            onClick = { menuExpanded = false; onDelete() },
+                        )
+                    }
+                }
             }
         }
     }

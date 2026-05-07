@@ -54,11 +54,12 @@ fun SearchScreen(
     val focusManager   = LocalFocusManager.current
 
     val tabs = listOf(
-        Triple("Hepsi",      Icons.Outlined.Search,        0),
-        Triple("Kişi",       Icons.Outlined.PersonOutline, 1),
-        Triple("Gönderi",    Icons.Outlined.DynamicFeed,   2),
-        Triple("Seri",       Icons.Outlined.AutoStories,   3),
-        Triple("Kitap",      Icons.Outlined.MenuBook,      4),
+        Triple("Hepsi",   Icons.Outlined.Search,        0),
+        Triple("Kişi",    Icons.Outlined.PersonOutline, 1),
+        Triple("Gönderi", Icons.Outlined.DynamicFeed,   2),
+        Triple("Seri",    Icons.Outlined.AutoStories,   3),
+        Triple("Kitap",   Icons.Outlined.MenuBook,      4),
+        Triple("Alıntı",  Icons.Outlined.FormatQuote,   5),
     )
 
     LaunchedEffect(Unit) { vm.loadSuggestions() }
@@ -148,6 +149,7 @@ fun SearchScreen(
                         2    -> searchResults.filter { it.type == "post" }
                         3    -> searchResults.filter { it.type == "serial" }
                         4    -> searchResults.filter { it.type == "book" }
+                        5    -> searchResults.filter { it.type == "author" || it.type == "book_quote" }
                         else -> searchResults
                     }
 

@@ -290,6 +290,37 @@ class SerialsViewModel @Inject constructor(
         )
     }
 
+    // ── Bölüm Düzenle ────────────────────────────────────────────────────────
+    fun updateChapter(serialId: String, chapterId: String, newTitle: String, newBody: String) {
+        viewModelScope.launch {
+            try {
+                val wc = newBody.trim().split("\s+".toRegex()).count { it.isNotBlank() }
+                firestore.collection("serials").document(serialId)
+                    .collection("chapters").document(chapterId)
+                    .update(mapOf("title" to newTitle.trim(), "body" to newBody.trim(), "wordCount" to wc)).await()
+                _chapters.value = _chapters.value.map {
+                    if (it.id == chapterId) it.copy(title = newTitle.trim(), body = newBody.trim(), wordCount = wc) else it
+                }
+                _selectedChapter.value = _selectedChapter.value?.let {
+                    if (it.id == chapterId) it.copy(title = newTitle.trim(), body = newBody.trim(), wordCount = wc) else it
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Bölüm Sil ─────────────────────────────────────────────────────────────
+    fun deleteChapter(serialId: String, chapterId: String) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("serials").document(serialId)
+                    .collection("chapters").document(chapterId).delete().await()
+                _chapters.value = _chapters.value.filter { it.id != chapterId }
+                firestore.collection("serials").document(serialId)
+                    .update("chapterCount", _chapters.value.size).await()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
     private fun com.google.firebase.firestore.DocumentSnapshot.toChapter(): Chapter? {
         val d = data ?: return null
         return Chapter(

@@ -577,21 +577,59 @@ fun PostCard(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                 }
             }
-            // Repost kartı — tema: repostType ile farklı içerik tipleri
+            // Repost embed kartı — tema buildRpEmbed() ile senkron
             if (post.repostType.isNotBlank()) {
-                Surface(shape = RoundedCornerShape(10.dp), color = SurfaceVar,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(when(post.repostType){"serial"->"📖 Serial";"blog"->"📄 Blog";"feed"->"🔁 Gönderi";else->"🔁"},
-                            color = Primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        if (post.repostTitle.isNotBlank()) Text(post.repostTitle, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
-                        if (post.serialTitle.isNotBlank()) Text(post.serialTitle, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                Surface(
+                    shape    = RoundedCornerShape(13.dp),
+                    color    = SurfaceVar,
+                    border   = androidx.compose.foundation.BorderStroke(0.5.dp, Divider),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        // Tip etiketi — tema: rp-embed-lbl
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(
+                                when (post.repostType) {
+                                    "serial" -> Icons.Outlined.MenuBook
+                                    "blog"   -> Icons.Outlined.Article
+                                    else     -> Icons.Default.Repeat
+                                },
+                                contentDescription = null, tint = Primary, modifier = Modifier.size(11.dp),
+                            )
+                            Text(
+                                when (post.repostType) { "serial" -> "Kitap"; "blog" -> "Blog Yazısı"; "feed" -> "Dîsa Parvekirî"; else -> "Paylaşım" },
+                                color = Primary, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp,
+                            )
+                        }
+                        // Feed repostu: orijinal yazar avatarı + adı — tema: rp-meta
+                        if (post.repostType == "feed" && post.repostAuthor.isNotBlank()) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Box(
+                                    modifier = Modifier.size(16.dp).clip(CircleShape).background(SurfaceVar),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (post.repostAuthorPhoto.isNotBlank()) {
+                                        AsyncImage(model = post.repostAuthorPhoto, contentDescription = null,
+                                            modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                    } else {
+                                        Text(post.repostAuthor.firstOrNull()?.uppercase() ?: "?",
+                                            color = OnBackground, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                Text(post.repostAuthor, color = OnSurface, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        // İçerik
+                        if (post.repostTitle.isNotBlank())  Text(post.repostTitle,  color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                        if (post.serialTitle.isNotBlank())  Text(post.serialTitle,  color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
                         if (post.chapterTitle.isNotBlank()) Text("Bölüm ${post.chapterOrder}: ${post.chapterTitle}", color = Muted, fontSize = 12.sp)
-                        if (post.repostText.isNotBlank()) Text(post.repostText, color = Muted, fontSize = 12.sp, maxLines = 3)
-                        if (post.repostAuthor.isNotBlank()) Text("— ${post.repostAuthor}", color = Muted, fontSize = 11.sp)
+                        if (post.repostText.isNotBlank())   Text(post.repostText,   color = OnSurface,    fontSize = 13.sp, maxLines = 4, lineHeight = 19.sp)
                         val rImg = listOf(post.repostImg, post.serialCover).firstOrNull { it.isNotBlank() } ?: ""
-                        if (rImg.isNotBlank()) AsyncImage(model = rImg, contentDescription = null,
-                            modifier = Modifier.fillMaxWidth().height(120.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                        if (rImg.isNotBlank()) {
+                            AsyncImage(model = rImg, contentDescription = null,
+                                modifier = Modifier.fillMaxWidth().height(120.dp).clip(RoundedCornerShape(8.dp)),
+                                contentScale = ContentScale.Crop)
+                        }
                     }
                 }
             }

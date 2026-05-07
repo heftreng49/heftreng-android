@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.google.firebase.auth.FirebaseAuth
 import com.heftreng.app.data.model.Chapter
 import com.heftreng.app.data.model.Serial
 import com.heftreng.app.ui.screens.social.LikerListSheet
@@ -214,8 +215,11 @@ fun SerialDetailScreen(
     val loading  by vm.loading.collectAsState()
     val likers   by socialVm.likers.collectAsState()
     val socialLoading by socialVm.loading.collectAsState()
-    var showAddChapter by remember { mutableStateOf(false) }
-    var showLikers by remember { mutableStateOf(false) }
+    val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+    var showAddChapter  by remember { mutableStateOf(false) }
+    var showLikers      by remember { mutableStateOf(false) }
+    var chapterToEdit   by remember { mutableStateOf<Chapter?>(null) }
+    var chapterToDelete by remember { mutableStateOf<Chapter?>(null) }
 
     LaunchedEffect(serialId) { vm.loadSerial(serialId) }
 
@@ -279,7 +283,13 @@ fun SerialDetailScreen(
                 }
             } else {
                 items(chapters) { ch ->
-                    ChapterRow(ch) { navController.navigate("chapter/${serialId}/${ch.id}") }
+                    ChapterRow(
+                        chapter  = ch,
+                        canEdit  = myUid == (serial?.uid ?: ""),
+                        onClick  = { navController.navigate("chapter/${serialId}/${ch.id}") },
+                        onEdit   = { chapterToEdit = ch },
+                        onDelete = { chapterToDelete = ch },
+                    )
                 }
             }
         }
@@ -302,6 +312,32 @@ fun SerialDetailScreen(
                 vm.addChapter(serialId, title, body)
                 showAddChapter = false
             }
+        )
+    }
+
+    chapterToEdit?.let { ch ->
+        EditChapterDialog(
+            chapter   = ch,
+            onDismiss = { chapterToEdit = null },
+            onSave    = { newTitle, newBody ->
+                vm.updateChapter(serialId, ch.id, newTitle, newBody)
+                chapterToEdit = null
+            },
+        )
+    }
+
+    chapterToDelete?.let { ch ->
+        AlertDialog(
+            onDismissRequest = { chapterToDelete = null },
+            containerColor   = HeftSurface,
+            title = { Text("Bölümü Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            text  = { Text(""${ch.title}" bölümünü silmek istediğine emin misin?", color = Muted) },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteChapter(serialId, ch.id); chapterToDelete = null }) {
+                    Text("Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = { TextButton(onClick = { chapterToDelete = null }) { Text("İptal", color = Muted) } },
         )
     }
 }
@@ -358,14 +394,21 @@ private fun SerialHeader(serial: Serial, onLike: () -> Unit, onShowLikers: (() -
 }
 
 @Composable
-private fun ChapterRow(chapter: Chapter, onClick: () -> Unit) {
+private fun ChapterRow(
+    chapter  : Chapter,
+    canEdit  : Boolean,
+    onClick  : () -> Unit,
+    onEdit   : () -> Unit,
+    onDelete : () -> Unit,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(HeftSurface)
             .clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(start = 14.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -379,8 +422,81 @@ private fun ChapterRow(chapter: Chapter, onClick: () -> Unit) {
             Text(chapter.title, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             Text("${chapter.wordCount} kelime", color = Muted, fontSize = 11.sp)
         }
-        Icon(Icons.Default.ChevronRight, null, tint = Muted, modifier = Modifier.size(18.dp))
+        if (canEdit) {
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.MoreVert, null, tint = Muted, modifier = Modifier.size(18.dp))
+                }
+                DropdownMenu(
+                    expanded         = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                    containerColor   = HeftSurface,
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(16.dp))
+                                Text("Düzenle", color = OnBackground, fontSize = 14.sp)
+                            }
+                        },
+                        onClick = { menuExpanded = false; onEdit() },
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                                Text("Sil", color = Color(0xFFEF4444), fontSize = 14.sp)
+                            }
+                        },
+                        onClick = { menuExpanded = false; onDelete() },
+                    )
+                }
+            }
+        } else {
+            Icon(Icons.Default.ChevronRight, null, tint = Muted, modifier = Modifier.size(18.dp))
+        }
     }
+}
+
+@Composable
+private fun EditChapterDialog(chapter: Chapter, onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
+    var title by remember { mutableStateOf(chapter.title) }
+    var body  by remember { mutableStateOf(chapter.body) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = { Text("Bölümü Düzenle", color = OnBackground, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = title, onValueChange = { title = it },
+                    label = { Text("Başlık") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Amber, unfocusedBorderColor = Divider,
+                        focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
+                        unfocusedContainerColor = SurfaceVar, focusedContainerColor = SurfaceVar,
+                    ),
+                )
+                OutlinedTextField(
+                    value = body, onValueChange = { body = it },
+                    label = { Text("İçerik") }, minLines = 5,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Amber, unfocusedBorderColor = Divider,
+                        focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
+                        unfocusedContainerColor = SurfaceVar, focusedContainerColor = SurfaceVar,
+                    ),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (title.isNotBlank() && body.isNotBlank()) onSave(title, body) }) {
+                Text("Kaydet", color = Amber, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("İptal", color = Muted) } },
+    )
 }
 
 // ── Bölüm okuma ekranı ───────────────────────────────────────────────────────

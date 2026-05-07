@@ -301,28 +301,46 @@ class FeedViewModel @Inject constructor(
                 val myPhoto = userDoc.getString("photoURL") ?: ""
                 // Tema + Android alan uyumu
                 firestore.collection("feed").add(mapOf(
-                    "uid"         to uid,
-                    "name"        to myName,
-                    "displayName" to myName,
-                    "username"    to (userDoc.getString("username") ?: ""),
-                    "photoURL"    to myPhoto,
-                    "text"        to post.text,
-                    "imgUrl"      to post.imageURL,
-                    "imageURL"    to post.imageURL,
-                    "quote"       to if (post.quoteText.isNotBlank()) mapOf(
-                        "text" to post.quoteText, "book" to post.bookName, "author" to post.authorName,
-                    ) else null,
-                    "quoteText"   to post.quoteText,
-                    "bookName"    to post.bookName,
-                    "authorName"  to post.authorName,
-                    "likes"       to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
-                    "repostType"  to "feed",
-                    "repostId"    to post.id,
-                    "repostUid"   to post.uid,
-                    "ts"          to Timestamp.now(),
+                    "uid"               to uid,
+                    "name"              to myName,
+                    "displayName"       to myName,
+                    "username"          to (userDoc.getString("username") ?: ""),
+                    "photoURL"          to myPhoto,
+                    // Bu kartın kendi içeriği YOK
+                    "text"              to "",
+                    "imgUrl"            to "",
+                    "imageURL"          to "",
+                    // Orijinal gönderiye referans
+                    "repostType"        to "feed",
+                    "repostId"          to post.id,
+                    "repostUid"         to post.uid,
+                    // Embed önizleme (tema rp-embed uyumu)
+                    "repostText"        to post.text.take(200),
+                    "repostAuthor"      to post.displayName,
+                    "repostAuthorPhoto" to post.photoURL,
+                    "repostAuthorUid"   to post.uid,
+                    "repostImg"         to (post.imageURL.takeIf { it.isNotBlank() } ?: post.imgUrl),
+                    "likes" to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
+                    "ts"    to Timestamp.now(),
                 )).await()
                 firestore.collection("feed").document(post.id).update("reposts", FieldValue.increment(1)).await()
                 if (post.uid != uid) sendNotif(post.uid, "repost", "$myName gönderini paylaştı", post.text.take(60), post.id)
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Yorum Sil ─────────────────────────────────────────────────────────────
+    fun deleteComment(postId: String, commentId: String) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("feed").document(postId)
+                    .collection("comments").document(commentId).delete().await()
+                firestore.collection("feed").document(postId)
+                    .update("cmtCount", FieldValue.increment(-1)).await()
+                _comments.value = _comments.value.filter { it.id != commentId }
+                _posts.value = _posts.value.map {
+                    if (it.id == postId) it.copy(commentsCount = maxOf(0, it.commentsCount - 1)) else it
+                }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
