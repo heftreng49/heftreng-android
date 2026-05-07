@@ -331,7 +331,7 @@ fun SerialDetailScreen(
             onDismissRequest = { chapterToDelete = null },
             containerColor   = HeftSurface,
             title = { Text("Bölümü Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
-            text  = { Text(""${ch.title}" bölümünü silmek istediğine emin misin?", color = Muted) },
+            text  = { Text("\"${ch.title}\" bölümünü silmek istediğine emin misin?", color = Muted) },
             confirmButton = {
                 TextButton(onClick = { vm.deleteChapter(serialId, ch.id); chapterToDelete = null }) {
                     Text("Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
