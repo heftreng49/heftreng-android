@@ -308,7 +308,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     )
                 }
                 composable(Screen.Notifications.route) {
-                    NotificationsScreen(navController)
+                    NotificationsScreen(navController, notifVm)
                 }
                 composable(Screen.EditProfile.route) { EditProfileScreen(navController) }
                 composable(Screen.Admin.route)    { AdminScreen(navController) }
