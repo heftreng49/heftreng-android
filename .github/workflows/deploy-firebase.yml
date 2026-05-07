@@ -3,6 +3,11 @@ name: Firebase Deploy
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'functions/**'
+      - 'public/**'
+      - 'firebase.json'
+      - '.github/workflows/deploy-firebase.yml'
 
 jobs:
   deploy:
