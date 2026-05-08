@@ -17,7 +17,7 @@ exports.sendPush = onCall(
   {
     region: "europe-west1",
     // CORS — web tema için
-    cors: ["https://heft-reng.blogspot.com", "http://localhost"],
+    cors: true,
     // Kimlik doğrulama zorunlu değil (web tema login olmadan test edebilir)
     enforceAppCheck: false,
   },
@@ -38,7 +38,7 @@ exports.sendPush = onCall(
 
     if (!targetUid) {
       console.warn("[HF Push] targetUid eksik");
-      throw new HttpsError("invalid-argument", "targetUid zorunlu.");
+      return { success: false, reason: "no_target" };
     }
 
     const db = getFirestore();
