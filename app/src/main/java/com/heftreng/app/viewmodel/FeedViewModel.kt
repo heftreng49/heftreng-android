@@ -531,11 +531,11 @@ class FeedViewModel @Inject constructor(
                 "read"      to false,
                 "ts"        to Timestamp.now(),
             )).await()
-            // Cloud Function sendPush — FCM native push
+            // Cloud Function sendPush — FCM ile native push gönder
             try {
                 val functions = com.google.firebase.functions.FirebaseFunctions
                     .getInstance("europe-west1")
-                val result = functions.getHttpsCallable("sendPush").call(
+                functions.getHttpsCallable("sendPush").call(
                     hashMapOf(
                         "targetUid" to toUid,
                         "title"     to "Heftreng",
@@ -545,10 +545,10 @@ class FeedViewModel @Inject constructor(
                         "fromUid"   to uid,
                         "convId"    to "",
                     )
-                ).await()  // Task'ı bekle — aksi halde coroutine içinde tetiklenmez
-                android.util.Log.d("HF_PUSH", "sendPush sonucu: \${result.data}")
+                ).await()
+                android.util.Log.d("HF_PUSH", "sendPush başarılı → $toUid")
             } catch (e: Exception) {
-                android.util.Log.e("HF_PUSH", "sendPush hatası: \${e.message}")
+                android.util.Log.e("HF_PUSH", "sendPush hatası: ${e.message}")
             }
         } catch (e: Exception) { e.printStackTrace() }
     }
