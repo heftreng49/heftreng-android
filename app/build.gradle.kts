@@ -79,6 +79,7 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.messaging)
     implementation(libs.firebase.storage)
+    implementation(libs.firebase.functions)
     implementation(libs.play.services.auth)
 
     // Coroutines

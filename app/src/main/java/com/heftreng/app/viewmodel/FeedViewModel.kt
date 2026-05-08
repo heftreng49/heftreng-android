@@ -531,10 +531,23 @@ class FeedViewModel @Inject constructor(
                 "read"      to false,
                 "ts"        to Timestamp.now(),
             )).await()
-            firestore.collection("pushQueue").add(mapOf(
-                "targetUid" to toUid, "title" to "Heftreng", "body" to title,
-                "feedId"    to feedId, "ts"   to Timestamp.now(),
-            )).await()
+            // Cloud Function sendPush — FCM ile native push gönder
+            try {
+                val functions = com.google.firebase.functions.FirebaseFunctions
+                    .getInstance("europe-west1")
+                functions.getHttpsCallable("sendPush").call(
+                    hashMapOf(
+                        "targetUid" to toUid,
+                        "title"     to "Heftreng",
+                        "body"      to title,
+                        "type"      to type,
+                        "postId"    to feedId,
+                        "fromUid"   to uid,
+                        "convId"    to "",
+                    )
+                )
+                // fire-and-forget — await gereksiz
+            } catch (_: Exception) {}
         } catch (e: Exception) { e.printStackTrace() }
     }
 }

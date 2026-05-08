@@ -74,24 +74,25 @@ class AdminViewModel @Inject constructor(
         }
     }
 
-    // ── Push bildirimi — XML: _hfAdminSendPush ─────────────────────────────────
-    // pushQueue koleksiyonuna yazar — OneSignal Edge Function okur
+    // ── Push bildirimi — Cloud Function sendPush çağırır ──────────────────────
     fun sendPush(title: String, body: String, url: String = "", targetUid: String = "") {
         if (!_isAdmin.value) return
         viewModelScope.launch {
             try {
                 _pushResult.value = "Gönderiliyor…"
-                firestore.collection("pushQueue").add(
-                    mapOf(
-                        "targetUid" to targetUid.ifBlank { "ALL" },
-                        "title"     to title,
-                        "body"      to body,
-                        "url"       to url.ifBlank { "https://heft-reng.blogspot.com/" },
-                        "ts"        to FieldValue.serverTimestamp(),
-                        "sentBy"    to (auth.currentUser?.email ?: "admin"),
-                    )
-                ).await()
-                _pushResult.value = "✓ Push kuyruğa eklendi"
+                val functions = com.google.firebase.functions.FirebaseFunctions
+                    .getInstance("europe-west1")
+                val data = hashMapOf(
+                    "targetUid" to targetUid.ifBlank { auth.currentUser?.uid ?: "" },
+                    "title"     to title,
+                    "body"      to body,
+                    "url"       to url.ifBlank { "https://heft-reng.blogspot.com/" },
+                    "type"      to "default",
+                )
+                functions.getHttpsCallable("sendPush")
+                    .call(data)
+                    .await()
+                _pushResult.value = "✓ Push gönderildi"
             } catch (e: Exception) {
                 _pushResult.value = "✗ Hata: ${e.message}"
             }
