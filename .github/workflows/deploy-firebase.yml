@@ -7,7 +7,10 @@ on:
       - 'functions/**'
       - 'public/**'
       - 'firebase.json'
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
       - '.github/workflows/deploy-firebase.yml'
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -27,6 +30,6 @@ jobs:
         run: cd functions && npm install
 
       - name: Deploy to Firebase
-        run: firebase deploy --only functions,hosting --project bloggerheftreng --token "$FIREBASE_TOKEN"
+        run: firebase deploy --only functions,firestore:rules,firestore:indexes --project bloggerheftreng --token "$FIREBASE_TOKEN"
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
