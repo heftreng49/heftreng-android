@@ -198,6 +198,25 @@ class MessagesViewModel @Inject constructor(
                 )
                 firestore.collection("conversations").document(convId)
                     .set(convUpd, SetOptions.merge()).await()
+                // sendPush — karşı tarafa bildirim gönder
+                try {
+                    val myName = auth.currentUser?.displayName ?: "Biri"
+                    com.google.firebase.functions.FirebaseFunctions
+                        .getInstance("europe-west1")
+                        .getHttpsCallable("sendPush")
+                        .call(hashMapOf(
+                            "targetUid" to toUid,
+                            "title"     to myName,
+                            "body"      to text.ifBlank { "📷 Görsel gönderdi" },
+                            "type"      to "message",
+                            "convId"    to convId,
+                            "fromUid"   to uid,
+                            "postId"    to "",
+                        )).await()
+                    android.util.Log.d("HF_PUSH", "Mesaj push gönderildi → $toUid")
+                } catch (e: Exception) {
+                    android.util.Log.e("HF_PUSH", "Mesaj push hatası: ${e.message}")
+                }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
