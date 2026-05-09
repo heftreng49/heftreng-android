@@ -300,6 +300,21 @@ fun MessageDetailScreen(
     val context       = LocalContext.current
     var recorder      by remember { mutableStateOf<MediaRecorder?>(null) }
     var audioFile     by remember { mutableStateOf<File?>(null) }
+    var recordSecs    by remember { mutableStateOf(0) }
+
+    // Kayıt sayacı
+    LaunchedEffect(isRecording) {
+        if (isRecording) {
+            recordSecs = 0
+            while (isRecording) {
+                kotlinx.coroutines.delay(1000)
+                recordSecs++
+                if (recordSecs >= 120) break // max 2 dakika
+            }
+        } else {
+            recordSecs = 0
+        }
+    }
 
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -554,61 +569,71 @@ fun MessageDetailScreen(
                         )
                         // Sesli mesaj butonu
                         if (inputText.isBlank() && selectedImage == null) {
-                            Box(
-                                modifier = Modifier.size(36.dp).clip(CircleShape)
-                                    .background(
-                                        if (isRecording) Brush.linearGradient(listOf(Color(0xFFEF4444), Color(0xFFDC2626)))
-                                        else Brush.linearGradient(listOf(SurfaceVar, SurfaceVar))
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                if (isRecording) {
+                                    Text(
+                                        "%02d:%02d".format(recordSecs / 60, recordSecs % 60),
+                                        color    = Color(0xFFEF4444),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
                                     )
-                                    .pointerInput(Unit) {
-                                        detectTapGestures(
-                                            onPress = {
-                                                // Önce izin kontrol et
-                                                if (androidx.core.content.ContextCompat.checkSelfPermission(
-                                                        context, android.Manifest.permission.RECORD_AUDIO)
-                                                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                                    audioPermLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-                                                    return@detectTapGestures
-                                                }
-                                                // Kayıt başlat
-                                                try {
-                                                    val f = File(context.cacheDir, "audio_${System.currentTimeMillis()}.m4a")
-                                                    audioFile = f
-                                                    val mr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                                                        MediaRecorder(context) else @Suppress("DEPRECATION") MediaRecorder()
-                                                    mr.setAudioSource(MediaRecorder.AudioSource.MIC)
-                                                    mr.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                                                    mr.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                                                    mr.setOutputFile(f.absolutePath)
-                                                    mr.prepare()
-                                                    mr.start()
-                                                    recorder = mr
-                                                    isRecording = true
-                                                } catch (e: Exception) { e.printStackTrace() }
-                                                tryAwaitRelease()
-                                                // Kayıt durdur ve gönder
-                                                try {
-                                                    recorder?.stop()
-                                                    recorder?.release()
-                                                    recorder = null
-                                                    isRecording = false
-                                                    audioFile?.let { f ->
-                                                        if (f.exists() && f.length() > 0) {
-                                                            vm.uploadAudioAndSend(convId, otherUid, f)
-                                                        }
-                                                    }
-                                                } catch (e: Exception) { e.printStackTrace(); isRecording = false }
-                                            }
+                                }
+                                Box(
+                                    modifier = Modifier.size(36.dp).clip(CircleShape)
+                                        .background(
+                                            if (isRecording) Brush.linearGradient(listOf(Color(0xFFEF4444), Color(0xFFDC2626)))
+                                            else Brush.linearGradient(listOf(SurfaceVar, SurfaceVar))
                                         )
-                                    },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
-                                    null,
-                                    tint     = if (isRecording) Color.White else Muted,
-                                    modifier = Modifier.size(18.dp),
-                                )
+                                        .pointerInput(Unit) {
+                                            detectTapGestures(
+                                                onPress = {
+                                                    // Önce izin kontrol et
+                                                    if (androidx.core.content.ContextCompat.checkSelfPermission(
+                                                            context, android.Manifest.permission.RECORD_AUDIO)
+                                                        != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                                        audioPermLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                                        return@detectTapGestures
+                                                    }
+                                                    // Kayıt başlat
+                                                    try {
+                                                        val f = File(context.cacheDir, "audio_${System.currentTimeMillis()}.m4a")
+                                                        audioFile = f
+                                                        val mr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                                                            MediaRecorder(context) else @Suppress("DEPRECATION") MediaRecorder()
+                                                        mr.setAudioSource(MediaRecorder.AudioSource.MIC)
+                                                        mr.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                                                        mr.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                                                        mr.setOutputFile(f.absolutePath)
+                                                        mr.prepare()
+                                                        mr.start()
+                                                        recorder = mr
+                                                        isRecording = true
+                                                    } catch (e: Exception) { e.printStackTrace() }
+                                                    tryAwaitRelease()
+                                                    // Kayıt durdur ve gönder
+                                                    try {
+                                                        recorder?.stop()
+                                                        recorder?.release()
+                                                        recorder = null
+                                                        isRecording = false
+                                                        audioFile?.let { f ->
+                                                            if (f.exists() && f.length() > 0) {
+                                                                vm.uploadAudioAndSend(convId, otherUid, f)
+                                                            }
+                                                        }
+                                                    } catch (e: Exception) { e.printStackTrace(); isRecording = false }
+                                                }
+                                            )
+                                        },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
+                                        null,
+                                        tint     = if (isRecording) Color.White else Muted,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
                             }
                         }
                         // Tema: .msg-send-btn — gradient, circular
@@ -733,25 +758,35 @@ fun MessageDetailScreen(
 // ── Sesli Mesaj Oynatıcı ─────────────────────────────────────────────────────
 @Composable
 private fun AudioMessagePlayer(audioUrl: String, isMine: Boolean) {
-    var isPlaying by remember { mutableStateOf(false) }
-    var player    by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
-    val context   = LocalContext.current
+    var isPlaying  by remember { mutableStateOf(false) }
+    var player     by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
+    var currentSec by remember { mutableStateOf(0) }
+    var totalSec   by remember { mutableStateOf(0) }
 
     DisposableEffect(audioUrl) {
-        onDispose {
-            player?.release()
-            player = null
+        onDispose { player?.release(); player = null }
+    }
+
+    // Oynatma sayacı
+    LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            while (isPlaying) {
+                kotlinx.coroutines.delay(500)
+                currentSec = (player?.currentPosition ?: 0) / 1000
+            }
         }
     }
 
+    fun formatTime(s: Int) = "%d:%02d".format(s / 60, s % 60)
+
     Row(
-        modifier          = Modifier
-            .widthIn(min = 140.dp, max = 200.dp)
+        modifier = Modifier
+            .widthIn(min = 160.dp, max = 220.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(if (isMine) Color.White.copy(alpha = 0.15f) else Color(0xFF8B5CF6).copy(alpha = 0.10f))
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         IconButton(
             onClick = {
@@ -763,8 +798,17 @@ private fun AudioMessagePlayer(audioUrl: String, isMine: Boolean) {
                         try {
                             val mp = android.media.MediaPlayer().apply {
                                 setDataSource(audioUrl)
-                                setOnPreparedListener { start(); isPlaying = true }
-                                setOnCompletionListener { isPlaying = false; reset(); player = null }
+                                setOnPreparedListener {
+                                    totalSec = duration / 1000
+                                    start()
+                                    isPlaying = true
+                                }
+                                setOnCompletionListener {
+                                    isPlaying = false
+                                    currentSec = 0
+                                    reset()
+                                    player = null
+                                }
                                 setOnErrorListener { _, _, _ -> isPlaying = false; player = null; false }
                                 prepareAsync()
                             }
@@ -789,13 +833,22 @@ private fun AudioMessagePlayer(audioUrl: String, isMine: Boolean) {
             Icons.Default.GraphicEq,
             null,
             tint     = if (isMine) Color.White.copy(alpha = 0.7f) else Color(0xFF8B5CF6).copy(alpha = 0.7f),
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(16.dp),
         )
-        Text(
-            if (isPlaying) "▶ Çalıyor" else "🎤 Ses",
-            color    = if (isMine) Color.White.copy(alpha = 0.85f) else Color(0xFF8B5CF6),
-            fontSize = 11.sp,
-        )
+        Column {
+            Text(
+                "🎤 Sesli mesaj",
+                color    = if (isMine) Color.White.copy(alpha = 0.85f) else Color(0xFF8B5CF6),
+                fontSize = 11.sp,
+            )
+            Text(
+                if (isPlaying) "${formatTime(currentSec)} / ${formatTime(totalSec)}"
+                else if (totalSec > 0) formatTime(totalSec)
+                else "⏳",
+                color    = if (isMine) Color.White.copy(alpha = 0.6f) else Color(0xFF8B5CF6).copy(alpha = 0.6f),
+                fontSize = 10.sp,
+            )
+        }
     }
 }
 
