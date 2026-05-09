@@ -46,6 +46,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import java.io.File
+import androidx.core.content.ContextCompat
 
 // ── Konuşma Listesi ─────────────────────────────────────────────────────────
 // Tema: .msgp-wrap, .msgp-hd, .msgp-conv-item, .msgp-conv-av, .msgp-unread-dot
@@ -304,6 +305,16 @@ fun MessageDetailScreen(
         ActivityResultContracts.GetContent()
     ) { uri -> selectedImage = uri }
 
+    // Runtime izin launcher — ses kaydı
+    val audioPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* izin sonucu — kullanıcı tekrar basınca kayıt başlar */ }
+
+    // Runtime izin launcher — galeri
+    val imagePermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) imagePicker.launch("image/*") }
+
     val otherUid = remember(conversations, convId) {
         conversations.firstOrNull { it.id == convId }
             ?.participantIds?.firstOrNull { it != vm.uid } ?: ""
@@ -506,7 +517,17 @@ fun MessageDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
                         // Resim seçici butonu
-                        IconButton(onClick = { imagePicker.launch("image/*") }, modifier = Modifier.size(36.dp)) {
+                        IconButton(onClick = {
+                            val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                                android.Manifest.permission.READ_MEDIA_IMAGES
+                            else android.Manifest.permission.READ_EXTERNAL_STORAGE
+                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, perm)
+                                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                imagePicker.launch("image/*")
+                            } else {
+                                imagePermLauncher.launch(perm)
+                            }
+                        }, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Default.Image, null, tint = if (selectedImage != null) Primary else Muted, modifier = Modifier.size(22.dp))
                         }
                         // Tema: .msg-inp-wrap + .msg-inp
@@ -542,6 +563,13 @@ fun MessageDetailScreen(
                                     .pointerInput(Unit) {
                                         detectTapGestures(
                                             onPress = {
+                                                // Önce izin kontrol et
+                                                if (androidx.core.content.ContextCompat.checkSelfPermission(
+                                                        context, android.Manifest.permission.RECORD_AUDIO)
+                                                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                                    audioPermLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                                    return@detectTapGestures
+                                                }
                                                 // Kayıt başlat
                                                 try {
                                                     val f = File(context.cacheDir, "audio_${System.currentTimeMillis()}.m4a")

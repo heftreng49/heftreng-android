@@ -49,6 +49,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,6 +78,10 @@ fun FeedScreen(
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri -> inlineImageUri = uri }
+
+    val imagePermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) imagePicker.launch("image/*") }
 
     val currentUser = FirebaseAuth.getInstance().currentUser
     val myUid       = currentUser?.uid ?: ""
@@ -160,7 +165,17 @@ fun FeedScreen(
                         language     = language,
                         imageUri     = inlineImageUri,
                         uploading    = uploading,
-                        onImagePick  = { imagePicker.launch("image/*") },
+                        onImagePick  = {
+                            val perm = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU)
+                                android.Manifest.permission.READ_MEDIA_IMAGES
+                            else android.Manifest.permission.READ_EXTERNAL_STORAGE
+                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, perm)
+                                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                imagePicker.launch("image/*")
+                            } else {
+                                imagePermLauncher.launch(perm)
+                            }
+                        },
                         onImageClear = { inlineImageUri = null },
                     )
                 }
