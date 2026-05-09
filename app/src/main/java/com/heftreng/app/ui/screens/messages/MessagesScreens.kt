@@ -39,6 +39,13 @@ import com.heftreng.app.viewmodel.MessagesViewModel
 import com.heftreng.app.viewmodel.PresenceViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import android.net.Uri
+import android.media.MediaRecorder
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import java.io.File
 
 // ── Konuşma Listesi ─────────────────────────────────────────────────────────
 // Tema: .msgp-wrap, .msgp-hd, .msgp-conv-item, .msgp-conv-av, .msgp-unread-dot
@@ -281,11 +288,21 @@ fun MessageDetailScreen(
     val conversations by vm.conversations.collectAsState()
     val listState     = rememberLazyListState()
 
-    var inputText   by remember { mutableStateOf("") }
-    var replyTo     by remember { mutableStateOf<Message?>(null) }
-    var editMsg     by remember { mutableStateOf<Message?>(null) }
-    var ctxMsg      by remember { mutableStateOf<Message?>(null) }
-    var ctxOffset   by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    var inputText     by remember { mutableStateOf("") }
+    var replyTo       by remember { mutableStateOf<Message?>(null) }
+    var editMsg       by remember { mutableStateOf<Message?>(null) }
+    var ctxMsg        by remember { mutableStateOf<Message?>(null) }
+    var ctxOffset     by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    var selectedImage by remember { mutableStateOf<Uri?>(null) }
+    var isRecording   by remember { mutableStateOf(false) }
+    val uploading     by vm.uploading.collectAsState()
+    val context       = LocalContext.current
+    var recorder      by remember { mutableStateOf<MediaRecorder?>(null) }
+    var audioFile     by remember { mutableStateOf<File?>(null) }
+
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri -> selectedImage = uri }
 
     val otherUid = remember(conversations, convId) {
         conversations.firstOrNull { it.id == convId }
@@ -459,12 +476,39 @@ fun MessageDetailScreen(
 
                 // Tema: .msg-inp-bar
                 Surface(color = HeftSurface, tonalElevation = 0.dp) {
-                    Row(
+                    Column {
+                        // Seçili resim önizleme
+                        if (selectedImage != null) {
+                            Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                                AsyncImage(
+                                    model = selectedImage,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(80.dp)
+                                        .clip(RoundedCornerShape(10.dp)),
+                                    contentScale = ContentScale.Crop,
+                                )
+                                IconButton(
+                                    onClick  = { selectedImage = null },
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .size(22.dp)
+                                        .background(Color.Black.copy(alpha = 0.6f), CircleShape),
+                                ) {
+                                    Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(12.dp))
+                                }
+                            }
+                        }
+                        Row(
                         modifier = Modifier.fillMaxWidth().navigationBarsPadding()
                             .padding(horizontal = 9.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.Bottom,
                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
+                        // Resim seçici butonu
+                        IconButton(onClick = { imagePicker.launch("image/*") }, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Default.Image, null, tint = if (selectedImage != null) Primary else Muted, modifier = Modifier.size(22.dp))
+                        }
                         // Tema: .msg-inp-wrap + .msg-inp
                         OutlinedTextField(
                             value         = inputText,
@@ -487,18 +531,82 @@ fun MessageDetailScreen(
                                 focusedContainerColor   = SurfaceVar,
                             ),
                         )
+                        // Sesli mesaj butonu
+                        if (inputText.isBlank() && selectedImage == null) {
+                            Box(
+                                modifier = Modifier.size(36.dp).clip(CircleShape)
+                                    .background(
+                                        if (isRecording) Brush.linearGradient(listOf(Color(0xFFEF4444), Color(0xFFDC2626)))
+                                        else Brush.linearGradient(listOf(SurfaceVar, SurfaceVar))
+                                    )
+                                    .pointerInput(Unit) {
+                                        detectTapGestures(
+                                            onPress = {
+                                                // Kayıt başlat
+                                                try {
+                                                    val f = File(context.cacheDir, "audio_${System.currentTimeMillis()}.m4a")
+                                                    audioFile = f
+                                                    val mr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                                                        MediaRecorder(context) else @Suppress("DEPRECATION") MediaRecorder()
+                                                    mr.setAudioSource(MediaRecorder.AudioSource.MIC)
+                                                    mr.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                                                    mr.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                                                    mr.setOutputFile(f.absolutePath)
+                                                    mr.prepare()
+                                                    mr.start()
+                                                    recorder = mr
+                                                    isRecording = true
+                                                } catch (e: Exception) { e.printStackTrace() }
+                                                tryAwaitRelease()
+                                                // Kayıt durdur ve gönder
+                                                try {
+                                                    recorder?.stop()
+                                                    recorder?.release()
+                                                    recorder = null
+                                                    isRecording = false
+                                                    audioFile?.let { f ->
+                                                        if (f.exists() && f.length() > 0) {
+                                                            vm.uploadAudioAndSend(convId, otherUid, f)
+                                                        }
+                                                    }
+                                                } catch (e: Exception) { e.printStackTrace(); isRecording = false }
+                                            }
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
+                                    null,
+                                    tint     = if (isRecording) Color.White else Muted,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
                         // Tema: .msg-send-btn — gradient, circular
+                        if (inputText.isNotBlank() || selectedImage != null) {
                         Box(
                             modifier = Modifier.size(36.dp).clip(CircleShape)
                                 .background(
-                                    if (inputText.isNotBlank())
-                                        Brush.linearGradient(listOf(PrimaryLight, Primary))
-                                    else Brush.linearGradient(listOf(Divider, Divider))
+                                    if (uploading) Brush.linearGradient(listOf(Divider, Divider))
+                                    else Brush.linearGradient(listOf(PrimaryLight, Primary))
                                 )
-                                .clickable(enabled = inputText.isNotBlank()) {
+                                .clickable(enabled = !uploading) {
                                     if (editMsg != null) {
                                         vm.editMessage(editMsg!!, inputText.trim())
                                         editMsg = null
+                                    } else if (selectedImage != null) {
+                                        vm.uploadImageAndSend(
+                                            convId      = convId,
+                                            toUid       = otherUid,
+                                            uri         = selectedImage!!,
+                                            replyToId   = replyTo?.id ?: "",
+                                            replyToText = replyTo?.text ?: "",
+                                            replyToName = if (replyTo?.senderId == vm.uid) "Sen"
+                                                          else otherUser?.displayName ?: "",
+                                        )
+                                        selectedImage = null
+                                        replyTo = null
                                     } else {
                                         vm.sendMessage(
                                             convId      = convId,
@@ -515,14 +623,20 @@ fun MessageDetailScreen(
                                 },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.Send, null,
-                                tint = if (inputText.isNotBlank()) Color.White else Muted,
-                                modifier = Modifier.size(18.dp))
+                            if (uploading) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.AutoMirrored.Filled.Send, null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp))
+                            }
                         }
+                        } // end send button if
                     }
+                    } // end Row
+                    } // end Column
                 }
             }
-        }
     ) { padding ->
         if (messages.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
@@ -588,6 +702,75 @@ fun MessageDetailScreen(
     }
 }
 
+// ── Sesli Mesaj Oynatıcı ─────────────────────────────────────────────────────
+@Composable
+private fun AudioMessagePlayer(audioUrl: String, isMine: Boolean) {
+    var isPlaying by remember { mutableStateOf(false) }
+    var player    by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
+    val context   = LocalContext.current
+
+    DisposableEffect(audioUrl) {
+        onDispose {
+            player?.release()
+            player = null
+        }
+    }
+
+    Row(
+        modifier          = Modifier
+            .widthIn(min = 140.dp, max = 200.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (isMine) Color.White.copy(alpha = 0.15f) else Color(0xFF8B5CF6).copy(alpha = 0.10f))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        IconButton(
+            onClick = {
+                if (isPlaying) {
+                    player?.pause()
+                    isPlaying = false
+                } else {
+                    if (player == null) {
+                        try {
+                            val mp = android.media.MediaPlayer().apply {
+                                setDataSource(audioUrl)
+                                setOnPreparedListener { start(); isPlaying = true }
+                                setOnCompletionListener { isPlaying = false; reset(); player = null }
+                                setOnErrorListener { _, _, _ -> isPlaying = false; player = null; false }
+                                prepareAsync()
+                            }
+                            player = mp
+                        } catch (e: Exception) { e.printStackTrace() }
+                    } else {
+                        player?.start()
+                        isPlaying = true
+                    }
+                }
+            },
+            modifier = Modifier.size(32.dp),
+        ) {
+            Icon(
+                if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                null,
+                tint     = if (isMine) Color.White else Color(0xFF8B5CF6),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Icon(
+            Icons.Default.GraphicEq,
+            null,
+            tint     = if (isMine) Color.White.copy(alpha = 0.7f) else Color(0xFF8B5CF6).copy(alpha = 0.7f),
+            modifier = Modifier.size(20.dp),
+        )
+        Text(
+            if (isPlaying) "▶ Çalıyor" else "🎤 Ses",
+            color    = if (isMine) Color.White.copy(alpha = 0.85f) else Color(0xFF8B5CF6),
+            fontSize = 11.sp,
+        )
+    }
+}
+
 // Tema: .msg-ctx-item, .msg-ctx-item.danger
 @Composable
 private fun MsgCtxItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, danger: Boolean, onClick: () -> Unit) {
@@ -619,7 +802,7 @@ private fun MsgRow(
     onLike        : () -> Unit,
     onLongPress   : (androidx.compose.ui.geometry.Offset) -> Unit,
 ) {
-    if (msg.text.isBlank() && msg.imageUrl.isBlank()) return
+    if (msg.text.isBlank() && msg.imageUrl.isBlank() && msg.audioUrl.isBlank()) return
     val iLiked = myUid in msg.likedBy
 
     // Tema: .msg-row, .msg-row.me / .msg-row.them
@@ -713,6 +896,10 @@ private fun MsgRow(
                             AsyncImage(model = msg.imageUrl, contentDescription = null,
                                 modifier = Modifier.widthIn(max = 200.dp).clip(RoundedCornerShape(10.dp)),
                                 contentScale = ContentScale.Crop)
+                            Spacer(Modifier.height(4.dp))
+                        }
+                        if (msg.audioUrl.isNotBlank()) {
+                            AudioMessagePlayer(audioUrl = msg.audioUrl, isMine = isMine)
                             Spacer(Modifier.height(4.dp))
                         }
                         if (msg.text.isNotBlank())

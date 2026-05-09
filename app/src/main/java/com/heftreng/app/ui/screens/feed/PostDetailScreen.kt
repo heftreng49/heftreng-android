@@ -13,8 +13,6 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -265,13 +263,12 @@ private fun CommentRow(
     onShowLikers : () -> Unit,
     onDelete     : () -> Unit,
 ) {
-    val canDelete    = myUid == comment.uid || myUid == postUid
-    var menuExpanded by remember { mutableStateOf(false) }
+    val canDelete = myUid == comment.uid || myUid == postUid
     Row(
         modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        // Avatar — tıklanabilir
+        // Avatar
         Box(
             modifier = Modifier
                 .size(34.dp)
@@ -306,7 +303,7 @@ private fun CommentRow(
             Text(comment.text, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
         }
         Spacer(Modifier.width(8.dp))
-        // Beğeni butonu + sayacı
+        // Sağ taraf — beğeni + silme
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             IconButton(onClick = onLike, modifier = Modifier.size(32.dp)) {
                 Icon(
@@ -324,26 +321,15 @@ private fun CommentRow(
                     modifier = Modifier.clickable { onShowLikers() },
                 )
             }
+            // Silme butonu — sadece kendi yorumu veya gönderi sahibiyse
             if (canDelete) {
-                Box {
-                    IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.MoreVert, null, tint = Muted, modifier = Modifier.size(15.dp))
-                    }
-                    DropdownMenu(
-                        expanded         = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                        containerColor   = HeftSurface,
-                    ) {
-                        DropdownMenuItem(
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444), modifier = Modifier.size(15.dp))
-                                    Text("Sil", color = Color(0xFFEF4444), fontSize = 13.sp)
-                                }
-                            },
-                            onClick = { menuExpanded = false; onDelete() },
-                        )
-                    }
+                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Yorumu sil",
+                        tint     = Color(0xFFEF4444).copy(alpha = 0.7f),
+                        modifier = Modifier.size(15.dp),
+                    )
                 }
             }
         }

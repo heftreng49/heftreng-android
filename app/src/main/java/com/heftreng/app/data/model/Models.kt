@@ -130,6 +130,7 @@ data class Message(
     val senderId       : String       = "",
     val text           : String       = "",
     val imageUrl       : String       = "",
+    val audioUrl       : String       = "",
     val createdAt      : String       = "",
     val read           : Boolean      = false,
     val deleted        : Boolean      = false,

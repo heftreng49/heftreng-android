@@ -45,6 +45,10 @@ import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
 import kotlinx.coroutines.tasks.await
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +70,13 @@ fun FeedScreen(
     var inlineText       by remember { mutableStateOf("") }
     var inlineQuote      by remember { mutableStateOf<QuotePayload?>(null) }
     var showInlineQuote  by remember { mutableStateOf(false) }
+    var inlineImageUri   by remember { mutableStateOf<Uri?>(null) }
+    val uploading        by vm.uploading.collectAsState()
+    val context          = LocalContext.current
+
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri -> inlineImageUri = uri }
 
     val currentUser = FirebaseAuth.getInstance().currentUser
     val myUid       = currentUser?.uid ?: ""
@@ -121,19 +132,36 @@ fun FeedScreen(
                         onQuoteAdd    = { showInlineQuote = true },
                         onQuoteRemove = { inlineQuote = null },
                         onSend        = {
-                            if (inlineText.isNotBlank() || inlineQuote != null) {
-                                vm.createPost(
-                                    text       = inlineText.trim(),
-                                    quoteText  = inlineQuote?.text ?: "",
-                                    authorName = inlineQuote?.authorName ?: "",
-                                    bookName   = inlineQuote?.bookName ?: "",
-                                )
-                                inlineText  = ""
-                                inlineQuote = null
+                            if (inlineText.isNotBlank() || inlineQuote != null || inlineImageUri != null) {
+                                val uri = inlineImageUri
+                                if (uri != null) {
+                                    vm.uploadImageAndCreatePost(
+                                        imageUri   = uri,
+                                        text       = inlineText.trim(),
+                                        quoteText  = inlineQuote?.text ?: "",
+                                        authorName = inlineQuote?.authorName ?: "",
+                                        bookName   = inlineQuote?.bookName ?: "",
+                                        context    = context,
+                                    )
+                                } else {
+                                    vm.createPost(
+                                        text       = inlineText.trim(),
+                                        quoteText  = inlineQuote?.text ?: "",
+                                        authorName = inlineQuote?.authorName ?: "",
+                                        bookName   = inlineQuote?.bookName ?: "",
+                                    )
+                                }
+                                inlineText     = ""
+                                inlineQuote    = null
+                                inlineImageUri = null
                             }
                         },
-                        photoURL = myPhotoURL,
-                        language = language,
+                        photoURL     = myPhotoURL,
+                        language     = language,
+                        imageUri     = inlineImageUri,
+                        uploading    = uploading,
+                        onImagePick  = { imagePicker.launch("image/*") },
+                        onImageClear = { inlineImageUri = null },
                     )
                 }
                 // ── Gönderi listesi ───────────────────────────────────────
@@ -205,6 +233,10 @@ private fun InlineComposeBox(
     onSend        : () -> Unit,
     photoURL      : String,
     language      : String,
+    imageUri      : Uri?         = null,
+    uploading     : Boolean      = false,
+    onImagePick   : () -> Unit   = {},
+    onImageClear  : () -> Unit   = {},
 ) {
     Surface(
         modifier       = Modifier.fillMaxWidth().padding(12.dp),
@@ -253,6 +285,29 @@ private fun InlineComposeBox(
                 Spacer(Modifier.height(8.dp))
                 QuoteInputSection(quote = quote, onRemove = onQuoteRemove)
             }
+            if (imageUri != null) {
+                Spacer(Modifier.height(8.dp))
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    AsyncImage(
+                        model            = imageUri,
+                        contentDescription = null,
+                        modifier         = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp)
+                            .clip(RoundedCornerShape(10.dp)),
+                        contentScale     = ContentScale.Crop,
+                    )
+                    IconButton(
+                        onClick  = onImageClear,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .size(28.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape),
+                    ) {
+                        Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
             Spacer(Modifier.height(6.dp))
             Row(
                 modifier          = Modifier.fillMaxWidth(),
@@ -271,7 +326,19 @@ private fun InlineComposeBox(
                     fontSize = 11.sp,
                     modifier = Modifier.clickable { onQuoteAdd() },
                 )
+                Spacer(Modifier.width(12.dp))
+                IconButton(onClick = onImagePick, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Default.Image, null,
+                        tint     = if (imageUri != null) Primary else Muted,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
                 Spacer(Modifier.weight(1f))
+                if (uploading) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Primary, strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                }
                 Text(
                     "${text.length}/1000",
                     color    = if (text.length > 900) Error else Muted,

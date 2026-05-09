@@ -143,6 +143,7 @@ class MessagesViewModel @Inject constructor(
                         senderId       = d["senderUid"]     as? String ?: "",
                         text           = d["text"]          as? String ?: "",
                         imageUrl       = d["image_url"]     as? String ?: "",
+                        audioUrl       = d["audio_url"]     as? String ?: "",
                         createdAt      = (d["createdAt"] as? Timestamp)?.toDate()?.time?.toString() ?: "",
                         read           = d["read"]          as? Boolean ?: false,
                         deleted        = d["deleted"]       as? Boolean ?: false,
@@ -218,6 +219,103 @@ class MessagesViewModel @Inject constructor(
                     android.util.Log.e("HF_PUSH", "Mesaj push hatası: ${e.message}")
                 }
             } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Resim: Storage'a yükle → mesaj gönder ────────────────────────────────
+    private val _uploading = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val uploading = _uploading.asStateFlow()
+
+    fun uploadImageAndSend(
+        convId  : String,
+        toUid   : String,
+        uri     : android.net.Uri,
+        replyToId   : String = "",
+        replyToText : String = "",
+        replyToName : String = "",
+    ) {
+        viewModelScope.launch {
+            try {
+                _uploading.value = true
+                val ref = com.google.firebase.storage.FirebaseStorage.getInstance()
+                    .reference.child("messages/$convId/${System.currentTimeMillis()}.jpg")
+                ref.putFile(uri).await()
+                val url = ref.downloadUrl.await().toString()
+                sendMessage(
+                    convId      = convId,
+                    toUid       = toUid,
+                    text        = "",
+                    imageUrl    = url,
+                    replyToId   = replyToId,
+                    replyToText = replyToText,
+                    replyToName = replyToName,
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _uploading.value = false
+            }
+        }
+    }
+
+    // ── Sesli mesaj: Storage'a yükle → mesaj gönder ──────────────────────────
+    fun uploadAudioAndSend(
+        convId : String,
+        toUid  : String,
+        file   : java.io.File,
+    ) {
+        viewModelScope.launch {
+            try {
+                _uploading.value = true
+                val uri = android.net.Uri.fromFile(file)
+                val ref = com.google.firebase.storage.FirebaseStorage.getInstance()
+                    .reference.child("messages/$convId/audio_${System.currentTimeMillis()}.m4a")
+                ref.putFile(uri).await()
+                val url = ref.downloadUrl.await().toString()
+                // audio_url alanıyla özel mesaj tipi
+                val msgData = mutableMapOf<String, Any>(
+                    "senderUid" to uid,
+                    "text"      to "",
+                    "image_url" to "",
+                    "audio_url" to url,
+                    "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    "read"      to false,
+                    "deleted"   to false,
+                    "edited"    to false,
+                    "liked_by"  to emptyList<String>(),
+                )
+                firestore.collection("convMessages").document(convId)
+                    .collection("msgs").add(msgData).await()
+                val convUpd = mutableMapOf<String, Any>(
+                    "last_msg"      to "🎤 Sesli mesaj",
+                    "updated_at"    to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    "unread_$toUid" to com.google.firebase.firestore.FieldValue.increment(1),
+                    "unread_$uid"   to 0L,
+                )
+                firestore.collection("conversations").document(convId)
+                    .set(convUpd, com.google.firebase.firestore.SetOptions.merge()).await()
+                // push
+                try {
+                    val myName = auth.currentUser?.displayName ?: "Biri"
+                    com.google.firebase.functions.FirebaseFunctions
+                        .getInstance("europe-west1")
+                        .getHttpsCallable("sendPush")
+                        .call(hashMapOf(
+                            "targetUid" to toUid,
+                            "title"     to myName,
+                            "body"      to "🎤 Sesli mesaj gönderdi",
+                            "type"      to "message",
+                            "convId"    to convId,
+                            "fromUid"   to uid,
+                            "postId"    to "",
+                        )).await()
+                } catch (_: Exception) {}
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _uploading.value = false
+                file.delete()
+            }
         }
     }
 

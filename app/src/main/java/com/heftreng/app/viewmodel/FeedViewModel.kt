@@ -362,6 +362,36 @@ class FeedViewModel @Inject constructor(
         _draftPrefs?.edit()?.remove("feed_draft")?.apply()
     }
 
+    // ── Firebase Storage'a resim yükle, sonra gönderi oluştur ──────────────────
+    fun uploadImageAndCreatePost(
+        imageUri   : android.net.Uri,
+        text       : String,
+        quoteText  : String = "",
+        authorName : String = "",
+        bookName   : String = "",
+        context    : android.content.Context,
+    ) {
+        if (uid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                _uploading.value = true
+                val storage = com.google.firebase.storage.FirebaseStorage.getInstance()
+                val ref = storage.reference
+                    .child("posts/$uid/${System.currentTimeMillis()}.jpg")
+                ref.putFile(imageUri).await()
+                val url = ref.downloadUrl.await().toString()
+                createPost(text = text, imageURL = url, quoteText = quoteText, authorName = authorName, bookName = bookName)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _uploading.value = false
+            }
+        }
+    }
+
+    private val _uploading = MutableStateFlow(false)
+    val uploading = _uploading.asStateFlow()
+
     fun createPost(text: String, imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "") {
         if (uid.isEmpty()) return
         viewModelScope.launch {
