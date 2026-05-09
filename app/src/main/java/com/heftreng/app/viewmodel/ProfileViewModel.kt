@@ -106,6 +106,10 @@ class ProfileViewModel @Inject constructor(
                     val dName = (fd["displayName"] as? String)?.takeIf { it.isNotBlank() }
                         ?: (fd["name"] as? String)?.takeIf { it.isNotBlank() } ?: ""
 
+                    val likeDoc = if (myUid.isNotEmpty())
+                        firestore.collection("feedLikes").document("${doc.id}_$myUid").get().await()
+                    else null
+
                     Post(
                         id            = doc.id,
                         uid           = fd["uid"]      as? String ?: "",
@@ -120,6 +124,7 @@ class ProfileViewModel @Inject constructor(
                         likesCount    = (fd["likes"]    as? Long)?.toInt() ?: 0,
                         commentsCount = (fd["cmtCount"] as? Long)?.toInt() ?: 0,
                         repostsCount  = (fd["reposts"]  as? Long)?.toInt() ?: 0,
+                        isLikedByMe   = likeDoc?.exists() ?: false,
                         ts            = fd["ts"] as? Timestamp,
                     )
                 }.sortedByDescending { it.ts?.seconds ?: 0L }
