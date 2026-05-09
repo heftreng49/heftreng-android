@@ -83,209 +83,6 @@ fun ConversationsScreen(
         it.lastMessage.contains(searchQuery, ignoreCase = true)
     }
 
-    // ── Kayıt Overlay ────────────────────────────────────────────────────────
-    if (isRecording || showAudioPreview) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.75f))
-                .zIndex(10f),
-            contentAlignment = Alignment.Center,
-        ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth(0.85f)
-                    .wrapContentHeight(),
-                shape          = RoundedCornerShape(24.dp),
-                colors         = CardDefaults.cardColors(containerColor = HeftSurface),
-                elevation      = CardDefaults.cardElevation(8.dp),
-            ) {
-                Column(
-                    modifier              = Modifier.padding(28.dp),
-                    horizontalAlignment   = Alignment.CenterHorizontally,
-                    verticalArrangement   = Arrangement.spacedBy(20.dp),
-                ) {
-                    if (isRecording) {
-                        // ── Kayıt ekranı ──────────────────────────────────
-                        val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-                        val pulseScale by infiniteTransition.animateFloat(
-                            initialValue = 1f,
-                            targetValue  = 1.25f,
-                            animationSpec = infiniteRepeatable(
-                                animation = tween(600, easing = FastOutSlowInEasing),
-                                repeatMode = RepeatMode.Reverse,
-                            ),
-                            label = "pulseScale",
-                        )
-                        Text(
-                            "Kayıt yapılıyor",
-                            color      = OnBackground,
-                            fontSize   = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Box(contentAlignment = Alignment.Center) {
-                            Box(
-                                modifier = Modifier
-                                    .size((72 * pulseScale).dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFEF4444).copy(alpha = 0.25f))
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFEF4444)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    Icons.Default.Mic, null,
-                                    tint     = Color.White,
-                                    modifier = Modifier.size(30.dp),
-                                )
-                            }
-                        }
-                        Text(
-                            "%02d:%02d".format(recordSecs / 60, recordSecs % 60),
-                            color      = Color(0xFFEF4444),
-                            fontSize   = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            "Durdurmak için butona bas",
-                            color    = Muted,
-                            fontSize = 12.sp,
-                        )
-                        // Durdur butonu
-                        Button(
-                            onClick = {
-                                try {
-                                    recorder?.stop()
-                                    recorder?.release()
-                                    recorder = null
-                                } catch (e: Exception) { e.printStackTrace() }
-                                isRecording = false
-                                if ((audioFile?.length() ?: 0) > 0) {
-                                    showAudioPreview = true
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
-                            shape  = RoundedCornerShape(50),
-                        ) {
-                            Icon(Icons.Default.Stop, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Durdur")
-                        }
-                        // İptal
-                        TextButton(onClick = {
-                            recorder?.stop(); recorder?.release(); recorder = null
-                            isRecording = false
-                            audioFile?.delete(); audioFile = null
-                        }) {
-                            Text("İptal", color = Muted)
-                        }
-
-                    } else if (showAudioPreview) {
-                        // ── Önizleme ekranı ───────────────────────────────
-                        Text(
-                            "Sesli Mesaj",
-                            color      = OnBackground,
-                            fontSize   = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            "Süre: %02d:%02d".format(recordSecs / 60, recordSecs % 60),
-                            color    = Muted,
-                            fontSize = 13.sp,
-                        )
-                        // Dinle/Durdur
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment      = Alignment.CenterVertically,
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    if (isPreviewPlaying) {
-                                        previewPlayer?.pause()
-                                        isPreviewPlaying = false
-                                    } else {
-                                        if (previewPlayer == null) {
-                                            try {
-                                                val mp = android.media.MediaPlayer().apply {
-                                                    setDataSource(audioFile!!.absolutePath)
-                                                    setOnPreparedListener { start(); isPreviewPlaying = true }
-                                                    setOnCompletionListener { isPreviewPlaying = false; reset(); previewPlayer = null }
-                                                    prepareAsync()
-                                                }
-                                                previewPlayer = mp
-                                            } catch (e: Exception) { e.printStackTrace() }
-                                        } else {
-                                            previewPlayer?.start()
-                                            isPreviewPlaying = true
-                                        }
-                                    }
-                                },
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .clip(CircleShape)
-                                    .background(Primary),
-                            ) {
-                                Icon(
-                                    if (isPreviewPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    null,
-                                    tint     = Color.White,
-                                    modifier = Modifier.size(28.dp),
-                                )
-                            }
-                        }
-                        Row(
-                            modifier              = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            // Sil
-                            OutlinedButton(
-                                onClick = {
-                                    previewPlayer?.release(); previewPlayer = null
-                                    isPreviewPlaying = false
-                                    audioFile?.delete(); audioFile = null
-                                    showAudioPreview = false
-                                    recordSecs = 0
-                                },
-                                modifier = Modifier.weight(1f),
-                                shape    = RoundedCornerShape(50),
-                                colors   = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
-                            ) {
-                                Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Sil")
-                            }
-                            // Gönder
-                            Button(
-                                onClick = {
-                                    previewPlayer?.release(); previewPlayer = null
-                                    isPreviewPlaying = false
-                                    showAudioPreview = false
-                                    recordSecs = 0
-                                    audioFile?.let { f ->
-                                        if (f.exists() && f.length() > 0) {
-                                            vm.uploadAudioAndSend(convId, otherUid, f)
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.weight(1f),
-                                colors   = ButtonDefaults.buttonColors(containerColor = Primary),
-                                shape    = RoundedCornerShape(50),
-                            ) {
-                                Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Gönder")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     Scaffold(
         containerColor = Background,
         topBar = {
@@ -597,6 +394,209 @@ fun MessageDetailScreen(
     }
     LaunchedEffect(editMsg) {
         if (editMsg != null) inputText = editMsg!!.text
+    }
+
+    // ── Kayıt Overlay ────────────────────────────────────────────────────────
+    if (isRecording || showAudioPreview) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.75f))
+                .zIndex(10f),
+            contentAlignment = Alignment.Center,
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.85f)
+                    .wrapContentHeight(),
+                shape          = RoundedCornerShape(24.dp),
+                colors         = CardDefaults.cardColors(containerColor = HeftSurface),
+                elevation      = CardDefaults.cardElevation(8.dp),
+            ) {
+                Column(
+                    modifier              = Modifier.padding(28.dp),
+                    horizontalAlignment   = Alignment.CenterHorizontally,
+                    verticalArrangement   = Arrangement.spacedBy(20.dp),
+                ) {
+                    if (isRecording) {
+                        // ── Kayıt ekranı ──────────────────────────────────
+                        val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+                        val pulseScale by infiniteTransition.animateFloat(
+                            initialValue = 1f,
+                            targetValue  = 1.25f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(600, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Reverse,
+                            ),
+                            label = "pulseScale",
+                        )
+                        Text(
+                            "Kayıt yapılıyor",
+                            color      = OnBackground,
+                            fontSize   = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Box(contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier = Modifier
+                                    .size((72 * pulseScale).dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFEF4444).copy(alpha = 0.25f))
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFEF4444)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    Icons.Default.Mic, null,
+                                    tint     = Color.White,
+                                    modifier = Modifier.size(30.dp),
+                                )
+                            }
+                        }
+                        Text(
+                            "%02d:%02d".format(recordSecs / 60, recordSecs % 60),
+                            color      = Color(0xFFEF4444),
+                            fontSize   = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            "Durdurmak için butona bas",
+                            color    = Muted,
+                            fontSize = 12.sp,
+                        )
+                        // Durdur butonu
+                        Button(
+                            onClick = {
+                                try {
+                                    recorder?.stop()
+                                    recorder?.release()
+                                    recorder = null
+                                } catch (e: Exception) { e.printStackTrace() }
+                                isRecording = false
+                                if ((audioFile?.length() ?: 0) > 0) {
+                                    showAudioPreview = true
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                            shape  = RoundedCornerShape(50),
+                        ) {
+                            Icon(Icons.Default.Stop, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Durdur")
+                        }
+                        // İptal
+                        TextButton(onClick = {
+                            recorder?.stop(); recorder?.release(); recorder = null
+                            isRecording = false
+                            audioFile?.delete(); audioFile = null
+                        }) {
+                            Text("İptal", color = Muted)
+                        }
+
+                    } else if (showAudioPreview) {
+                        // ── Önizleme ekranı ───────────────────────────────
+                        Text(
+                            "Sesli Mesaj",
+                            color      = OnBackground,
+                            fontSize   = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            "Süre: %02d:%02d".format(recordSecs / 60, recordSecs % 60),
+                            color    = Muted,
+                            fontSize = 13.sp,
+                        )
+                        // Dinle/Durdur
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment      = Alignment.CenterVertically,
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    if (isPreviewPlaying) {
+                                        previewPlayer?.pause()
+                                        isPreviewPlaying = false
+                                    } else {
+                                        if (previewPlayer == null) {
+                                            try {
+                                                val mp = android.media.MediaPlayer().apply {
+                                                    setDataSource(audioFile!!.absolutePath)
+                                                    setOnPreparedListener { start(); isPreviewPlaying = true }
+                                                    setOnCompletionListener { isPreviewPlaying = false; reset(); previewPlayer = null }
+                                                    prepareAsync()
+                                                }
+                                                previewPlayer = mp
+                                            } catch (e: Exception) { e.printStackTrace() }
+                                        } else {
+                                            previewPlayer?.start()
+                                            isPreviewPlaying = true
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(CircleShape)
+                                    .background(Primary),
+                            ) {
+                                Icon(
+                                    if (isPreviewPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    null,
+                                    tint     = Color.White,
+                                    modifier = Modifier.size(28.dp),
+                                )
+                            }
+                        }
+                        Row(
+                            modifier              = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            // Sil
+                            OutlinedButton(
+                                onClick = {
+                                    previewPlayer?.release(); previewPlayer = null
+                                    isPreviewPlaying = false
+                                    audioFile?.delete(); audioFile = null
+                                    showAudioPreview = false
+                                    recordSecs = 0
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape    = RoundedCornerShape(50),
+                                colors   = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
+                            ) {
+                                Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Sil")
+                            }
+                            // Gönder
+                            Button(
+                                onClick = {
+                                    previewPlayer?.release(); previewPlayer = null
+                                    isPreviewPlaying = false
+                                    showAudioPreview = false
+                                    recordSecs = 0
+                                    audioFile?.let { f ->
+                                        if (f.exists() && f.length() > 0) {
+                                            vm.uploadAudioAndSend(convId, otherUid, f)
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                                shape    = RoundedCornerShape(50),
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Gönder")
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     Scaffold(
