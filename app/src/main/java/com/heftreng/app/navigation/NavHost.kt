@@ -22,7 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.heftreng.app.viewmodel.AppConfigViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import coil.compose.AsyncImage
@@ -30,6 +29,7 @@ import com.heftreng.app.ui.screens.admin.AdminScreen
 import com.heftreng.app.ui.screens.admin.CmsScreen
 import com.heftreng.app.ui.screens.auth.AuthScreen
 import com.heftreng.app.ui.screens.feed.FeedScreen
+import com.heftreng.app.ui.screens.cms.CmsPageScreen
 import com.heftreng.app.ui.screens.kurdi.KurdiScreen
 import com.heftreng.app.ui.screens.messages.ConversationsScreen
 import com.heftreng.app.ui.screens.messages.MessageDetailScreen
@@ -76,6 +76,7 @@ sealed class Screen(val route: String) {
     object ReadingList   : Screen("reading_list/{uid}") { fun go(uid: String) = "reading_list/$uid" }
     object Books         : Screen("books")
     object BookDetail    : Screen("book/{bookId}")         { fun go(id: String) = "book/$id" }
+    object CmsPage       : Screen("cms_page/{slug}")       { fun go(slug: String) = "cms_page/$slug" }
     object BookChapter   : Screen("book_chapter/{bid}/{cid}") { fun go(b: String, c: String) = "book_chapter/$b/$c" }
 }
 
@@ -104,14 +105,12 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val settingsVm     : SettingsViewModel      = hiltViewModel()
     val notifVm        : NotificationsViewModel = hiltViewModel()
     val msgsVm         : MessagesViewModel      = hiltViewModel()
-    val configVm       : AppConfigViewModel     = hiltViewModel()
 
     val currentUser by authVm.currentUser.collectAsState()
     val isDark      by settingsVm.darkMode.collectAsState()
     val language    by settingsVm.language.collectAsState()
     val totalUnread by msgsVm.totalUnread.collectAsState()
     val unreadNotif by notifVm.unreadCount.collectAsState()
-    val appConfig   by configVm.config.collectAsState()
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope       = rememberCoroutineScope()
@@ -286,47 +285,13 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 }
             },
         ) { innerPadding ->
-            // Bakım modu
-            if (appConfig.maintenanceMode) {
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(innerPadding),
-                    contentAlignment = androidx.compose.ui.Alignment.Center,
-                ) {
-                    Column(
-                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(32.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.Build, null,
-                            tint     = Primary,
-                            modifier = Modifier.size(56.dp),
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            "Bakım",
-                            color      = OnBackground,
-                            fontWeight = FontWeight.Bold,
-                            fontSize   = 20.sp,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            appConfig.maintenanceMessage,
-                            color    = Muted,
-                            fontSize = 14.sp,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        )
-                    }
-                }
-                return@Scaffold
-            }
-
             NavHost(
                 navController    = navController,
                 startDestination = Screen.Feed.route,
                 modifier         = Modifier.padding(innerPadding),
             ) {
                 composable(Screen.Feed.route) {
-                    FeedScreen(navController = navController, appConfig = appConfig)
+                    FeedScreen(navController = navController)
                 }
                 composable(Screen.Search.route) { SearchScreen(navController) }
                 composable(Screen.Serials.route) { SerialsScreen(navController, language) }
@@ -350,6 +315,11 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     NotificationsScreen(navController, notifVm)
                 }
                 composable(Screen.EditProfile.route) { EditProfileScreen(navController) }
+
+                composable(Screen.CmsPage.route) { back ->
+                    val slug = back.arguments?.getString("slug") ?: ""
+                    CmsPageScreen(navController = navController, slug = slug)
+                }
                 composable(Screen.Admin.route)    { AdminScreen(navController) }
                 composable(Screen.Cms.route)      { CmsScreen(navController) }
                 composable(Screen.Settings.route) { SettingsScreen(navController) }

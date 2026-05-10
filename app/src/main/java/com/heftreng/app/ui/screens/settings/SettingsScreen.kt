@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
@@ -162,11 +163,17 @@ fun SettingsScreen(
             // ── Diğer ────────────────────────────────────────────────────
             item {
                 SettingsSection(title = "Diğer / Yên Din") {
-                    SettingsRow(Icons.Outlined.Info, "Heftreng Hakkında", "Derbarê heftreng") {}
+                    SettingsRow(Icons.Outlined.Info, "Heftreng Hakkında", "Derbarê heftreng") {
+                        navController.navigate(Screen.CmsPage.go("hakkinda"))
+                    }
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
-                    SettingsRow(Icons.Outlined.Description, "Kullanım Koşulları", "Şert û mercên bikarhanînê") {}
+                    SettingsRow(Icons.Outlined.Description, "Kullanım Koşulları", "Şert û mercên bikarhanînê") {
+                        navController.navigate(Screen.CmsPage.go("kullanim-kosullari"))
+                    }
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
-                    SettingsRow(Icons.Outlined.Shield, "Gizlilik Politikası", "Siyaseta nepeniyê") {}
+                    SettingsRow(Icons.Outlined.Shield, "Gizlilik Politikası", "Siyaseta nepeniyê") {
+                        navController.navigate(Screen.CmsPage.go("gizlilik-politikasi"))
+                    }
                 }
             }
 
