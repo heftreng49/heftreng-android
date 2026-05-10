@@ -11,6 +11,7 @@ import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.data.model.AdMobTestIds
+import com.heftreng.app.data.model.AdMobProdIds
 import com.heftreng.app.data.model.CmsAdConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -80,7 +81,7 @@ class AdsViewModel @Inject constructor(
         val config = _interstitialConfig.value ?: return
         if (!config.enabled || !_adsEnabled.value) return
 
-        val unitId = if (config.testMode) AdMobTestIds.INTERSTITIAL else config.unitId
+        val unitId = if (config.testMode) AdMobTestIds.INTERSTITIAL else AdMobProdIds.INTERSTITIAL
         if (unitId.isBlank()) return
 
         val adRequest = AdRequest.Builder().build()
@@ -122,7 +123,7 @@ class AdsViewModel @Inject constructor(
         val config = _rewardedConfig.value ?: return
         if (!config.enabled || !_adsEnabled.value) return
 
-        val unitId = if (config.testMode) AdMobTestIds.REWARDED else config.unitId
+        val unitId = if (config.testMode) AdMobTestIds.REWARDED else AdMobProdIds.REWARDED
         if (unitId.isBlank()) return
 
         val adRequest = AdRequest.Builder().build()
@@ -161,7 +162,7 @@ class AdsViewModel @Inject constructor(
     fun bannerUnitId(): String? {
         val config = _bannerConfig.value ?: return null
         if (!config.enabled || !_adsEnabled.value) return null
-        return if (config.testMode) AdMobTestIds.BANNER else config.unitId.ifBlank { null }
+        return if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
     }
 
     // ── Banner pozisyonu ──────────────────────────────────────────────────────

@@ -349,3 +349,10 @@ object AdMobTestIds {
     const val INTERSTITIAL  = "ca-app-pub-3940256099942544/1033173712"
     const val REWARDED      = "ca-app-pub-3940256099942544/5224354917"
 }
+
+// Gerçek Unit ID'ler — testMode = false olduğunda bunlar kullanılır
+object AdMobProdIds {
+    const val BANNER        = "ca-app-pub-6463746824939277/7866834575"
+    const val INTERSTITIAL  = "ca-app-pub-6463746824939277/4989839500"
+    const val REWARDED      = "ca-app-pub-6463746824939277/9693325673"
+}
