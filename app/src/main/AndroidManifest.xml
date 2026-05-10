@@ -7,9 +7,6 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.CAMERA" />
 
     <application
@@ -31,7 +28,6 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Deep link: heftreng://app/post/ID gibi -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -48,17 +44,14 @@
             </intent-filter>
         </service>
 
-        <!-- FCM varsayılan bildirim kanalı -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="heftreng_default" />
 
-        <!-- FCM bildirim ikonu -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@drawable/ic_notif" />
 
-        <!-- FCM bildirim rengi -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_color"
             android:resource="@color/notif_color" />
@@ -67,12 +60,10 @@
             android:name="com.google.android.gms.version"
             android:value="@integer/google_play_services_version" />
 
-    </application>
-    <!-- AdMob App ID -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-3940256099942544~3347511713" />
 
     </application>
 </manifest>
-</manifest>
+                
