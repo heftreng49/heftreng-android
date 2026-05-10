@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -764,7 +765,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                     Switch(
                         checked         = adsEnabled,
                         onCheckedChange = { enabled ->
-                            kotlinx.coroutines.MainScope().launch {
+                            scope.launch {
                                 try {
                                     firestore.collection("cms_ads").document("global")
                                         .set(mapOf("enabled" to enabled))

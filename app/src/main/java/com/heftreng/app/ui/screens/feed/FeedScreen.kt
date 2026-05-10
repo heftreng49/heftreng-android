@@ -38,6 +38,7 @@ import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.component.AdBannerView
 import com.heftreng.app.viewmodel.AdsViewModel
+import com.heftreng.app.ui.component.QuoteCard
 import com.heftreng.app.ui.component.QuoteDialog
 import com.heftreng.app.ui.component.QuoteInputSection
 import com.heftreng.app.ui.component.QuotePayload
