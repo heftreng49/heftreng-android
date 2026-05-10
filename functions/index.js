@@ -1,24 +1,22 @@
 /**
  * Heftreng — Cloud Functions
  * firebase-admin: ^12.0.0
- * firebase-functions: ^4.9.0  (v2 API — gen 2 runtime)
+ * firebase-functions: ^5.0.0  (gen 2, admin 12 uyumlu)
  */
 
-const { onCall, HttpsError }    = require("firebase-functions/v2/https");
-const { onDocumentCreated }     = require("firebase-functions/v2/firestore");
-const { initializeApp }         = require("firebase-admin/app");
-const { getFirestore }          = require("firebase-admin/firestore");
-const { getMessaging }          = require("firebase-admin/messaging");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onDocumentCreated }  = require("firebase-functions/v2/firestore");
+const { initializeApp }      = require("firebase-admin/app");
+const { getFirestore }       = require("firebase-admin/firestore");
+const { getMessaging }       = require("firebase-admin/messaging");
 
 initializeApp();
 
-// ── sendPush — HTTPS Callable (gen 2) ────────────────────────────────────────
+// ── sendPush — HTTPS Callable ─────────────────────────────────────────────────
 exports.sendPush = onCall(
   { region: "europe-west1", enforceAppCheck: false },
   async (request) => {
-    const callerUid = request.auth?.uid || "anonymous";
-    console.log("[HF Push] caller:", callerUid);
-
+    // firebase-functions v5: request.data
     const {
       targetUid,
       title   = "Heftreng",
@@ -78,15 +76,13 @@ exports.sendPush = onCall(
   }
 );
 
-// ── onNewNotif — Firestore Trigger (gen 2) ────────────────────────────────────
+// ── onNewNotif — Firestore Trigger ────────────────────────────────────────────
 exports.onNewNotif = onDocumentCreated(
   { document: "userNotifs/{uid}/msgs/{msgId}", region: "europe-west1" },
   async (event) => {
     const uid  = event.params.uid;
     const data = event.data?.data();
     if (!data) return;
-
-    console.log("[HF Notif] uid:", uid, "type:", data.type);
 
     const db = getFirestore();
     let fcmToken = null;
@@ -99,8 +95,8 @@ exports.onNewNotif = onDocumentCreated(
     if (!fcmToken || fcmToken.startsWith("https://")) return;
 
     const channelId =
-      data.type === "message"                           ? "heftreng_messages" :
-      data.type === "like" || data.type === "repost"   ? "heftreng_likes"    :
+      data.type === "message"                         ? "heftreng_messages" :
+      data.type === "like" || data.type === "repost"  ? "heftreng_likes"    :
       "heftreng_default";
 
     try {
