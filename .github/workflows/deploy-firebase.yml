@@ -33,6 +33,6 @@ jobs:
           npm install
 
       - name: Deploy to Firebase
-        run: firebase deploy --only functions,firestore:rules,firestore:indexes --project bloggerheftreng --token "$FIREBASE_TOKEN"
+        run: firebase deploy --only functions,firestore:rules,firestore:indexes --force --project bloggerheftreng --token "$FIREBASE_TOKEN"
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
