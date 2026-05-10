@@ -689,7 +689,7 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                             Fmt("U", "u",          "Altı Çizili"),
                             Fmt("H2", "h2",        "Başlık"),
                             Fmt("¶",  "p",         "Paragraf"),
-                            Fmt(""", "blockquote","Alıntı Blok"),
+                            Fmt("«»", "blockquote","Alıntı Blok"),
                             Fmt("—",  "hr",        "Yatay Çizgi"),
                         )
                         formats.forEach { fmt ->
@@ -730,11 +730,10 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                         listOf(
                             "Diyalog"  to "<p>— ... dedi.</p>",
                             "Sahne"    to "<p>* * *</p>",
-                            "Son"      to "<p class="son">~ Son ~</p>",
+                            "Son"      to "<p>~ Son ~</p>",
                         ).forEach { (label, snippet) ->
                             OutlinedButton(
-                                onClick = { body += "
-$snippet" },
+                                onClick = { body += "\n" + snippet },
                                 modifier = Modifier.height(28.dp),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                                 border = androidx.compose.foundation.BorderStroke(1.dp, Divider),
@@ -746,7 +745,7 @@ $snippet" },
 
                     // Kelime sayısı önizleme
                     val wordCount = body.replace(Regex("<[^>]+>"), "").trim()
-                        .split(Regex("\s+")).count { it.isNotBlank() }
+                        .split(Regex("\\s+")).count { it.isNotBlank() }
                     Text("$wordCount kelime", color = Muted, fontSize = 11.sp)
 
                     // Butonlar
