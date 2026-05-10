@@ -79,6 +79,11 @@ fun AdminScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
                     }
                 },
+                actions = {
+                    IconButton(onClick = { navController.navigate("cms") }) {
+                        Icon(Icons.Default.Tune, contentDescription = "CMS", tint = Amber)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
             )
         }

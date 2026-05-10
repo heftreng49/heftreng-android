@@ -26,10 +26,10 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import coil.compose.AsyncImage
 import com.heftreng.app.ui.screens.admin.AdminScreen
-import com.heftreng.app.ui.screens.admin.CmsScreen
+import com.heftreng.app.ui.screens.cms.CmsScreen
+import com.heftreng.app.viewmodel.CmsViewModel
 import com.heftreng.app.ui.screens.auth.AuthScreen
 import com.heftreng.app.ui.screens.feed.FeedScreen
-import com.heftreng.app.ui.screens.cms.CmsPageScreen
 import com.heftreng.app.ui.screens.kurdi.KurdiScreen
 import com.heftreng.app.ui.screens.messages.ConversationsScreen
 import com.heftreng.app.ui.screens.messages.MessageDetailScreen
@@ -76,7 +76,6 @@ sealed class Screen(val route: String) {
     object ReadingList   : Screen("reading_list/{uid}") { fun go(uid: String) = "reading_list/$uid" }
     object Books         : Screen("books")
     object BookDetail    : Screen("book/{bookId}")         { fun go(id: String) = "book/$id" }
-    object CmsPage       : Screen("cms_page/{slug}")       { fun go(slug: String) = "cms_page/$slug" }
     object BookChapter   : Screen("book_chapter/{bid}/{cid}") { fun go(b: String, c: String) = "book_chapter/$b/$c" }
 }
 
@@ -105,8 +104,10 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val settingsVm     : SettingsViewModel      = hiltViewModel()
     val notifVm        : NotificationsViewModel = hiltViewModel()
     val msgsVm         : MessagesViewModel      = hiltViewModel()
+    val cmsVm          : CmsViewModel           = hiltViewModel()
 
     val currentUser by authVm.currentUser.collectAsState()
+    val cmsSettings by cmsVm.settings.collectAsState()
     val isDark      by settingsVm.darkMode.collectAsState()
     val language    by settingsVm.language.collectAsState()
     val totalUnread by msgsVm.totalUnread.collectAsState()
@@ -235,7 +236,17 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                         containerColor = HeftSurface,
                         tonalElevation = 0.dp,
                     ) {
-                        bottomNavItems.forEach { item ->
+                        val visibleNavItems = bottomNavItems.filter { item ->
+                            when (item.route) {
+                                Screen.Feed.route     -> cmsSettings.screenFeed
+                                Screen.Messages.route -> cmsSettings.screenMessages
+                                Screen.Search.route   -> cmsSettings.screenSearch
+                                Screen.Serials.route  -> cmsSettings.screenSerials
+                                Screen.Kurdi.route    -> cmsSettings.screenKurdi
+                                else                  -> true
+                            }
+                        }
+                        visibleNavItems.forEach { item ->
                             val selected = currentRoute == item.route ||
                                 (item.route == "profile/me" && currentRoute?.startsWith("profile/") == true)
                             NavigationBarItem(
@@ -315,13 +326,8 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     NotificationsScreen(navController, notifVm)
                 }
                 composable(Screen.EditProfile.route) { EditProfileScreen(navController) }
-
-                composable(Screen.CmsPage.route) { back ->
-                    val slug = back.arguments?.getString("slug") ?: ""
-                    CmsPageScreen(navController = navController, slug = slug)
-                }
                 composable(Screen.Admin.route)    { AdminScreen(navController) }
-                composable(Screen.Cms.route)      { CmsScreen(navController) }
+                composable(Screen.Cms.route)      { CmsScreen(onBack = { navController.popBackStack() }) }
                 composable(Screen.Settings.route) { SettingsScreen(navController) }
                 composable("post/{postId}") { back ->
                     SinglePostScreen(
@@ -460,18 +466,6 @@ fun DrawerContent(
                     Icon(Icons.Default.AdminPanelSettings, null, tint = Error, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(12.dp))
                     Text("Admin Paneli", color = Error, fontSize = 14.sp)
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable { onNavigate(Screen.Cms.route) }
-                        .padding(horizontal = 10.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Default.Dashboard, null, tint = Amber, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text("CMS Yönetimi", color = Amber, fontSize = 14.sp)
                 }
             }
 

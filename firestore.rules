@@ -318,40 +318,15 @@ service cloud.firestore {
     match /kf_grammar/{id}    { allow read: if true; allow write: if isAdmin(); }
     match /kf_cats/{id}       { allow read: if true; allow write: if isAdmin(); }
 
+    // ─── CMS ──────────────────────────────────────────────────────
+    match /cms/{docId} {
+      allow read: if isAuth();      // Tüm giriş yapmış kullanıcılar okuyabilir
+      allow write: if isAdmin();    // Sadece admin yazabilir
+    }
+
     match /kf_reports/{reportId} {
       allow read, update, delete: if isAdmin();
       allow create: if isAuth() && maxLen('reason', 500);
-    }
-
-    // ─── CMS ──────────────────────────────────────────────────
-    // Sayfalar — herkes okur, sadece admin yazar
-    match /cms_pages/{pageId} {
-      allow read: if resource.data.get('published', true) == true || isAdmin();
-      allow write: if isAdmin();
-    }
-
-    // Bannerlar — herkes okur (aktif olanlar), sadece admin yazar
-    match /cms_banners/{bannerId} {
-      allow read: if resource.data.get('active', true) == true || isAdmin();
-      allow write: if isAdmin();
-    }
-
-    // Duyurular — herkes okur (aktif olanlar), sadece admin yazar
-    match /cms_announcements/{annId} {
-      allow read: if resource.data.get('active', true) == true || isAdmin();
-      allow write: if isAdmin();
-    }
-
-    // Kategoriler — herkes okur, sadece admin yazar
-    match /cms_categories/{catId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // Reklam konfigürasyonları — herkes okur, sadece admin yazar
-    match /cms_ads/{adId} {
-      allow read: if true;
-      allow write: if isAdmin();
     }
   }
 }
