@@ -93,4 +93,7 @@ dependencies {
     // --- TEMAYI KURTARAN KRİTİK EKLEME ---
     // Themes.xml'deki "Theme.Material3..." hatasını bu satır çözer.
     implementation(libs.google.material)
+
+    // AdMob
+    implementation(libs.admob)
 }

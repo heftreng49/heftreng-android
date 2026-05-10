@@ -26,6 +26,7 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import coil.compose.AsyncImage
 import com.heftreng.app.ui.screens.admin.AdminScreen
+import com.heftreng.app.ui.screens.admin.CmsScreen
 import com.heftreng.app.ui.screens.auth.AuthScreen
 import com.heftreng.app.ui.screens.feed.FeedScreen
 import com.heftreng.app.ui.screens.kurdi.KurdiScreen
@@ -64,6 +65,7 @@ sealed class Screen(val route: String) {
     object Kurdi         : Screen("kurdi")
     object Serials       : Screen("serials")
     object Admin         : Screen("admin")
+    object Cms           : Screen("cms")
     object MessageDetail : Screen("message/{convId}") { fun go(id: String) = "message/$id" }
     object Profile       : Screen("profile/{uid}")    { fun go(uid: String) = "profile/$uid" }
     object EditProfile   : Screen("edit_profile")
@@ -312,6 +314,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 }
                 composable(Screen.EditProfile.route) { EditProfileScreen(navController) }
                 composable(Screen.Admin.route)    { AdminScreen(navController) }
+                composable(Screen.Cms.route)      { CmsScreen(navController) }
                 composable(Screen.Settings.route) { SettingsScreen(navController) }
                 composable("post/{postId}") { back ->
                     SinglePostScreen(
@@ -450,6 +453,18 @@ fun DrawerContent(
                     Icon(Icons.Default.AdminPanelSettings, null, tint = Error, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(12.dp))
                     Text("Admin Paneli", color = Error, fontSize = 14.sp)
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onNavigate(Screen.Cms.route) }
+                        .padding(horizontal = 10.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.Dashboard, null, tint = Amber, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("CMS Yönetimi", color = Amber, fontSize = 14.sp)
                 }
             }
 

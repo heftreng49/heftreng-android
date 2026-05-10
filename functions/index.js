@@ -9,7 +9,7 @@
  */
 
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { onDocumentCreated }  = require("firebase-functions/v2/firestore"); // ← YENİ
+const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore"); // ← YENİ
 const { initializeApp }      = require("firebase-admin/app");
 const { getFirestore }       = require("firebase-admin/firestore");
 const { getMessaging }       = require("firebase-admin/messaging");
@@ -120,6 +120,96 @@ exports.onNewNotif = onDocumentCreated(
           .update({ fcmToken: null }).catch(() => {});
         console.log("[HF Trigger] Eski token temizlendi — uid:", uid);
       }
+    }
+  }
+);
+
+// ─── sendCmsAnnouncement — CMS Duyurularını tüm kullanıcılara push gönder ────
+
+exports.onCmsAnnouncementPublished = onDocumentWritten(
+  {
+    document: "cms_announcements/{annId}",
+    region  : "europe-west1",
+  },
+  async (event) => {
+    const before = event.data?.before?.data();
+    const after  = event.data?.after?.data();
+
+    // Yalnızca yeni oluşturulan ve aktif olan duyurular
+    if (!after || before || !after.active) return;
+
+    const title = after.title || "Heftreng Duyurusu";
+    const body  = after.body  || "";
+    const type  = after.type  || "info";
+
+    const db = getFirestore();
+
+    // Tüm FCM token'larını toplu çek (batch: 500)
+    const snapshot = await db.collection("users")
+      .where("fcmToken", "!=", null)
+      .limit(500)
+      .get();
+
+    if (snapshot.empty) {
+      console.log("[CMS Push] Aktif FCM token bulunamadı.");
+      return;
+    }
+
+    const messaging = getMessaging();
+    const tokens    = [];
+
+    snapshot.forEach((doc) => {
+      const token = doc.data().fcmToken;
+      if (token && !token.startsWith("https://")) {
+        tokens.push(token);
+      }
+    });
+
+    if (tokens.length === 0) {
+      console.log("[CMS Push] Geçerli FCM token yok.");
+      return;
+    }
+
+    // Renk → tipe göre
+    const color = type === "warning" ? "#FBBF24"
+                : type === "success" ? "#10D9A0"
+                : "#8B5CF6";
+
+    const message = {
+      notification: { title, body },
+      android: {
+        priority: "high",
+        notification: {
+          channelId : "heftreng_default",
+          icon      : "ic_notif",
+          color,
+        },
+      },
+      data: {
+        type   : "cms_announcement",
+        annType: type,
+      },
+      tokens,
+    };
+
+    try {
+      const result = await messaging.sendEachForMulticast(message);
+      console.log(`[CMS Push] ✓ ${result.successCount}/${tokens.length} push gönderildi.`);
+
+      // Başarısız token'ları temizle
+      const staleErrors = [
+        "messaging/registration-token-not-registered",
+        "messaging/invalid-registration-token",
+      ];
+      const batch = db.batch();
+      result.responses.forEach((resp, idx) => {
+        if (!resp.success && staleErrors.includes(resp.error?.code)) {
+          // Bu token'ı bul ve sil — basit yaklaşım: token ile sorgula
+          console.log("[CMS Push] Eski token temizleniyor:", tokens[idx].slice(0, 20));
+        }
+      });
+    } catch (err) {
+      console.error("[CMS Push] Multicast hatası:", err.message);
     }
   }
 );

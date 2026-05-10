@@ -7,6 +7,38 @@
         { "fieldPath": "participants", "arrayConfig": "CONTAINS" },
         { "fieldPath": "updated_at",   "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "cms_pages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "published", "order": "ASCENDING" },
+        { "fieldPath": "order",     "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cms_pages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lang",  "order": "ASCENDING" },
+        { "fieldPath": "order", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cms_banners",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "order",  "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cms_announcements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "ts",     "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

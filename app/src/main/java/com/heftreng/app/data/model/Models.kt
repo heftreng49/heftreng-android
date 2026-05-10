@@ -230,6 +230,47 @@ data class KurdiLesson(
     val order     : Int     = 0,
 )
 
+// ─── CMS ─────────────────────────────────────────────────
+data class CmsPage(
+    val id        : String                         = "",
+    val slug      : String                         = "",
+    val title     : String                         = "",
+    val body      : String                         = "",
+    val lang      : String                         = "tr",
+    val published : Boolean                        = true,
+    val order     : Int                            = 0,
+    val updatedAt : com.google.firebase.Timestamp? = null,
+    val updatedBy : String                         = "",
+)
+
+data class CmsBanner(
+    val id        : String                         = "",
+    val title     : String                         = "",
+    val subtitle  : String                         = "",
+    val imageUrl  : String                         = "",
+    val linkUrl   : String                         = "",
+    val active    : Boolean                        = true,
+    val order     : Int                            = 0,
+    val updatedAt : com.google.firebase.Timestamp? = null,
+)
+
+data class CmsAnnouncement(
+    val id     : String                         = "",
+    val title  : String                         = "",
+    val body   : String                         = "",
+    val type   : String                         = "info",
+    val active : Boolean                        = true,
+    val ts     : com.google.firebase.Timestamp? = null,
+)
+
+data class CmsCategory(
+    val id     : String = "",
+    val name   : String = "",
+    val nameKu : String = "",
+    val slug   : String = "",
+    val order  : Int    = 0,
+)
+
 // ─── KURDİ AI DERS ──────────────────────────────────────
 data class AiLesson(
     val topic    : String           = "",
@@ -244,3 +285,24 @@ data class AiExercise(
     val options : List<String> = emptyList(),
     val answer  : String       = "",
 )
+
+// ─── CMS REKLAM KONFİGÜRASYONU ─────────────────────────────
+data class CmsAdConfig(
+    val id          : String  = "",   // Firestore doc ID (ör. "banner_feed")
+    val unitId      : String  = "",   // AdMob unit ID
+    val enabled     : Boolean = false,
+    val testMode    : Boolean = true,
+    // Banner özel
+    val position    : Int     = 5,    // Feed'de kaçıncı kart sonrası
+    // Interstitial özel
+    val frequency   : Int     = 3,    // Kaç chapter'da bir
+    // Rewarded özel
+    val xpReward    : Int     = 50,
+)
+
+// Test Unit ID'leri — testMode = true olduğunda bunlar kullanılır
+object AdMobTestIds {
+    const val BANNER        = "ca-app-pub-3940256099942544/6300978111"
+    const val INTERSTITIAL  = "ca-app-pub-3940256099942544/1033173712"
+    const val REWARDED      = "ca-app-pub-3940256099942544/5224354917"
+}

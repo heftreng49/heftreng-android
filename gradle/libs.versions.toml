@@ -16,6 +16,7 @@ ktor = "3.0.0"
 accompanist = "0.36.0"
 # Buraya ekledik
 googleMaterial = "1.11.0"
+admob          = "23.2.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -33,6 +34,9 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 
 # Themes.xml hatasını çözen kritik satır
 google-material = { group = "com.google.android.material", name = "material", version.ref = "googleMaterial" }
+
+# AdMob
+admob = { group = "com.google.android.gms", name = "play-services-ads", version.ref = "admob" }
 
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }

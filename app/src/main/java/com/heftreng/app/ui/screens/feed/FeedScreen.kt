@@ -36,7 +36,8 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
-import com.heftreng.app.ui.component.QuoteCard
+import com.heftreng.app.ui.component.AdBannerView
+import com.heftreng.app.viewmodel.AdsViewModel
 import com.heftreng.app.ui.component.QuoteDialog
 import com.heftreng.app.ui.component.QuoteInputSection
 import com.heftreng.app.ui.component.QuotePayload
@@ -58,11 +59,16 @@ fun FeedScreen(
     language     : String = "tr",
     vm           : FeedViewModel  = hiltViewModel(),
     socialVm     : SocialViewModel = hiltViewModel(),
+    adsVm        : AdsViewModel    = hiltViewModel(),
 ) {
     val posts       by vm.posts.collectAsState()
     val loading     by vm.loading.collectAsState()
     val hasMore     by vm.hasMore.collectAsState()
     val loadingMore by vm.loadingMore.collectAsState()
+    val bannerUnitId = adsVm.bannerUnitId()
+    val bannerPos    = adsVm.bannerPosition()
+
+    LaunchedEffect(Unit) { adsVm.loadAdConfigs() }
 
     var likersPostId     by remember { mutableStateOf<String?>(null) }
     val likers           by socialVm.likers.collectAsState()
@@ -179,7 +185,7 @@ fun FeedScreen(
                         onImageClear = { inlineImageUri = null },
                     )
                 }
-                // ── Gönderi listesi ───────────────────────────────────────
+                // ── Gönderi listesi ───────────────────────────────────
                 items(posts, key = { it.id }) { post ->
                     PostCard(
                         post      = post,
@@ -203,6 +209,13 @@ fun FeedScreen(
                         },
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                    // ── AdMob Banner — her bannerPos. kartta bir ─────────
+                    val postIndex = posts.indexOf(post)
+                    if (bannerUnitId != null &&
+                        postIndex >= 0 &&
+                        (postIndex + 1) % bannerPos == 0) {
+                        AdBannerView(unitId = bannerUnitId)
+                    }
                 }
                 // ── Daha Fazla Göster ─────────────────────────────────────
                 if (hasMore) {
