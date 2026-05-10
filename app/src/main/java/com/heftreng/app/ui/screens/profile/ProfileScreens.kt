@@ -96,7 +96,7 @@ fun ProfileScreen(
             TopAppBar(
                 title = {
                     Text(
-                        user?.username?.let { "@$it" } ?: user?.displayName ?: "",
+                        user?.let { u -> if (u.username.isNotBlank()) "@${u.username}" else u.displayName.ifBlank { "Profil" } } ?: "Yükleniyor...",
                         color = OnBackground, fontWeight = FontWeight.SemiBold,
                     )
                 },

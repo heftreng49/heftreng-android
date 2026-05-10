@@ -595,12 +595,18 @@ fun PostCard(
                     }
                 }
                 Spacer(Modifier.width(10.dp))
-                Column {
+                Column(Modifier.weight(1f)) {
                     Text(post.displayName.ifBlank { "Bênas" }, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
-                    Text(
-                        if (post.username.isNotBlank()) "@${post.username}" else "—",
-                        color = Muted, fontSize = 12.sp,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            if (post.username.isNotBlank()) "@${post.username}" else "—",
+                            color = Muted, fontSize = 12.sp,
+                        )
+                        if (post.ts != null) {
+                            Text("·", color = Muted, fontSize = 12.sp)
+                            Text(postTimeAgo(post.ts.seconds), color = Muted, fontSize = 12.sp)
+                        }
+                    }
                 }
             }
             Box {
@@ -908,5 +914,20 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel) {
                 }
             }
         }
+    }
+}
+
+// ── Tarih helper ─────────────────────────────────────────────────────────────
+fun postTimeAgo(seconds: Long): String {
+    val now  = System.currentTimeMillis() / 1000L
+    val diff = now - seconds
+    return when {
+        diff < 60          -> "az önce"
+        diff < 3600        -> "${diff / 60}dk"
+        diff < 86400       -> "${diff / 3600}sa"
+        diff < 86400 * 7   -> "${diff / 86400}g"
+        diff < 86400 * 30  -> "${diff / 86400 / 7}hf"
+        diff < 86400 * 365 -> "${diff / 86400 / 30}ay"
+        else               -> "${diff / 86400 / 365}y"
     }
 }

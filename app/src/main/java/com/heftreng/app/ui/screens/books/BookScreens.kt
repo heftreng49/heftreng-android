@@ -11,6 +11,12 @@ package com.heftreng.app.ui.screens.books
 // ═══════════════════════════════════════════════════════
 
 import androidx.compose.foundation.*
+import android.text.Html
+import android.text.Spanned
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import android.widget.TextView
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.*
@@ -301,12 +307,41 @@ fun BookChapterReadScreen(
             Spacer(Modifier.height(20.dp))
             HorizontalDivider(color = Divider)
             Spacer(Modifier.height(16.dp))
-            Text(
-                ch.body,
-                color      = OnSurface,
-                fontSize   = 16.sp,
-                lineHeight = 28.sp,
-            )
+            // HTML içerik render — body HTML tag içeriyorsa AndroidView/TextView kullan
+            val ctx = LocalContext.current
+            if (ch.body.contains("<") && ch.body.contains(">")) {
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth(),
+                    factory  = { context ->
+                        TextView(context).apply {
+                            setTextColor(android.graphics.Color.parseColor("#E5E5EA"))
+                            textSize = 16f
+                            setLineSpacing(0f, 1.6f)
+                            setPadding(0, 0, 0, 0)
+                            setLinkTextColor(android.graphics.Color.parseColor("#F59E0B"))
+                            movementMethod = android.text.method.LinkMovementMethod.getInstance()
+                        }
+                    },
+                    update = { tv ->
+                        val htmlStr = ch.body
+                            .replace("<hr>", "<hr/>")
+                            .replace("<hr >", "<hr/>")
+                        @Suppress("DEPRECATION")
+                        val spanned: Spanned = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N)
+                            Html.fromHtml(htmlStr, Html.FROM_HTML_MODE_COMPACT)
+                        else Html.fromHtml(htmlStr)
+                        tv.text = spanned
+                    }
+                )
+            } else {
+                // Düz metin
+                Text(
+                    ch.body,
+                    color      = OnSurface,
+                    fontSize   = 16.sp,
+                    lineHeight = 28.sp,
+                )
+            }
             Spacer(Modifier.height(40.dp))
         }
     }

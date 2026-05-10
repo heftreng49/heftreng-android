@@ -65,18 +65,18 @@ class SearchViewModel @Inject constructor(
     private suspend fun searchAll(q: String) {
         val results = mutableListOf<SearchResult>()
         val qLower  = q.lowercase()
+        val qCap    = q.replaceFirstChar { it.uppercaseChar() }
 
-        // Kullanıcı — displayName prefix
+        // Kullanıcı — displayName + name + username prefix araması (3 varyant)
+        // Firestore prefix case-sensitive olduğu için orijinal, lowercase, capitalize denenir
         try {
-            val uSnap = firestore.collection("users")
-                .orderBy("displayName")
-                .startAt(q).endAt(q + "\uF8FF")
-                .limit(15).get().await()
-            results += uSnap.documents.mapNotNull { doc ->
-                val d = doc.data ?: return@mapNotNull null
-                val name  = d["displayName"] as? String ?: d["name"] as? String ?: return@mapNotNull null
+            val seenIds = mutableSetOf<String>()
+
+            fun mapUser(doc: com.google.firebase.firestore.DocumentSnapshot): SearchResult? {
+                val d = doc.data ?: return null
+                val name  = d["displayName"] as? String ?: d["name"] as? String ?: return null
                 val uname = d["username"] as? String ?: ""
-                SearchResult(
+                return SearchResult(
                     id       = doc.id,
                     type     = "user",
                     title    = name,
@@ -85,25 +85,33 @@ class SearchViewModel @Inject constructor(
                     uid      = doc.id,
                 )
             }
-            // username prefix de dene
+
+            for (prefix in listOf(q, qLower, qCap).distinct()) {
+                val snap = firestore.collection("users")
+                    .orderBy("displayName")
+                    .startAt(prefix).endAt(prefix + "\uF8FF")
+                    .limit(15).get().await()
+                for (doc in snap.documents) {
+                    if (seenIds.add(doc.id)) mapUser(doc)?.let { results += it }
+                }
+            }
+            // username lowercase prefix
             val uSnap2 = firestore.collection("users")
                 .orderBy("username")
                 .startAt(qLower).endAt(qLower + "\uF8FF")
-                .limit(10).get().await()
-            val existingIds = results.map { it.id }.toSet()
-            results += uSnap2.documents.mapNotNull { doc ->
-                if (doc.id in existingIds) return@mapNotNull null
-                val d = doc.data ?: return@mapNotNull null
-                val name  = d["displayName"] as? String ?: d["name"] as? String ?: return@mapNotNull null
-                val uname = d["username"] as? String ?: ""
-                SearchResult(
-                    id       = doc.id,
-                    type     = "user",
-                    title    = name,
-                    subtitle = if (uname.isNotBlank()) "@$uname" else "",
-                    imageUrl = d["photoURL"] as? String ?: "",
-                    uid      = doc.id,
-                )
+                .limit(15).get().await()
+            for (doc in uSnap2.documents) {
+                if (seenIds.add(doc.id)) mapUser(doc)?.let { results += it }
+            }
+            // name alanı ile de dene
+            for (prefix in listOf(q, qLower, qCap).distinct()) {
+                val snap = firestore.collection("users")
+                    .orderBy("name")
+                    .startAt(prefix).endAt(prefix + "\uF8FF")
+                    .limit(10).get().await()
+                for (doc in snap.documents) {
+                    if (seenIds.add(doc.id)) mapUser(doc)?.let { results += it }
+                }
             }
         } catch (e: Exception) { e.printStackTrace() }
 

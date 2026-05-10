@@ -42,6 +42,7 @@ import com.heftreng.app.viewmodel.SearchViewModel
 @Composable
 fun SearchScreen(
     navController: NavController,
+    language     : String = "tr",
     vm           : SearchViewModel = hiltViewModel(),
 ) {
     val results        by vm.results.collectAsState()
@@ -53,13 +54,14 @@ fun SearchScreen(
     var query          by remember { mutableStateOf("") }
     val focusManager   = LocalFocusManager.current
 
+    val ku = language == "ku"
     val tabs = listOf(
-        Triple("Hepsi",   Icons.Outlined.Search,        0),
-        Triple("Kişi",    Icons.Outlined.PersonOutline, 1),
-        Triple("Gönderi", Icons.Outlined.DynamicFeed,   2),
-        Triple("Seri",    Icons.Outlined.AutoStories,   3),
-        Triple("Kitap",   Icons.Outlined.MenuBook,      4),
-        Triple("Alıntı",  Icons.Outlined.FormatQuote,   5),
+        Triple(if (ku) "Hemû"      else "Hepsi",   Icons.Outlined.Search,        0),
+        Triple(if (ku) "Kes"       else "Kişi",    Icons.Outlined.PersonOutline, 1),
+        Triple(if (ku) "Nivîs"     else "Gönderi", Icons.Outlined.DynamicFeed,   2),
+        Triple(if (ku) "Rêzik"     else "Seri",    Icons.Outlined.AutoStories,   3),
+        Triple(if (ku) "Pirtûk"    else "Kitap",   Icons.Outlined.MenuBook,      4),
+        Triple(if (ku) "Gotinên"   else "Alıntı",  Icons.Outlined.FormatQuote,   5),
     )
 
     LaunchedEffect(Unit) { vm.loadSuggestions() }
@@ -72,7 +74,7 @@ fun SearchScreen(
                     OutlinedTextField(
                         value         = query,
                         onValueChange = { query = it; if (it.length >= 2) vm.search(it) else if (it.isEmpty()) vm.search("") },
-                        placeholder   = { Text("Bikarhêner, nivîs, pirtûk...", color = Muted, fontSize = 13.sp) },
+                        placeholder   = { Text(if (language == "ku") "Bikarhêner, nivîs, pirtûk..." else "Kullanıcı, gönderi, kitap...", color = Muted, fontSize = 13.sp) },
                         singleLine    = true,
                         modifier      = Modifier.fillMaxWidth(),
                         shape         = RoundedCornerShape(24.dp),
