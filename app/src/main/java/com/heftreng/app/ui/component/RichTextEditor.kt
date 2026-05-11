@@ -243,16 +243,15 @@ fun RichTextEditor(
                 ThinDivider()
 
                 // Renk butonu
+                val colorBrush = if (textColor != null)
+                    Brush.linearGradient(listOf(textColor!!, textColor!!))
+                else
+                    Brush.linearGradient(listOf(Color(0xFFFF6B6B), Color(0xFF4ECDC4), Color(0xFF45B7D1)))
                 Box(
                     modifier = Modifier
                         .size(32.dp)
                         .clip(CircleShape)
-                        .background(
-                            if (textColor != null) textColor!!
-                            else Brush.linearGradient(
-                                listOf(Color(0xFFFF6B6B), Color(0xFF4ECDC4), Color(0xFF45B7D1))
-                            )
-                        )
+                        .background(colorBrush)
                         .border(2.dp, if (showColor) Amber else Color.Transparent, CircleShape)
                         .clickable(
                             indication        = null,
