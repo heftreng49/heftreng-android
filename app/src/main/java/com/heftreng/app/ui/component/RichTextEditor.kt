@@ -187,7 +187,7 @@ fun RichTextEditor(
         onChange(spansToHtml(tfv.text, spans))
     }
 
-    Column(modifier = modifier) {
+    Column(modifier = modifier.fillMaxHeight()) {
 
         // ── Araç çubuğu ──────────────────────────────────────────────────
         Column(
@@ -411,7 +411,8 @@ fun RichTextEditor(
             ),
             modifier      = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 180.dp, max = 360.dp)
+                .fillMaxHeight()
+                .heightIn(min = 160.dp)
                 .background(
                     color = SurfaceVar,
                     shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),

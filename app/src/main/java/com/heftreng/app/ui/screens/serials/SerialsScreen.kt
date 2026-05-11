@@ -730,11 +730,10 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
 
                 HorizontalDivider(color = Divider)
 
-                // ── Scrollable içerik ─────────────────────────────────────
+                // ── Başlık alanı + editör ────────────────────────────────
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -748,14 +747,14 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                         colors        = hfTextFieldColors(),
                     )
 
-                    // İçerik — Rich Text Editör
+                    // İçerik — Rich Text Editör (kalan alanı doldurur)
                     RichTextEditor(
                         value       = body,
                         onChange    = { body = it },
                         placeholder = "Bölüm içeriğinizi buraya yazın...",
-                        modifier    = Modifier.fillMaxWidth(),
+                        modifier    = Modifier.fillMaxWidth().weight(1f),
                     )
-                } // scrollable Column end
+                }
 
                 HorizontalDivider(color = Divider)
 
