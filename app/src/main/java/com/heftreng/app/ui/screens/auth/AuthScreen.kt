@@ -42,6 +42,7 @@ fun AuthScreen(
     var password by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
+    var showForgotDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentUser) {
         if (currentUser != null) onAuthSuccess()
@@ -156,6 +157,18 @@ fun AuthScreen(
                 singleLine = true,
             )
 
+            // Şifremi unuttum — sadece giriş modunda göster
+            if (!isRegister) {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                    TextButton(
+                        onClick = { showForgotDialog = true },
+                        contentPadding = PaddingValues(0.dp),
+                    ) {
+                        Text("Şifremi unuttum", color = Amber, fontSize = 12.sp)
+                    }
+                }
+            }
+
             error?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
                 LaunchedEffect(it) { vm.clearError() }
@@ -199,6 +212,117 @@ fun AuthScreen(
             }
         }
     }
+
+    // ── Şifremi Unuttum Dialog ────────────────────────────────────────────────
+    if (showForgotDialog) {
+        ForgotPasswordDialog(
+            prefillEmail = email,
+            onDismiss    = { showForgotDialog = false },
+            vm           = vm,
+        )
+    }
+}
+
+@Composable
+private fun ForgotPasswordDialog(
+    prefillEmail: String,
+    onDismiss   : () -> Unit,
+    vm          : AuthViewModel,
+) {
+    var resetEmail by remember { mutableStateOf(prefillEmail) }
+    var error      by remember { mutableStateOf<String?>(null) }
+    var loading    by remember { mutableStateOf(false) }
+    var success    by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!loading) onDismiss() },
+        containerColor   = HeftSurface,
+        title = {
+            Text(
+                "Şifremi Unuttum",
+                color      = OnBackground,
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            if (success) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("✅", fontSize = 32.sp)
+                    Text(
+                        "Şifre sıfırlama bağlantısı gönderildi. E-posta kutunuzu kontrol edin.",
+                        color    = OnBackground,
+                        fontSize = 14.sp,
+                    )
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "Kayıtlı e-posta adresinizi girin, şifre sıfırlama bağlantısı göndereceğiz.",
+                        color    = Muted,
+                        fontSize = 13.sp,
+                    )
+                    OutlinedTextField(
+                        value         = resetEmail,
+                        onValueChange = { resetEmail = it; error = null },
+                        label         = { Text("E-posta") },
+                        singleLine    = true,
+                        modifier      = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor      = Amber,
+                            unfocusedBorderColor    = Divider,
+                            focusedTextColor        = OnBackground,
+                            unfocusedTextColor      = OnBackground,
+                            unfocusedContainerColor = SurfaceVar,
+                            focusedContainerColor   = SurfaceVar,
+                            focusedLabelColor       = Amber,
+                            unfocusedLabelColor     = Muted,
+                            cursorColor             = Amber,
+                        ),
+                    )
+                    if (error != null) {
+                        Text(error!!, color = Error, fontSize = 12.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (!success) {
+                TextButton(
+                    onClick = {
+                        loading = true
+                        vm.sendPasswordReset(
+                            email     = resetEmail,
+                            onSuccess = { loading = false; success = true },
+                            onError   = { msg -> loading = false; error = msg },
+                        )
+                    },
+                    enabled = !loading,
+                ) {
+                    if (loading) {
+                        CircularProgressIndicator(
+                            modifier    = Modifier.size(16.dp),
+                            color       = Amber,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Text("Gönder", color = Amber, fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else {
+                TextButton(onClick = onDismiss) {
+                    Text("Tamam", color = Amber, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        dismissButton = {
+            if (!success) {
+                TextButton(onClick = { if (!loading) onDismiss() }) {
+                    Text("İptal", color = Muted)
+                }
+            }
+        },
+    )
 }
 
 @Composable

@@ -324,6 +324,22 @@ private fun ChangePasswordDialog(
                 if (newPwAgain.isNotBlank() && newPw != newPwAgain) {
                     Text("Şifreler eşleşmiyor", color = Error, fontSize = 12.sp)
                 }
+                // Şifreni mi unuttun?
+                var showForgotFromSettings by remember { mutableStateOf(false) }
+                TextButton(
+                    onClick            = { showForgotFromSettings = true },
+                    contentPadding     = PaddingValues(0.dp),
+                ) {
+                    Text("Şifreni mi unuttun? Mail ile sıfırla →", color = Amber, fontSize = 12.sp)
+                }
+                if (showForgotFromSettings) {
+                    val authVm2 : AuthViewModel = hiltViewModel()
+                    ForgotPasswordFromSettings(
+                        prefillEmail = authVm2.currentEmail,
+                        onDismiss    = { showForgotFromSettings = false },
+                        authVm       = authVm2,
+                    )
+                }
             }
         },
         confirmButton = {
@@ -524,3 +540,71 @@ private fun settingsTextFieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedLabelColor     = Muted,
     cursorColor             = Amber,
 )
+
+@Composable
+internal fun ForgotPasswordFromSettings(
+    prefillEmail: String,
+    onDismiss   : () -> Unit,
+    authVm      : AuthViewModel,
+) {
+    var resetEmail by remember { mutableStateOf(prefillEmail) }
+    var error      by remember { mutableStateOf<String?>(null) }
+    var loading    by remember { mutableStateOf(false) }
+    var success    by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!loading) onDismiss() },
+        containerColor   = HeftSurface,
+        title = { Text("Şifreni Sıfırla", color = OnBackground, fontWeight = FontWeight.Bold) },
+        text = {
+            if (success) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("✅", fontSize = 32.sp)
+                    Text(
+                        "Şifre sıfırlama bağlantısı gönderildi. E-posta kutunuzu kontrol edin.",
+                        color = OnBackground, fontSize = 14.sp,
+                    )
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Kayıtlı e-posta adresinize şifre sıfırlama bağlantısı göndereceğiz.",
+                        color = Muted, fontSize = 13.sp,
+                    )
+                    OutlinedTextField(
+                        value         = resetEmail,
+                        onValueChange = { resetEmail = it; error = null },
+                        label         = { Text("E-posta") },
+                        singleLine    = true,
+                        modifier      = Modifier.fillMaxWidth(),
+                        colors        = settingsTextFieldColors(),
+                    )
+                    if (error != null) Text(error!!, color = Error, fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            if (!success) {
+                TextButton(
+                    onClick = {
+                        loading = true
+                        authVm.sendPasswordReset(
+                            email     = resetEmail,
+                            onSuccess = { loading = false; success = true },
+                            onError   = { msg -> loading = false; error = msg },
+                        )
+                    },
+                    enabled = !loading,
+                ) {
+                    if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
+                    else Text("Gönder", color = Amber, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                TextButton(onClick = onDismiss) { Text("Tamam", color = Amber, fontWeight = FontWeight.Bold) }
+            }
+        },
+        dismissButton = {
+            if (!success) TextButton(onClick = { if (!loading) onDismiss() }) { Text("İptal", color = Muted) }
+        },
+    )
+}

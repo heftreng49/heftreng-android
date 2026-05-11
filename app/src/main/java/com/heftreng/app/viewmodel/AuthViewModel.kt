@@ -29,6 +29,8 @@ class AuthViewModel @Inject constructor(
     private val _currentUser = MutableStateFlow<FirebaseUser?>(auth.currentUser)
     val currentUser = _currentUser.asStateFlow()
 
+    val currentEmail: String get() = auth.currentUser?.email ?: ""
+
     private val _error   = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
@@ -185,6 +187,22 @@ class AuthViewModel @Inject constructor(
     fun signOut() {
         auth.signOut()
         _currentUser.value = null
+    }
+
+    fun sendPasswordReset(
+        email    : String,
+        onSuccess: () -> Unit,
+        onError  : (String) -> Unit,
+    ) {
+        if (email.isBlank()) { onError("E-posta adresini girin"); return }
+        viewModelScope.launch {
+            try {
+                auth.sendPasswordResetEmail(email.trim()).await()
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.localizedMessage ?: "Hata oluştu")
+            }
+        }
     }
 
     fun clearError() { _error.value = null }
