@@ -755,6 +755,7 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                         placeholder = "Bölüm içeriğinizi buraya yazın...",
                         modifier    = Modifier.fillMaxWidth(),
                     )
+                } // scrollable Column end
 
                 HorizontalDivider(color = Divider)
 
@@ -782,10 +783,10 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                         Text("Bölümü Ekle", fontWeight = FontWeight.Bold)
                     }
                 }
-            }
-        }
-    }
-}
+            } // Column fillMaxSize end
+        } // Surface end
+    } // Dialog end
+} // AddChapterDialog end
 
 @Composable
 fun hfTextFieldColors() = OutlinedTextFieldDefaults.colors(
