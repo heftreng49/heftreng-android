@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import com.heftreng.app.ui.component.RichTextEditor
+import com.heftreng.app.ui.component.htmlStrip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import android.text.Html
@@ -518,16 +520,12 @@ private fun EditChapterDialog(chapter: Chapter, onDismiss: () -> Unit, onSave: (
                         modifier      = Modifier.fillMaxWidth(),
                         colors        = hfTextFieldColors(),
                     )
-                    OutlinedTextField(
-                        value         = body,
-                        onValueChange = { body = it },
-                        label         = { Text("İçerik (HTML destekli)") },
-                        minLines      = 6,
-                        maxLines      = 999,
-                        modifier      = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 160.dp, max = 400.dp),
-                        colors        = hfTextFieldColors(),
+                    // İçerik alanı — Rich Text Editör
+                    RichTextEditor(
+                        value       = body,
+                        onChange    = { body = it },
+                        placeholder = "Bölüm içeriğini düzenleyin...",
+                        modifier    = Modifier.fillMaxWidth(),
                     )
                     val wordCount = body.replace(Regex("<[^>]+>"), "").trim()
                         .split(Regex("\\s+")).count { it.isNotBlank() }
@@ -696,19 +694,9 @@ private fun CreateSerialDialog(onDismiss: () -> Unit, onCreate: (String, String,
 
 @Composable
 private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> Unit) {
-    var title      by remember { mutableStateOf("") }
-    var body       by remember { mutableStateOf("") }
-    var activeFormat by remember { mutableStateOf<String?>(null) }
+    var title by remember { mutableStateOf("") }
+    var body  by remember { mutableStateOf("") }
 
-    // HTML formatlama yardımcısı
-    fun applyFormat(tag: String) {
-        val open  = "<$tag>"
-        val close = "</$tag>"
-        body = if (body.endsWith(close)) body else body + "$open$close"
-        activeFormat = tag
-    }
-
-    // Tam ekran dialog — DialogProperties ile
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(
@@ -725,72 +713,18 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
 
-                // ── Sabit başlık + toolbar ────────────────────────────────
-                Column(
+                // ── Başlık çubuğu ─────────────────────────────────────────
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(HeftSurface)
                         .padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    // Başlık + kapat butonu
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text("Yeni Bölüm", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        IconButton(onClick = onDismiss) {
-                            Icon(Icons.Default.Close, null, tint = Muted)
-                        }
-                    }
-
-                    // Başlık alanı
-                    OutlinedTextField(
-                        value         = title,
-                        onValueChange = { title = it },
-                        label         = { Text("Bölüm Başlığı *") },
-                        singleLine    = true,
-                        modifier      = Modifier.fillMaxWidth(),
-                        colors        = hfTextFieldColors(),
-                    )
-
-                    // Biçimlendirme toolbar
-                    Text("Biçimlendirme", color = Muted, fontSize = 11.sp)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(androidx.compose.ui.graphics.Color(0xFF1C1C1E))
-                            .padding(4.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                    ) {
-                        data class Fmt(val label: String, val tag: String)
-                        listOf(
-                            Fmt("B",  "b"),
-                            Fmt("I",  "i"),
-                            Fmt("U",  "u"),
-                            Fmt("H2", "h2"),
-                            Fmt("¶",  "p"),
-                            Fmt("«»", "blockquote"),
-                            Fmt("—",  "hr"),
-                        ).forEach { fmt ->
-                            TextButton(
-                                onClick = {
-                                    body = if (fmt.tag == "hr") body + "<hr/>"
-                                           else body + "<${fmt.tag}></${fmt.tag}>"
-                                },
-                                modifier = Modifier.defaultMinSize(minWidth = 40.dp, minHeight = 36.dp),
-                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                                colors = ButtonDefaults.textButtonColors(contentColor = Amber),
-                            ) {
-                                Text(
-                                    fmt.label,
-                                    fontSize   = if (fmt.label == "B") 14.sp else 12.sp,
-                                    fontWeight = if (fmt.label == "B") FontWeight.ExtraBold else FontWeight.Normal,
-                                )
-                            }
-                        }
+                    Text("Yeni Bölüm", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, null, tint = Muted)
                     }
                 }
 
@@ -804,43 +738,23 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                         .padding(horizontal = 20.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    // İçerik alanı — weight(1f) ile kalan alanı doldurur ama minLines küçük
+                    // Başlık alanı
                     OutlinedTextField(
-                        value         = body,
-                        onValueChange = { body = it },
-                        label         = { Text("İçerik (HTML destekli)") },
-                        placeholder   = { Text("<p>Bölüm içeriğinizi buraya yazın...</p>", color = Muted, fontSize = 12.sp) },
-                        minLines      = 6,
-                        maxLines      = 999,
-                        modifier      = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 160.dp, max = 400.dp),
+                        value         = title,
+                        onValueChange = { title = it },
+                        label         = { Text("Bölüm Başlığı *") },
+                        singleLine    = true,
+                        modifier      = Modifier.fillMaxWidth(),
                         colors        = hfTextFieldColors(),
                     )
 
-                    // Şablon butonları
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf(
-                            "Diyalog" to "<p>— ... dedi.</p>",
-                            "Sahne"   to "<p>* * *</p>",
-                            "Son"     to "<p>~ Son ~</p>",
-                        ).forEach { (label, snippet) ->
-                            OutlinedButton(
-                                onClick = { body += "\n" + snippet },
-                                modifier = Modifier.height(30.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Divider),
-                            ) {
-                                Text(label, color = Muted, fontSize = 11.sp)
-                            }
-                        }
-                    }
-
-                    // Kelime sayacı
-                    val wordCount = body.replace(Regex("<[^>]+>"), "").trim()
-                        .split(Regex("\\s+")).count { it.isNotBlank() }
-                    Text("$wordCount kelime", color = Muted, fontSize = 11.sp)
-                }
+                    // İçerik — Rich Text Editör
+                    RichTextEditor(
+                        value       = body,
+                        onChange    = { body = it },
+                        placeholder = "Bölüm içeriğinizi buraya yazın...",
+                        modifier    = Modifier.fillMaxWidth(),
+                    )
 
                 HorizontalDivider(color = Divider)
 
