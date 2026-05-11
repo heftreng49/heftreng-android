@@ -18,8 +18,8 @@ class HeftrangApp : Application() {
         MobileAds.setRequestConfiguration(
             RequestConfiguration.Builder()
                 .setTestDeviceIds(listOf(
-                    "EMULATOR",                          // Emülatör
-                    "33BE2250B43518CCDA7DE426D04EE231",  // Yaygın test ID — değiştir
+                    "EMULATOR",
+                    "C84376E1EF997B7B30871490FB336DF4",  // ee61e8bf-564d-4409-b0e3-62f2c15c7cd6
                 ))
                 .build()
         )

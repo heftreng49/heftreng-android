@@ -480,7 +480,7 @@ private fun EditChapterDialog(chapter: Chapter, onDismiss: () -> Unit, onSave: (
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .navigationBarsPadding(),
+                .imePadding(),
             color = HeftSurface,
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -717,7 +717,7 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .navigationBarsPadding(),
+                .imePadding(),
             color = HeftSurface,
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
