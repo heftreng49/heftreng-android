@@ -18,6 +18,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -31,14 +33,17 @@ import com.heftreng.app.viewmodel.SettingsViewModel
 @Composable
 fun SettingsScreen(
     navController : NavController,
-    // NavHost'taki aynı ViewModel instance'ını kullan — activity scope
     vm            : SettingsViewModel = hiltViewModel(),
     authVm        : AuthViewModel     = hiltViewModel(),
 ) {
-    val isDark   by vm.darkMode.collectAsState()
-    val language by vm.language.collectAsState()
-    val pushEnabled   by vm.pushEnabled.collectAsState()
+    val isDark         by vm.darkMode.collectAsState()
+    val language       by vm.language.collectAsState()
+    val pushEnabled    by vm.pushEnabled.collectAsState()
     val privateAccount by vm.privateAccount.collectAsState()
+
+    // Dialog state'leri
+    var showPasswordDialog by remember { mutableStateOf(false) }
+    var showEmailDialog    by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = Background,
@@ -90,7 +95,6 @@ fun SettingsScreen(
 
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
 
-                    // Dil seçimi
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Outlined.Translate, null, tint = Amber, modifier = Modifier.size(22.dp))
@@ -126,9 +130,13 @@ fun SettingsScreen(
                         navController.navigate("edit_profile")
                     }
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
-                    SettingsRow(Icons.Outlined.Lock, "Şifre Değiştir", "Şîfreya nû") {}
+                    SettingsRow(Icons.Outlined.Lock, "Şifre Değiştir", "Şîfreya nû") {
+                        showPasswordDialog = true
+                    }
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
-                    SettingsRow(Icons.Outlined.Email, "E-posta", "Email biguherîne") {}
+                    SettingsRow(Icons.Outlined.Email, "E-posta Değiştir", vm.currentEmail.ifBlank { "Email biguherîne" }) {
+                        showEmailDialog = true
+                    }
                 }
             }
 
@@ -177,7 +185,7 @@ fun SettingsScreen(
                 }
             }
 
-            // ── Admin (sadece admin email) ────────────────────────────────
+            // ── Admin ────────────────────────────────────────────────────
             if (vm.isAdmin) {
                 item {
                     SettingsSection {
@@ -203,10 +211,7 @@ fun SettingsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                authVm.signOut()
-                                // NavHost auth null olunca otomatik AuthScreen'e gider
-                            }
+                            .clickable { authVm.signOut() }
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -219,6 +224,224 @@ fun SettingsScreen(
             }
         }
     }
+
+    // ── Şifre Değiştir Dialog ─────────────────────────────────────────────────
+    if (showPasswordDialog) {
+        ChangePasswordDialog(
+            onDismiss = { showPasswordDialog = false },
+            onConfirm = { current, newPw ->
+                vm.changePassword(
+                    currentPassword = current,
+                    newPassword     = newPw,
+                    onSuccess       = { showPasswordDialog = false },
+                    onError         = { /* snackbar yerine dialog içinde hata gösteriliyor */ },
+                )
+            },
+            vm = vm,
+        )
+    }
+
+    // ── E-posta Değiştir Dialog ───────────────────────────────────────────────
+    if (showEmailDialog) {
+        ChangeEmailDialog(
+            currentEmail = vm.currentEmail,
+            onDismiss    = { showEmailDialog = false },
+            onConfirm    = { password, newEmail ->
+                vm.changeEmail(
+                    currentPassword = password,
+                    newEmail        = newEmail,
+                    onSuccess       = { showEmailDialog = false },
+                    onError         = {},
+                )
+            },
+            vm = vm,
+        )
+    }
+}
+
+// ── Şifre Değiştir Dialog ─────────────────────────────────────────────────────
+@Composable
+private fun ChangePasswordDialog(
+    onDismiss : () -> Unit,
+    onConfirm : (String, String) -> Unit,
+    vm        : SettingsViewModel,
+) {
+    var currentPw  by remember { mutableStateOf("") }
+    var newPw      by remember { mutableStateOf("") }
+    var newPwAgain by remember { mutableStateOf("") }
+    var error      by remember { mutableStateOf<String?>(null) }
+    var loading    by remember { mutableStateOf(false) }
+    var showCurrent by remember { mutableStateOf(false) }
+    var showNew     by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!loading) onDismiss() },
+        containerColor   = HeftSurface,
+        title = { Text("Şifre Değiştir", color = OnBackground, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value         = currentPw,
+                    onValueChange = { currentPw = it; error = null },
+                    label         = { Text("Mevcut Şifre") },
+                    singleLine    = true,
+                    modifier      = Modifier.fillMaxWidth(),
+                    visualTransformation = if (showCurrent) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showCurrent = !showCurrent }) {
+                            Icon(if (showCurrent) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, null, tint = Muted)
+                        }
+                    },
+                    colors = settingsTextFieldColors(),
+                )
+                OutlinedTextField(
+                    value         = newPw,
+                    onValueChange = { newPw = it; error = null },
+                    label         = { Text("Yeni Şifre") },
+                    singleLine    = true,
+                    modifier      = Modifier.fillMaxWidth(),
+                    visualTransformation = if (showNew) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showNew = !showNew }) {
+                            Icon(if (showNew) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, null, tint = Muted)
+                        }
+                    },
+                    colors = settingsTextFieldColors(),
+                )
+                OutlinedTextField(
+                    value         = newPwAgain,
+                    onValueChange = { newPwAgain = it; error = null },
+                    label         = { Text("Yeni Şifre (Tekrar)") },
+                    singleLine    = true,
+                    modifier      = Modifier.fillMaxWidth(),
+                    visualTransformation = PasswordVisualTransformation(),
+                    isError       = newPwAgain.isNotBlank() && newPw != newPwAgain,
+                    colors = settingsTextFieldColors(),
+                )
+                if (error != null) {
+                    Text(error!!, color = Error, fontSize = 12.sp)
+                }
+                if (newPwAgain.isNotBlank() && newPw != newPwAgain) {
+                    Text("Şifreler eşleşmiyor", color = Error, fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    when {
+                        currentPw.isBlank() -> error = "Mevcut şifreyi girin"
+                        newPw.length < 6    -> error = "Yeni şifre en az 6 karakter olmalı"
+                        newPw != newPwAgain -> error = "Şifreler eşleşmiyor"
+                        else -> {
+                            loading = true
+                            vm.changePassword(
+                                currentPassword = currentPw,
+                                newPassword     = newPw,
+                                onSuccess       = { loading = false; onDismiss() },
+                                onError         = { msg -> loading = false; error = msg },
+                            )
+                        }
+                    }
+                },
+                enabled = !loading,
+            ) {
+                if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
+                else Text("Kaydet", color = Amber, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { if (!loading) onDismiss() }) { Text("İptal", color = Muted) }
+        },
+    )
+}
+
+// ── E-posta Değiştir Dialog ───────────────────────────────────────────────────
+@Composable
+private fun ChangeEmailDialog(
+    currentEmail : String,
+    onDismiss    : () -> Unit,
+    onConfirm    : (String, String) -> Unit,
+    vm           : SettingsViewModel,
+) {
+    var password  by remember { mutableStateOf("") }
+    var newEmail  by remember { mutableStateOf("") }
+    var error     by remember { mutableStateOf<String?>(null) }
+    var loading   by remember { mutableStateOf(false) }
+    var showPw    by remember { mutableStateOf(false) }
+    var success   by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!loading) onDismiss() },
+        containerColor   = HeftSurface,
+        title = { Text("E-posta Değiştir", color = OnBackground, fontWeight = FontWeight.Bold) },
+        text = {
+            if (success) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF22C55E), modifier = Modifier.size(36.dp))
+                    Text("Doğrulama e-postası gönderildi. Yeni adresinizi onaylayın.", color = OnBackground, fontSize = 14.sp)
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Mevcut: $currentEmail", color = Muted, fontSize = 12.sp)
+                    OutlinedTextField(
+                        value         = newEmail,
+                        onValueChange = { newEmail = it; error = null },
+                        label         = { Text("Yeni E-posta") },
+                        singleLine    = true,
+                        modifier      = Modifier.fillMaxWidth(),
+                        colors        = settingsTextFieldColors(),
+                    )
+                    OutlinedTextField(
+                        value         = password,
+                        onValueChange = { password = it; error = null },
+                        label         = { Text("Mevcut Şifre") },
+                        singleLine    = true,
+                        modifier      = Modifier.fillMaxWidth(),
+                        visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showPw = !showPw }) {
+                                Icon(if (showPw) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, null, tint = Muted)
+                            }
+                        },
+                        colors = settingsTextFieldColors(),
+                    )
+                    if (error != null) Text(error!!, color = Error, fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            if (!success) {
+                TextButton(
+                    onClick = {
+                        when {
+                            newEmail.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(newEmail).matches() ->
+                                error = "Geçerli bir e-posta girin"
+                            password.isBlank() -> error = "Şifrenizi girin"
+                            else -> {
+                                loading = true
+                                vm.changeEmail(
+                                    currentPassword = password,
+                                    newEmail        = newEmail,
+                                    onSuccess       = { loading = false; success = true },
+                                    onError         = { msg -> loading = false; error = msg },
+                                )
+                            }
+                        }
+                    },
+                    enabled = !loading,
+                ) {
+                    if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
+                    else Text("Doğrulama Gönder", color = Amber, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                TextButton(onClick = onDismiss) { Text("Tamam", color = Amber, fontWeight = FontWeight.Bold) }
+            }
+        },
+        dismissButton = {
+            if (!success) TextButton(onClick = { if (!loading) onDismiss() }) { Text("İptal", color = Muted) }
+        },
+    )
 }
 
 // ── Bileşenler ────────────────────────────────────────────────────────────────
@@ -288,3 +511,16 @@ private fun SettingsSwitchRow(
         )
     }
 }
+
+@Composable
+private fun settingsTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor      = Amber,
+    unfocusedBorderColor    = Divider,
+    focusedTextColor        = OnBackground,
+    unfocusedTextColor      = OnBackground,
+    unfocusedContainerColor = SurfaceVar,
+    focusedContainerColor   = SurfaceVar,
+    focusedLabelColor       = Amber,
+    unfocusedLabelColor     = Muted,
+    cursorColor             = Amber,
+)

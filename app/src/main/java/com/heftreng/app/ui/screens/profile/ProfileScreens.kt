@@ -38,6 +38,7 @@ import com.heftreng.app.ui.screens.serials.SerialCard
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.FollowListSheet
 import com.heftreng.app.viewmodel.*
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -604,25 +605,48 @@ fun EditProfileScreen(
     vm           : ProfileViewModel = hiltViewModel(),
 ) {
     val user        by vm.user.collectAsState()
+    val loading     by vm.loading.collectAsState()
     var displayName by remember(user) { mutableStateOf(user?.displayName ?: "") }
     var bio         by remember(user) { mutableStateOf(user?.bio ?: "") }
     var website     by remember(user) { mutableStateOf(user?.website ?: "") }
     var username    by remember(user) { mutableStateOf(user?.username ?: "") }
     var usernameErr by remember { mutableStateOf<String?>(null) }
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope             = rememberCoroutineScope()
+
     val storage     = com.google.firebase.storage.FirebaseStorage.getInstance()
     val photoPicker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.GetContent()
-    ) { uri -> uri?.let { vm.updateProfilePhoto(it, storage) } }
+    ) { uri ->
+        uri?.let {
+            vm.updateProfilePhoto(
+                imageUri = it,
+                storage  = storage,
+                onDone   = { scope.launch { snackbarHostState.showSnackbar("Profil fotoğrafı güncellendi ✓") } },
+                onError  = { msg -> scope.launch { snackbarHostState.showSnackbar("Hata: $msg") } },
+            )
+        }
+    }
     val coverPicker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.GetContent()
-    ) { uri -> uri?.let { vm.updateCoverPhoto(it, storage) } }
+    ) { uri ->
+        uri?.let {
+            vm.updateCoverPhoto(
+                imageUri = it,
+                storage  = storage,
+                onDone   = { scope.launch { snackbarHostState.showSnackbar("Kapak fotoğrafı güncellendi ✓") } },
+                onError  = { msg -> scope.launch { snackbarHostState.showSnackbar("Hata: $msg") } },
+            )
+        }
+    }
 
     LaunchedEffect(Unit) { vm.load("me") }
 
     Scaffold(
-        modifier       = Modifier.imePadding(),
-        containerColor = Background,
+        modifier          = Modifier.imePadding(),
+        containerColor    = Background,
+        snackbarHost      = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -638,20 +662,30 @@ fun EditProfileScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = {
-                        vm.updateProfile(displayName, bio, website)
-                        val usernameChanged = username.isNotBlank() &&
-                            username != (user?.username ?: "")
-                        if (usernameChanged) {
-                            vm.updateUsername(username,
-                                onSuccess = { navController.popBackStack() },
-                                onError   = { usernameErr = it },
-                            )
-                        } else {
-                            navController.popBackStack()
-                        }
-                    }) {
-                        Text("Kaydet", color = Amber, fontWeight = FontWeight.Bold)
+                    if (loading) {
+                        CircularProgressIndicator(
+                            modifier    = Modifier.size(20.dp).padding(end = 4.dp),
+                            color       = Amber,
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                    TextButton(
+                        onClick  = {
+                            vm.updateProfile(displayName, bio, website)
+                            val usernameChanged = username.isNotBlank() &&
+                                username != (user?.username ?: "")
+                            if (usernameChanged) {
+                                vm.updateUsername(username,
+                                    onSuccess = { navController.popBackStack() },
+                                    onError   = { usernameErr = it },
+                                )
+                            } else {
+                                navController.popBackStack()
+                            }
+                        },
+                        enabled = !loading,
+                    ) {
+                        Text("Kaydet", color = if (loading) Muted else Amber, fontWeight = FontWeight.Bold)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
@@ -670,16 +704,52 @@ fun EditProfileScreen(
                 modifier              = Modifier.fillMaxWidth(),
             ) {
                 OutlinedButton(
-                    onClick  = { photoPicker.launch("image/*") },
+                    onClick  = { if (!loading) photoPicker.launch("image/*") },
                     modifier = Modifier.weight(1f),
                     shape    = RoundedCornerShape(10.dp),
-                ) { Text("📷 Profil Foto", fontSize = 12.sp) }
+                ) {
+                    if (loading) CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Amber, strokeWidth = 2.dp)
+                    else Text("📷 Profil Foto", fontSize = 12.sp)
+                }
                 OutlinedButton(
-                    onClick  = { coverPicker.launch("image/*") },
+                    onClick  = { if (!loading) coverPicker.launch("image/*") },
                     modifier = Modifier.weight(1f),
                     shape    = RoundedCornerShape(10.dp),
-                ) { Text("🖼 Kapak Foto", fontSize = 12.sp) }
+                ) {
+                    if (loading) CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Amber, strokeWidth = 2.dp)
+                    else Text("🖼 Kapak Foto", fontSize = 12.sp)
+                }
             }
+
+            // Mevcut fotoğrafları göster
+            user?.let { u ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (u.photoURL.isNotEmpty()) {
+                        AsyncImage(
+                            model        = u.photoURL,
+                            contentDescription = "Profil",
+                            contentScale = ContentScale.Crop,
+                            modifier     = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(SurfaceVar),
+                        )
+                    }
+                    if (u.coverPhoto.isNotEmpty()) {
+                        AsyncImage(
+                            model        = u.coverPhoto,
+                            contentDescription = "Kapak",
+                            contentScale = ContentScale.Crop,
+                            modifier     = Modifier
+                                .height(48.dp)
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(SurfaceVar),
+                        )
+                    }
+                }
+            }
+
             OutlinedTextField(
                 value         = displayName,
                 onValueChange = { displayName = it },

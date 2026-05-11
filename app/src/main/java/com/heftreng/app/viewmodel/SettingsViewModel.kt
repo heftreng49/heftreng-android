@@ -4,11 +4,13 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 @HiltViewModel
@@ -19,6 +21,9 @@ class SettingsViewModel @Inject constructor(
 
     val isAdmin: Boolean
         get() = auth.currentUser?.email == "siirgibi49@gmail.com"
+
+    val currentEmail: String
+        get() = auth.currentUser?.email ?: ""
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences("hf_settings", Context.MODE_PRIVATE)
@@ -34,6 +39,48 @@ class SettingsViewModel @Inject constructor(
 
     private val _privateAccount = MutableStateFlow(prefs.getBoolean("hf_private", false))
     val privateAccount = _privateAccount.asStateFlow()
+
+    // ── Şifre değiştir ───────────────────────────────────────────────────────
+    fun changePassword(
+        currentPassword: String,
+        newPassword: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        val user  = auth.currentUser ?: return onError("Oturum bulunamadı")
+        val email = user.email       ?: return onError("E-posta bulunamadı")
+        viewModelScope.launch {
+            try {
+                val cred = EmailAuthProvider.getCredential(email, currentPassword)
+                user.reauthenticate(cred).await()
+                user.updatePassword(newPassword).await()
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.localizedMessage ?: "Hata oluştu")
+            }
+        }
+    }
+
+    // ── E-posta değiştir ─────────────────────────────────────────────────────
+    fun changeEmail(
+        currentPassword: String,
+        newEmail: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        val user  = auth.currentUser ?: return onError("Oturum bulunamadı")
+        val email = user.email       ?: return onError("E-posta bulunamadı")
+        viewModelScope.launch {
+            try {
+                val cred = EmailAuthProvider.getCredential(email, currentPassword)
+                user.reauthenticate(cred).await()
+                user.verifyBeforeUpdateEmail(newEmail).await()
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.localizedMessage ?: "Hata oluştu")
+            }
+        }
+    }
 
     fun toggleDarkMode() {
         viewModelScope.launch {

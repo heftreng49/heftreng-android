@@ -38,6 +38,16 @@ class AdsViewModel @Inject constructor(
     private val _adsEnabled         = MutableStateFlow(true)
     val adsEnabled = _adsEnabled.asStateFlow()
 
+    // ── Banner unit ID — StateFlow olarak (recompose tetikler) ───────────────
+    val bannerUnitId: StateFlow<String?> = combine(_bannerConfig, _adsEnabled) { config, enabled ->
+        if (config == null || !config.enabled || !enabled) null
+        else if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val bannerPosition: StateFlow<Int> = _bannerConfig
+        .map { it?.position ?: 5 }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 5)
+
     // ── Yüklenmiş reklamlar ───────────────────────────────────────────────────
     private var interstitialAd: InterstitialAd? = null
     private var rewardedAd:     RewardedAd?     = null
@@ -48,7 +58,6 @@ class AdsViewModel @Inject constructor(
             try {
                 val snap = firestore.collection("cms_ads").get().await()
 
-                // Global kill switch — cms_ads/global belgesi
                 val global = snap.documents.find { it.id == "global" }
                 _adsEnabled.value = global?.getBoolean("enabled") ?: true
 
@@ -56,21 +65,29 @@ class AdsViewModel @Inject constructor(
                     if (doc.id == "global") return@forEach
                     val d = doc.data ?: return@forEach
                     val config = CmsAdConfig(
-                        id       = doc.id,
-                        unitId   = d["unitId"]   as? String  ?: "",
-                        enabled  = d["enabled"]  as? Boolean ?: false,
-                        testMode = d["testMode"] as? Boolean ?: true,
-                        position = (d["position"]  as? Long)?.toInt() ?: 5,
+                        id        = doc.id,
+                        unitId    = d["unitId"]    as? String  ?: "",
+                        enabled   = d["enabled"]   as? Boolean ?: false,
+                        testMode  = d["testMode"]  as? Boolean ?: true,
+                        position  = (d["position"]  as? Long)?.toInt() ?: 5,
                         frequency = (d["frequency"] as? Long)?.toInt() ?: 3,
-                        xpReward = (d["xpReward"]  as? Long)?.toInt() ?: 50,
+                        xpReward  = (d["xpReward"]  as? Long)?.toInt() ?: 50,
                     )
                     when (doc.id) {
-                        "banner_feed"       -> _bannerConfig.value = config
+                        "banner_feed"         -> _bannerConfig.value       = config
                         "interstitial_serial" -> _interstitialConfig.value = config
-                        "rewarded_xp"       -> _rewardedConfig.value = config
+                        "rewarded_xp"         -> _rewardedConfig.value     = config
                     }
                 }
             } catch (e: Exception) {
+                // Firestore erişilemiyorsa test modunda varsayılan banner göster
+                _bannerConfig.value = CmsAdConfig(
+                    id       = "banner_feed",
+                    unitId   = AdMobTestIds.BANNER,
+                    enabled  = true,
+                    testMode = true,
+                    position = 5,
+                )
                 e.printStackTrace()
             }
         }
@@ -84,16 +101,11 @@ class AdsViewModel @Inject constructor(
         val unitId = if (config.testMode) AdMobTestIds.INTERSTITIAL else AdMobProdIds.INTERSTITIAL
         if (unitId.isBlank()) return
 
-        val adRequest = AdRequest.Builder().build()
         InterstitialAd.load(
-            context, unitId, adRequest,
+            context, unitId, AdRequest.Builder().build(),
             object : InterstitialAdLoadCallback() {
-                override fun onAdLoaded(ad: InterstitialAd) {
-                    interstitialAd = ad
-                }
-                override fun onAdFailedToLoad(error: LoadAdError) {
-                    interstitialAd = null
-                }
+                override fun onAdLoaded(ad: InterstitialAd) { interstitialAd = ad }
+                override fun onAdFailedToLoad(error: LoadAdError) { interstitialAd = null }
             }
         )
     }
@@ -105,7 +117,7 @@ class AdsViewModel @Inject constructor(
                 override fun onAdDismissedFullScreenContent() {
                     interstitialAd = null
                     onDismiss()
-                    loadInterstitial(activity)   // Sonraki için önceden yükle
+                    loadInterstitial(activity)
                 }
                 override fun onAdFailedToShowFullScreenContent(e: AdError) {
                     interstitialAd = null
@@ -126,16 +138,11 @@ class AdsViewModel @Inject constructor(
         val unitId = if (config.testMode) AdMobTestIds.REWARDED else AdMobProdIds.REWARDED
         if (unitId.isBlank()) return
 
-        val adRequest = AdRequest.Builder().build()
         RewardedAd.load(
-            context, unitId, adRequest,
+            context, unitId, AdRequest.Builder().build(),
             object : RewardedAdLoadCallback() {
-                override fun onAdLoaded(ad: RewardedAd) {
-                    rewardedAd = ad
-                }
-                override fun onAdFailedToLoad(error: LoadAdError) {
-                    rewardedAd = null
-                }
+                override fun onAdLoaded(ad: RewardedAd) { rewardedAd = ad }
+                override fun onAdFailedToLoad(error: LoadAdError) { rewardedAd = null }
             }
         )
     }
@@ -157,16 +164,6 @@ class AdsViewModel @Inject constructor(
         }
         ad.show(activity) { onRewarded(config?.xpReward ?: 50) }
     }
-
-    // ── Aktif banner unit ID'sini döndür ─────────────────────────────────────
-    fun bannerUnitId(): String? {
-        val config = _bannerConfig.value ?: return null
-        if (!config.enabled || !_adsEnabled.value) return null
-        return if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
-    }
-
-    // ── Banner pozisyonu ──────────────────────────────────────────────────────
-    fun bannerPosition(): Int = _bannerConfig.value?.position ?: 5
 
     override fun onCleared() {
         super.onCleared()

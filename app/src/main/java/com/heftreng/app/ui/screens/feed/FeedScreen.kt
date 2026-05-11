@@ -68,8 +68,8 @@ fun FeedScreen(
     val loading     by vm.loading.collectAsState()
     val hasMore     by vm.hasMore.collectAsState()
     val loadingMore by vm.loadingMore.collectAsState()
-    val bannerUnitId = adsVm.bannerUnitId()
-    val bannerPos    = adsVm.bannerPosition()
+    val bannerUnitId by adsVm.bannerUnitId.collectAsState()
+    val bannerPos    by adsVm.bannerPosition.collectAsState()
 
     LaunchedEffect(Unit) { adsVm.loadAdConfigs() }
 

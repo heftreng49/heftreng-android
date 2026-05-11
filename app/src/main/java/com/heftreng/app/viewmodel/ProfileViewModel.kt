@@ -307,8 +307,14 @@ class ProfileViewModel @Inject constructor(
     }
 
     // ── Profil / Kapak fotoğrafı güncelle ────────────────────────────────────
-    fun updateProfilePhoto(imageUri: android.net.Uri, storage: com.google.firebase.storage.FirebaseStorage, onDone: (String) -> Unit = {}) {
-        if (myUid.isEmpty()) return
+    fun updateProfilePhoto(
+        imageUri: android.net.Uri,
+        storage : com.google.firebase.storage.FirebaseStorage,
+        onDone  : (String) -> Unit = {},
+        onError : (String) -> Unit = {},
+    ) {
+        if (myUid.isEmpty()) { onError("Kullanıcı bulunamadı"); return }
+        _loading.value = true
         viewModelScope.launch {
             try {
                 val ref = storage.reference.child("profile_photos/${myUid}.jpg")
@@ -317,25 +323,40 @@ class ProfileViewModel @Inject constructor(
                 firestore.collection("users").document(myUid).update("photoURL", url).await()
                 _user.value = _user.value?.copy(photoURL = url)
                 onDone(url)
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onError(e.localizedMessage ?: "Fotoğraf yüklenemedi")
+            } finally {
+                _loading.value = false
+            }
         }
     }
 
-    fun updateCoverPhoto(imageUri: android.net.Uri, storage: com.google.firebase.storage.FirebaseStorage, onDone: (String) -> Unit = {}) {
-        if (myUid.isEmpty()) return
+    fun updateCoverPhoto(
+        imageUri: android.net.Uri,
+        storage : com.google.firebase.storage.FirebaseStorage,
+        onDone  : (String) -> Unit = {},
+        onError : (String) -> Unit = {},
+    ) {
+        if (myUid.isEmpty()) { onError("Kullanıcı bulunamadı"); return }
+        _loading.value = true
         viewModelScope.launch {
             try {
                 val ref = storage.reference.child("cover_photos/${myUid}.jpg")
                 ref.putFile(imageUri).await()
                 val url = ref.downloadUrl.await().toString()
-                // Tema: hem coverPhoto hem coverURL yaz (her iki alan kullanılıyor)
                 firestore.collection("users").document(myUid).update(mapOf(
                     "coverPhoto" to url,
                     "coverURL"   to url,
                 )).await()
                 _user.value = _user.value?.copy(coverPhoto = url)
                 onDone(url)
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onError(e.localizedMessage ?: "Kapak fotoğrafı yüklenemedi")
+            } finally {
+                _loading.value = false
+            }
         }
     }
 

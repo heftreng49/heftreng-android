@@ -55,7 +55,7 @@ fun SerialsScreen(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text(if (language == "ku") "Nivîsandina Pirtûkê" else "Kitap Yazma", fontWeight = FontWeight.Bold, color = OnBackground) },
+                title = { Text(if (language == "ku") "Pirtûk" else "Kitaplar", fontWeight = FontWeight.Bold, color = OnBackground) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
                 actions = {
                     IconButton(onClick = { showCreate = true }) {
@@ -468,41 +468,100 @@ private fun ChapterRow(
 private fun EditChapterDialog(chapter: Chapter, onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
     var title by remember { mutableStateOf(chapter.title) }
     var body  by remember { mutableStateOf(chapter.body) }
-    AlertDialog(
+
+    androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
-        containerColor   = HeftSurface,
-        title = { Text("Bölümü Düzenle", color = OnBackground, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = title, onValueChange = { title = it },
-                    label = { Text("Başlık") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Amber, unfocusedBorderColor = Divider,
-                        focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
-                        unfocusedContainerColor = SurfaceVar, focusedContainerColor = SurfaceVar,
-                    ),
-                )
-                OutlinedTextField(
-                    value = body, onValueChange = { body = it },
-                    label = { Text("İçerik") }, minLines = 5,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Amber, unfocusedBorderColor = Divider,
-                        focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
-                        unfocusedContainerColor = SurfaceVar, focusedContainerColor = SurfaceVar,
-                    ),
-                )
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows  = false,
+        ),
+    ) {
+        androidx.compose.material3.Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding(),
+            color = HeftSurface,
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+
+                // ── Başlık çubuğu ─────────────────────────────────────────
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(HeftSurface)
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("Bölümü Düzenle", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, null, tint = Muted)
+                    }
+                }
+
+                HorizontalDivider(color = Divider)
+
+                // ── Scrollable içerik ─────────────────────────────────────
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    OutlinedTextField(
+                        value         = title,
+                        onValueChange = { title = it },
+                        label         = { Text("Bölüm Başlığı *") },
+                        singleLine    = true,
+                        modifier      = Modifier.fillMaxWidth(),
+                        colors        = hfTextFieldColors(),
+                    )
+                    OutlinedTextField(
+                        value         = body,
+                        onValueChange = { body = it },
+                        label         = { Text("İçerik (HTML destekli)") },
+                        minLines      = 12,
+                        modifier      = Modifier.fillMaxWidth(),
+                        colors        = hfTextFieldColors(),
+                    )
+                    val wordCount = body.replace(Regex("<[^>]+>"), "").trim()
+                        .split(Regex("\\s+")).count { it.isNotBlank() }
+                    Text("$wordCount kelime", color = Muted, fontSize = 11.sp)
+                }
+
+                HorizontalDivider(color = Divider)
+
+                // ── Sabit alt buton çubuğu ────────────────────────────────
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(HeftSurface)
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                    verticalAlignment     = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("İptal", color = Muted)
+                    }
+                    Button(
+                        onClick  = { if (title.isNotBlank() && body.isNotBlank()) onSave(title, body) },
+                        enabled  = title.isNotBlank() && body.isNotBlank(),
+                        shape    = RoundedCornerShape(12.dp),
+                        colors   = ButtonDefaults.buttonColors(
+                            containerColor = Amber,
+                            contentColor   = androidx.compose.ui.graphics.Color.Black,
+                        ),
+                    ) {
+                        Icon(Icons.Default.Save, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Kaydet", fontWeight = FontWeight.Bold)
+                    }
+                }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { if (title.isNotBlank() && body.isNotBlank()) onSave(title, body) }) {
-                Text("Kaydet", color = Amber, fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("İptal", color = Muted) } },
-    )
+        }
+    }
 }
 
 // ── Bölüm okuma ekranı ───────────────────────────────────────────────────────

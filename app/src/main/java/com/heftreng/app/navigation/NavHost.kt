@@ -86,7 +86,7 @@ data class BottomNavItem(val route: String, val label: String, val icon: ImageVe
 val bottomNavItems = listOf(
     BottomNavItem(Screen.Feed.route,    "Nivîs",  Icons.Outlined.DynamicFeed,  Icons.Filled.DynamicFeed),
     BottomNavItem(Screen.Search.route,  "Bigere", Icons.Outlined.Search,       Icons.Filled.Search),
-    BottomNavItem(Screen.Serials.route, "Pirtûk", Icons.Outlined.AutoStories,  Icons.Filled.AutoStories),
+    BottomNavItem(Screen.Serials.route, "Kitaplar", Icons.Outlined.AutoStories,  Icons.Filled.AutoStories),
     BottomNavItem(Screen.Kurdi.route,   "Kurdî",  Icons.Outlined.Translate,    Icons.Filled.Translate),
     BottomNavItem("profile/me",         "Profîl", Icons.Outlined.PersonOutline,Icons.Filled.Person),
 )
@@ -426,8 +426,7 @@ fun DrawerContent(
             val items = listOf(
                 Triple(Icons.Outlined.DynamicFeed,    "Nivîs / Feed",           Screen.Feed.route),
                 Triple(Icons.Outlined.Search,         "Bigere / Ara",           Screen.Search.route),
-                Triple(Icons.Outlined.AutoStories,    "Pirtûk / Seriler",       Screen.Serials.route),
-                Triple(Icons.Outlined.MenuBook,       "Kitaplar / Pirtûk",      Screen.Books.route),
+                Triple(Icons.Outlined.AutoStories,    "Kitaplar / Pirtûk",      Screen.Serials.route),
                 Triple(Icons.Outlined.Translate,      "Kurdî Fêrbibe",          Screen.Kurdi.route),
                 Triple(Icons.Outlined.NotificationsNone, "Agahdarî / Bildirimler (${if (unreadNotif>0) unreadNotif else ""})", Screen.Notifications.route),
                 Triple(Icons.Outlined.ChatBubbleOutline, "Peyam / Mesajlar (${if (totalUnread>0) totalUnread else ""})", Screen.Messages.route),
