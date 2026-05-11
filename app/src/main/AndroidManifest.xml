@@ -21,10 +21,7 @@
     <!-- Ağ durumu — FCM WebChannel için -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- Kamera — profil fotoğrafı veya gönderi -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
-
+    
     <!-- Dosya yazma — eski Android için (API 28 ve altı) -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
