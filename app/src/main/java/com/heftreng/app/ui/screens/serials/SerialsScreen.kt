@@ -522,8 +522,11 @@ private fun EditChapterDialog(chapter: Chapter, onDismiss: () -> Unit, onSave: (
                         value         = body,
                         onValueChange = { body = it },
                         label         = { Text("İçerik (HTML destekli)") },
-                        minLines      = 12,
-                        modifier      = Modifier.fillMaxWidth(),
+                        minLines      = 6,
+                        maxLines      = 999,
+                        modifier      = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 160.dp, max = 400.dp),
                         colors        = hfTextFieldColors(),
                     )
                     val wordCount = body.replace(Regex("<[^>]+>"), "").trim()
@@ -801,14 +804,17 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                         .padding(horizontal = 20.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    // İçerik alanı — sınırsız yükseklik
+                    // İçerik alanı — weight(1f) ile kalan alanı doldurur ama minLines küçük
                     OutlinedTextField(
                         value         = body,
                         onValueChange = { body = it },
                         label         = { Text("İçerik (HTML destekli)") },
                         placeholder   = { Text("<p>Bölüm içeriğinizi buraya yazın...</p>", color = Muted, fontSize = 12.sp) },
-                        minLines      = 12,
-                        modifier      = Modifier.fillMaxWidth(),
+                        minLines      = 6,
+                        maxLines      = 999,
+                        modifier      = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 160.dp, max = 400.dp),
                         colors        = hfTextFieldColors(),
                     )
 
