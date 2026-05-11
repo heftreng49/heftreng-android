@@ -2,6 +2,7 @@ package com.heftreng.app.ui.screens.serials
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -645,21 +646,44 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
         activeFormat = tag
     }
 
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        androidx.compose.foundation.layout.Box(
+    // Tam ekran dialog — DialogProperties ile
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows  = false,
+        ),
+    ) {
+        androidx.compose.material3.Surface(
             modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight()
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding(),
+            color = HeftSurface,
         ) {
-            androidx.compose.material3.Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = HeftSurface,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Yeni Bölüm", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            Column(modifier = Modifier.fillMaxSize()) {
 
-                    // Başlık
+                // ── Sabit başlık + toolbar ────────────────────────────────
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(HeftSurface)
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    // Başlık + kapat butonu
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("Yeni Bölüm", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, null, tint = Muted)
+                        }
+                    }
+
+                    // Başlık alanı
                     OutlinedTextField(
                         value         = title,
                         onValueChange = { title = it },
@@ -669,38 +693,34 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                         colors        = hfTextFieldColors(),
                     )
 
-                    // HTML biçimlendirme araç çubuğu
+                    // Biçimlendirme toolbar
                     Text("Biçimlendirme", color = Muted, fontSize = 11.sp)
                     Row(
-                        modifier             = Modifier
+                        modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
                             .background(androidx.compose.ui.graphics.Color(0xFF1C1C1E))
-                            .padding(6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
                     ) {
-                        data class Fmt(val label: String, val tag: String, val tooltip: String)
-                        val formats = listOf(
-                            Fmt("B", "b",          "Kalın"),
-                            Fmt("I", "i",          "İtalik"),
-                            Fmt("U", "u",          "Altı Çizili"),
-                            Fmt("H2", "h2",        "Başlık"),
-                            Fmt("¶",  "p",         "Paragraf"),
-                            Fmt("«»", "blockquote","Alıntı Blok"),
-                            Fmt("—",  "hr",        "Yatay Çizgi"),
-                        )
-                        formats.forEach { fmt ->
-                            val isHr = fmt.tag == "hr"
+                        data class Fmt(val label: String, val tag: String)
+                        listOf(
+                            Fmt("B",  "b"),
+                            Fmt("I",  "i"),
+                            Fmt("U",  "u"),
+                            Fmt("H2", "h2"),
+                            Fmt("¶",  "p"),
+                            Fmt("«»", "blockquote"),
+                            Fmt("—",  "hr"),
+                        ).forEach { fmt ->
                             TextButton(
-                                onClick  = {
-                                    body = if (isHr) body + "<hr/>" else {
-                                        val o = "<${fmt.tag}>"; val c = "</${fmt.tag}>"
-                                        body + "$o$c"
-                                    }
+                                onClick = {
+                                    body = if (fmt.tag == "hr") body + "<hr/>"
+                                           else body + "<${fmt.tag}></${fmt.tag}>"
                                 },
-                                modifier = Modifier.defaultMinSize(minWidth = 36.dp, minHeight = 32.dp),
+                                modifier = Modifier.defaultMinSize(minWidth = 40.dp, minHeight = 36.dp),
                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                                colors   = ButtonDefaults.textButtonColors(contentColor = Amber),
+                                colors = ButtonDefaults.textButtonColors(contentColor = Amber),
                             ) {
                                 Text(
                                     fmt.label,
@@ -710,52 +730,77 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                             }
                         }
                     }
+                }
 
-                    // İçerik alanı
+                HorizontalDivider(color = Divider)
+
+                // ── Scrollable içerik ─────────────────────────────────────
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    // İçerik alanı — sınırsız yükseklik
                     OutlinedTextField(
                         value         = body,
                         onValueChange = { body = it },
                         label         = { Text("İçerik (HTML destekli)") },
                         placeholder   = { Text("<p>Bölüm içeriğinizi buraya yazın...</p>", color = Muted, fontSize = 12.sp) },
-                        minLines      = 8,
-                        modifier      = Modifier.fillMaxWidth().heightIn(min = 200.dp),
+                        minLines      = 12,
+                        modifier      = Modifier.fillMaxWidth(),
                         colors        = hfTextFieldColors(),
                     )
 
-                    // Hızlı şablon satırı
+                    // Şablon butonları
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf(
-                            "Diyalog"  to "<p>— ... dedi.</p>",
-                            "Sahne"    to "<p>* * *</p>",
-                            "Son"      to "<p>~ Son ~</p>",
+                            "Diyalog" to "<p>— ... dedi.</p>",
+                            "Sahne"   to "<p>* * *</p>",
+                            "Son"     to "<p>~ Son ~</p>",
                         ).forEach { (label, snippet) ->
                             OutlinedButton(
                                 onClick = { body += "\n" + snippet },
-                                modifier = Modifier.height(28.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                modifier = Modifier.height(30.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                                 border = androidx.compose.foundation.BorderStroke(1.dp, Divider),
                             ) {
-                                Text(label, color = Muted, fontSize = 10.sp)
+                                Text(label, color = Muted, fontSize = 11.sp)
                             }
                         }
                     }
 
-                    // Kelime sayısı önizleme
+                    // Kelime sayacı
                     val wordCount = body.replace(Regex("<[^>]+>"), "").trim()
                         .split(Regex("\\s+")).count { it.isNotBlank() }
                     Text("$wordCount kelime", color = Muted, fontSize = 11.sp)
+                }
 
-                    // Butonlar
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = onDismiss) { Text("İptal", color = Muted) }
-                        Spacer(Modifier.width(8.dp))
-                        Button(
-                            onClick  = { if (title.isNotBlank() && body.isNotBlank()) onAdd(title, body) },
-                            enabled  = title.isNotBlank() && body.isNotBlank(),
-                            colors   = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = androidx.compose.ui.graphics.Color.Black),
-                        ) {
-                            Text("Bölümü Ekle", fontWeight = FontWeight.Bold)
-                        }
+                HorizontalDivider(color = Divider)
+
+                // ── Sabit alt buton çubuğu ────────────────────────────────
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(HeftSurface)
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("İptal", color = Muted)
+                    }
+                    Button(
+                        onClick  = { if (title.isNotBlank() && body.isNotBlank()) onAdd(title, body) },
+                        enabled  = title.isNotBlank() && body.isNotBlank(),
+                        shape    = RoundedCornerShape(12.dp),
+                        colors   = ButtonDefaults.buttonColors(
+                            containerColor = Amber,
+                            contentColor   = androidx.compose.ui.graphics.Color.Black,
+                        ),
+                    ) {
+                        Text("Bölümü Ekle", fontWeight = FontWeight.Bold)
                     }
                 }
             }
