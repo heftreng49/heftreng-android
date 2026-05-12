@@ -50,13 +50,12 @@ fun PostDetailScreen(
     val socialLoading by socialVm.loading.collectAsState()
 
     val post  = posts.find { it.id == postId }
-    val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+    val myUid = remember { viewModel.uid }
 
     var commentText    by remember { mutableStateOf("") }
     var showLikers     by remember { mutableStateOf(false) }
     var cmtToDelete    by remember { mutableStateOf<Comment?>(null) }
     var showCmtLikers  by remember { mutableStateOf<String?>(null) }
-    // Düzenleme dialogu
     var editComment    by remember { mutableStateOf<Comment?>(null) }
     var editText       by remember { mutableStateOf("") }
 
@@ -142,8 +141,10 @@ fun PostDetailScreen(
                     }
                 } else {
                     items(comments, key = { it.id }) { cmt ->
+                        // ⋮ butonu her yorumda görünür — silme/düzenleme yetkisi
+                        // deleteComment/editComment içinde Firestore'da kontrol edilir
+                        val isOwner   = myUid.isNotEmpty() && myUid == cmt.uid
                         val canManage = myUid.isNotEmpty() && (myUid == cmt.uid || myUid == post.uid)
-                        val isOwner   = myUid == cmt.uid
                         CommentRow(
                             comment      = cmt,
                             canManage    = canManage,
@@ -292,9 +293,7 @@ private fun CommentRow(
     var menuExpanded by remember { mutableStateOf(false) }
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top,
     ) {
         // Avatar
@@ -325,7 +324,7 @@ private fun CommentRow(
             Spacer(Modifier.height(2.dp))
             Text(comment.text, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
         }
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(4.dp))
         // Sağ taraf — beğeni + menü
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             IconButton(onClick = onLike, modifier = Modifier.size(32.dp)) {
@@ -343,30 +342,26 @@ private fun CommentRow(
                 Box {
                     IconButton(
                         onClick  = { menuExpanded = true },
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier.size(28.dp),
                     ) {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = "Seçenekler",
-                            tint     = Muted,
-                            modifier = Modifier.size(18.dp),
-                        )
+                        Icon(Icons.Default.MoreVert, contentDescription = "Seçenekler", tint = Muted, modifier = Modifier.size(18.dp))
                     }
                     DropdownMenu(
                         expanded         = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
+                        containerColor   = HeftSurface,
                     ) {
                         if (isOwner) {
                             DropdownMenuItem(
-                                text         = { Text("Düzenle") },
-                                leadingIcon  = { Icon(Icons.Default.Edit, null, tint = Amber) },
-                                onClick      = { menuExpanded = false; onEdit() },
+                                text        = { Text("Düzenle", color = OnBackground) },
+                                leadingIcon = { Icon(Icons.Default.Edit, null, tint = Amber) },
+                                onClick     = { menuExpanded = false; onEdit() },
                             )
                         }
                         DropdownMenuItem(
-                            text         = { Text("Sil", color = Color(0xFFEF4444)) },
-                            leadingIcon  = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) },
-                            onClick      = { menuExpanded = false; onDelete() },
+                            text        = { Text("Sil", color = Color(0xFFEF4444)) },
+                            leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) },
+                            onClick     = { menuExpanded = false; onDelete() },
                         )
                     }
                 }

@@ -338,6 +338,14 @@ class FeedViewModel @Inject constructor(
     fun deleteComment(postId: String, commentId: String) {
         viewModelScope.launch {
             try {
+                // Firestore'dan yorumu al, uid kontrolü yap
+                val cmtDoc = firestore.collection("feed").document(postId)
+                    .collection("comments").document(commentId).get().await()
+                val cmtUid = cmtDoc.getString("uid") ?: ""
+                val postDoc = firestore.collection("feed").document(postId).get().await()
+                val postUid = postDoc.getString("uid") ?: ""
+                // Sadece yorum sahibi veya gönderi sahibi silebilir
+                if (uid != cmtUid && uid != postUid) return@launch
                 firestore.collection("feed").document(postId)
                     .collection("comments").document(commentId).delete().await()
                 firestore.collection("feed").document(postId)
