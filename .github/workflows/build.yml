@@ -17,6 +17,17 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      # OTOMATİK SÜRÜM ARTIRMA ADIMI
+      - name: Bump Version Code
+        run: |
+          # Mevcut run_number'a 10 ekliyoruz. 
+          # Play Store'da hali hazırda '1' kullanıldığı için 
+          # GitHub run_number 1 ise, yeni kod 11 olacaktır. 
+          # Böylece asla çakışma yaşanmaz.
+          NEW_VERSION_CODE=$(( ${{ github.run_number }} + 10 ))
+          echo "Yeni Version Code: $NEW_VERSION_CODE"
+          sed -i "s/versionCode [0-9]*/versionCode $NEW_VERSION_CODE/" app/build.gradle
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
@@ -54,3 +65,4 @@ jobs:
         with:
           name: heftreng-release.aab
           path: app/build/outputs/bundle/release/*.aab
+          
