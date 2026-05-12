@@ -1,9 +1,7 @@
 package com.heftreng.app.ui.screens.feed
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -58,8 +56,6 @@ fun PostDetailScreen(
     var showLikers     by remember { mutableStateOf(false) }
     var cmtToDelete    by remember { mutableStateOf<Comment?>(null) }
     var showCmtLikers  by remember { mutableStateOf<String?>(null) }
-    // Basılı tutunca açılan sheet
-    var sheetComment   by remember { mutableStateOf<Comment?>(null) }
     // Düzenleme dialogu
     var editComment    by remember { mutableStateOf<Comment?>(null) }
     var editText       by remember { mutableStateOf("") }
@@ -147,13 +143,16 @@ fun PostDetailScreen(
                 } else {
                     items(comments, key = { it.id }) { cmt ->
                         val canManage = myUid.isNotEmpty() && (myUid == cmt.uid || myUid == post.uid)
+                        val isOwner   = myUid == cmt.uid
                         CommentRow(
                             comment      = cmt,
                             canManage    = canManage,
+                            isOwner      = isOwner,
                             onLike       = { viewModel.toggleCommentLike(postId, cmt) },
                             onProfile    = { navController.navigate("profile/${cmt.uid}") },
                             onShowLikers = { socialVm.loadCommentLikers(cmt.id); showCmtLikers = cmt.id },
-                            onLongPress  = { if (canManage) sheetComment = cmt },
+                            onDelete     = { cmtToDelete = cmt },
+                            onEdit       = { editText = cmt.text; editComment = cmt },
                         )
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     }
@@ -198,66 +197,6 @@ fun PostDetailScreen(
                 ) {
                     Icon(Icons.AutoMirrored.Filled.Send, null, tint = if (commentText.isNotBlank()) Amber else Muted)
                 }
-            }
-        }
-    }
-
-    // ── Basılı tutunca açılan BottomSheet ─────────────────────────────────────
-    sheetComment?.let { cmt ->
-        val isOwner = myUid == cmt.uid
-        ModalBottomSheet(
-            onDismissRequest = { sheetComment = null },
-            containerColor   = HeftSurface,
-        ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
-                // Başlık
-                Text(
-                    text     = cmt.displayName,
-                    color    = Muted,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                )
-                Text(
-                    text     = cmt.text,
-                    color    = OnBackground,
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 12.dp),
-                )
-                HorizontalDivider(color = Divider)
-
-                // Düzenle — sadece kendi yorumuysa
-                if (isOwner) {
-                    ListItem(
-                        headlineContent = { Text("Düzenle", color = OnBackground, fontSize = 15.sp) },
-                        leadingContent  = { Icon(Icons.Default.Edit, null, tint = Amber) },
-                        colors          = ListItemDefaults.colors(containerColor = HeftSurface),
-                        modifier        = Modifier.clickable {
-                            editText    = cmt.text
-                            editComment = cmt
-                            sheetComment = null
-                        },
-                    )
-                    HorizontalDivider(color = Divider)
-                }
-
-                // Sil — kendi yorumu veya gönderi sahibi
-                ListItem(
-                    headlineContent = { Text("Sil", color = Color(0xFFEF4444), fontSize = 15.sp) },
-                    leadingContent  = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) },
-                    colors          = ListItemDefaults.colors(containerColor = HeftSurface),
-                    modifier        = Modifier.clickable {
-                        cmtToDelete  = cmt
-                        sheetComment = null
-                    },
-                )
-                HorizontalDivider(color = Divider)
-
-                // İptal
-                ListItem(
-                    headlineContent = { Text("İptal", color = Muted, fontSize = 15.sp) },
-                    colors          = ListItemDefaults.colors(containerColor = HeftSurface),
-                    modifier        = Modifier.clickable { sheetComment = null },
-                )
             }
         }
     }
@@ -339,23 +278,22 @@ fun PostDetailScreen(
 }
 
 // ── Yorum satırı ─────────────────────────────────────────────────────────────
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CommentRow(
     comment      : Comment,
     canManage    : Boolean,
+    isOwner      : Boolean,
     onLike       : () -> Unit,
     onProfile    : () -> Unit,
     onShowLikers : () -> Unit,
-    onLongPress  : () -> Unit,
+    onDelete     : () -> Unit,
+    onEdit       : () -> Unit,
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(
-                onClick     = {},
-                onLongClick = onLongPress,
-            )
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -388,7 +326,7 @@ private fun CommentRow(
             Text(comment.text, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
         }
         Spacer(Modifier.width(8.dp))
-        // Sağ taraf — beğeni
+        // Sağ taraf — beğeni + menü
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             IconButton(onClick = onLike, modifier = Modifier.size(32.dp)) {
                 Icon(
@@ -401,14 +339,37 @@ private fun CommentRow(
             if (comment.likesCount > 0) {
                 Text("${comment.likesCount}", color = Muted, fontSize = 11.sp, modifier = Modifier.clickable { onShowLikers() })
             }
-            // Basılı tutunca açılacak, ama buton ipucu olarak göster
             if (canManage) {
-                Icon(
-                    Icons.Default.MoreVert,
-                    contentDescription = "Seçenekler",
-                    tint     = Muted.copy(alpha = 0.5f),
-                    modifier = Modifier.size(16.dp),
-                )
+                Box {
+                    IconButton(
+                        onClick  = { menuExpanded = true },
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = "Seçenekler",
+                            tint     = Muted,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded         = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        if (isOwner) {
+                            DropdownMenuItem(
+                                text         = { Text("Düzenle") },
+                                leadingIcon  = { Icon(Icons.Default.Edit, null, tint = Amber) },
+                                onClick      = { menuExpanded = false; onEdit() },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text         = { Text("Sil", color = Color(0xFFEF4444)) },
+                            leadingIcon  = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) },
+                            onClick      = { menuExpanded = false; onDelete() },
+                        )
+                    }
+                }
             }
         }
     }
