@@ -1,7 +1,9 @@
 package com.heftreng.app.ui.screens.feed
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,8 +12,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
@@ -48,18 +51,23 @@ fun PostDetailScreen(
     val likers   by socialVm.likers.collectAsState()
     val socialLoading by socialVm.loading.collectAsState()
 
-    val post = posts.find { it.id == postId }
+    val post  = posts.find { it.id == postId }
     val myUid = remember { viewModel.uid }
 
-    var commentText   by remember { mutableStateOf("") }
-    var showLikers    by remember { mutableStateOf(false) }
-    var cmtToDelete   by remember { mutableStateOf<Comment?>(null) }
-    var showCmtLikers by remember { mutableStateOf<String?>(null) } // cmtId
+    var commentText    by remember { mutableStateOf("") }
+    var showLikers     by remember { mutableStateOf(false) }
+    var cmtToDelete    by remember { mutableStateOf<Comment?>(null) }
+    var showCmtLikers  by remember { mutableStateOf<String?>(null) }
+    // Basılı tutunca açılan sheet
+    var sheetComment   by remember { mutableStateOf<Comment?>(null) }
+    // Düzenleme dialogu
+    var editComment    by remember { mutableStateOf<Comment?>(null) }
+    var editText       by remember { mutableStateOf("") }
 
     LaunchedEffect(postId) { viewModel.loadComments(postId) }
 
     Scaffold(
-        modifier = Modifier.imePadding(),
+        modifier       = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(
@@ -85,7 +93,6 @@ fun PostDetailScreen(
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(bottom = 8.dp),
             ) {
-                // Post kartı
                 item {
                     PostCard(
                         post         = post,
@@ -94,75 +101,59 @@ fun PostDetailScreen(
                         onProfile    = { navController.navigate(Screen.Profile.go(post.uid)) },
                         onComment    = {},
                         onShare      = { viewModel.repost(post) },
-                        onShowLikers = {
-                            socialVm.loadPostLikers(post.id)
-                            showLikers = true
-                        },
+                        onShowLikers = { socialVm.loadPostLikers(post.id); showLikers = true },
                     )
                     HorizontalDivider(color = SurfaceVar, thickness = 6.dp)
                 }
 
-                // Beğeni satırı — tıklanabilir
                 if (post.likesCount > 0) {
                     item {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    socialVm.loadPostLikers(post.id)
-                                    showLikers = true
-                                }
+                                .clickable { socialVm.loadPostLikers(post.id); showLikers = true }
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(Icons.Filled.Favorite, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text(
-                                "${post.likesCount} beğeni",
-                                color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
-                            )
+                            Text("${post.likesCount} beğeni", color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         }
                         HorizontalDivider(color = Divider)
                     }
                 }
 
-                // Yorumlar başlığı
                 item {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            "Yorumlar",
-                            color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                        )
+                        Text("Yorumlar", color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         if (post.commentsCount > 0) {
                             Spacer(Modifier.width(6.dp))
-                            Box(
-                                Modifier.clip(RoundedCornerShape(10.dp)).background(SurfaceVar).padding(horizontal = 8.dp, vertical = 2.dp)
-                            ) { Text("${post.commentsCount}", color = Muted, fontSize = 11.sp) }
+                            Box(Modifier.clip(RoundedCornerShape(10.dp)).background(SurfaceVar).padding(horizontal = 8.dp, vertical = 2.dp)) {
+                                Text("${post.commentsCount}", color = Muted, fontSize = 11.sp)
+                            }
                         }
                     }
                 }
 
-                // Yorum listesi
                 if (comments.isEmpty()) {
                     item {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(32.dp),
-                            contentAlignment = Alignment.Center,
-                        ) { Text("Henüz yorum yok", color = Muted, fontSize = 14.sp) }
+                        Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text("Henüz yorum yok", color = Muted, fontSize = 14.sp)
+                        }
                     }
                 } else {
                     items(comments, key = { it.id }) { cmt ->
+                        val canManage = myUid.isNotEmpty() && (myUid == cmt.uid || myUid == post.uid)
                         CommentRow(
                             comment      = cmt,
-                            myUid        = myUid,
-                            postUid      = post.uid,
+                            canManage    = canManage,
                             onLike       = { viewModel.toggleCommentLike(postId, cmt) },
                             onProfile    = { navController.navigate("profile/${cmt.uid}") },
                             onShowLikers = { socialVm.loadCommentLikers(cmt.id); showCmtLikers = cmt.id },
-                            onDelete     = { cmtToDelete = cmt },
+                            onLongPress  = { if (canManage) sheetComment = cmt },
                         )
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     }
@@ -197,40 +188,137 @@ fun PostDetailScreen(
                 )
                 Spacer(Modifier.width(8.dp))
                 IconButton(
-                    onClick  = {
+                    onClick = {
                         if (commentText.isNotBlank()) {
                             viewModel.addComment(post, commentText.trim())
                             commentText = ""
                         }
                     },
-                    enabled  = commentText.isNotBlank(),
+                    enabled = commentText.isNotBlank(),
                 ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send, null,
-                        tint = if (commentText.isNotBlank()) Amber else Muted,
-                    )
+                    Icon(Icons.AutoMirrored.Filled.Send, null, tint = if (commentText.isNotBlank()) Amber else Muted)
                 }
             }
         }
     }
 
-    // Yorum silme onay dialogu
+    // ── Basılı tutunca açılan BottomSheet ─────────────────────────────────────
+    sheetComment?.let { cmt ->
+        val isOwner = myUid == cmt.uid
+        ModalBottomSheet(
+            onDismissRequest  = { sheetComment = null },
+            containerColor    = HeftSurface,
+            contentWindowInsets = WindowInsets(0),
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
+                // Başlık
+                Text(
+                    text     = cmt.displayName,
+                    color    = Muted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+                Text(
+                    text     = cmt.text,
+                    color    = OnBackground,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 12.dp),
+                )
+                HorizontalDivider(color = Divider)
+
+                // Düzenle — sadece kendi yorumuysa
+                if (isOwner) {
+                    ListItem(
+                        headlineContent = { Text("Düzenle", color = OnBackground, fontSize = 15.sp) },
+                        leadingContent  = { Icon(Icons.Default.Edit, null, tint = Amber) },
+                        colors          = ListItemDefaults.colors(containerColor = HeftSurface),
+                        modifier        = Modifier.clickable {
+                            editText    = cmt.text
+                            editComment = cmt
+                            sheetComment = null
+                        },
+                    )
+                    HorizontalDivider(color = Divider)
+                }
+
+                // Sil — kendi yorumu veya gönderi sahibi
+                ListItem(
+                    headlineContent = { Text("Sil", color = Color(0xFFEF4444), fontSize = 15.sp) },
+                    leadingContent  = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) },
+                    colors          = ListItemDefaults.colors(containerColor = HeftSurface),
+                    modifier        = Modifier.clickable {
+                        cmtToDelete  = cmt
+                        sheetComment = null
+                    },
+                )
+                HorizontalDivider(color = Divider)
+
+                // İptal
+                ListItem(
+                    headlineContent = { Text("İptal", color = Muted, fontSize = 15.sp) },
+                    colors          = ListItemDefaults.colors(containerColor = HeftSurface),
+                    modifier        = Modifier.clickable { sheetComment = null },
+                )
+            }
+        }
+    }
+
+    // ── Silme onay dialogu ────────────────────────────────────────────────────
     cmtToDelete?.let { cmt ->
         AlertDialog(
             onDismissRequest = { cmtToDelete = null },
             containerColor   = HeftSurface,
-            title = { Text("Yorumu Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
-            text  = { Text("Bu yorumu silmek istediğine emin misin?", color = Muted) },
+            title  = { Text("Yorumu Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            text   = { Text("Bu yorumu silmek istediğine emin misin?", color = Muted) },
             confirmButton = {
                 TextButton(onClick = { viewModel.deleteComment(postId, cmt.id); cmtToDelete = null }) {
                     Text("Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                 }
             },
-            dismissButton = { TextButton(onClick = { cmtToDelete = null }) { Text("İptal", color = Muted) } },
+            dismissButton = {
+                TextButton(onClick = { cmtToDelete = null }) { Text("İptal", color = Muted) }
+            },
         )
     }
 
-    // Gönderi beğenenler sheet
+    // ── Düzenleme dialogu ─────────────────────────────────────────────────────
+    editComment?.let { cmt ->
+        AlertDialog(
+            onDismissRequest = { editComment = null },
+            containerColor   = HeftSurface,
+            title  = { Text("Yorumu Düzenle", color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            text   = {
+                OutlinedTextField(
+                    value         = editText,
+                    onValueChange = { editText = it },
+                    modifier      = Modifier.fillMaxWidth(),
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor   = Amber,
+                        unfocusedBorderColor = Divider,
+                        focusedTextColor     = OnBackground,
+                        unfocusedTextColor   = OnBackground,
+                        unfocusedContainerColor = SurfaceVar,
+                        focusedContainerColor   = SurfaceVar,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.editComment(postId, cmt.id, editText)
+                        editComment = null
+                    },
+                    enabled = editText.isNotBlank() && editText != cmt.text,
+                ) {
+                    Text("Kaydet", color = Amber, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editComment = null }) { Text("İptal", color = Muted) }
+            },
+        )
+    }
+
     if (showLikers) {
         LikerListSheet(
             likers    = likers,
@@ -240,7 +328,6 @@ fun PostDetailScreen(
         )
     }
 
-    // Yorum beğenenler sheet
     if (showCmtLikers != null) {
         LikerListSheet(
             title     = "Yorum Beğenenler",
@@ -253,20 +340,24 @@ fun PostDetailScreen(
 }
 
 // ── Yorum satırı ─────────────────────────────────────────────────────────────
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CommentRow(
     comment      : Comment,
-    myUid        : String,
-    postUid      : String,
+    canManage    : Boolean,
     onLike       : () -> Unit,
     onProfile    : () -> Unit,
     onShowLikers : () -> Unit,
-    onDelete     : () -> Unit,
+    onLongPress  : () -> Unit,
 ) {
-    // comment.uid boşsa (eski yorum) myUid boş olmadığı sürece gönderi sahibi kontrolü yeterli
-    val canDelete = myUid.isNotEmpty() && (myUid == comment.uid || myUid == postUid)
     Row(
-        modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick     = {},
+                onLongClick = onLongPress,
+            )
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top,
     ) {
         // Avatar
@@ -293,18 +384,12 @@ private fun CommentRow(
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(
-                comment.displayName,
-                fontWeight = FontWeight.SemiBold,
-                color      = OnBackground,
-                fontSize   = 13.sp,
-                modifier   = Modifier.clickable { onProfile() },
-            )
+            Text(comment.displayName, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 13.sp, modifier = Modifier.clickable { onProfile() })
             Spacer(Modifier.height(2.dp))
             Text(comment.text, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
         }
         Spacer(Modifier.width(8.dp))
-        // Sağ taraf — beğeni + silme
+        // Sağ taraf — beğeni
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             IconButton(onClick = onLike, modifier = Modifier.size(32.dp)) {
                 Icon(
@@ -315,23 +400,16 @@ private fun CommentRow(
                 )
             }
             if (comment.likesCount > 0) {
-                Text(
-                    "${comment.likesCount}",
-                    color    = Muted,
-                    fontSize = 11.sp,
-                    modifier = Modifier.clickable { onShowLikers() },
-                )
+                Text("${comment.likesCount}", color = Muted, fontSize = 11.sp, modifier = Modifier.clickable { onShowLikers() })
             }
-            // Silme butonu — sadece kendi yorumu veya gönderi sahibiyse
-            if (canDelete) {
-                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Yorumu sil",
-                        tint     = Color(0xFFEF4444).copy(alpha = 0.7f),
-                        modifier = Modifier.size(15.dp),
-                    )
-                }
+            // Basılı tutunca açılacak, ama buton ipucu olarak göster
+            if (canManage) {
+                Icon(
+                    Icons.Default.MoreVert,
+                    contentDescription = "Seçenekler",
+                    tint     = Muted.copy(alpha = 0.5f),
+                    modifier = Modifier.size(16.dp),
+                )
             }
         }
     }

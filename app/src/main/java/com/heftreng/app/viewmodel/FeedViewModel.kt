@@ -350,6 +350,20 @@ class FeedViewModel @Inject constructor(
         }
     }
 
+    fun editComment(postId: String, commentId: String, newText: String) {
+        if (newText.isBlank()) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("feed").document(postId)
+                    .collection("comments").document(commentId)
+                    .update("text", newText.trim()).await()
+                _comments.value = _comments.value.map {
+                    if (it.id == commentId) it.copy(text = newText.trim()) else it
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
     // ── Draft kaydet/yükle ────────────────────────────────────────────────────
     private var _draftPrefs: android.content.SharedPreferences? = null
 
