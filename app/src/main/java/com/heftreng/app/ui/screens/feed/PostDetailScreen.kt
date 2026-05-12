@@ -1,9 +1,7 @@
 package com.heftreng.app.ui.screens.feed
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -144,13 +142,8 @@ fun PostDetailScreen(
                     }
                 } else {
                     items(comments, key = { it.id }) { cmt ->
-                        // canManage: kendi yorumun VEYA gönderinin sahibisin
-                        // uid boş string karşılaştırması engellendi
-                        val canManage = myUid.length > 4 && (
-                            cmt.uid == myUid ||
-                            post.uid == myUid
-                        )
-                        val isOwner = myUid.length > 4 && cmt.uid == myUid
+                        val canManage = myUid.isNotEmpty() && (myUid == cmt.uid || myUid == post.uid)
+                        val isOwner   = myUid == cmt.uid
                         CommentRow(
                             comment      = cmt,
                             canManage    = canManage,
@@ -286,8 +279,6 @@ fun PostDetailScreen(
 
 // ── Yorum satırı ─────────────────────────────────────────────────────────────
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
 private fun CommentRow(
     comment      : Comment,
     canManage    : Boolean,
@@ -298,15 +289,11 @@ private fun CommentRow(
     onDelete     : () -> Unit,
     onEdit       : () -> Unit,
 ) {
-    var showMenu by remember { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(
-                onClick      = { },
-                onLongClick  = { if (canManage) showMenu = true },
-            )
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -334,27 +321,12 @@ private fun CommentRow(
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(
-                comment.displayName,
-                fontWeight = FontWeight.SemiBold,
-                color      = OnBackground,
-                fontSize   = 13.sp,
-                modifier   = Modifier.clickable { onProfile() },
-            )
+            Text(comment.displayName, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 13.sp, modifier = Modifier.clickable { onProfile() })
             Spacer(Modifier.height(2.dp))
             Text(comment.text, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
-            // Uzun bas ipucu — sadece yorum sahibine
-            if (canManage) {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    "Seçenekler için uzun bas",
-                    color    = Muted.copy(alpha = 0.5f),
-                    fontSize = 10.sp,
-                )
-            }
         }
         Spacer(Modifier.width(8.dp))
-        // Sağ taraf — beğeni + sil butonu
+        // Sağ taraf — beğeni + menü
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             IconButton(onClick = onLike, modifier = Modifier.size(32.dp)) {
                 Icon(
@@ -365,54 +337,40 @@ private fun CommentRow(
                 )
             }
             if (comment.likesCount > 0) {
-                Text(
-                    "${comment.likesCount}",
-                    color    = Muted,
-                    fontSize = 11.sp,
-                    modifier = Modifier.clickable { onShowLikers() },
-                )
+                Text("${comment.likesCount}", color = Muted, fontSize = 11.sp, modifier = Modifier.clickable { onShowLikers() })
             }
-            // Sil butonu — her zaman görünür, sadece canManage ise aktif
             if (canManage) {
-                IconButton(
-                    onClick  = onDelete,
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Yorumu Sil",
-                        tint     = Color(0xFFEF4444).copy(alpha = 0.7f),
-                        modifier = Modifier.size(16.dp),
-                    )
+                Box {
+                    IconButton(
+                        onClick  = { menuExpanded = true },
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = "Seçenekler",
+                            tint     = Muted,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded         = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        if (isOwner) {
+                            DropdownMenuItem(
+                                text         = { Text("Düzenle") },
+                                leadingIcon  = { Icon(Icons.Default.Edit, null, tint = Amber) },
+                                onClick      = { menuExpanded = false; onEdit() },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text         = { Text("Sil", color = Color(0xFFEF4444)) },
+                            leadingIcon  = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) },
+                            onClick      = { menuExpanded = false; onDelete() },
+                        )
+                    }
                 }
             }
         }
-    }
-
-    // Uzun basma menüsü
-    if (showMenu) {
-        AlertDialog(
-            onDismissRequest = { showMenu = false },
-            containerColor   = HeftSurface,
-            title  = { Text("Yorum", color = OnBackground, fontWeight = FontWeight.SemiBold) },
-            text   = { Text(comment.text, color = Muted, maxLines = 3) },
-            confirmButton = {
-                TextButton(onClick = { showMenu = false; onDelete() }) {
-                    Text("Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                Row {
-                    if (isOwner) {
-                        TextButton(onClick = { showMenu = false; onEdit() }) {
-                            Text("Düzenle", color = Amber)
-                        }
-                    }
-                    TextButton(onClick = { showMenu = false }) {
-                        Text("İptal", color = Muted)
-                    }
-                }
-            },
-        )
     }
 }
