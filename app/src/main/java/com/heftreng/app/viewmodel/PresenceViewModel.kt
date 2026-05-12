@@ -84,10 +84,32 @@ class PresenceViewModel @Inject constructor(
         firestore.collection("typing").document("${convId}_$otherUid")
             .addSnapshotListener { snap, _ ->
                 val exists = snap?.exists() == true
-                _typingUsers.value = if (exists)
-                    _typingUsers.value + otherUid
-                else
-                    _typingUsers.value - otherUid
+                if (!exists) {
+                    // Belge yok → yazıyor değil
+                    _typingUsers.value = _typingUsers.value - otherUid
+                    return@addSnapshotListener
+                }
+                // Timestamp kontrolü: 8 saniyeden eskiyse yazıyor sayma
+                val ts = snap?.getTimestamp("ts")?.toDate()?.time ?: 0L
+                val ageSec = (System.currentTimeMillis() - ts) / 1000
+                if (ageSec < 8) {
+                    _typingUsers.value = _typingUsers.value + otherUid
+                    // 8 saniye sonra otomatik temizle
+                    viewModelScope.launch {
+                        kotlinx.coroutines.delay((8 - ageSec) * 1000)
+                        val current = try {
+                            firestore.collection("typing").document("${convId}_$otherUid")
+                                .get().await()
+                        } catch (e: Exception) { null }
+                        val currentTs = current?.getTimestamp("ts")?.toDate()?.time ?: 0L
+                        if (currentTs == ts) {
+                            _typingUsers.value = _typingUsers.value - otherUid
+                        }
+                    }
+                } else {
+                    // Eski belge kalmış, yazıyor değil
+                    _typingUsers.value = _typingUsers.value - otherUid
+                }
             }
     }
 
