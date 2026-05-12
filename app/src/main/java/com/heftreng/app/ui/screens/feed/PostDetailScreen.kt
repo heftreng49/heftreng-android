@@ -49,7 +49,7 @@ fun PostDetailScreen(
     val socialLoading by socialVm.loading.collectAsState()
 
     val post = posts.find { it.id == postId }
-    val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+    val myUid = remember { viewModel.uid }
 
     var commentText   by remember { mutableStateOf("") }
     var showLikers    by remember { mutableStateOf(false) }
@@ -263,7 +263,8 @@ private fun CommentRow(
     onShowLikers : () -> Unit,
     onDelete     : () -> Unit,
 ) {
-    val canDelete = myUid == comment.uid || myUid == postUid
+    // comment.uid boşsa (eski yorum) myUid boş olmadığı sürece gönderi sahibi kontrolü yeterli
+    val canDelete = myUid.isNotEmpty() && (myUid == comment.uid || myUid == postUid)
     Row(
         modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top,

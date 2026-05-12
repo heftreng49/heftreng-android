@@ -247,10 +247,15 @@ class FeedViewModel @Inject constructor(
                     .collection("comments").orderBy("ts", Query.Direction.ASCENDING).get().await()
                 _comments.value = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
+                    // uid alanı farklı isimlerle kaydedilmiş olabilir
+                    val commentUid = (d["uid"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: (d["userId"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: (d["authorId"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: ""
                     Comment(
                         id          = doc.id,
                         postId      = postId,
-                        uid         = d["uid"]      as? String ?: "",
+                        uid         = commentUid,
                         displayName = (d["displayName"] as? String)?.takeIf { it.isNotBlank() } ?: d["name"] as? String ?: "",
                         photoURL    = d["photoURL"] as? String ?: "",
                         text        = d["text"]     as? String ?: "",
