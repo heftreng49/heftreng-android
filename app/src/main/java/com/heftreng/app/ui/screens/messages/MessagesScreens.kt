@@ -340,9 +340,16 @@ fun MessageDetailScreen(
     LaunchedEffect(convId) {
         if (conversations.isEmpty()) vm.listenConversations()
         vm.listenMessages(convId)
-        
         vm.loadOtherUser(convId)
+    }
+
+    // Ekran açılınca online yap, kapanınca offline yap
+    DisposableEffect(convId) {
         presenceVm.goOnline()
+        onDispose {
+            presenceVm.goOffline()
+            presenceVm.setTyping(convId, false)
+        }
     }
 
     val otherUidForPresence = remember(otherUser) { otherUser?.uid ?: "" }
@@ -352,8 +359,12 @@ fun MessageDetailScreen(
             presenceVm.listenTyping(convId, otherUidForPresence)
         }
     }
-    val isOtherOnline = presenceVm.isOnline(otherUser?.uid ?: "")
-    val isOtherTyping = presenceVm.isTyping(otherUser?.uid ?: "")
+
+    // StateFlow reaktif olarak dinle — UI otomatik güncellenir
+    val onlineUsers by presenceVm.onlineUsers.collectAsState()
+    val typingUsers by presenceVm.typingUsers.collectAsState()
+    val isOtherOnline = (otherUser?.uid ?: "") in onlineUsers
+    val isOtherTyping = (otherUser?.uid ?: "") in typingUsers
 
     LaunchedEffect(conversations) {
         if (conversations.isNotEmpty() && otherUser == null) vm.loadOtherUser(convId)
@@ -823,6 +834,7 @@ fun MessageDetailScreen(
                                             replyToName = if (replyTo?.senderId == vm.uid) "Sen"
                                                           else otherUser?.displayName ?: "",
                                         )
+                                        presenceVm.setTyping(convId, false)
                                         replyTo = null
                                     }
                                     inputText = ""
