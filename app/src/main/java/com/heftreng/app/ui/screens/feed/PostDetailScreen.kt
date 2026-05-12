@@ -50,7 +50,7 @@ fun PostDetailScreen(
     val socialLoading by socialVm.loading.collectAsState()
 
     val post  = posts.find { it.id == postId }
-    val myUid = remember { viewModel.uid }
+    val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
     var commentText    by remember { mutableStateOf("") }
     var showLikers     by remember { mutableStateOf(false) }
