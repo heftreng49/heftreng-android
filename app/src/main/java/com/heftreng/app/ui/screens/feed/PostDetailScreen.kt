@@ -206,9 +206,8 @@ fun PostDetailScreen(
     sheetComment?.let { cmt ->
         val isOwner = myUid == cmt.uid
         ModalBottomSheet(
-            onDismissRequest  = { sheetComment = null },
-            containerColor    = HeftSurface,
-            contentWindowInsets = WindowInsets(0),
+            onDismissRequest = { sheetComment = null },
+            containerColor   = HeftSurface,
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
                 // Başlık
