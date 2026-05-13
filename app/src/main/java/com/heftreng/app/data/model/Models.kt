@@ -57,8 +57,19 @@ data class Post(
     val serialCover      : String     = "",   // tema: serial kapak
     val chapterTitle     : String     = "",   // tema: bölüm başlığı
     val chapterOrder     : Int        = 0,    // tema: bölüm sırası
-    val isLikedByMe   : Boolean    = false,
-    val isSavedByMe   : Boolean    = false,
+    // tema: repostSerial alanları
+    val repostSerialId        : String  = "",
+    val repostSerialTitle     : String  = "",
+    val repostSerialDesc      : String  = "",
+    val repostSerialCover     : String  = "",
+    val repostSerialAuthorName: String  = "",
+    val repostSerialAuthorUid : String  = "",
+    val repostSerialBg        : String  = "",
+    val repostSerialChCount   : Int     = 0,
+    val isLikedByMe      : Boolean    = false,
+    val isSavedByMe      : Boolean    = false,
+    val isRepostedByMe   : Boolean    = false,
+    val myRepostId       : String     = "",
 )
 
 // ─── YORUM ─────────────────────────────────────────────

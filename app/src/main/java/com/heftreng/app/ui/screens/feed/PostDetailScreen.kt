@@ -1,7 +1,9 @@
 package com.heftreng.app.ui.screens.feed
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -50,7 +52,7 @@ fun PostDetailScreen(
     val socialLoading by socialVm.loading.collectAsState()
 
     val post  = posts.find { it.id == postId }
-    val myUid = remember { viewModel.uid }
+    val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
     var commentText    by remember { mutableStateOf("") }
     var showLikers     by remember { mutableStateOf(false) }
@@ -143,8 +145,8 @@ fun PostDetailScreen(
                     items(comments, key = { it.id }) { cmt ->
                         // ⋮ butonu her yorumda görünür — silme/düzenleme yetkisi
                         // deleteComment/editComment içinde Firestore'da kontrol edilir
-                        val isOwner   = myUid.isNotEmpty() && myUid == cmt.uid
-                        val canManage = myUid.isNotEmpty() && (myUid == cmt.uid || myUid == post.uid)
+                        val isOwner   = myUid.length > 4 && myUid == cmt.uid
+                        val canManage = myUid.length > 4 && (myUid == cmt.uid || myUid == post.uid)
                         CommentRow(
                             comment      = cmt,
                             canManage    = canManage,
@@ -280,6 +282,8 @@ fun PostDetailScreen(
 
 // ── Yorum satırı ─────────────────────────────────────────────────────────────
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
 private fun CommentRow(
     comment      : Comment,
     canManage    : Boolean,
@@ -290,10 +294,16 @@ private fun CommentRow(
     onDelete     : () -> Unit,
     onEdit       : () -> Unit,
 ) {
-    var menuExpanded by remember { mutableStateOf(false) }
+    var showDialog by remember { mutableStateOf(false) }
 
     Row(
-        modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick     = {},
+                onLongClick = { if (canManage) showDialog = true },
+            )
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top,
     ) {
         // Avatar
@@ -320,12 +330,18 @@ private fun CommentRow(
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(comment.displayName, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 13.sp, modifier = Modifier.clickable { onProfile() })
+            Text(
+                comment.displayName,
+                fontWeight = FontWeight.SemiBold,
+                color      = OnBackground,
+                fontSize   = 13.sp,
+                modifier   = Modifier.clickable { onProfile() },
+            )
             Spacer(Modifier.height(2.dp))
             Text(comment.text, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
         }
         Spacer(Modifier.width(4.dp))
-        // Sağ taraf — beğeni + menü
+        // Sağ taraf — beğeni + sil
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             IconButton(onClick = onLike, modifier = Modifier.size(32.dp)) {
                 Icon(
@@ -336,36 +352,54 @@ private fun CommentRow(
                 )
             }
             if (comment.likesCount > 0) {
-                Text("${comment.likesCount}", color = Muted, fontSize = 11.sp, modifier = Modifier.clickable { onShowLikers() })
+                Text(
+                    "${comment.likesCount}",
+                    color    = Muted,
+                    fontSize = 11.sp,
+                    modifier = Modifier.clickable { onShowLikers() },
+                )
             }
+            // Direkt kırmızı sil butonu — canManage ise göster
             if (canManage) {
-                Box {
-                    IconButton(
-                        onClick  = { menuExpanded = true },
-                        modifier = Modifier.size(28.dp),
-                    ) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Seçenekler", tint = Muted, modifier = Modifier.size(18.dp))
-                    }
-                    DropdownMenu(
-                        expanded         = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                        containerColor   = HeftSurface,
-                    ) {
-                        if (isOwner) {
-                            DropdownMenuItem(
-                                text        = { Text("Düzenle", color = OnBackground) },
-                                leadingIcon = { Icon(Icons.Default.Edit, null, tint = Amber) },
-                                onClick     = { menuExpanded = false; onEdit() },
-                            )
-                        }
-                        DropdownMenuItem(
-                            text        = { Text("Sil", color = Color(0xFFEF4444)) },
-                            leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) },
-                            onClick     = { menuExpanded = false; onDelete() },
-                        )
-                    }
+                IconButton(
+                    onClick  = { showDialog = true },
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Sil",
+                        tint     = Color(0xFFEF4444),
+                        modifier = Modifier.size(16.dp),
+                    )
                 }
             }
         }
+    }
+
+    // Onay dialogu
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            containerColor   = HeftSurface,
+            title = { Text("Yorumu Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            text  = { Text(comment.text.take(80), color = Muted) },
+            confirmButton = {
+                TextButton(onClick = { showDialog = false; onDelete() }) {
+                    Text("Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Row {
+                    if (isOwner) {
+                        TextButton(onClick = { showDialog = false; onEdit() }) {
+                            Text("Düzenle", color = Amber)
+                        }
+                    }
+                    TextButton(onClick = { showDialog = false }) {
+                        Text("İptal", color = Muted)
+                    }
+                }
+            },
+        )
     }
 }

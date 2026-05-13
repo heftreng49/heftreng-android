@@ -46,8 +46,9 @@ class FeedViewModel @Inject constructor(
 
     val uid get() = auth.currentUser?.uid ?: ""
 
-    private var likedIds = emptySet<String>()
-    private var savedIds = emptySet<String>()
+    private var likedIds    = emptySet<String>()
+    private var savedIds    = emptySet<String>()
+    private var myRepostMap = emptyMap<String, String>() // originalPostId → myRepostDocId
     private var lastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
     private val PAGE_SIZE = 20L
 
@@ -129,8 +130,18 @@ class FeedViewModel @Inject constructor(
                             bookName      = bookName,
                             authorName    = authorName,
                             ts            = d["ts"] as? Timestamp,
-                            isLikedByMe   = doc.id in likedIds,
-                            isSavedByMe   = doc.id in savedIds,
+                            isLikedByMe        = doc.id in likedIds,
+                            isSavedByMe        = doc.id in savedIds,
+                            isRepostedByMe     = doc.id in myRepostMap,
+                            myRepostId         = myRepostMap[doc.id] ?: "",
+                            repostSerialId         = d["repostSerialId"]         as? String ?: "",
+                            repostSerialTitle      = d["repostSerialTitle"]      as? String ?: "",
+                            repostSerialDesc       = d["repostSerialDesc"]       as? String ?: "",
+                            repostSerialCover      = d["repostSerialCover"]      as? String ?: "",
+                            repostSerialAuthorName = d["repostSerialAuthorName"] as? String ?: "",
+                            repostSerialAuthorUid  = d["repostSerialAuthorUid"]  as? String ?: "",
+                            repostSerialBg         = d["repostSerialBg"]         as? String ?: "",
+                            repostSerialChCount    = (d["repostSerialChCount"]   as? Long)?.toInt() ?: 0,
                         )
                     }
                     _loading.value = false
@@ -144,12 +155,20 @@ class FeedViewModel @Inject constructor(
         try {
             likedIds = firestore.collection("feedLikes").whereEqualTo("uid", uid)
                 .get().await().documents.mapNotNull {
-                    it.getString("feedId") ?: it.getString("postId") // geriye dönük uyum
+                    it.getString("feedId") ?: it.getString("postId")
                 }.toSet()
             savedIds = firestore.collection("feedSaves").whereEqualTo("uid", uid)
                 .get().await().documents.mapNotNull {
                     it.getString("feedId") ?: it.getString("postId")
                 }.toSet()
+            // Kullanıcının kendi repostları: originalPostId → repostDocId
+            myRepostMap = firestore.collection("feed")
+                .whereEqualTo("uid", uid)
+                .whereEqualTo("repostType", "feed")
+                .get().await().documents.mapNotNull { doc ->
+                    val originalId = doc.getString("repostId") ?: return@mapNotNull null
+                    originalId to doc.id
+                }.toMap()
         } catch (e: Exception) { e.printStackTrace() }
     }
 
@@ -299,37 +318,66 @@ class FeedViewModel @Inject constructor(
 
     fun repost(post: Post) {
         if (uid.isEmpty()) return
+        // Zaten repost ettiyse engelle — tema: rpCache ile aynı mantık
+        if (post.isRepostedByMe || post.id in myRepostMap) {
+            return
+        }
         viewModelScope.launch {
             try {
                 val userDoc = firestore.collection("users").document(uid).get().await()
                 val myName  = userDoc.getString("displayName") ?: userDoc.getString("name") ?: ""
                 val myPhoto = userDoc.getString("photoURL") ?: ""
-                // Tema + Android alan uyumu
-                firestore.collection("feed").add(mapOf(
+                val newRef = firestore.collection("feed").add(mapOf(
                     "uid"               to uid,
                     "name"              to myName,
                     "displayName"       to myName,
                     "username"          to (userDoc.getString("username") ?: ""),
                     "photoURL"          to myPhoto,
-                    // Bu kartın kendi içeriği YOK
                     "text"              to "",
                     "imgUrl"            to "",
                     "imageURL"          to "",
-                    // Orijinal gönderiye referans
                     "repostType"        to "feed",
                     "repostId"          to post.id,
                     "repostUid"         to post.uid,
-                    // Embed önizleme (tema rp-embed uyumu)
                     "repostText"        to post.text.take(200),
-                    "repostAuthor"      to post.displayName,
+                    "repostAuthor"      to (post.displayName.ifBlank { post.name }),
                     "repostAuthorPhoto" to post.photoURL,
                     "repostAuthorUid"   to post.uid,
                     "repostImg"         to (post.imageURL.takeIf { it.isNotBlank() } ?: post.imgUrl),
                     "likes" to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
                     "ts"    to Timestamp.now(),
                 )).await()
-                firestore.collection("feed").document(post.id).update("reposts", FieldValue.increment(1)).await()
+                firestore.collection("feed").document(post.id)
+                    .update("reposts", FieldValue.increment(1)).await()
+                myRepostMap = myRepostMap + (post.id to newRef.id)
+                _posts.value = _posts.value.map {
+                    if (it.id == post.id) it.copy(
+                        repostsCount   = it.repostsCount + 1,
+                        isRepostedByMe = true,
+                        myRepostId     = newRef.id,
+                    ) else it
+                }
                 if (post.uid != uid) sendNotif(post.uid, "repost", "$myName gönderini paylaştı", post.text.take(60), post.id)
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun unrepost(post: Post) {
+        if (uid.isEmpty()) return
+        val repostDocId = post.myRepostId.ifBlank { myRepostMap[post.id] } ?: return
+        viewModelScope.launch {
+            try {
+                firestore.collection("feed").document(repostDocId).delete().await()
+                firestore.collection("feed").document(post.id)
+                    .update("reposts", FieldValue.increment(-1)).await()
+                myRepostMap = myRepostMap - post.id
+                _posts.value = _posts.value.map {
+                    if (it.id == post.id) it.copy(
+                        repostsCount   = maxOf(0, it.repostsCount - 1),
+                        isRepostedByMe = false,
+                        myRepostId     = "",
+                    ) else it
+                }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
@@ -338,14 +386,7 @@ class FeedViewModel @Inject constructor(
     fun deleteComment(postId: String, commentId: String) {
         viewModelScope.launch {
             try {
-                // Firestore'dan yorumu al, uid kontrolü yap
-                val cmtDoc = firestore.collection("feed").document(postId)
-                    .collection("comments").document(commentId).get().await()
-                val cmtUid = cmtDoc.getString("uid") ?: ""
-                val postDoc = firestore.collection("feed").document(postId).get().await()
-                val postUid = postDoc.getString("uid") ?: ""
-                // Sadece yorum sahibi veya gönderi sahibi silebilir
-                if (uid != cmtUid && uid != postUid) return@launch
+                // Tema gibi: uid kontrolü yok, Firestore Security Rules halleder
                 firestore.collection("feed").document(postId)
                     .collection("comments").document(commentId).delete().await()
                 firestore.collection("feed").document(postId)
@@ -509,12 +550,11 @@ class FeedViewModel @Inject constructor(
                         bookName      = bookName,
                         authorName    = authorName,
                         ts            = d["ts"] as? com.google.firebase.Timestamp,
-                        isLikedByMe   = doc.id in likedIds,
-                        isSavedByMe   = doc.id in savedIds,
+                        isLikedByMe    = doc.id in likedIds,
+                        isSavedByMe    = doc.id in savedIds,
+                        isRepostedByMe = doc.id in myRepostMap,
+                        myRepostId     = myRepostMap[doc.id] ?: "",
                     )
-                }
-                val existingIds = _posts.value.map { it.id }.toSet()
-                _posts.value = _posts.value + newPosts.filter { it.id !in existingIds }
             } catch (e: Exception) { e.printStackTrace() }
             finally { _loadingMore.value = false }
         }
@@ -557,8 +597,10 @@ class FeedViewModel @Inject constructor(
                     repostTitle   = d["repostTitle"]   as? String ?: "",
                     repostText    = d["repostText"]    as? String ?: "",
                     serialTitle   = d["serialTitle"]   as? String ?: "",
-                    isLikedByMe   = doc.id in likedIds,
-                    isSavedByMe   = doc.id in savedIds,
+                    isLikedByMe    = doc.id in likedIds,
+                    isSavedByMe    = doc.id in savedIds,
+                    isRepostedByMe = doc.id in myRepostMap,
+                    myRepostId     = myRepostMap[doc.id] ?: "",
                 )
                 _posts.value = _posts.value + post
             } catch (e: Exception) { e.printStackTrace() }

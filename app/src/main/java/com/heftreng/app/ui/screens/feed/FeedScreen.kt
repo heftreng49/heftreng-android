@@ -198,7 +198,10 @@ fun FeedScreen(
                         onSave    = { vm.toggleSave(post) },
                         onProfile = { navController.navigate(Screen.Profile.go(post.uid)) },
                         onComment = { commentPost = post },
-                        onShare   = { vm.repost(post) },
+                        onShare   = {
+                            if (post.isRepostedByMe) vm.unrepost(post)
+                            else vm.repost(post)
+                        },
                         onDelete  = { vm.deletePost(post.id) },
                         onEdit    = { newText -> vm.editPost(post.id, newText) },
                         onTap        = { navController.navigate(Screen.PostDetail.go(post.id)) },
@@ -774,7 +777,9 @@ fun PostCard(
             if (post.commentsCount > 0) Text(post.commentsCount.toString(), color = Muted, fontSize = 13.sp)
             Spacer(Modifier.width(4.dp))
             IconButton(onClick = onShare) {
-                Icon(Icons.Default.Repeat, null, tint = Muted, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Repeat, null,
+                    tint     = if (post.isRepostedByMe) Amber else Muted,
+                    modifier = Modifier.size(20.dp))
             }
             if (post.repostsCount > 0) Text(post.repostsCount.toString(), color = Muted, fontSize = 13.sp)
             Spacer(Modifier.weight(1f))
