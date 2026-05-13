@@ -75,7 +75,25 @@ class AuthViewModel @Inject constructor(
             _loading.value = true
             try {
                 val result = auth.signInWithEmailAndPassword(email, password).await()
-                result.user?.let { syncFcmToken(it.uid) }
+                val user   = result.user ?: return@launch
+                // Kullanıcı adı boşsa Firestore'dan al ve Auth'a yaz
+                if (user.displayName.isNullOrBlank()) {
+                    try {
+                        val doc  = firestore.collection("users").document(user.uid).get().await()
+                        val name = doc.getString("displayName")?.takeIf { it.isNotBlank() }
+                                   ?: doc.getString("name")?.takeIf { it.isNotBlank() }
+                                   ?: email.substringBefore("@")
+                        val profileUpdates = com.google.firebase.auth.userProfileChangeRequest {
+                            displayName = name
+                        }
+                        user.updateProfile(profileUpdates).await()
+                        // Firestore'da da name/displayName alanlarını güncelle
+                        firestore.collection("users").document(user.uid).update(
+                            mapOf("displayName" to name, "name" to name)
+                        ).await()
+                    } catch (e: Exception) { e.printStackTrace() }
+                }
+                syncFcmToken(user.uid)
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -137,7 +155,21 @@ class AuthViewModel @Inject constructor(
     }
 
     private suspend fun createUserDoc(user: FirebaseUser, overrideName: String? = null) {
-        val name     = overrideName ?: user.displayName ?: user.email?.substringBefore("@") ?: "Kullanıcı"
+        val name     = overrideName?.takeIf { it.isNotBlank() }
+                       ?: user.displayName?.takeIf { it.isNotBlank() }
+                       ?: user.email?.substringBefore("@")?.takeIf { it.isNotBlank() }
+                       ?: "Kullanıcı"
+        val photoURL = user.photoUrl?.toString() ?: ""
+
+        // 1. Firebase Auth profilini güncelle — displayName boş kalmasın
+        try {
+            val profileUpdates = com.google.firebase.auth.userProfileChangeRequest {
+                displayName = name
+            }
+            user.updateProfile(profileUpdates).await()
+        } catch (e: Exception) { e.printStackTrace() }
+
+        // 2. Firestore users koleksiyonuna yaz
         val username = generateUniqueUsername(name)
         firestore.collection("users").document(user.uid).set(mapOf(
             "uid"         to user.uid,
@@ -145,7 +177,7 @@ class AuthViewModel @Inject constructor(
             "name"        to name,
             "username"    to username,
             "email"       to (user.email ?: ""),
-            "photoURL"    to (user.photoUrl?.toString() ?: ""),
+            "photoURL"    to photoURL,
             "coverPhoto"  to "",
             "bio"         to "",
             "website"     to "",
@@ -156,6 +188,8 @@ class AuthViewModel @Inject constructor(
             "createdAt"   to com.google.firebase.Timestamp.now(),
             "lastSeen"    to com.google.firebase.Timestamp.now(),
         ), com.google.firebase.firestore.SetOptions.merge()).await()
+
+        // 3. username benzersizlik kaydı
         firestore.collection("usernames").document(username).set(
             mapOf("uid" to user.uid)
         ).await()
