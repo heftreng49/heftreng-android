@@ -60,18 +60,10 @@ fun CommentsSheet(
     val scope = rememberCoroutineScope()
 
     // ── Auth state ────────────────────────────────────────────────────────────
-    var myUid   by remember { mutableStateOf(auth.currentUser?.uid ?: "") }
+    // Doğrudan currentUser'dan al — sheet açıldığında kullanıcı zaten login
+    val myUid   = remember { auth.currentUser?.uid ?: "" }
     var myName  by remember { mutableStateOf(auth.currentUser?.displayName ?: "") }
     var myPhoto by remember { mutableStateOf(auth.currentUser?.photoUrl?.toString() ?: "") }
-    DisposableEffect(Unit) {
-        val l = FirebaseAuth.AuthStateListener { a ->
-            myUid   = a.currentUser?.uid ?: ""
-            myName  = a.currentUser?.displayName ?: ""
-            myPhoto = a.currentUser?.photoUrl?.toString() ?: ""
-        }
-        auth.addAuthStateListener(l)
-        onDispose { auth.removeAuthStateListener(l) }
-    }
 
     // ── State ─────────────────────────────────────────────────────────────────
     var comments     by remember { mutableStateOf<List<FeedComment>>(emptyList()) }

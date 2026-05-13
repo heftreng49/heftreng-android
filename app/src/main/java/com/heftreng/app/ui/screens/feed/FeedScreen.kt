@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -870,6 +871,8 @@ fun EditPostDialog(currentText: String, onDismiss: () -> Unit, onSave: (String) 
 fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel) {
     val comments    by vm.comments.collectAsState()
     var commentText by remember { mutableStateOf("") }
+    var deleteTarget by remember { mutableStateOf<Comment?>(null) }
+    val myUid = vm.uid
     LaunchedEffect(post.id) { vm.loadComments(post.id) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = HeftSurface) {
@@ -878,12 +881,15 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel) {
                 .fillMaxWidth()
                 .fillMaxHeight(0.75f)
                 .padding(horizontal = 16.dp)
-                .navigationBarsPadding(),
+                .navigationBarsPadding()
+                .imePadding(),
         ) {
             Text("Yorumlar", fontWeight = FontWeight.SemiBold, color = OnBackground, modifier = Modifier.padding(vertical = 8.dp))
             HorizontalDivider(color = Divider)
             LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(comments, key = { it.id }) { cmt ->
+                    val canDelete = myUid.isNotBlank() &&
+                        (cmt.uid == myUid || post.uid == myUid)
                     Row(verticalAlignment = Alignment.Top) {
                         AsyncImage(
                             model = cmt.photoURL.ifEmpty { null }, contentDescription = null,
@@ -891,9 +897,22 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel) {
                             contentScale = ContentScale.Crop,
                         )
                         Spacer(Modifier.width(8.dp))
-                        Column {
+                        Column(Modifier.weight(1f)) {
                             Text(cmt.displayName, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 13.sp)
                             Text(cmt.text, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
+                        }
+                        if (canDelete) {
+                            IconButton(
+                                onClick  = { deleteTarget = cmt },
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Sil",
+                                    tint     = Color(0xFFEF4444).copy(alpha = 0.7f),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -919,6 +938,26 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel) {
                 }
             }
         }
+    }
+
+    // Silme onay dialogu
+    deleteTarget?.let { cmt ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            containerColor   = HeftSurface,
+            title  = { Text("Yorumu Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            text   = { Text(cmt.text.take(80), color = Muted, fontSize = 13.sp) },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteComment(post.id, cmt.id); deleteTarget = null }) {
+                    Text("Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) {
+                    Text("İptal", color = Muted)
+                }
+            },
+        )
     }
 }
 
