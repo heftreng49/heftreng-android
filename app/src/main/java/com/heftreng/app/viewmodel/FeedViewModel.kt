@@ -555,6 +555,7 @@ class FeedViewModel @Inject constructor(
                         isRepostedByMe = doc.id in myRepostMap,
                         myRepostId     = myRepostMap[doc.id] ?: "",
                     )
+                }
             } catch (e: Exception) { e.printStackTrace() }
             finally { _loadingMore.value = false }
         }
