@@ -33,7 +33,6 @@ import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
 import com.heftreng.app.data.model.Comment
 import com.heftreng.app.navigation.Screen
-import com.heftreng.app.ui.component.DebugLog
 import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
@@ -152,18 +151,10 @@ fun PostDetailScreen(
                     }
                 } else {
                     items(comments, key = { it.id }) { cmt ->
+                        // ⋮ butonu her yorumda görünür — silme/düzenleme yetkisi
+                        // deleteComment/editComment içinde Firestore'da kontrol edilir
                         val isOwner   = myUid.isNotBlank() && myUid == cmt.uid
                         val canManage = myUid.isNotBlank() && (myUid == cmt.uid || myUid == post.uid)
-                        // Admin debug log
-                        SideEffect {
-                            DebugLog.section("PostDetail")
-                            DebugLog.put("myUid", myUid.ifBlank { "BOŞ!" })
-                            DebugLog.put("cmt[${cmt.id.take(6)}].uid", cmt.uid.ifBlank { "BOŞ!" })
-                            DebugLog.put("cmt.displayName", cmt.displayName)
-                            DebugLog.put("isOwner", isOwner.toString())
-                            DebugLog.put("canManage", canManage.toString())
-                            DebugLog.put("post.uid", post.uid.take(8))
-                        }
                         CommentRow(
                             comment      = cmt,
                             canManage    = canManage,
