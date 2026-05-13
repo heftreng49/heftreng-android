@@ -52,7 +52,15 @@ fun PostDetailScreen(
     val socialLoading by socialVm.loading.collectAsState()
 
     val post  = posts.find { it.id == postId }
-    val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+    // Auth state reaktif izleme — ekran açılırken currentUser null olabilir
+    var myUid by remember { mutableStateOf(FirebaseAuth.getInstance().currentUser?.uid ?: "") }
+    DisposableEffect(Unit) {
+        val listener = FirebaseAuth.AuthStateListener { auth ->
+            myUid = auth.currentUser?.uid ?: ""
+        }
+        FirebaseAuth.getInstance().addAuthStateListener(listener)
+        onDispose { FirebaseAuth.getInstance().removeAuthStateListener(listener) }
+    }
 
     var commentText    by remember { mutableStateOf("") }
     var showLikers     by remember { mutableStateOf(false) }
@@ -145,8 +153,8 @@ fun PostDetailScreen(
                     items(comments, key = { it.id }) { cmt ->
                         // ⋮ butonu her yorumda görünür — silme/düzenleme yetkisi
                         // deleteComment/editComment içinde Firestore'da kontrol edilir
-                        val isOwner   = myUid.length > 4 && myUid == cmt.uid
-                        val canManage = myUid.length > 4 && (myUid == cmt.uid || myUid == post.uid)
+                        val isOwner   = myUid.isNotBlank() && myUid == cmt.uid
+                        val canManage = myUid.isNotBlank() && (myUid == cmt.uid || myUid == post.uid)
                         CommentRow(
                             comment      = cmt,
                             canManage    = canManage,
