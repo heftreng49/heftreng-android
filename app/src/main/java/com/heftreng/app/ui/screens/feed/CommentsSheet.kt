@@ -3,7 +3,6 @@ package com.heftreng.app.ui.screens.feed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -167,7 +166,6 @@ fun CommentsSheet(
         onDismissRequest  = onDismiss,
         containerColor    = Background,
         contentColor      = OnBackground,
-        windowInsets      = WindowInsets.ime,
         dragHandle = {
             Box(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
@@ -181,7 +179,8 @@ fun CommentsSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.9f)
-                .navigationBarsPadding(),
+                .navigationBarsPadding()
+                .imePadding(),
         ) {
             // Başlık
             Row(
