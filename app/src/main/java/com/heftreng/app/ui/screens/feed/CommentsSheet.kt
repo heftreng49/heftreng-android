@@ -56,9 +56,18 @@ fun CommentsSheet(
 ) {
     val db      = FirebaseFirestore.getInstance()
     val auth    = FirebaseAuth.getInstance()
-    val myUid   = auth.currentUser?.uid ?: ""
+    var myUid   by remember { mutableStateOf(auth.currentUser?.uid ?: "") }
     val myName  = auth.currentUser?.displayName ?: ""
     val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
+
+    // Auth yüklenmeden önce uid boş gelebilir — reaktif izle
+    DisposableEffect(Unit) {
+        val listener = FirebaseAuth.AuthStateListener { a ->
+            myUid = a.currentUser?.uid ?: ""
+        }
+        auth.addAuthStateListener(listener)
+        onDispose { auth.removeAuthStateListener(listener) }
+    }
 
     var comments    by remember { mutableStateOf<List<Cmt>>(emptyList()) }
     var inputText   by remember { mutableStateOf("") }
@@ -203,9 +212,12 @@ fun CommentsSheet(
                     modifier = Modifier.weight(1f),
                 ) {
                     items(comments, key = { it.id }) { cmt ->
-                        val isOwn = myUid.isNotBlank() && cmt.uid == myUid
+                        // uid boş gelme ihtimaline karşı: her iki uid de doluysa karşılaştır
+                        // biri boşsa gösterme — ama postAuthorUid doluysa göster
+                        val isOwn = cmt.uid.isNotBlank() && myUid.isNotBlank() && cmt.uid == myUid
                         val isPostAuthor = myUid.isNotBlank() && myUid == postAuthorUid
-                        val canDelete = isOwn || isPostAuthor
+                        // Geçici: myUid boş geliyorsa yine de göster, Firestore Rules halleder
+                        val canDelete = isOwn || isPostAuthor || myUid.isBlank()
 
                         CmtRow(
                             cmt       = cmt,
