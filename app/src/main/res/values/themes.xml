@@ -10,7 +10,7 @@
         <item name="android:windowBackground">@color/background</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <!-- Edge-to-edge: sistem çubukları şeffaf, Compose içerik içine çizer -->
-        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <!-- Edge-to-edge: Android 15+ için always kullan (shortEdges deprecated) -->
+        <item name="android:windowLayoutInDisplayCutoutMode">always</item>
     </style>
 </resources>
