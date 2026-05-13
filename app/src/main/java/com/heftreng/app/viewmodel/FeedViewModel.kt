@@ -382,11 +382,15 @@ class FeedViewModel @Inject constructor(
         }
     }
 
+    private val _commentError = MutableStateFlow<String?>(null)
+    val commentError = _commentError.asStateFlow()
+
+    fun clearCommentError() { _commentError.value = null }
+
     // ── Yorum Sil ─────────────────────────────────────────────────────────────
     fun deleteComment(postId: String, commentId: String) {
         viewModelScope.launch {
             try {
-                // Tema gibi: uid kontrolü yok, Firestore Security Rules halleder
                 firestore.collection("feed").document(postId)
                     .collection("comments").document(commentId).delete().await()
                 firestore.collection("feed").document(postId)
@@ -395,7 +399,12 @@ class FeedViewModel @Inject constructor(
                 _posts.value = _posts.value.map {
                     if (it.id == postId) it.copy(commentsCount = maxOf(0, it.commentsCount - 1)) else it
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // PERMISSION_DENIED — kullanıcıya hata göster
+                _commentError.value = if (e.message?.contains("PERMISSION_DENIED") == true)
+                    "Bu yorumu silme yetkiniz yok." else "Yorum silinemedi: ${e.message}"
+            }
         }
     }
 

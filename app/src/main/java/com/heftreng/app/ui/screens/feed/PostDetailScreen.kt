@@ -51,17 +51,22 @@ fun PostDetailScreen(
     val comments by viewModel.comments.collectAsState()
     val likers   by socialVm.likers.collectAsState()
     val socialLoading by socialVm.loading.collectAsState()
+    val commentError  by viewModel.commentError.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val post  = posts.find { it.id == postId }
     // viewModel.uid — Hilt inject edilen auth instance'ından gelir, getInstance() ile çakışmaz
-    var myUid by remember { mutableStateOf(viewModel.uid) }
+    var myUid   by remember { mutableStateOf(viewModel.uid) }
+    var myEmail by remember { mutableStateOf(FirebaseAuth.getInstance().currentUser?.email ?: "") }
     DisposableEffect(Unit) {
         val listener = com.google.firebase.auth.FirebaseAuth.AuthStateListener {
-            myUid = viewModel.uid
+            myUid   = viewModel.uid
+            myEmail = FirebaseAuth.getInstance().currentUser?.email ?: ""
         }
-        com.google.firebase.auth.FirebaseAuth.getInstance().addAuthStateListener(listener)
-        onDispose { com.google.firebase.auth.FirebaseAuth.getInstance().removeAuthStateListener(listener) }
+        FirebaseAuth.getInstance().addAuthStateListener(listener)
+        onDispose { FirebaseAuth.getInstance().removeAuthStateListener(listener) }
     }
+    val isAdmin = myUid.isNotBlank() && myEmail == "siirgibi49@gmail.com"
 
     var commentText    by remember { mutableStateOf("") }
     var showLikers     by remember { mutableStateOf(false) }
@@ -71,6 +76,14 @@ fun PostDetailScreen(
     var editText       by remember { mutableStateOf("") }
 
     LaunchedEffect(postId) { viewModel.loadComments(postId) }
+
+    // Hata snackbar
+    LaunchedEffect(commentError) {
+        commentError?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearCommentError()
+        }
+    }
 
     // Admin debug — auth + comment durumunu izle
     LaunchedEffect(myUid, comments) {
@@ -93,6 +106,7 @@ fun PostDetailScreen(
     Scaffold(
         modifier       = Modifier.imePadding(),
         containerColor = Background,
+        snackbarHost   = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Gönderi", color = OnBackground, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
@@ -170,8 +184,10 @@ fun PostDetailScreen(
                     }
                 } else {
                     items(comments, key = { it.id }) { cmt ->
+                        // Kural: sadece yorum sahibi veya admin silebilir/düzenleyebilir
+                        // (post sahibi başkasının yorumunu silemez — Firestore Rules ile uyumlu)
                         val isOwner   = myUid.isNotBlank() && myUid == cmt.uid
-                        val canManage = myUid.isNotBlank() && (myUid == cmt.uid || myUid == post.uid)
+                        val canManage = isOwner || isAdmin
                         CommentRow(
                             comment      = cmt,
                             canManage    = canManage,
@@ -383,17 +399,19 @@ private fun CommentRow(
                     modifier = Modifier.clickable { onShowLikers() },
                 )
             }
-            // Sil butonu — her zaman göster, yetki Firestore Rules'da
-            IconButton(
-                onClick  = { showDialog = true },
-                modifier = Modifier.size(32.dp),
-            ) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Sil",
-                    tint     = Color(0xFFEF4444).copy(alpha = 0.7f),
-                    modifier = Modifier.size(15.dp),
-                )
+            // Sil butonu — sadece yorum sahibi veya admin görür
+            if (canManage) {
+                IconButton(
+                    onClick  = { showDialog = true },
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Yorumu sil",
+                        tint     = Color(0xFFEF4444).copy(alpha = 0.7f),
+                        modifier = Modifier.size(15.dp),
+                    )
+                }
             }
         }
     }
