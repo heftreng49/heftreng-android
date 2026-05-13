@@ -3,6 +3,7 @@ package com.heftreng.app.ui.screens.feed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -60,10 +61,17 @@ fun CommentsSheet(
     val scope = rememberCoroutineScope()
 
     // ── Auth state ────────────────────────────────────────────────────────────
-    // Doğrudan currentUser'dan al — sheet açıldığında kullanıcı zaten login
-    val myUid   = remember { auth.currentUser?.uid ?: "" }
+    var myUid   by remember { mutableStateOf(auth.currentUser?.uid ?: "") }
     var myName  by remember { mutableStateOf(auth.currentUser?.displayName ?: "") }
     var myPhoto by remember { mutableStateOf(auth.currentUser?.photoUrl?.toString() ?: "") }
+    // Auth yüklenmemişse tekrar dene
+    LaunchedEffect(Unit) {
+        if (myUid.isBlank()) {
+            myUid   = auth.currentUser?.uid ?: ""
+            myName  = auth.currentUser?.displayName ?: ""
+            myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
+        }
+    }
 
     // ── State ─────────────────────────────────────────────────────────────────
     var comments     by remember { mutableStateOf<List<FeedComment>>(emptyList()) }
@@ -159,6 +167,7 @@ fun CommentsSheet(
         onDismissRequest  = onDismiss,
         containerColor    = Background,
         contentColor      = OnBackground,
+        windowInsets      = WindowInsets.ime,
         dragHandle = {
             Box(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
@@ -172,8 +181,7 @@ fun CommentsSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.9f)
-                .navigationBarsPadding()
-                .imePadding(),
+                .navigationBarsPadding(),
         ) {
             // Başlık
             Row(

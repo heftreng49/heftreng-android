@@ -66,7 +66,10 @@ fun PostDetailScreen(
     val auth  = FirebaseAuth.getInstance()
     val scope = rememberCoroutineScope()
 
-    val myUid = remember { auth.currentUser?.uid ?: "" }
+    var myUid by remember { mutableStateOf(auth.currentUser?.uid ?: "") }
+    LaunchedEffect(Unit) {
+        if (myUid.isBlank()) myUid = auth.currentUser?.uid ?: ""
+    }
 
     var comments     by remember { mutableStateOf<List<DetailComment>>(emptyList()) }
     var cmtLoading   by remember { mutableStateOf(true) }
@@ -122,8 +125,8 @@ fun PostDetailScreen(
                         "ts"          to Timestamp.now(),
                     )
                 ).await()
-                db.collection("feed").document(postId)
-                    .update("cmtCount", FieldValue.increment(1)).await()
+                // cmtCount sadece bir kez artırılmalı — FeedViewModel.addComment() zaten yapıyor
+                // Burada tekrar increment yapılırsa sayaç iki katına çıkar
             } catch (e: Exception) {
                 errorMsg = e.message ?: "Hata"
             }
