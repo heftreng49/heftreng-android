@@ -35,6 +35,7 @@ import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestore
+import com.heftreng.app.data.model.Comment
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.component.AdBannerView
