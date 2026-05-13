@@ -129,6 +129,8 @@ fun CommentsSheet(
     }
 
     // ── Yorum sil ─────────────────────────────────────────────────────────────
+    var errorMsg by remember { mutableStateOf("") }
+
     fun deleteComment(cmt: Cmt) {
         scope.launch {
             try {
@@ -136,7 +138,10 @@ fun CommentsSheet(
                     .collection("comments").document(cmt.id).delete().await()
                 db.collection("feed").document(postId)
                     .update("cmtCount", FieldValue.increment(-1)).await()
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                errorMsg = e.message ?: "Bilinmeyen hata"
+                e.printStackTrace()
+            }
         }
     }
 
@@ -260,6 +265,21 @@ fun CommentsSheet(
                 }
             }
         }
+    }
+
+    // Hata mesajı
+    if (errorMsg.isNotBlank()) {
+        AlertDialog(
+            onDismissRequest = { errorMsg = "" },
+            containerColor   = HeftSurface,
+            title  = { Text("Hata", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold) },
+            text   = { Text(errorMsg, color = OnSurface, fontSize = 13.sp) },
+            confirmButton = {
+                TextButton(onClick = { errorMsg = "" }) {
+                    Text("Tamam", color = Amber)
+                }
+            },
+        )
     }
 
     // Silme onay dialogu
