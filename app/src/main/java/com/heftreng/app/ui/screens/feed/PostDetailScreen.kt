@@ -32,9 +32,10 @@ fun PostDetailScreen(
     postId       : String,
     socialVm     : SocialViewModel = hiltViewModel(),
 ) {
-    val posts  by viewModel.posts.collectAsState()
-    val likers by socialVm.likers.collectAsState()
-    val post   = posts.find { it.id == postId }
+    val posts          by viewModel.posts.collectAsState()
+    val likers         by socialVm.likers.collectAsState()
+    val socialLoading  by socialVm.loading.collectAsState()
+    val post           = posts.find { it.id == postId }
 
     var showLikers   by remember { mutableStateOf(false) }
     var showComments by remember { mutableStateOf(true) }
@@ -130,6 +131,7 @@ fun PostDetailScreen(
     if (showLikers) {
         LikerListSheet(
             likers    = likers,
+            loading   = socialLoading,
             onDismiss = { showLikers = false },
             onProfile = { uid -> showLikers = false; navController.navigate("profile/$uid") },
         )
