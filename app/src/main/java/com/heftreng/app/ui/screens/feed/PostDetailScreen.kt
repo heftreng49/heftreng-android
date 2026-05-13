@@ -33,6 +33,7 @@ import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
 import com.heftreng.app.data.model.Comment
 import com.heftreng.app.navigation.Screen
+import com.heftreng.app.ui.component.DebugLog
 import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
@@ -70,6 +71,23 @@ fun PostDetailScreen(
     var editText       by remember { mutableStateOf("") }
 
     LaunchedEffect(postId) { viewModel.loadComments(postId) }
+
+    // Admin debug — auth + comment durumunu izle
+    LaunchedEffect(myUid, comments) {
+        DebugLog.section("PostDetail")
+        DebugLog.put("myUid", myUid.ifBlank { "⚠️ BOŞ" })
+        DebugLog.put("email", FirebaseAuth.getInstance().currentUser?.email ?: "null")
+        DebugLog.put("commentSayisi", comments.size.toString())
+        comments.firstOrNull()?.let { cmt ->
+            DebugLog.put("ilkCmt.uid", cmt.uid.ifBlank { "⚠️ BOŞ" })
+            DebugLog.put("ilkCmt.name", cmt.displayName)
+            DebugLog.put("uid==cmt.uid", (myUid == cmt.uid).toString())
+        }
+        post?.let {
+            DebugLog.put("post.uid", it.uid.take(12))
+            DebugLog.put("uid==post.uid", (myUid == it.uid).toString())
+        }
+    }
 
     Scaffold(
         modifier       = Modifier.imePadding(),
@@ -151,8 +169,6 @@ fun PostDetailScreen(
                     }
                 } else {
                     items(comments, key = { it.id }) { cmt ->
-                        // ⋮ butonu her yorumda görünür — silme/düzenleme yetkisi
-                        // deleteComment/editComment içinde Firestore'da kontrol edilir
                         val isOwner   = myUid.isNotBlank() && myUid == cmt.uid
                         val canManage = myUid.isNotBlank() && (myUid == cmt.uid || myUid == post.uid)
                         CommentRow(
