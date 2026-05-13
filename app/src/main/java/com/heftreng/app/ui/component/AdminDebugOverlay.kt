@@ -51,26 +51,33 @@ private const val ADMIN_EMAIL = "siirgibi49@gmail.com"
 
 // Global debug log — her ekrandan buraya yazılır
 object DebugLog {
-    private val _entries = mutableStateListOf<Pair<String, String>>()
-    val entries: List<Pair<String, String>> get() = _entries
+    val entries = androidx.compose.runtime.mutableStateListOf<Pair<String, String>>()
 
     fun put(key: String, value: String) {
-        val idx = _entries.indexOfFirst { it.first == key }
-        if (idx >= 0) _entries[idx] = key to value
-        else _entries.add(key to value)
+        val idx = entries.indexOfFirst { it.first == key }
+        if (idx >= 0) entries[idx] = key to value
+        else entries.add(key to value)
     }
 
     fun section(name: String) {
         put("── $name ──", "")
     }
 
-    fun clear() = _entries.clear()
+    fun clear() = entries.clear()
 }
 
 @Composable
 fun AdminDebugOverlay() {
-    val auth = FirebaseAuth.getInstance()
-    val isAdmin = auth.currentUser?.email == ADMIN_EMAIL
+    var isAdmin by remember { mutableStateOf(false) }
+    DisposableEffect(Unit) {
+        val listener = com.google.firebase.auth.FirebaseAuth.AuthStateListener { auth ->
+            isAdmin = auth.currentUser?.email == ADMIN_EMAIL
+        }
+        com.google.firebase.auth.FirebaseAuth.getInstance().addAuthStateListener(listener)
+        // İlk değeri hemen set et
+        isAdmin = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email == ADMIN_EMAIL
+        onDispose { com.google.firebase.auth.FirebaseAuth.getInstance().removeAuthStateListener(listener) }
+    }
     if (!isAdmin) return
 
     var expanded by remember { mutableStateOf(false) }

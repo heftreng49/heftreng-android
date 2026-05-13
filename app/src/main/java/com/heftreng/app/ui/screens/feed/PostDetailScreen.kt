@@ -53,14 +53,14 @@ fun PostDetailScreen(
     val socialLoading by socialVm.loading.collectAsState()
 
     val post  = posts.find { it.id == postId }
-    // Auth state reaktif izleme — ekran açılırken currentUser null olabilir
-    var myUid by remember { mutableStateOf(FirebaseAuth.getInstance().currentUser?.uid ?: "") }
+    // viewModel.uid — Hilt inject edilen auth instance'ından gelir, getInstance() ile çakışmaz
+    var myUid by remember { mutableStateOf(viewModel.uid) }
     DisposableEffect(Unit) {
-        val listener = FirebaseAuth.AuthStateListener { auth ->
-            myUid = auth.currentUser?.uid ?: ""
+        val listener = com.google.firebase.auth.FirebaseAuth.AuthStateListener {
+            myUid = viewModel.uid
         }
-        FirebaseAuth.getInstance().addAuthStateListener(listener)
-        onDispose { FirebaseAuth.getInstance().removeAuthStateListener(listener) }
+        com.google.firebase.auth.FirebaseAuth.getInstance().addAuthStateListener(listener)
+        onDispose { com.google.firebase.auth.FirebaseAuth.getInstance().removeAuthStateListener(listener) }
     }
 
     var commentText    by remember { mutableStateOf("") }
@@ -76,7 +76,8 @@ fun PostDetailScreen(
     LaunchedEffect(myUid, comments) {
         DebugLog.section("PostDetail")
         DebugLog.put("myUid", myUid.ifBlank { "⚠️ BOŞ" })
-        DebugLog.put("email", FirebaseAuth.getInstance().currentUser?.email ?: "null")
+        DebugLog.put("vmUid", viewModel.uid.ifBlank { "⚠️ BOŞ" })
+        DebugLog.put("email", com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: "null")
         DebugLog.put("commentSayisi", comments.size.toString())
         comments.firstOrNull()?.let { cmt ->
             DebugLog.put("ilkCmt.uid", cmt.uid.ifBlank { "⚠️ BOŞ" })
