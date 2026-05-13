@@ -281,7 +281,6 @@ fun PostDetailScreen(
 }
 
 // ── Yorum satırı ─────────────────────────────────────────────────────────────
-@Composable
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CommentRow(
