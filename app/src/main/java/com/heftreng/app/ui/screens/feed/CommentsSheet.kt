@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
@@ -31,50 +32,55 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.heftreng.app.ui.theme.*
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
-// ── Veri modeli ───────────────────────────────────────────────────────────────
-private data class Cmt(
-    val id        : String    = "",
-    val uid       : String    = "",
-    val name      : String    = "",
-    val photoURL  : String    = "",
-    val text      : String    = "",
-    val likes     : Int       = 0,
-    val likedByMe : Boolean   = false,
-    val ts        : Timestamp? = null,
+// ── Model ─────────────────────────────────────────────────────────────────────
+private data class FeedComment(
+    val id           : String     = "",
+    val uid          : String     = "",
+    val name         : String     = "",
+    val photoURL     : String     = "",
+    val text         : String     = "",
+    val replyTo      : String     = "",
+    val replyToCmtId : String     = "",
+    val likes        : Int        = 0,
+    val ts           : Timestamp? = null,
 )
 
-// ── Ana yorum sheet'i ─────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CommentsSheet(
-    postId      : String,
-    postAuthorUid: String,
-    onDismiss   : () -> Unit,
+    postId        : String,
+    postAuthorUid : String,
+    onDismiss     : () -> Unit,
 ) {
-    val db      = FirebaseFirestore.getInstance()
-    val auth    = FirebaseAuth.getInstance()
-    var myUid   by remember { mutableStateOf(auth.currentUser?.uid ?: "") }
-    val myName  = auth.currentUser?.displayName ?: ""
-    val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
+    val db    = FirebaseFirestore.getInstance()
+    val auth  = FirebaseAuth.getInstance()
+    val scope = rememberCoroutineScope()
 
-    // Auth yüklenmeden önce uid boş gelebilir — reaktif izle
+    // ── Auth state ────────────────────────────────────────────────────────────
+    var myUid   by remember { mutableStateOf(auth.currentUser?.uid ?: "") }
+    var myName  by remember { mutableStateOf(auth.currentUser?.displayName ?: "") }
+    var myPhoto by remember { mutableStateOf(auth.currentUser?.photoUrl?.toString() ?: "") }
     DisposableEffect(Unit) {
-        val listener = FirebaseAuth.AuthStateListener { a ->
-            myUid = a.currentUser?.uid ?: ""
+        val l = FirebaseAuth.AuthStateListener { a ->
+            myUid   = a.currentUser?.uid ?: ""
+            myName  = a.currentUser?.displayName ?: ""
+            myPhoto = a.currentUser?.photoUrl?.toString() ?: ""
         }
-        auth.addAuthStateListener(listener)
-        onDispose { auth.removeAuthStateListener(listener) }
+        auth.addAuthStateListener(l)
+        onDispose { auth.removeAuthStateListener(l) }
     }
 
-    var comments    by remember { mutableStateOf<List<Cmt>>(emptyList()) }
-    var inputText   by remember { mutableStateOf("") }
-    var loading     by remember { mutableStateOf(true) }
-    var deleteTarget by remember { mutableStateOf<Cmt?>(null) }
-    val listState   = rememberLazyListState()
-    val scope       = rememberCoroutineScope()
+    // ── State ─────────────────────────────────────────────────────────────────
+    var comments     by remember { mutableStateOf<List<FeedComment>>(emptyList()) }
+    var loading      by remember { mutableStateOf(true) }
+    var inputText    by remember { mutableStateOf("") }
+    var replyTo      by remember { mutableStateOf<FeedComment?>(null) }
+    var deleteTarget by remember { mutableStateOf<FeedComment?>(null) }
+    var errorMsg     by remember { mutableStateOf("") }
+    val listState    = rememberLazyListState()
 
     // ── Realtime listener ─────────────────────────────────────────────────────
     DisposableEffect(postId) {
@@ -82,23 +88,22 @@ fun CommentsSheet(
         reg = db.collection("feed").document(postId)
             .collection("comments")
             .orderBy("ts", Query.Direction.ASCENDING)
-            .addSnapshotListener { snap, _ ->
-                if (snap == null) return@addSnapshotListener
-                val myLikedIds = mutableSetOf<String>()
-
-                // liked kontrolü için ayrı sorgu yerine likes alt koleksiyonunu kullanmıyoruz
-                // sadece likes sayısını gösteriyoruz
+            .addSnapshotListener { snap, err ->
+                if (err != null) { loading = false; return@addSnapshotListener }
+                if (snap == null) { loading = false; return@addSnapshotListener }
                 comments = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
-                    Cmt(
-                        id       = doc.id,
-                        uid      = d["uid"] as? String ?: "",
-                        name     = (d["displayName"] as? String)?.ifBlank { null }
-                                   ?: d["name"] as? String ?: "?",
-                        photoURL = d["photoURL"] as? String ?: "",
-                        text     = d["text"]     as? String ?: "",
-                        likes    = (d["likes"]   as? Long)?.toInt() ?: 0,
-                        ts       = d["ts"]       as? Timestamp,
+                    FeedComment(
+                        id           = doc.id,
+                        uid          = d["uid"]          as? String ?: "",
+                        name         = (d["name"]        as? String)?.ifBlank { null }
+                                       ?: d["displayName"] as? String ?: "?",
+                        photoURL     = d["photoURL"]     as? String ?: "",
+                        text         = d["text"]         as? String ?: "",
+                        replyTo      = d["replyTo"]      as? String ?: "",
+                        replyToCmtId = d["replyToCmtId"] as? String ?: "",
+                        likes        = (d["likes"]       as? Long)?.toInt() ?: 0,
+                        ts           = d["ts"]           as? Timestamp,
                     )
                 }
                 loading = false
@@ -111,6 +116,8 @@ fun CommentsSheet(
         val text = inputText.trim()
         if (text.isBlank() || myUid.isBlank()) return
         inputText = ""
+        val replyRef = replyTo
+        replyTo = null
         scope.launch {
             try {
                 // Kullanıcı adını Firestore'dan al
@@ -122,25 +129,27 @@ fun CommentsSheet(
 
                 db.collection("feed").document(postId)
                     .collection("comments").add(mapOf(
-                        "uid"         to myUid,
-                        "name"        to name,
-                        "displayName" to name,
-                        "photoURL"    to photo,
-                        "text"        to text,
-                        "likes"       to 0,
-                        "ts"          to Timestamp.now(),
+                        "uid"          to myUid,
+                        "name"         to name,
+                        "displayName"  to name,
+                        "photoURL"     to photo,
+                        "text"         to text,
+                        "replyTo"      to (replyRef?.name ?: ""),
+                        "replyToCmtId" to (replyRef?.id   ?: ""),
+                        "likes"        to 0,
+                        "ts"           to Timestamp.now(),
                     )).await()
 
                 db.collection("feed").document(postId)
                     .update("cmtCount", FieldValue.increment(1)).await()
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                errorMsg = e.message ?: "Hata"
+            }
         }
     }
 
     // ── Yorum sil ─────────────────────────────────────────────────────────────
-    var errorMsg by remember { mutableStateOf("") }
-
-    fun deleteComment(cmt: Cmt) {
+    fun deleteComment(cmt: FeedComment) {
         scope.launch {
             try {
                 db.collection("feed").document(postId)
@@ -148,125 +157,153 @@ fun CommentsSheet(
                 db.collection("feed").document(postId)
                     .update("cmtCount", FieldValue.increment(-1)).await()
             } catch (e: Exception) {
-                errorMsg = e.message ?: "Bilinmeyen hata"
-                e.printStackTrace()
+                errorMsg = "Silinemedi: ${e.message}"
             }
         }
     }
 
-    // ── UI ───────────────────────────────────────────────────────────────────
+    // ── UI ────────────────────────────────────────────────────────────────────
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor   = HeftSurface,
+        onDismissRequest  = onDismiss,
+        containerColor    = Background,
+        contentColor      = OnBackground,
         dragHandle = {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    modifier = Modifier
-                        .width(40.dp)
-                        .height(4.dp)
-                        .background(Muted.copy(alpha = 0.4f), CircleShape)
-                )
+                Box(Modifier.width(36.dp).height(4.dp).background(Muted.copy(alpha = 0.3f), CircleShape))
             }
         },
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.85f)
+                .fillMaxHeight(0.9f)
                 .navigationBarsPadding()
                 .imePadding(),
         ) {
             // Başlık
-            Text(
-                "Yorumlar",
-                color      = OnBackground,
-                fontWeight = FontWeight.Bold,
-                fontSize   = 16.sp,
-                modifier   = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("Yorumlar", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                if (comments.isNotEmpty()) {
+                    Text("${comments.size}", color = Muted, fontSize = 13.sp)
+                }
+            }
             HorizontalDivider(color = Divider)
 
-            // Yorum listesi
-            if (loading) {
-                Box(
-                    modifier            = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment    = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(color = Amber, modifier = Modifier.size(28.dp))
+            // Liste
+            when {
+                loading -> {
+                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Amber, modifier = Modifier.size(28.dp))
+                    }
                 }
-            } else if (comments.isEmpty()) {
-                Box(
-                    modifier            = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment    = Alignment.Center,
-                ) {
-                    Text("Henüz yorum yok", color = Muted, fontSize = 14.sp)
+                comments.isEmpty() -> {
+                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("💬", fontSize = 32.sp)
+                            Spacer(Modifier.height(8.dp))
+                            Text("Henüz yorum yok", color = Muted, fontSize = 14.sp)
+                        }
+                    }
                 }
-            } else {
-                LazyColumn(
-                    state    = listState,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    items(comments, key = { it.id }) { cmt ->
-                        // uid boş gelme ihtimaline karşı: her iki uid de doluysa karşılaştır
-                        // biri boşsa gösterme — ama postAuthorUid doluysa göster
-                        val isOwn = cmt.uid.isNotBlank() && myUid.isNotBlank() && cmt.uid == myUid
-                        val isPostAuthor = myUid.isNotBlank() && myUid == postAuthorUid
-                        // Geçici: myUid boş geliyorsa yine de göster, Firestore Rules halleder
-                        val canDelete = isOwn || isPostAuthor || myUid.isBlank()
-
-                        CmtRow(
-                            cmt       = cmt,
-                            canDelete = canDelete,
-                            onDelete  = { deleteTarget = cmt },
-                        )
-                        HorizontalDivider(
-                            color     = Divider.copy(alpha = 0.5f),
-                            thickness = 0.5.dp,
-                            modifier  = Modifier.padding(horizontal = 16.dp),
-                        )
+                else -> {
+                    LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
+                        items(comments, key = { it.id }) { cmt ->
+                            // Sil butonu: uid eşleşiyorsa VEYA post sahibiyse göster
+                            val canDelete = (cmt.uid.isNotBlank() && cmt.uid == myUid)
+                                         || (myUid.isNotBlank() && myUid == postAuthorUid)
+                            CommentRow(
+                                cmt       = cmt,
+                                canDelete = canDelete,
+                                onDelete  = { deleteTarget = cmt },
+                                onReply   = { replyTo = cmt },
+                            )
+                            HorizontalDivider(
+                                color     = Divider.copy(alpha = 0.4f),
+                                thickness = 0.5.dp,
+                                modifier  = Modifier.padding(start = 52.dp),
+                            )
+                        }
                     }
                 }
             }
 
-            // Yorum yazma alanı
+            // Yanıtlama göstergesi
+            if (replyTo != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SurfaceVar)
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        "@${replyTo!!.name} yanıtlanıyor",
+                        color    = Amber,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    TextButton(
+                        onClick        = { replyTo = null },
+                        contentPadding = PaddingValues(0.dp),
+                    ) {
+                        Text("İptal", color = Muted, fontSize = 12.sp)
+                    }
+                }
+            }
+
+            // Yorum yazma
             HorizontalDivider(color = Divider)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(HeftSurface)
+                    .background(Background)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 OutlinedTextField(
                     value         = inputText,
                     onValueChange = { inputText = it },
-                    placeholder   = { Text("Yorum yaz...", color = Muted, fontSize = 14.sp) },
-                    modifier      = Modifier.weight(1f),
-                    shape         = RoundedCornerShape(24.dp),
-                    colors        = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor   = Amber,
-                        unfocusedBorderColor = Divider,
-                        cursorColor          = Amber,
-                        focusedTextColor     = OnBackground,
-                        unfocusedTextColor   = OnBackground,
+                    placeholder   = {
+                        Text(
+                            if (replyTo != null) "@${replyTo!!.name} yanıtla..."
+                            else "Yorum yaz...",
+                            color    = Muted,
+                            fontSize = 14.sp,
+                        )
+                    },
+                    modifier  = Modifier.weight(1f),
+                    shape     = RoundedCornerShape(24.dp),
+                    colors    = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor      = Amber,
+                        unfocusedBorderColor    = Divider,
+                        cursorColor             = Amber,
+                        focusedTextColor        = OnBackground,
+                        unfocusedTextColor      = OnBackground,
+                        focusedContainerColor   = SurfaceVar,
+                        unfocusedContainerColor = SurfaceVar,
                     ),
                     maxLines = 4,
                 )
                 Spacer(Modifier.width(8.dp))
-                IconButton(
-                    onClick  = ::sendComment,
-                    enabled  = inputText.isNotBlank(),
+                Box(
                     modifier = Modifier
                         .size(44.dp)
                         .background(
-                            if (inputText.isNotBlank()) Amber else Muted.copy(alpha = 0.2f),
+                            if (inputText.isNotBlank()) Amber else Muted.copy(0.2f),
                             CircleShape,
-                        ),
+                        )
+                        .clickable(enabled = inputText.isNotBlank()) { sendComment() },
+                    contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.Send,
@@ -279,21 +316,6 @@ fun CommentsSheet(
         }
     }
 
-    // Hata mesajı
-    if (errorMsg.isNotBlank()) {
-        AlertDialog(
-            onDismissRequest = { errorMsg = "" },
-            containerColor   = HeftSurface,
-            title  = { Text("Hata", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold) },
-            text   = { Text(errorMsg, color = OnSurface, fontSize = 13.sp) },
-            confirmButton = {
-                TextButton(onClick = { errorMsg = "" }) {
-                    Text("Tamam", color = Amber)
-                }
-            },
-        )
-    }
-
     // Silme onay dialogu
     deleteTarget?.let { cmt ->
         AlertDialog(
@@ -302,10 +324,7 @@ fun CommentsSheet(
             title  = { Text("Yorumu Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
             text   = { Text(cmt.text.take(80), color = Muted, fontSize = 13.sp) },
             confirmButton = {
-                TextButton(onClick = {
-                    deleteComment(cmt)
-                    deleteTarget = null
-                }) {
+                TextButton(onClick = { deleteComment(cmt); deleteTarget = null }) {
                     Text("Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                 }
             },
@@ -316,19 +335,35 @@ fun CommentsSheet(
             },
         )
     }
+
+    // Hata dialogu
+    if (errorMsg.isNotBlank()) {
+        AlertDialog(
+            onDismissRequest = { errorMsg = "" },
+            containerColor   = HeftSurface,
+            title  = { Text("Hata", color = Color(0xFFEF4444), fontWeight = FontWeight.SemiBold) },
+            text   = { Text(errorMsg, color = Muted, fontSize = 13.sp) },
+            confirmButton = {
+                TextButton(onClick = { errorMsg = "" }) {
+                    Text("Tamam", color = Amber)
+                }
+            },
+        )
+    }
 }
 
-// ── Tek yorum satırı ──────────────────────────────────────────────────────────
+// ── Yorum satırı ─────────────────────────────────────────────────────────────
 @Composable
-private fun CmtRow(
-    cmt       : Cmt,
+private fun CommentRow(
+    cmt       : FeedComment,
     canDelete : Boolean,
     onDelete  : () -> Unit,
+    onReply   : () -> Unit,
 ) {
     Row(
         modifier          = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.Top,
     ) {
         // Avatar
@@ -341,51 +376,73 @@ private fun CmtRow(
         ) {
             if (cmt.photoURL.isNotBlank()) {
                 AsyncImage(
-                    model            = cmt.photoURL,
+                    model              = cmt.photoURL,
                     contentDescription = null,
-                    modifier         = Modifier.fillMaxSize(),
-                    contentScale     = ContentScale.Crop,
+                    modifier           = Modifier.fillMaxSize(),
+                    contentScale       = ContentScale.Crop,
                 )
             } else {
                 Text(
                     cmt.name.firstOrNull()?.uppercase() ?: "?",
                     color      = OnBackground,
-                    fontSize   = 14.sp,
+                    fontSize   = 13.sp,
                     fontWeight = FontWeight.Bold,
                 )
             }
         }
 
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(8.dp))
 
         // İçerik
         Column(Modifier.weight(1f)) {
-            Text(
-                cmt.name,
-                color      = OnBackground,
-                fontWeight = FontWeight.SemiBold,
-                fontSize   = 13.sp,
-            )
+            Text(cmt.name, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            // Yanıt göstergesi
+            if (cmt.replyTo.isNotBlank()) {
+                Text(
+                    "@${cmt.replyTo}",
+                    color    = Amber,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
             Spacer(Modifier.height(2.dp))
-            Text(
-                cmt.text,
-                color    = OnSurface,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-            )
+            Text(cmt.text, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
+            // Alt aksiyonlar
+            Row(
+                modifier            = Modifier.padding(top = 4.dp),
+                verticalAlignment   = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                // Beğeni sayısı
+                if (cmt.likes > 0) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.Favorite,
+                            null,
+                            tint     = Color(0xFFEF4444),
+                            modifier = Modifier.size(11.dp),
+                        )
+                        Spacer(Modifier.width(2.dp))
+                        Text("${cmt.likes}", color = Muted, fontSize = 11.sp)
+                    }
+                }
+                // Yanıtla
+                Text(
+                    "Yanıtla",
+                    color    = Muted,
+                    fontSize = 11.sp,
+                    modifier = Modifier.clickable { onReply() },
+                )
+            }
         }
 
-        // Sil butonu — sadece canDelete ise göster
+        // Sil butonu
         if (canDelete) {
-            Spacer(Modifier.width(4.dp))
-            IconButton(
-                onClick  = onDelete,
-                modifier = Modifier.size(32.dp),
-            ) {
+            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                 Icon(
                     Icons.Default.Delete,
                     contentDescription = "Sil",
-                    tint     = Color(0xFFEF4444).copy(alpha = 0.8f),
+                    tint     = Color(0xFFEF4444).copy(alpha = 0.7f),
                     modifier = Modifier.size(16.dp),
                 )
             }
