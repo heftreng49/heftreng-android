@@ -383,19 +383,17 @@ private fun CommentRow(
                     modifier = Modifier.clickable { onShowLikers() },
                 )
             }
-            // Direkt kırmızı sil butonu — canManage ise göster
-            if (canManage) {
-                IconButton(
-                    onClick  = { showDialog = true },
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Sil",
-                        tint     = Color(0xFFEF4444),
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
+            // Sil butonu — her zaman göster, yetki Firestore Rules'da
+            IconButton(
+                onClick  = { showDialog = true },
+                modifier = Modifier.size(32.dp),
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Sil",
+                    tint     = Color(0xFFEF4444).copy(alpha = 0.7f),
+                    modifier = Modifier.size(15.dp),
+                )
             }
         }
     }
