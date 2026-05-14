@@ -1,0 +1,24 @@
+name: Delete Anonymous Users
+
+on:
+  workflow_dispatch:  # Manuel tetikleme — sadece sen çalıştırırsın
+
+jobs:
+  delete-anon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install firebase-admin
+        run: npm install firebase-admin
+
+      - name: Create service account file
+        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > serviceAccount.json
+
+      - name: Run delete script
+        run: node delete-anonymous-users.js
