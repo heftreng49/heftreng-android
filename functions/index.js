@@ -1,32 +1,23 @@
-
-    /**
+/**
  * Heftreng — Cloud Functions
  * Deploy: firebase deploy --only functions
  *
  * v2 — onNewNotif Firestore trigger eklendi
- * Web → Android push artık SW/CORS/izin bağımsız çalışır:
- *   Web tema → userNotifs/{uid}/msgs koleksiyonuna yazar
- *   onNewNotif → otomatik tetiklenir → FCM push gönderir → Android bildirim alır
+ * v3 — fixNewUserDisplayName: Auth onCreate (v1) ile kullanıcı profili otomatik oluşturuluyor
+ *      fixExistingUserNames: Mevcut "Kullanıcı" yazanları toplu düzelt (HTTP)
  */
 
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { onDocumentCreated }  = require("firebase-functions/v2/firestore"); // ← YENİ
-const { initializeApp }      = require("firebase-admin/app");
-const { getFirestore }       = require("firebase-admin/firestore");
-const { getMessaging }       = require("firebase-admin/messaging");
+const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
+const { onDocumentCreated }             = require("firebase-functions/v2/firestore");
+const functions                         = require("firebase-functions");   // v1 — Auth trigger için
+const { initializeApp }                 = require("firebase-admin/app");
+const { getFirestore }                  = require("firebase-admin/firestore");
+const { getMessaging }                  = require("firebase-admin/messaging");
 
 initializeApp();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// onNewNotif — Firestore Trigger  ← YENİ EKLENEN FONKSİYON
-//
-// Ne zaman çalışır:
-//   Web temada beğeni / yorum / takip / mesaj olunca
-//   addNotifToUser() → userNotifs/{uid}/msgs koleksiyonuna belge eklenir
-//   Bu fonksiyon otomatik tetiklenir ve FCM push gönderir
-//
-// Avantaj: Service Worker, CORS, web push izni GEREKMİYOR
-//          Android kullanıcı arka planda bile bildirimi alır
+// onNewNotif — Firestore Trigger
 // ─────────────────────────────────────────────────────────────────────────────
 exports.onNewNotif = onDocumentCreated(
   {
@@ -49,7 +40,6 @@ exports.onNewNotif = onDocumentCreated(
     const fromUid = data.fromUid || "";
     const convId  = data.convId  || "";
 
-    // Tip bazlı URL
     let url = "https://heft-reng.blogspot.com/";
     if (type === "message") {
       url = "https://heft-reng.blogspot.com/p/mesajlar.html";
@@ -59,7 +49,6 @@ exports.onNewNotif = onDocumentCreated(
 
     const db = getFirestore();
 
-    // Kullanıcının FCM token'ını al
     let fcmToken = null;
     try {
       const doc = await db.collection("users").doc(uid).get();
@@ -73,13 +62,11 @@ exports.onNewNotif = onDocumentCreated(
       return;
     }
 
-    // Token yoksa veya web push subscription ise atla
     if (!fcmToken || fcmToken.startsWith("https://")) {
       console.log("[HF Trigger] FCM token yok, push atlandı — uid:", uid);
       return;
     }
 
-    // Kanal ID — bildirim tipine göre
     const channelId =
       type === "message"                         ? "heftreng_messages" :
       type === "like" || type === "repost"       ? "heftreng_likes"    :
@@ -96,13 +83,7 @@ exports.onNewNotif = onDocumentCreated(
           color: "#8B5CF6",
         },
       },
-      data: {
-        type,
-        postId,
-        fromUid,
-        convId,
-        url,
-      },
+      data: { type, postId, fromUid, convId, url },
     };
 
     const STALE = [
@@ -125,11 +106,9 @@ exports.onNewNotif = onDocumentCreated(
   }
 );
 
-// ─── sendPush — HTTPS Callable (mevcut, değiştirilmedi) ──────────────────────
-// Android: FirebaseFunctions.getInstance("europe-west1").getHttpsCallable("sendPush")
-// Web:     firebase.functions().httpsCallable("sendPush")
-// NOT: Web tema artık bunu çağırmak zorunda değil (onNewNotif üstlendi),
-//      ama admin paneli ve Android için korunuyor.
+// ─────────────────────────────────────────────────────────────────────────────
+// sendPush — HTTPS Callable
+// ─────────────────────────────────────────────────────────────────────────────
 exports.sendPush = onCall(
   {
     region        : "europe-west1",
@@ -158,7 +137,6 @@ exports.sendPush = onCall(
 
     const db = getFirestore();
 
-    // Kullanıcı belgesini oku
     let userData;
     try {
       const doc = await db.collection("users").doc(targetUid).get();
@@ -174,26 +152,21 @@ exports.sendPush = onCall(
 
     const fcmToken = userData.fcmToken || null;
 
-    console.log("[HF Push] fcmToken:", fcmToken ? "VAR" : "YOK", "— target:", targetUid);
-
     if (!fcmToken) {
       console.warn("[HF Push] FCM token yok — uid:", targetUid);
       return { success: false, reason: "no_fcm_token" };
     }
 
-    // Web push subscription token ise FCM ile gönderme
     if (fcmToken.startsWith("https://")) {
       console.warn("[HF Push] Web push subscription — FCM desteklenmiyor");
       return { success: false, reason: "web_sub_not_supported" };
     }
 
-    // Kanal ID — bildirim tipine göre
     const channelId =
       type === "message"                   ? "heftreng_messages" :
       type === "like" || type === "repost" ? "heftreng_likes"    :
       "heftreng_default";
 
-    // FCM mesajı gönder
     try {
       const msg = {
         token: fcmToken,
@@ -206,13 +179,7 @@ exports.sendPush = onCall(
             color: "#8B5CF6",
           },
         },
-        data: {
-          type,
-          postId,
-          fromUid,
-          convId,
-          url,
-        },
+        data: { type, postId, fromUid, convId, url },
       };
 
       const result = await getMessaging().send(msg);
@@ -222,7 +189,6 @@ exports.sendPush = onCall(
     } catch (err) {
       console.error("[HF Push] FCM hatası:", err.code, err.message);
 
-      // Eski/geçersiz token — sil
       const staleErrors = [
         "messaging/registration-token-not-registered",
         "messaging/invalid-registration-token",
@@ -238,3 +204,76 @@ exports.sendPush = onCall(
     }
   }
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// fixNewUserDisplayName — Auth onCreate (v1 syntax, GCIP gerektirmez)
+//
+// Kullanıcı kayıt olunca otomatik çalışır:
+//   - displayName boşsa email'den üretir (örn. ali.veli@... → "ali veli")
+//   - users/{uid} belgesini oluşturur (merge: true)
+// ─────────────────────────────────────────────────────────────────────────────
+exports.fixNewUserDisplayName = functions
+  .region("us-east1")
+  .auth.user()
+  .onCreate(async (user) => {
+    const db = getFirestore();
+    try {
+      const derived =
+        user.displayName?.trim() ||
+        user.email?.split("@")[0]?.replace(/[._]/g, " ") ||
+        "Kullanıcı";
+
+      await db.collection("users").doc(user.uid).set(
+        {
+          uid        : user.uid,
+          displayName: derived,
+          name       : derived,
+          email      : user.email || "",
+          photoURL   : user.photoURL || "",
+          createdAt  : new Date(),
+        },
+        { merge: true }
+      );
+
+      console.log(`[fixNewUser] ${user.uid} → "${derived}"`);
+    } catch (e) {
+      console.error("[fixNewUser] hata:", e);
+    }
+  });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// fixExistingUserNames — HTTP trigger (bir kez çalıştır)
+//
+// Firestore'da displayName = "Kullanıcı" veya boş olan herkesi düzeltir.
+// Çalıştırmak için: https://us-central1-bloggerheftreng.cloudfunctions.net/fixExistingUserNames
+// ─────────────────────────────────────────────────────────────────────────────
+exports.fixExistingUserNames = onRequest(async (req, res) => {
+  const db   = getFirestore();
+  const auth = require("firebase-admin/auth").getAuth();
+  let fixed = 0, skipped = 0;
+
+  const snap = await db.collection("users").get();
+  for (const doc of snap.docs) {
+    const data = doc.data();
+    const name = data.displayName || data.name || "";
+    if (name && name !== "Kullanıcı") { skipped++; continue; }
+
+    try {
+      const authUser = await auth.getUser(doc.id);
+      const derived  =
+        authUser.displayName?.trim() ||
+        authUser.email?.split("@")[0]?.replace(/[._]/g, " ") ||
+        null;
+
+      if (!derived || derived === "Kullanıcı") { skipped++; continue; }
+
+      await doc.ref.update({ displayName: derived, name: derived });
+      fixed++;
+      console.log(`[fixExisting] ${doc.id} → "${derived}"`);
+    } catch (e) {
+      console.error(`[fixExisting] ${doc.id}:`, e.message);
+      skipped++;
+    }
+  }
+  res.json({ fixed, skipped, total: snap.size });
+});
