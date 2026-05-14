@@ -15,8 +15,10 @@ android {
         applicationId = "com.heftreng.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.0.2"
+        // GitHub Actions'ta GITHUB_RUN_NUMBER her push'ta otomatik artar
+        // Lokalde 1 olur, CI'da her build'de 1 artar — artık elle değiştirmene gerek yok
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1)
+        versionName = "1.0.${versionCode}"
     }
 
     signingConfigs {
