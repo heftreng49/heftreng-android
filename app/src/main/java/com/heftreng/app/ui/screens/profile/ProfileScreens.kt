@@ -36,6 +36,7 @@ import com.heftreng.app.data.model.User
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.screens.auth.heftrangTextFieldColors
 import com.heftreng.app.ui.screens.feed.PostCard
+import com.heftreng.app.ui.component.FullScreenImageViewer
 import com.heftreng.app.ui.screens.serials.SerialCard
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.FollowListSheet
@@ -422,13 +423,15 @@ private fun ProfileHeader(
                 .height(100.dp)
                 .background(SurfaceVar)
         ) {
+            var showCover by remember { mutableStateOf(false) }
             if (user?.coverPhoto?.isNotEmpty() == true) {
                 AsyncImage(
                     model              = user.coverPhoto,
                     contentDescription = null,
                     contentScale       = ContentScale.Crop,
-                    modifier           = Modifier.fillMaxSize(),
+                    modifier           = Modifier.fillMaxSize().clickable { showCover = true },
                 )
+                if (showCover) FullScreenImageViewer(url = user.coverPhoto) { showCover = false }
             }
         }
 
@@ -439,6 +442,7 @@ private fun ProfileHeader(
                 verticalAlignment = Alignment.Bottom,
             ) {
                 val avatarUrl = user?.photoURL?.ifEmpty { null }
+                var showAvatar by remember { mutableStateOf(false) }
                 Box(
                     modifier = Modifier
                         .size(76.dp)
@@ -448,7 +452,8 @@ private fun ProfileHeader(
                             androidx.compose.ui.graphics.Brush.linearGradient(
                                 listOf(Primary, PrimaryLight)
                             )
-                        ),
+                        )
+                        .then(if (avatarUrl != null) Modifier.clickable { showAvatar = true } else Modifier),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (avatarUrl != null) {
@@ -467,6 +472,8 @@ private fun ProfileHeader(
                         )
                     }
                 }
+                if (showAvatar && avatarUrl != null)
+                    FullScreenImageViewer(url = avatarUrl) { showAvatar = false }
                 Spacer(Modifier.weight(1f))
                 Spacer(Modifier.height(12.dp))
                 if (isMe) {

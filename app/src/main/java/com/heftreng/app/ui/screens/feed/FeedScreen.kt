@@ -42,6 +42,7 @@ import com.heftreng.app.ui.component.AdBannerView
 import com.heftreng.app.viewmodel.AdsViewModel
 import com.heftreng.app.ui.component.QuoteCard
 import com.heftreng.app.ui.component.LinkifyText
+import com.heftreng.app.ui.component.FullScreenImageViewer
 import com.heftreng.app.ui.component.QuoteDialog
 import com.heftreng.app.ui.component.QuoteInputSection
 import com.heftreng.app.ui.component.QuotePayload
@@ -747,12 +748,18 @@ fun PostCard(
             }
             val displayImg = post.imgUrl.ifBlank { post.imageURL }
             if (displayImg.isNotBlank()) {
+                var showImg by remember { mutableStateOf(false) }
                 AsyncImage(
                     model              = displayImg,
                     contentDescription = null,
-                    modifier           = Modifier.fillMaxWidth().heightIn(max = 300.dp).clip(RoundedCornerShape(12.dp)),
+                    modifier           = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 300.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { showImg = true },
                     contentScale       = ContentScale.Crop,
                 )
+                if (showImg) FullScreenImageViewer(url = displayImg) { showImg = false }
                 Spacer(Modifier.height(8.dp))
             }
         }

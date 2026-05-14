@@ -36,6 +36,7 @@ import coil.compose.AsyncImage
 import com.heftreng.app.data.model.Message
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.component.LinkifyText
+import com.heftreng.app.ui.component.FullScreenImageViewer
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.MessagesViewModel
 import com.heftreng.app.viewmodel.PresenceViewModel
@@ -1137,10 +1138,17 @@ private fun MsgRow(
                 } else {
                     Column {
                         if (msg.imageUrl.isNotBlank()) {
-                            // Tema: .msg-bubble-img
-                            AsyncImage(model = msg.imageUrl, contentDescription = null,
-                                modifier = Modifier.widthIn(max = 200.dp).clip(RoundedCornerShape(10.dp)),
-                                contentScale = ContentScale.Crop)
+                            var showMsgImg by remember { mutableStateOf(false) }
+                            AsyncImage(
+                                model              = msg.imageUrl,
+                                contentDescription = null,
+                                modifier           = Modifier
+                                    .widthIn(max = 200.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { showMsgImg = true },
+                                contentScale       = ContentScale.Crop,
+                            )
+                            if (showMsgImg) FullScreenImageViewer(url = msg.imageUrl) { showMsgImg = false }
                             Spacer(Modifier.height(4.dp))
                         }
                         if (msg.audioUrl.isNotBlank()) {
