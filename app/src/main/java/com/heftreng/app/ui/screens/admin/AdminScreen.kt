@@ -24,6 +24,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AdminViewModel
+import androidx.compose.foundation.clickable
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,13 +49,32 @@ fun AdminScreen(
     var userSearch  by remember { mutableStateOf("") }
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    val tabs = listOf("Push", "Bildirim", "Kullanıcılar", "Bekleyenler", "İstatistik")
+    // Düzenle tab state
+    val feedPosts   by vm.feedPosts.collectAsState()
+    val editResult  by vm.editResult.collectAsState()
+    var editUser    by remember { mutableStateOf<com.heftreng.app.data.model.User?>(null) }
+    var editName    by remember { mutableStateOf("") }
+    var editPhoto   by remember { mutableStateOf("") }
+    var deleteUserConfirm by remember { mutableStateOf<String?>(null) }
+    var deletePostConfirm by remember { mutableStateOf<String?>(null) }
+    var postSearch  by remember { mutableStateOf("") }
+
+    val tabs = listOf("Push", "Bildirim", "Kullanıcılar", "Bekleyenler", "İstatistik", "Düzenle")
 
     LaunchedEffect(Unit) {
         vm.checkAdmin()
         vm.loadUsers()
         vm.loadPendingPosts()
         vm.loadStats()
+        vm.loadFeedPosts()
+    }
+
+    // editResult bildirimi
+    LaunchedEffect(editResult) {
+        if (editResult.isNotBlank()) {
+            kotlinx.coroutines.delay(3000)
+            vm.clearEditResult()
+        }
     }
 
     if (!isAdmin) {
@@ -331,8 +351,222 @@ fun AdminScreen(
                         }
                     }
                 }
+
+
+                // ── Düzenle ───────────────────────────────────────────────────
+                5 -> {
+                    LazyColumn(
+                        modifier       = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        // Sonuç bildirimi
+                        if (editResult.isNotBlank()) {
+                            item {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (editResult.startsWith("✓")) Success.copy(0.15f) else Error.copy(0.15f),
+                                ) {
+                                    Text(
+                                        editResult,
+                                        color    = if (editResult.startsWith("✓")) Success else Error,
+                                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
+                        }
+
+                        // ── Kullanıcı Düzenle / Sil ──────────────────────────
+                        item {
+                            Text("Kullanıcı Düzenle / Sil", color = Amber, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Spacer(Modifier.height(8.dp))
+
+                            val filteredUsers = users.filter {
+                                userSearch.isBlank() ||
+                                it.displayName.contains(userSearch, ignoreCase = true) ||
+                                it.email.contains(userSearch, ignoreCase = true) ||
+                                it.uid.contains(userSearch, ignoreCase = true)
+                            }
+
+                            OutlinedTextField(
+                                value         = userSearch,
+                                onValueChange = { userSearch = it },
+                                placeholder   = { Text("İsim, email veya UID ara…", color = Muted, fontSize = 13.sp) },
+                                singleLine    = true,
+                                modifier      = Modifier.fillMaxWidth(),
+                                shape         = RoundedCornerShape(10.dp),
+                                colors        = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor   = Amber, unfocusedBorderColor = Divider,
+                                    focusedTextColor     = OnBackground, unfocusedTextColor = OnBackground,
+                                    unfocusedContainerColor = SurfaceVar, focusedContainerColor = SurfaceVar,
+                                ),
+                                leadingIcon = { Icon(Icons.Default.Search, null, tint = Muted) },
+                            )
+                            Spacer(Modifier.height(8.dp))
+
+                            filteredUsers.take(20).forEach { user ->
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = HeftSurface,
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                ) {
+                                    Column(Modifier.padding(12.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Column(Modifier.weight(1f)) {
+                                                Text(user.displayName.ifBlank { "—" }, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                                Text(user.email, color = Muted, fontSize = 11.sp)
+                                                Text(user.uid, color = Muted, fontSize = 9.sp)
+                                                if (user.banned) Text("BANLANDI", color = Error, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                            // Düzenle butonu
+                                            IconButton(onClick = {
+                                                editUser  = user
+                                                editName  = user.displayName
+                                                editPhoto = user.photoURL
+                                            }) {
+                                                Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(18.dp))
+                                            }
+                                            // Ban/Unban
+                                            IconButton(onClick = { vm.toggleBan(user.uid, !user.banned) }) {
+                                                Icon(
+                                                    if (user.banned) Icons.Default.LockOpen else Icons.Default.Block,
+                                                    null,
+                                                    tint = if (user.banned) Success else Error,
+                                                    modifier = Modifier.size(18.dp),
+                                                )
+                                            }
+                                            // Sil
+                                            IconButton(onClick = { deleteUserConfirm = user.uid }) {
+                                                Icon(Icons.Default.DeleteForever, null, tint = Error, modifier = Modifier.size(18.dp))
+                                            }
+                                        }
+
+                                        // Düzenleme formu
+                                        if (editUser?.uid == user.uid) {
+                                            Spacer(Modifier.height(8.dp))
+                                            HorizontalDivider(color = Divider)
+                                            Spacer(Modifier.height(8.dp))
+                                            adminTextField(editName,  { editName  = it }, "Yeni isim")
+                                            Spacer(Modifier.height(6.dp))
+                                            adminTextField(editPhoto, { editPhoto = it }, "Yeni fotoğraf URL")
+                                            Spacer(Modifier.height(8.dp))
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Button(
+                                                    onClick  = { vm.updateUserProfile(user.uid, editName, editPhoto); editUser = null },
+                                                    shape    = RoundedCornerShape(8.dp),
+                                                    colors   = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                                                    modifier = Modifier.weight(1f),
+                                                ) { Text("Kaydet", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                                                OutlinedButton(
+                                                    onClick  = { editUser = null },
+                                                    shape    = RoundedCornerShape(8.dp),
+                                                    modifier = Modifier.weight(1f),
+                                                ) { Text("İptal", fontSize = 12.sp, color = Muted) }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // ── Gönderi Sil ───────────────────────────────────────
+                        item {
+                            HorizontalDivider(color = Divider)
+                            Spacer(Modifier.height(4.dp))
+                            Text("Gönderi Sil", color = Error, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Spacer(Modifier.height(8.dp))
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    value         = postSearch,
+                                    onValueChange = { postSearch = it },
+                                    placeholder   = { Text("İçerik veya UID ara…", color = Muted, fontSize = 13.sp) },
+                                    singleLine    = true,
+                                    modifier      = Modifier.weight(1f),
+                                    shape         = RoundedCornerShape(10.dp),
+                                    colors        = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = Amber, unfocusedBorderColor = Divider,
+                                        focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
+                                        unfocusedContainerColor = SurfaceVar, focusedContainerColor = SurfaceVar,
+                                    ),
+                                )
+                                IconButton(
+                                    onClick  = { vm.loadFeedPosts(postSearch) },
+                                    modifier = Modifier.background(Amber, RoundedCornerShape(10.dp)),
+                                ) {
+                                    Icon(Icons.Default.Search, null, tint = Color.Black)
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+
+                            feedPosts.forEach { post ->
+                                Surface(
+                                    shape    = RoundedCornerShape(10.dp),
+                                    color    = HeftSurface,
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                ) {
+                                    Row(
+                                        modifier          = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.Top,
+                                    ) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                (post["text"] as? String ?: "").take(100),
+                                                color    = OnBackground,
+                                                fontSize = 12.sp,
+                                                maxLines = 2,
+                                            )
+                                            Spacer(Modifier.height(2.dp))
+                                            Text("UID: ${post["uid"] as? String ?: "?"}", color = Muted, fontSize = 10.sp)
+                                        }
+                                        IconButton(onClick = { deletePostConfirm = post["id"] as? String }) {
+                                            Icon(Icons.Default.Delete, null, tint = Error, modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
+    }
+
+    // Kullanıcı silme onay dialogu
+    deleteUserConfirm?.let { uid ->
+        AlertDialog(
+            onDismissRequest = { deleteUserConfirm = null },
+            containerColor   = HeftSurface,
+            title  = { Text("Kullanıcıyı Sil", color = Error, fontWeight = FontWeight.SemiBold) },
+            text   = { Text("Bu işlem geri alınamaz. Kullanıcı ve tüm gönderileri silinir.", color = Muted) },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteUser(uid); deleteUserConfirm = null }) {
+                    Text("Sil", color = Error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteUserConfirm = null }) { Text("İptal", color = Muted) }
+            },
+        )
+    }
+
+    // Gönderi silme onay dialogu
+    deletePostConfirm?.let { postId ->
+        AlertDialog(
+            onDismissRequest = { deletePostConfirm = null },
+            containerColor   = HeftSurface,
+            title  = { Text("Gönderiyi Sil", color = Error, fontWeight = FontWeight.SemiBold) },
+            text   = { Text("Bu gönderi kalıcı olarak silinecek.", color = Muted) },
+            confirmButton = {
+                TextButton(onClick = { vm.deletePost(postId); deletePostConfirm = null }) {
+                    Text("Sil", color = Error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deletePostConfirm = null }) { Text("İptal", color = Muted) }
+            },
+        )
     }
 }
 

@@ -157,6 +157,100 @@ class AdminViewModel @Inject constructor(
         }
     }
 
+
+    // ── Kullanıcı adı / fotoğraf düzelt ──────────────────────────────────────
+    private val _editResult = MutableStateFlow("")
+    val editResult = _editResult.asStateFlow()
+
+    fun updateUserProfile(uid: String, displayName: String, photoURL: String) {
+        if (uid.isBlank() || !_isAdmin.value) return
+        viewModelScope.launch {
+            try {
+                val updates = mutableMapOf<String, Any>()
+                if (displayName.isNotBlank()) {
+                    updates["displayName"] = displayName
+                    updates["name"]        = displayName
+                }
+                if (photoURL.isNotBlank()) updates["photoURL"] = photoURL
+                if (updates.isEmpty()) { _editResult.value = "✗ Değişiklik yok"; return@launch }
+                firestore.collection("users").document(uid).update(updates).await()
+                _users.value = _users.value.map {
+                    if (it.uid == uid) it.copy(
+                        displayName = displayName.ifBlank { it.displayName },
+                        photoURL    = photoURL.ifBlank    { it.photoURL },
+                    ) else it
+                }
+                _editResult.value = "✓ Profil güncellendi"
+            } catch (e: Exception) { _editResult.value = "✗ ${e.message}" }
+        }
+    }
+
+    // ── Kullanıcıyı tamamen sil ───────────────────────────────────────────────
+    fun deleteUser(uid: String) {
+        if (uid.isBlank() || !_isAdmin.value) return
+        viewModelScope.launch {
+            try {
+                // Firestore dökümanını sil
+                firestore.collection("users").document(uid).delete().await()
+                // Kullanıcının gönderilerini sil
+                val posts = firestore.collection("feed")
+                    .whereEqualTo("uid", uid).get().await()
+                posts.documents.forEach { it.reference.delete() }
+                _users.value = _users.value.filter { it.uid != uid }
+                _editResult.value = "✓ Kullanıcı silindi"
+            } catch (e: Exception) { _editResult.value = "✗ ${e.message}" }
+        }
+    }
+
+    // ── Feed gönderisi sil ────────────────────────────────────────────────────
+    private val _feedPosts = MutableStateFlow<List<Map<String, Any>>>(emptyList())
+    val feedPosts = _feedPosts.asStateFlow()
+
+    fun loadFeedPosts(query: String = "") {
+        viewModelScope.launch {
+            try {
+                val snap = firestore.collection("feed")
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(50).get().await()
+                _feedPosts.value = snap.documents.mapNotNull { doc ->
+                    (doc.data ?: return@mapNotNull null)
+                        .toMutableMap().also { it["id"] = doc.id }
+                }.filter {
+                    query.isBlank() ||
+                    (it["text"] as? String ?: "").contains(query, ignoreCase = true) ||
+                    (it["uid"]  as? String ?: "").contains(query, ignoreCase = true)
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun deletePost(postId: String) {
+        if (postId.isBlank() || !_isAdmin.value) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("feed").document(postId).delete().await()
+                _feedPosts.value = _feedPosts.value.filter { it["id"] != postId }
+                _editResult.value = "✓ Gönderi silindi"
+            } catch (e: Exception) { _editResult.value = "✗ ${e.message}" }
+        }
+    }
+
+    // ── Yorum sil ─────────────────────────────────────────────────────────────
+    fun deleteComment(postId: String, commentId: String) {
+        if (!_isAdmin.value) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("feed").document(postId)
+                    .collection("comments").document(commentId).delete().await()
+                firestore.collection("feed").document(postId)
+                    .update("cmtCount", FieldValue.increment(-1)).await()
+                _editResult.value = "✓ Yorum silindi"
+            } catch (e: Exception) { _editResult.value = "✗ ${e.message}" }
+        }
+    }
+
+    fun clearEditResult() { _editResult.value = "" }
+
     // ── İstatistikler ─────────────────────────────────────────────────────────
     fun loadStats() {
         viewModelScope.launch {
