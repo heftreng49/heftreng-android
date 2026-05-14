@@ -3,6 +3,7 @@ package com.heftreng.app.ui.screens.feed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -75,9 +76,19 @@ fun PostDetailScreen(
     val auth  = FirebaseAuth.getInstance()
     val scope = rememberCoroutineScope()
 
-    // Auth — her zaman taze al, remember olmadan
-    val myUid   = auth.currentUser?.uid ?: ""
-    val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
+    // Auth — sheet ile aynı güvenli yöntem: remember + AuthStateListener
+    var myUid   by remember { mutableStateOf(auth.currentUser?.uid ?: "") }
+    var myName  by remember { mutableStateOf(auth.currentUser?.displayName ?: "") }
+    var myPhoto by remember { mutableStateOf(auth.currentUser?.photoUrl?.toString() ?: "") }
+    DisposableEffect(Unit) {
+        val listener = com.google.firebase.auth.FirebaseAuth.AuthStateListener { a ->
+            myUid   = a.currentUser?.uid ?: ""
+            myName  = a.currentUser?.displayName ?: ""
+            myPhoto = a.currentUser?.photoUrl?.toString() ?: ""
+        }
+        auth.addAuthStateListener(listener)
+        onDispose { auth.removeAuthStateListener(listener) }
+    }
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester     = remember { FocusRequester() }
@@ -148,7 +159,7 @@ fun PostDetailScreen(
         replyTo = null
         scope.launch {
             try {
-                val name  = myFirestoreName.ifBlank { auth.currentUser?.displayName ?: "?" }
+                val name  = myFirestoreName.ifBlank { myName.ifBlank { auth.currentUser?.displayName ?: "?" } }
                 val photo = myFirestorePhoto.ifBlank { myPhoto }
                 db.collection("feed").document(postId).collection("comments").add(
                     mapOf(
@@ -185,10 +196,7 @@ fun PostDetailScreen(
     }
 
     Scaffold(
-        containerColor    = Background,
-        // imePadding Scaffold seviyesinde — klavye açılınca içerik yukarı kayar
-        // gönder butonu her zaman görünür kalır
-        contentWindowInsets = WindowInsets(0),
+        containerColor = Background,
         topBar = {
             TopAppBar(
                 title = { Text("Gönderi", color = OnBackground, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
@@ -214,6 +222,7 @@ fun PostDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .navigationBarsPadding()
                 .imePadding(),
         ) {
             // Yorumlar listesi
@@ -287,9 +296,9 @@ fun PostDetailScreen(
                 }
 
                 items(comments, key = { it.id }) { cmt ->
-                    // canDelete: kendi yorumu VEYA gönderi sahibi
-                    val canDelete = myUid.isNotBlank() &&
-                        (cmt.uid == myUid || postAuthorUid == myUid)
+                    // Sheet ile aynı mantık: uid eşleşiyorsa VEYA post sahibiyse
+                    val canDelete = (cmt.uid.isNotBlank() && cmt.uid == myUid)
+                                 || (myUid.isNotBlank() && myUid == postAuthorUid)
                     DetailCommentRow(
                         cmt       = cmt,
                         canDelete = canDelete,
