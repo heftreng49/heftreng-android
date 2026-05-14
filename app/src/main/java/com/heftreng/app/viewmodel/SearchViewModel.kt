@@ -74,7 +74,11 @@ class SearchViewModel @Inject constructor(
 
             fun mapUser(doc: com.google.firebase.firestore.DocumentSnapshot): SearchResult? {
                 val d = doc.data ?: return null
-                val name  = d["displayName"] as? String ?: d["name"] as? String ?: return null
+                val name  = (d["displayName"] as? String)?.ifBlank { null }
+                            ?: (d["name"]        as? String)?.ifBlank { null }
+                            ?: (d["email"]       as? String)?.substringBefore("@")?.ifBlank { null }
+                            ?: (d["username"]    as? String)?.ifBlank { null }
+                            ?: return null
                 val uname = d["username"] as? String ?: ""
                 return SearchResult(
                     id       = doc.id,
@@ -125,7 +129,9 @@ class SearchViewModel @Inject constructor(
                 val d = doc.data ?: return@mapNotNull null
                 val text = d["text"] as? String ?: return@mapNotNull null
                 if (text.isBlank()) return@mapNotNull null
-                val name = d["displayName"] as? String ?: d["name"] as? String ?: ""
+                val name = (d["displayName"] as? String)?.ifBlank { null }
+                           ?: (d["name"] as? String)?.ifBlank { null }
+                           ?: (d["email"] as? String)?.substringBefore("@") ?: ""
                 SearchResult(
                     id       = doc.id,
                     type     = "post",
@@ -279,9 +285,15 @@ class SearchViewModel @Inject constructor(
 
     private fun com.google.firebase.firestore.DocumentSnapshot.toUser(): User? {
         val d = data ?: return null
+        // displayName → name → email prefix → username → "Kullanıcı" sıralamasıyla al
+        val rawName = (d["displayName"] as? String)?.ifBlank { null }
+                      ?: (d["name"]        as? String)?.ifBlank { null }
+                      ?: (d["email"]       as? String)?.substringBefore("@")?.ifBlank { null }
+                      ?: (d["username"]    as? String)?.ifBlank { null }
+                      ?: "Kullanıcı"
         return User(
             uid            = id,
-            displayName    = d["displayName"] as? String ?: d["name"] as? String ?: "",
+            displayName    = rawName,
             username       = d["username"]    as? String ?: "",
             photoURL       = d["photoURL"]    as? String ?: "",
             bio            = d["bio"]         as? String ?: "",
