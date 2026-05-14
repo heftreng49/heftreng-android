@@ -35,6 +35,7 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.data.model.Message
 import com.heftreng.app.navigation.Screen
+import com.heftreng.app.ui.component.LinkifyText
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.MessagesViewModel
 import com.heftreng.app.viewmodel.PresenceViewModel
@@ -1147,7 +1148,12 @@ private fun MsgRow(
                             Spacer(Modifier.height(4.dp))
                         }
                         if (msg.text.isNotBlank())
-                            Text(msg.text, color = if (isMine) Color.White else OnBackground, fontSize = 13.sp, lineHeight = 19.sp)
+                            LinkifyText(
+                                text       = msg.text,
+                                fontSize   = 13.sp,
+                                lineHeight = 19.sp,
+                                modifier   = Modifier,
+                            )
                         if (msg.edited)
                             Text(if (language == "ku") "(guherî)" else "(düzenlendi)",
                                 color = if (isMine) Color.White.copy(alpha = 0.55f) else Muted,

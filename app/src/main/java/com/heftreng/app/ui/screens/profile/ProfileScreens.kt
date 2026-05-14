@@ -24,7 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.platform.LocalContext
+import com.heftreng.app.utils.openUrl
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.data.model.Post
@@ -519,7 +520,26 @@ private fun ProfileHeader(
             }
             if (user?.website?.isNotBlank() == true) {
                 Spacer(Modifier.height(2.dp))
-                Text(user.website, color = Amber, fontSize = 12.sp)
+                val context = LocalContext.current
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { openUrl(context, user.website) }
+                ) {
+                    Icon(
+                        Icons.Default.Link,
+                        contentDescription = null,
+                        tint     = Amber,
+                        modifier = Modifier.size(13.dp),
+                    )
+                    Spacer(Modifier.width(3.dp))
+                    Text(
+                        user.website,
+                        color    = Amber,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
 
             Spacer(Modifier.height(12.dp))
