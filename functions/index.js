@@ -7,59 +7,16 @@ const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https")
 const { onDocumentCreated }             = require("firebase-functions/v2/firestore");
 const functions                         = require("firebase-functions");
 const { initializeApp }                 = require("firebase-admin/app");
-const { getFirestore, FieldValue }      = require("firebase-admin/firestore");
+const { getFirestore }                  = require("firebase-admin/firestore");
 const { getMessaging }                  = require("firebase-admin/messaging");
 
 initializeApp();
 
 // ─── Yardımcı: Auth verisinden güvenli displayName üret ─────────────────────
 function deriveName(authUser) {
-  return authUser.displayName?.trim()
-      || authUser.email?.split("@")[0]?.replace(/[._-]/g, " ").trim()
+  return (authUser.displayName || "").trim()
+      || (authUser.email || "").split("@")[0].replace(/[._-]/g, " ").trim()
       || "Kullanıcı";
-}
-
-// ─── Yardımcı: Bir users belgesi için eksik alanları hesapla ────────────────
-function buildPatch(data, authUser) {
-  const patch = {};
-  const derived = deriveName(authUser);
-
-  // displayName: boş, "Kullanıcı" veya hiç yoksa düzelt
-  if (!data.displayName || data.displayName === "Kullanıcı")
-    patch.displayName = derived;
-
-  // name: boş, "Kullanıcı" veya hiç yoksa düzelt
-  if (!data.name || data.name === "Kullanıcı")
-    patch.name = derived;
-
-  // photoURL: boş veya hiç yoksa Auth'takini al
-  if (!data.photoURL && authUser.photoURL)
-    patch.photoURL = authUser.photoURL;
-
-  // email: hiç yoksa ekle
-  if (!data.email && authUser.email)
-    patch.email = authUser.email;
-
-  // uid: hiç yoksa ekle
-  if (!data.uid)
-    patch.uid = authUser.uid;
-
-  // username: hiç yoksa email'den üret
-  if (!data.username) {
-    const base = (authUser.email || "").split("@")[0]
-                   .toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (base) patch.username = base;
-  }
-
-  // Sayısal alanlar: hiç yoksa 0 ile başlat
-  if (data.followers  === undefined) patch.followers  = 0;
-  if (data.following  === undefined) patch.following  = 0;
-  if (data.postCount  === undefined) patch.postCount  = 0;
-
-  // createdAt: hiç yoksa şimdiki zaman
-  if (!data.createdAt) patch.createdAt = new Date();
-
-  return patch;
 }
 
 // ─── onNewNotif — Firestore Trigger (v2) ────────────────────────────────────
@@ -104,7 +61,6 @@ exports.onNewNotif = onDocumentCreated(
       android: { priority: "high", notification: { channelId, icon: "ic_notif", color: "#8B5CF6" } },
       data: { type, postId, fromUid, convId, url },
     };
-
     const STALE = [
       "messaging/registration-token-not-registered",
       "messaging/invalid-registration-token",
@@ -173,7 +129,6 @@ exports.sendPush = onCall(
 );
 
 // ─── fixNewUserDisplayName — Auth onCreate (v1 gen1) ────────────────────────
-// Yeni kayıt olduğunda users belgesi oluşturur, tüm temel alanları doldurur
 exports.fixNewUserDisplayName = functions
   .runWith({})
   .region("us-central1")
@@ -205,57 +160,95 @@ exports.fixNewUserDisplayName = functions
   });
 
 // ─── repairAllUsers — HTTP endpoint ─────────────────────────────────────────
-// Tüm kullanıcıları tarar, eksik/hatalı her alanı Auth verisiyle tamamlar
-// Kullanım: GET https://us-central1-bloggerheftreng.cloudfunctions.net/repairAllUsers
-// Güvenlik: ?secret=hf2024 parametresi gerekli
+// Auth'taki TÜM kullanıcıları tarar:
+//   - Firestore belgesi yoksa → oluşturur
+//   - Firestore belgesi varsa ama eksik alanlar varsa → tamamlar
+// Kullanım: GET .../repairAllUsers?secret=hf2024
 exports.repairAllUsers = onRequest(async (req, res) => {
-  // Basit güvenlik — URL'ye ?secret=hf2024 ekle
   if (req.query.secret !== "hf2024") {
-    res.status(403).json({ error: "Yetkisiz" });
-    return;
+    res.status(403).json({ error: "Yetkisiz" }); return;
   }
 
   const db   = getFirestore();
   const auth = require("firebase-admin/auth").getAuth();
 
-  let fixed = 0, skipped = 0, errors = 0;
+  let created = 0, patched = 0, skipped = 0, errors = 0;
   const details = [];
 
   try {
-    const snap = await db.collection("users").get();
+    // Auth'taki tüm kullanıcıları sayfalı çek
+    let pageToken;
+    do {
+      const listResult = await auth.listUsers(1000, pageToken);
+      pageToken = listResult.pageToken;
 
-    for (const doc of snap.docs) {
-      const data = doc.data();
-      let authUser;
+      for (const authUser of listResult.users) {
+        try {
+          const ref  = db.collection("users").doc(authUser.uid);
+          const snap = await ref.get();
+          const derived = deriveName(authUser);
+          const base    = (authUser.email || "").split("@")[0]
+                            .toLowerCase().replace(/[^a-z0-9]/g, "");
 
-      try {
-        authUser = await auth.getUser(doc.id);
-      } catch (e) {
-        // Auth'ta bu uid yok — Firestore'daki hayalet belge
-        errors++;
-        details.push({ uid: doc.id, status: "auth_not_found" });
-        continue;
+          if (!snap.exists) {
+            // Belge hiç yok — sıfırdan oluştur
+            await ref.set({
+              uid        : authUser.uid,
+              displayName: derived,
+              name       : derived,
+              username   : base || authUser.uid.slice(0, 8),
+              email      : authUser.email    || "",
+              photoURL   : authUser.photoURL || "",
+              createdAt  : new Date(),
+              followers  : 0,
+              following  : 0,
+              postCount  : 0,
+            });
+            created++;
+            details.push({ uid: authUser.uid, status: "created", name: derived });
+            console.log(`[repairAll] ✓ OLUŞTURULDU: ${authUser.uid} → "${derived}"`);
+
+          } else {
+            // Belge var — eksik alanları tamamla
+            const data  = snap.data();
+            const patch = {};
+
+            if (!data.displayName || data.displayName === "Kullanıcı")
+              patch.displayName = derived;
+            if (!data.name || data.name === "Kullanıcı")
+              patch.name = derived;
+            if (!data.photoURL && authUser.photoURL)
+              patch.photoURL = authUser.photoURL;
+            if (!data.email && authUser.email)
+              patch.email = authUser.email;
+            if (!data.uid)
+              patch.uid = authUser.uid;
+            if (!data.username)
+              patch.username = base || authUser.uid.slice(0, 8);
+            if (data.followers  === undefined) patch.followers  = 0;
+            if (data.following  === undefined) patch.following  = 0;
+            if (data.postCount  === undefined) patch.postCount  = 0;
+            if (!data.createdAt) patch.createdAt = new Date();
+
+            if (Object.keys(patch).length > 0) {
+              await ref.update(patch);
+              patched++;
+              details.push({ uid: authUser.uid, status: "patched", fields: Object.keys(patch) });
+              console.log(`[repairAll] ✓ GÜNCELLENDI: ${authUser.uid}`, Object.keys(patch));
+            } else {
+              skipped++;
+            }
+          }
+        } catch (e) {
+          errors++;
+          details.push({ uid: authUser.uid, status: "error", error: e.message });
+          console.error(`[repairAll] hata — ${authUser.uid}:`, e.message);
+        }
       }
+    } while (pageToken);
 
-      const patch = buildPatch(data, authUser);
+    res.json({ created, patched, skipped, errors, details });
 
-      if (Object.keys(patch).length === 0) {
-        skipped++;
-        continue;
-      }
-
-      try {
-        await doc.ref.update(patch);
-        fixed++;
-        details.push({ uid: doc.id, patched: Object.keys(patch) });
-        console.log(`[repairAll] ✓ ${doc.id} → düzeltilen alanlar:`, Object.keys(patch));
-      } catch (e) {
-        errors++;
-        details.push({ uid: doc.id, status: "update_error", error: e.message });
-      }
-    }
-
-    res.json({ fixed, skipped, errors, total: snap.size, details });
   } catch (e) {
     console.error("[repairAll] genel hata:", e);
     res.status(500).json({ error: e.message });
