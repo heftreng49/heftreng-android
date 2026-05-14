@@ -54,21 +54,27 @@ class AuthViewModel @Inject constructor(
                 val credential = GoogleAuthProvider.getCredential(idToken, null)
                 val result     = auth.signInWithCredential(credential).await()
                 val user       = result.user ?: return@launch
-                // Yeni kullanıcı: tam döküman oluştur
-                // Eski kullanıcı: Google'dan gelen güncel isim/fotoğraf Firestore'a yaz
                 if (result.additionalUserInfo?.isNewUser == true) {
+                    // Yeni kullanıcı: Google profilini Firestore'a yaz
                     createUserDoc(user)
                 } else {
+                    // Eski kullanıcı: sadece lastSeen güncelle
+                    // displayName/photoURL'e dokunma — kullanıcı uygulama içinde değiştirmiş olabilir
+                    // Sadece Firestore'da hiç isim yoksa Google'dan doldur
+                    val doc = firestore.collection("users").document(user.uid).get().await()
+                    val existingName = doc.getString("displayName")?.takeIf { it.isNotBlank() && it != "Kullanıcı" }
                     val updates = mutableMapOf<String, Any>(
                         "lastSeen" to com.google.firebase.Timestamp.now(),
                     )
-                    // Google profili varsa her girişte güncelle
-                    user.displayName?.takeIf { it.isNotBlank() }?.let {
-                        updates["displayName"] = it
-                        updates["name"]        = it
-                    }
-                    user.photoUrl?.toString()?.takeIf { it.isNotBlank() }?.let {
-                        updates["photoURL"] = it
+                    if (existingName == null) {
+                        // İsim hiç yok veya "Kullanıcı" yazıyor — Google'dan doldur
+                        user.displayName?.takeIf { it.isNotBlank() }?.let {
+                            updates["displayName"] = it
+                            updates["name"]        = it
+                        }
+                        user.photoUrl?.toString()?.takeIf { it.isNotBlank() }?.let {
+                            updates["photoURL"] = it
+                        }
                     }
                     firestore.collection("users").document(user.uid).update(updates)
                 }
