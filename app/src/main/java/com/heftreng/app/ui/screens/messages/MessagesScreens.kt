@@ -389,16 +389,16 @@ fun MessageDetailScreen(
         modifier       = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
-            // Tema: .msg-chat-hd
             TopAppBar(
                 title = {
                     Row(
                         verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.clickable {
+                            otherUser?.uid?.let { navController.navigate("profile/$it") }
+                        },
                     ) {
-                        // Tema: .msg-chat-hd-av-wrap + .msg-chat-hd-online
                         Box {
-                            // Tema: .msg-chat-hd-av
                             Box(
                                 modifier = Modifier.size(36.dp).clip(CircleShape)
                                     .background(Brush.linearGradient(listOf(Primary, Accent))),
@@ -411,7 +411,6 @@ fun MessageDetailScreen(
                                 else Text(otherUser?.displayName?.firstOrNull()?.uppercase() ?: "?",
                                     color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
-                            // Online durumu — gerçek presence
                             if (isOtherOnline) {
                                 Box(
                                     modifier = Modifier.size(9.dp).clip(CircleShape)
@@ -422,7 +421,6 @@ fun MessageDetailScreen(
                             }
                         }
                         Column {
-                            // Tema: .msg-chat-hd-name
                             Text(
                                 otherUser?.displayName?.ifBlank { otherUser?.email ?: "…" } ?: "…",
                                 color      = OnBackground,
@@ -431,7 +429,6 @@ fun MessageDetailScreen(
                                 maxLines   = 1,
                                 overflow   = TextOverflow.Ellipsis,
                             )
-                            // Gerçek presence + typing durumu
                             when {
                                 isOtherTyping -> Text(
                                     if (language == "ku") "dinivîse..." else "yazıyor...",
@@ -455,8 +452,34 @@ fun MessageDetailScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { }) {
-                        Icon(Icons.Default.MoreVert, null, tint = Muted)
+                    var menuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, null, tint = Muted)
+                        }
+                        DropdownMenu(
+                            expanded         = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                            containerColor   = HeftSurface,
+                        ) {
+                            DropdownMenuItem(
+                                text        = { Text(if (language == "ku") "Profîl" else "Profile git", color = OnBackground) },
+                                leadingIcon = { Icon(Icons.Default.Person, null, tint = Amber) },
+                                onClick     = {
+                                    menuExpanded = false
+                                    otherUser?.uid?.let { navController.navigate("profile/$it") }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text        = { Text(if (language == "ku") "Sohbetê jê bibe" else "Sohbeti sil", color = Color(0xFFEF4444)) },
+                                leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) },
+                                onClick     = {
+                                    menuExpanded = false
+                                    vm.deleteConversation(convId)
+                                    navController.popBackStack()
+                                },
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = HeftSurface),
@@ -1026,7 +1049,10 @@ private fun MsgRow(
     // Tema: .msg-row, .msg-row.me / .msg-row.them
     Row(
         modifier              = Modifier.fillMaxWidth().pointerInput(msg.id) {
-            detectTapGestures(onLongPress = { onLongPress(it) })
+            detectTapGestures(
+                onLongPress   = { onLongPress(it) },
+                onDoubleTap   = { onLike() },
+            )
         },
         horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
         verticalAlignment     = Alignment.Bottom,
