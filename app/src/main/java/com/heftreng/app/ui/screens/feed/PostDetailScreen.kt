@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -24,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -43,7 +46,6 @@ import com.heftreng.app.viewmodel.SocialViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
-// ── Model (CommentsSheet ile aynı yapı) ───────────────────────────────────────
 private data class DetailComment(
     val id           : String     = "",
     val uid          : String     = "",
@@ -73,22 +75,14 @@ fun PostDetailScreen(
     val auth  = FirebaseAuth.getInstance()
     val scope = rememberCoroutineScope()
 
-    // ── Auth — CommentsSheet ile aynı güvenli yöntem ─────────────────────────
-    var myUid   by remember { mutableStateOf(auth.currentUser?.uid ?: "") }
-    var myName  by remember { mutableStateOf(auth.currentUser?.displayName ?: "") }
-    var myPhoto by remember { mutableStateOf(auth.currentUser?.photoUrl?.toString() ?: "") }
-    LaunchedEffect(Unit) {
-        if (myUid.isBlank()) {
-            myUid   = auth.currentUser?.uid ?: ""
-            myName  = auth.currentUser?.displayName ?: ""
-            myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
-        }
-    }
+    // Auth — her zaman taze al, remember olmadan
+    val myUid   = auth.currentUser?.uid ?: ""
+    val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
 
-    // ── Klavye otomatik aç (feed'den gelince) ────────────────────────────────
-    val focusRequester     = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
+    val focusRequester     = remember { FocusRequester() }
     var openKeyboard       by remember { mutableStateOf(false) }
+
     LaunchedEffect(openKeyboard) {
         if (openKeyboard) {
             focusRequester.requestFocus()
@@ -97,7 +91,6 @@ fun PostDetailScreen(
         }
     }
 
-    // ── State ─────────────────────────────────────────────────────────────────
     var comments     by remember { mutableStateOf<List<DetailComment>>(emptyList()) }
     var cmtLoading   by remember { mutableStateOf(true) }
     var inputText    by remember { mutableStateOf("") }
@@ -107,7 +100,19 @@ fun PostDetailScreen(
     var showLikers   by remember { mutableStateOf(false) }
     val listState    = rememberLazyListState()
 
-    // ── Realtime yorum listener ───────────────────────────────────────────────
+    // Firestore'dan kullanıcı adını çek (yorum göndermek için)
+    var myFirestoreName  by remember { mutableStateOf("") }
+    var myFirestorePhoto by remember { mutableStateOf("") }
+    LaunchedEffect(myUid) {
+        if (myUid.isBlank()) return@LaunchedEffect
+        try {
+            val doc = db.collection("users").document(myUid).get().await()
+            myFirestoreName  = doc.getString("displayName") ?: doc.getString("name") ?: ""
+            myFirestorePhoto = doc.getString("photoURL") ?: myPhoto
+        } catch (_: Exception) {}
+    }
+
+    // Realtime yorum listener
     DisposableEffect(postId) {
         var reg: ListenerRegistration? = null
         reg = db.collection("feed").document(postId)
@@ -120,8 +125,8 @@ fun PostDetailScreen(
                     DetailComment(
                         id           = doc.id,
                         uid          = d["uid"]          as? String ?: "",
-                        name         = (d["name"]        as? String)?.ifBlank { null }
-                                       ?: d["displayName"] as? String ?: "?",
+                        name         = (d["displayName"] as? String)?.ifBlank { null }
+                                       ?: d["name"]      as? String ?: "?",
                         photoURL     = d["photoURL"]     as? String ?: "",
                         text         = d["text"]         as? String ?: "",
                         replyTo      = d["replyTo"]      as? String ?: "",
@@ -135,7 +140,6 @@ fun PostDetailScreen(
         onDispose { reg?.remove() }
     }
 
-    // ── Yorum gönder ─────────────────────────────────────────────────────────
     fun sendComment() {
         val text = inputText.trim()
         if (text.isBlank() || myUid.isBlank()) return
@@ -144,16 +148,13 @@ fun PostDetailScreen(
         replyTo = null
         scope.launch {
             try {
-                val userDoc = db.collection("users").document(myUid).get().await()
-                val name    = userDoc.getString("displayName")
-                              ?: userDoc.getString("name")
-                              ?: myName.ifBlank { "?" }
-                val photo   = userDoc.getString("photoURL") ?: myPhoto
+                val name  = myFirestoreName.ifBlank { auth.currentUser?.displayName ?: "?" }
+                val photo = myFirestorePhoto.ifBlank { myPhoto }
                 db.collection("feed").document(postId).collection("comments").add(
                     mapOf(
                         "uid"          to myUid,
-                        "name"         to name,
                         "displayName"  to name,
+                        "name"         to name,
                         "photoURL"     to photo,
                         "text"         to text,
                         "replyTo"      to (replyRef?.name ?: ""),
@@ -170,7 +171,6 @@ fun PostDetailScreen(
         }
     }
 
-    // ── Yorum sil ────────────────────────────────────────────────────────────
     fun deleteComment(cmt: DetailComment) {
         scope.launch {
             try {
@@ -184,9 +184,11 @@ fun PostDetailScreen(
         }
     }
 
-    // ── UI ────────────────────────────────────────────────────────────────────
     Scaffold(
-        containerColor = Background,
+        containerColor    = Background,
+        // imePadding Scaffold seviyesinde — klavye açılınca içerik yukarı kayar
+        // gönder butonu her zaman görünür kalır
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
                 title = { Text("Gönderi", color = OnBackground, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
@@ -214,12 +216,12 @@ fun PostDetailScreen(
                 .padding(padding)
                 .imePadding(),
         ) {
+            // Yorumlar listesi
             LazyColumn(
                 state          = listState,
                 modifier       = Modifier.weight(1f),
                 contentPadding = PaddingValues(bottom = 8.dp),
             ) {
-                // Gönderi kartı
                 item {
                     PostCard(
                         post         = post,
@@ -233,7 +235,6 @@ fun PostDetailScreen(
                     HorizontalDivider(color = SurfaceVar, thickness = 6.dp)
                 }
 
-                // Beğeni sayısı
                 if (post.likesCount > 0) {
                     item {
                         Row(
@@ -251,12 +252,9 @@ fun PostDetailScreen(
                     }
                 }
 
-                // Yorumlar başlığı
                 item {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
@@ -268,7 +266,6 @@ fun PostDetailScreen(
                     HorizontalDivider(color = Divider)
                 }
 
-                // Yükleniyor
                 if (cmtLoading) {
                     item {
                         Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -277,7 +274,6 @@ fun PostDetailScreen(
                     }
                 }
 
-                // Boş durum
                 if (!cmtLoading && comments.isEmpty()) {
                     item {
                         Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -290,15 +286,15 @@ fun PostDetailScreen(
                     }
                 }
 
-                // Yorum listesi — CommentsSheet ile aynı canDelete mantığı
                 items(comments, key = { it.id }) { cmt ->
-                    val canDelete = (cmt.uid.isNotBlank() && cmt.uid == myUid)
-                                 || (myUid.isNotBlank() && myUid == postAuthorUid)
+                    // canDelete: kendi yorumu VEYA gönderi sahibi
+                    val canDelete = myUid.isNotBlank() &&
+                        (cmt.uid == myUid || postAuthorUid == myUid)
                     DetailCommentRow(
                         cmt       = cmt,
                         canDelete = canDelete,
                         onDelete  = { deleteTarget = cmt },
-                        onReply   = { replyTo = cmt },
+                        onReply   = { replyTo = cmt; openKeyboard = true },
                     )
                     HorizontalDivider(
                         color     = Divider.copy(alpha = 0.4f),
@@ -320,9 +316,7 @@ fun PostDetailScreen(
                 ) {
                     Text(
                         "@${replyTo!!.name} yanıtlanıyor",
-                        color      = Amber,
-                        fontSize   = 12.sp,
-                        fontWeight = FontWeight.Medium,
+                        color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Medium,
                     )
                     TextButton(onClick = { replyTo = null }, contentPadding = PaddingValues(0.dp)) {
                         Text("İptal", color = Muted, fontSize = 12.sp)
@@ -330,7 +324,7 @@ fun PostDetailScreen(
                 }
             }
 
-            // Yorum yazma alanı
+            // Yorum yazma alanı — klavye açık kalır, gönder butonu her zaman görünür
             HorizontalDivider(color = Divider)
             Row(
                 modifier = Modifier
@@ -359,15 +353,22 @@ fun PostDetailScreen(
                         focusedContainerColor   = SurfaceVar,
                         unfocusedContainerColor = SurfaceVar,
                     ),
-                    maxLines = 4,
+                    maxLines       = 4,
+                    // ImeAction.Send — klavyedeki gönder tuşu da çalışır, klavye kapanmaz
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { sendComment() }),
                 )
                 Spacer(Modifier.width(8.dp))
-                Box(
+                // IconButton kullan — clickable klavyeyi kapatır
+                IconButton(
+                    onClick  = { sendComment() },
+                    enabled  = inputText.isNotBlank(),
                     modifier = Modifier
                         .size(44.dp)
-                        .background(if (inputText.isNotBlank()) Amber else Muted.copy(0.2f), CircleShape)
-                        .clickable(enabled = inputText.isNotBlank()) { sendComment() },
-                    contentAlignment = Alignment.Center,
+                        .background(
+                            if (inputText.isNotBlank()) Amber else Muted.copy(alpha = 0.15f),
+                            CircleShape,
+                        ),
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.Send,
@@ -398,7 +399,6 @@ fun PostDetailScreen(
         )
     }
 
-    // Hata dialogu
     if (errorMsg.isNotBlank()) {
         AlertDialog(
             onDismissRequest = { errorMsg = "" },
@@ -409,7 +409,6 @@ fun PostDetailScreen(
         )
     }
 
-    // Beğenenler sheet
     if (showLikers) {
         LikerListSheet(
             likers    = likers,
@@ -420,7 +419,6 @@ fun PostDetailScreen(
     }
 }
 
-// ── Yorum satırı (CommentsSheet.CommentRow ile aynı yapı) ────────────────────
 @Composable
 private fun DetailCommentRow(
     cmt       : DetailComment,
@@ -476,8 +474,8 @@ private fun DetailCommentRow(
                 Icon(
                     Icons.Default.Delete,
                     contentDescription = "Sil",
-                    tint     = Color(0xFFEF4444).copy(alpha = 0.7f),
-                    modifier = Modifier.size(16.dp),
+                    tint     = Color(0xFFEF4444).copy(alpha = 0.8f),
+                    modifier = Modifier.size(18.dp),
                 )
             }
         }
