@@ -920,8 +920,6 @@ fun MessageDetailScreen(
                 }
             }
         }
-
-        }
     } // end Scaffold
 
     // Context menu — Scaffold dışında, tüm ekranı kaplar
