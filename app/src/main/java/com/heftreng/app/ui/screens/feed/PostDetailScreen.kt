@@ -62,10 +62,11 @@ private data class DetailComment(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PostDetailScreen(
-    navController: NavController,
-    viewModel    : FeedViewModel,
-    postId       : String,
-    socialVm     : SocialViewModel = hiltViewModel(),
+    navController   : NavController,
+    viewModel       : FeedViewModel,
+    postId          : String,
+    autoOpenKeyboard: Boolean = false,
+    socialVm        : SocialViewModel = hiltViewModel(),
 ) {
     val posts         by viewModel.posts.collectAsState()
     val likers        by socialVm.likers.collectAsState()
@@ -76,7 +77,6 @@ fun PostDetailScreen(
     val auth  = FirebaseAuth.getInstance()
     val scope = rememberCoroutineScope()
 
-    // Auth — sheet ile aynı güvenli yöntem: remember + AuthStateListener
     var myUid   by remember { mutableStateOf(auth.currentUser?.uid ?: "") }
     var myName  by remember { mutableStateOf(auth.currentUser?.displayName ?: "") }
     var myPhoto by remember { mutableStateOf(auth.currentUser?.photoUrl?.toString() ?: "") }
@@ -93,6 +93,14 @@ fun PostDetailScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester     = remember { FocusRequester() }
     var openKeyboard       by remember { mutableStateOf(false) }
+
+    // Feed'den yorum butonuna basılınca otomatik klavye aç
+    LaunchedEffect(Unit) {
+        if (autoOpenKeyboard) {
+            kotlinx.coroutines.delay(400) // ekran yüklensin
+            openKeyboard = true
+        }
+    }
 
     LaunchedEffect(openKeyboard) {
         if (openKeyboard) {
@@ -133,9 +141,14 @@ fun PostDetailScreen(
                 if (err != null || snap == null) { cmtLoading = false; return@addSnapshotListener }
                 comments = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
+                    // uid farklı field adlarıyla kaydedilmiş olabilir
+                    val cmtUid = (d["uid"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: (d["userId"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: (d["authorId"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: ""
                     DetailComment(
                         id           = doc.id,
-                        uid          = d["uid"]          as? String ?: "",
+                        uid          = cmtUid,
                         name         = (d["displayName"] as? String)?.ifBlank { null }
                                        ?: d["name"]      as? String ?: "?",
                         photoURL     = d["photoURL"]     as? String ?: "",
@@ -174,6 +187,7 @@ fun PostDetailScreen(
                         "ts"           to Timestamp.now(),
                     )
                 ).await()
+                // cmtCount sadece bir kez artır
                 db.collection("feed").document(postId)
                     .update("cmtCount", FieldValue.increment(1)).await()
             } catch (e: Exception) {
@@ -193,6 +207,16 @@ fun PostDetailScreen(
                 errorMsg = "Silinemedi: ${e.message}"
             }
         }
+    }
+
+    var postAuthorUid by remember { mutableStateOf("") }
+
+    // postAuthorUid'yi post.uid'den veya Firestore'dan al
+    LaunchedEffect(postId, post?.uid) {
+        postAuthorUid = post?.uid?.takeIf { it.isNotBlank() } ?: try {
+            db.collection("feed").document(postId).get().await()
+                .getString("uid") ?: ""
+        } catch (_: Exception) { "" }
     }
 
     // Post listede yoksa Firestore'dan yükle
@@ -239,8 +263,6 @@ fun PostDetailScreen(
             }
             return@Scaffold
         }
-
-        val postAuthorUid = post.uid
 
         Column(
             modifier = Modifier
@@ -329,9 +351,10 @@ fun PostDetailScreen(
                 }
 
                 items(comments, key = { it.id }) { cmt ->
-                    // Sheet ile aynı mantık: uid eşleşiyorsa VEYA post sahibiyse
-                    val canDelete = (cmt.uid.isNotBlank() && cmt.uid == myUid)
-                                 || (myUid.isNotBlank() && myUid == postAuthorUid)
+                    val canDelete = myUid.isNotBlank() && (
+                        (cmt.uid.isNotBlank() && cmt.uid == myUid) ||
+                        myUid == postAuthorUid
+                    )
                     DetailCommentRow(
                         cmt       = cmt,
                         canDelete = canDelete,
