@@ -148,82 +148,75 @@ fun QuoteDialog(
     val db  = remember { FirebaseFirestore.getInstance() }
     val uid = remember { FirebaseAuth.getInstance().currentUser?.uid ?: "" }
 
-    var bookSuggestions    by remember { mutableStateOf<List<QuoteSuggestion>>(emptyList()) }
-    var authorSuggestions  by remember { mutableStateOf<List<String>>(emptyList()) }
-    var fsAuthorSuggestions by remember { mutableStateOf<List<String>>(emptyList()) }
-    var showBookDrop       by remember { mutableStateOf(false) }
-    var showAuthorDrop     by remember { mutableStateOf(false) }
+    var bookSuggestions     by remember { mutableStateOf<List<QuoteSuggestion>>(emptyList()) }
+    var authorSuggestions   by remember { mutableStateOf<List<QuoteSuggestion>>(emptyList()) }
+    var showBookDrop        by remember { mutableStateOf(false) }
+    var showAuthorDrop      by remember { mutableStateOf(false) }
 
-    // Kullanıcının önceki alıntı kitaplarını yükle
-    LaunchedEffect(uid) {
-        if (uid.isBlank()) return@LaunchedEffect
+    // Tüm feed'deki kitap+yazar verilerini yükle (tüm kullanıcıların alıntıları)
+    LaunchedEffect(Unit) {
         try {
             val snap = db.collection("feed")
-                .whereEqualTo("uid", uid)
-                .limit(50).get().await()
-            val map = mutableMapOf<String, QuoteSuggestion>()
-            snap.documents.forEach { doc ->
+                .whereEqualTo("type", "quote")
+                .limit(300).get().await()
+
+            // type alanı yoksa quote objesi olan tüm postları çek
+            val allDocs = if (snap.isEmpty) {
+                db.collection("feed").limit(300).get().await().documents
+                    .filter { it.get("quote") != null }
+            } else snap.documents
+
+            // Kitap bazlı gruplama: kitapAdı → QuoteSuggestion
+            val bookMap    = mutableMapOf<String, QuoteSuggestion>()
+            // Yazar bazlı gruplama: yazarAdı → QuoteSuggestion
+            val authorMap  = mutableMapOf<String, QuoteSuggestion>()
+
+            allDocs.forEach { doc ->
                 val qObj   = doc.get("quote") as? Map<*, *> ?: return@forEach
-                val bName  = (qObj["book"]   as? String)?.takeIf { it.isNotBlank() } ?: return@forEach
-                val aName  = (qObj["author"] as? String) ?: ""
-                val key    = bName.lowercase()
-                val cur    = map[key]
-                map[key]   = QuoteSuggestion(
+                val bName  = (qObj["book"]   as? String)?.trim()?.takeIf { it.isNotBlank() } ?: return@forEach
+                val aName  = (qObj["author"] as? String)?.trim() ?: ""
+                val bKey   = bName.lowercase()
+                val aKey   = aName.lowercase()
+
+                // Kitap haritası
+                val cur    = bookMap[bKey]
+                bookMap[bKey] = QuoteSuggestion(
                     bookName   = bName,
                     authorName = cur?.authorName?.ifBlank { aName } ?: aName,
                     count      = (cur?.count ?: 0) + 1,
                 )
-            }
-            bookSuggestions = map.values.sortedByDescending { it.count }
-        } catch (_: Exception) {}
-    }
 
-    // Kitap değişince yazar öner
-    LaunchedEffect(book) {
-        val match = bookSuggestions.filter {
-            it.bookName.contains(book, ignoreCase = true) && book.isNotBlank()
-        }
-        authorSuggestions = match.map { it.authorName }.filter { it.isNotBlank() }.distinct()
-        showBookDrop      = book.isNotBlank() && match.isNotEmpty()
-        if (!showBookDrop) showAuthorDrop = false
-    }
-
-    // Yazar alanına yazınca Firestore'dan ara
-    LaunchedEffect(author) {
-        if (author.length < 2) {
-            fsAuthorSuggestions = emptyList()
-            showAuthorDrop = authorSuggestions.any { it.contains(author, ignoreCase = true) } && author.isNotBlank()
-            return@LaunchedEffect
-        }
-        try {
-            // authors koleksiyonundan ara
-            val authorEnd = author + "\uf8ff"
-            val snap = db.collection("authors")
-                .orderBy("name")
-                .startAt(author.lowercase())
-                .endAt(authorEnd.lowercase())
-                .limit(10).get().await()
-
-            val results = snap.documents
-                .mapNotNull { it.getString("name") ?: it.getString("displayName") }
-                .filter { it.isNotBlank() }
-
-            // Eğer authors koleksiyonu yoksa feed'den çek
-            val finalResults = if (results.isEmpty()) {
-                val feedSnap = db.collection("feed")
-                    .limit(200).get().await()
-                feedSnap.documents.mapNotNull { doc ->
-                    val qObj = doc.get("quote") as? Map<*, *> ?: return@mapNotNull null
-                    qObj["author"] as? String
+                // Yazar haritası
+                if (aName.isNotBlank()) {
+                    val curA = authorMap[aKey]
+                    authorMap[aKey] = QuoteSuggestion(
+                        bookName   = curA?.bookName?.ifBlank { bName } ?: bName,
+                        authorName = aName,
+                        count      = (curA?.count ?: 0) + 1,
+                    )
                 }
-                .filter { it.contains(author, ignoreCase = true) && it.isNotBlank() }
-                .distinct()
-                .take(10)
-            } else results
-
-            fsAuthorSuggestions = finalResults
-            showAuthorDrop = finalResults.isNotEmpty() || authorSuggestions.any { it.contains(author, ignoreCase = true) }
+            }
+            bookSuggestions   = bookMap.values.sortedByDescending { it.count }
+            authorSuggestions = authorMap.values.sortedByDescending { it.count }
         } catch (_: Exception) {}
+    }
+
+    // Kitap yazınca — kitap + yazarı getir
+    LaunchedEffect(book) {
+        if (book.isBlank()) { showBookDrop = false; return@LaunchedEffect }
+        val match = bookSuggestions.filter {
+            it.bookName.contains(book, ignoreCase = true)
+        }
+        showBookDrop = match.isNotEmpty()
+    }
+
+    // Yazar yazınca — yazar + kitabı getir
+    LaunchedEffect(author) {
+        if (author.isBlank()) { showAuthorDrop = false; return@LaunchedEffect }
+        val match = authorSuggestions.filter {
+            it.authorName.contains(author, ignoreCase = true)
+        }
+        showAuthorDrop = match.isNotEmpty()
     }
 
     AlertDialog(
@@ -318,10 +311,8 @@ fun QuoteDialog(
                         value         = author,
                         onValueChange = {
                             author = it
-                            showAuthorDrop = it.isNotBlank() && (
-                                authorSuggestions.any { a -> a.contains(it, ignoreCase = true) } ||
-                                fsAuthorSuggestions.isNotEmpty()
-                            )
+                            showAuthorDrop = it.isNotBlank() &&
+                                authorSuggestions.any { s -> s.authorName.contains(it, ignoreCase = true) }
                         },
                         label         = { Text("YAZAR") },
                         singleLine    = true,
@@ -331,38 +322,50 @@ fun QuoteDialog(
                             Icon(Icons.Default.Person, null, tint = Muted, modifier = Modifier.size(18.dp))
                         },
                         trailingIcon  = if (author.isNotBlank()) {{
-                            IconButton(onClick = { author = ""; showAuthorDrop = false; fsAuthorSuggestions = emptyList() }) {
+                            IconButton(onClick = { author = ""; showAuthorDrop = false }) {
                                 Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
                             }
                         }} else null,
                     )
-                    // Yazar öneri dropdown — hem local hem Firestore sonuçları
-                    val combinedAuthors = (
-                        authorSuggestions.filter { it.contains(author, ignoreCase = true) } +
-                        fsAuthorSuggestions.filter { a -> authorSuggestions.none { it.equals(a, ignoreCase = true) } }
-                    ).distinct().take(8)
-
-                    if (showAuthorDrop && combinedAuthors.isNotEmpty()) {
-                        Surface(
-                            shape  = RoundedCornerShape(10.dp),
-                            color  = HeftSurface,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Divider),
-                            tonalElevation = 4.dp,
-                        ) {
-                            Column {
-                                combinedAuthors.forEach { a ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { author = a; showAuthorDrop = false }
-                                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                                        verticalAlignment     = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    ) {
-                                        Icon(Icons.Default.Person, null, tint = Primary, modifier = Modifier.size(14.dp))
-                                        Text(a, color = OnBackground, fontSize = 13.sp)
+                    // Yazar öneri dropdown — yazar adı + kitap adı + alıntı sayısı
+                    if (showAuthorDrop) {
+                        val filtered = authorSuggestions.filter {
+                            it.authorName.contains(author, ignoreCase = true)
+                        }.take(8)
+                        if (filtered.isNotEmpty()) {
+                            Surface(
+                                shape          = RoundedCornerShape(10.dp),
+                                color          = HeftSurface,
+                                border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
+                                tonalElevation = 4.dp,
+                            ) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 160.dp)) {
+                                    items(filtered) { s ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    author         = s.authorName
+                                                    // Kitap boşsa yazara ait kitabı da doldur
+                                                    if (book.isBlank() && s.bookName.isNotBlank())
+                                                        book = s.bookName
+                                                    showAuthorDrop = false
+                                                    showBookDrop   = false
+                                                }
+                                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                            verticalAlignment     = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Icon(Icons.Default.Person, null, tint = Primary, modifier = Modifier.size(14.dp))
+                                            Column(Modifier.weight(1f)) {
+                                                Text(s.authorName, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                                if (s.bookName.isNotBlank())
+                                                    Text(s.bookName, color = Muted, fontSize = 11.sp)
+                                            }
+                                            Text("${s.count} alıntı", color = Muted, fontSize = 10.sp)
+                                        }
+                                        HorizontalDivider(color = Divider, thickness = 0.5.dp)
                                     }
-                                    HorizontalDivider(color = Divider, thickness = 0.5.dp)
                                 }
                             }
                         }
