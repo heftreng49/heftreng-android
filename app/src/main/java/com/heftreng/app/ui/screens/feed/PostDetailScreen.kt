@@ -195,6 +195,20 @@ fun PostDetailScreen(
         }
     }
 
+    // Post listede yoksa Firestore'dan yükle
+    LaunchedEffect(postId) {
+        if (posts.none { it.id == postId }) {
+            viewModel.ensurePost(postId)
+        }
+    }
+
+    // 8 saniye sonra hâlâ null ise hata göster
+    var loadTimeout by remember { mutableStateOf(false) }
+    LaunchedEffect(postId) {
+        kotlinx.coroutines.delay(8000)
+        if (posts.none { it.id == postId }) loadTimeout = true
+    }
+
     Scaffold(
         containerColor = Background,
         topBar = {
@@ -210,8 +224,18 @@ fun PostDetailScreen(
         },
     ) { padding ->
         if (post == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Amber)
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                if (loadTimeout) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Gönderi bulunamadı", color = Muted, fontSize = 15.sp)
+                        Spacer(Modifier.height(12.dp))
+                        TextButton(onClick = { navController.popBackStack() }) {
+                            Text("Geri dön", color = Amber)
+                        }
+                    }
+                } else {
+                    CircularProgressIndicator(color = Amber)
+                }
             }
             return@Scaffold
         }

@@ -679,7 +679,7 @@ fun PostCard(
                 )
             }
             if (post.text.isNotBlank()) {
-                LinkifyText(post.text, fontSize = 15.sp, lineHeight = 22.sp)
+                LinkifyText(post.text, fontSize = 15.sp, lineHeight = 22.sp, expandable = true)
                 Spacer(Modifier.height(8.dp))
             }
                         if (post.repostType.isNotBlank() && post.repostType != "feed") {
