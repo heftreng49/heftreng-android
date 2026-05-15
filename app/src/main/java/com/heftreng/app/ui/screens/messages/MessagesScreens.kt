@@ -1031,6 +1031,7 @@ private fun MsgCtxItem(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 // ── Mesaj Satırı ─────────────────────────────────────────────────────────────
 // Tema: .msg-row, .msg-row.me, .msg-row.them, .msg-row-av, .msg-bubble
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun MsgRow(
     msg           : Message,
