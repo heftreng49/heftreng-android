@@ -1048,14 +1048,14 @@ private fun MsgRow(
     if (msg.text.isBlank() && msg.imageUrl.isBlank() && msg.audioUrl.isBlank()) return
     val iLiked = myUid in msg.likedBy
 
-    // Tema: .msg-row, .msg-row.me / .msg-row.them
     Row(
-        modifier              = Modifier.fillMaxWidth().pointerInput(msg.id) {
-            detectTapGestures(
-                onLongPress   = { onLongPress(it) },
-                onDoubleTap   = { onLike() },
-            )
-        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick     = { },
+                onLongClick = { onLongPress(androidx.compose.ui.geometry.Offset.Zero) },
+                onDoubleClick = { onLike() },
+            ),
         horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
         verticalAlignment     = Alignment.Bottom,
     ) {
