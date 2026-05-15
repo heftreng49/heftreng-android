@@ -219,6 +219,15 @@ fun FeedScreen(
                         onTapBook = { book ->
                             navController.navigate("book_quotes/${URLEncoder.encode(book, "UTF-8")}")
                         },
+                        onTapRepost = { repostId, repostType ->
+                            when (repostType) {
+                                "feed" -> navController.navigate(Screen.PostDetail.go(repostId))
+                                "serial" -> navController.navigate("serial/$repostId")
+                                "chapter" -> navController.navigate("chapter/$repostId")
+                                "blog" -> navController.navigate("blog/$repostId")
+                                else -> navController.navigate(Screen.PostDetail.go(repostId))
+                            }
+                        },
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     // ── AdMob Banner — her bannerPos. kartta bir ─────────
@@ -557,6 +566,7 @@ fun PostCard(
     onShowLikers : (() -> Unit)? = null,
     onTapAuthor  : ((String) -> Unit)? = null,
     onTapBook    : ((String) -> Unit)? = null,
+    onTapRepost  : ((postId: String, type: String) -> Unit)? = null,
 ) {
     val myUid            = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     val isOwn            = post.uid == myUid
@@ -696,7 +706,14 @@ fun PostCard(
                     shape    = RoundedCornerShape(13.dp),
                     color    = SurfaceVar,
                     border   = androidx.compose.foundation.BorderStroke(0.5.dp, Divider),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .then(
+                            if (post.repostId.isNotBlank() && onTapRepost != null)
+                                Modifier.clickable { onTapRepost(post.repostId, post.repostType) }
+                            else Modifier
+                        ),
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         // Tip etiketi — tema: rp-embed-lbl

@@ -248,6 +248,14 @@ fun ProfileScreen(
                                 onDelete  = if (isMe) ({ vm.deleteOwnPost(post.id) }) else null,
                                 onEdit    = if (isMe) ({ newText -> vm.editOwnPost(post.id, newText) }) else null,
                                 onTap     = { navController.navigate(Screen.PostDetail.go(post.id)) },
+                                onTapRepost = { repostId, repostType ->
+                                    when (repostType) {
+                                        "feed"    -> navController.navigate(Screen.PostDetail.go(repostId))
+                                        "serial"  -> navController.navigate("serial/$repostId")
+                                        "chapter" -> navController.navigate("chapter/$repostId")
+                                        else      -> navController.navigate(Screen.PostDetail.go(repostId))
+                                    }
+                                },
                             )
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         }

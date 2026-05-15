@@ -264,6 +264,15 @@ fun PostDetailScreen(
                         onComment    = { openKeyboard = true },
                         onShare      = { viewModel.repost(post) },
                         onShowLikers = { socialVm.loadPostLikers(post.id); showLikers = true },
+                        onTapRepost  = { repostId, repostType ->
+                            when (repostType) {
+                                "feed"    -> navController.navigate(Screen.PostDetail.go(repostId))
+                                "serial"  -> navController.navigate("serial/$repostId")
+                                "chapter" -> navController.navigate("chapter/$repostId")
+                                "blog"    -> navController.navigate("blog/$repostId")
+                                else      -> navController.navigate(Screen.PostDetail.go(repostId))
+                            }
+                        },
                     )
                     HorizontalDivider(color = SurfaceVar, thickness = 6.dp)
                 }
