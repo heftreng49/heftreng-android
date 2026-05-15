@@ -387,6 +387,7 @@ fun MessageDetailScreen(
         if (editMsg != null) inputText = editMsg!!.text
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         modifier       = Modifier.imePadding(),
         containerColor = Background,
@@ -920,29 +921,37 @@ fun MessageDetailScreen(
             }
         }
 
-        // Tema: .msg-ctx-menu — uzun basma menüsü
-        if (ctxMsg != null) {
-            Box(modifier = Modifier.fillMaxSize().clickable { ctxMsg = null }.background(Color.Black.copy(alpha = 0.35f))) {
-                Surface(
-                    shape          = RoundedCornerShape(14.dp),
-                    color          = HeftSurface,
-                    tonalElevation = 0.dp,
-                    modifier       = Modifier.align(Alignment.Center).width(180.dp),
-                    shadowElevation = 24.dp,
-                    border          = BorderStroke(1.dp, Divider),
-                ) {
-                    Column(modifier = Modifier.padding(5.dp)) {
-                        MsgCtxItem(Icons.Default.Reply, if (language == "ku") "Bersiv bide" else "Yanıtla", false) { replyTo = ctxMsg; ctxMsg = null }
-                        if (ctxMsg?.senderId == vm.uid) {
-                            MsgCtxItem(Icons.Default.Create, if (language == "ku") "Biguherîne" else "Düzenle", false) { editMsg = ctxMsg; ctxMsg = null }
-                            MsgCtxItem(Icons.Default.Delete, if (language == "ku") "Jê bibe" else "Sil", true) { vm.deleteMessage(ctxMsg!!); ctxMsg = null }
-                        }
-                        MsgCtxItem(Icons.Default.FavoriteBorder, if (language == "ku") "Hez bike" else "Beğen", false) { vm.toggleLike(ctxMsg!!); ctxMsg = null }
+        }
+    } // end Scaffold
+
+    // Context menu — Scaffold dışında, tüm ekranı kaplar
+    if (ctxMsg != null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable { ctxMsg = null }
+                .background(Color.Black.copy(alpha = 0.35f))
+        ) {
+            Surface(
+                shape           = RoundedCornerShape(14.dp),
+                color           = HeftSurface,
+                tonalElevation  = 0.dp,
+                modifier        = Modifier.align(Alignment.Center).width(180.dp),
+                shadowElevation = 24.dp,
+                border          = BorderStroke(1.dp, Divider),
+            ) {
+                Column(modifier = Modifier.padding(5.dp)) {
+                    MsgCtxItem(Icons.Default.Reply, if (language == "ku") "Bersiv bide" else "Yanıtla", false) { replyTo = ctxMsg; ctxMsg = null }
+                    if (ctxMsg?.senderId == vm.uid) {
+                        MsgCtxItem(Icons.Default.Create, if (language == "ku") "Biguherîne" else "Düzenle", false) { editMsg = ctxMsg; ctxMsg = null }
+                        MsgCtxItem(Icons.Default.Delete, if (language == "ku") "Jê bibe" else "Sil", true) { vm.deleteMessage(ctxMsg!!); ctxMsg = null }
                     }
+                    MsgCtxItem(Icons.Default.FavoriteBorder, if (language == "ku") "Hez bike" else "Beğen", false) { vm.toggleLike(ctxMsg!!); ctxMsg = null }
                 }
             }
         }
     }
+    } // end outer Box
 }
 
 // ── Sesli Mesaj Oynatıcı ─────────────────────────────────────────────────────
@@ -1050,13 +1059,7 @@ private fun MsgRow(
     val iLiked = myUid in msg.likedBy
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick     = { },
-                onLongClick = { onLongPress(androidx.compose.ui.geometry.Offset.Zero) },
-                onDoubleClick = { onLike() },
-            ),
+        modifier              = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
         verticalAlignment     = Alignment.Bottom,
     ) {
@@ -1109,7 +1112,6 @@ private fun MsgRow(
             }
 
             // Tema: .msg-bubble — ana balon
-            // .msg-row.me .msg-bubble → gradient, .msg-row.them .msg-bubble → s3
             Box(
                 modifier = Modifier
                     .widthIn(max = 250.dp)
@@ -1123,13 +1125,17 @@ private fun MsgRow(
                     )
                     .then(
                         if (msg.deleted)
-                        // Tema: .msg-bubble.deleted
                             Modifier.background(SurfaceVar).border(1.dp, Divider, RoundedCornerShape(16.dp))
                         else if (isMine)
                             Modifier.background(Brush.linearGradient(listOf(PrimaryLight, Primary)))
                         else
                             Modifier.background(SurfaceVar).border(1.dp, Divider, RoundedCornerShape(
                                 topStart = 16.dp, topEnd = 16.dp, bottomStart = 3.dp, bottomEnd = 16.dp))
+                    )
+                    .combinedClickable(
+                        onClick       = { },
+                        onLongClick   = { onLongPress(androidx.compose.ui.geometry.Offset.Zero) },
+                        onDoubleClick = { onLike() },
                     )
                     .padding(horizontal = 11.dp, vertical = 7.dp)
             ) {
