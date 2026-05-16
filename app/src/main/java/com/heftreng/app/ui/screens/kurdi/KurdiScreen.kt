@@ -605,36 +605,67 @@ fun LessonScreen(
         },
         // ── Devam butonu SABIT altta ───────────────────────────────────────────
         bottomBar = {
-            if (!allDone) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Background)
-                        .padding(horizontal = 20.dp, vertical = 12.dp)
-                        .navigationBarsPadding()
-                        .imePadding(),
-                ) {
-                    Button(
-                        onClick  = {
-                            if (allDone) { onComplete(); return@Button }
-                            if (!vocabDone) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Background)
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .navigationBarsPadding()
+                    .imePadding(),
+            ) {
+                // Doğru/Yanlış sonuç bandı — showResult sonrası göster
+                if (showResult && currentEx != null && !allDone) {
+                    val isCorrect = when (currentEx.type) {
+                        "mcq"  -> selectedAns == currentEx.answer
+                        "fill" -> fillAnswer.trim().equals(currentEx.answer, ignoreCase = true)
+                        else   -> true
+                    }
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                        shape    = RoundedCornerShape(12.dp),
+                        color    = if (isCorrect) Color(0xFF22C55E).copy(0.15f) else Color(0xFFEF4444).copy(0.15f),
+                    ) {
+                        Row(
+                            modifier          = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(if (isCorrect) "✓" else "✗", color = if (isCorrect) Color(0xFF22C55E) else Color(0xFFEF4444), fontWeight = FontWeight.Black, fontSize = 16.sp)
+                            Text(
+                                if (isCorrect) "Doğru!" else "Doğru cevap: ${currentEx.answer}",
+                                color      = if (isCorrect) Color(0xFF22C55E) else Color(0xFFEF4444),
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize   = 14.sp,
+                            )
+                        }
+                    }
+                }
+
+                Button(
+                    onClick  = {
+                        when {
+                            allDone -> onComplete()
+                            !vocabDone -> {
                                 step++
-                                return@Button
                             }
-                            if (showResult || currentEx?.type == "match" || currentEx?.type == "build") {
+                            showResult || currentEx?.type == "match" || currentEx?.type == "build" -> {
+                                // Sonraki soruya geç
                                 step++
                                 selectedAns = null
                                 showResult  = false
                                 fillAnswer  = ""
                             }
-                        },
-                        enabled  = canAdvance,
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape    = RoundedCornerShape(14.dp),
-                        colors   = ButtonDefaults.buttonColors(containerColor = Primary),
-                    ) {
-                        Text(nextLabel, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
+                        }
+                    },
+                    enabled  = canAdvance,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape    = RoundedCornerShape(14.dp),
+                    colors   = ButtonDefaults.buttonColors(
+                        containerColor = if (allDone) Amber else Primary,
+                        contentColor   = Color.White,
+                    ),
+                ) {
+                    Text(nextLabel, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
         },
@@ -756,7 +787,7 @@ fun LessonScreen(
                             val options = listOf(ex.optA, ex.optB, ex.optC, ex.optD).filter { it.isNotBlank() }
                             items(options) { opt ->
                                 val isSel     = selectedAns == opt
-                                val isCorrect = showResult && opt == ex.optA // optA her zaman doğru (tema kuralı)
+                                val isCorrect = showResult && opt == ex.answer // answer alanını kullan
                                 val bgColor   = when {
                                     !showResult -> if (isSel) Primary.copy(0.15f) else HeftSurface
                                     isCorrect   -> Color(0xFF22C55E).copy(0.15f)
@@ -776,7 +807,7 @@ fun LessonScreen(
                                         .clickable(enabled = !showResult) {
                                             selectedAns = opt
                                             showResult  = true
-                                            if (opt == ex.optA) correctCount++
+                                            if (opt == ex.answer) correctCount++
                                         },
                                     shape  = RoundedCornerShape(12.dp),
                                     color  = bgColor,
@@ -788,12 +819,13 @@ fun LessonScreen(
                                     ) {
                                         Text(opt, color = OnBackground, fontWeight = FontWeight.Medium, fontSize = 15.sp, modifier = Modifier.weight(1f))
                                         if (showResult) {
+                                            val selCorrect = opt == ex.answer
                                             Icon(
-                                                if (isCorrect) Icons.Default.CheckCircle
+                                                if (selCorrect) Icons.Default.CheckCircle
                                                 else if (isSel) Icons.Default.Cancel
                                                 else Icons.Default.RadioButtonUnchecked,
                                                 null,
-                                                tint     = if (isCorrect) Color(0xFF22C55E) else if (isSel) Color(0xFFEF4444) else Divider,
+                                                tint     = if (selCorrect) Color(0xFF22C55E) else if (isSel) Color(0xFFEF4444) else Divider,
                                                 modifier = Modifier.size(20.dp),
                                             )
                                         }
@@ -833,30 +865,6 @@ fun LessonScreen(
                                         colors   = ButtonDefaults.buttonColors(containerColor = Primary),
                                     ) {
                                         Text("Kontrol Et", color = Color.White, fontWeight = FontWeight.Bold)
-                                    }
-                                } else {
-                                    Spacer(Modifier.height(12.dp))
-                                    val correct = fillAnswer.trim().equals(ex.answer, ignoreCase = true)
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = if (correct) Color(0xFF22C55E).copy(0.15f) else Color(0xFFEF4444).copy(0.15f),
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                if (correct) Icons.Default.CheckCircle else Icons.Default.Cancel,
-                                                null,
-                                                tint     = if (correct) Color(0xFF22C55E) else Color(0xFFEF4444),
-                                                modifier = Modifier.size(20.dp),
-                                            )
-                                            Spacer(Modifier.width(8.dp))
-                                            Text(
-                                                if (correct) "Doğru! ✓" else "Doğru cevap: ${ex.answer}",
-                                                color      = if (correct) Color(0xFF22C55E) else Color(0xFFEF4444),
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontSize   = 14.sp,
-                                            )
-                                        }
                                     }
                                 }
                             }
