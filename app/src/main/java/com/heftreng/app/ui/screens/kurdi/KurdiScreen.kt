@@ -1023,7 +1023,10 @@ private fun MatchExercise(
     }
 }
 
-// ── Cümle kurma egzersizi (build) ─────────────────────────────────────────────
+// ── Cümle kurma egzersizi (build) — web temasıyla birebir aynı mantık ──────────
+// words = doğru sıralı Kürtçe kelimeler (Firestore'dan gelir)
+// bank  = words'ün karıştırılmış hali (sadece görüntü için)
+// Kontrol: placed.joinToString(" ").trim().lowercase() == words.joinToString(" ").trim().lowercase()
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun BuildExercise(
@@ -1032,23 +1035,37 @@ private fun BuildExercise(
     onCorrect: () -> Unit,
     onChecked: () -> Unit,
 ) {
-    val bank     = remember(words) { words.shuffled() }
-    val placed   = remember { mutableStateListOf<String>() }
-    val usedIdx  = remember { mutableStateListOf<Int>() }   // bank index'leri
-    var checked  by remember { mutableStateOf(false) }
-    var correct  by remember { mutableStateOf(false) }
+    // Bank: words'ü karıştır — her kelime kaç kez varsa o kadar görünür
+    val bank    = remember(words) { words.shuffled() }
+    // placed: kullanıcının seçtiği kelimeler (bank index bazlı takip)
+    val usedIdx = remember { mutableStateListOf<Int>() }
+    val placed  = remember { mutableStateListOf<String>() }
+    var checked by remember { mutableStateOf(false) }
+    var correct by remember { mutableStateOf(false) }
 
     Column(
-        modifier            = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+        modifier            = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Türkçe anlam
+        // Türkçe ipucu — web: .kp-build-tr
         if (tr.isNotBlank()) {
-            Text("\"$tr\"", color = Muted, fontSize = 13.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                textAlign = TextAlign.Center, modifier = Modifier.padding(bottom = 12.dp))
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = SurfaceVar,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Text("🇹🇷 ", fontSize = 14.sp)
+                    Text(tr, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp, textAlign = TextAlign.Center)
+                }
+            }
         }
 
-        // Yerleştirme alanı
+        // Yerleştirme alanı — web: #kpBuildArea
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1056,8 +1073,8 @@ private fun BuildExercise(
                 .background(
                     when {
                         !checked -> HeftSurface
-                        correct  -> Color(0xFF22C55E).copy(0.1f)
-                        else     -> Color(0xFFEF4444).copy(0.1f)
+                        correct  -> Color(0xFF22C55E).copy(0.08f)
+                        else     -> Color(0xFFEF4444).copy(0.08f)
                     }
                 )
                 .border(
@@ -1070,96 +1087,94 @@ private fun BuildExercise(
                     RoundedCornerShape(12.dp),
                 )
                 .padding(12.dp)
-                .heightIn(min = 52.dp),
+                .heightIn(min = 56.dp),
             contentAlignment = Alignment.Center,
         ) {
-            androidx.compose.foundation.layout.FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-                verticalArrangement   = Arrangement.spacedBy(7.dp),
-            ) {
-                placed.forEachIndexed { i, word ->
-                    Surface(
-                        modifier = Modifier.clickable(enabled = !checked) {
-                            placed.removeAt(i)
-                            // Bu kelimeye ait ilk kullanılmış bank index'ini serbest bırak
-                            val idx = bank.indexOfFirst { it == word && bank.indexOf(it) in usedIdx }
-                            if (idx != -1) usedIdx.remove(idx)
-                        },
-                        shape  = RoundedCornerShape(9.dp),
-                        color  = Primary.copy(0.15f),
-                        border = BorderStroke(2.dp, Primary),
-                    ) {
-                        Text(word, color = Primary, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp,
-                            modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp))
+            if (placed.isEmpty()) {
+                Text("Kelimelere sırayla dokun", color = Muted, fontSize = 13.sp)
+            } else {
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalArrangement   = Arrangement.spacedBy(7.dp),
+                ) {
+                    placed.forEachIndexed { i, word ->
+                        // Tıklayınca geri al
+                        Surface(
+                            modifier = Modifier.clickable(enabled = !checked) {
+                                placed.removeAt(i)
+                                // Bu kelimenin en son kullanılan bank index'ini serbest bırak
+                                val bankIdx = usedIdx.lastOrNull { bank.getOrNull(it) == word }
+                                if (bankIdx != null) usedIdx.remove(bankIdx)
+                            },
+                            shape  = RoundedCornerShape(9.dp),
+                            color  = Primary.copy(0.15f),
+                            border = BorderStroke(2.dp, Primary),
+                        ) {
+                            Text(
+                                word,
+                                color      = Primary,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize   = 14.sp,
+                                modifier   = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
+                            )
+                        }
                     }
-                }
-                if (placed.isEmpty()) {
-                    Text("Kelimelere dokun →", color = Muted, fontSize = 12.sp)
                 }
             }
         }
 
         Spacer(Modifier.height(12.dp))
 
-        // Kelime bankası
+        // Kelime bankası — web: #kpBuildBank
         androidx.compose.foundation.layout.FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement   = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
         ) {
             bank.forEachIndexed { idx, word ->
                 val isUsed = idx in usedIdx
                 Surface(
                     modifier = Modifier
+                        .alpha(if (isUsed) 0.2f else 1f)
                         .clickable(enabled = !checked && !isUsed) {
                             placed.add(word)
                             usedIdx.add(idx)
-                        }
-                        .alpha(if (isUsed) 0.2f else 1f),
+                        },
                     shape  = RoundedCornerShape(10.dp),
-                    color  = if (isUsed) SurfaceVar else HeftSurface,
-                    border = BorderStroke(2.dp, Divider),
+                    color  = HeftSurface,
+                    border = BorderStroke(2.dp, if (isUsed) Divider.copy(alpha = 0.3f) else Divider),
                 ) {
-                    Text(word, color = OnBackground, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp,
-                        modifier = Modifier.padding(horizontal = 15.dp, vertical = 10.dp))
+                    Text(
+                        word,
+                        color      = OnBackground,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize   = 14.sp,
+                        modifier   = Modifier.padding(horizontal = 15.dp, vertical = 10.dp),
+                    )
                 }
             }
         }
 
         Spacer(Modifier.height(12.dp))
 
+        // Kontrol Et butonu — sadece tüm kelimeler seçildiğinde aktif
         if (!checked) {
             Button(
                 onClick = {
-                    correct = placed.toList() == words
+                    // Web temasıyla aynı: given.trim().toLowerCase() === expected.trim().toLowerCase()
+                    val given    = placed.joinToString(" ").trim().lowercase()
+                    val expected = words.joinToString(" ").trim().lowercase()
+                    correct = given == expected
                     if (correct) onCorrect()
                     checked = true
                     onChecked()
                 },
                 enabled  = placed.size == words.size,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
                 shape    = RoundedCornerShape(12.dp),
                 colors   = ButtonDefaults.buttonColors(containerColor = Primary),
-            ) { Text("Kontrol Et", color = Color.White, fontWeight = FontWeight.Bold) }
-        } else {
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = if (correct) Color(0xFF22C55E).copy(0.15f) else Color(0xFFEF4444).copy(0.15f),
-                modifier = Modifier.fillMaxWidth(),
             ) {
-                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (correct) Icons.Default.CheckCircle else Icons.Default.Cancel,
-                        null,
-                        tint = if (correct) Color(0xFF22C55E) else Color(0xFFEF4444),
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        if (correct) "Doğru! ✓" else "Doğru sıra: ${words.joinToString(" ")}",
-                        color = if (correct) Color(0xFF22C55E) else Color(0xFFEF4444),
-                        fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
-                    )
-                }
+                Text("KONTROL ET", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, letterSpacing = 0.5.sp)
             }
         }
     }
