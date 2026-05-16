@@ -181,4 +181,143 @@ class YazarViewModel @Inject constructor(
     }
 
     fun clearResult() { _submitResult.value = null }
+
+    // ════════════════════════════════════════════════════════════
+    // ADMİN FONKSİYONLARI
+    // ════════════════════════════════════════════════════════════
+
+    private val _pendingPosts = MutableStateFlow<List<PendingPost>>(emptyList())
+    val pendingPosts = _pendingPosts.asStateFlow()
+
+    private val _pendingLoading = MutableStateFlow(false)
+    val pendingLoading = _pendingLoading.asStateFlow()
+
+    private val _pendingStats = MutableStateFlow(PendingStats())
+    val pendingStats = _pendingStats.asStateFlow()
+
+    data class PendingStats(
+        val pending  : Int = 0,
+        val approved : Int = 0,
+        val rejected : Int = 0,
+    )
+
+    // Tüm pending yazıları yükle (admin)
+    fun loadAllPendingPosts(filter: String = "all") {
+        viewModelScope.launch {
+            _pendingLoading.value = true
+            try {
+                var q = firestore.collection("pendingPosts")
+                    .orderBy("createdAt", Query.Direction.DESCENDING)
+                    .limit(100)
+                val snap = q.get().await()
+                val all = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    @Suppress("UNCHECKED_CAST")
+                    PendingPost(
+                        id             = doc.id,
+                        title          = d["title"]          as? String ?: "",
+                        content        = d["content"]        as? String ?: "",
+                        summary        = d["summary"]        as? String ?: "",
+                        cover          = d["cover"]          as? String ?: "",
+                        category       = d["category"]       as? String ?: "",
+                        lang           = d["lang"]           as? String ?: "tr",
+                        tags           = (d["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                        authorId       = d["authorId"]       as? String ?: "",
+                        authorName     = d["authorName"]     as? String ?: "",
+                        authorEmail    = d["authorEmail"]    as? String ?: "",
+                        status         = d["status"]         as? String ?: "pending",
+                        adminNote      = d["adminNote"]      as? String ?: "",
+                        bloggerPostId  = d["bloggerPostId"]  as? String ?: "",
+                        bloggerPostUrl = d["bloggerPostUrl"] as? String ?: "",
+                    )
+                }
+                // İstatistik
+                _pendingStats.value = PendingStats(
+                    pending  = all.count { it.status == "pending" },
+                    approved = all.count { it.status == "approved" },
+                    rejected = all.count { it.status == "rejected" },
+                )
+                // Filtre
+                _pendingPosts.value = if (filter == "all") all else all.filter { it.status == filter }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _pendingLoading.value = false
+            }
+        }
+    }
+
+    // Onayla — status → approved, adminNote güncelle
+    fun approvePost(postId: String, note: String = "") {
+        viewModelScope.launch {
+            try {
+                firestore.collection("pendingPosts").document(postId).update(
+                    mapOf(
+                        "status"    to "approved",
+                        "adminNote" to note,
+                        "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    )
+                ).await()
+                // Local güncelle
+                _pendingPosts.value = _pendingPosts.value.map {
+                    if (it.id == postId) it.copy(status = "approved", adminNote = note) else it
+                }
+                recalcStats()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    // Reddet — status → rejected, adminNote güncelle
+    fun rejectPost(postId: String, note: String = "") {
+        viewModelScope.launch {
+            try {
+                firestore.collection("pendingPosts").document(postId).update(
+                    mapOf(
+                        "status"    to "rejected",
+                        "adminNote" to note,
+                        "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    )
+                ).await()
+                _pendingPosts.value = _pendingPosts.value.map {
+                    if (it.id == postId) it.copy(status = "rejected", adminNote = note) else it
+                }
+                recalcStats()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    // Status'u herhangi bir değere güncelle
+    fun updatePostStatus(postId: String, status: String, note: String = "") {
+        viewModelScope.launch {
+            try {
+                firestore.collection("pendingPosts").document(postId).update(
+                    mapOf(
+                        "status"    to status,
+                        "adminNote" to note,
+                        "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    )
+                ).await()
+                _pendingPosts.value = _pendingPosts.value.map {
+                    if (it.id == postId) it.copy(status = status, adminNote = note) else it
+                }
+                recalcStats()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun recalcStats() {
+        val all = _pendingPosts.value
+        _pendingStats.value = PendingStats(
+            pending  = all.count { it.status == "pending" },
+            approved = all.count { it.status == "approved" },
+            rejected = all.count { it.status == "rejected" },
+        )
+    }
+
 }
