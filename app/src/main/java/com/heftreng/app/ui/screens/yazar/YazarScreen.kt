@@ -3,6 +3,8 @@ package com.heftreng.app.ui.screens.yazar
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -31,7 +33,7 @@ import com.heftreng.app.viewmodel.YazarViewModel
 // Sekmeler: Yaz | Yazılarım
 // ═══════════════════════════════════════════════════════════════════════════════
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun YazarScreen(
     navController: NavController,

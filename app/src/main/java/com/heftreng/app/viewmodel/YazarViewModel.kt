@@ -153,7 +153,7 @@ class YazarViewModel @Inject constructor(
                         "status"        to "pending",
                         "adminNote"     to "",
                         "bloggerPostId" to "",
-                        "bloggerPostUrl"to "",
+                        "bloggerPostUrl" to "",
                         "createdAt"     to FieldValue.serverTimestamp(),
                         "updatedAt"     to FieldValue.serverTimestamp(),
                     )
