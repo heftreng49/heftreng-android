@@ -11,6 +11,8 @@ import com.google.firebase.firestore.SetOptions
 import com.heftreng.app.data.model.AiExercise
 import com.heftreng.app.data.model.AiLesson
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import android.content.Context
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -26,7 +28,9 @@ import javax.net.ssl.HttpsURLConnection
 data class KfUnit(
     val id     : String = "",
     val ttl    : String = "",      // site: ttl / nameTr
-    val descTr : String = "",
+    val nameKu : String = "",
+    val desc   : String = "",      // site: desc (not descTr)
+    val descTr : String = "",      // eski uyumluluk
     val icon   : String = "📖",
     val color  : String = "#8B5CF6",
     val order  : Int    = 0,
@@ -53,15 +57,19 @@ data class KfVocab(
 )
 
 data class KfExercise(
-    val id       : String       = "",
-    val type     : String       = "mcq",
-    val question : String       = "",
-    val optA     : String       = "",
-    val optB     : String       = "",
-    val optC     : String       = "",
-    val optD     : String       = "",
-    val answer   : String       = "",
-    val wrong    : List<String> = emptyList(),
+    val id         : String           = "",
+    val type       : String           = "mcq",   // mcq | fill | match | build
+    val question   : String           = "",
+    val questionTr : String           = "",
+    val optA       : String           = "",
+    val optB       : String           = "",
+    val optC       : String           = "",
+    val optD       : String           = "",
+    val answer     : String           = "",
+    val wrong      : List<String>     = emptyList(),
+    val pairs      : List<Pair<String,String>> = emptyList(), // match tipi
+    val words      : List<String>     = emptyList(), // build tipi
+    val tr         : String           = "",      // build'in Türkçe çevirisi
 )
 
 data class ActiveLesson(
@@ -72,9 +80,21 @@ data class ActiveLesson(
 
 @HiltViewModel
 class KurdiViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
 ) : ViewModel() {
+
+    private val prefs by lazy { context.getSharedPreferences("hf_kurdi", Context.MODE_PRIVATE) }
+
+    // OR API key — localStorage('kf_or_key') ile eşdeğer
+    private val _orApiKey = MutableStateFlow(prefs.getString("kf_or_key", "") ?: "")
+    val orApiKey = _orApiKey.asStateFlow()
+
+    fun saveOrKey(key: String) {
+        _orApiKey.value = key
+        prefs.edit().putString("kf_or_key", key).apply()
+    }
 
     // ── State ─────────────────────────────────────────────────────────────────
     private val _units        = MutableStateFlow<List<KfUnit>>(emptyList())
@@ -194,6 +214,8 @@ class KurdiViewModel @Inject constructor(
                     id     = doc.id,
                     ttl    = (d["ttl"] as? String)?.takeIf { it.isNotBlank() }
                              ?: d["nameTr"] as? String ?: d["name"] as? String ?: "Ünite",
+                    nameKu = d["nameKu"] as? String ?: "",
+                    desc   = d["desc"]   as? String ?: "",
                     descTr = d["descTr"] as? String ?: d["desc"] as? String ?: "",
                     icon   = d["icon"]   as? String ?: "📖",
                     color  = d["color"]  as? String ?: "#8B5CF6",
@@ -254,7 +276,8 @@ class KurdiViewModel @Inject constructor(
                         val d = doc.data ?: return@mapNotNull null
                         KfVocab(
                             id = doc.id,
-                            ku = d["ku"] as? String ?: "",
+                            ku = (d["ku"] as? String)?.takeIf { it.isNotBlank() }
+                                 ?: d["kur"] as? String ?: "",
                             kp = d["kp"] as? String ?: "",
                             tr = d["tr"] as? String ?: "",
                             e  = d["e"]  as? String ?: "📖",
@@ -268,16 +291,30 @@ class KurdiViewModel @Inject constructor(
                         .whereEqualTo("lessonId", lessonId).get().await()
                     snap.documents.mapNotNull { doc ->
                         val d = doc.data ?: return@mapNotNull null
+                        // match tipi — pairs: [[ku, tr], ...]
+                        val pairsRaw = d["pairs"] as? List<*>
+                        val pairs = pairsRaw?.mapNotNull { item ->
+                            val pair = item as? List<*>
+                            val a = pair?.getOrNull(0) as? String ?: return@mapNotNull null
+                            val b = pair.getOrNull(1) as? String ?: return@mapNotNull null
+                            a to b
+                        } ?: emptyList()
+                        // build tipi — words: [String]
+                        val words = (d["words"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
                         KfExercise(
-                            id       = doc.id,
-                            type     = d["type"]     as? String ?: "mcq",
-                            question = d["question"] as? String ?: "",
-                            optA     = d["optA"]     as? String ?: "",
-                            optB     = d["optB"]     as? String ?: "",
-                            optC     = d["optC"]     as? String ?: "",
-                            optD     = d["optD"]     as? String ?: "",
-                            answer   = d["answer"]   as? String ?: "",
-                            wrong    = (d["wrong"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+                            id         = doc.id,
+                            type       = d["type"]       as? String ?: "mcq",
+                            question   = d["question"]   as? String ?: "",
+                            questionTr = d["questionTr"] as? String ?: d["tr"] as? String ?: "",
+                            optA       = d["optA"]       as? String ?: "",
+                            optB       = d["optB"]       as? String ?: "",
+                            optC       = d["optC"]       as? String ?: "",
+                            optD       = d["optD"]       as? String ?: "",
+                            answer     = d["answer"]     as? String ?: d["correct"] as? String ?: "",
+                            wrong      = (d["wrong"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+                            pairs      = pairs,
+                            words      = words,
+                            tr         = d["tr"] as? String ?: "",
                         )
                     }
                 } catch (_: Exception) { emptyList() }
@@ -337,6 +374,7 @@ class KurdiViewModel @Inject constructor(
                         "kf_xp"      to newXp,
                         "kf_streak"  to _streak.value,
                         "kf_lastDate" to today,
+                        "kf_level"   to newLevel,
                         "xp"         to newXp,
                         "level"      to newLevel,
                         "updatedAt"  to FieldValue.serverTimestamp(),

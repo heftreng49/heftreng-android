@@ -29,6 +29,7 @@ import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
@@ -357,8 +358,8 @@ private fun UnitHeader(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(unit.ttl, fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 15.sp)
-                    if (unit.descTr.isNotBlank()) {
-                        Text(unit.descTr, color = Muted, fontSize = 12.sp)
+                    if (unit.desc.isNotBlank()) {
+                        Text(unit.desc, color = Muted, fontSize = 12.sp)
                     }
                     Spacer(Modifier.height(4.dp))
                     Text("$done/$total ders tamamlandı", color = Muted, fontSize = 11.sp)
@@ -811,6 +812,25 @@ fun LessonScreen(
                                 }
                             }
                         }
+
+                        "match" -> {
+                            // Eşleştirme — sol Kürtçe, sağ Türkçe
+                            MatchExercise(
+                                pairs      = ex.pairs,
+                                onCorrect  = { correctCount++ },
+                                onAllDone  = { showResult = true; selectedAns = "done" },
+                            )
+                        }
+
+                        "build" -> {
+                            // Cümle kurma — kelimeleri sürükle/tıkla ile sırala
+                            BuildExercise(
+                                words      = ex.words,
+                                tr         = ex.tr,
+                                onCorrect  = { correctCount++ },
+                                onChecked  = { showResult = true; selectedAns = "done" },
+                            )
+                        }
                     }
 
                     Spacer(Modifier.weight(1f))
@@ -830,6 +850,274 @@ fun LessonScreen(
                         }
                     }
                     Spacer(Modifier.navigationBarsPadding())
+                }
+            }
+        }
+    }
+}
+
+// ── Eşleştirme egzersizi (match) ─────────────────────────────────────────────
+@Composable
+private fun MatchExercise(
+    pairs    : List<Pair<String, String>>,
+    onCorrect: () -> Unit,
+    onAllDone: () -> Unit,
+) {
+    if (pairs.isEmpty()) return
+    val shuffledRight = remember(pairs) { pairs.map { it.second }.shuffled() }
+    var selectedLeft  by remember { mutableStateOf<String?>(null) }
+    var selectedRight by remember { mutableStateOf<String?>(null) }
+    val matched       = remember { mutableStateListOf<String>() }  // matched left keys
+    val wrongLeft     = remember { mutableStateOf<String?>(null) }
+    val wrongRight    = remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(selectedLeft, selectedRight) {
+        val l = selectedLeft; val r = selectedRight
+        if (l != null && r != null) {
+            val correct = pairs.find { it.first == l }?.second == r
+            if (correct) {
+                matched.add(l)
+                onCorrect()
+                if (matched.size == pairs.size) onAllDone()
+            } else {
+                wrongLeft.value = l; wrongRight.value = r
+                kotlinx.coroutines.delay(500)
+                wrongLeft.value = null; wrongRight.value = null
+            }
+            selectedLeft = null; selectedRight = null
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+        Text(
+            "Eşleştir", color = Muted, fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 12.dp),
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            // Sol — Kürtçe
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                pairs.forEach { (ku, _) ->
+                    val isMatched  = ku in matched
+                    val isSelected = selectedLeft == ku
+                    val isWrong    = wrongLeft.value == ku
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !isMatched) { selectedLeft = ku },
+                        shape  = RoundedCornerShape(10.dp),
+                        color  = when {
+                            isMatched  -> Color(0xFF22C55E).copy(0.12f)
+                            isWrong    -> Color(0xFFEF4444).copy(0.12f)
+                            isSelected -> Primary.copy(0.15f)
+                            else       -> HeftSurface
+                        },
+                        border = BorderStroke(
+                            1.5.dp,
+                            when {
+                                isMatched  -> Color(0xFF22C55E)
+                                isWrong    -> Color(0xFFEF4444)
+                                isSelected -> Primary
+                                else       -> Divider
+                            }
+                        ),
+                    ) {
+                        Text(
+                            ku,
+                            color      = if (isMatched) Color(0xFF22C55E) else OnBackground,
+                            fontWeight = FontWeight.Bold,
+                            fontSize   = 13.sp,
+                            textAlign  = TextAlign.Center,
+                            modifier   = Modifier.padding(12.dp).fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+            // Sağ — Türkçe (karıştırılmış)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                shuffledRight.forEach { tr ->
+                    val matchedLeft = pairs.find { it.second == tr }?.first
+                    val isMatched   = matchedLeft != null && matchedLeft in matched
+                    val isSelected  = selectedRight == tr
+                    val isWrong     = wrongRight.value == tr
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !isMatched) { selectedRight = tr },
+                        shape  = RoundedCornerShape(10.dp),
+                        color  = when {
+                            isMatched  -> Color(0xFF22C55E).copy(0.12f)
+                            isWrong    -> Color(0xFFEF4444).copy(0.12f)
+                            isSelected -> Primary.copy(0.15f)
+                            else       -> HeftSurface
+                        },
+                        border = BorderStroke(
+                            1.5.dp,
+                            when {
+                                isMatched  -> Color(0xFF22C55E)
+                                isWrong    -> Color(0xFFEF4444)
+                                isSelected -> Primary
+                                else       -> Divider
+                            }
+                        ),
+                    ) {
+                        Text(
+                            tr,
+                            color      = if (isMatched) Color(0xFF22C55E) else OnBackground,
+                            fontWeight = FontWeight.Medium,
+                            fontSize   = 13.sp,
+                            textAlign  = TextAlign.Center,
+                            modifier   = Modifier.padding(12.dp).fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Cümle kurma egzersizi (build) ─────────────────────────────────────────────
+@Composable
+private fun BuildExercise(
+    words    : List<String>,
+    tr       : String,
+    onCorrect: () -> Unit,
+    onChecked: () -> Unit,
+) {
+    val bank     = remember(words) { words.shuffled() }
+    val placed   = remember { mutableStateListOf<String>() }
+    val used     = remember { mutableStateListOf<String>() }  // bank index'leri
+    var checked  by remember { mutableStateOf(false) }
+    var correct  by remember { mutableStateOf(false) }
+
+    Column(
+        modifier            = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // Türkçe anlam
+        if (tr.isNotBlank()) {
+            Text("\"$tr\"", color = Muted, fontSize = 13.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                textAlign = TextAlign.Center, modifier = Modifier.padding(bottom = 12.dp))
+        }
+
+        // Yerleştirme alanı
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    when {
+                        !checked -> HeftSurface
+                        correct  -> Color(0xFF22C55E).copy(0.1f)
+                        else     -> Color(0xFFEF4444).copy(0.1f)
+                    }
+                )
+                .border(
+                    2.dp,
+                    when {
+                        !checked -> Divider
+                        correct  -> Color(0xFF22C55E)
+                        else     -> Color(0xFFEF4444)
+                    },
+                    RoundedCornerShape(12.dp),
+                )
+                .padding(12.dp)
+                .heightIn(min = 52.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalArrangement   = Arrangement.spacedBy(7.dp),
+            ) {
+                placed.forEachIndexed { i, word ->
+                    Surface(
+                        modifier = Modifier.clickable(enabled = !checked) {
+                            placed.removeAt(i)
+                            val bankIdx = bank.indexOfFirst { it == word && bank.indexOf(it) !in used.toIntArray().toList() }
+                            if (bankIdx != -1) used.remove(bankIdx)
+                        },
+                        shape  = RoundedCornerShape(9.dp),
+                        color  = Primary.copy(0.15f),
+                        border = BorderStroke(2.dp, Primary),
+                    ) {
+                        Text(word, color = Primary, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp,
+                            modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp))
+                    }
+                }
+                if (placed.isEmpty()) {
+                    Text("Kelimelere dokun →", color = Muted, fontSize = 12.sp)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // Kelime bankası
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement   = Arrangement.spacedBy(8.dp),
+        ) {
+            bank.forEachIndexed { idx, word ->
+                val isUsed = idx in used
+                Surface(
+                    modifier = Modifier
+                        .clickable(enabled = !checked && !isUsed) {
+                            placed.add(word)
+                            used.add(idx)
+                        }
+                        .alpha(if (isUsed) 0.2f else 1f),
+                    shape  = RoundedCornerShape(10.dp),
+                    color  = if (isUsed) SurfaceVar else HeftSurface,
+                    border = BorderStroke(2.dp, if (isUsed) Divider else Divider),
+                ) {
+                    Text(word, color = OnBackground, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp,
+                        modifier = Modifier.padding(horizontal = 15.dp, vertical = 10.dp))
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        if (!checked) {
+            Button(
+                onClick = {
+                    correct = placed == words
+                    if (correct) onCorrect()
+                    checked = true
+                    onChecked()
+                },
+                enabled  = placed.size == words.size,
+                modifier = Modifier.fillMaxWidth(),
+                shape    = RoundedCornerShape(12.dp),
+                colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+            ) { Text("Kontrol Et", color = Color.White, fontWeight = FontWeight.Bold) }
+        } else {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = if (correct) Color(0xFF22C55E).copy(0.15f) else Color(0xFFEF4444).copy(0.15f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (correct) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                        null,
+                        tint = if (correct) Color(0xFF22C55E) else Color(0xFFEF4444),
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (correct) "Doğru! ✓" else "Doğru sıra: ${words.joinToString(" ")}",
+                        color = if (correct) Color(0xFF22C55E) else Color(0xFFEF4444),
+                        fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                    )
                 }
             }
         }
@@ -866,7 +1154,8 @@ fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
     val aiLesson  by vm.aiLesson.collectAsState()
     val aiLoading by vm.aiLoading.collectAsState()
     val aiError   by vm.aiError.collectAsState()
-    var apiKey    by remember { mutableStateOf("") }
+    val savedKey  by vm.orApiKey.collectAsState()
+    var apiKey    by remember(savedKey) { mutableStateOf(savedKey) }
     var topic     by remember { mutableStateOf("") }
     var level     by remember { mutableStateOf("destpêk") }
     val levels    = listOf("destpêk" to "🌱 Başlangıç", "navîn" to "🌿 Orta", "pêşketî" to "🌳 İleri")
@@ -878,13 +1167,18 @@ fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
     ) {
         item {
             Text("AI ile Kurdî Ders", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
-            Text("OpenRouter API anahtarını gir.", color = Muted, fontSize = 12.sp)
+            Text("OpenRouter API anahtarını gir, kaydedilir.", color = Muted, fontSize = 12.sp)
         }
         item {
             OutlinedTextField(
-                value = apiKey, onValueChange = { apiKey = it },
-                label    = { Text("API Key", color = Muted, fontSize = 12.sp) },
+                value         = apiKey,
+                onValueChange = { apiKey = it; vm.saveOrKey(it) },
+                label    = { Text("OpenRouter API Key", color = Muted, fontSize = 12.sp) },
                 modifier = Modifier.fillMaxWidth(), singleLine = true,
+                trailingIcon = {
+                    if (apiKey.isNotBlank())
+                        Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF22C55E), modifier = Modifier.size(18.dp))
+                },
                 colors   = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar,
                     focusedTextColor = OnBackground, unfocusedTextColor = OnBackground),
