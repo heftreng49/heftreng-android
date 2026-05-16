@@ -1157,10 +1157,10 @@ private fun MsgRow(
                         if (msg.replyToName.isNotBlank())
                             // .msg-reply-preview-name
                             Text(msg.replyToName, color = if (isMine) Color.White.copy(alpha = 0.9f) else Primary,
-                                fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         // .msg-reply-preview-txt
                         Text(msg.replyToText, color = if (isMine) Color.White.copy(alpha = 0.75f) else Muted,
-                            fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
                 Spacer(Modifier.height(2.dp))
@@ -1191,7 +1191,7 @@ private fun MsgRow(
             ) {
                 if (msg.deleted) {
                     Text(if (language == "ku") "Peyam hat jêbirin" else "Bu mesaj silindi",
-                        color = Muted, fontSize = 13.sp, fontStyle = FontStyle.Italic)
+                        color = Muted, fontSize = 15.sp, fontStyle = FontStyle.Italic)
                 } else {
                     Column {
                         if (msg.imageUrl.isNotBlank()) {
@@ -1215,14 +1215,14 @@ private fun MsgRow(
                         if (msg.text.isNotBlank())
                             LinkifyText(
                                 text       = msg.text,
-                                fontSize   = 13.sp,
-                                lineHeight = 19.sp,
+                                fontSize   = 15.sp,
+                                lineHeight = 22.sp,
                                 modifier   = Modifier,
                             )
                         if (msg.edited)
                             Text(if (language == "ku") "(guherî)" else "(düzenlendi)",
                                 color = if (isMine) Color.White.copy(alpha = 0.55f) else Muted,
-                                fontSize = 9.sp)
+                                fontSize = 11.sp)
                     }
                 }
             }
@@ -1233,7 +1233,7 @@ private fun MsgRow(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
             ) {
-                Text(formatTime(msg.createdAt), color = Muted, fontSize = 9.sp)
+                Text(formatTime(msg.createdAt), color = Muted, fontSize = 11.sp)
                 if (isMine) {
                     Spacer(Modifier.width(3.dp))
                     // Tema: .msg-read.read → mavi, .msg-read.sent → soluk
