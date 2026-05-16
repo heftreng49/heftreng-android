@@ -191,7 +191,7 @@ fun parseHtml(html: String): List<HtmlNode> {
 
     // 2. Normalize
     val clean = noStyle
-        .replace(Regex("<br\s*/?>", RegexOption.IGNORE_CASE), "\n")
+        .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
         .replace(Regex("</(div|p|section|article|li)>", RegexOption.IGNORE_CASE), "\n")
         .replace(Regex("<div[^>]*>", RegexOption.IGNORE_CASE), "")
         .replace(Regex("<span[^>]*>", RegexOption.IGNORE_CASE), "")
