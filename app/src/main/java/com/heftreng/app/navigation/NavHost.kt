@@ -30,7 +30,8 @@ import coil.compose.AsyncImage
 import com.heftreng.app.ui.screens.admin.AdminScreen
 import com.heftreng.app.ui.screens.admin.CmsScreen
 import com.heftreng.app.ui.screens.auth.AuthScreen
-import com.heftreng.app.ui.screens.feed.FeedScreen
+import com.heftreng.app.ui.screens.blog.BlogScreen
+import com.heftreng.app.ui.screens.blog.BlogPostScreen
 import com.heftreng.app.ui.screens.cms.CmsPageScreen
 import com.heftreng.app.ui.screens.kurdi.KurdiScreen
 import com.heftreng.app.ui.screens.messages.ConversationsScreen
@@ -59,7 +60,8 @@ import kotlinx.coroutines.launch
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 sealed class Screen(val route: String) {
-    object Auth          : Screen("auth")
+    object Blog         : Screen("blog")
+    object BlogPost     : Screen("blog_post/{postId}") { fun go(id: String) = "blog_post/$id" }
     object Feed          : Screen("feed")
     object Search        : Screen("search")
     object Messages      : Screen("messages")
@@ -86,15 +88,15 @@ sealed class Screen(val route: String) {
 data class BottomNavItem(val route: String, val label: String, val icon: ImageVector, val iconSel: ImageVector)
 
 val bottomNavItems = listOf(
-    BottomNavItem(Screen.Feed.route,    "Nivîs",  Icons.Outlined.DynamicFeed,  Icons.Filled.DynamicFeed),
-    BottomNavItem(Screen.Search.route,  "Bigere", Icons.Outlined.Search,       Icons.Filled.Search),
-    BottomNavItem(Screen.Serials.route, "Kitaplar", Icons.Outlined.AutoStories,  Icons.Filled.AutoStories),
-    BottomNavItem(Screen.Kurdi.route,   "Kurdî",  Icons.Outlined.Translate,    Icons.Filled.Translate),
-    BottomNavItem("profile/me",         "Profîl", Icons.Outlined.PersonOutline,Icons.Filled.Person),
+    BottomNavItem(Screen.Feed.route,  "Nivîs",   Icons.Outlined.DynamicFeed,   Icons.Filled.DynamicFeed),
+    BottomNavItem(Screen.Blog.route,  "Blog",    Icons.Outlined.Article,        Icons.Filled.Article),
+    BottomNavItem(Screen.Serials.route,"Kitaplar",Icons.Outlined.AutoStories,   Icons.Filled.AutoStories),
+    BottomNavItem(Screen.Kurdi.route, "Kurdî",   Icons.Outlined.Translate,      Icons.Filled.Translate),
+    BottomNavItem("profile/me",       "Profîl",  Icons.Outlined.PersonOutline,  Icons.Filled.Person),
 )
 
 private val bottomNavRoutes = setOf(
-    Screen.Feed.route, Screen.Search.route, Screen.Serials.route,
+    Screen.Feed.route, Screen.Blog.route, Screen.Serials.route,
     Screen.Kurdi.route, "profile/me",
 )
 
@@ -192,6 +194,10 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                             }
                         },
                         actions = {
+                            // Arama butonu
+                            IconButton(onClick = { navController.navigate(Screen.Search.route) }) {
+                                Icon(Icons.Outlined.Search, null, tint = OnBackground)
+                            }
                             // Bildirim butonu — badge ile
                             BadgedBox(
                                 badge = {
@@ -292,6 +298,15 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 startDestination = Screen.Feed.route,
                 modifier         = Modifier.padding(innerPadding),
             ) {
+                composable(Screen.Blog.route) {
+                    BlogScreen(navController = navController)
+                }
+                composable("blog_post/{postId}") { back ->
+                    BlogPostScreen(
+                        postId        = back.arguments?.getString("postId") ?: "",
+                        navController = navController,
+                    )
+                }
                 composable(Screen.Feed.route) {
                     FeedScreen(navController = navController)
                 }
