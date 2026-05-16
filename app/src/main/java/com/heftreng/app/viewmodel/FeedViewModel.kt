@@ -66,7 +66,7 @@ class FeedViewModel @Inject constructor(
                     if (uid.isNotEmpty() && likedIds.isEmpty() && savedIds.isEmpty()) loadInteractions()
                     if (snap.documents.isNotEmpty()) lastDoc = snap.documents.last()
                     _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
-                    _posts.value = snap.documents.mapNotNull { doc ->
+                    val rawPosts = snap.documents.mapNotNull { doc ->
                         val d = doc.data ?: return@mapNotNull null
                         // Tema: "name", Android: "displayName" — ikisini destekle
                         val displayName = (d["displayName"] as? String)?.takeIf { it.isNotBlank() }
@@ -144,9 +144,40 @@ class FeedViewModel @Inject constructor(
                             repostSerialChCount    = (d["repostSerialChCount"]   as? Long)?.toInt() ?: 0,
                         )
                     }
+                    _posts.value = enrichPostsWithUserData(rawPosts)
                     _loading.value = false
                 }
             }
+    }
+
+    // ── Post listesini users koleksiyonundan güncel avatar/isim ile zenginleştir ──
+    // feed dokümanındaki photoURL/displayName eski kalabilir; her zaman users'tan çek
+    private suspend fun enrichPostsWithUserData(posts: List<Post>): List<Post> {
+        if (posts.isEmpty()) return posts
+        val uids = posts.map { it.uid }.filter { it.isNotBlank() }.distinct()
+        val userMap = mutableMapOf<String, Pair<String, String>>() // uid → (name, photoURL)
+        uids.chunked(10).forEach { chunk ->
+            try {
+                val snap = firestore.collection("users")
+                    .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                    .get().await()
+                snap.documents.forEach { doc ->
+                    val name = (doc.getString("displayName") ?: doc.getString("name") ?: "").takeIf { it.isNotBlank() }
+                    val photo = doc.getString("photoURL")?.takeIf { it.isNotBlank() }
+                    if (name != null || photo != null) {
+                        userMap[doc.id] = Pair(name ?: "", photo ?: "")
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        return posts.map { post ->
+            val (freshName, freshPhoto) = userMap[post.uid] ?: return@map post
+            post.copy(
+                displayName = freshName.ifBlank { post.displayName },
+                name        = freshName.ifBlank { post.name },
+                photoURL    = freshPhoto.ifBlank { post.photoURL },
+            )
+        }
     }
 
     // Tema: feedLikes query → "feedId" alan adı
@@ -531,7 +562,7 @@ class FeedViewModel @Inject constructor(
                     .get().await()
                 if (snap.documents.isNotEmpty()) lastDoc = snap.documents.last()
                 _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
-                val newPosts = snap.documents.mapNotNull { doc ->
+                val rawMore = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     val displayName = (d["displayName"] as? String)?.takeIf { it.isNotBlank() }
                         ?: d["name"] as? String ?: ""
@@ -565,6 +596,8 @@ class FeedViewModel @Inject constructor(
                         myRepostId     = myRepostMap[doc.id] ?: "",
                     )
                 }
+                val newPosts = enrichPostsWithUserData(rawMore)
+                _posts.value = _posts.value + newPosts
             } catch (e: Exception) { e.printStackTrace() }
             finally { _loadingMore.value = false }
         }

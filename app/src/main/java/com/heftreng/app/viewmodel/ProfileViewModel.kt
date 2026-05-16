@@ -84,7 +84,7 @@ class ProfileViewModel @Inject constructor(
                 val snap = firestore.collection("feed")
                     .whereEqualTo("uid", targetUid)
                     .limit(50).get().await()
-                _posts.value = snap.documents.mapNotNull { doc ->
+                val rawProfilePosts = snap.documents.mapNotNull { doc ->
                     val fd = doc.data ?: return@mapNotNull null
                     val postText  = fd["text"]     as? String ?: ""
                     val imageURL  = fd["imageURL"] as? String ?: fd["imgUrl"] as? String ?: ""
@@ -128,6 +128,7 @@ class ProfileViewModel @Inject constructor(
                         ts            = fd["ts"] as? Timestamp,
                     )
                 }.sortedByDescending { it.ts?.seconds ?: 0L }
+                _posts.value = enrichPostsWithUserData(rawProfilePosts)
 
                 // Takip durumu
                 if (targetUid != myUid) {
@@ -297,7 +298,7 @@ class ProfileViewModel @Inject constructor(
                         ))
                     }
                 }
-                _savedPosts.value = posts.sortedByDescending { it.ts?.seconds ?: 0L }
+                _savedPosts.value = enrichPostsWithUserData(posts.sortedByDescending { it.ts?.seconds ?: 0L })
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -378,6 +379,33 @@ class ProfileViewModel @Inject constructor(
                 _user.value = _user.value?.copy(username = handle)
                 onSuccess()
             } catch (e: Exception) { onError(e.message ?: "Hata") }
+        }
+    }
+
+    // ── Post listesini users koleksiyonundan güncel avatar/isim ile zenginleştir ──
+    private suspend fun enrichPostsWithUserData(posts: List<Post>): List<Post> {
+        if (posts.isEmpty()) return posts
+        val uids = posts.map { it.uid }.filter { it.isNotBlank() }.distinct()
+        val userMap = mutableMapOf<String, Pair<String, String>>()
+        uids.chunked(10).forEach { chunk ->
+            try {
+                val snap = firestore.collection("users")
+                    .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                    .get().await()
+                snap.documents.forEach { doc ->
+                    val name = (doc.getString("displayName") ?: doc.getString("name") ?: "").takeIf { it.isNotBlank() }
+                    val photo = doc.getString("photoURL")?.takeIf { it.isNotBlank() }
+                    if (name != null || photo != null) userMap[doc.id] = Pair(name ?: "", photo ?: "")
+                }
+            } catch (_: Exception) {}
+        }
+        return posts.map { post ->
+            val (freshName, freshPhoto) = userMap[post.uid] ?: return@map post
+            post.copy(
+                displayName = freshName.ifBlank { post.displayName },
+                name        = freshName.ifBlank { post.name },
+                photoURL    = freshPhoto.ifBlank { post.photoURL },
+            )
         }
     }
 
