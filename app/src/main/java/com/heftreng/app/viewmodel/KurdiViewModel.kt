@@ -245,7 +245,7 @@ class KurdiViewModel @Inject constructor(
             } else {
                 // kf_units boşsa kf_lessons'tan varsayılan ünite oluştur
                 if (allLessons.isNotEmpty()) {
-                    _units.value   = listOf(KfUnit("u_default", "Dersler", "", "📚", "#8B5CF6", 0))
+                    _units.value   = listOf(KfUnit(id = "u_default", ttl = "Dersler", nameKu = "", desc = "", icon = "📚", color = "#8B5CF6", order = 0))
                     _lessons.value = allLessons.map { it.copy(unitId = "u_default") }
                 } else {
                     // Her ikisi de boşsa mock veri
@@ -508,11 +508,11 @@ class KurdiViewModel @Inject constructor(
 // ── Mock verisi (site ile aynı ID'ler) ────────────────────────────────────────
 // Site _kpRenderMockUnits() ile tamamen eşleşiyor — kf_done senkronize çalışır
 private val MOCK_UNITS = listOf(
-    KfUnit("u1", "Destpêk",  "Temel Kelimeler", "🌱", "#58cc02", 1),
-    KfUnit("u2", "Jimare",   "Sayılar",         "🔢", "#1cb0f6", 2),
-    KfUnit("u3", "Reng",     "Renkler",         "🎨", "#ce82ff", 3),
-    KfUnit("u4", "Malbat",   "Aile",            "👨‍👩‍👧", "#ff9600", 4),
-    KfUnit("u5", "Xwarin",   "Yemek",           "🍎", "#ff4b4b", 5),
+    KfUnit(id="u1", ttl="Destpêk",  nameKu="Destpêk",  desc="Temel Kelimeler", icon="🌱", color="#58cc02", order=1),
+    KfUnit(id="u2", ttl="Jimare",   nameKu="Jimare",   desc="Sayılar",         icon="🔢", color="#1cb0f6", order=2),
+    KfUnit(id="u3", ttl="Reng",     nameKu="Reng",     desc="Renkler",         icon="🎨", color="#ce82ff", order=3),
+    KfUnit(id="u4", ttl="Malbat",   nameKu="Malbat",   desc="Aile",            icon="👨‍👩‍👧", color="#ff9600", order=4),
+    KfUnit(id="u5", ttl="Xwarin",   nameKu="Xwarin",   desc="Yemek",           icon="🍎", color="#ff4b4b", order=5),
 )
 
 private val MOCK_LESSONS = listOf(

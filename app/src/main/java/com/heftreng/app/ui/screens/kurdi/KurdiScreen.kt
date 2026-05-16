@@ -985,6 +985,7 @@ private fun MatchExercise(
 }
 
 // ── Cümle kurma egzersizi (build) ─────────────────────────────────────────────
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun BuildExercise(
     words    : List<String>,
@@ -994,7 +995,7 @@ private fun BuildExercise(
 ) {
     val bank     = remember(words) { words.shuffled() }
     val placed   = remember { mutableStateListOf<String>() }
-    val used     = remember { mutableStateListOf<String>() }  // bank index'leri
+    val usedIdx  = remember { mutableStateListOf<Int>() }   // bank index'leri
     var checked  by remember { mutableStateOf(false) }
     var correct  by remember { mutableStateOf(false) }
 
@@ -1041,8 +1042,9 @@ private fun BuildExercise(
                     Surface(
                         modifier = Modifier.clickable(enabled = !checked) {
                             placed.removeAt(i)
-                            val bankIdx = bank.indexOfFirst { it == word && bank.indexOf(it) !in used.toIntArray().toList() }
-                            if (bankIdx != -1) used.remove(bankIdx)
+                            // Bu kelimeye ait ilk kullanılmış bank index'ini serbest bırak
+                            val idx = bank.indexOfFirst { it == word && bank.indexOf(it) in usedIdx }
+                            if (idx != -1) usedIdx.remove(idx)
                         },
                         shape  = RoundedCornerShape(9.dp),
                         color  = Primary.copy(0.15f),
@@ -1066,17 +1068,17 @@ private fun BuildExercise(
             verticalArrangement   = Arrangement.spacedBy(8.dp),
         ) {
             bank.forEachIndexed { idx, word ->
-                val isUsed = idx in used
+                val isUsed = idx in usedIdx
                 Surface(
                     modifier = Modifier
                         .clickable(enabled = !checked && !isUsed) {
                             placed.add(word)
-                            used.add(idx)
+                            usedIdx.add(idx)
                         }
                         .alpha(if (isUsed) 0.2f else 1f),
                     shape  = RoundedCornerShape(10.dp),
                     color  = if (isUsed) SurfaceVar else HeftSurface,
-                    border = BorderStroke(2.dp, if (isUsed) Divider else Divider),
+                    border = BorderStroke(2.dp, Divider),
                 ) {
                     Text(word, color = OnBackground, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp,
                         modifier = Modifier.padding(horizontal = 15.dp, vertical = 10.dp))
@@ -1089,7 +1091,7 @@ private fun BuildExercise(
         if (!checked) {
             Button(
                 onClick = {
-                    correct = placed == words
+                    correct = placed.toList() == words
                     if (correct) onCorrect()
                     checked = true
                     onChecked()
