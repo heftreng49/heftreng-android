@@ -63,7 +63,7 @@ class SocialViewModel @Inject constructor(
                 }.filter { it.uid.isNotBlank() }
 
                 if (results.isNotEmpty()) {
-                    _likers.value = results
+                    _likers.value = enrichFromUsers(results)
                     return@launch
                 }
 
@@ -95,33 +95,8 @@ class SocialViewModel @Inject constructor(
                         ts = d["ts"] as? com.google.firebase.Timestamp)
                 }.filter { it.uid.isNotBlank() }
 
-                // Eksik isim varsa users'tan tamamla
-                val needFetch = fromDocs.filter { it.name.isBlank() }.map { it.uid }
-                if (needFetch.isEmpty()) {
-                    _likers.value = fromDocs
-                    return@launch
-                }
-
-                val enriched = fromDocs.toMutableList()
-                needFetch.chunked(10).forEach { chunk ->
-                    try {
-                        val userSnap = firestore.collection("users")
-                            .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
-                            .get().await()
-                        userSnap.documents.forEach { userDoc ->
-                            val idx = enriched.indexOfFirst { it.uid == userDoc.id }
-                            if (idx >= 0) {
-                                val uData = userDoc.data ?: return@forEach
-                                enriched[idx] = enriched[idx].copy(
-                                    name     = (uData["displayName"] as? String)
-                                               ?: uData["name"] as? String ?: "",
-                                    photoURL = uData["photoURL"] as? String ?: "",
-                                )
-                            }
-                        }
-                    } catch (_: Exception) {}
-                }
-                _likers.value = enriched
+                // Her zaman users koleksiyonundan güncel isim/fotoğraf çek
+                _likers.value = enrichFromUsers(fromDocs)
 
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -147,7 +122,7 @@ class SocialViewModel @Inject constructor(
                     mapToLikeEntry(doc.data ?: return@mapNotNull null)
                 }.filter { it.uid.isNotBlank() }
 
-                _likers.value = if (results.isNotEmpty()) results else {
+                val commentResults = if (results.isNotEmpty()) results else {
                     // Belge ID prefix fallback
                     firestore.collection("commentLikes")
                         .orderBy(com.google.firebase.firestore.FieldPath.documentId())
@@ -158,6 +133,7 @@ class SocialViewModel @Inject constructor(
                             mapToLikeEntry(doc.data ?: return@mapNotNull null)
                         }.filter { it.uid.isNotBlank() }
                 }
+                _likers.value = enrichFromUsers(commentResults)
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -177,9 +153,10 @@ class SocialViewModel @Inject constructor(
                     .limit(200)
                     .get().await()
 
-                _likers.value = snap.documents.mapNotNull { doc ->
+                val serialResults = snap.documents.mapNotNull { doc ->
                     mapToLikeEntry(doc.data ?: return@mapNotNull null)
                 }.filter { it.uid.isNotBlank() }
+                _likers.value = enrichFromUsers(serialResults)
 
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -211,19 +188,8 @@ class SocialViewModel @Inject constructor(
                         ts       = d["ts"] as? com.google.firebase.Timestamp,
                     )
                 }.filter { it.uid.isNotBlank() }
-                // Avatar boş olanları users koleksiyonundan tamamla
-                _followers.value = rawFollowers.map { entry ->
-                    if (entry.photoURL.isNotBlank()) entry
-                    else {
-                        try {
-                            val uDoc = firestore.collection("users").document(entry.uid).get().await()
-                            entry.copy(
-                                photoURL = uDoc.getString("photoURL") ?: "",
-                                name = entry.name.ifBlank { uDoc.getString("name") ?: uDoc.getString("displayName") ?: "" }
-                            )
-                        } catch (e: Exception) { entry }
-                    }
-                }
+                // Her zaman users koleksiyonundan güncel isim/fotoğraf çek
+                _followers.value = enrichFollowFromUsers(rawFollowers)
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -253,19 +219,8 @@ class SocialViewModel @Inject constructor(
                         ts       = d["ts"] as? com.google.firebase.Timestamp,
                     )
                 }.filter { it.uid.isNotBlank() }
-                // Avatar boş olanları users koleksiyonundan tamamla
-                _following.value = rawFollowing.map { entry ->
-                    if (entry.photoURL.isNotBlank()) entry
-                    else {
-                        try {
-                            val uDoc = firestore.collection("users").document(entry.uid).get().await()
-                            entry.copy(
-                                photoURL = uDoc.getString("photoURL") ?: "",
-                                name = entry.name.ifBlank { uDoc.getString("name") ?: uDoc.getString("displayName") ?: "" }
-                            )
-                        } catch (e: Exception) { entry }
-                    }
-                }
+                // Her zaman users koleksiyonundan güncel isim/fotoğraf çek
+                _following.value = enrichFollowFromUsers(rawFollowing)
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -289,5 +244,58 @@ class SocialViewModel @Inject constructor(
             photoURL = d["photoURL"]    as? String ?: "",
             ts       = d["ts"]          as? com.google.firebase.Timestamp,
         )
+    }
+
+    // ── users koleksiyonundan güncel isim/fotoğraf ile zenginleştir ──────────
+    // Beğenenler veya takipçi listelerinde eski/yanlış isim gösterilmemesi için
+    // her zaman users/{uid} dokümanından displayName, name ve photoURL çekilir.
+    private suspend fun enrichFromUsers(entries: List<LikeEntry>): List<LikeEntry> {
+        if (entries.isEmpty()) return entries
+        val enriched = entries.toMutableList()
+        entries.map { it.uid }.filter { it.isNotBlank() }.chunked(10).forEach { chunk ->
+            try {
+                val userSnap = firestore.collection("users")
+                    .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                    .get().await()
+                userSnap.documents.forEach { userDoc ->
+                    val idx = enriched.indexOfFirst { it.uid == userDoc.id }
+                    if (idx >= 0) {
+                        val uData = userDoc.data ?: return@forEach
+                        val freshName = (uData["displayName"] as? String)?.takeIf { it.isNotBlank() }
+                            ?: (uData["name"] as? String)?.takeIf { it.isNotBlank() }
+                            ?: enriched[idx].name
+                        val freshPhoto = (uData["photoURL"] as? String)?.takeIf { it.isNotBlank() }
+                            ?: enriched[idx].photoURL
+                        enriched[idx] = enriched[idx].copy(name = freshName, photoURL = freshPhoto)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        return enriched
+    }
+
+    private suspend fun enrichFollowFromUsers(entries: List<FollowEntry>): List<FollowEntry> {
+        if (entries.isEmpty()) return entries
+        val enriched = entries.toMutableList()
+        entries.map { it.uid }.filter { it.isNotBlank() }.chunked(10).forEach { chunk ->
+            try {
+                val userSnap = firestore.collection("users")
+                    .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                    .get().await()
+                userSnap.documents.forEach { userDoc ->
+                    val idx = enriched.indexOfFirst { it.uid == userDoc.id }
+                    if (idx >= 0) {
+                        val uData = userDoc.data ?: return@forEach
+                        val freshName = (uData["displayName"] as? String)?.takeIf { it.isNotBlank() }
+                            ?: (uData["name"] as? String)?.takeIf { it.isNotBlank() }
+                            ?: enriched[idx].name
+                        val freshPhoto = (uData["photoURL"] as? String)?.takeIf { it.isNotBlank() }
+                            ?: enriched[idx].photoURL
+                        enriched[idx] = enriched[idx].copy(name = freshName, photoURL = freshPhoto)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        return enriched
     }
 }
