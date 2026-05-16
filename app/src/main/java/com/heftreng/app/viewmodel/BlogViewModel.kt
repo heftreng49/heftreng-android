@@ -92,22 +92,16 @@ class BlogViewModel @Inject constructor() : ViewModel() {
     fun loadPostDetail(postId: String) {
         viewModelScope.launch {
             _detailLoading.value = true
-
-            // Önce listede var mı bak — içerik zaten yüklü
+            // Liste çekiminde fetchBodies=false olduğundan içerik boş gelir.
+            // Detay için her zaman API'den tam içeriği çek.
             val cached = _state.value.posts.find { it.id == postId }
-            if (cached != null && cached.content.isNotBlank()) {
-                _detail.value = cached
-                _detailLoading.value = false
-                return@launch
-            }
-
-            // Listede yoksa API'den çek
-            _detail.value = null
+            if (cached != null) _detail.value = cached // başlık/thumbnail önizleme için
             try {
                 val url = "https://www.googleapis.com/blogger/v3/blogs/$BLOG_ID/posts/$postId?key=$API_KEY"
                 val json = httpGet(url)
                 _detail.value = parsePost(JSONObject(json))
             } catch (e: Exception) {
+                // API başarısız olursa cache'deki ile kal
                 if (cached != null) _detail.value = cached
             }
             _detailLoading.value = false
@@ -121,7 +115,7 @@ class BlogViewModel @Inject constructor() : ViewModel() {
     ): Pair<List<BlogPost>, String?> = withContext(Dispatchers.IO) {
         val url = buildString {
             append("https://www.googleapis.com/blogger/v3/blogs/$BLOG_ID/posts")
-            append("?key=$API_KEY&maxResults=$PAGE_SIZE&fetchBodies=true&fetchImages=true")
+            append("?key=$API_KEY&maxResults=$PAGE_SIZE&fetchBodies=false&fetchImages=true")
             if (pageToken != null) append("&pageToken=$pageToken")
             if (label != null) append("&labels=${java.net.URLEncoder.encode(label, "UTF-8")}")
         }
