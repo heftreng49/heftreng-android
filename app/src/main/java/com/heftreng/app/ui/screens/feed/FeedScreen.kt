@@ -200,7 +200,7 @@ fun FeedScreen(
                         onLike    = { vm.toggleLike(post) },
                         onSave    = { vm.toggleSave(post) },
                         onProfile = { navController.navigate(Screen.Profile.go(post.uid)) },
-                        onComment = { navController.navigate(Screen.PostDetail.go(post.id, openKeyboard = true)) },
+                        onComment = { navController.navigate(Screen.PostDetail.go(post.id)) },
                         onShare   = {
                             if (post.isRepostedByMe) vm.unrepost(post)
                             else vm.repost(post)

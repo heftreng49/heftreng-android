@@ -27,11 +27,11 @@ import com.heftreng.app.utils.captureComposable
 import com.heftreng.app.utils.shareBitmap
 
 fun sharePost(context: Context, post: Post, target: ShareTarget) {
-    captureComposable(context) {
-        ShareCardContent(post = post)
-    } onBitmap@ { bitmap ->
-        shareBitmap(context, bitmap, target)
-    }
+    captureComposable(
+        context  = context,
+        content  = { ShareCardContent(post = post) },
+        onBitmap = { bitmap -> shareBitmap(context, bitmap, target) },
+    )
 }
 
 // captureComposable için lambda syntax düzeltmesi
