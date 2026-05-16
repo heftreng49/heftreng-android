@@ -46,7 +46,7 @@ import com.heftreng.app.ui.component.FullScreenImageViewer
 import com.heftreng.app.ui.component.QuoteDialog
 import com.heftreng.app.ui.component.QuoteInputSection
 import com.heftreng.app.ui.component.QuotePayload
-import com.heftreng.app.ui.component.ShareCaptureBox
+import com.heftreng.app.ui.component.SharePreviewDialog
 import com.heftreng.app.utils.ShareTarget
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.LikerListSheet
@@ -572,7 +572,6 @@ fun PostCard(
     var showEditDialog   by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var shareTarget      by remember { mutableStateOf<ShareTarget?>(null) }
-    val context          = androidx.compose.ui.platform.LocalContext.current
 
     Column(
         modifier = Modifier
@@ -841,13 +840,14 @@ fun PostCard(
         }
     }
 
-    // Paylaşım kartı yakalama — görünmez, shareTarget set edilince tetiklenir
-    ShareCaptureBox(
-        post    = post,
-        target  = shareTarget,
-        context = context,
-        onDone  = { shareTarget = null },
-    )
+    // Paylaşım önizleme dialogu — hedef seçilince açılır, Coil yüklenince paylaş butonuna basılır
+    if (shareTarget != null) {
+        SharePreviewDialog(
+            post      = post,
+            target    = shareTarget!!,
+            onDismiss = { shareTarget = null },
+        )
+    }
 
     // Düzenleme dialog
     if (showEditDialog) {

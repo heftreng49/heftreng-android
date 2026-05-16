@@ -1,13 +1,15 @@
 package com.heftreng.app.ui.component
 
-import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,24 +21,124 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.utils.ShareTarget
 import com.heftreng.app.utils.shareBitmap
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
-// ── Paylaşım tetikleyici — Composable dışından çağrılır ──────────────────────
-// Artık captureComposable yok. Bunun yerine PostCard içinde ShareCaptureOverlay
-// kullanılıyor; bu fonksiyon sadece geriye dönük uyumluluk için bırakıldı.
-// Asıl paylaşım FeedScreen / PostCard içindeki graphicsLayer ile yapılır.
+// ── Paylaşım önizleme dialogu ─────────────────────────────────────────────────
+// Kullanıcı hedef seçince bu dialog açılır.
+// Kart görünür render edilir (Coil yükler), "Paylaş" butonuna basılınca bitmap alınır.
+@Composable
+fun SharePreviewDialog(
+    post     : Post,
+    target   : ShareTarget,
+    onDismiss: () -> Unit,
+) {
+    val context       = LocalContext.current
+    val scope         = rememberCoroutineScope()
+    val graphicsLayer = rememberGraphicsLayer()
+    var capturing     by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape          = RoundedCornerShape(20.dp),
+            color          = HeftSurface,
+            tonalElevation = 0.dp,
+            modifier       = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+
+                // Başlık
+                Row(
+                    modifier          = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Paylaşım Önizlemesi",
+                        color      = OnBackground,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize   = 15.sp,
+                        modifier   = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, null, tint = Muted)
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Kart — görünür render, graphicsLayer kayıt altında
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .drawWithContent {
+                            graphicsLayer.record { this@drawWithContent.drawContent() }
+                            drawLayer(graphicsLayer)
+                        },
+                ) {
+                    ShareCardContent(post = post)
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Paylaş butonu
+                Button(
+                    onClick = {
+                        if (capturing) return@Button
+                        capturing = true
+                        scope.launch {
+                            // Coil son frame'i çizsin diye kısa bekle
+                            delay(120)
+                            val bmp: Bitmap = graphicsLayer
+                                .toImageBitmap()
+                                .asAndroidBitmap()
+                                .copy(Bitmap.Config.ARGB_8888, false)
+                            shareBitmap(context, bmp, target)
+                            onDismiss()
+                        }
+                    },
+                    enabled  = !capturing,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = RoundedCornerShape(12.dp),
+                    colors   = ButtonDefaults.buttonColors(
+                        containerColor = Amber,
+                        contentColor   = Color.Black,
+                    ),
+                ) {
+                    if (capturing) {
+                        CircularProgressIndicator(
+                            modifier    = Modifier.size(18.dp),
+                            color       = Color.Black,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(Icons.Default.Share, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            when (target) {
+                                ShareTarget.WHATSAPP  -> "WhatsApp'ta Paylaş"
+                                ShareTarget.INSTAGRAM -> "Instagram'da Paylaş"
+                                ShareTarget.ANY       -> "Paylaş"
+                            },
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 // ── Paylaşım kartı içeriği ────────────────────────────────────────────────────
 @Composable
@@ -47,7 +149,6 @@ fun ShareCardContent(post: Post) {
             .background(Color(0xFF0E0E1A))
             .padding(20.dp),
     ) {
-        // Kullanıcı bilgisi
         Row(
             verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -61,8 +162,10 @@ fun ShareCardContent(post: Post) {
             ) {
                 if (post.photoURL.isNotBlank()) {
                     AsyncImage(
-                        model = post.photoURL, contentDescription = null,
-                        modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
+                        model              = post.photoURL,
+                        contentDescription = null,
+                        modifier           = Modifier.fillMaxSize(),
+                        contentScale       = ContentScale.Crop,
                     )
                 } else {
                     Text(
@@ -80,7 +183,6 @@ fun ShareCardContent(post: Post) {
 
         Spacer(Modifier.height(14.dp))
 
-        // Alıntı
         if (post.quoteText.isNotBlank()) {
             Box(
                 modifier = Modifier
@@ -108,27 +210,25 @@ fun ShareCardContent(post: Post) {
             Spacer(Modifier.height(10.dp))
         }
 
-        // Metin
         if (post.text.isNotBlank()) {
             Text(post.text, color = Color(0xFFE0E0F0), fontSize = 15.sp, lineHeight = 22.sp)
             Spacer(Modifier.height(10.dp))
         }
 
-        // Görsel
         val img = post.imgUrl.ifBlank { post.imageURL }
         if (img.isNotBlank()) {
             AsyncImage(
-                model = img, contentDescription = null,
-                modifier = Modifier
+                model              = img,
+                contentDescription = null,
+                modifier           = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 300.dp)
                     .clip(RoundedCornerShape(10.dp)),
-                contentScale = ContentScale.Crop,
+                contentScale       = ContentScale.Crop,
             )
             Spacer(Modifier.height(10.dp))
         }
 
-        // Heftreng branding
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -138,47 +238,11 @@ fun ShareCardContent(post: Post) {
         ) {
             Text(
                 "heftreng.com",
-                color = Color(0xFFFFB300), fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.align(Alignment.CenterEnd),
+                color      = Color(0xFFFFB300),
+                fontSize   = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier   = Modifier.align(Alignment.CenterEnd),
             )
-        }
-    }
-}
-
-// ── graphicsLayer ile ekran dışı capture + paylaşım ──────────────────────────
-// PostCard içinde bu Composable'ı invisible olarak render et,
-// paylaşım butonuna basılınca graphicsLayer.toImageBitmap() ile bitmap al.
-@Composable
-fun ShareCaptureBox(
-    post    : Post,
-    target  : ShareTarget?,          // null = yakalama yapma
-    context : Context,
-    onDone  : () -> Unit,            // target null'a sıfırla
-) {
-    val graphicsLayer = rememberGraphicsLayer()
-    val scope         = rememberCoroutineScope()
-
-    LaunchedEffect(target) {
-        if (target == null) return@LaunchedEffect
-        // Bir frame bekle — içerik render olsun
-        withContext(Dispatchers.Main) {
-            val bitmap: Bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
-            shareBitmap(context, bitmap, target)
-            onDone()
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .size(1.dp)          // görünmez — layout'u bozmaz
-            .drawWithContent {
-                graphicsLayer.record { this@drawWithContent.drawContent() }
-                drawLayer(graphicsLayer)
-            },
-    ) {
-        // 1080px genişlikte render et
-        Box(modifier = Modifier.width(360.dp)) {
-            ShareCardContent(post = post)
         }
     }
 }
