@@ -183,72 +183,78 @@ data class HtmlSpan(
 fun parseHtml(html: String): List<HtmlNode> {
     val nodes = mutableListOf<HtmlNode>()
 
-    // Satır sonlarını normalize et
-    val clean = html
+    // 1. Style/script temizle
+    val noStyle = html
+        .replace(Regex("<style[^>]*>.*?</style>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")
+        .replace(Regex("<script[^>]*>.*?</script>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")
         .replace(Regex("<!--.*?-->", RegexOption.DOT_MATCHES_ALL), "")
-        .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
-        .replace(Regex("<div[^>]*>", RegexOption.IGNORE_CASE), "\n")
-        .replace("</div>", "\n")
 
-    // Blok etiketleri yakala
+    // 2. Normalize
+    val clean = noStyle
+        .replace(Regex("<br\s*/?>", RegexOption.IGNORE_CASE), "\n")
+        .replace(Regex("</(div|p|section|article|li)>", RegexOption.IGNORE_CASE), "\n")
+        .replace(Regex("<div[^>]*>", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("<span[^>]*>", RegexOption.IGNORE_CASE), "")
+        .replace("</span>", "")
+
     val blockPattern = Regex(
-        """<(h[1-6]|p|blockquote|ul|ol|pre|hr|img)[^>]*>(.*?)</\1>|<(hr|img)([^>]*)/>""",
+        """<(h[1-6]|p|blockquote|ul|ol|pre|hr|img)[^>]*>(.*?)</\1>|<(hr|img)([^>]*)/?>""",
         setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE),
     )
 
     var lastEnd = 0
     blockPattern.findAll(clean).forEach { match ->
-        // Etiket öncesi düz metin
         val before = clean.substring(lastEnd, match.range.first).trim()
         if (before.isNotBlank()) {
-            nodes += HtmlNode.Paragraph(parseInline(before))
-            nodes += HtmlNode.Spacer
+            before.split("\n").map { it.trim() }.filter { it.isNotBlank() }.forEach { line ->
+                nodes += HtmlNode.Paragraph(parseInline(line))
+                nodes += HtmlNode.Spacer
+            }
         }
         lastEnd = match.range.last + 1
 
-        val tag     = (match.groupValues[1].ifBlank { match.groupValues[3] }).lowercase()
-        val inner   = match.groupValues[2]
-        val attrs   = match.groupValues[4]
+        val tag   = (match.groupValues[1].ifBlank { match.groupValues[3] }).lowercase()
+        val inner = match.groupValues[2]
+        val attrs = match.groupValues[4]
 
         when {
             tag.matches(Regex("h[1-6]")) -> {
-                val level = tag[1].digitToInt()
-                nodes += HtmlNode.Heading(level, stripTags(inner))
-                nodes += HtmlNode.Spacer
-            }
-            tag == "p" -> {
-                val spans = parseInline(inner)
-                if (spans.any { it.text.isNotBlank() }) {
-                    // img içeren p bloklarını ImageNode'a çevir
-                    val imgMatch = Regex("""<img[^>]+src=["']([^"']+)["'][^>]*alt=["']([^"']*)["']""", RegexOption.IGNORE_CASE).find(inner)
-                        ?: Regex("""<img[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(inner)
-                    if (imgMatch != null) {
-                        val src = imgMatch.groupValues[1]
-                        val alt = imgMatch.groupValues.getOrElse(2) { "" }
-                        nodes += HtmlNode.ImageNode(src, alt)
-                    } else {
-                        nodes += HtmlNode.Paragraph(spans)
-                    }
+                val text = stripTags(inner).trim()
+                if (text.isNotBlank()) {
+                    nodes += HtmlNode.Heading(tag[1].digitToInt(), text)
                     nodes += HtmlNode.Spacer
                 }
             }
-            tag == "blockquote" -> {
-                nodes += HtmlNode.BlockQuote(stripTags(inner).trim())
+            tag == "p" -> {
+                val imgMatch = Regex("""<img[^>]+src=["']([^"']+)["'][^>]*alt=["']([^"']*)["']""", RegexOption.IGNORE_CASE).find(inner)
+                    ?: Regex("""<img[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(inner)
+                if (imgMatch != null) {
+                    val src = imgMatch.groupValues[1]
+                    val alt = imgMatch.groupValues.getOrElse(2) { "" }
+                    nodes += HtmlNode.ImageNode(src, alt)
+                } else {
+                    val spans = parseInline(inner)
+                    if (spans.any { it.text.isNotBlank() }) nodes += HtmlNode.Paragraph(spans)
+                }
                 nodes += HtmlNode.Spacer
+            }
+            tag == "blockquote" -> {
+                val text = stripTags(inner).trim()
+                if (text.isNotBlank()) { nodes += HtmlNode.BlockQuote(text); nodes += HtmlNode.Spacer }
             }
             tag == "ul" -> {
                 val items = Regex("<li[^>]*>(.*?)</li>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
-                    .findAll(inner).map { stripTags(it.groupValues[1]).trim() }.toList()
+                    .findAll(inner).map { stripTags(it.groupValues[1]).trim() }.filter { it.isNotBlank() }.toList()
                 if (items.isNotEmpty()) { nodes += HtmlNode.BulletList(items); nodes += HtmlNode.Spacer }
             }
             tag == "ol" -> {
                 val items = Regex("<li[^>]*>(.*?)</li>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
-                    .findAll(inner).map { stripTags(it.groupValues[1]).trim() }.toList()
+                    .findAll(inner).map { stripTags(it.groupValues[1]).trim() }.filter { it.isNotBlank() }.toList()
                 if (items.isNotEmpty()) { nodes += HtmlNode.OrderedList(items); nodes += HtmlNode.Spacer }
             }
             tag == "pre" -> {
-                nodes += HtmlNode.CodeBlock(stripTags(inner).trim())
-                nodes += HtmlNode.Spacer
+                val text = stripTags(inner).trim()
+                if (text.isNotBlank()) { nodes += HtmlNode.CodeBlock(text); nodes += HtmlNode.Spacer }
             }
             tag == "hr" -> { nodes += HtmlNode.HRule(); nodes += HtmlNode.Spacer }
             tag == "img" -> {
@@ -261,9 +267,25 @@ fun parseHtml(html: String): List<HtmlNode> {
 
     // Kalan metin
     val tail = clean.substring(lastEnd).trim()
-    if (tail.isNotBlank()) nodes += HtmlNode.Paragraph(parseInline(tail))
+    if (tail.isNotBlank()) {
+        tail.split("\n").map { it.trim() }.filter { it.isNotBlank() }.forEach { line ->
+            nodes += HtmlNode.Paragraph(parseInline(line))
+            nodes += HtmlNode.Spacer
+        }
+    }
 
-    return nodes
+    // Hiç node bulunamadıysa ham metni göster
+    return nodes.ifEmpty {
+        val plain = html
+            .replace(Regex("<style[^>]*>.*?</style>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")
+            .replace(Regex("<[^>]*>"), " ")
+            .replace(Regex("&nbsp;"), " ")
+            .replace(Regex("&[a-z]+;"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        if (plain.isNotBlank()) listOf(HtmlNode.Paragraph(listOf(HtmlSpan(plain))))
+        else emptyList()
+    }
 }
 
 // Satır içi span parse

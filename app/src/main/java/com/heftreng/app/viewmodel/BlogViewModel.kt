@@ -167,7 +167,14 @@ class BlogViewModel @Inject constructor() : ViewModel() {
     }
 
     private fun htmlToPlainText(html: String): String =
-        html.replace(Regex("<[^>]*>"), " ")
+        html
+            .replace(Regex("<style[^>]*>.*?</style>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")
+            .replace(Regex("<script[^>]*>.*?</script>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")
+            .replace(Regex("<[^>]*>"), " ")
+            .replace(Regex("&nbsp;"), " ")
+            .replace(Regex("&amp;"), "&")
+            .replace(Regex("&lt;"), "<")
+            .replace(Regex("&gt;"), ">")
             .replace(Regex("&[a-z]+;"), " ")
             .replace(Regex("\\s+"), " ")
             .trim()
