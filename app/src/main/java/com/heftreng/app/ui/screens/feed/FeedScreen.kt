@@ -80,7 +80,6 @@ fun FeedScreen(
     var likersPostId     by remember { mutableStateOf<String?>(null) }
     val likers           by socialVm.likers.collectAsState()
     val socialLoading    by socialVm.loading.collectAsState()
-    var commentPost      by remember { mutableStateOf<Post?>(null) }
     var inlineText       by remember { mutableStateOf("") }
     var inlineQuote      by remember { mutableStateOf<QuotePayload?>(null) }
     var showInlineQuote  by remember { mutableStateOf(false) }
@@ -201,7 +200,7 @@ fun FeedScreen(
                         onLike    = { vm.toggleLike(post) },
                         onSave    = { vm.toggleSave(post) },
                         onProfile = { navController.navigate(Screen.Profile.go(post.uid)) },
-                        onComment = { commentPost = post },
+                        onComment = { navController.navigate(Screen.PostDetail.go(post.id, openKeyboard = true)) },
                         onShare   = {
                             if (post.isRepostedByMe) vm.unrepost(post)
                             else vm.repost(post)
@@ -227,6 +226,9 @@ fun FeedScreen(
                                 "blog" -> navController.navigate("blog/$repostId")
                                 else -> navController.navigate(Screen.PostDetail.go(repostId))
                             }
+                        },
+                        onExternalShare = { target ->
+                            com.heftreng.app.ui.component.captureAndShare(context, post, target)
                         },
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
@@ -266,9 +268,6 @@ fun FeedScreen(
 
     }
 
-    commentPost?.let { post ->
-        CommentSheet(post = post, onDismiss = { commentPost = null }, vm = vm)
-    }
 }
 
 // ── InlineComposeBox — feed üstündeki hızlı paylaşım kutusu ──────────────────
@@ -567,6 +566,7 @@ fun PostCard(
     onTapAuthor  : ((String) -> Unit)? = null,
     onTapBook    : ((String) -> Unit)? = null,
     onTapRepost  : ((postId: String, type: String) -> Unit)? = null,
+    onExternalShare: ((target: com.heftreng.app.utils.ShareTarget) -> Unit)? = null,
 ) {
     val myUid            = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     val isOwn            = post.uid == myUid
@@ -648,17 +648,42 @@ fun PostCard(
                         )
                     } else {
                         DropdownMenuItem(
-                            text        = { Text("Paylaş", color = OnBackground) },
+                            text        = { Text("Yeniden Paylaş", color = OnBackground) },
                             leadingIcon = { Icon(Icons.Default.Repeat, null, tint = Muted) },
                             onClick     = { menuExpanded = false; onShare() },
                         )
-                        if (onStoryShare != null) {
-                            DropdownMenuItem(
-                                text        = { Text("Hikaye Olarak Paylaş") },
-                                leadingIcon = { Icon(Icons.Outlined.Wallpaper, null) },
-                                onClick     = { menuExpanded = false; onStoryShare() },
-                            )
-                        }
+                        HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                        DropdownMenuItem(
+                            text        = { Text("WhatsApp'ta Paylaş", color = OnBackground) },
+                            leadingIcon = {
+                                Icon(Icons.Default.Share, null,
+                                    tint = Color(0xFF25D366), modifier = Modifier.size(20.dp))
+                            },
+                            onClick     = {
+                                menuExpanded = false
+                                onExternalShare?.invoke(com.heftreng.app.utils.ShareTarget.WHATSAPP)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text        = { Text("Instagram'da Paylaş", color = OnBackground) },
+                            leadingIcon = {
+                                Icon(Icons.Default.Share, null,
+                                    tint = Color(0xFFE1306C), modifier = Modifier.size(20.dp))
+                            },
+                            onClick     = {
+                                menuExpanded = false
+                                onExternalShare?.invoke(com.heftreng.app.utils.ShareTarget.INSTAGRAM)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text        = { Text("Diğer Uygulamalar", color = OnBackground) },
+                            leadingIcon = { Icon(Icons.Default.IosShare, null, tint = Muted) },
+                            onClick     = {
+                                menuExpanded = false
+                                onExternalShare?.invoke(com.heftreng.app.utils.ShareTarget.ANY)
+                            },
+                        )
+                        HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         DropdownMenuItem(
                             text        = { Text("Şikayet et", color = Color(0xFFEF4444)) },
                             leadingIcon = { Icon(Icons.Default.Flag, null, tint = Color(0xFFEF4444)) },
