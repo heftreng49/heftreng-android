@@ -1058,13 +1058,13 @@ private fun MsgRow(
     if (msg.text.isBlank() && msg.imageUrl.isBlank() && msg.audioUrl.isBlank()) return
     val iLiked = myUid in msg.likedBy
 
-    // ── Swipe-to-reply ────────────────────────────────────────────────────────
-    val swipeThreshold = 72f
+    // ── Swipe + LongPress + DoubleTap — tek pointerInput ─────────────────────
+    val swipeThreshold = 80f
     var rawOffset      by remember { mutableStateOf(0f) }
     val animatedOffset by animateFloatAsState(
-        targetValue    = rawOffset,
-        animationSpec  = spring(stiffness = Spring.StiffnessMediumLow),
-        label          = "swipe",
+        targetValue   = rawOffset,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label         = "swipe",
     )
     var triggered by remember { mutableStateOf(false) }
 
@@ -1072,8 +1072,9 @@ private fun MsgRow(
         modifier = Modifier
             .fillMaxWidth()
             .pointerInput(Unit) {
+                // Swipe
                 detectHorizontalDragGestures(
-                    onDragEnd   = {
+                    onDragEnd    = {
                         if (rawOffset >= swipeThreshold && !triggered) {
                             triggered = true
                             onReply()
@@ -1083,33 +1084,37 @@ private fun MsgRow(
                     },
                     onDragCancel = { rawOffset = 0f },
                 ) { _, dragAmount ->
-                    // Benim mesajım → sola kaydır (negatif), diğeri → sağa (pozitif)
                     val direction = if (isMine) -1f else 1f
                     val delta = dragAmount * direction
                     if (delta > 0) rawOffset = (rawOffset + delta).coerceIn(0f, swipeThreshold * 1.2f)
                 }
+            }
+            .pointerInput(Unit) {
+                // Uzun basma + çift tıklama
+                detectTapGestures(
+                    onLongPress   = { offset -> onLongPress(offset) },
+                    onDoubleTap   = { onLike() },
+                )
             },
     ) {
         // Yanıtla ikonu — swipe sırasında görünür
         val swipeProgress = (animatedOffset / swipeThreshold).coerceIn(0f, 1f)
-        if (swipeProgress > 0.1f) {
+        if (swipeProgress > 0.05f) {
             Icon(
                 Icons.Default.Reply,
                 contentDescription = null,
                 tint     = Primary.copy(alpha = swipeProgress),
                 modifier = Modifier
-                    .size(20.dp)
+                    .size(22.dp)
                     .align(if (isMine) Alignment.CenterStart else Alignment.CenterEnd)
-                    .padding(horizontal = 8.dp),
+                    .padding(horizontal = 4.dp),
             )
         }
 
-        // Mesaj içeriği — swipe offset ile kayar
-        val offsetX = if (isMine) -animatedOffset else animatedOffset
         Row(
             modifier              = Modifier
                 .fillMaxWidth()
-                .offset(x = offsetX.dp),
+                .offset(x = (if (isMine) -animatedOffset else animatedOffset).dp),
             horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
             verticalAlignment     = Alignment.Bottom,
         ) {
@@ -1164,7 +1169,7 @@ private fun MsgRow(
             // Tema: .msg-bubble — ana balon
             Box(
                 modifier = Modifier
-                    .widthIn(max = 250.dp)
+                    .fillMaxWidth(0.78f)
                     .clip(
                         RoundedCornerShape(
                             topStart    = 16.dp,
@@ -1182,12 +1187,7 @@ private fun MsgRow(
                             Modifier.background(SurfaceVar).border(1.dp, Divider, RoundedCornerShape(
                                 topStart = 16.dp, topEnd = 16.dp, bottomStart = 3.dp, bottomEnd = 16.dp))
                     )
-                    .combinedClickable(
-                        onClick       = { },
-                        onLongClick   = { onLongPress(androidx.compose.ui.geometry.Offset.Zero) },
-                        onDoubleClick = { onLike() },
-                    )
-                    .padding(horizontal = 11.dp, vertical = 7.dp)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 if (msg.deleted) {
                     Text(if (language == "ku") "Peyam hat jêbirin" else "Bu mesaj silindi",
