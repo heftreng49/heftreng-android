@@ -149,6 +149,7 @@ fun YazarScreen(
 // ═══════════════════════════════════════════════════════════════════════════════
 // SEKME 1 — YAZ
 // ═══════════════════════════════════════════════════════════════════════════════
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun WriteTab(vm: YazarViewModel, loading: Boolean) {
     var title    by remember { mutableStateOf("") }
