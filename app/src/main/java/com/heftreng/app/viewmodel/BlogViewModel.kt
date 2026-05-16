@@ -40,7 +40,7 @@ data class BlogState(
 class BlogViewModel @Inject constructor() : ViewModel() {
 
     private val BLOG_ID = "6362476808834153672"
-    private val API_KEY = "AIzaSyCZByW_n4B888Ec4cjNQDoQovU-rVN75gs"
+    private val API_KEY = "AIzaSyCu2ZmHntoZ9txhSFLzafy9JEvgm6LPZLI"
     private val PAGE_SIZE = 10
 
     private val _state   = MutableStateFlow(BlogState())
