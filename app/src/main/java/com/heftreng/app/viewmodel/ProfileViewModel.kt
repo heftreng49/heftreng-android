@@ -367,13 +367,26 @@ class ProfileViewModel @Inject constructor(
         val handle = newUsername.lowercase().trim()
         viewModelScope.launch {
             try {
-                val taken = firestore.collection("usernames").document(handle).get().await().exists()
-                if (taken) { onError("Bu kullanıcı adı alınmış"); return@launch }
-                val batch = firestore.batch()
-                val old   = _user.value?.username ?: ""
-                if (old.isNotBlank()) batch.delete(firestore.collection("usernames").document(old))
-                batch.set(firestore.collection("usernames").document(handle),
-                    mapOf("uid" to myUid, "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()))
+                // Alınmış mı kontrolü — kendi mevcut kullanıcı adını geçirmez
+                val takenDoc = firestore.collection("usernames").document(handle).get().await()
+                if (takenDoc.exists()) {
+                    val ownerUid = takenDoc.getString("uid") ?: ""
+                    if (ownerUid != myUid) {
+                        onError("Bu kullanıcı adı alınmış")
+                        return@launch
+                    }
+                }
+                val oldHandle = _user.value?.username ?: ""
+                val batch     = firestore.batch()
+                // Eski kullanıcı adı index'ini sil (farklıysa)
+                if (oldHandle.isNotBlank() && oldHandle != handle)
+                    batch.delete(firestore.collection("usernames").document(oldHandle))
+                // Yeni kullanıcı adı index'ini yaz
+                batch.set(
+                    firestore.collection("usernames").document(handle),
+                    mapOf("uid" to myUid, "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()),
+                )
+                // users dokümanını güncelle
                 batch.update(firestore.collection("users").document(myUid), mapOf("username" to handle))
                 batch.commit().await()
                 _user.value = _user.value?.copy(username = handle)
