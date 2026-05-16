@@ -1,9 +1,5 @@
 package com.heftreng.app.ui.screens.blog
 
-import android.webkit.WebChromeClient
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -17,12 +13,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.*
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
@@ -30,8 +33,9 @@ import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.BlogViewModel
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// BLOG YAZI DETAY EKRANI
+// BLOG YAZI DETAY — TAM NATIVE (WebView yok)
 // ═══════════════════════════════════════════════════════════════════════════════
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BlogPostScreen(
@@ -41,7 +45,6 @@ fun BlogPostScreen(
 ) {
     val post    by vm.detail.collectAsState()
     val loading by vm.detailLoading.collectAsState()
-    val isDark  = LocalHeftrangColors.current.isDark
 
     LaunchedEffect(postId) { vm.loadPostDetail(postId) }
 
@@ -71,9 +74,7 @@ fun BlogPostScreen(
             loading -> Box(
                 modifier         = Modifier.fillMaxSize().padding(pad),
                 contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator(color = Amber)
-            }
+            ) { CircularProgressIndicator(color = Amber) }
 
             post != null -> {
                 val p = post!!
@@ -88,9 +89,7 @@ fun BlogPostScreen(
                         AsyncImage(
                             model              = p.thumbnail,
                             contentDescription = null,
-                            modifier           = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp),
+                            modifier           = Modifier.fillMaxWidth().height(220.dp),
                             contentScale       = ContentScale.Crop,
                         )
                     }
@@ -98,16 +97,14 @@ fun BlogPostScreen(
                     Column(modifier = Modifier.padding(16.dp)) {
                         // Etiketler
                         if (p.labels.isNotEmpty()) {
-                            Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 p.labels.take(4).forEach { label ->
                                     Surface(
                                         shape = RoundedCornerShape(99.dp),
                                         color = Amber.copy(alpha = 0.15f),
                                     ) {
                                         Text(
-                                            label,
-                                            color    = Amber,
-                                            fontSize = 11.sp,
+                                            label, color = Amber, fontSize = 11.sp,
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                                         )
                                     }
@@ -118,11 +115,9 @@ fun BlogPostScreen(
 
                         // Başlık
                         Text(
-                            p.title,
-                            color      = OnBackground,
+                            p.title, color = OnBackground,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize   = 20.sp,
-                            lineHeight = 28.sp,
+                            fontSize = 20.sp, lineHeight = 28.sp,
                         )
 
                         Spacer(Modifier.height(12.dp))
@@ -130,17 +125,13 @@ fun BlogPostScreen(
                         // Yazar + tarih
                         Row(
                             verticalAlignment     = Alignment.CenterVertically,
-                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             if (p.authorPhoto.isNotBlank()) {
                                 AsyncImage(
-                                    model              = p.authorPhoto,
-                                    contentDescription = null,
-                                    modifier           = Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .background(SurfaceVar),
-                                    contentScale       = ContentScale.Crop,
+                                    model = p.authorPhoto, contentDescription = null,
+                                    modifier = Modifier.size(28.dp).clip(CircleShape).background(SurfaceVar),
+                                    contentScale = ContentScale.Crop,
                                 )
                             }
                             Column {
@@ -154,39 +145,8 @@ fun BlogPostScreen(
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         Spacer(Modifier.height(16.dp))
 
-                        // İçerik — WebView ile HTML render
-                        val bgHex  = if (isDark) "#0D0D1A" else "#F8F7FF"
-                        val txtHex = if (isDark) "#E0E0F0" else "#1A1040"
-                        val htmlContent = buildStyledHtml(p.content, bgHex, txtHex)
-
-                        var webHeight by remember { mutableStateOf(800) }
-
-                        AndroidView(
-                            factory = { ctx ->
-                                WebView(ctx).apply {
-                                    settings.apply {
-                                        javaScriptEnabled = false
-                                        loadWithOverviewMode = true
-                                        useWideViewPort = true
-                                        setSupportZoom(false)
-                                        builtInZoomControls = false
-                                        displayZoomControls = false
-                                        cacheMode = WebSettings.LOAD_NO_CACHE
-                                    }
-                                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                                    isScrollContainer = false
-                                    webViewClient = WebViewClient()
-                                    webChromeClient = object : WebChromeClient() {}
-                                    loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
-                                }
-                            },
-                            update = { wv ->
-                                wv.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 200.dp, max = 8000.dp),
-                        )
+                        // İçerik — tamamen native
+                        HtmlContent(html = p.content)
                     }
                 }
             }
@@ -194,53 +154,303 @@ fun BlogPostScreen(
     }
 }
 
-private fun buildStyledHtml(content: String, bg: String, text: String): String = """
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: $bg;
-    color: $text;
-    font-family: -apple-system, 'Segoe UI', sans-serif;
-    font-size: 15px;
-    line-height: 1.7;
-    padding: 4px 0;
-    word-break: break-word;
-  }
-  img {
-    max-width: 100%;
-    height: auto;
-    border-radius: 10px;
-    margin: 8px 0;
-    display: block;
-  }
-  a { color: #FFB300; text-decoration: none; }
-  h1, h2, h3 { margin: 16px 0 8px; line-height: 1.3; }
-  p { margin-bottom: 12px; }
-  blockquote {
-    border-left: 3px solid #FFB300;
-    padding-left: 12px;
-    margin: 12px 0;
-    color: #888899;
-    font-style: italic;
-  }
-  pre, code {
-    background: rgba(255,255,255,0.07);
-    border-radius: 6px;
-    padding: 2px 6px;
-    font-size: 13px;
-  }
-</style>
-</head>
-<body>
-$content
-</body>
-</html>
-""".trimIndent()
+// ═══════════════════════════════════════════════════════════════════════════════
+// HTML PARSER + NATIVE RENDERER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// HTML node türleri
+sealed class HtmlNode {
+    data class Heading(val level: Int, val text: String)              : HtmlNode()
+    data class Paragraph(val spans: List<HtmlSpan>)                   : HtmlNode()
+    data class BlockQuote(val text: String)                           : HtmlNode()
+    data class BulletList(val items: List<String>)                    : HtmlNode()
+    data class OrderedList(val items: List<String>)                   : HtmlNode()
+    data class ImageNode(val src: String, val alt: String)            : HtmlNode()
+    data class HRule(val dummy: Unit = Unit)                          : HtmlNode()
+    data class CodeBlock(val code: String)                            : HtmlNode()
+    object Spacer                                                      : HtmlNode()
+}
+
+data class HtmlSpan(
+    val text   : String,
+    val bold   : Boolean = false,
+    val italic : Boolean = false,
+    val link   : String? = null,
+    val code   : Boolean = false,
+)
+
+// ── Parser ────────────────────────────────────────────────────────────────────
+fun parseHtml(html: String): List<HtmlNode> {
+    val nodes = mutableListOf<HtmlNode>()
+
+    // Satır sonlarını normalize et
+    val clean = html
+        .replace(Regex("<!--.*?-->", RegexOption.DOT_MATCHES_ALL), "")
+        .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
+        .replace(Regex("<div[^>]*>", RegexOption.IGNORE_CASE), "\n")
+        .replace("</div>", "\n")
+
+    // Blok etiketleri yakala
+    val blockPattern = Regex(
+        """<(h[1-6]|p|blockquote|ul|ol|pre|hr|img)[^>]*>(.*?)</\1>|<(hr|img)([^>]*)/>""",
+        setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE),
+    )
+
+    var lastEnd = 0
+    blockPattern.findAll(clean).forEach { match ->
+        // Etiket öncesi düz metin
+        val before = clean.substring(lastEnd, match.range.first).trim()
+        if (before.isNotBlank()) {
+            nodes += HtmlNode.Paragraph(parseInline(before))
+            nodes += HtmlNode.Spacer
+        }
+        lastEnd = match.range.last + 1
+
+        val tag     = (match.groupValues[1].ifBlank { match.groupValues[3] }).lowercase()
+        val inner   = match.groupValues[2]
+        val attrs   = match.groupValues[4]
+
+        when {
+            tag.matches(Regex("h[1-6]")) -> {
+                val level = tag[1].digitToInt()
+                nodes += HtmlNode.Heading(level, stripTags(inner))
+                nodes += HtmlNode.Spacer
+            }
+            tag == "p" -> {
+                val spans = parseInline(inner)
+                if (spans.any { it.text.isNotBlank() }) {
+                    // img içeren p bloklarını ImageNode'a çevir
+                    val imgMatch = Regex("""<img[^>]+src=["']([^"']+)["'][^>]*alt=["']([^"']*)["']""", RegexOption.IGNORE_CASE).find(inner)
+                        ?: Regex("""<img[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(inner)
+                    if (imgMatch != null) {
+                        val src = imgMatch.groupValues[1]
+                        val alt = imgMatch.groupValues.getOrElse(2) { "" }
+                        nodes += HtmlNode.ImageNode(src, alt)
+                    } else {
+                        nodes += HtmlNode.Paragraph(spans)
+                    }
+                    nodes += HtmlNode.Spacer
+                }
+            }
+            tag == "blockquote" -> {
+                nodes += HtmlNode.BlockQuote(stripTags(inner).trim())
+                nodes += HtmlNode.Spacer
+            }
+            tag == "ul" -> {
+                val items = Regex("<li[^>]*>(.*?)</li>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+                    .findAll(inner).map { stripTags(it.groupValues[1]).trim() }.toList()
+                if (items.isNotEmpty()) { nodes += HtmlNode.BulletList(items); nodes += HtmlNode.Spacer }
+            }
+            tag == "ol" -> {
+                val items = Regex("<li[^>]*>(.*?)</li>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+                    .findAll(inner).map { stripTags(it.groupValues[1]).trim() }.toList()
+                if (items.isNotEmpty()) { nodes += HtmlNode.OrderedList(items); nodes += HtmlNode.Spacer }
+            }
+            tag == "pre" -> {
+                nodes += HtmlNode.CodeBlock(stripTags(inner).trim())
+                nodes += HtmlNode.Spacer
+            }
+            tag == "hr" -> { nodes += HtmlNode.HRule(); nodes += HtmlNode.Spacer }
+            tag == "img" -> {
+                val src = Regex("""src=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(attrs)?.groupValues?.get(1) ?: ""
+                val alt = Regex("""alt=["']([^"']*)["']""", RegexOption.IGNORE_CASE).find(attrs)?.groupValues?.get(1) ?: ""
+                if (src.isNotBlank()) { nodes += HtmlNode.ImageNode(src, alt); nodes += HtmlNode.Spacer }
+            }
+        }
+    }
+
+    // Kalan metin
+    val tail = clean.substring(lastEnd).trim()
+    if (tail.isNotBlank()) nodes += HtmlNode.Paragraph(parseInline(tail))
+
+    return nodes
+}
+
+// Satır içi span parse
+fun parseInline(html: String): List<HtmlSpan> {
+    val spans = mutableListOf<HtmlSpan>()
+    val clean = html.replace(Regex("<img[^>]+>", RegexOption.IGNORE_CASE), "")
+
+    val inlinePattern = Regex(
+        """<(strong|b|em|i|code|a)([^>]*)>(.*?)</\1>""",
+        setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE),
+    )
+
+    var last = 0
+    inlinePattern.findAll(clean).forEach { match ->
+        val before = clean.substring(last, match.range.first)
+        if (before.isNotBlank()) spans += HtmlSpan(decodeEntities(stripTags(before)))
+        last = match.range.last + 1
+
+        val tag   = match.groupValues[1].lowercase()
+        val attrs = match.groupValues[2]
+        val text  = decodeEntities(stripTags(match.groupValues[3]))
+        val href  = Regex("""href=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(attrs)?.groupValues?.get(1)
+
+        spans += HtmlSpan(
+            text   = text,
+            bold   = tag in listOf("strong", "b"),
+            italic = tag in listOf("em", "i"),
+            code   = tag == "code",
+            link   = href,
+        )
+    }
+
+    val tail = clean.substring(last)
+    if (tail.isNotBlank()) spans += HtmlSpan(decodeEntities(stripTags(tail)))
+
+    return spans.filter { it.text.isNotBlank() }
+}
+
+private fun stripTags(html: String) = html.replace(Regex("<[^>]*>"), "").replace(Regex("\\s+"), " ").trim()
+
+private fun decodeEntities(s: String) = s
+    .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+    .replace("&quot;", "\"").replace("&#39;", "'").replace("&nbsp;", " ")
+    .replace("&rsquo;", "'").replace("&lsquo;", "'")
+    .replace("&rdquo;", "\"").replace("&ldquo;", "\"")
+    .replace("&mdash;", "—").replace("&ndash;", "–")
+
+// ── Compose renderer ──────────────────────────────────────────────────────────
+@Composable
+fun HtmlContent(html: String) {
+    val nodes = remember(html) { parseHtml(html) }
+    val uriHandler = LocalUriHandler.current
+
+    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+        nodes.forEach { node ->
+            when (node) {
+                is HtmlNode.Spacer -> Spacer(Modifier.height(10.dp))
+
+                is HtmlNode.HRule -> HorizontalDivider(
+                    color = Divider, thickness = 0.5.dp,
+                    modifier = Modifier.padding(vertical = 6.dp),
+                )
+
+                is HtmlNode.Heading -> {
+                    val (fs, fw) = when (node.level) {
+                        1 -> 22.sp to FontWeight.ExtraBold
+                        2 -> 19.sp to FontWeight.Bold
+                        3 -> 17.sp to FontWeight.Bold
+                        else -> 15.sp to FontWeight.SemiBold
+                    }
+                    Text(node.text, color = OnBackground, fontSize = fs, fontWeight = fw, lineHeight = (fs.value * 1.3f).sp)
+                }
+
+                is HtmlNode.Paragraph -> {
+                    val annotated = buildAnnotatedString {
+                        node.spans.forEach { span ->
+                            val style = SpanStyle(
+                                fontWeight     = if (span.bold) FontWeight.Bold else null,
+                                fontStyle      = if (span.italic) FontStyle.Italic else null,
+                                color          = if (span.link != null) Amber else OnBackground,
+                                textDecoration = if (span.link != null) TextDecoration.Underline else null,
+                                background     = if (span.code) SurfaceVar else Color.Unspecified,
+                                fontSize       = if (span.code) 13.sp else 15.sp,
+                            )
+                            if (span.link != null) {
+                                pushStringAnnotation("URL", span.link)
+                                withStyle(style) { append(span.text) }
+                                pop()
+                            } else {
+                                withStyle(style) { append(span.text) }
+                            }
+                        }
+                    }
+                    androidx.compose.foundation.text.ClickableText(
+                        text  = annotated,
+                        style = TextStyle(color = OnBackground, fontSize = 15.sp, lineHeight = 24.sp),
+                        onClick = { offset ->
+                            annotated.getStringAnnotations("URL", offset, offset)
+                                .firstOrNull()?.let { uriHandler.openUri(it.item) }
+                        },
+                    )
+                }
+
+                is HtmlNode.BlockQuote -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .drawBehind {
+                                drawRect(
+                                    color   = Amber,
+                                    topLeft = Offset.Zero,
+                                    size    = Size(4.dp.toPx(), size.height),
+                                )
+                            }
+                            .padding(start = 14.dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
+                    ) {
+                        Text(
+                            node.text,
+                            color      = Muted,
+                            fontSize   = 14.sp,
+                            lineHeight = 22.sp,
+                            fontStyle  = FontStyle.Italic,
+                        )
+                    }
+                }
+
+                is HtmlNode.BulletList -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        node.items.forEach { item ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("•", color = Amber, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                Text(item, color = OnBackground, fontSize = 15.sp, lineHeight = 22.sp, modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+
+                is HtmlNode.OrderedList -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        node.items.forEachIndexed { i, item ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("${i + 1}.", color = Amber, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.widthIn(min = 20.dp))
+                                Text(item, color = OnBackground, fontSize = 15.sp, lineHeight = 22.sp, modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+
+                is HtmlNode.CodeBlock -> {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = SurfaceVar,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            node.code,
+                            color    = OnBackground,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            modifier = Modifier.padding(12.dp),
+                        )
+                    }
+                }
+
+                is HtmlNode.ImageNode -> {
+                    AsyncImage(
+                        model              = node.src,
+                        contentDescription = node.alt.takeIf { it.isNotBlank() },
+                        modifier           = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight()
+                            .clip(RoundedCornerShape(10.dp)),
+                        contentScale       = ContentScale.FillWidth,
+                    )
+                    if (node.alt.isNotBlank()) {
+                        Text(
+                            node.alt, color = Muted, fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 private fun formatBlogDate(iso: String): String {
     return try {
