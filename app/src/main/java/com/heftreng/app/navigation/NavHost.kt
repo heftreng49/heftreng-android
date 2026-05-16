@@ -32,6 +32,7 @@ import com.heftreng.app.ui.screens.admin.CmsScreen
 import com.heftreng.app.ui.screens.auth.AuthScreen
 import com.heftreng.app.ui.screens.blog.BlogScreen
 import com.heftreng.app.ui.screens.blog.BlogPostScreen
+import com.heftreng.app.ui.screens.feed.FeedScreen
 import com.heftreng.app.ui.screens.cms.CmsPageScreen
 import com.heftreng.app.ui.screens.kurdi.KurdiScreen
 import com.heftreng.app.ui.screens.messages.ConversationsScreen
@@ -60,6 +61,7 @@ import kotlinx.coroutines.launch
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 sealed class Screen(val route: String) {
+    object Auth          : Screen("auth")
     object Blog         : Screen("blog")
     object BlogPost     : Screen("blog_post/{postId}") { fun go(id: String) = "blog_post/$id" }
     object Feed          : Screen("feed")
@@ -123,7 +125,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
         // Tema MainActivity'de zaten uygulanıyor
         AuthScreen(onAuthSuccess = {
             navController.navigate(Screen.Feed.route) {
-                popUpTo(Screen.Auth.route) { inclusive = true }
+                popUpTo(Screen.Auth.route) { this.inclusive = true }
             }
         })
         return
