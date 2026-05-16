@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -336,142 +337,37 @@ private fun decodeEntities(s: String) = s
 // ── Compose renderer ──────────────────────────────────────────────────────────
 @Composable
 fun HtmlContent(html: String) {
-    val nodes = remember(html) { parseHtml(html) }
-    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    val textColor = OnBackground
+    val linkColor = Amber
+    val codeColor = SurfaceVar
 
-    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-        nodes.forEach { node ->
-            when (node) {
-                is HtmlNode.Spacer -> Spacer(Modifier.height(10.dp))
-
-                is HtmlNode.HRule -> HorizontalDivider(
-                    color = Divider, thickness = 0.5.dp,
-                    modifier = Modifier.padding(vertical = 6.dp),
-                )
-
-                is HtmlNode.Heading -> {
-                    val (fs, fw) = when (node.level) {
-                        1 -> 22.sp to FontWeight.ExtraBold
-                        2 -> 19.sp to FontWeight.Bold
-                        3 -> 17.sp to FontWeight.Bold
-                        else -> 15.sp to FontWeight.SemiBold
-                    }
-                    Text(node.text, color = OnBackground, fontSize = fs, fontWeight = fw, lineHeight = (fs.value * 1.3f).sp)
-                }
-
-                is HtmlNode.Paragraph -> {
-                    val annotated = buildAnnotatedString {
-                        node.spans.forEach { span ->
-                            val style = SpanStyle(
-                                fontWeight     = if (span.bold) FontWeight.Bold else null,
-                                fontStyle      = if (span.italic) FontStyle.Italic else null,
-                                color          = if (span.link != null) Amber else OnBackground,
-                                textDecoration = if (span.link != null) TextDecoration.Underline else null,
-                                background     = if (span.code) SurfaceVar else Color.Unspecified,
-                                fontSize       = if (span.code) 13.sp else 15.sp,
-                            )
-                            if (span.link != null) {
-                                pushStringAnnotation("URL", span.link)
-                                withStyle(style) { append(span.text) }
-                                pop()
-                            } else {
-                                withStyle(style) { append(span.text) }
-                            }
-                        }
-                    }
-                    androidx.compose.foundation.text.ClickableText(
-                        text  = annotated,
-                        style = TextStyle(color = OnBackground, fontSize = 15.sp, lineHeight = 24.sp),
-                        onClick = { offset ->
-                            annotated.getStringAnnotations("URL", offset, offset)
-                                .firstOrNull()?.let { uriHandler.openUri(it.item) }
-                        },
-                    )
-                }
-
-                is HtmlNode.BlockQuote -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .drawBehind {
-                                drawRect(
-                                    color   = Amber,
-                                    topLeft = Offset.Zero,
-                                    size    = Size(4.dp.toPx(), size.height),
-                                )
-                            }
-                            .padding(start = 14.dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
-                    ) {
-                        Text(
-                            node.text,
-                            color      = Muted,
-                            fontSize   = 14.sp,
-                            lineHeight = 22.sp,
-                            fontStyle  = FontStyle.Italic,
-                        )
-                    }
-                }
-
-                is HtmlNode.BulletList -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        node.items.forEach { item ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("•", color = Amber, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                                Text(item, color = OnBackground, fontSize = 15.sp, lineHeight = 22.sp, modifier = Modifier.weight(1f))
-                            }
-                        }
-                    }
-                }
-
-                is HtmlNode.OrderedList -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        node.items.forEachIndexed { i, item ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("${i + 1}.", color = Amber, fontSize = 15.sp, fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.widthIn(min = 20.dp))
-                                Text(item, color = OnBackground, fontSize = 15.sp, lineHeight = 22.sp, modifier = Modifier.weight(1f))
-                            }
-                        }
-                    }
-                }
-
-                is HtmlNode.CodeBlock -> {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = SurfaceVar,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            node.code,
-                            color    = OnBackground,
-                            fontSize = 12.sp,
-                            lineHeight = 18.sp,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                            modifier = Modifier.padding(12.dp),
-                        )
-                    }
-                }
-
-                is HtmlNode.ImageNode -> {
-                    AsyncImage(
-                        model              = node.src,
-                        contentDescription = node.alt.takeIf { it.isNotBlank() },
-                        modifier           = Modifier
-                            .fillMaxWidth()
-                            .wrapContentHeight()
-                            .clip(RoundedCornerShape(10.dp)),
-                        contentScale       = ContentScale.FillWidth,
-                    )
-                    if (node.alt.isNotBlank()) {
-                        Text(
-                            node.alt, color = Muted, fontSize = 11.sp,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                    }
-                }
+    AndroidView(
+        factory = { ctx ->
+            android.widget.TextView(ctx).apply {
+                setTextColor(android.graphics.Color.parseColor("#E2E8F0"))
+                setLinkTextColor(android.graphics.Color.parseColor("#F59E0B"))
+                textSize = 15f
+                linksClickable = true
+                autoLinkMask = 0
+                movementMethod = android.text.method.LinkMovementMethod.getInstance()
+                setPadding(0, 0, 0, 0)
             }
-        }
-    }
+        },
+        update = { tv ->
+            val cleaned = html
+                .replace(Regex("<style[^>]*>.*?</style>", setOf(kotlin.text.RegexOption.DOT_MATCHES_ALL, kotlin.text.RegexOption.IGNORE_CASE)), "")
+                .replace(Regex("<script[^>]*>.*?</script>", setOf(kotlin.text.RegexOption.DOT_MATCHES_ALL, kotlin.text.RegexOption.IGNORE_CASE)), "")
+            @Suppress("DEPRECATION")
+            tv.text = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N)
+                android.text.Html.fromHtml(cleaned, android.text.Html.FROM_HTML_MODE_LEGACY)
+            else
+                android.text.Html.fromHtml(cleaned)
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 2.dp),
+    )
 }
 
 private fun formatBlogDate(iso: String): String {
