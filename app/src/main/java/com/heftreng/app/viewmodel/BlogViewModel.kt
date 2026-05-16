@@ -92,20 +92,70 @@ class BlogViewModel @Inject constructor() : ViewModel() {
     fun loadPostDetail(postId: String) {
         viewModelScope.launch {
             _detailLoading.value = true
-            // Liste çekiminde fetchBodies=false olduğundan içerik boş gelir.
-            // Detay için her zaman API'den tam içeriği çek.
             val cached = _state.value.posts.find { it.id == postId }
-            if (cached != null) _detail.value = cached // başlık/thumbnail önizleme için
+            if (cached != null) _detail.value = cached // başlık/thumbnail hemen göster
+
             try {
-                val url = "https://www.googleapis.com/blogger/v3/blogs/$BLOG_ID/posts/$postId?key=$API_KEY"
-                val json = httpGet(url)
+                // Yöntem 1: post URL'sine ?alt=json ekle — API key gerektirmez, tam içerik gelir
+                // Örn: https://heftreng.blogspot.com/2024/01/yazi.html?alt=json
+                val postUrl = cached?.url
+                if (!postUrl.isNullOrBlank()) {
+                    val jsonUrl = postUrl.trimEnd('/') + "?alt=json"
+                    try {
+                        val raw  = httpGet(jsonUrl)
+                        val root = JSONObject(raw)
+                        // Blogger ?alt=json yanıtı: root.entry objesi
+                        val entry   = root.optJSONObject("entry")
+                        if (entry != null) {
+                            _detail.value = parseAtomEntry(entry, cached)
+                            _detailLoading.value = false
+                            return@launch
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                // Yöntem 2: Blogger v3 API (fallback)
+                val apiUrl = "https://www.googleapis.com/blogger/v3/blogs/$BLOG_ID/posts/$postId?key=$API_KEY"
+                val json   = httpGet(apiUrl)
                 _detail.value = parsePost(JSONObject(json))
             } catch (e: Exception) {
-                // API başarısız olursa cache'deki ile kal
                 if (cached != null) _detail.value = cached
             }
             _detailLoading.value = false
         }
+    }
+
+    // Blogger ?alt=json yanıtını parse et
+    private fun parseAtomEntry(entry: JSONObject, base: BlogPost): BlogPost {
+        // İçerik: entry.content.$t veya entry.summary.$t
+        val contentObj = entry.optJSONObject("content") ?: entry.optJSONObject("summary")
+        val content    = contentObj?.optString("\$t") ?: base.content
+
+        // Başlık
+        val titleObj = entry.optJSONObject("title")
+        val title    = titleObj?.optString("\$t") ?: base.title
+
+        // Yazar
+        val authorArr  = entry.optJSONArray("author")
+        val authorObj  = authorArr?.optJSONObject(0)
+        val authorName = authorObj?.optJSONObject("name")?.optString("\$t") ?: base.authorName
+        val authorImg  = authorObj?.optJSONObject("gd\$image")?.optString("src") ?: base.authorPhoto
+
+        // Etiketler
+        val cats   = entry.optJSONArray("category")
+        val labels = if (cats != null) {
+            (0 until cats.length()).mapNotNull { cats.optJSONObject(it)?.optString("term") }
+        } else base.labels
+
+        return base.copy(
+            title       = title,
+            content     = content,
+            summary     = htmlToPlainText(content).take(180).trimEnd() + if (content.length > 180) "…" else "",
+            authorName  = authorName,
+            authorPhoto = authorImg,
+            labels      = labels,
+            thumbnail   = extractFirstImage(content).ifBlank { base.thumbnail },
+        )
     }
 
     // ── HTTP ─────────────────────────────────────────────────────────────────
