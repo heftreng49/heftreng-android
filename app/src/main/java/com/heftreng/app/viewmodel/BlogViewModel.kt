@@ -92,15 +92,24 @@ class BlogViewModel @Inject constructor() : ViewModel() {
     fun loadPostDetail(postId: String) {
         viewModelScope.launch {
             _detailLoading.value = true
+
+            // Önce listede var mı bak — içerik zaten yüklü
+            val cached = _state.value.posts.find { it.id == postId }
+            if (cached != null && cached.content.isNotBlank()) {
+                _detail.value = cached
+                _detailLoading.value = false
+                return@launch
+            }
+
+            // Listede yoksa API'den çek
             _detail.value = null
             try {
-                val url = buildString {
-                    append("https://www.googleapis.com/blogger/v3/blogs/$BLOG_ID/posts/$postId")
-                    append("?key=$API_KEY&fetchBody=true&fetchImages=true")
-                }
+                val url = "https://www.googleapis.com/blogger/v3/blogs/$BLOG_ID/posts/$postId?key=$API_KEY"
                 val json = httpGet(url)
                 _detail.value = parsePost(JSONObject(json))
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                if (cached != null) _detail.value = cached
+            }
             _detailLoading.value = false
         }
     }
