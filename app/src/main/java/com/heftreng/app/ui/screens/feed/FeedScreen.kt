@@ -828,6 +828,35 @@ fun PostCard(
                     modifier = Modifier.size(20.dp))
             }
             if (post.repostsCount > 0) Text(post.repostsCount.toString(), color = Muted, fontSize = 13.sp)
+            Spacer(Modifier.width(4.dp))
+            // Dış paylaşım butonu
+            Box {
+                var shareMenuExpanded by remember { mutableStateOf(false) }
+                IconButton(onClick = { shareMenuExpanded = true }) {
+                    Icon(Icons.Default.IosShare, null, tint = Muted, modifier = Modifier.size(20.dp))
+                }
+                DropdownMenu(
+                    expanded         = shareMenuExpanded,
+                    onDismissRequest = { shareMenuExpanded = false },
+                    containerColor   = HeftSurface,
+                ) {
+                    DropdownMenuItem(
+                        text        = { Text("WhatsApp", color = OnBackground, fontSize = 13.sp) },
+                        leadingIcon = { Icon(Icons.Default.Share, null, tint = Color(0xFF25D366), modifier = Modifier.size(18.dp)) },
+                        onClick     = { shareMenuExpanded = false; shareTarget = ShareTarget.WHATSAPP },
+                    )
+                    DropdownMenuItem(
+                        text        = { Text("Instagram", color = OnBackground, fontSize = 13.sp) },
+                        leadingIcon = { Icon(Icons.Default.Share, null, tint = Color(0xFFE1306C), modifier = Modifier.size(18.dp)) },
+                        onClick     = { shareMenuExpanded = false; shareTarget = ShareTarget.INSTAGRAM },
+                    )
+                    DropdownMenuItem(
+                        text        = { Text("Diğer", color = OnBackground, fontSize = 13.sp) },
+                        leadingIcon = { Icon(Icons.Default.IosShare, null, tint = Muted, modifier = Modifier.size(18.dp)) },
+                        onClick     = { shareMenuExpanded = false; shareTarget = ShareTarget.ANY },
+                    )
+                }
+            }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = onSave) {
                 Icon(
