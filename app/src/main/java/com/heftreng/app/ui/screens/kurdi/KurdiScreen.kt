@@ -539,27 +539,37 @@ fun LessonScreen(
     onComplete   : () -> Unit,
     onClose      : () -> Unit,
 ) {
-    var step          by remember { mutableStateOf(0) }
-    var showVocab     by remember { mutableStateOf(true) }  // önce kelimeler, sonra sorular
-    var selectedAns   by remember { mutableStateOf<String?>(null) }
-    var showResult    by remember { mutableStateOf(false) }
-    var correctCount  by remember { mutableStateOf(0) }
-    var fillAnswer    by remember { mutableStateOf("") }
+    var step         by remember { mutableStateOf(0) }
+    var selectedAns  by remember { mutableStateOf<String?>(null) }
+    var showResult   by remember { mutableStateOf(false) }
+    var correctCount by remember { mutableStateOf(0) }
+    var fillAnswer   by remember { mutableStateOf("") }
 
     val lesson    = activeLesson.lesson
     val vocab     = activeLesson.vocab
     val exercises = activeLesson.exercises
 
-    // Vocab aşaması bitti mi?
-    val vocabDone = step >= vocab.size
+    val vocabDone  = vocab.isEmpty() || step >= vocab.size
+    val exStep     = if (vocabDone) (if (vocab.isEmpty()) step else step - vocab.size) else 0
+    val exDone     = exercises.isEmpty() || exStep >= exercises.size
+    val currentEx  = if (vocabDone && !exDone) exercises.getOrNull(exStep) else null
+    val allDone    = vocabDone && exDone
+    val totalSteps = vocab.size + exercises.size
 
-    // Soru adımı
-    val exStep = if (vocabDone) step - vocab.size else 0
-    val exDone = exStep >= exercises.size
-    val currentEx = if (vocabDone && !exDone) exercises.getOrNull(exStep) else null
-
-    // Tüm adımlar bitti
-    val allDone = vocabDone && exDone
+    // Devam butonu metni ve aktifliği
+    val canAdvance = when {
+        allDone    -> true
+        !vocabDone -> true
+        currentEx != null -> showResult
+        else -> false
+    }
+    val nextLabel = when {
+        allDone                          -> "Dersi Bitir"
+        !vocabDone && step >= vocab.size - 1 -> "Sorulara Geç →"
+        !vocabDone                       -> "Sonraki Kelime"
+        exStep >= exercises.size - 1     -> "Dersi Tamamla 🎉"
+        else                             -> "Devam"
+    }
 
     Scaffold(
         containerColor = Background,
@@ -568,7 +578,6 @@ fun LessonScreen(
                 title = {
                     Column {
                         Text(lesson.nameTr, fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 15.sp)
-                        val totalSteps = vocab.size + exercises.size
                         if (totalSteps > 0) {
                             LinearProgressIndicator(
                                 progress   = { step.toFloat() / totalSteps },
@@ -585,7 +594,6 @@ fun LessonScreen(
                     }
                 },
                 actions = {
-                    // XP rozeti
                     Surface(shape = RoundedCornerShape(20.dp), color = Amber.copy(alpha = 0.15f)) {
                         Text("+${lesson.xp} XP", color = Amber, fontWeight = FontWeight.Bold, fontSize = 11.sp,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
@@ -594,163 +602,207 @@ fun LessonScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
             )
-        }
-    ) { padding ->
-
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            when {
-                // ── Tamamlandı ────────────────────────────────────────────────
-                allDone -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Text("🎉", fontSize = 72.sp)
-                            Text("Ders Tamamlandı!", fontWeight = FontWeight.ExtraBold, color = OnBackground, fontSize = 22.sp)
-                            Surface(shape = RoundedCornerShape(20.dp), color = Amber.copy(0.15f)) {
-                                Text("+${lesson.xp} XP kazandın!", color = Amber, fontWeight = FontWeight.Bold, fontSize = 16.sp,
-                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            Button(
-                                onClick = onComplete,
-                                modifier = Modifier.fillMaxWidth(0.7f),
-                                shape    = RoundedCornerShape(14.dp),
-                                colors   = ButtonDefaults.buttonColors(containerColor = Primary),
-                            ) {
-                                Text("Devam", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            }
-                        }
-                    }
-                }
-
-                // ── Kelime kartı ──────────────────────────────────────────────
-                !vocabDone -> {
-                    val voc = vocab[step]
-                    Spacer(Modifier.height(32.dp))
-                    // Kelime kartı
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp)
-                            .clickable { /* flip */ },
-                        shape = RoundedCornerShape(20.dp),
-                        color = HeftSurface,
-                    ) {
-                        Column(
-                            modifier            = Modifier.padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(voc.e, fontSize = 56.sp)
-                            Spacer(Modifier.height(16.dp))
-                            Text(voc.ku, fontWeight = FontWeight.ExtraBold, color = OnBackground, fontSize = 28.sp)
-                            if (voc.kp.isNotBlank()) {
-                                Text("/${voc.kp}/", color = Muted, fontSize = 14.sp)
-                            }
-                            Spacer(Modifier.height(12.dp))
-                            HorizontalDivider(color = Divider)
-                            Spacer(Modifier.height(12.dp))
-                            Text(voc.tr, fontWeight = FontWeight.SemiBold, color = Primary, fontSize = 22.sp)
-                        }
-                    }
-                    Spacer(Modifier.weight(1f))
-                    // İleri butonu
+        },
+        // ── Devam butonu SABIT altta ───────────────────────────────────────────
+        bottomBar = {
+            if (!allDone) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Background)
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                        .navigationBarsPadding()
+                        .imePadding(),
+                ) {
                     Button(
-                        onClick  = { step++ },
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        onClick  = {
+                            if (allDone) { onComplete(); return@Button }
+                            if (!vocabDone) {
+                                step++
+                                return@Button
+                            }
+                            if (showResult || currentEx?.type == "match" || currentEx?.type == "build") {
+                                step++
+                                selectedAns = null
+                                showResult  = false
+                                fillAnswer  = ""
+                            }
+                        },
+                        enabled  = canAdvance,
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape    = RoundedCornerShape(14.dp),
                         colors   = ButtonDefaults.buttonColors(containerColor = Primary),
                     ) {
+                        Text(nextLabel, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                }
+            }
+        },
+    ) { padding ->
+
+        when {
+            // ── Tamamlandı ────────────────────────────────────────────────────
+            allDone -> {
+                Box(
+                    Modifier.fillMaxSize().padding(padding),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.padding(24.dp),
+                    ) {
+                        Text("🎉", fontSize = 72.sp)
+                        Text("Ders Tamamlandı!", fontWeight = FontWeight.ExtraBold, color = OnBackground, fontSize = 22.sp)
+                        Surface(shape = RoundedCornerShape(20.dp), color = Amber.copy(0.15f)) {
+                            Text("+${lesson.xp} XP kazandın!", color = Amber, fontWeight = FontWeight.Bold, fontSize = 16.sp,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+                        }
+                        if (correctCount > 0) {
+                            Text("$correctCount doğru cevap", color = Color(0xFF22C55E), fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick  = onComplete,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape    = RoundedCornerShape(14.dp),
+                            colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                        ) {
+                            Text("Devam", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                    }
+                }
+            }
+
+            // ── Kelime kartı ──────────────────────────────────────────────────
+            !vocabDone -> {
+                val voc = vocab[step]
+                LazyColumn(
+                    modifier            = Modifier.fillMaxSize().padding(padding),
+                    contentPadding      = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    item {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape    = RoundedCornerShape(20.dp),
+                            color    = HeftSurface,
+                        ) {
+                            Column(
+                                modifier            = Modifier.padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                if (voc.e.isNotBlank()) {
+                                    Text(voc.e, fontSize = 56.sp)
+                                    Spacer(Modifier.height(16.dp))
+                                }
+                                Text(voc.ku, fontWeight = FontWeight.ExtraBold, color = OnBackground, fontSize = 30.sp, textAlign = TextAlign.Center)
+                                if (voc.kp.isNotBlank()) {
+                                    Spacer(Modifier.height(4.dp))
+                                    Text("/${voc.kp}/", color = Muted, fontSize = 14.sp)
+                                }
+                                Spacer(Modifier.height(12.dp))
+                                HorizontalDivider(color = Divider)
+                                Spacer(Modifier.height(12.dp))
+                                Text(voc.tr, fontWeight = FontWeight.SemiBold, color = Primary, fontSize = 22.sp, textAlign = TextAlign.Center)
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        // Adım göstergesi
                         Text(
-                            if (step < vocab.size - 1) "Sonraki Kelime" else "Sorulara Geç →",
-                            color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                            "${step + 1} / ${vocab.size}",
+                            color    = Muted,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                    Spacer(Modifier.navigationBarsPadding())
                 }
+            }
 
-                // ── Egzersiz ──────────────────────────────────────────────────
-                currentEx != null -> {
-                    val ex = currentEx
-                    // Reset state on step change
-                    LaunchedEffect(step) {
-                        selectedAns = null
-                        showResult  = false
-                        fillAnswer  = ""
+            // ── Egzersiz ──────────────────────────────────────────────────────
+            currentEx != null -> {
+                val ex = currentEx
+                LaunchedEffect(step) {
+                    selectedAns = null
+                    showResult  = false
+                    fillAnswer  = ""
+                }
+                LazyColumn(
+                    modifier            = Modifier.fillMaxSize().padding(padding),
+                    contentPadding      = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    item {
+                        // Soru
+                        Text(
+                            ex.question,
+                            fontWeight = FontWeight.Bold,
+                            color      = OnBackground,
+                            fontSize   = 18.sp,
+                            textAlign  = TextAlign.Center,
+                            modifier   = Modifier.fillMaxWidth(),
+                        )
+                        // Türkçe ipucu (fill tipinde)
+                        if (ex.type == "fill" && ex.questionTr.isNotBlank()) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(ex.questionTr, color = Muted, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                        }
+                        Spacer(Modifier.height(20.dp))
                     }
-
-                    Spacer(Modifier.height(24.dp))
-                    // Soru
-                    Text(
-                        ex.question,
-                        fontWeight = FontWeight.Bold,
-                        color      = OnBackground,
-                        fontSize   = 18.sp,
-                        textAlign  = TextAlign.Center,
-                        modifier   = Modifier.padding(horizontal = 24.dp),
-                    )
-                    Spacer(Modifier.height(24.dp))
 
                     when (ex.type) {
                         "mcq" -> {
-                            // Çoktan seçmeli
                             val options = listOf(ex.optA, ex.optB, ex.optC, ex.optD).filter { it.isNotBlank() }
-                            Column(
-                                modifier            = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                options.forEach { opt ->
-                                    val isSel     = selectedAns == opt
-                                    val isCorrect = opt == ex.answer
-                                    val bgColor   = when {
-                                        !showResult -> if (isSel) Primary.copy(0.15f) else HeftSurface
-                                        isCorrect   -> Color(0xFF22C55E).copy(0.15f)
-                                        isSel       -> Color(0xFFEF4444).copy(0.15f)
-                                        else        -> HeftSurface
-                                    }
-                                    val borderColor = when {
-                                        !showResult -> if (isSel) Primary else Divider
-                                        isCorrect   -> Color(0xFF22C55E)
-                                        isSel       -> Color(0xFFEF4444)
-                                        else        -> Divider
-                                    }
-                                    Surface(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable(enabled = !showResult) {
-                                                selectedAns = opt
-                                                showResult  = true
-                                                if (opt == ex.answer) correctCount++
-                                            },
-                                        shape  = RoundedCornerShape(12.dp),
-                                        color  = bgColor,
-                                        border = BorderStroke(1.5.dp, borderColor),
+                            items(options) { opt ->
+                                val isSel     = selectedAns == opt
+                                val isCorrect = showResult && opt == ex.optA // optA her zaman doğru (tema kuralı)
+                                val bgColor   = when {
+                                    !showResult -> if (isSel) Primary.copy(0.15f) else HeftSurface
+                                    isCorrect   -> Color(0xFF22C55E).copy(0.15f)
+                                    isSel       -> Color(0xFFEF4444).copy(0.15f)
+                                    else        -> HeftSurface
+                                }
+                                val borderCol = when {
+                                    !showResult -> if (isSel) Primary else Divider
+                                    isCorrect   -> Color(0xFF22C55E)
+                                    isSel       -> Color(0xFFEF4444)
+                                    else        -> Divider
+                                }
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 10.dp)
+                                        .clickable(enabled = !showResult) {
+                                            selectedAns = opt
+                                            showResult  = true
+                                            if (opt == ex.optA) correctCount++
+                                        },
+                                    shape  = RoundedCornerShape(12.dp),
+                                    color  = bgColor,
+                                    border = BorderStroke(1.5.dp, borderCol),
+                                ) {
+                                    Row(
+                                        modifier          = Modifier.padding(14.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
                                     ) {
-                                        Row(
-                                            modifier          = Modifier.padding(14.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            Text(opt, color = OnBackground, fontWeight = FontWeight.Medium, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                                            if (showResult) {
-                                                Icon(
-                                                    if (isCorrect) Icons.Default.CheckCircle else if (isSel) Icons.Default.Cancel else Icons.Default.RadioButtonUnchecked,
-                                                    null,
-                                                    tint = if (isCorrect) Color(0xFF22C55E) else if (isSel) Color(0xFFEF4444) else Divider,
-                                                    modifier = Modifier.size(20.dp),
-                                                )
-                                            }
+                                        Text(opt, color = OnBackground, fontWeight = FontWeight.Medium, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                                        if (showResult) {
+                                            Icon(
+                                                if (isCorrect) Icons.Default.CheckCircle
+                                                else if (isSel) Icons.Default.Cancel
+                                                else Icons.Default.RadioButtonUnchecked,
+                                                null,
+                                                tint     = if (isCorrect) Color(0xFF22C55E) else if (isSel) Color(0xFFEF4444) else Divider,
+                                                modifier = Modifier.size(20.dp),
+                                            )
                                         }
                                     }
                                 }
                             }
                         }
                         "fill" -> {
-                            // Boşluk doldurma
-                            Column(
-                                modifier            = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
+                            item {
                                 OutlinedTextField(
                                     value         = fillAnswer,
                                     onValueChange = { if (!showResult) fillAnswer = it },
@@ -767,17 +819,30 @@ fun LessonScreen(
                                         focusedContainerColor   = HeftSurface,
                                     ),
                                 )
-                                if (showResult) {
+                                if (!showResult) {
+                                    Spacer(Modifier.height(12.dp))
+                                    Button(
+                                        onClick  = {
+                                            showResult  = true
+                                            selectedAns = fillAnswer
+                                            if (fillAnswer.trim().equals(ex.answer, ignoreCase = true)) correctCount++
+                                        },
+                                        enabled  = fillAnswer.isNotBlank(),
+                                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                                        shape    = RoundedCornerShape(12.dp),
+                                        colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                                    ) {
+                                        Text("Kontrol Et", color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                } else {
                                     Spacer(Modifier.height(12.dp))
                                     val correct = fillAnswer.trim().equals(ex.answer, ignoreCase = true)
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
                                         color = if (correct) Color(0xFF22C55E).copy(0.15f) else Color(0xFFEF4444).copy(0.15f),
+                                        modifier = Modifier.fillMaxWidth(),
                                     ) {
-                                        Row(
-                                            modifier          = Modifier.padding(12.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
+                                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                             Icon(
                                                 if (correct) Icons.Default.CheckCircle else Icons.Default.Cancel,
                                                 null,
@@ -793,63 +858,29 @@ fun LessonScreen(
                                             )
                                         }
                                     }
-                                    if (!correct && selectedAns == null) correctCount.let { }
-                                } else {
-                                    Spacer(Modifier.height(12.dp))
-                                    Button(
-                                        onClick  = {
-                                            showResult  = true
-                                            selectedAns = fillAnswer
-                                            if (fillAnswer.trim().equals(ex.answer, ignoreCase = true)) correctCount++
-                                        },
-                                        enabled  = fillAnswer.isNotBlank(),
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape    = RoundedCornerShape(12.dp),
-                                        colors   = ButtonDefaults.buttonColors(containerColor = Primary),
-                                    ) {
-                                        Text("Kontrol Et", color = Color.White, fontWeight = FontWeight.Bold)
-                                    }
                                 }
                             }
                         }
-
                         "match" -> {
-                            // Eşleştirme — sol Kürtçe, sağ Türkçe
-                            MatchExercise(
-                                pairs      = ex.pairs,
-                                onCorrect  = { correctCount++ },
-                                onAllDone  = { showResult = true; selectedAns = "done" },
-                            )
+                            item {
+                                MatchExercise(
+                                    pairs     = ex.pairs,
+                                    onCorrect = { correctCount++ },
+                                    onAllDone = { showResult = true; selectedAns = "done" },
+                                )
+                            }
                         }
-
                         "build" -> {
-                            // Cümle kurma — kelimeleri sürükle/tıkla ile sırala
-                            BuildExercise(
-                                words      = ex.words,
-                                tr         = ex.tr,
-                                onCorrect  = { correctCount++ },
-                                onChecked  = { showResult = true; selectedAns = "done" },
-                            )
+                            item {
+                                BuildExercise(
+                                    words     = ex.words,
+                                    tr        = ex.tr,
+                                    onCorrect = { correctCount++ },
+                                    onChecked = { showResult = true; selectedAns = "done" },
+                                )
+                            }
                         }
                     }
-
-                    Spacer(Modifier.weight(1f))
-
-                    // İleri / Sonraki butonu (cevap verildikten sonra)
-                    if (showResult) {
-                        Button(
-                            onClick  = { step++ },
-                            modifier = Modifier.fillMaxWidth().padding(24.dp),
-                            shape    = RoundedCornerShape(14.dp),
-                            colors   = ButtonDefaults.buttonColors(containerColor = Primary),
-                        ) {
-                            Text(
-                                if (exStep < exercises.size - 1) "Devam" else "Dersi Tamamla 🎉",
-                                color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp,
-                            )
-                        }
-                    }
-                    Spacer(Modifier.navigationBarsPadding())
                 }
             }
         }
