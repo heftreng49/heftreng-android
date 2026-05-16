@@ -32,6 +32,7 @@ import com.heftreng.app.ui.screens.admin.CmsScreen
 import com.heftreng.app.ui.screens.auth.AuthScreen
 import com.heftreng.app.ui.screens.blog.BlogScreen
 import com.heftreng.app.ui.screens.blog.BlogPostScreen
+import com.heftreng.app.ui.screens.yazar.YazarScreen
 import com.heftreng.app.viewmodel.BlogViewModel
 import com.heftreng.app.ui.screens.feed.FeedScreen
 import com.heftreng.app.ui.screens.cms.CmsPageScreen
@@ -84,6 +85,7 @@ sealed class Screen(val route: String) {
     object Books         : Screen("books")
     object BookDetail    : Screen("book/{bookId}")         { fun go(id: String) = "book/$id" }
     object CmsPage       : Screen("cms_page/{slug}")       { fun go(slug: String) = "cms_page/$slug" }
+    object Yazar         : Screen("yazar")
     object BookChapter   : Screen("book_chapter/{bid}/{cid}") { fun go(b: String, c: String) = "book_chapter/$b/$c" }
 }
 
@@ -345,6 +347,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 }
                 composable(Screen.Admin.route)    { AdminScreen(navController) }
                 composable(Screen.Cms.route)      { CmsScreen(navController) }
+                composable(Screen.Yazar.route)    { YazarScreen(navController) }
                 composable(Screen.Settings.route) { SettingsScreen(navController) }
                 composable("post/{postId}") { back ->
                     SinglePostScreen(
@@ -455,6 +458,7 @@ fun DrawerContent(
                 Triple(Icons.Outlined.NotificationsNone, "Agahdarî / Bildirimler (${if (unreadNotif>0) unreadNotif else ""})", Screen.Notifications.route),
                 Triple(Icons.Outlined.ChatBubbleOutline, "Peyam / Mesajlar (${if (totalUnread>0) totalUnread else ""})", Screen.Messages.route),
                 Triple(Icons.Outlined.Settings,       "Mîheng / Ayarlar",       Screen.Settings.route),
+                Triple(Icons.Outlined.Edit,           "Nivîskar / Yazar Paneli", Screen.Yazar.route),
             )
 
             items.forEach { (icon, label, route) ->
