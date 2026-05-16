@@ -336,16 +336,22 @@ private fun decodeEntities(s: String) = s
 // ── Compose renderer ──────────────────────────────────────────────────────────
 @Composable
 fun HtmlContent(html: String) {
-    val context = LocalContext.current
+    // Tema renklerini Compose katmanından al — hardcode değil
     val textColor = OnBackground
     val linkColor = Amber
-    val codeColor = SurfaceVar
+    val bgColor   = Background
+
+    // toArgb() Compose Color → Android int dönüşümü
+    val textArgb = textColor.toArgb()
+    val linkArgb = linkColor.toArgb()
+    val bgArgb   = bgColor.toArgb()
 
     AndroidView(
         factory = { ctx ->
             android.widget.TextView(ctx).apply {
-                setTextColor(android.graphics.Color.parseColor("#E2E8F0"))
-                setLinkTextColor(android.graphics.Color.parseColor("#F59E0B"))
+                setTextColor(textArgb)
+                setLinkTextColor(linkArgb)
+                setBackgroundColor(bgArgb)
                 textSize = 15f
                 linksClickable = true
                 autoLinkMask = 0
@@ -354,6 +360,10 @@ fun HtmlContent(html: String) {
             }
         },
         update = { tv ->
+            // Tema değişirse renkleri güncelle
+            tv.setTextColor(textArgb)
+            tv.setLinkTextColor(linkArgb)
+            tv.setBackgroundColor(bgArgb)
             val cleaned = html
                 .replace(Regex("<style[^>]*>.*?</style>", setOf(kotlin.text.RegexOption.DOT_MATCHES_ALL, kotlin.text.RegexOption.IGNORE_CASE)), "")
                 .replace(Regex("<script[^>]*>.*?</script>", setOf(kotlin.text.RegexOption.DOT_MATCHES_ALL, kotlin.text.RegexOption.IGNORE_CASE)), "")
@@ -365,6 +375,7 @@ fun HtmlContent(html: String) {
         },
         modifier = Modifier
             .fillMaxWidth()
+            .background(bgColor)
             .padding(horizontal = 2.dp),
     )
 }
