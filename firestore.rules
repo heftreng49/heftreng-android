@@ -318,6 +318,15 @@ service cloud.firestore {
     match /kf_grammar/{id}    { allow read: if true; allow write: if isAdmin(); }
     match /kf_cats/{id}       { allow read: if true; allow write: if isAdmin(); }
 
+    // ─── USERNAMES (kullanıcı adı rezervasyonu) ─────────────────────
+    match /usernames/{handle} {
+      allow read: if true;
+      allow create: if isAuth()
+          && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuth()
+          && resource.data.uid == request.auth.uid;
+    }
+
     // ─── CMS ──────────────────────────────────────────────────────
     match /cms/{docId} {
       allow read: if isAuth();      // Tüm giriş yapmış kullanıcılar okuyabilir
