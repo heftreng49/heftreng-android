@@ -46,6 +46,8 @@ import com.heftreng.app.ui.component.FullScreenImageViewer
 import com.heftreng.app.ui.component.QuoteDialog
 import com.heftreng.app.ui.component.QuoteInputSection
 import com.heftreng.app.ui.component.QuotePayload
+import com.heftreng.app.ui.component.ShareCaptureBox
+import com.heftreng.app.utils.ShareTarget
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.viewmodel.FeedViewModel
@@ -226,9 +228,6 @@ fun FeedScreen(
                                 "blog" -> navController.navigate("blog/$repostId")
                                 else -> navController.navigate(Screen.PostDetail.go(repostId))
                             }
-                        },
-                        onExternalShare = { target ->
-                            com.heftreng.app.ui.component.captureAndShare(context, post, target)
                         },
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
@@ -566,13 +565,14 @@ fun PostCard(
     onTapAuthor  : ((String) -> Unit)? = null,
     onTapBook    : ((String) -> Unit)? = null,
     onTapRepost  : ((postId: String, type: String) -> Unit)? = null,
-    onExternalShare: ((target: com.heftreng.app.utils.ShareTarget) -> Unit)? = null,
 ) {
     val myUid            = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     val isOwn            = post.uid == myUid
     var menuExpanded     by remember { mutableStateOf(false) }
     var showEditDialog   by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var shareTarget      by remember { mutableStateOf<ShareTarget?>(null) }
+    val context          = androidx.compose.ui.platform.LocalContext.current
 
     Column(
         modifier = Modifier
@@ -646,6 +646,7 @@ fun PostCard(
                             leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) },
                             onClick     = { menuExpanded = false; showDeleteDialog = true },
                         )
+                        HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     } else {
                         DropdownMenuItem(
                             text        = { Text("Yeniden Paylaş", color = OnBackground) },
@@ -653,36 +654,30 @@ fun PostCard(
                             onClick     = { menuExpanded = false; onShare() },
                         )
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
-                        DropdownMenuItem(
-                            text        = { Text("WhatsApp'ta Paylaş", color = OnBackground) },
-                            leadingIcon = {
-                                Icon(Icons.Default.Share, null,
-                                    tint = Color(0xFF25D366), modifier = Modifier.size(20.dp))
-                            },
-                            onClick     = {
-                                menuExpanded = false
-                                onExternalShare?.invoke(com.heftreng.app.utils.ShareTarget.WHATSAPP)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text        = { Text("Instagram'da Paylaş", color = OnBackground) },
-                            leadingIcon = {
-                                Icon(Icons.Default.Share, null,
-                                    tint = Color(0xFFE1306C), modifier = Modifier.size(20.dp))
-                            },
-                            onClick     = {
-                                menuExpanded = false
-                                onExternalShare?.invoke(com.heftreng.app.utils.ShareTarget.INSTAGRAM)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text        = { Text("Diğer Uygulamalar", color = OnBackground) },
-                            leadingIcon = { Icon(Icons.Default.IosShare, null, tint = Muted) },
-                            onClick     = {
-                                menuExpanded = false
-                                onExternalShare?.invoke(com.heftreng.app.utils.ShareTarget.ANY)
-                            },
-                        )
+                    }
+                    // Dış paylaşım — hem kendi hem başkası için
+                    DropdownMenuItem(
+                        text        = { Text("WhatsApp'ta Paylaş", color = OnBackground) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Share, null,
+                                tint = Color(0xFF25D366), modifier = Modifier.size(20.dp))
+                        },
+                        onClick     = { menuExpanded = false; shareTarget = ShareTarget.WHATSAPP },
+                    )
+                    DropdownMenuItem(
+                        text        = { Text("Instagram'da Paylaş", color = OnBackground) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Share, null,
+                                tint = Color(0xFFE1306C), modifier = Modifier.size(20.dp))
+                        },
+                        onClick     = { menuExpanded = false; shareTarget = ShareTarget.INSTAGRAM },
+                    )
+                    DropdownMenuItem(
+                        text        = { Text("Diğer Uygulamalar", color = OnBackground) },
+                        leadingIcon = { Icon(Icons.Default.IosShare, null, tint = Muted) },
+                        onClick     = { menuExpanded = false; shareTarget = ShareTarget.ANY },
+                    )
+                    if (!isOwn) {
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         DropdownMenuItem(
                             text        = { Text("Şikayet et", color = Color(0xFFEF4444)) },
@@ -845,6 +840,14 @@ fun PostCard(
             }
         }
     }
+
+    // Paylaşım kartı yakalama — görünmez, shareTarget set edilince tetiklenir
+    ShareCaptureBox(
+        post    = post,
+        target  = shareTarget,
+        context = context,
+        onDone  = { shareTarget = null },
+    )
 
     // Düzenleme dialog
     if (showEditDialog) {

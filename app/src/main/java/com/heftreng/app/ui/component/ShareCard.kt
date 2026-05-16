@@ -8,12 +8,16 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -23,27 +27,18 @@ import coil.compose.AsyncImage
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.utils.ShareTarget
-import com.heftreng.app.utils.captureComposable
 import com.heftreng.app.utils.shareBitmap
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-fun sharePost(context: Context, post: Post, target: ShareTarget) {
-    captureComposable(
-        context  = context,
-        content  = { ShareCardContent(post = post) },
-        onBitmap = { bitmap -> shareBitmap(context, bitmap, target) },
-    )
-}
+// ── Paylaşım tetikleyici — Composable dışından çağrılır ──────────────────────
+// Artık captureComposable yok. Bunun yerine PostCard içinde ShareCaptureOverlay
+// kullanılıyor; bu fonksiyon sadece geriye dönük uyumluluk için bırakıldı.
+// Asıl paylaşım FeedScreen / PostCard içindeki graphicsLayer ile yapılır.
 
-// captureComposable için lambda syntax düzeltmesi
-fun captureAndShare(context: Context, post: Post, target: ShareTarget) {
-    com.heftreng.app.utils.captureComposable(
-        context  = context,
-        widthPx  = 1080,
-        content  = { ShareCardContent(post = post) },
-        onBitmap = { bitmap -> shareBitmap(context, bitmap, target) },
-    )
-}
-
+// ── Paylaşım kartı içeriği ────────────────────────────────────────────────────
 @Composable
 fun ShareCardContent(post: Post) {
     Column(
@@ -146,6 +141,44 @@ fun ShareCardContent(post: Post) {
                 color = Color(0xFFFFB300), fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
+        }
+    }
+}
+
+// ── graphicsLayer ile ekran dışı capture + paylaşım ──────────────────────────
+// PostCard içinde bu Composable'ı invisible olarak render et,
+// paylaşım butonuna basılınca graphicsLayer.toImageBitmap() ile bitmap al.
+@Composable
+fun ShareCaptureBox(
+    post    : Post,
+    target  : ShareTarget?,          // null = yakalama yapma
+    context : Context,
+    onDone  : () -> Unit,            // target null'a sıfırla
+) {
+    val graphicsLayer = rememberGraphicsLayer()
+    val scope         = rememberCoroutineScope()
+
+    LaunchedEffect(target) {
+        if (target == null) return@LaunchedEffect
+        // Bir frame bekle — içerik render olsun
+        withContext(Dispatchers.Main) {
+            val bitmap: Bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
+            shareBitmap(context, bitmap, target)
+            onDone()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .size(1.dp)          // görünmez — layout'u bozmaz
+            .drawWithContent {
+                graphicsLayer.record { this@drawWithContent.drawContent() }
+                drawLayer(graphicsLayer)
+            },
+    ) {
+        // 1080px genişlikte render et
+        Box(modifier = Modifier.width(360.dp)) {
+            ShareCardContent(post = post)
         }
     }
 }
