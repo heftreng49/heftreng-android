@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.imeNestedScroll
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.*
@@ -1038,7 +1040,7 @@ private fun MsgCtxItem(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 // ── Mesaj Satırı ─────────────────────────────────────────────────────────────
 // Tema: .msg-row, .msg-row.me, .msg-row.them, .msg-row-av, .msg-bubble
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MsgRow(
     msg           : Message,
@@ -1056,11 +1058,61 @@ private fun MsgRow(
     if (msg.text.isBlank() && msg.imageUrl.isBlank() && msg.audioUrl.isBlank()) return
     val iLiked = myUid in msg.likedBy
 
-    Row(
-        modifier              = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
-        verticalAlignment     = Alignment.Bottom,
+    // ── Swipe-to-reply ────────────────────────────────────────────────────────
+    val swipeThreshold = 72f
+    var rawOffset      by remember { mutableStateOf(0f) }
+    val animatedOffset by animateFloatAsState(
+        targetValue    = rawOffset,
+        animationSpec  = spring(stiffness = Spring.StiffnessMediumLow),
+        label          = "swipe",
+    )
+    var triggered by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragEnd   = {
+                        if (rawOffset >= swipeThreshold && !triggered) {
+                            triggered = true
+                            onReply()
+                        }
+                        rawOffset = 0f
+                        triggered = false
+                    },
+                    onDragCancel = { rawOffset = 0f },
+                ) { _, dragAmount ->
+                    // Benim mesajım → sola kaydır (negatif), diğeri → sağa (pozitif)
+                    val direction = if (isMine) -1f else 1f
+                    val delta = dragAmount * direction
+                    if (delta > 0) rawOffset = (rawOffset + delta).coerceIn(0f, swipeThreshold * 1.2f)
+                }
+            },
     ) {
+        // Yanıtla ikonu — swipe sırasında görünür
+        val swipeProgress = (animatedOffset / swipeThreshold).coerceIn(0f, 1f)
+        if (swipeProgress > 0.1f) {
+            Icon(
+                Icons.Default.Reply,
+                contentDescription = null,
+                tint     = Primary.copy(alpha = swipeProgress),
+                modifier = Modifier
+                    .size(20.dp)
+                    .align(if (isMine) Alignment.CenterStart else Alignment.CenterEnd)
+                    .padding(horizontal = 8.dp),
+            )
+        }
+
+        // Mesaj içeriği — swipe offset ile kayar
+        val offsetX = if (isMine) -animatedOffset else animatedOffset
+        Row(
+            modifier              = Modifier
+                .fillMaxWidth()
+                .offset(x = offsetX.dp),
+            horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
+            verticalAlignment     = Alignment.Bottom,
+        ) {
         // Tema: .msg-row-av (karşı taraf için)
         if (!isMine) {
             Box(
@@ -1214,7 +1266,8 @@ private fun MsgRow(
         }
 
         if (isMine) Spacer(Modifier.width(6.dp))
-    }
+        } // end Row
+    } // end Box (swipe)
 }
 
 // ── Yardımcı ─────────────────────────────────────────────────────────────────
