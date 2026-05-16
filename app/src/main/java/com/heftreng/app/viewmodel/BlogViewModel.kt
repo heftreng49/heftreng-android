@@ -92,30 +92,17 @@ class BlogViewModel @Inject constructor() : ViewModel() {
     fun loadPostDetail(postId: String) {
         viewModelScope.launch {
             _detailLoading.value = true
+            // Cache'de varsa hemen göster (liste fetchBodies=true ile geldiğinden içerik dolu)
             val cached = _state.value.posts.find { it.id == postId }
-            if (cached != null) _detail.value = cached // başlık/thumbnail hemen göster
-
+            if (cached != null && cached.content.isNotBlank()) {
+                _detail.value = cached
+                _detailLoading.value = false
+                return@launch
+            }
+            // Cache yoksa veya içerik boşsa API'den çek
+            if (cached != null) _detail.value = cached
             try {
-                // Yöntem 1: post URL'sine ?alt=json ekle — API key gerektirmez, tam içerik gelir
-                // Örn: https://heftreng.blogspot.com/2024/01/yazi.html?alt=json
-                val postUrl = cached?.url
-                if (!postUrl.isNullOrBlank()) {
-                    val jsonUrl = postUrl.trimEnd('/') + "?alt=json"
-                    try {
-                        val raw  = httpGet(jsonUrl)
-                        val root = JSONObject(raw)
-                        // Blogger ?alt=json yanıtı: root.entry objesi
-                        val entry   = root.optJSONObject("entry")
-                        if (entry != null) {
-                            _detail.value = parseAtomEntry(entry, cached)
-                            _detailLoading.value = false
-                            return@launch
-                        }
-                    } catch (_: Exception) {}
-                }
-
-                // Yöntem 2: Blogger v3 API (fallback)
-                val apiUrl = "https://www.googleapis.com/blogger/v3/blogs/$BLOG_ID/posts/$postId?key=$API_KEY"
+                val apiUrl = "https://www.googleapis.com/blogger/v3/blogs/$BLOG_ID/posts/$postId?key=$API_KEY&fetchBodies=true"
                 val json   = httpGet(apiUrl)
                 _detail.value = parsePost(JSONObject(json))
             } catch (e: Exception) {
@@ -125,39 +112,6 @@ class BlogViewModel @Inject constructor() : ViewModel() {
         }
     }
 
-    // Blogger ?alt=json yanıtını parse et
-    private fun parseAtomEntry(entry: JSONObject, base: BlogPost): BlogPost {
-        // İçerik: entry.content.$t veya entry.summary.$t
-        val contentObj = entry.optJSONObject("content") ?: entry.optJSONObject("summary")
-        val content    = contentObj?.optString("\$t") ?: base.content
-
-        // Başlık
-        val titleObj = entry.optJSONObject("title")
-        val title    = titleObj?.optString("\$t") ?: base.title
-
-        // Yazar
-        val authorArr  = entry.optJSONArray("author")
-        val authorObj  = authorArr?.optJSONObject(0)
-        val authorName = authorObj?.optJSONObject("name")?.optString("\$t") ?: base.authorName
-        val authorImg  = authorObj?.optJSONObject("gd\$image")?.optString("src") ?: base.authorPhoto
-
-        // Etiketler
-        val cats   = entry.optJSONArray("category")
-        val labels = if (cats != null) {
-            (0 until cats.length()).mapNotNull { cats.optJSONObject(it)?.optString("term") }
-        } else base.labels
-
-        return base.copy(
-            title       = title,
-            content     = content,
-            summary     = htmlToPlainText(content).take(180).trimEnd() + if (content.length > 180) "…" else "",
-            authorName  = authorName,
-            authorPhoto = authorImg,
-            labels      = labels,
-            thumbnail   = extractFirstImage(content).ifBlank { base.thumbnail },
-        )
-    }
-
     // ── HTTP ─────────────────────────────────────────────────────────────────
     private suspend fun fetchPosts(
         pageToken : String?,
@@ -165,7 +119,7 @@ class BlogViewModel @Inject constructor() : ViewModel() {
     ): Pair<List<BlogPost>, String?> = withContext(Dispatchers.IO) {
         val url = buildString {
             append("https://www.googleapis.com/blogger/v3/blogs/$BLOG_ID/posts")
-            append("?key=$API_KEY&maxResults=$PAGE_SIZE&fetchBodies=false&fetchImages=true")
+            append("?key=$API_KEY&maxResults=$PAGE_SIZE&fetchBodies=true&fetchImages=true")
             if (pageToken != null) append("&pageToken=$pageToken")
             if (label != null) append("&labels=${java.net.URLEncoder.encode(label, "UTF-8")}")
         }

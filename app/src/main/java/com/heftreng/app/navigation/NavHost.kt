@@ -32,6 +32,7 @@ import com.heftreng.app.ui.screens.admin.CmsScreen
 import com.heftreng.app.ui.screens.auth.AuthScreen
 import com.heftreng.app.ui.screens.blog.BlogScreen
 import com.heftreng.app.ui.screens.blog.BlogPostScreen
+import com.heftreng.app.viewmodel.BlogViewModel
 import com.heftreng.app.ui.screens.feed.FeedScreen
 import com.heftreng.app.ui.screens.cms.CmsPageScreen
 import com.heftreng.app.ui.screens.kurdi.KurdiScreen
@@ -111,6 +112,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val settingsVm     : SettingsViewModel      = hiltViewModel()
     val notifVm        : NotificationsViewModel = hiltViewModel()
     val msgsVm         : MessagesViewModel      = hiltViewModel()
+    val blogVm         : BlogViewModel          = hiltViewModel()
 
     val currentUser by authVm.currentUser.collectAsState()
     val isDark      by settingsVm.darkMode.collectAsState()
@@ -301,12 +303,13 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 modifier         = Modifier.padding(innerPadding),
             ) {
                 composable(Screen.Blog.route) {
-                    BlogScreen(navController = navController)
+                    BlogScreen(navController = navController, vm = blogVm)
                 }
                 composable("blog_post/{postId}") { back ->
                     BlogPostScreen(
                         postId        = back.arguments?.getString("postId") ?: "",
                         navController = navController,
+                        vm            = blogVm,
                     )
                 }
                 composable(Screen.Feed.route) {

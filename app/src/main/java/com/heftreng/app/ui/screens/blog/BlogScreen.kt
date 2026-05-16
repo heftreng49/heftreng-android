@@ -19,7 +19,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.ui.theme.*
@@ -35,7 +34,7 @@ import java.util.*
 @Composable
 fun BlogScreen(
     navController : NavController,
-    vm            : BlogViewModel = hiltViewModel(),
+    vm            : BlogViewModel,
 ) {
     val state    by vm.state.collectAsState()
     var selLabel by remember { mutableStateOf<String?>(null) }

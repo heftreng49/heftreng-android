@@ -27,7 +27,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.ui.theme.*
@@ -42,7 +41,7 @@ import com.heftreng.app.viewmodel.BlogViewModel
 fun BlogPostScreen(
     postId        : String,
     navController : NavController,
-    vm            : BlogViewModel = hiltViewModel(),
+    vm            : BlogViewModel,
 ) {
     val post    by vm.detail.collectAsState()
     val loading by vm.detailLoading.collectAsState()
