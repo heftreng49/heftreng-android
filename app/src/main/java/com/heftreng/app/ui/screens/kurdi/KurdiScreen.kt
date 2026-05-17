@@ -793,7 +793,12 @@ fun LessonScreen(
                         when (ex.type) {
                             // ── Çoktan seçmeli ────────────────────────────────
                             "mcq" -> {
-                                val options = listOf(ex.optA, ex.optB, ex.optC, ex.optD).filter { it.isNotBlank() }
+                                // Web temasıyla aynı: seçenekleri karıştır, answer(=optA) ile karşılaştır
+                                val options = remember(ex.id) {
+                                    listOf(ex.optA, ex.optB, ex.optC, ex.optD)
+                                        .filter { it.isNotBlank() }
+                                        .shuffled()
+                                }
                                 items(options) { opt ->
                                     val isSel     = selectedAns == opt
                                     val isCorrect = showResult && opt.trim().equals(ex.answer.trim(), ignoreCase = true)

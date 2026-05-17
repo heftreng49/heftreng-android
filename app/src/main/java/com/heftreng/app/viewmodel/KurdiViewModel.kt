@@ -310,7 +310,9 @@ class KurdiViewModel @Inject constructor(
                             optB       = d["optB"]       as? String ?: "",
                             optC       = d["optC"]       as? String ?: "",
                             optD       = d["optD"]       as? String ?: "",
-                            answer     = d["answer"]     as? String ?: d["correct"] as? String ?: "",
+                            answer     = (d["answer"] as? String)?.takeIf { it.isNotBlank() }
+                                         ?: (d["correct"] as? String)?.takeIf { it.isNotBlank() }
+                                         ?: d["optA"] as? String ?: "", // web temasında optA her zaman doğru
                             wrong      = (d["wrong"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
                             pairs      = pairs,
                             words      = words,

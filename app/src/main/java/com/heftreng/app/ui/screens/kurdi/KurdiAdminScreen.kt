@@ -687,7 +687,7 @@ private fun ExerciseEditDialog(
                                         data["optB"]   = optB.trim()
                                         data["optC"]   = optC.trim()
                                         data["optD"]   = optD.trim()
-                                        data["answer"] = answer.trim()
+                                        data["answer"] = optA.trim() // web temasıyla aynı: optA her zaman doğru
                                     }
                                     "fill" -> {
                                         data["answer"] = answer.trim()
