@@ -849,6 +849,7 @@ fun LessonScreen(
 
                             // ── Boşluk doldur ─────────────────────────────────
                             "fill" -> item {
+                                val isCorrectFill = fillAnswer.trim().equals(ex.answer.trim(), ignoreCase = true)
                                 OutlinedTextField(
                                     value         = fillAnswer,
                                     onValueChange = { if (!showResult) fillAnswer = it },
@@ -856,27 +857,43 @@ fun LessonScreen(
                                     modifier      = Modifier.fillMaxWidth(),
                                     shape         = RoundedCornerShape(12.dp),
                                     singleLine    = true,
+                                    readOnly      = showResult,
                                     colors        = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor      = Primary,
-                                        unfocusedBorderColor    = Divider,
+                                        focusedBorderColor      = if (showResult && isCorrectFill) Color(0xFF22C55E) else if (showResult) Color(0xFFEF4444) else Primary,
+                                        unfocusedBorderColor    = if (showResult && isCorrectFill) Color(0xFF22C55E) else if (showResult) Color(0xFFEF4444) else Divider,
                                         focusedTextColor        = OnBackground,
                                         unfocusedTextColor      = OnBackground,
                                         unfocusedContainerColor = HeftSurface,
                                         focusedContainerColor   = HeftSurface,
                                     ),
                                 )
+                                Spacer(Modifier.height(12.dp))
                                 if (!showResult) {
-                                    Spacer(Modifier.height(12.dp))
                                     Button(
                                         onClick  = {
                                             showResult = true
-                                            if (fillAnswer.trim().equals(ex.answer, ignoreCase = true)) correctCount++
+                                            if (fillAnswer.trim().equals(ex.answer.trim(), ignoreCase = true)) correctCount++
                                         },
                                         enabled  = fillAnswer.isNotBlank(),
                                         modifier = Modifier.fillMaxWidth().height(48.dp),
                                         shape    = RoundedCornerShape(12.dp),
                                         colors   = ButtonDefaults.buttonColors(containerColor = Primary),
-                                    ) { Text("Kontrol Et", color = Color.White, fontWeight = FontWeight.Bold) }
+                                    ) { Text("Kontrol Et", color = Color.White, fontWeight = FontWeight.ExtraBold) }
+                                } else if (!isCorrectFill) {
+                                    // Yanlışsa tekrar deneme imkanı ver
+                                    OutlinedButton(
+                                        onClick  = {
+                                            fillAnswer = ""
+                                            showResult = false
+                                        },
+                                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                                        shape    = RoundedCornerShape(12.dp),
+                                        border   = BorderStroke(2.dp, Primary),
+                                    ) {
+                                        Icon(Icons.Default.Refresh, null, tint = Primary, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Tekrar Dene", color = Primary, fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
 
