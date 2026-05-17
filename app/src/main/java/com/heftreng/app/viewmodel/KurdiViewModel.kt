@@ -319,12 +319,15 @@ class KurdiViewModel @Inject constructor(
                     }
                 } catch (_: Exception) { emptyList() }
 
-                val finalVocab: List<KfVocab> = vocabList.ifEmpty {
-                    MOCK_VOCAB[lessonId] ?: emptyList()
-                }
-                val finalExercises: List<KfExercise> = exerciseList.ifEmpty {
-                    MOCK_EXERCISES[lessonId] ?: emptyList()
-                }
+                val finalVocab: List<KfVocab> = vocabList
+                    .distinctBy { it.ku.trim().lowercase() }
+                    .ifEmpty { MOCK_VOCAB[lessonId] ?: emptyList() }
+
+                // Firestore'da mükerrer doküman varsa temizle
+                // Aynı tip+soru kombinasyonu sadece bir kez gösterilir
+                val finalExercises: List<KfExercise> = exerciseList
+                    .distinctBy { "${it.type}|${it.question.trim().lowercase()}" }
+                    .ifEmpty { MOCK_EXERCISES[lessonId] ?: emptyList() }
 
                 _activeLesson.value = ActiveLesson(
                     lesson    = lesson,
