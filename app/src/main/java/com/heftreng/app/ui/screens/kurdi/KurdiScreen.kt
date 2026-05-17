@@ -793,51 +793,54 @@ fun LessonScreen(
                         when (ex.type) {
                             // ── Çoktan seçmeli ────────────────────────────────
                             "mcq" -> {
-                                // Web temasıyla aynı: seçenekleri karıştır, answer(=optA) ile karşılaştır
-                                val options = remember(ex.id) {
-                                    listOf(ex.optA, ex.optB, ex.optC, ex.optD)
-                                        .filter { it.isNotBlank() }
-                                        .shuffled()
-                                }
-                                items(options) { opt ->
+                                // remember LazyListScope dışında item{} içinde kullanılmalı
+                                item {
+                                    val options = remember(ex.id) {
+                                        listOf(ex.optA, ex.optB, ex.optC, ex.optD)
+                                            .filter { it.isNotBlank() }
+                                            .shuffled()
+                                    }
+                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                        options.forEach { opt ->
                                     val isSel     = selectedAns == opt
                                     val isCorrect = showResult && opt.trim().equals(ex.answer.trim(), ignoreCase = true)
                                     val isWrong   = showResult && isSel && !opt.trim().equals(ex.answer.trim(), ignoreCase = true)
-                                    Surface(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(bottom = 10.dp)
-                                            .clickable(enabled = !showResult) {
-                                                selectedAns = opt
-                                                showResult  = true
-                                                if (opt.trim().equals(ex.answer.trim(), ignoreCase = true)) correctCount++
-                                            },
-                                        shape  = RoundedCornerShape(14.dp),
-                                        color  = when {
-                                            isCorrect -> Color(0xFF22C55E).copy(0.12f)
-                                            isWrong   -> Color(0xFFEF4444).copy(0.12f)
-                                            isSel     -> Primary.copy(0.12f)
-                                            else      -> HeftSurface
-                                        },
-                                        border = BorderStroke(2.dp, when {
-                                            isCorrect -> Color(0xFF22C55E)
-                                            isWrong   -> Color(0xFFEF4444)
-                                            isSel     -> Primary
-                                            else      -> Divider
-                                        }),
-                                    ) {
-                                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Text(opt, color = OnBackground, fontWeight = FontWeight.SemiBold,
-                                                fontSize = 15.sp, modifier = Modifier.weight(1f))
-                                            if (showResult) {
-                                                Icon(
-                                                    if (isCorrect) Icons.Default.CheckCircle
-                                                    else if (isWrong) Icons.Default.Cancel
-                                                    else Icons.Default.RadioButtonUnchecked,
-                                                    null,
-                                                    tint     = when { isCorrect -> Color(0xFF22C55E); isWrong -> Color(0xFFEF4444); else -> Divider },
-                                                    modifier = Modifier.size(20.dp),
-                                                )
+                                            Surface(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable(enabled = !showResult) {
+                                                        selectedAns = opt
+                                                        showResult  = true
+                                                        if (opt.trim().equals(ex.answer.trim(), ignoreCase = true)) correctCount++
+                                                    },
+                                                shape  = RoundedCornerShape(14.dp),
+                                                color  = when {
+                                                    isCorrect -> Color(0xFF22C55E).copy(0.12f)
+                                                    isWrong   -> Color(0xFFEF4444).copy(0.12f)
+                                                    isSel     -> Primary.copy(0.12f)
+                                                    else      -> HeftSurface
+                                                },
+                                                border = BorderStroke(2.dp, when {
+                                                    isCorrect -> Color(0xFF22C55E)
+                                                    isWrong   -> Color(0xFFEF4444)
+                                                    isSel     -> Primary
+                                                    else      -> Divider
+                                                }),
+                                            ) {
+                                                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(opt, color = OnBackground, fontWeight = FontWeight.SemiBold,
+                                                        fontSize = 15.sp, modifier = Modifier.weight(1f))
+                                                    if (showResult) {
+                                                        Icon(
+                                                            if (isCorrect) Icons.Default.CheckCircle
+                                                            else if (isWrong) Icons.Default.Cancel
+                                                            else Icons.Default.RadioButtonUnchecked,
+                                                            null,
+                                                            tint     = when { isCorrect -> Color(0xFF22C55E); isWrong -> Color(0xFFEF4444); else -> Divider },
+                                                            modifier = Modifier.size(20.dp),
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
                                     }
