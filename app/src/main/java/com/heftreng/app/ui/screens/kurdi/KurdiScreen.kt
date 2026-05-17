@@ -627,7 +627,7 @@ fun LessonScreen(
                         "build" -> buildResult == true
                         "match" -> true
                         "fill"  -> fillAnswer.trim().equals(currentEx.answer, ignoreCase = true)
-                        "mcq"   -> selectedAns == currentEx.answer
+                        "mcq"   -> selectedAns?.trim().equals(currentEx.answer.trim(), ignoreCase = true) == true
                         else    -> true
                     }
                     Surface(
@@ -796,8 +796,8 @@ fun LessonScreen(
                                 val options = listOf(ex.optA, ex.optB, ex.optC, ex.optD).filter { it.isNotBlank() }
                                 items(options) { opt ->
                                     val isSel     = selectedAns == opt
-                                    val isCorrect = showResult && opt == ex.answer
-                                    val isWrong   = showResult && isSel && opt != ex.answer
+                                    val isCorrect = showResult && opt.trim().equals(ex.answer.trim(), ignoreCase = true)
+                                    val isWrong   = showResult && isSel && !opt.trim().equals(ex.answer.trim(), ignoreCase = true)
                                     Surface(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -805,7 +805,7 @@ fun LessonScreen(
                                             .clickable(enabled = !showResult) {
                                                 selectedAns = opt
                                                 showResult  = true
-                                                if (opt == ex.answer) correctCount++
+                                                if (opt.trim().equals(ex.answer.trim(), ignoreCase = true)) correctCount++
                                             },
                                         shape  = RoundedCornerShape(14.dp),
                                         color  = when {

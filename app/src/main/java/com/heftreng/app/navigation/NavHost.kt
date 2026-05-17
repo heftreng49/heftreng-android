@@ -37,6 +37,7 @@ import com.heftreng.app.viewmodel.BlogViewModel
 import com.heftreng.app.ui.screens.feed.FeedScreen
 import com.heftreng.app.ui.screens.cms.CmsPageScreen
 import com.heftreng.app.ui.screens.kurdi.KurdiScreen
+import com.heftreng.app.ui.screens.kurdi.KurdiAdminScreen
 import com.heftreng.app.ui.screens.messages.ConversationsScreen
 import com.heftreng.app.ui.screens.messages.MessageDetailScreen
 import com.heftreng.app.ui.screens.notifications.NotificationsScreen
@@ -86,6 +87,7 @@ sealed class Screen(val route: String) {
     object BookDetail    : Screen("book/{bookId}")         { fun go(id: String) = "book/$id" }
     object CmsPage       : Screen("cms_page/{slug}")       { fun go(slug: String) = "cms_page/$slug" }
     object Yazar         : Screen("yazar")
+    object KurdiAdmin    : Screen("kurdi_admin")
     object BookChapter   : Screen("book_chapter/{bid}/{cid}") { fun go(b: String, c: String) = "book_chapter/$b/$c" }
 }
 
@@ -348,6 +350,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 composable(Screen.Admin.route)    { AdminScreen(navController) }
                 composable(Screen.Cms.route)      { CmsScreen(navController) }
                 composable(Screen.Yazar.route)    { YazarScreen(navController) }
+                composable(Screen.KurdiAdmin.route) { KurdiAdminScreen(navController) }
                 composable(Screen.Settings.route) { SettingsScreen(navController) }
                 composable("post/{postId}") { back ->
                     SinglePostScreen(
@@ -459,6 +462,7 @@ fun DrawerContent(
                 Triple(Icons.Outlined.ChatBubbleOutline, "Peyam / Mesajlar (${if (totalUnread>0) totalUnread else ""})", Screen.Messages.route),
                 Triple(Icons.Outlined.Settings,       "Mîheng / Ayarlar",       Screen.Settings.route),
                 Triple(Icons.Outlined.Edit,           "Nivîskar / Yazar Paneli", Screen.Yazar.route),
+                Triple(Icons.Outlined.School,          "Kurdî Admin",             Screen.KurdiAdmin.route),
             )
 
             items.forEach { (icon, label, route) ->
