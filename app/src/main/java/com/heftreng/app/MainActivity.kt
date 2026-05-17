@@ -1,17 +1,27 @@
 package com.heftreng.app
 
 import android.Manifest
+import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
+import com.google.android.play.core.appupdate.AppUpdateManagerFactory
+import com.google.android.play.core.appupdate.AppUpdateOptions
+import com.google.android.play.core.install.InstallStateUpdatedListener
+import com.google.android.play.core.install.model.AppUpdateType
+import com.google.android.play.core.install.model.InstallStatus
+import com.google.android.play.core.install.model.UpdateAvailability
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -31,6 +41,25 @@ class MainActivity : ComponentActivity() {
     // SettingsViewModel — darkMode tercihi için
     private val settingsVm: SettingsViewModel by viewModels()
     private val authVm: AuthViewModel by viewModels()
+
+    // ── In-App Update ──────────────────────────────────────────────────────────
+    private val appUpdateManager by lazy { AppUpdateManagerFactory.create(this) }
+
+    private val installStateListener = InstallStateUpdatedListener { state ->
+        if (state.installStatus() == InstallStatus.DOWNLOADED) {
+            // İndirme tamamlandı — hemen uygula
+            appUpdateManager.completeUpdate()
+        }
+    }
+
+    private val updateResultLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result: ActivityResult ->
+        if (result.resultCode == Activity.RESULT_CANCELED) {
+            // Kullanıcı güncellemeyi erteledi — sorun değil
+            Log.d("InAppUpdate", "Güncelleme ertelendi")
+        }
+    }
 
     // POST_NOTIFICATIONS izin launcher (Android 13+)
     private val notifPermLauncher = registerForActivityResult(
@@ -61,6 +90,48 @@ class MainActivity : ComponentActivity() {
 
         // Bildirim izni iste
         requestNotificationPermission()
+
+        // Güncelleme kontrolü
+        checkForUpdate()
+    }
+
+    // ── Güncelleme kontrolü ────────────────────────────────────────────────────
+    private fun checkForUpdate() {
+        appUpdateManager.registerListener(installStateListener)
+        appUpdateManager.appUpdateInfo.addOnSuccessListener { info ->
+            when {
+                // Güncelleme mevcut ve indirilebilir
+                info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
+                && info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) -> {
+                    appUpdateManager.startUpdateFlowForResult(
+                        info,
+                        updateResultLauncher,
+                        AppUpdateOptions.newBuilder(AppUpdateType.FLEXIBLE).build(),
+                    )
+                }
+                // Güncelleme indirildi ama henüz uygulanmadı (uygulama yeniden açıldıysa)
+                info.installStatus() == InstallStatus.DOWNLOADED -> {
+                    appUpdateManager.completeUpdate()
+                }
+            }
+        }.addOnFailureListener {
+            Log.d("InAppUpdate", "Güncelleme kontrolü başarısız: ${it.message}")
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Uygulama arka plandan dönünce tekrar kontrol et
+        appUpdateManager.appUpdateInfo.addOnSuccessListener { info ->
+            if (info.installStatus() == InstallStatus.DOWNLOADED) {
+                appUpdateManager.completeUpdate()
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        appUpdateManager.unregisterListener(installStateListener)
     }
 
     override fun onNewIntent(intent: android.content.Intent) {

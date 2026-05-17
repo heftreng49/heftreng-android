@@ -90,6 +90,7 @@ dependencies {
 
     // Networking & Images
     implementation(libs.coil.compose)
+    implementation("com.google.android.play:app-update-ktx:2.1.0")
     implementation(libs.ktor.client.android)
 
     // --- TEMAYI KURTARAN KRİTİK EKLEME ---
