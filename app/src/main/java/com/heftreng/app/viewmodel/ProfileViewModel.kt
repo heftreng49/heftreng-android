@@ -365,9 +365,12 @@ class ProfileViewModel @Inject constructor(
     fun updateUsername(newUsername: String, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
         if (myUid.isEmpty() || newUsername.isBlank()) return
         val handle = newUsername.lowercase().trim()
+            .filter { it.isLetterOrDigit() || it == '_' }
+            .take(20)
+        if (handle.isBlank()) { onError("Geçersiz kullanıcı adı"); return }
         viewModelScope.launch {
             try {
-                // Alınmış mı kontrolü — kendi mevcut kullanıcı adını geçirmez
+                // Alınmış mı kontrolü
                 val takenDoc = firestore.collection("usernames").document(handle).get().await()
                 if (takenDoc.exists()) {
                     val ownerUid = takenDoc.getString("uid") ?: ""
@@ -378,7 +381,7 @@ class ProfileViewModel @Inject constructor(
                 }
                 val oldHandle = _user.value?.username ?: ""
                 val batch     = firestore.batch()
-                // Eski kullanıcı adı index'ini sil (farklıysa)
+                // Eski kullanıcı adı index'ini sil
                 if (oldHandle.isNotBlank() && oldHandle != handle)
                     batch.delete(firestore.collection("usernames").document(oldHandle))
                 // Yeni kullanıcı adı index'ini yaz
@@ -386,8 +389,12 @@ class ProfileViewModel @Inject constructor(
                     firestore.collection("usernames").document(handle),
                     mapOf("uid" to myUid, "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()),
                 )
-                // users dokümanını güncelle
-                batch.update(firestore.collection("users").document(myUid), mapOf("username" to handle))
+                // users dokümanını merge ile güncelle (tema gibi set+merge)
+                batch.set(
+                    firestore.collection("users").document(myUid),
+                    mapOf("username" to handle),
+                    com.google.firebase.firestore.SetOptions.merge(),
+                )
                 batch.commit().await()
                 _user.value = _user.value?.copy(username = handle)
                 onSuccess()

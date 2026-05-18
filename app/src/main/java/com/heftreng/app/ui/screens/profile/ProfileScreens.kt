@@ -707,12 +707,12 @@ fun EditProfileScreen(
                     }
                     TextButton(
                         onClick  = {
-                            val usernameChanged = username.isNotBlank() &&
-                                username != (user?.username ?: "")
-                            if (usernameChanged) {
-                                // Önce username güncelle (users dokümanını da batch'te günceller),
-                                // başarılı olursa profil bilgilerini (bio/website/name) güncelle
-                                vm.updateUsername(username,
+                            val trimmedUsername = username.trim()
+                            val currentUsername = user?.username ?: ""
+                            val usernameChanged = trimmedUsername != currentUsername
+
+                            if (usernameChanged && trimmedUsername.isNotBlank()) {
+                                vm.updateUsername(trimmedUsername,
                                     onSuccess = {
                                         vm.updateProfile(displayName, bio, website)
                                         navController.popBackStack()
