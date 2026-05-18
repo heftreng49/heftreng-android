@@ -374,28 +374,20 @@ class ProfileViewModel @Inject constructor(
                 val takenDoc = firestore.collection("usernames").document(handle).get().await()
                 if (takenDoc.exists()) {
                     val ownerUid = takenDoc.getString("uid") ?: ""
-                    if (ownerUid != myUid) {
-                        onError("Bu kullanıcı adı alınmış")
-                        return@launch
-                    }
+                    if (ownerUid != myUid) { onError("Bu kullanıcı adı alınmış"); return@launch }
                 }
-                val oldHandle = _user.value?.username ?: ""
-                val batch     = firestore.batch()
-                // Eski kullanıcı adı index'ini sil
-                if (oldHandle.isNotBlank() && oldHandle != handle)
-                    batch.delete(firestore.collection("usernames").document(oldHandle))
-                // Yeni kullanıcı adı index'ini yaz
-                batch.set(
-                    firestore.collection("usernames").document(handle),
-                    mapOf("uid" to myUid, "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()),
-                )
-                // users dokümanını merge ile güncelle (tema gibi set+merge)
-                batch.set(
-                    firestore.collection("users").document(myUid),
-                    mapOf("username" to handle),
-                    com.google.firebase.firestore.SetOptions.merge(),
-                )
-                batch.commit().await()
+                val oldHandle = _user.value?.username?.lowercase()?.trim() ?: ""
+                // Eski handle sil
+                if (oldHandle.isNotBlank() && oldHandle != handle) {
+                    try { firestore.collection("usernames").document(oldHandle).delete().await() }
+                    catch (_: Exception) {}
+                }
+                // Yeni handle kaydet
+                firestore.collection("usernames").document(handle).set(
+                    mapOf("uid" to myUid, "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp())
+                ).await()
+                // users dokümanını güncelle
+                firestore.collection("users").document(myUid).update(mapOf("username" to handle)).await()
                 _user.value = _user.value?.copy(username = handle)
                 onSuccess()
             } catch (e: Exception) { onError(e.message ?: "Hata") }
