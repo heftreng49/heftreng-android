@@ -44,7 +44,9 @@ fun SinglePostScreen(
     navController: NavController,
     vm           : FeedViewModel  = hiltViewModel(),
     socialVm     : SocialViewModel = hiltViewModel(),
+    language     : String = "tr",
 ) {
+    val ku = language == "ku"
     val posts         by vm.posts.collectAsState()
     val comments      by vm.comments.collectAsState()
     val likers        by socialVm.likers.collectAsState()
@@ -66,10 +68,10 @@ fun SinglePostScreen(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text("Gönderi", fontWeight = FontWeight.SemiBold, color = OnBackground) },
+                title = { Text(if (ku) "Nivîs" else "Gönderi", fontWeight = FontWeight.SemiBold, color = OnBackground) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = OnBackground)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, if (ku) "Vegere" else "Geri", tint = OnBackground)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
@@ -104,6 +106,7 @@ fun SinglePostScreen(
                         onTapAuthor = { author ->
                             navController.navigate("author_quotes/${java.net.URLEncoder.encode(author, "UTF-8")}")
                         },
+                        language = language,
                         onTapBook = { book ->
                             navController.navigate("book_quotes/${java.net.URLEncoder.encode(book, "UTF-8")}")
                         },
@@ -126,7 +129,7 @@ fun SinglePostScreen(
                         ) {
                             Icon(Icons.Filled.Favorite, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("${post.likesCount} beğeni", color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text("${post.likesCount} ${if (ku) "xweşandin" else "beğeni"}", color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         }
                         HorizontalDivider(color = Divider)
                     }
@@ -138,7 +141,7 @@ fun SinglePostScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Yorumlar", color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text(if (ku) "Şîrove" else "Yorumlar", color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         if (post.commentsCount > 0) {
                             Spacer(Modifier.width(6.dp))
                             Box(Modifier.clip(RoundedCornerShape(10.dp)).background(SurfaceVar).padding(horizontal = 8.dp, vertical = 2.dp)) {
@@ -152,7 +155,7 @@ fun SinglePostScreen(
                 if (comments.isEmpty()) {
                     item {
                         Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Text("Henüz yorum yok", color = Muted, fontSize = 14.sp)
+                            Text(if (ku) "Hîn şîrove tune" else "Henüz yorum yok", color = Muted, fontSize = 14.sp)
                         }
                     }
                 } else {
@@ -185,7 +188,7 @@ fun SinglePostScreen(
                 OutlinedTextField(
                     value         = commentText,
                     onValueChange = { commentText = it },
-                    placeholder   = { Text("Yorum yaz...", color = Muted, fontSize = 14.sp) },
+                    placeholder   = { Text(if (ku) "Şîrove binivîse..." else "Yorum yaz...", color = Muted, fontSize = 14.sp) },
                     modifier      = Modifier.weight(1f),
                     shape         = RoundedCornerShape(24.dp),
                     singleLine    = true,

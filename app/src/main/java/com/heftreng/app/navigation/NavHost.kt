@@ -356,6 +356,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     SinglePostScreen(
                         postId        = back.arguments?.getString("postId") ?: "",
                         navController = navController,
+                        language      = language,
                     )
                 }
                 composable("serial/{id}") { back ->

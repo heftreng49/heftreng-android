@@ -67,7 +67,9 @@ fun PostDetailScreen(
     postId          : String,
     autoOpenKeyboard: Boolean = false,
     socialVm        : SocialViewModel = hiltViewModel(),
+    language        : String = "tr",
 ) {
+    val ku = language == "ku"
     val posts         by viewModel.posts.collectAsState()
     val likers        by socialVm.likers.collectAsState()
     val socialLoading by socialVm.loading.collectAsState()
@@ -295,6 +297,7 @@ fun PostDetailScreen(
                                 else      -> navController.navigate(Screen.PostDetail.go(repostId))
                             }
                         },
+                        language = language,
                     )
                     HorizontalDivider(color = SurfaceVar, thickness = 6.dp)
                 }
@@ -310,7 +313,7 @@ fun PostDetailScreen(
                         ) {
                             Icon(Icons.Filled.Favorite, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("${post.likesCount} beğeni", color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text("${post.likesCount} ${if (ku) "xweşandin" else "beğeni"}", color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         }
                         HorizontalDivider(color = Divider)
                     }
@@ -322,7 +325,7 @@ fun PostDetailScreen(
                         verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text("Yorumlar", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(if (ku) "Şîrove" else "Yorumlar", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                         if (comments.isNotEmpty()) {
                             Text("${comments.size}", color = Muted, fontSize = 13.sp)
                         }
@@ -380,11 +383,11 @@ fun PostDetailScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        "@${replyTo!!.name} yanıtlanıyor",
+                        "@${replyTo!!.name} ${if (ku) "bersiv dide" else "yanıtlanıyor"}",
                         color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Medium,
                     )
                     TextButton(onClick = { replyTo = null }, contentPadding = PaddingValues(0.dp)) {
-                        Text("İptal", color = Muted, fontSize = 12.sp)
+                        Text(if (ku) "Betal bike" else "İptal", color = Muted, fontSize = 12.sp)
                     }
                 }
             }
@@ -403,7 +406,7 @@ fun PostDetailScreen(
                     onValueChange = { inputText = it },
                     placeholder   = {
                         Text(
-                            if (replyTo != null) "@${replyTo!!.name} yanıtla..." else "Yorum yaz...",
+                            if (replyTo != null) "@${replyTo!!.name} ${if (ku) "bersiv bide..." else "yanıtla..."}" else if (ku) "Şîrove binivîse..." else "Yorum yaz...",
                             color = Muted, fontSize = 14.sp,
                         )
                     },
@@ -451,15 +454,15 @@ fun PostDetailScreen(
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             containerColor   = HeftSurface,
-            title  = { Text("Yorumu Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            title  = { Text(if (ku) "Şîrove Jê Bibe" else "Yorumu Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
             text   = { Text(cmt.text.take(80), color = Muted, fontSize = 13.sp) },
             confirmButton = {
                 TextButton(onClick = { deleteComment(cmt); deleteTarget = null }) {
-                    Text("Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                    Text(if (ku) "Jê bibe" else "Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) { Text("İptal", color = Muted) }
+                TextButton(onClick = { deleteTarget = null }) { Text(if (ku) "Betal bike" else "İptal", color = Muted) }
             },
         )
     }
@@ -538,7 +541,7 @@ private fun DetailCommentRow(
             IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                 Icon(
                     Icons.Default.Delete,
-                    contentDescription = "Sil",
+                    contentDescription = if (ku) "Jê bibe" else "Sil",
                     tint     = Color(0xFFEF4444).copy(alpha = 0.8f),
                     modifier = Modifier.size(18.dp),
                 )

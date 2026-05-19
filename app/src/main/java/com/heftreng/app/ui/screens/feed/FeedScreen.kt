@@ -749,7 +749,12 @@ fun PostCard(
                                 contentDescription = null, tint = Primary, modifier = Modifier.size(11.dp),
                             )
                             Text(
-                                when (post.repostType) { "serial" -> "Kitap"; "blog" -> "Blog Yazısı"; "feed" -> "Dîsa Parvekirî"; else -> "Paylaşım" },
+                                when (post.repostType) {
+                                    "serial" -> if (ku) "Pirtûk" else "Kitap"
+                                    "blog"   -> if (ku) "Gotara Blogê" else "Blog Yazısı"
+                                    "feed"   -> if (ku) "Dîsa Parvekirî" else "Paylaşım"
+                                    else     -> if (ku) "Parvekirî" else "Paylaşım"
+                                },
                                 color = Primary, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp,
                             )
                         }

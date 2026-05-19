@@ -261,6 +261,7 @@ fun ProfileScreen(
                                         else      -> navController.navigate(Screen.PostDetail.go(repostId))
                                     }
                                 },
+                                language = language,
                             )
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         }
