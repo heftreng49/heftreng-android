@@ -1,4 +1,4 @@
-package com.heftreng.app.ui.screens
+package com.heftreng.app.ui.screens.notifications
 
 import com.heftreng.app.ui.i18n.Strings
 
