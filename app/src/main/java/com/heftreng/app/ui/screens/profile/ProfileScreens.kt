@@ -174,6 +174,7 @@ fun ProfileScreen(
                             }
                         }
                     },
+                    language = language,
                 )
             }
 
@@ -431,7 +432,9 @@ private fun ProfileHeader(
     onFollowers   : () -> Unit = {},
     onFollowing   : () -> Unit = {},
     onMessage     : () -> Unit,
+    language      : String = "tr",
 ) {
+    val ku = language == "ku"
     Column(modifier = Modifier.fillMaxWidth()) {
         // Kapak fotoğrafı
         Box(
