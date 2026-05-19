@@ -73,9 +73,13 @@ fun ProfileScreen(
 
     val isMe      = uid == "me" || uid == vm.myUid
     val targetUid = if (uid == "me") vm.myUid else uid
+    val ku = language == "ku"
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Gönderiler", "Seriler", "Okuma Listesi")
+    val tabs = if (ku)
+        listOf("Nivîs", "Rêzedîmen", "Lîsteya Xwendinê")
+    else
+        listOf("Gönderiler", "Seriler", "Okuma Listesi")
 
     // Mesaj navigate state — composable dışında navigate yapabilmek için
     var navigateToConv by remember { mutableStateOf<String?>(null) }
@@ -100,7 +104,7 @@ fun ProfileScreen(
             TopAppBar(
                 title = {
                     Text(
-                        user?.let { u -> if (u.username.isNotBlank()) "@${u.username}" else u.displayName.ifBlank { "Profil" } } ?: "Yükleniyor...",
+                        user?.let { u -> if (u.username.isNotBlank()) "@${u.username}" else u.displayName.ifBlank { if (ku) "Profîl" else "Profil" } } ?: if (ku) "Tê barkirin..." else "Yükleniyor...",
                         color = OnBackground, fontWeight = FontWeight.SemiBold,
                     )
                 },
@@ -230,7 +234,7 @@ fun ProfileScreen(
                                         modifier = Modifier.size(44.dp),
                                     )
                                     Spacer(Modifier.height(10.dp))
-                                    Text("Henüz gönderi yok", color = Muted)
+                                    Text(if (ku) "Hîn nivîs tune" else "Henüz gönderi yok", color = Muted)
                                 }
                             }
                         }
@@ -277,7 +281,7 @@ fun ProfileScreen(
                                         modifier = Modifier.size(44.dp),
                                     )
                                     Spacer(Modifier.height(10.dp))
-                                    Text("Henüz seri yok", color = Muted)
+                                    Text(if (ku) "Hîn rêzedîmen tune" else "Henüz seri yok", color = Muted)
                                     if (isMe) {
                                         Spacer(Modifier.height(8.dp))
                                         TextButton(
@@ -318,12 +322,17 @@ fun ProfileScreen(
                                         modifier = Modifier.size(44.dp),
                                     )
                                     Spacer(Modifier.height(10.dp))
-                                    Text("Okuma listesi boş", color = Muted)
+                                    Text(if (ku) "Lîsteya xwendinê vala ye" else "Okuma listesi boş", color = Muted)
                                 }
                             }
                         }
                     } else {
-                        val statuses = listOf(
+                        val statuses = if (ku) listOf(
+                            "okuyorum"         to "Dixwînim",
+                            "okumak_istiyorum" to "Dixwazim Bixwînim",
+                            "okudum"           to "Xwendim",
+                            "biraktim"         to "Berda",
+                        ) else listOf(
                             "okuyorum"         to "Okuyorum",
                             "okumak_istiyorum" to "Okumak İstiyorum",
                             "okudum"           to "Okudum",
@@ -490,7 +499,7 @@ private fun ProfileHeader(
                         shape   = RoundedCornerShape(10.dp),
                         border  = androidx.compose.foundation.BorderStroke(1.dp, Divider),
                         colors  = ButtonDefaults.outlinedButtonColors(contentColor = OnBackground),
-                    ) { Text("Düzenle", fontSize = 13.sp) }
+                    ) { Text(if (ku) "Biguherîne" else "Düzenle", fontSize = 13.sp) }
                 } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         // Mesaj butonu
@@ -512,7 +521,7 @@ private fun ProfileHeader(
                             ),
                         ) {
                             Text(
-                                if (isFollowing) "Takip Ediliyor" else "Takip Et",
+                                if (isFollowing) (if (ku) "Tê Şopandin" else "Takip Ediliyor") else (if (ku) "Bişopîne" else "Takip Et"),
                                 fontSize = 13.sp,
                             )
                         }
@@ -639,7 +648,9 @@ fun StatItem(count: Int, label: String, onClick: (() -> Unit)? = null) {
 fun EditProfileScreen(
     navController: NavController,
     vm           : ProfileViewModel = hiltViewModel(),
+    language     : String           = "tr",
 ) {
+    val ku = language == "ku"
     val user        by vm.user.collectAsState()
     val loading     by vm.loading.collectAsState()
     var displayName by remember(user) { mutableStateOf(user?.displayName ?: "") }
@@ -659,8 +670,8 @@ fun EditProfileScreen(
             vm.updateProfilePhoto(
                 imageUri = it,
                 storage  = storage,
-                onDone   = { scope.launch { snackbarHostState.showSnackbar("Profil fotoğrafı güncellendi ✓") } },
-                onError  = { msg -> scope.launch { snackbarHostState.showSnackbar("Hata: $msg") } },
+                onDone   = { scope.launch { snackbarHostState.showSnackbar(if (ku) "Wêneya profîlê hate nûkirin ✓" else "Profil fotoğrafı güncellendi ✓") } },
+                onError  = { msg -> scope.launch { snackbarHostState.showSnackbar(if (ku) "Çewtî: $msg" else "Hata: $msg") } },
             )
         }
     }
@@ -671,8 +682,8 @@ fun EditProfileScreen(
             vm.updateCoverPhoto(
                 imageUri = it,
                 storage  = storage,
-                onDone   = { scope.launch { snackbarHostState.showSnackbar("Kapak fotoğrafı güncellendi ✓") } },
-                onError  = { msg -> scope.launch { snackbarHostState.showSnackbar("Hata: $msg") } },
+                onDone   = { scope.launch { snackbarHostState.showSnackbar(if (ku) "Wêneya bergê hate nûkirin ✓" else "Kapak fotoğrafı güncellendi ✓") } },
+                onError  = { msg -> scope.launch { snackbarHostState.showSnackbar(if (ku) "Çewtî: $msg" else "Hata: $msg") } },
             )
         }
     }
@@ -687,7 +698,7 @@ fun EditProfileScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "Profili Düzenle",
+                        if (ku) "Profîlê Biguherîne" else "Profili Düzenle",
                         color      = OnBackground,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -726,7 +737,7 @@ fun EditProfileScreen(
                         },
                         enabled = !loading,
                     ) {
-                        Text("Kaydet", color = if (loading) Muted else Amber, fontWeight = FontWeight.Bold)
+                        Text(if (ku) "Tomarkirin" else "Kaydet", color = if (loading) Muted else Amber, fontWeight = FontWeight.Bold)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
@@ -750,7 +761,7 @@ fun EditProfileScreen(
                     shape    = RoundedCornerShape(10.dp),
                 ) {
                     if (loading) CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Amber, strokeWidth = 2.dp)
-                    else Text("📷 Profil Foto", fontSize = 12.sp)
+                    else Text(if (ku) "📷 Wêneya Profîlê" else "📷 Profil Foto", fontSize = 12.sp)
                 }
                 OutlinedButton(
                     onClick  = { if (!loading) coverPicker.launch("image/*") },
@@ -758,7 +769,7 @@ fun EditProfileScreen(
                     shape    = RoundedCornerShape(10.dp),
                 ) {
                     if (loading) CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Amber, strokeWidth = 2.dp)
-                    else Text("🖼 Kapak Foto", fontSize = 12.sp)
+                    else Text(if (ku) "🖼 Wêneya Bergê" else "🖼 Kapak Foto", fontSize = 12.sp)
                 }
             }
 
@@ -794,7 +805,7 @@ fun EditProfileScreen(
             OutlinedTextField(
                 value         = displayName,
                 onValueChange = { displayName = it },
-                label         = { Text("Adın / Nav") },
+                label         = { Text(if (ku) "Navê te / Adın" else "Adın / Nav") },
                 singleLine    = true,
                 modifier      = Modifier.fillMaxWidth(),
                 shape         = RoundedCornerShape(12.dp),

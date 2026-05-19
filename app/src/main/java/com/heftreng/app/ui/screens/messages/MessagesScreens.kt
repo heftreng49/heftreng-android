@@ -63,6 +63,7 @@ fun ConversationsScreen(
     language     : String = "tr",
     vm           : MessagesViewModel = hiltViewModel(),
 ) {
+    val ku = language == "ku"
     val conversations by vm.conversations.collectAsState()
     val loading       by vm.loading.collectAsState()
     var searchQuery   by remember { mutableStateOf("") }
@@ -229,7 +230,7 @@ fun ConversationsScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 // .msgp-conv-name, .msgp-conv-name.unread
                                 Text(
-                                    conv.otherUser?.displayName?.ifBlank { conv.otherUser?.email } ?: "Kullanıcı",
+                                    conv.otherUser?.displayName?.ifBlank { conv.otherUser?.email } ?: if (ku) "Bikarhêner" else "Kullanıcı",
                                     fontWeight = if (unread) FontWeight.ExtraBold else FontWeight.Bold,
                                     color      = OnBackground,
                                     fontSize   = 14.sp,
@@ -289,6 +290,7 @@ fun MessageDetailScreen(
     vm           : MessagesViewModel  = hiltViewModel(),
     presenceVm   : PresenceViewModel  = hiltViewModel(),
 ) {
+    val ku = language == "ku"
     val messages      by vm.messages.collectAsState()
     val otherUser     by vm.otherUser.collectAsState()
     val conversations by vm.conversations.collectAsState()
@@ -523,7 +525,7 @@ fun MessageDetailScreen(
                                     .background(Color(0xFFEF4444).copy(alpha = alpha), CircleShape)
                             )
                             Text(
-                                "Kayıt yapılıyor",
+                                if (ku) "Tê tomarkirin" else "Kayıt yapılıyor",
                                 color     = Color(0xFFEF4444),
                                 fontSize  = 13.sp,
                                 fontWeight = FontWeight.Medium,
@@ -545,7 +547,7 @@ fun MessageDetailScreen(
                                 },
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                             ) {
-                                Text("İptal", color = Muted, fontSize = 12.sp)
+                                Text(if (ku) "Betal bike" else "İptal", color = Muted, fontSize = 12.sp)
                             }
                         }
                     }
@@ -606,7 +608,7 @@ fun MessageDetailScreen(
                             // Süre
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    "Sesli mesaj",
+                                    if (ku) "Dengbêjiya dengî" else "Sesli mesaj",
                                     color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Medium,
                                 )
                                 Text(
@@ -667,7 +669,7 @@ fun MessageDetailScreen(
                         Box(modifier = Modifier.size(3.dp, 32.dp).clip(RoundedCornerShape(2.dp)).background(Primary))
                         Column(modifier = Modifier.weight(1f)) {
                             // .msg-reply-bar-name
-                            Text(if (replyTo?.senderId == vm.uid) "Sen" else otherUser?.displayName ?: "",
+                            Text(if (replyTo?.senderId == vm.uid) if (ku) "Tu" else "Sen" else otherUser?.displayName ?: "",
                                 color = Primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             // .msg-reply-bar-txt
                             Text(replyTo?.text ?: "", color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -847,7 +849,7 @@ fun MessageDetailScreen(
                                             uri         = selectedImage!!,
                                             replyToId   = replyTo?.id ?: "",
                                             replyToText = replyTo?.text ?: "",
-                                            replyToName = if (replyTo?.senderId == vm.uid) "Sen"
+                                            replyToName = if (replyTo?.senderId == vm.uid) if (ku) "Tu" else "Sen"
                                                           else otherUser?.displayName ?: "",
                                         )
                                         selectedImage = null
@@ -859,7 +861,7 @@ fun MessageDetailScreen(
                                             text        = inputText.trim(),
                                             replyToId   = replyTo?.id ?: "",
                                             replyToText = replyTo?.text ?: "",
-                                            replyToName = if (replyTo?.senderId == vm.uid) "Sen"
+                                            replyToName = if (replyTo?.senderId == vm.uid) if (ku) "Tu" else "Sen"
                                                           else otherUser?.displayName ?: "",
                                         )
                                         presenceVm.setTyping(convId, false)

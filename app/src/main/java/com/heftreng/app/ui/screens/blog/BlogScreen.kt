@@ -35,7 +35,9 @@ import java.util.*
 fun BlogScreen(
     navController : NavController,
     vm            : BlogViewModel,
+    language      : String = "tr",
 ) {
+    val ku = language == "ku"
     val state    by vm.state.collectAsState()
     var selLabel by remember { mutableStateOf<String?>(null) }
 
@@ -67,7 +69,7 @@ fun BlogScreen(
                         FilterChip(
                             selected = selLabel == null,
                             onClick  = { selLabel = null; vm.filterByLabel(null) },
-                            label    = { Text("Hemû", fontSize = 12.sp) },
+                            label    = { Text(if (ku) "Hemû" else "Tümü", fontSize = 12.sp) },
                             colors   = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = Amber,
                                 selectedLabelColor     = Color.Black,
@@ -93,8 +95,9 @@ fun BlogScreen(
             when {
                 state.loading && state.posts.isEmpty() -> BlogShimmerList()
                 state.error != null && state.posts.isEmpty() -> BlogError(
-                    message = state.error ?: "",
-                    onRetry = { vm.loadPosts(refresh = true) },
+                    message  = state.error ?: "",
+                    onRetry  = { vm.loadPosts(refresh = true) },
+                    language = language,
                 )
                 else -> {
                     LazyColumn(
@@ -232,7 +235,7 @@ fun BlogPostCard(post: BlogPost, onClick: () -> Unit) {
 
 // ── Hata ─────────────────────────────────────────────────────────────────────
 @Composable
-private fun BlogError(message: String, onRetry: () -> Unit) {
+private fun BlogError(message: String, onRetry: () -> Unit, language: String = "tr") {
     Column(
         modifier              = Modifier.fillMaxSize().padding(32.dp),
         horizontalAlignment   = Alignment.CenterHorizontally,
@@ -245,7 +248,7 @@ private fun BlogError(message: String, onRetry: () -> Unit) {
         Button(
             onClick = onRetry,
             colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
-        ) { Text("Dîsa biceribîne") }
+        ) { Text(if (language == "ku") "Dîsa biceribîne" else "Tekrar Dene") }
     }
 }
 

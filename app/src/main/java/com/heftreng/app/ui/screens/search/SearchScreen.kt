@@ -167,7 +167,7 @@ fun SearchScreen(
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Icon(Icons.Outlined.SearchOff, null, tint = Muted, modifier = Modifier.size(40.dp))
                                     Spacer(Modifier.height(8.dp))
-                                    Text("Sonuç bulunamadı", color = Muted)
+                                    Text(if (ku) "Encam nehat dîtin" else "Sonuç bulunamadı", color = Muted)
                                 }
                             }
                         }

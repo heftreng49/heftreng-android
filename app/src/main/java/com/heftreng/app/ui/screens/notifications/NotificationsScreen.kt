@@ -1,7 +1,5 @@
 package com.heftreng.app.ui.screens.notifications
 
-import com.heftreng.app.ui.i18n.Strings
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -34,9 +32,9 @@ import com.heftreng.app.viewmodel.NotificationsViewModel
 fun NotificationsScreen(
     navController: NavController,
     vm: NotificationsViewModel = hiltViewModel(),
-    settingsVm: com.heftreng.app.viewmodel.SettingsViewModel = hiltViewModel(),
+    language: String = "tr",
 ) {
-    val language      by settingsVm.language.collectAsState()
+    val ku = language == "ku"
     val notifications by vm.notifications.collectAsState()
     val loading       by vm.loading.collectAsState()
     val unreadCount   = notifications.count { !it.read }
@@ -47,20 +45,29 @@ fun NotificationsScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Agahdarî", fontWeight = FontWeight.SemiBold, color = OnBackground)
+                        Text(
+                            if (ku) "Agahdarî" else "Bildirimler",
+                            fontWeight = FontWeight.SemiBold, color = OnBackground
+                        )
                         if (unreadCount > 0)
-                            Text("$unreadCount okunmamış", color = Muted, fontSize = 11.sp)
+                            Text(
+                                if (ku) "$unreadCount nexwendî" else "$unreadCount okunmamış",
+                                color = Muted, fontSize = 11.sp
+                            )
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = OnBackground)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = if (ku) "Vegere" else "Geri", tint = OnBackground)
                     }
                 },
                 actions = {
                     if (unreadCount > 0) {
                         TextButton(onClick = { vm.markAllRead() }) {
-                            Text("Tümünü oku", color = Amber, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (ku) "Hemû bixwîne" else "Tümünü oku",
+                                color = Amber, fontSize = 13.sp, fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 },
@@ -79,8 +86,14 @@ fun NotificationsScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.Notifications, contentDescription = null, tint = Muted, modifier = Modifier.size(52.dp))
                         Spacer(Modifier.height(12.dp))
-                        Text(Strings.noNotif(language), color = Muted, fontSize = 15.sp)
-                        Text("Agahdarî tune", color = Muted, fontSize = 12.sp)
+                        Text(
+                            if (ku) "Agahdarî tune" else "Henüz bildirim yok",
+                            color = Muted, fontSize = 15.sp
+                        )
+                        Text(
+                            if (ku) "Agahdariyên nû dê li vir xuya bikin" else "Yeni bildirimler burada görünecek",
+                            color = Muted, fontSize = 12.sp
+                        )
                     }
                 }
             }
@@ -91,44 +104,34 @@ fun NotificationsScreen(
                 ) {
                     items(notifications, key = { it.id }) { notif ->
                         NotifItem(
-                            notif   = notif,
-                            onClick = {
+                            notif    = notif,
+                            language = language,
+                            onClick  = {
                                 vm.markRead(notif.id)
-                                // Bildirim tipine göre yönlendir
                                 when (notif.type) {
                                     "follow" -> navController.navigate(Screen.Profile.go(notif.fromUid))
                                     "like", "cmt", "comment", "repost",
                                     "chapter", "post_approved", "post_rejected" -> {
                                         val pid = notif.postId
                                         when {
-                                            // postId direkt varsa
                                             !pid.isNullOrBlank() ->
                                                 navController.navigate(Screen.PostDetail.go(pid))
-                                            // url'den postId çıkar: /post/ABC123 veya ?pid=ABC123
                                             notif.url.isNotBlank() -> {
-                                                // DÜZELTME: Regex ifadeleri Raw String (""") içine alındı
                                                 val fromUrl = Regex("""post/([\w-]+)""").find(notif.url)?.groupValues?.get(1)
                                                     ?: Regex("""[?&]pid=([\w-]+)""").find(notif.url)?.groupValues?.get(1)
                                                     ?: Regex("""[?&]feedId=([\w-]+)""").find(notif.url)?.groupValues?.get(1)
-                                                
                                                 if (!fromUrl.isNullOrBlank())
                                                     navController.navigate(Screen.PostDetail.go(fromUrl))
                                             }
                                         }
                                     }
-                                    // Seri bildirimi
                                     "serial" -> notif.url.isNotBlank().let {
-                                        // DÜZELTME: Regex ifadesi Raw String (""") içine alındı
                                         val sid = Regex("""serial/([\w-]+)""").find(notif.url)?.groupValues?.get(1)
                                         if (!sid.isNullOrBlank()) navController.navigate("serial/$sid")
                                     }
-                                    // Bilinmeyen tür ama fromUid varsa profile git
-                                    else -> if (notif.fromUid.isNotBlank())
-                                        navController.navigate(Screen.Profile.go(notif.fromUid))
                                 }
-                            },
+                            }
                         )
-                        HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     }
                 }
             }
@@ -137,7 +140,8 @@ fun NotificationsScreen(
 }
 
 @Composable
-fun NotifItem(notif: Notification, language: String = "tr", onClick: () -> Unit = {}) {
+fun NotifItem(notif: Notification, onClick: () -> Unit = {}, language: String = "tr") {
+    val ku = language == "ku"
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -146,7 +150,6 @@ fun NotifItem(notif: Notification, language: String = "tr", onClick: () -> Unit 
             .padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Avatar + badge
         Box {
             AsyncImage(
                 model              = notif.fromPhoto.ifEmpty { null },
@@ -178,12 +181,11 @@ fun NotifItem(notif: Notification, language: String = "tr", onClick: () -> Unit 
                 Text(notif.fromName, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
             }
             Text(
-                notif.message.ifBlank { notifDefaultMessage(notif.type, language) },
+                notif.message.ifBlank { notifDefaultMessage(notif.type, ku) },
                 color = OnSurface, fontSize = 13.sp, lineHeight = 18.sp,
             )
         }
 
-        // Okunmamış nokta
         if (!notif.read) {
             Spacer(Modifier.width(8.dp))
             Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Amber))
@@ -206,10 +208,10 @@ fun notifIconColor(type: String) = when (type) {
     else      -> androidx.compose.ui.graphics.Color(0xFFF59E0B)
 }
 
-fun notifDefaultMessage(type: String, language: String = "tr") = when (type) {
-    "like"    -> if (language == "ku") "nivîsa we hez kir"       else "gönderinizi beğendi"
-    "comment" -> if (language == "ku") "li nivîsa we şîrove kir" else "gönderinize yorum yaptı"
-    "follow"  -> if (language == "ku") "dest bi şopîna we kir"   else "sizi takip etmeye başladı"
-    "repost"  -> if (language == "ku") "nivîsa we parve kir"     else "gönderinizi paylaştı"
-    else      -> if (language == "ku") "agahiyeke nû"             else "yeni bir bildirim"
+fun notifDefaultMessage(type: String, ku: Boolean = false) = when (type) {
+    "like"    -> if (ku) "nivîsa we xweş dît"          else "gönderinizi beğendi"
+    "comment" -> if (ku) "li ser nivîsa we şîrove kir" else "gönderinize yorum yaptı"
+    "follow"  -> if (ku) "dest bi şopandina we kir"    else "sizi takip etmeye başladı"
+    "repost"  -> if (ku) "nivîsa we parve kir"         else "gönderinizi paylaştı"
+    else      -> if (ku) "agahdariya nû"                else "yeni bir bildirim"
 }

@@ -229,6 +229,7 @@ fun FeedScreen(
                                 else -> navController.navigate(Screen.PostDetail.go(repostId))
                             }
                         },
+                        language = language,
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     // ── AdMob Banner — her bannerPos. kartta bir ─────────
@@ -565,7 +566,9 @@ fun PostCard(
     onTapAuthor  : ((String) -> Unit)? = null,
     onTapBook    : ((String) -> Unit)? = null,
     onTapRepost  : ((postId: String, type: String) -> Unit)? = null,
+    language     : String = "tr",
 ) {
+    val ku = language == "ku"
     val myUid            = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     val isOwn            = post.uid == myUid
     var menuExpanded     by remember { mutableStateOf(false) }
@@ -612,7 +615,7 @@ fun PostCard(
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(post.displayName.ifBlank { "Bênas" }, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
+                    Text(post.displayName.ifBlank { if (ku) "Bênas" else "Anonim" }, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
                             if (post.username.isNotBlank()) "@${post.username}" else "—",
@@ -620,14 +623,14 @@ fun PostCard(
                         )
                         if (post.ts != null) {
                             Text("·", color = Muted, fontSize = 12.sp)
-                            Text(postTimeAgo(post.ts.seconds), color = Muted, fontSize = 12.sp)
+                            Text(postTimeAgo(post.ts.seconds, ku), color = Muted, fontSize = 12.sp)
                         }
                     }
                 }
             }
             Box {
                 IconButton(onClick = { menuExpanded = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Seçenekler", tint = Muted)
+                    Icon(Icons.Default.MoreVert, contentDescription = if (ku) "Vebijêrk" else "Seçenekler", tint = Muted)
                 }
                 DropdownMenu(
                     expanded         = menuExpanded,
@@ -636,27 +639,27 @@ fun PostCard(
                 ) {
                     if (isOwn) {
                         DropdownMenuItem(
-                            text        = { Text("Düzenle", color = OnBackground) },
+                            text        = { Text(if (ku) "Biguherîne" else "Düzenle", color = OnBackground) },
                             leadingIcon = { Icon(Icons.Default.Create, null, tint = Muted) },
                             onClick     = { menuExpanded = false; showEditDialog = true },
                         )
                         DropdownMenuItem(
-                            text        = { Text("Sil", color = Color(0xFFEF4444)) },
+                            text        = { Text(if (ku) "Jê bibe" else "Sil", color = Color(0xFFEF4444)) },
                             leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) },
                             onClick     = { menuExpanded = false; showDeleteDialog = true },
                         )
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     } else {
                         DropdownMenuItem(
-                            text        = { Text("Yeniden Paylaş", color = OnBackground) },
+                            text        = { Text(if (ku) "Ji Nû Ve Parve Bike" else "Yeniden Paylaş", color = OnBackground) },
                             leadingIcon = { Icon(Icons.Default.Repeat, null, tint = Muted) },
                             onClick     = { menuExpanded = false; onShare() },
                         )
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     }
-                    // Dış paylaşım — hem kendi hem başkası için
+                    // Dış paylaşım
                     DropdownMenuItem(
-                        text        = { Text("WhatsApp'ta Paylaş", color = OnBackground) },
+                        text        = { Text(if (ku) "Di WhatsApp'ê de Parve Bike" else "WhatsApp'ta Paylaş", color = OnBackground) },
                         leadingIcon = {
                             Icon(Icons.Default.Share, null,
                                 tint = Color(0xFF25D366), modifier = Modifier.size(20.dp))
@@ -664,7 +667,7 @@ fun PostCard(
                         onClick     = { menuExpanded = false; shareTarget = ShareTarget.WHATSAPP },
                     )
                     DropdownMenuItem(
-                        text        = { Text("Instagram'da Paylaş", color = OnBackground) },
+                        text        = { Text(if (ku) "Di Instagram'ê de Parve Bike" else "Instagram'da Paylaş", color = OnBackground) },
                         leadingIcon = {
                             Icon(Icons.Default.Share, null,
                                 tint = Color(0xFFE1306C), modifier = Modifier.size(20.dp))
@@ -672,7 +675,7 @@ fun PostCard(
                         onClick     = { menuExpanded = false; shareTarget = ShareTarget.INSTAGRAM },
                     )
                     DropdownMenuItem(
-                        text        = { Text("Diğer Uygulamalar", color = OnBackground) },
+                        text        = { Text(if (ku) "Sepanên Din" else "Diğer Uygulamalar", color = OnBackground) },
                         leadingIcon = { Icon(Icons.Default.IosShare, null, tint = Muted) },
                         onClick     = { menuExpanded = false; shareTarget = ShareTarget.ANY },
                     )
@@ -771,7 +774,7 @@ fun PostCard(
                         // İçerik
                         if (post.repostTitle.isNotBlank())  Text(post.repostTitle,  color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
                         if (post.serialTitle.isNotBlank())  Text(post.serialTitle,  color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
-                        if (post.chapterTitle.isNotBlank()) Text("Bölüm ${post.chapterOrder}: ${post.chapterTitle}", color = Muted, fontSize = 12.sp)
+                        if (post.chapterTitle.isNotBlank()) Text("${if (ku) "Beş" else "Bölüm"} ${post.chapterOrder}: ${post.chapterTitle}", color = Muted, fontSize = 12.sp)
                         if (post.repostText.isNotBlank())   Text(post.repostText,   color = OnSurface,    fontSize = 13.sp, maxLines = 4, lineHeight = 19.sp)
                         val rImg = listOf(post.repostImg, post.serialCover).firstOrNull { it.isNotBlank() } ?: ""
                         if (rImg.isNotBlank()) {
@@ -851,7 +854,7 @@ fun PostCard(
                         onClick     = { shareMenuExpanded = false; shareTarget = ShareTarget.INSTAGRAM },
                     )
                     DropdownMenuItem(
-                        text        = { Text("Diğer", color = OnBackground, fontSize = 13.sp) },
+                        text        = { Text(if (ku) "Yên Din" else "Diğer", color = OnBackground, fontSize = 13.sp) },
                         leadingIcon = { Icon(Icons.Default.IosShare, null, tint = Muted, modifier = Modifier.size(18.dp)) },
                         onClick     = { shareMenuExpanded = false; shareTarget = ShareTarget.ANY },
                     )
@@ -861,7 +864,7 @@ fun PostCard(
             IconButton(onClick = onSave) {
                 Icon(
                     if (post.isSavedByMe) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                    contentDescription = "Kaydet",
+                    contentDescription = if (ku) "Tomarkirin" else "Kaydet",
                     tint               = if (post.isSavedByMe) Amber else Muted,
                     modifier           = Modifier.size(20.dp),
                 )
@@ -882,6 +885,7 @@ fun PostCard(
     if (showEditDialog) {
         EditPostDialog(
             currentText = post.text,
+            language    = language,
             onDismiss   = { showEditDialog = false },
             onSave      = { newText -> onEdit?.invoke(newText); showEditDialog = false },
         )
@@ -892,16 +896,16 @@ fun PostCard(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             containerColor   = HeftSurface,
-            title   = { Text("Gönderiyi sil?", color = OnBackground, fontWeight = FontWeight.SemiBold) },
-            text    = { Text("Bu gönderi kalıcı olarak silinecek.", color = Muted, fontSize = 14.sp) },
+            title   = { Text(if (ku) "Nivîs jê bibe?" else "Gönderiyi sil?", color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            text    = { Text(if (ku) "Ev nivîs dê ji holê rabe." else "Bu gönderi kalıcı olarak silinecek.", color = Muted, fontSize = 14.sp) },
             confirmButton = {
                 TextButton(onClick = { onDelete?.invoke(); showDeleteDialog = false }) {
-                    Text("Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                    Text(if (ku) "Jê bibe" else "Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("İptal", color = Muted)
+                    Text(if (ku) "Betal bike" else "İptal", color = Muted)
                 }
             },
         )
@@ -911,12 +915,13 @@ fun PostCard(
 // ── EditPostDialog ────────────────────────────────────────────────────────────
 
 @Composable
-fun EditPostDialog(currentText: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+fun EditPostDialog(currentText: String, onDismiss: () -> Unit, onSave: (String) -> Unit, language: String = "tr") {
+    val ku = language == "ku"
     var text by remember { mutableStateOf(currentText) }
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = HeftSurface), modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(20.dp)) {
-                Text("Gönderiyi Düzenle", fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 16.sp)
+                Text(if (ku) "Nivîsê Biguherîne" else "Gönderiyi Düzenle", fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 16.sp)
                 Spacer(Modifier.height(14.dp))
                 OutlinedTextField(
                     value         = text,
@@ -934,13 +939,13 @@ fun EditPostDialog(currentText: String, onDismiss: () -> Unit, onSave: (String) 
                 )
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                    TextButton(onClick = onDismiss) { Text("İptal", color = Muted) }
+                    TextButton(onClick = onDismiss) { Text(if (ku) "Betal bike" else "İptal", color = Muted) }
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = { if (text.isNotBlank()) onSave(text) },
                         colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
                         shape   = RoundedCornerShape(10.dp),
-                    ) { Text("Kaydet", fontWeight = FontWeight.Bold) }
+                    ) { Text(if (ku) "Tomarkirin" else "Kaydet", fontWeight = FontWeight.Bold) }
                 }
             }
         }
@@ -951,7 +956,8 @@ fun EditPostDialog(currentText: String, onDismiss: () -> Unit, onSave: (String) 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel) {
+fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel, language: String = "tr") {
+    val ku = language == "ku"
     val comments    by vm.comments.collectAsState()
     var commentText by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<Comment?>(null) }
@@ -967,7 +973,7 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel) {
                 .navigationBarsPadding()
                 .imePadding(),
         ) {
-            Text("Yorumlar", fontWeight = FontWeight.SemiBold, color = OnBackground, modifier = Modifier.padding(vertical = 8.dp))
+            Text(if (ku) "Şîrove" else "Yorumlar", fontWeight = FontWeight.SemiBold, color = OnBackground, modifier = Modifier.padding(vertical = 8.dp))
             HorizontalDivider(color = Divider)
             LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(comments, key = { it.id }) { cmt ->
@@ -991,7 +997,7 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel) {
                             ) {
                                 Icon(
                                     Icons.Default.Delete,
-                                    contentDescription = "Sil",
+                                    contentDescription = if (ku) "Jê bibe" else "Sil",
                                     tint     = Color(0xFFEF4444).copy(alpha = 0.7f),
                                     modifier = Modifier.size(16.dp),
                                 )
@@ -1004,7 +1010,7 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel) {
             Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = commentText, onValueChange = { commentText = it },
-                    placeholder = { Text("Yorum yaz...", color = Muted) },
+                    placeholder = { Text(if (ku) "Şîrove binivîse..." else "Yorum yaz...", color = Muted) },
                     modifier = Modifier.weight(1f), shape = RoundedCornerShape(24.dp), singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Amber, unfocusedBorderColor = Divider,
@@ -1023,21 +1029,20 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel) {
         }
     }
 
-    // Silme onay dialogu
     deleteTarget?.let { cmt ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             containerColor   = HeftSurface,
-            title  = { Text("Yorumu Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            title  = { Text(if (ku) "Şîrove Jê Bibe" else "Yorumu Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
             text   = { Text(cmt.text.take(80), color = Muted, fontSize = 13.sp) },
             confirmButton = {
                 TextButton(onClick = { vm.deleteComment(post.id, cmt.id); deleteTarget = null }) {
-                    Text("Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                    Text(if (ku) "Jê bibe" else "Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { deleteTarget = null }) {
-                    Text("İptal", color = Muted)
+                    Text(if (ku) "Betal bike" else "İptal", color = Muted)
                 }
             },
         )
@@ -1045,16 +1050,16 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel) {
 }
 
 // ── Tarih helper ─────────────────────────────────────────────────────────────
-fun postTimeAgo(seconds: Long): String {
+fun postTimeAgo(seconds: Long, ku: Boolean = false): String {
     val now  = System.currentTimeMillis() / 1000L
     val diff = now - seconds
     return when {
-        diff < 60          -> "az önce"
-        diff < 3600        -> "${diff / 60}dk"
-        diff < 86400       -> "${diff / 3600}sa"
-        diff < 86400 * 7   -> "${diff / 86400}g"
-        diff < 86400 * 30  -> "${diff / 86400 / 7}hf"
-        diff < 86400 * 365 -> "${diff / 86400 / 30}ay"
-        else               -> "${diff / 86400 / 365}y"
+        diff < 60          -> if (ku) "niha" else "az önce"
+        diff < 3600        -> if (ku) "${diff / 60}d"   else "${diff / 60}dk"
+        diff < 86400       -> if (ku) "${diff / 3600}s" else "${diff / 3600}sa"
+        diff < 86400 * 7   -> if (ku) "${diff / 86400}r" else "${diff / 86400}g"
+        diff < 86400 * 30  -> if (ku) "${diff / 86400 / 7}hf" else "${diff / 86400 / 7}hf"
+        diff < 86400 * 365 -> if (ku) "${diff / 86400 / 30}m" else "${diff / 86400 / 30}ay"
+        else               -> if (ku) "${diff / 86400 / 365}s" else "${diff / 86400 / 365}y"
     }
 }

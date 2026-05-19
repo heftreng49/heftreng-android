@@ -26,22 +26,26 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
+import com.heftreng.app.viewmodel.SettingsViewModel
 
 @Composable
 fun AuthScreen(
     onAuthSuccess: () -> Unit,
-    vm: AuthViewModel = hiltViewModel(),
+    vm           : AuthViewModel     = hiltViewModel(),
+    settingsVm   : SettingsViewModel = hiltViewModel(),
 ) {
-    val context = LocalContext.current
+    val context     = LocalContext.current
     val currentUser by vm.currentUser.collectAsState()
-    val loading by vm.loading.collectAsState()
-    val error by vm.error.collectAsState()
+    val loading     by vm.loading.collectAsState()
+    val error       by vm.error.collectAsState()
+    val language    by settingsVm.language.collectAsState()
+    val ku = language == "ku"
 
-    var isRegister by remember { mutableStateOf(false) }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var displayName by remember { mutableStateOf("") }
-    var showPassword by remember { mutableStateOf(false) }
+    var isRegister      by remember { mutableStateOf(false) }
+    var email           by remember { mutableStateOf("") }
+    var password        by remember { mutableStateOf("") }
+    var displayName     by remember { mutableStateOf("") }
+    var showPassword    by remember { mutableStateOf(false) }
     var showForgotDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentUser) {
@@ -76,76 +80,102 @@ fun AuthScreen(
         ) {
             // Logo
             Text(
-                text = "heftreng",
-                fontSize = 40.sp,
-                fontWeight = FontWeight.Bold,
-                color = Amber,
+                text         = "heftreng",
+                fontSize     = 40.sp,
+                fontWeight   = FontWeight.Bold,
+                color        = Amber,
                 letterSpacing = (-1).sp,
             )
             Text(
-                text = if (isRegister) "Hesap oluştur" else "Hoş geldin",
+                text     = if (isRegister)
+                    (if (ku) "Hesabek nû çêke" else "Hesap oluştur")
+                else
+                    (if (ku) "Xêr hatî" else "Hoş geldin"),
                 fontSize = 14.sp,
-                color = Muted,
+                color    = Muted,
             )
 
             Spacer(Modifier.height(8.dp))
 
-            // Google Sign-In
+            // Dil seçimi — giriş ekranında da görünür
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("tr" to "Türkçe", "ku" to "Kurdî").forEach { (code, label) ->
+                    val selected = language == code
+                    OutlinedButton(
+                        onClick  = { settingsVm.setLanguage(code) },
+                        modifier = Modifier.weight(1f),
+                        shape    = RoundedCornerShape(10.dp),
+                        colors   = ButtonDefaults.outlinedButtonColors(
+                            containerColor = if (selected) Amber else Color.Transparent,
+                            contentColor   = if (selected) Color.Black else Muted,
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (selected) Amber else Divider,
+                        ),
+                    ) { Text(label, fontSize = 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) }
+                }
+            }
+
+            // Google ile giriş
             OutlinedButton(
                 onClick = {
                     val client = vm.getGoogleSignInClient(context)
                     googleLauncher.launch(client.signInIntent)
                 },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = OnBackground),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Divider),
+                shape    = RoundedCornerShape(12.dp),
+                colors   = ButtonDefaults.outlinedButtonColors(contentColor = OnBackground),
+                border   = androidx.compose.foundation.BorderStroke(1.dp, Divider),
             ) {
-                Text("Google ile devam et", modifier = Modifier.padding(vertical = 4.dp))
+                Text(
+                    if (ku) "Bi Google re berdewam bike" else "Google ile devam et",
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier          = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 HorizontalDivider(modifier = Modifier.weight(1f), color = Divider)
-                Text("  ya da  ", color = Muted, fontSize = 12.sp)
+                Text(if (ku) "  an jî  " else "  ya da  ", color = Muted, fontSize = 12.sp)
                 HorizontalDivider(modifier = Modifier.weight(1f), color = Divider)
             }
 
-            // E-posta alanları
+            // Ad alanı (sadece kayıt modunda)
             AnimatedVisibility(visible = isRegister) {
                 OutlinedTextField(
-                    value = displayName,
+                    value         = displayName,
                     onValueChange = { displayName = it },
-                    label = { Text("Adın") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = heftrangTextFieldColors(),
-                    singleLine = true,
+                    label         = { Text(if (ku) "Navê te" else "Adın") },
+                    modifier      = Modifier.fillMaxWidth(),
+                    shape         = RoundedCornerShape(12.dp),
+                    colors        = heftrangTextFieldColors(),
+                    singleLine    = true,
                 )
             }
 
             OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("E-posta") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = heftrangTextFieldColors(),
+                value           = email,
+                onValueChange   = { email = it },
+                label           = { Text("E-posta") },
+                modifier        = Modifier.fillMaxWidth(),
+                shape           = RoundedCornerShape(12.dp),
+                colors          = heftrangTextFieldColors(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                singleLine = true,
+                singleLine      = true,
             )
 
             OutlinedTextField(
-                value = password,
+                value         = password,
                 onValueChange = { password = it },
-                label = { Text("Şifre") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = heftrangTextFieldColors(),
+                label         = { Text(if (ku) "Şîfre" else "Şifre") },
+                modifier      = Modifier.fillMaxWidth(),
+                shape         = RoundedCornerShape(12.dp),
+                colors        = heftrangTextFieldColors(),
                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
+                trailingIcon  = {
                     IconButton(onClick = { showPassword = !showPassword }) {
                         Icon(
                             if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
@@ -157,14 +187,17 @@ fun AuthScreen(
                 singleLine = true,
             )
 
-            // Şifremi unuttum — sadece giriş modunda göster
+            // Şifremi unuttum
             if (!isRegister) {
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                     TextButton(
-                        onClick = { showForgotDialog = true },
+                        onClick        = { showForgotDialog = true },
                         contentPadding = PaddingValues(0.dp),
                     ) {
-                        Text("Şifremi unuttum", color = Amber, fontSize = 12.sp)
+                        Text(
+                            if (ku) "Şîfreya xwe ji bîr kir" else "Şifremi unuttum",
+                            color = Amber, fontSize = 12.sp,
+                        )
                     }
                 }
             }
@@ -180,8 +213,8 @@ fun AuthScreen(
                     else vm.signInWithEmail(email, password)
                 },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
+                shape    = RoundedCornerShape(12.dp),
+                colors   = ButtonDefaults.buttonColors(
                     containerColor = Amber,
                     contentColor   = Color.Black,
                 ),
@@ -189,36 +222,39 @@ fun AuthScreen(
             ) {
                 if (loading) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = Color.Black,
+                        modifier    = Modifier.size(20.dp),
+                        color       = Color.Black,
                         strokeWidth = 2.dp,
                     )
                 } else {
                     Text(
-                        if (isRegister) "Kayıt ol" else "Giriş yap",
+                        if (isRegister) (if (ku) "Qeyd bibe" else "Kayıt ol")
+                        else (if (ku) "Têkeve" else "Giriş yap"),
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(vertical = 4.dp),
+                        modifier   = Modifier.padding(vertical = 4.dp),
                     )
                 }
             }
 
             TextButton(onClick = { isRegister = !isRegister }) {
                 Text(
-                    if (isRegister) "Zaten hesabın var mı? Giriş yap"
-                    else "Hesabın yok mu? Kayıt ol",
-                    color = Amber,
+                    if (isRegister)
+                        (if (ku) "Hesabê te heye? Têkeve" else "Zaten hesabın var mı? Giriş yap")
+                    else
+                        (if (ku) "Hesabê te tune? Qeyd bibe" else "Hesabın yok mu? Kayıt ol"),
+                    color    = Amber,
                     fontSize = 13.sp,
                 )
             }
         }
     }
 
-    // ── Şifremi Unuttum Dialog ────────────────────────────────────────────────
     if (showForgotDialog) {
         ForgotPasswordDialog(
             prefillEmail = email,
             onDismiss    = { showForgotDialog = false },
             vm           = vm,
+            ku           = ku,
         )
     }
 }
@@ -228,6 +264,7 @@ private fun ForgotPasswordDialog(
     prefillEmail: String,
     onDismiss   : () -> Unit,
     vm          : AuthViewModel,
+    ku          : Boolean = false,
 ) {
     var resetEmail by remember { mutableStateOf(prefillEmail) }
     var error      by remember { mutableStateOf<String?>(null) }
@@ -239,7 +276,7 @@ private fun ForgotPasswordDialog(
         containerColor   = HeftSurface,
         title = {
             Text(
-                "Şifremi Unuttum",
+                if (ku) "Şîreya Xwe Ji Bîr Kir" else "Şifremi Unuttum",
                 color      = OnBackground,
                 fontWeight = FontWeight.Bold,
             )
@@ -249,7 +286,8 @@ private fun ForgotPasswordDialog(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("✅", fontSize = 32.sp)
                     Text(
-                        "Şifre sıfırlama bağlantısı gönderildi. E-posta kutunuzu kontrol edin.",
+                        if (ku) "Lînka sifirkirina şîfreyê hate şandin. E-postaya xwe kontrol bike."
+                        else "Şifre sıfırlama bağlantısı gönderildi. E-posta kutunuzu kontrol edin.",
                         color    = OnBackground,
                         fontSize = 14.sp,
                     )
@@ -257,7 +295,8 @@ private fun ForgotPasswordDialog(
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "Kayıtlı e-posta adresinizi girin, şifre sıfırlama bağlantısı göndereceğiz.",
+                        if (ku) "E-postaya qeydkirî binivîse, em lînka sifirkirinê bişînin."
+                        else "Kayıtlı e-posta adresinizi girin, şifre sıfırlama bağlantısı göndereceğiz.",
                         color    = Muted,
                         fontSize = 13.sp,
                     )
@@ -300,25 +339,21 @@ private fun ForgotPasswordDialog(
                     enabled = !loading,
                 ) {
                     if (loading) {
-                        CircularProgressIndicator(
-                            modifier    = Modifier.size(16.dp),
-                            color       = Amber,
-                            strokeWidth = 2.dp,
-                        )
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
                     } else {
-                        Text("Gönder", color = Amber, fontWeight = FontWeight.Bold)
+                        Text(if (ku) "Bişîne" else "Gönder", color = Amber, fontWeight = FontWeight.Bold)
                     }
                 }
             } else {
                 TextButton(onClick = onDismiss) {
-                    Text("Tamam", color = Amber, fontWeight = FontWeight.Bold)
+                    Text(if (ku) "Temam" else "Tamam", color = Amber, fontWeight = FontWeight.Bold)
                 }
             }
         },
         dismissButton = {
             if (!success) {
                 TextButton(onClick = { if (!loading) onDismiss() }) {
-                    Text("İptal", color = Muted)
+                    Text(if (ku) "Betal bike" else "İptal", color = Muted)
                 }
             }
         },
@@ -327,13 +362,13 @@ private fun ForgotPasswordDialog(
 
 @Composable
 fun heftrangTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor   = Amber,
-    unfocusedBorderColor = Divider,
-    focusedLabelColor    = Amber,
-    unfocusedLabelColor  = Muted,
-    cursorColor          = Amber,
-    focusedTextColor     = OnBackground,
-    unfocusedTextColor   = OnBackground,
+    focusedBorderColor      = Amber,
+    unfocusedBorderColor    = Divider,
+    focusedLabelColor       = Amber,
+    unfocusedLabelColor     = Muted,
+    cursorColor             = Amber,
+    focusedTextColor        = OnBackground,
+    unfocusedTextColor      = OnBackground,
     unfocusedContainerColor = HeftSurface,
     focusedContainerColor   = HeftSurface,
 )
