@@ -1,6 +1,6 @@
 package com.heftreng.app.ui.screens
 
-import com.heftreng.app.ui.i18n.Strings.notifications
+import com.heftreng.app.ui.i18n.Strings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -137,7 +137,7 @@ fun NotificationsScreen(
 }
 
 @Composable
-fun NotifItem(notif: Notification, onClick: () -> Unit = {}) {
+fun NotifItem(notif: Notification, language: String = "tr", onClick: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
