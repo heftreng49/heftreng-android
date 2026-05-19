@@ -363,6 +363,7 @@ fun PostDetailScreen(
                         canDelete = canDelete,
                         onDelete  = { deleteTarget = cmt },
                         onReply   = { replyTo = cmt; openKeyboard = true },
+                        language  = language,
                     )
                     HorizontalDivider(
                         color     = Divider.copy(alpha = 0.4f),
@@ -493,7 +494,9 @@ private fun DetailCommentRow(
     canDelete : Boolean,
     onDelete  : () -> Unit,
     onReply   : () -> Unit,
+    language  : String = "tr",
 ) {
+    val ku = language == "ku"
     Row(
         modifier          = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.Top,
@@ -534,7 +537,7 @@ private fun DetailCommentRow(
                         Text("${cmt.likes}", color = Muted, fontSize = 11.sp)
                     }
                 }
-                Text("Yanıtla", color = Muted, fontSize = 11.sp, modifier = Modifier.clickable { onReply() })
+                Text(if (ku) "Bersiv bide" else "Yanıtla", color = Muted, fontSize = 11.sp, modifier = Modifier.clickable { onReply() })
             }
         }
         if (canDelete) {
