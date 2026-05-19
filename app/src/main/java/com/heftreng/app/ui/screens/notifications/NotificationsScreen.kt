@@ -1,4 +1,6 @@
-package com.heftreng.app.ui.screens.notifications
+package com.heftreng.app.ui.screens
+
+import com.heftreng.app.ui.i18n.Strings.notifications
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,7 +34,9 @@ import com.heftreng.app.viewmodel.NotificationsViewModel
 fun NotificationsScreen(
     navController: NavController,
     vm: NotificationsViewModel = hiltViewModel(),
+    settingsVm: com.heftreng.app.viewmodel.SettingsViewModel = hiltViewModel(),
 ) {
+    val language      by settingsVm.language.collectAsState()
     val notifications by vm.notifications.collectAsState()
     val loading       by vm.loading.collectAsState()
     val unreadCount   = notifications.count { !it.read }
@@ -75,7 +79,7 @@ fun NotificationsScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.Notifications, contentDescription = null, tint = Muted, modifier = Modifier.size(52.dp))
                         Spacer(Modifier.height(12.dp))
-                        Text("Henüz bildirim yok", color = Muted, fontSize = 15.sp)
+                        Text(Strings.noNotif(language), color = Muted, fontSize = 15.sp)
                         Text("Agahdarî tune", color = Muted, fontSize = 12.sp)
                     }
                 }
@@ -174,7 +178,7 @@ fun NotifItem(notif: Notification, onClick: () -> Unit = {}) {
                 Text(notif.fromName, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
             }
             Text(
-                notif.message.ifBlank { notifDefaultMessage(notif.type) },
+                notif.message.ifBlank { notifDefaultMessage(notif.type, language) },
                 color = OnSurface, fontSize = 13.sp, lineHeight = 18.sp,
             )
         }
@@ -202,10 +206,10 @@ fun notifIconColor(type: String) = when (type) {
     else      -> androidx.compose.ui.graphics.Color(0xFFF59E0B)
 }
 
-fun notifDefaultMessage(type: String) = when (type) {
-    "like"    -> "gönderinizi beğendi"
-    "comment" -> "gönderinize yorum yaptı"
-    "follow"  -> "sizi takip etmeye başladı"
-    "repost"  -> "gönderinizi paylaştı"
-    else      -> "yeni bir bildirim"
+fun notifDefaultMessage(type: String, language: String = "tr") = when (type) {
+    "like"    -> if (language == "ku") "nivîsa we hez kir"       else "gönderinizi beğendi"
+    "comment" -> if (language == "ku") "li nivîsa we şîrove kir" else "gönderinize yorum yaptı"
+    "follow"  -> if (language == "ku") "dest bi şopîna we kir"   else "sizi takip etmeye başladı"
+    "repost"  -> if (language == "ku") "nivîsa we parve kir"     else "gönderinizi paylaştı"
+    else      -> if (language == "ku") "agahiyeke nû"             else "yeni bir bildirim"
 }

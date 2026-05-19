@@ -1,0 +1,170 @@
+package com.heftreng.app.ui.i18n
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HEFTREng — Türkçe / Kurmancî Lokalizasyon
+//
+// KULLANIM (herhangi bir @Composable içinde):
+//   val lang = settingsVm.language.collectAsState().value  // zaten her ekranda var
+//   Strings.feed(lang)        → "Nivis" veya "Herik"
+//   Strings.save(lang)        → "Kaydet" veya "Tomar bike"
+//
+// Hiçbir CompositionLocal veya @Composable context gerektirmez.
+// Her fonksiyon saf (pure) Kotlin — her yerden çağrılabilir.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+object Strings {
+
+    // ── Dil yardımcısı ────────────────────────────────────────────────────────
+    private fun t(lang: String, tr: String, ku: String) = if (lang == "ku") ku else tr
+
+    // ── Alt Navigasyon ────────────────────────────────────────────────────────
+    fun navFeed(l: String)         = t(l, "Nivis",       "Nivis")
+    fun navBlog(l: String)         = t(l, "Blog",        "Blog")
+    fun navBooks(l: String)        = t(l, "Kitaplar",    "Pirtûk")
+    fun navKurdi(l: String)        = t(l, "Kurdî",       "Kurdî")
+    fun navProfile(l: String)      = t(l, "Profil",      "Profîl")
+    fun navSearch(l: String)       = t(l, "Keşfet",      "Keşif bike")
+    fun navMessages(l: String)     = t(l, "Mesajlar",    "Peyam")
+    fun navNotifs(l: String)       = t(l, "Bildirimler", "Agahî")
+    fun navSettings(l: String)     = t(l, "Ayarlar",     "Mîheng")
+
+    // ── Genel Butonlar ────────────────────────────────────────────────────────
+    fun save(l: String)            = t(l, "Kaydet",          "Tomar bike")
+    fun cancel(l: String)          = t(l, "İptal",           "Betal bike")
+    fun delete(l: String)          = t(l, "Sil",             "Jê bibe")
+    fun edit(l: String)            = t(l, "Düzenle",         "Biguhêze")
+    fun send(l: String)            = t(l, "Gönder",          "Bişîne")
+    fun back(l: String)            = t(l, "Geri",            "Vegere")
+    fun confirm(l: String)         = t(l, "Onayla",          "Piştrast bike")
+    fun loading(l: String)         = t(l, "Yükleniyor...",   "Tê barkirin...")
+    fun retry(l: String)           = t(l, "Tekrar Dene",     "Dîsa biceribîne")
+    fun close(l: String)           = t(l, "Kapat",           "Bigire")
+    fun next(l: String)            = t(l, "Sonraki",         "Pêştir")
+    fun finish(l: String)          = t(l, "Bitir",           "Bidawî bike")
+    fun share(l: String)           = t(l, "Paylaş",          "Parve bike")
+    fun noResult(l: String)        = t(l, "Sonuç bulunamadı","Encam nehate dîtin")
+    fun error(l: String)           = t(l, "Bir hata oluştu", "Çewtiyeke derket")
+
+    // ── Sosyal ───────────────────────────────────────────────────────────────
+    fun follow(l: String)          = t(l, "Takip Et",        "Şopîne")
+    fun unfollow(l: String)        = t(l, "Takibi Bırak",    "Şopînê berde")
+    fun followers(l: String)       = t(l, "Takipçi",         "Şopîner")
+    fun following(l: String)       = t(l, "Takip",           "Şopandî")
+    fun likes(l: String)           = t(l, "Beğeni",          "Hez kirin")
+    fun comments(l: String)        = t(l, "Yorum",           "Şîrove")
+    fun posts(l: String)           = t(l, "Gönderi",         "Nivîs")
+    fun readMore(l: String)        = t(l, "Devamını Oku",    "Zêdetir bixwîne")
+
+    // ── Auth ──────────────────────────────────────────────────────────────────
+    fun login(l: String)           = t(l, "Giriş Yap",       "Têkeve")
+    fun logout(l: String)          = t(l, "Çıkış Yap",       "Derkeve")
+    fun register(l: String)        = t(l, "Kayıt Ol",        "Qeyd bibe")
+    fun email(l: String)           = t(l, "E-posta",         "E-name")
+    fun password(l: String)        = t(l, "Şifre",           "Şîfre")
+    fun fullName(l: String)        = t(l, "Ad Soyad",        "Nav û Nasname")
+    fun username(l: String)        = t(l, "Kullanıcı Adı",   "Navê Bikarhêner")
+    fun forgotPass(l: String)      = t(l, "Şifremi Unuttum", "Şîfreya min ji bîr bû")
+    fun noAccount(l: String)       = t(l, "Hesabın yok mu? Kayıt ol", "Hesabê te tune? Qeyd bibe")
+    fun hasAccount(l: String)      = t(l, "Hesabın var mı? Giriş yap", "Hesabê te heye? Têkeve")
+
+    // ── Feed ──────────────────────────────────────────────────────────────────
+    fun whatsOnMind(l: String)     = t(l, "Ne düşünüyorsun?",         "Tu çi difikiri?")
+    fun postHint(l: String)        = t(l, "Düşüncelerini paylaş...",  "Ramanên xwe parve bike...")
+    fun like(l: String)            = t(l, "Beğen",                    "Hez bike")
+    fun comment(l: String)         = t(l, "Yorum",                    "Şîrove")
+    fun repost(l: String)          = t(l, "Tekrar Paylaş",            "Dîsa parve bike")
+    fun addComment(l: String)      = t(l, "Yorum Ekle",               "Şîrove zêde bike")
+    fun commentHint(l: String)     = t(l, "Yorumunu yaz...",          "Şîroveya xwe binivîse...")
+    fun noPost(l: String)          = t(l, "Henüz gönderi yok",        "Hîn nivîs tune")
+    fun deletePost(l: String)      = t(l, "Gönderiyi Sil",            "Nivîsê jê bibe")
+    fun deletePostConfirm(l: String) = t(l,
+        "Bu gönderi kalıcı olarak silinecek. Emin misin?",
+        "Ev nivîs dê bê vegere were jêbirin. Tu piştrast î?")
+    fun report(l: String)          = t(l, "Şikayet Et",               "Rapor bike")
+
+    // ── Profil ────────────────────────────────────────────────────────────────
+    fun editProfile(l: String)     = t(l, "Profili Düzenle",   "Profîlê biguhêze")
+    fun bio(l: String)             = t(l, "Hakkında",          "Der barê min")
+    fun website(l: String)         = t(l, "Web Sitesi",        "Malpera min")
+    fun joined(l: String)          = t(l, "Katıldı",           "Beşdar bû")
+    fun noPosts(l: String)         = t(l, "Henüz gönderi yok", "Hîn nivîs tune")
+    fun savedPosts(l: String)      = t(l, "Kaydedilenler",     "Tomarkirî")
+    fun profilePhoto(l: String)    = t(l, "Profil Foto",       "Wêneya Profîlê")
+    fun coverPhoto(l: String)      = t(l, "Kapak Foto",        "Wêneya Bergê")
+
+    // ── Blog ──────────────────────────────────────────────────────────────────
+    fun blogEmpty(l: String)       = t(l, "Blog yazısı bulunamadı", "Gotara blogê nehate dîtin")
+    fun readTime(l: String)        = t(l, "dk okuma",               "xul. xwendin")
+
+    // ── Kitaplar ──────────────────────────────────────────────────────────────
+    fun readingList(l: String)     = t(l, "Okuma Listesi",    "Lîsteya Xwendinê")
+    fun addToList(l: String)       = t(l, "Listeye Ekle",     "Lîsteyê zêde bike")
+    fun removeFromList(l: String)  = t(l, "Listeden Çıkar",   "Ji lîsteyê derxe")
+    fun quotes(l: String)          = t(l, "Alıntılar",        "Gotinên Bijarte")
+    fun authors(l: String)         = t(l, "Yazarlar",         "Nivîskar")
+    fun serials(l: String)         = t(l, "Seriler",          "Rêze")
+
+    // ── Kurdî Dersleri ────────────────────────────────────────────────────────
+    fun kurdiUnits(l: String)      = t(l, "Üniteler",               "Yekîne")
+    fun kurdiDict(l: String)       = t(l, "Sözlük",                 "Ferheng")
+    fun kurdiGrammar(l: String)    = t(l, "Dilbilgisi",             "Rêziman")
+    fun kurdiAi(l: String)         = t(l, "YZ Ders",                "Dersê ZZ")
+    fun lessonComplete(l: String)  = t(l, "Ders Tamamlandı! 🎉",    "Ders Qediya! 🎉")
+    fun correctAnswer(l: String)   = t(l, "Doğru!",                 "Rast!")
+    fun wrongAnswer(l: String)     = t(l, "Yanlış!",                "Xelet!")
+    fun checkAnswer(l: String)     = t(l, "Kontrol Et",             "Kontrol bike")
+    fun continueLesson(l: String)  = t(l, "Devam",                  "Berdewam bike")
+    fun tapInOrder(l: String)      = t(l, "Kelimelere sırayla dokun","Peyvan bi rêzê bixin")
+    fun typeAnswer(l: String)      = t(l, "Cevabını yaz...",        "Bersiva xwe binivîse...")
+    fun xpGained(l: String)        = t(l, "XP kazandın!",           "XP qezenc kir!")
+    fun finishLesson(l: String)    = t(l, "Dersi Bitir 🎉",         "Dersa Bidawî Bike 🎉")
+    fun nextQuestion(l: String)    = t(l, "Sonraki →",              "Pêştir →")
+    fun toQuestions(l: String)     = t(l, "Sorulara Geç →",         "Biçe Pirsên →")
+    fun complete(l: String)        = t(l, "Tamamla 🎉",             "Temam bike 🎉")
+    fun correctCount(l: String, n: Int) = t(l, "$n doğru cevap ✓", "$n bersivên rast ✓")
+    fun correctAnswerIs(l: String, a: String) = t(l, "Doğru cevap: $a", "Bersiva rast: $a")
+    fun correctOrder(l: String, w: String)    = t(l, "Doğru sıra: $w",  "Rêza rast: $w")
+    fun tryAgain(l: String)        = t(l, "Tekrar Dene",            "Dîsa biceribîne")
+
+    // ── Mesajlar ──────────────────────────────────────────────────────────────
+    fun messagesTitle(l: String)   = t(l, "Mesajlar",         "Peyam")
+    fun messageHint(l: String)     = t(l, "Mesaj yaz...",     "Peyamê binivîse...")
+    fun noMessages(l: String)      = t(l, "Henüz mesaj yok",  "Hîn peyam tune")
+    fun newMessage(l: String)      = t(l, "Yeni Mesaj",       "Peyama Nû")
+
+    // ── Bildirimler ───────────────────────────────────────────────────────────
+    fun noNotif(l: String)         = t(l, "Henüz bildirim yok",          "Hîn agahî tune")
+    fun notifLike(l: String)       = t(l, "gönderini beğendi",           "nivîsa te hez kir")
+    fun notifComment(l: String)    = t(l, "yorum yaptı",                 "şîrove kir")
+    fun notifFollow(l: String)     = t(l, "seni takip etmeye başladı",   "dest bi şopîna te kir")
+
+    // ── Ayarlar ───────────────────────────────────────────────────────────────
+    fun settingsTitle(l: String)   = t(l, "Ayarlar",          "Mîheng")
+    fun darkMode(l: String)        = t(l, "Karanlık Mod",     "Moda Tarî")
+    fun lightMode(l: String)       = t(l, "Aydınlık Mod",     "Moda Ronî")
+    fun appLanguage(l: String)     = t(l, "Uygulama Dili",    "Zimana Bernameyê")
+    fun about(l: String)           = t(l, "Hakkında",         "Der barê me")
+    fun version(l: String)         = t(l, "Sürüm",            "Guherto")
+    fun account(l: String)         = t(l, "Hesap",            "Hesab")
+    fun privacy(l: String)         = t(l, "Gizlilik",         "Nepenî")
+
+    // ── Yazar Paneli ──────────────────────────────────────────────────────────
+    fun yazarTitle(l: String)      = t(l, "Nivîskar / Yazar Paneli", "Nivîskar")
+    fun yazarWrite(l: String)      = t(l, "Yaz",               "Binivîse")
+    fun yazarMyPosts(l: String)    = t(l, "Yazılarım",         "Nivîsên min")
+    fun yazarSubmit(l: String)     = t(l, "Yazıyı Gönder",     "Nivîsê bişîne")
+    fun yazarCategory(l: String)   = t(l, "Kategori",          "Kategorî")
+    fun yazarTags(l: String)       = t(l, "Etiketler",         "Etîket")
+    fun yazarPending(l: String)    = t(l, "Bekliyor ⏳",       "Li bendê ye ⏳")
+    fun yazarApproved(l: String)   = t(l, "Yayında ✅",        "Weşandî ✅")
+    fun yazarRejected(l: String)   = t(l, "Reddedildi ❌",     "Red kir ❌")
+    fun yazarWithdraw(l: String)   = t(l, "Geri Çek",          "Vegerîne")
+
+    // ── Arama ─────────────────────────────────────────────────────────────────
+    fun searchHint(l: String)      = t(l,
+        "Kullanıcı, gönderi veya kitap ara...",
+        "Bikarhêner, nivîs an pirtûk bigere...")
+    fun searchPeople(l: String)    = t(l, "Kişiler",    "Kes")
+    fun searchPosts(l: String)     = t(l, "Gönderiler", "Nivîs")
+    fun searchBooks(l: String)     = t(l, "Kitaplar",   "Pirtûk")
+}
