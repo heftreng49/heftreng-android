@@ -68,6 +68,7 @@ fun CmsScreen(
         vm.loadAnnouncements()
         vm.loadCategories()
         adsVm.loadAdConfigs()
+        configVm.load()
         yazarVm.loadAllPendingPosts()
     }
 
@@ -113,6 +114,11 @@ fun CmsScreen(
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { navController.navigate("kurdi_admin") }) {
+                        Icon(Icons.Default.School, contentDescription = "Kurdî Admin", tint = Amber)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),

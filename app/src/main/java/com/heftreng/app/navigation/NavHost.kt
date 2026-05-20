@@ -363,7 +363,10 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 composable(Screen.Admin.route)    { AdminScreen(navController) }
                 composable(Screen.Cms.route)      { CmsScreen(navController) }
                 composable(Screen.Yazar.route)    { YazarScreen(navController) }
-                composable(Screen.KurdiAdmin.route) { KurdiAdminScreen(navController) }
+                composable(Screen.KurdiAdmin.route) {
+                    if (isAdmin) KurdiAdminScreen(navController)
+                    else { LaunchedEffect(Unit) { navController.popBackStack() } }
+                }
                 composable(Screen.Settings.route) { SettingsScreen(navController) }
                 composable("post/{postId}") { back ->
                     SinglePostScreen(
@@ -475,7 +478,6 @@ fun DrawerContent(
                 Triple(Icons.Outlined.ChatBubbleOutline, "Peyam / Mesajlar (${if (totalUnread>0) totalUnread else ""})", Screen.Messages.route),
                 Triple(Icons.Outlined.Settings,       "Mîheng / Ayarlar",       Screen.Settings.route),
                 Triple(Icons.Outlined.Edit,           "Nivîskar / Yazar Paneli", Screen.Yazar.route),
-                Triple(Icons.Outlined.School,          "Kurdî Admin",             Screen.KurdiAdmin.route),
             )
 
             items.forEach { (icon, label, route) ->
@@ -517,6 +519,18 @@ fun DrawerContent(
                     Icon(Icons.Default.Dashboard, null, tint = Amber, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(12.dp))
                     Text("CMS Yönetimi", color = Amber, fontSize = 14.sp)
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onNavigate(Screen.KurdiAdmin.route) }
+                        .padding(horizontal = 10.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Outlined.School, null, tint = Amber, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Kurdî Admin", color = Amber, fontSize = 14.sp)
                 }
             }
 

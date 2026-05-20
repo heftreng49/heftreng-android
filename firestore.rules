@@ -330,10 +330,47 @@ service cloud.firestore {
           && resource.data.uid == request.auth.uid;
     }
 
-    // ─── CMS ──────────────────────────────────────────────────────
+    // ─── CMS (genel koleksiyon) ───────────────────────────────────
     match /cms/{docId} {
-      allow read: if isAuth();      // Tüm giriş yapmış kullanıcılar okuyabilir
-      allow write: if isAdmin();    // Sadece admin yazabilir
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // ─── CMS ALT KOLEKSİYONLARI ──────────────────────────────────
+    // cms_pages: Statik sayfalar (hakkında, kurallar vb.)
+    match /cms_pages/{docId} {
+      allow read: if true;          // Herkese açık okuma (sayfa görüntüleme)
+      allow write: if isAdmin();
+    }
+
+    // cms_banners: Ana sayfa / feed banner reklamları
+    match /cms_banners/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // cms_announcements: Duyurular
+    match /cms_announcements/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // cms_categories: İçerik kategorileri
+    match /cms_categories/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // cms_ads: AdMob konfigürasyonları (global + placement bazlı)
+    match /cms_ads/{docId} {
+      allow read: if isAuth();      // Sadece giriş yapmış kullanıcılar görüntüler
+      allow write: if isAdmin();
+    }
+
+    // ─── APP CONFIG (özellik toggle, bakım modu) ──────────────────
+    match /appConfig/{docId} {
+      allow read: if true;          // Uygulama başlatmada herkese açık okunur
+      allow write: if isAdmin();
     }
 
     match /kf_reports/{reportId} {

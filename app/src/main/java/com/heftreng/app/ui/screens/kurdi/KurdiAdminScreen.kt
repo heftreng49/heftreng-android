@@ -36,8 +36,17 @@ import javax.inject.Inject
 @Composable
 fun KurdiAdminScreen(
     navController: NavController,
-    vm: KurdiViewModel = hiltViewModel(),
+    vm         : KurdiViewModel    = hiltViewModel(),
+    settingsVm : SettingsViewModel = hiltViewModel(),
 ) {
+    val isAdmin = settingsVm.isAdmin
+
+    // ── Güvenlik: sadece admin erişebilir ─────────────────────────
+    if (!isAdmin) {
+        LaunchedEffect(Unit) { navController.popBackStack() }
+        return
+    }
+
     val lessons by vm.lessons.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
     var selectedLesson by remember { mutableStateOf<KfLesson?>(null) }
