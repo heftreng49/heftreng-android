@@ -500,18 +500,6 @@ fun DrawerContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .clickable { onNavigate(Screen.Admin.route) }
-                        .padding(horizontal = 10.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Default.AdminPanelSettings, null, tint = Error, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text("Admin Paneli", color = Error, fontSize = 14.sp)
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
                         .clickable { onNavigate(Screen.Cms.route) }
                         .padding(horizontal = 10.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -519,18 +507,6 @@ fun DrawerContent(
                     Icon(Icons.Default.Dashboard, null, tint = Amber, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(12.dp))
                     Text("CMS Yönetimi", color = Amber, fontSize = 14.sp)
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable { onNavigate(Screen.KurdiAdmin.route) }
-                        .padding(horizontal = 10.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Outlined.School, null, tint = Amber, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text("Kurdî Admin", color = Amber, fontSize = 14.sp)
                 }
             }
 

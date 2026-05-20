@@ -60,7 +60,7 @@ fun CmsScreen(
     val pendingStats  by yazarVm.pendingStats.collectAsState()
     val pendingLoad   by yazarVm.pendingLoading.collectAsState()
     val appConfig by configVm.config.collectAsState()
-    val tabs = listOf("Sayfalar", "Bannerlar", "Duyurular", "Kategoriler", "Reklamlar", "Özellikler", "Yazılar")
+    val tabs = listOf("Sayfalar", "Bannerlar", "Duyurular", "Kategoriler", "Reklamlar", "Özellikler", "Yazılar", "Admin", "Kurdî Admin")
 
     LaunchedEffect(Unit) {
         vm.loadPages()
@@ -116,11 +116,7 @@ fun CmsScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
                     }
                 },
-                actions = {
-                    IconButton(onClick = { navController.navigate("kurdi_admin") }) {
-                        Icon(Icons.Default.School, contentDescription = "Kurdî Admin", tint = Amber)
-                    }
-                },
+
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
             )
         },
@@ -168,6 +164,8 @@ fun CmsScreen(
                 4 -> AdsTab(adsVm)
                 5 -> FeaturesTab(appConfig, configVm)
                 6 -> PendingPostsTab(pendingPosts, pendingStats, pendingLoad, yazarVm)
+                7 -> { LaunchedEffect(Unit) { navController.navigate("admin") } }
+                8 -> { LaunchedEffect(Unit) { navController.navigate("kurdi_admin") } }
             }
         }
     }

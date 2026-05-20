@@ -100,9 +100,6 @@ fun AdminScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { navController.navigate("kurdi_admin") }) {
-                        Icon(Icons.Default.School, contentDescription = "Kurdî Admin", tint = Amber)
-                    }
                     IconButton(onClick = { navController.navigate("cms") }) {
                         Icon(Icons.Default.Tune, contentDescription = "CMS", tint = Amber)
                     }
