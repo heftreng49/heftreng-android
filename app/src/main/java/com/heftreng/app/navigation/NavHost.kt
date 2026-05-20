@@ -1,5 +1,7 @@
 package com.heftreng.app.navigation
 
+import com.heftreng.app.ui.i18n.Strings
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -94,12 +96,14 @@ sealed class Screen(val route: String) {
 // ── Alt bar — temadaki gibi: Nivîs | Bigere | Pirtûk | Profîl ───────────────
 data class BottomNavItem(val route: String, val label: String, val icon: ImageVector, val iconSel: ImageVector)
 
+// bottomNavItems composable içinde language ile dinamik üretiliyor
+// (Bu statik liste artık kullanılmıyor — aşağıdaki composable içindeki listeyi kullan)
 val bottomNavItems = listOf(
-    BottomNavItem(Screen.Feed.route,  "Nivîs",   Icons.Outlined.DynamicFeed,   Icons.Filled.DynamicFeed),
-    BottomNavItem(Screen.Blog.route,  "Blog",    Icons.Outlined.Article,        Icons.Filled.Article),
-    BottomNavItem(Screen.Serials.route,"Kitaplar",Icons.Outlined.AutoStories,   Icons.Filled.AutoStories),
-    BottomNavItem(Screen.Kurdi.route, "Kurdî",   Icons.Outlined.Translate,      Icons.Filled.Translate),
-    BottomNavItem("profile/me",       "Profîl",  Icons.Outlined.PersonOutline,  Icons.Filled.Person),
+    BottomNavItem(Screen.Feed.route,   "Nivis",    Icons.Outlined.DynamicFeed,  Icons.Filled.DynamicFeed),
+    BottomNavItem(Screen.Blog.route,   "Blog",     Icons.Outlined.Article,       Icons.Filled.Article),
+    BottomNavItem(Screen.Serials.route,"Kitaplar", Icons.Outlined.AutoStories,  Icons.Filled.AutoStories),
+    BottomNavItem(Screen.Kurdi.route,  "Kurdî",    Icons.Outlined.Translate,     Icons.Filled.Translate),
+    BottomNavItem("profile/me",        "Profil",   Icons.Outlined.PersonOutline, Icons.Filled.Person),
 )
 
 private val bottomNavRoutes = setOf(
@@ -122,6 +126,14 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val isDark      by settingsVm.darkMode.collectAsState()
     val language    by settingsVm.language.collectAsState()
     val totalUnread by msgsVm.totalUnread.collectAsState()
+    // Dile göre alt bar etiketleri
+    val bottomNavItems = listOf(
+        BottomNavItem(Screen.Feed.route,    Strings.navFeed(language),    Icons.Outlined.DynamicFeed,  Icons.Filled.DynamicFeed),
+        BottomNavItem(Screen.Blog.route,    Strings.navBlog(language),    Icons.Outlined.Article,       Icons.Filled.Article),
+        BottomNavItem(Screen.Serials.route, Strings.navBooks(language),   Icons.Outlined.AutoStories,  Icons.Filled.AutoStories),
+        BottomNavItem(Screen.Kurdi.route,   Strings.navKurdi(language),   Icons.Outlined.Translate,     Icons.Filled.Translate),
+        BottomNavItem("profile/me",         Strings.navProfile(language), Icons.Outlined.PersonOutline, Icons.Filled.Person),
+    )
     val unreadNotif by notifVm.unreadCount.collectAsState()
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -307,7 +319,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 modifier         = Modifier.padding(innerPadding),
             ) {
                 composable(Screen.Blog.route) {
-                    BlogScreen(navController = navController, vm = blogVm, language = language)
+                    BlogScreen(navController = navController, vm = blogVm)
                 }
                 composable("blog_post/{postId}") { back ->
                     BlogPostScreen(
@@ -317,7 +329,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     )
                 }
                 composable(Screen.Feed.route) {
-                    FeedScreen(navController = navController)
+                    FeedScreen(navController = navController, language = language)
                 }
                 composable(Screen.Search.route) { SearchScreen(navController, language = language) }
                 composable(Screen.Serials.route) { SerialsScreen(navController, language) }
@@ -336,10 +348,11 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     MessageDetailScreen(
                         convId        = back.arguments?.getString("convId") ?: "",
                         navController = navController,
+                        language      = language,
                     )
                 }
                 composable(Screen.Notifications.route) {
-                    NotificationsScreen(navController, notifVm, language)
+                    NotificationsScreen(navController, notifVm)
                 }
                 composable(Screen.EditProfile.route) { EditProfileScreen(navController, language = language) }
 
@@ -356,7 +369,6 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     SinglePostScreen(
                         postId        = back.arguments?.getString("postId") ?: "",
                         navController = navController,
-                        language      = language,
                     )
                 }
                 composable("serial/{id}") { back ->
