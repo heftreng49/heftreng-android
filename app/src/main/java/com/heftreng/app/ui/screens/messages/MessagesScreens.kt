@@ -1,6 +1,7 @@
 package com.heftreng.app.ui.screens.messages
 
 import androidx.compose.material3.AlertDialog
+import com.heftreng.app.utils.HeftrangMessagingService
 
 import androidx.compose.foundation.layout.imeNestedScroll
 
@@ -70,6 +71,12 @@ fun ConversationsScreen(
     var showSearch    by remember { mutableStateOf(false) }
 
     val uid = vm.uid
+    // Ekran açıkken mesaj bildirimlerini bastır
+    DisposableEffect(Unit) {
+        HeftrangMessagingService.isMessagesScreenActive = true
+        onDispose { HeftrangMessagingService.isMessagesScreenActive = false }
+    }
+
     LaunchedEffect(uid) {
         if (uid.isNotEmpty()) vm.listenConversations()
     }
@@ -347,6 +354,12 @@ fun MessageDetailScreen(
         if (conversations.isEmpty()) vm.listenConversations()
         vm.listenMessages(convId)
         vm.loadOtherUser(convId)
+    }
+
+    // Mesaj bildirimleri: sohbet ekranındayken bastır
+    DisposableEffect(Unit) {
+        HeftrangMessagingService.isMessagesScreenActive = true
+        onDispose { HeftrangMessagingService.isMessagesScreenActive = false }
     }
 
     // Ekran açılınca online yap, kapanınca offline yap

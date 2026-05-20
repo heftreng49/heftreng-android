@@ -57,9 +57,10 @@ exports.onNewNotif = onDocumentCreated(
 
     const msg = {
       token: fcmToken,
-      notification: { title, body },
-      android: { priority: "high", notification: { channelId, icon: "ic_notif", color: "#8B5CF6" } },
-      data: { type, postId, fromUid, convId, url },
+      // notification bloğu YOK — data-only payload.
+      // notification varsa Android arka planda sisteme + onMessageReceived'e çift bildirim gönderir.
+      android: { priority: "high" },
+      data: { type, postId, fromUid, convId, url, title, body, channelId },
     };
     const STALE = [
       "messaging/registration-token-not-registered",
@@ -107,9 +108,9 @@ exports.sendPush = onCall(
     try {
       const msg = {
         token: fcmToken,
-        notification: { title, body },
-        android: { priority: "high", notification: { channelId, icon: "ic_notif", color: "#8B5CF6" } },
-        data: { type, postId, fromUid, convId, url },
+        // notification bloğu YOK — data-only payload.
+        android: { priority: "high" },
+        data: { type, postId, fromUid, convId, url, title, body, channelId },
       };
       const result = await getMessaging().send(msg);
       return { success: true, messageId: result };

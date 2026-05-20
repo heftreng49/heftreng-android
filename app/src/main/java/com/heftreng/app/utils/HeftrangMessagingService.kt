@@ -22,6 +22,10 @@ class HeftrangMessagingService : FirebaseMessagingService() {
         const val CHANNEL_ID_MESSAGES = "heftreng_messages"
         const val CHANNEL_ID_LIKES    = "heftreng_likes"
 
+        // ── Aktif ekran takibi ─────────────────────────────────────
+        // MessagesScreen açıkken "true" set eder → mesaj bildirimi bastırılır
+        @Volatile var isMessagesScreenActive: Boolean = false
+
         // Kullanıcı henüz giriş yapmamışsa token'ı burada sakla;
         // AuthViewModel login sonrasında bu değeri okuyup Firestore'a yazar.
         private const val PREFS_NAME  = "hf_prefs"
@@ -66,15 +70,18 @@ class HeftrangMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
+        // Artık data-only payload — notification bloğu yok, her şey data'da
         val data    = message.data
-        val notif   = message.notification
 
-        val title   = notif?.title ?: data["title"] ?: "Heftreng"
-        val body    = notif?.body  ?: data["body"]  ?: ""
+        val title   = data["title"]   ?: "Heftreng"
+        val body    = data["body"]    ?: ""
         val type    = data["type"]    ?: "default"
         val postId  = data["postId"]  ?: ""
         val fromUid = data["fromUid"] ?: ""
         val convId  = data["convId"]  ?: ""
+
+        // Mesajlar ekranı açıksa mesaj bildirimini bastır
+        if (type == "message" && isMessagesScreenActive) return
 
         // Bildirim tipine göre deep link intent
         val intent = Intent(this, MainActivity::class.java).apply {
@@ -103,7 +110,7 @@ class HeftrangMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val channelId = when (type) {
+        val channelId = data["channelId"]?.takeIf { it.isNotBlank() } ?: when (type) {
             "message"            -> CHANNEL_ID_MESSAGES
             "like", "repost"     -> CHANNEL_ID_LIKES
             else                 -> CHANNEL_ID_DEFAULT
