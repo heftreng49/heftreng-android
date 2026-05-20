@@ -311,6 +311,27 @@ data class CmsAdConfig(
     val xpReward    : Int     = 50,
 )
 
+// ─── ŞİKAYET ────────────────────────────────────────────────────────
+data class Report(
+    val id          : String     = "",
+    val reporterUid : String     = "",
+    val reporterName: String     = "",
+    val targetUid   : String     = "",
+    val targetName  : String     = "",
+    val targetPostId: String     = "",   // boşsa kullanıcı şikayeti
+    val reason      : String     = "",
+    val status      : String     = "pending",  // pending | reviewed | dismissed
+    val ts          : Timestamp? = null,
+)
+
+// ─── ENGELLİ KULLANICI ───────────────────────────────────────────────
+data class BlockedUser(
+    val uid         : String     = "",
+    val displayName : String     = "",
+    val photoURL    : String     = "",
+    val blockedAt   : Timestamp? = null,
+)
+
 // ─── APP CONFIG (CMS Özellik Yönetimi) ─────────────────────────────
 data class AppConfig(
     // Ekran aktiflik

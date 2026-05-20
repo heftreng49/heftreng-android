@@ -524,7 +524,7 @@ fun DrawerContent(
                     null, tint = Amber, modifier = Modifier.size(20.dp),
                 )
                 Spacer(Modifier.width(10.dp))
-                Text(if (isDark) "Karanlık" else "Aydınlık", color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Text(if (isDark) (if (language == "ku") "Moda Tarî" else "Karanlık") else (if (language == "ku") "Moda Ronahî" else "Aydınlık"), color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
                 Switch(
                     checked = isDark,
                     onCheckedChange = { settingsVm.toggleDarkMode() },
@@ -535,6 +535,30 @@ fun DrawerContent(
                         uncheckedTrackColor = Muted.copy(alpha = 0.2f),
                     ),
                 )
+            }
+
+            Spacer(Modifier.height(6.dp))
+
+            // ── Dil değişimi ───────────────────────────────────────────
+            Row(
+                modifier          = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(Icons.Outlined.Translate, null, tint = Amber, modifier = Modifier.size(18.dp))
+                listOf("tr" to "Türkçe", "ku" to "Kurdî").forEach { (code, label) ->
+                    val selected = language == code
+                    Button(
+                        onClick  = { settingsVm.setLanguage(code) },
+                        modifier = Modifier.weight(1f),
+                        shape    = RoundedCornerShape(8.dp),
+                        colors   = ButtonDefaults.buttonColors(
+                            containerColor = if (selected) Amber else SurfaceVar,
+                            contentColor   = if (selected) Color.Black else Muted,
+                        ),
+                        contentPadding = PaddingValues(vertical = 6.dp),
+                    ) { Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) }
+                }
             }
 
             Spacer(Modifier.height(8.dp))

@@ -260,13 +260,50 @@ class AdminViewModel @Inject constructor(
                 val serials = firestore.collection("serials").get().await().size()
                 val books   = firestore.collection("books").get().await().size()
                 val pending = firestore.collection("pendingPosts").get().await().size()
+                val reports = firestore.collection("reports").whereEqualTo("status", "pending").get().await().size()
                 _stats.value = mapOf(
                     "users"   to users,
                     "posts"   to posts,
                     "serials" to serials,
                     "books"   to books,
                     "pending" to pending,
+                    "reports" to reports,
                 )
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Şikayetler ────────────────────────────────────────────────────────────
+    private val _reports = MutableStateFlow<List<Map<String, Any>>>(emptyList())
+    val reports = _reports.asStateFlow()
+
+    fun loadReports() {
+        if (!_isAdmin.value) return
+        viewModelScope.launch {
+            _loading.value = true
+            try {
+                val snap = firestore.collection("reports")
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(100).get().await()
+                _reports.value = snap.documents.mapNotNull { doc ->
+                    val d = doc.data?.toMutableMap() ?: return@mapNotNull null
+                    d["id"] = doc.id
+                    d
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+            finally { _loading.value = false }
+        }
+    }
+
+    fun updateReportStatus(reportId: String, status: String) {
+        if (!_isAdmin.value) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("reports").document(reportId)
+                    .update("status", status).await()
+                _reports.value = _reports.value.map { r ->
+                    if (r["id"] == reportId) r.toMutableMap().also { it["status"] = status } else r
+                }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }

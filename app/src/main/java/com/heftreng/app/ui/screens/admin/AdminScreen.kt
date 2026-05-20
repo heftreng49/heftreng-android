@@ -59,7 +59,10 @@ fun AdminScreen(
     var deletePostConfirm by remember { mutableStateOf<String?>(null) }
     var postSearch  by remember { mutableStateOf("") }
 
-    val tabs = listOf("Push", "Bildirim", "Kullanıcılar", "Bekleyenler", "İstatistik", "Düzenle")
+    // Şikayetler
+    val reports     by vm.reports.collectAsState()
+
+    val tabs = listOf("Push", "Bildirim", "Kullanıcılar", "Bekleyenler", "Şikayetler", "İstatistik", "Düzenle")
 
     LaunchedEffect(Unit) {
         vm.checkAdmin()
@@ -67,6 +70,7 @@ fun AdminScreen(
         vm.loadPendingPosts()
         vm.loadStats()
         vm.loadFeedPosts()
+        vm.loadReports()
     }
 
     // editResult bildirimi
@@ -312,8 +316,82 @@ fun AdminScreen(
                     }
                 }
 
-                // ── İstatistikler ──────────────────────────────────────────────
+                // ── Şikayetler ─────────────────────────────────────────────────
                 4 -> LazyColumn(
+                    modifier       = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    item {
+                        Text("Şikayetler (${reports.size})", color = Amber, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    }
+                    if (reports.isEmpty()) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                                Text("Bekleyen şikayet yok", color = Muted)
+                            }
+                        }
+                    }
+                    items(reports, key = { it["id"] as? String ?: "" }) { report ->
+                        val reportId     = report["id"] as? String ?: ""
+                        val targetName   = report["targetName"] as? String ?: ""
+                        val reporterName = report["reporterName"] as? String ?: ""
+                        val reason       = report["reason"] as? String ?: ""
+                        val targetPostId = report["targetPostId"] as? String ?: ""
+                        val status       = report["status"] as? String ?: "pending"
+                        val statusColor  = when (status) {
+                            "reviewed"  -> Color(0xFF22C55E)
+                            "dismissed" -> Muted
+                            else        -> Color(0xFFF59E0B)
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = HeftSurface,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Şikayet edilen: $targetName", color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                    Surface(shape = RoundedCornerShape(6.dp), color = statusColor.copy(alpha = 0.15f)) {
+                                        Text(
+                                            when (status) { "reviewed" -> "İncelendi"; "dismissed" -> "Reddedildi"; else -> "Bekliyor" },
+                                            color = statusColor, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                        )
+                                    }
+                                }
+                                Text("Şikayetçi: $reporterName", color = Muted, fontSize = 12.sp)
+                                Text("Sebep: $reason", color = OnBackground, fontSize = 12.sp)
+                                if (targetPostId.isNotBlank()) {
+                                    Text("Post ID: $targetPostId", color = Muted, fontSize = 11.sp)
+                                }
+                                if (status == "pending") {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(
+                                            onClick = { vm.updateReportStatus(reportId, "reviewed") },
+                                            shape   = RoundedCornerShape(8.dp),
+                                            colors  = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E), contentColor = Color.White),
+                                            modifier = Modifier.weight(1f),
+                                            contentPadding = PaddingValues(vertical = 6.dp),
+                                        ) {
+                                            Text("İncelendi", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                        OutlinedButton(
+                                            onClick = { vm.updateReportStatus(reportId, "dismissed") },
+                                            shape   = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.weight(1f),
+                                            contentPadding = PaddingValues(vertical = 6.dp),
+                                        ) {
+                                            Text("Reddet", fontSize = 12.sp, color = Muted)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── İstatistikler ──────────────────────────────────────────────
+                5 -> LazyColumn(
                     modifier       = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -354,7 +432,7 @@ fun AdminScreen(
 
 
                 // ── Düzenle ───────────────────────────────────────────────────
-                5 -> {
+                6 -> {
                     LazyColumn(
                         modifier       = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(16.dp),

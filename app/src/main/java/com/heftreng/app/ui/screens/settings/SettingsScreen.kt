@@ -40,10 +40,15 @@ fun SettingsScreen(
     val language       by vm.language.collectAsState()
     val pushEnabled    by vm.pushEnabled.collectAsState()
     val privateAccount by vm.privateAccount.collectAsState()
+    val blockedUsers   by vm.blockedUsers.collectAsState()
+    val blockedLoading by vm.blockedLoading.collectAsState()
 
     // Dialog state'leri
     var showPasswordDialog by remember { mutableStateOf(false) }
     var showEmailDialog    by remember { mutableStateOf(false) }
+    var showBlockedDialog  by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { vm.loadBlockedUsers() }
 
     Scaffold(
         containerColor = Background,
@@ -187,7 +192,7 @@ fun SettingsScreen(
                         Icons.Outlined.Block,
                         if (language == "ku") "Bikarhênerên Astengkirî" else "Engellenen Kullanıcılar",
                         if (language == "ku") "Bikarhênerên astengkirî birêve bibe" else "Engellenen hesapları yönet",
-                    ) {}
+                    ) { showBlockedDialog = true }
                 }
             }
 
@@ -292,6 +297,17 @@ fun SettingsScreen(
             },
             vm       = vm,
             language = language,
+        )
+    }
+
+    // ── Engellenen Kullanıcılar Dialog ───────────────────────────────────────
+    if (showBlockedDialog) {
+        BlockedUsersDialog(
+            language      = language,
+            blockedUsers  = blockedUsers,
+            loading       = blockedLoading,
+            onUnblock     = { uid -> vm.unblockUser(uid) },
+            onDismiss     = { showBlockedDialog = false },
         )
     }
 }
@@ -658,6 +674,79 @@ internal fun ForgotPasswordFromSettings(
         },
         dismissButton = {
             if (!success) TextButton(onClick = { if (!loading) onDismiss() }) { Text(if (ku) "Betal bike" else "İptal", color = Muted) }
+        },
+    )
+}
+
+// ── Engellenen Kullanıcılar Dialog ───────────────────────────────────────────
+@Composable
+private fun BlockedUsersDialog(
+    language     : String,
+    blockedUsers : List<com.heftreng.app.data.model.BlockedUser>,
+    loading      : Boolean,
+    onUnblock    : (String) -> Unit,
+    onDismiss    : () -> Unit,
+) {
+    val ku = language == "ku"
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Text(
+                if (ku) "Bikarhênerên Astengkirî" else "Engellenen Kullanıcılar",
+                color = OnBackground, fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            if (loading) {
+                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Amber, modifier = Modifier.size(28.dp))
+                }
+            } else if (blockedUsers.isEmpty()) {
+                Text(
+                    if (ku) "Bikarhênerên astengkirî tune ne." else "Engellenmiş kullanıcı yok.",
+                    color = Muted, fontSize = 14.sp,
+                )
+            } else {
+                androidx.compose.foundation.lazy.LazyColumn(
+                    modifier           = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    androidx.compose.foundation.lazy.items(blockedUsers) { user ->
+                        Row(
+                            modifier          = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            coil.compose.AsyncImage(
+                                model              = user.photoURL.ifEmpty { null },
+                                contentDescription = null,
+                                modifier           = Modifier
+                                    .size(38.dp)
+                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                    .background(SurfaceVar),
+                                contentScale       = androidx.compose.ui.layout.ContentScale.Crop,
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                user.displayName.ifBlank { "Kullanıcı" },
+                                color = OnBackground, fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { onUnblock(user.uid) }) {
+                                Text(
+                                    if (ku) "Astengiyê Berde" else "Engeli Kaldır",
+                                    color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(if (ku) "Bigire" else "Kapat", color = Amber, fontWeight = FontWeight.Bold)
+            }
         },
     )
 }

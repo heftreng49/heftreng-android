@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import java.net.URLEncoder
 import androidx.compose.ui.Alignment
@@ -79,8 +80,40 @@ fun FeedScreen(
 
     LaunchedEffect(Unit) { adsVm.loadAdConfigs() }
 
-    var likersPostId     by remember { mutableStateOf<String?>(null) }
-    val likers           by socialVm.likers.collectAsState()
+    // ── Feed sekme (Herkes / Takip edilenler) ────────────────────────────────
+    var selectedFeedTab by remember { mutableIntStateOf(0) }
+    val ku = language == "ku"
+    val feedTabs = listOf(
+        if (ku) "Hemû" else "Herkes",
+        if (ku) "Şopîner" else "Takip Edilenler",
+    )
+
+    // Takip edilen kullanıcıların UID listesi
+    val currentUserUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+    var followingUids by remember { mutableStateOf<Set<String>>(emptySet()) }
+    LaunchedEffect(currentUserUid) {
+        if (currentUserUid.isNotEmpty()) {
+            try {
+                val snap = FirebaseFirestore.getInstance()
+                    .collection("follows")
+                    .whereEqualTo("fromUid", currentUserUid)
+                    .get().await()
+                followingUids = snap.documents.mapNotNull { it.getString("targetUid") }.toSet()
+            } catch (_: Exception) {}
+        }
+    }
+
+    val displayedPosts = remember(posts, selectedFeedTab, followingUids) {
+        if (selectedFeedTab == 1) posts.filter { it.uid in followingUids }
+        else posts
+    }
+
+    // ── Şikayet dialog ──────────────────────────────────────────────────────
+    var reportPostId     by remember { mutableStateOf<String?>(null) }
+    var reportTargetUid  by remember { mutableStateOf("") }
+    var reportTargetName by remember { mutableStateOf("") }
+
+    var likersPostId     by remember { mutableStateOf<String?>(null) }\n    val likers           by socialVm.likers.collectAsState()
     val socialLoading    by socialVm.loading.collectAsState()
     var inlineText       by remember { mutableStateOf("") }
     var inlineQuote      by remember { mutableStateOf<QuotePayload?>(null) }
@@ -132,8 +165,60 @@ fun FeedScreen(
         )
     }
 
+    // ── Şikayet gönder ──────────────────────────────────────────────────────
+    if (reportPostId != null) {
+        ReportDialog(
+            language     = language,
+            targetName   = reportTargetName,
+            onDismiss    = { reportPostId = null },
+            onConfirm    = { reason ->
+                val ruid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+                val rname = FirebaseAuth.getInstance().currentUser?.displayName ?: ""
+                FirebaseFirestore.getInstance().collection("reports").add(
+                    hashMapOf(
+                        "reporterUid"  to ruid,
+                        "reporterName" to rname,
+                        "targetUid"    to reportTargetUid,
+                        "targetName"   to reportTargetName,
+                        "targetPostId" to (reportPostId ?: ""),
+                        "reason"       to reason,
+                        "status"       to "pending",
+                        "ts"           to com.google.firebase.Timestamp.now(),
+                    )
+                )
+                reportPostId = null
+            },
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(Background).imePadding()) {
-        if (loading && posts.isEmpty()) {
+        Column(Modifier.fillMaxSize()) {
+            // ── Sekme satırı ────────────────────────────────────────────────
+            TabRow(
+                selectedTabIndex = selectedFeedTab,
+                containerColor   = Background,
+                contentColor     = Primary,
+                indicator        = { tabPositions ->
+                    Box(
+                        Modifier
+                            .tabIndicatorOffset(tabPositions[selectedFeedTab])
+                            .height(2.dp)
+                            .background(Primary)
+                    )
+                },
+            ) {
+                feedTabs.forEachIndexed { i, title ->
+                    Tab(
+                        selected               = selectedFeedTab == i,
+                        onClick                = { selectedFeedTab = i },
+                        text                   = { Text(title, fontSize = 13.sp, fontWeight = if (selectedFeedTab == i) FontWeight.Bold else FontWeight.Normal) },
+                        selectedContentColor   = Primary,
+                        unselectedContentColor = Muted,
+                    )
+                }
+            }
+
+        if (loading && displayedPosts.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Primary)
             }
@@ -143,7 +228,7 @@ fun FeedScreen(
                 contentPadding = PaddingValues(bottom = 100.dp),
             ) {
                 // ── Inline compose — tema .compose ────────────────────────
-                item {
+                if (selectedFeedTab == 0) item {
                     InlineComposeBox(
                         text          = inlineText,
                         onTextChange  = { inlineText = it },
@@ -196,7 +281,7 @@ fun FeedScreen(
                     )
                 }
                 // ── Gönderi listesi ───────────────────────────────────
-                items(posts, key = { it.id }) { post ->
+                items(displayedPosts, key = { it.id }) { post ->
                     PostCard(
                         post      = post,
                         onLike    = { vm.toggleLike(post) },
@@ -233,7 +318,7 @@ fun FeedScreen(
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     // ── AdMob Banner — her bannerPos. kartta bir ─────────
-                    val postIndex = posts.indexOf(post)
+                    val postIndex = displayedPosts.indexOf(post)
                     if (bannerUnitId != null &&
                         postIndex >= 0 &&
                         (postIndex + 1) % bannerPos == 0) {
@@ -265,9 +350,77 @@ fun FeedScreen(
                 }
             }
         }
+        } // Column
+    } // Box
 
-    }
+}
 
+// ── ReportDialog ──────────────────────────────────────────────────────────────
+@Composable
+private fun ReportDialog(
+    language   : String,
+    targetName : String,
+    onDismiss  : () -> Unit,
+    onConfirm  : (String) -> Unit,
+) {
+    val ku = language == "ku"
+    val reasons = if (ku) listOf(
+        "Naveroka neguncan",
+        "Spamê",
+        "Hatefsozî",
+        "Derew",
+        "Yê din",
+    ) else listOf(
+        "Uygunsuz içerik",
+        "Spam",
+        "Nefret söylemi",
+        "Yanlış bilgi",
+        "Diğer",
+    )
+    var selected by remember { mutableStateOf(reasons.first()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Text(
+                if (ku) "Rapor bike" else "Şikayet Et",
+                color = OnBackground, fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    "${if (ku) "Hesab" else "Hesap"}: $targetName",
+                    color = Muted, fontSize = 12.sp,
+                )
+                Spacer(Modifier.height(4.dp))
+                reasons.forEach { reason ->
+                    Row(
+                        modifier          = Modifier.fillMaxWidth().clickable { selected = reason }.padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = selected == reason,
+                            onClick  = { selected = reason },
+                            colors   = RadioButtonDefaults.colors(selectedColor = Amber),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(reason, color = OnBackground, fontSize = 14.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(selected) }) {
+                Text(if (ku) "Bişîne" else "Gönder", color = Amber, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(if (ku) "Betal bike" else "İptal", color = Muted)
+            }
+        },
+    )
 }
 
 // ── InlineComposeBox — feed üstündeki hızlı paylaşım kutusu ──────────────────
@@ -684,7 +837,12 @@ fun PostCard(
                         DropdownMenuItem(
                             text        = { Text("Şikayet et", color = Color(0xFFEF4444)) },
                             leadingIcon = { Icon(Icons.Default.Flag, null, tint = Color(0xFFEF4444)) },
-                            onClick     = { menuExpanded = false },
+                            onClick     = {
+                                menuExpanded = false
+                                reportPostId     = post.id
+                                reportTargetUid  = post.uid
+                                reportTargetName = post.displayName.ifBlank { post.name }
+                            },
                         )
                     }
                 }

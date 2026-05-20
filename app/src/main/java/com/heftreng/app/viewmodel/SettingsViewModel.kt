@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.heftreng.app.data.model.BlockedUser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
@@ -16,7 +18,8 @@ import javax.inject.Inject
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val auth: FirebaseAuth,
+    private val auth     : FirebaseAuth,
+    private val firestore: FirebaseFirestore,
 ) : ViewModel() {
 
     val isAdmin: Boolean
@@ -37,8 +40,63 @@ class SettingsViewModel @Inject constructor(
     private val _pushEnabled    = MutableStateFlow(prefs.getBoolean("hf_push", true))
     val pushEnabled = _pushEnabled.asStateFlow()
 
-    private val _privateAccount = MutableStateFlow(prefs.getBoolean("hf_private", false))
+    private val _privateAccount = MutableStateFlow(false)
     val privateAccount = _privateAccount.asStateFlow()
+
+    // ── Engellenen kullanıcılar ──────────────────────────────────────────────
+    private val _blockedUsers   = MutableStateFlow<List<BlockedUser>>(emptyList())
+    val blockedUsers = _blockedUsers.asStateFlow()
+
+    private val _blockedLoading = MutableStateFlow(false)
+    val blockedLoading = _blockedLoading.asStateFlow()
+
+    init {
+        loadPrivacySettings()
+    }
+
+    // ── Gizli profil — Firebase'den oku ─────────────────────────────────────
+    private fun loadPrivacySettings() {
+        val uid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                val doc = firestore.collection("users").document(uid).get().await()
+                _privateAccount.value = doc.getBoolean("private") ?: false
+            } catch (_: Exception) {}
+        }
+    }
+
+    // ── Engellenen kullanıcıları yükle ──────────────────────────────────────
+    fun loadBlockedUsers() {
+        val uid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            _blockedLoading.value = true
+            try {
+                val snap = firestore.collection("users").document(uid)
+                    .collection("blocked").get().await()
+                _blockedUsers.value = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    BlockedUser(
+                        uid         = doc.id,
+                        displayName = d["displayName"] as? String ?: d["name"] as? String ?: "",
+                        photoURL    = d["photoURL"] as? String ?: "",
+                    )
+                }
+            } catch (_: Exception) {}
+            finally { _blockedLoading.value = false }
+        }
+    }
+
+    // ── Engeli kaldır ────────────────────────────────────────────────────────
+    fun unblockUser(blockedUid: String) {
+        val myUid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                firestore.collection("users").document(myUid)
+                    .collection("blocked").document(blockedUid).delete().await()
+                _blockedUsers.value = _blockedUsers.value.filter { it.uid != blockedUid }
+            } catch (_: Exception) {}
+        }
+    }
 
     // ── Şifre değiştir ───────────────────────────────────────────────────────
     fun changePassword(
@@ -106,10 +164,14 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun togglePrivate() {
+        val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             val next = !_privateAccount.value
             _privateAccount.value = next
-            prefs.edit().putBoolean("hf_private", next).apply()
+            try {
+                firestore.collection("users").document(uid)
+                    .update("private", next).await()
+            } catch (_: Exception) {}
         }
     }
 }
