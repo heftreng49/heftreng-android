@@ -221,15 +221,32 @@ class ProfileViewModel @Inject constructor(
                 val ref  = firestore.collection("feedLikes").document("${post.id}_$myUid")
                 val pRef = firestore.collection("feed").document(post.id)
                 if (nowLiked) {
-                    val me = firestore.collection("users").document(myUid).get().await()
+                    val me     = firestore.collection("users").document(myUid).get().await()
+                    val myName = me.getString("displayName") ?: me.getString("name") ?: ""
+                    val myPhoto = me.getString("photoURL") ?: ""
                     ref.set(mapOf(
-                        "uid"     to myUid,
-                        "feedId"  to post.id,
-                        "name"    to (me.getString("name") ?: ""),
-                        "photoURL" to (me.getString("photoURL") ?: ""),
-                        "ts"      to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                        "uid"      to myUid,
+                        "feedId"   to post.id,
+                        "name"     to myName,
+                        "photoURL" to myPhoto,
+                        "ts"       to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                     )).await()
                     pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                    // Bildirim — kendi gönderisini beğenirse gönderme
+                    if (post.uid.isNotEmpty() && post.uid != myUid) {
+                        firestore.collection("userNotifs").document(post.uid).collection("msgs").add(mapOf(
+                            "fromUid"   to myUid,
+                            "fromName"  to myName,
+                            "fromPhoto" to myPhoto,
+                            "type"      to "like",
+                            "feedId"    to post.id,
+                            "postId"    to post.id,
+                            "title"     to "$myName gönderini beğendi",
+                            "sub"       to post.text.take(60),
+                            "ico"       to "favorite",
+                            "ts"        to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                        )).await()
+                    }
                 } else {
                     ref.delete().await()
                     pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(-1)).await()
