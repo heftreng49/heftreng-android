@@ -3,6 +3,8 @@ package com.heftreng.app.ui.screens.settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,11 +29,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
-import coil.compose.AsyncImage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,7 +49,6 @@ fun SettingsScreen(
     val blockedUsers   by vm.blockedUsers.collectAsState()
     val blockedLoading by vm.blockedLoading.collectAsState()
 
-    // Dialog state'leri
     var showPasswordDialog by remember { mutableStateOf(false) }
     var showEmailDialog    by remember { mutableStateOf(false) }
     var showBlockedDialog  by remember { mutableStateOf(false) }
@@ -146,25 +147,19 @@ fun SettingsScreen(
                         Icons.Outlined.Person,
                         if (language == "ku") "Profîlê Biguherîne" else "Profili Düzenle",
                         if (language == "ku") "Profîla xwe nûve bike" else "Profil bilgilerini düzenle",
-                    ) {
-                        navController.navigate("edit_profile")
-                    }
+                    ) { navController.navigate("edit_profile") }
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsRow(
                         Icons.Outlined.Lock,
                         if (language == "ku") "Şîreya Biguherîne" else "Şifre Değiştir",
                         if (language == "ku") "Şîreya nû destnîşan bike" else "Yeni şifre belirle",
-                    ) {
-                        showPasswordDialog = true
-                    }
+                    ) { showPasswordDialog = true }
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsRow(
                         Icons.Outlined.Email,
                         if (language == "ku") "E-Postayê Biguherîne" else "E-posta Değiştir",
                         vm.currentEmail.ifBlank { if (language == "ku") "Email biguherîne" else "E-posta adresi ekle" },
-                    ) {
-                        showEmailDialog = true
-                    }
+                    ) { showEmailDialog = true }
                 }
             }
 
@@ -207,25 +202,19 @@ fun SettingsScreen(
                         Icons.Outlined.Info,
                         if (language == "ku") "Derbarê Heftreng" else "Heftreng Hakkında",
                         if (language == "ku") "Serîlêdanê nas bike" else "Uygulama hakkında bilgi",
-                    ) {
-                        navController.navigate(Screen.CmsPage.go("hakkinda"))
-                    }
+                    ) { navController.navigate(Screen.CmsPage.go("hakkinda")) }
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsRow(
                         Icons.Outlined.Description,
                         if (language == "ku") "Şert û Mercên Bikarhanînê" else "Kullanım Koşulları",
                         if (language == "ku") "Peymanname bixwîne" else "Kullanım şartlarını görüntüle",
-                    ) {
-                        navController.navigate(Screen.CmsPage.go("kullanim-kosullari"))
-                    }
+                    ) { navController.navigate(Screen.CmsPage.go("kullanim-kosullari")) }
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsRow(
                         Icons.Outlined.Shield,
                         if (language == "ku") "Siyaseta Nepeniyê" else "Gizlilik Politikası",
                         if (language == "ku") "Siyaseta nepeniyê bixwîne" else "Gizlilik politikasını görüntüle",
-                    ) {
-                        navController.navigate(Screen.CmsPage.go("gizlilik-politikasi"))
-                    }
+                    ) { navController.navigate(Screen.CmsPage.go("gizlilik-politikasi")) }
                 }
             }
 
@@ -269,7 +258,7 @@ fun SettingsScreen(
         }
     }
 
-    // ── Şifre Değiştir Dialog ─────────────────────────────────────────────────
+    // ── Şifre Değiştir Dialog ────────────────────────────────────────────────
     if (showPasswordDialog) {
         ChangePasswordDialog(
             onDismiss = { showPasswordDialog = false },
@@ -278,7 +267,7 @@ fun SettingsScreen(
                     currentPassword = current,
                     newPassword     = newPw,
                     onSuccess       = { showPasswordDialog = false },
-                    onError         = { /* dialog içinde hata gösteriliyor */ },
+                    onError         = {},
                 )
             },
             vm       = vm,
@@ -286,7 +275,7 @@ fun SettingsScreen(
         )
     }
 
-    // ── E-posta Değiştir Dialog ───────────────────────────────────────────────
+    // ── E-posta Değiştir Dialog ──────────────────────────────────────────────
     if (showEmailDialog) {
         ChangeEmailDialog(
             currentEmail = vm.currentEmail,
@@ -307,11 +296,11 @@ fun SettingsScreen(
     // ── Engellenen Kullanıcılar Dialog ───────────────────────────────────────
     if (showBlockedDialog) {
         BlockedUsersDialog(
-            language      = language,
-            blockedUsers  = blockedUsers,
-            loading       = blockedLoading,
-            onUnblock     = { uid -> vm.unblockUser(uid) },
-            onDismiss     = { showBlockedDialog = false },
+            language     = language,
+            blockedUsers = blockedUsers,
+            loading      = blockedLoading,
+            onUnblock    = { uid -> vm.unblockUser(uid) },
+            onDismiss    = { showBlockedDialog = false },
         )
     }
 }
@@ -377,28 +366,23 @@ private fun ChangePasswordDialog(
                     isError       = newPwAgain.isNotBlank() && newPw != newPwAgain,
                     colors = settingsTextFieldColors(),
                 )
-                if (error != null) {
-                    Text(error!!, color = Error, fontSize = 12.sp)
-                }
+                if (error != null) Text(error!!, color = Error, fontSize = 12.sp)
                 if (newPwAgain.isNotBlank() && newPw != newPwAgain) {
                     Text(if (ku) "Şîre li hev nayên" else "Şifreler eşleşmiyor", color = Error, fontSize = 12.sp)
                 }
-                var showForgotFromSettings by remember { mutableStateOf(false) }
-                TextButton(
-                    onClick        = { showForgotFromSettings = true },
-                    contentPadding = PaddingValues(0.dp),
-                ) {
+                var showForgot by remember { mutableStateOf(false) }
+                TextButton(onClick = { showForgot = true }, contentPadding = PaddingValues(0.dp)) {
                     Text(
                         if (ku) "Şîreya xwe ji bîr kir? Bi maîlê sifir bike →"
                         else "Şifreni mi unuttun? Mail ile sıfırla →",
                         color = Amber, fontSize = 12.sp,
                     )
                 }
-                if (showForgotFromSettings) {
-                    val authVm2 : AuthViewModel = hiltViewModel()
+                if (showForgot) {
+                    val authVm2: AuthViewModel = hiltViewModel()
                     ForgotPasswordFromSettings(
                         prefillEmail = authVm2.currentEmail,
-                        onDismiss    = { showForgotFromSettings = false },
+                        onDismiss    = { showForgot = false },
                         authVm       = authVm2,
                         language     = language,
                     )
@@ -430,7 +414,9 @@ private fun ChangePasswordDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = { if (!loading) onDismiss() }) { Text(if (ku) "Betal bike" else "İptal", color = Muted) }
+            TextButton(onClick = { if (!loading) onDismiss() }) {
+                Text(if (ku) "Betal bike" else "İptal", color = Muted)
+            }
         },
     )
 }
@@ -445,12 +431,12 @@ private fun ChangeEmailDialog(
     language     : String = "tr",
 ) {
     val ku = language == "ku"
-    var password  by remember { mutableStateOf("") }
-    var newEmail  by remember { mutableStateOf("") }
-    var error     by remember { mutableStateOf<String?>(null) }
-    var loading   by remember { mutableStateOf(false) }
-    var showPw    by remember { mutableStateOf(false) }
-    var success   by remember { mutableStateOf(false) }
+    var password by remember { mutableStateOf("") }
+    var newEmail by remember { mutableStateOf("") }
+    var error    by remember { mutableStateOf<String?>(null) }
+    var loading  by remember { mutableStateOf(false) }
+    var showPw   by remember { mutableStateOf(false) }
+    var success  by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = { if (!loading) onDismiss() },
@@ -520,17 +506,93 @@ private fun ChangeEmailDialog(
                     else Text(if (ku) "Piştrastkirinê Bişîne" else "Doğrulama Gönder", color = Amber, fontWeight = FontWeight.Bold)
                 }
             } else {
-                TextButton(onClick = onDismiss) { Text(if (ku) "Temam" else "Tamam", color = Amber, fontWeight = FontWeight.Bold) }
+                TextButton(onClick = onDismiss) {
+                    Text(if (ku) "Temam" else "Tamam", color = Amber, fontWeight = FontWeight.Bold)
+                }
             }
         },
         dismissButton = {
-            if (!success) TextButton(onClick = { if (!loading) onDismiss() }) { Text(if (ku) "Betal bike" else "İptal", color = Muted) }
+            if (!success) TextButton(onClick = { if (!loading) onDismiss() }) {
+                Text(if (ku) "Betal bike" else "İptal", color = Muted)
+            }
+        },
+    )
+}
+
+// ── Engellenen Kullanıcılar Dialog ───────────────────────────────────────────
+@Composable
+private fun BlockedUsersDialog(
+    language     : String,
+    blockedUsers : List<com.heftreng.app.data.model.BlockedUser>,
+    loading      : Boolean,
+    onUnblock    : (String) -> Unit,
+    onDismiss    : () -> Unit,
+) {
+    val ku = language == "ku"
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Text(
+                if (ku) "Bikarhênerên Astengkirî" else "Engellenen Kullanıcılar",
+                color = OnBackground, fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            when {
+                loading -> Box(
+                    Modifier.fillMaxWidth().padding(24.dp),
+                    contentAlignment = Alignment.Center,
+                ) { CircularProgressIndicator(color = Amber, modifier = Modifier.size(28.dp)) }
+                blockedUsers.isEmpty() -> Text(
+                    if (ku) "Bikarhênerên astengkirî tune ne." else "Engellenmiş kullanıcı yok.",
+                    color = Muted, fontSize = 14.sp,
+                )
+                else -> Column(
+                    modifier            = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    blockedUsers.forEach { user ->
+                        Row(
+                            modifier          = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            AsyncImage(
+                                model              = user.photoURL.ifEmpty { null },
+                                contentDescription = null,
+                                modifier           = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(SurfaceVar),
+                                contentScale       = ContentScale.Crop,
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                user.displayName.ifBlank { "Kullanıcı" },
+                                color    = OnBackground,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { onUnblock(user.uid) }) {
+                                Text(
+                                    if (ku) "Astengiyê Berde" else "Engeli Kaldır",
+                                    color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(if (ku) "Bigire" else "Kapat", color = Amber, fontWeight = FontWeight.Bold)
+            }
         },
     )
 }
 
 // ── Bileşenler ────────────────────────────────────────────────────────────────
-
 @Composable
 private fun SettingsSection(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
     Column {
@@ -673,83 +735,14 @@ internal fun ForgotPasswordFromSettings(
                     else Text(if (ku) "Bişîne" else "Gönder", color = Amber, fontWeight = FontWeight.Bold)
                 }
             } else {
-                TextButton(onClick = onDismiss) { Text(if (ku) "Temam" else "Tamam", color = Amber, fontWeight = FontWeight.Bold) }
+                TextButton(onClick = onDismiss) {
+                    Text(if (ku) "Temam" else "Tamam", color = Amber, fontWeight = FontWeight.Bold)
+                }
             }
         },
         dismissButton = {
-            if (!success) TextButton(onClick = { if (!loading) onDismiss() }) { Text(if (ku) "Betal bike" else "İptal", color = Muted) }
-        },
-    )
-}
-
-// ── Engellenen Kullanıcılar Dialog ───────────────────────────────────────────
-@Composable
-private fun BlockedUsersDialog(
-    language     : String,
-    blockedUsers : List<com.heftreng.app.data.model.BlockedUser>,
-    loading      : Boolean,
-    onUnblock    : (String) -> Unit,
-    onDismiss    : () -> Unit,
-) {
-    val ku = language == "ku"
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor   = HeftSurface,
-        title = {
-            Text(
-                if (ku) "Bikarhênerên Astengkirî" else "Engellenen Kullanıcılar",
-                color = OnBackground, fontWeight = FontWeight.Bold,
-            )
-        },
-        text = {
-            if (loading) {
-                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Amber, modifier = Modifier.size(28.dp))
-                }
-            } else if (blockedUsers.isEmpty()) {
-                Text(
-                    if (ku) "Bikarhênerên astengkirî tune ne." else "Engellenmiş kullanıcı yok.",
-                    color = Muted, fontSize = 14.sp,
-                )
-            } else {
-                Column(
-                    modifier            = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    blockedUsers.forEach { user ->
-                        Row(
-                            modifier          = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            AsyncImage(
-                                model              = user.photoURL.ifEmpty { null },
-                                contentDescription = null,
-                                modifier           = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(SurfaceVar),
-                                contentScale       = ContentScale.Crop,
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                user.displayName.ifBlank { "Kullanıcı" },
-                                color = OnBackground, fontWeight = FontWeight.Medium,
-                                modifier = Modifier.weight(1f),
-                            )
-                            TextButton(onClick = { onUnblock(user.uid) }) {
-                                Text(
-                                    if (ku) "Astengiyê Berde" else "Engeli Kaldır",
-                                    color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(if (ku) "Bigire" else "Kapat", color = Amber, fontWeight = FontWeight.Bold)
+            if (!success) TextButton(onClick = { if (!loading) onDismiss() }) {
+                Text(if (ku) "Betal bike" else "İptal", color = Muted)
             }
         },
     )
