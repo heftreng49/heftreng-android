@@ -400,4 +400,29 @@ object Strings {
     fun replyAction(l: String)           = t(l, "Yanıtla",                    "Bersiv bide")
     fun replyingToSuffix(l: String)      = t(l, "yanıtlanıyor",               "bersiv dide")
     fun deleteFailed(l: String)          = t(l, "Silinemedi",                 "Nehat jêbirin")
+
+    // ── LinkifyText ───────────────────────────────────────────────────────────
+    fun showLess(l: String)              = t(l, "Daha Az Göster",             "Kêmtir Nîşan Bide")
+
+    // ── Auth ──────────────────────────────────────────────────────────────────
+    fun continueWithGoogle(l: String)    = t(l, "Google ile devam et",        "Bi Google re berdewam bike")
+    fun orDivider(l: String)             = t(l, "ya da",                      "an jî")
+    fun yourName(l: String)              = t(l, "Adın",                       "Navê te")
+
+    // ── PostDetailScreen ──────────────────────────────────────────────────────
+    fun postNotFound(l: String)          = t(l, "Gönderi bulunamadı",         "Nivîs nehat dîtin")
+
+    // ── KurdiScreen ───────────────────────────────────────────────────────────
+    fun levelLabel(l: String, n: Int)    = t(l, "Seviye $n",                  "Asta $n")
+    fun lessonNotFound(l: String)        = t(l, "Ders bulunamadı",            "Ders nehat dîtin")
+    fun dailyGoal(l: String)             = t(l, "Günlük Hedef",               "Armanca Rojane")
+    fun dailyGoalDesc(l: String)         = t(l, "Her gün pratik yap",         "Her roj pratîk bike")
+    fun comingSoon(l: String)            = t(l, "Yakında",                    "Zû tê")
+    fun topicHintLabel(l: String)        = t(l, "Konu",                       "Mijar")
+
+    // ── MessagesScreens ───────────────────────────────────────────────────────
+    fun searchMessages(l: String)        = t(l, "Mesajlarda ara...",          "Peyaman bigere...")
+    fun newConversation(l: String)       = t(l, "Yeni Konuşma",               "Axaftinek Nû")
+    fun deleteConvConfirm(l: String)     = t(l, "Sohbeti silmek istiyor musun?", "Dixwazî vê sohbetê jê bibî?")
+    fun noComments(l: String)            = t(l, "Henüz yorum yok",            "Hîn şîrove tune")
 }

@@ -224,6 +224,7 @@ fun CommentsSheet(
                             CommentRow(
                                 cmt       = cmt,
                                 canDelete = canDelete,
+                                language  = language,
                                 onDelete  = { deleteTarget = cmt },
                                 onReply   = { replyTo = cmt },
                             )
@@ -358,6 +359,7 @@ fun CommentsSheet(
 private fun CommentRow(
     cmt       : FeedComment,
     canDelete : Boolean,
+    language  : String = "tr",
     onDelete  : () -> Unit,
     onReply   : () -> Unit,
 ) {
