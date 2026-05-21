@@ -319,7 +319,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 modifier         = Modifier.padding(innerPadding),
             ) {
                 composable(Screen.Blog.route) {
-                    BlogScreen(navController = navController, vm = blogVm)
+                    BlogScreen(navController = navController, vm = blogVm, language = language)
                 }
                 composable("blog_post/{postId}") { back ->
                     BlogPostScreen(
@@ -352,7 +352,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     )
                 }
                 composable(Screen.Notifications.route) {
-                    NotificationsScreen(navController, notifVm)
+                    NotificationsScreen(navController, notifVm, language = language)
                 }
                 composable(Screen.EditProfile.route) { EditProfileScreen(navController, language = language) }
 
@@ -372,6 +372,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     SinglePostScreen(
                         postId        = back.arguments?.getString("postId") ?: "",
                         navController = navController,
+                        language      = language,
                     )
                 }
                 composable("serial/{id}") { back ->
@@ -405,12 +406,13 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 composable("book_chapter/{bid}/{cid}") { back ->
                     val bid = back.arguments?.getString("bid") ?: ""
                     val cid = back.arguments?.getString("cid") ?: ""
-                    BookChapterReadScreen(bookId = bid, chapterId = cid, navController = navController)
+                    BookChapterReadScreen(bookId = bid, chapterId = cid, navController = navController, language = language)
                 }
                 composable("reading_list/{uid}") { back ->
                     ReadingListScreen(
                         uid           = back.arguments?.getString("uid") ?: "",
                         navController = navController,
+                        language      = language,
                     )
                 }
             }

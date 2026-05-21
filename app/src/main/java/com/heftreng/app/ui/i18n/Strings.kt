@@ -18,7 +18,7 @@ object Strings {
     private fun t(lang: String, tr: String, ku: String) = if (lang == "ku") ku else tr
 
     // ── Alt Navigasyon ────────────────────────────────────────────────────────
-    fun navFeed(l: String)         = t(l, "Gönderiler",  "Nivîs")
+    fun navFeed(l: String)         = t(l, "Nivis",       "Nivis")
     fun navBlog(l: String)         = t(l, "Blog",        "Blog")
     fun navBooks(l: String)        = t(l, "Kitaplar",    "Pirtûk")
     fun navKurdi(l: String)        = t(l, "Kurdî",       "Kurdî")
@@ -98,13 +98,6 @@ object Strings {
 
     // ── Kitaplar ──────────────────────────────────────────────────────────────
     fun readingList(l: String)     = t(l, "Okuma Listesi",    "Lîsteya Xwendinê")
-    fun readingStatus(l: String, key: String) = when (key) {
-        "okuyorum"         -> t(l, "Okuyorum",         "Dixwînim")
-        "okumak_istiyorum" -> t(l, "Okumak İstiyorum", "Dixwazim Bixwînim")
-        "okudum"           -> t(l, "Okudum",           "Xwendim")
-        "biraktim"         -> t(l, "Bıraktım",         "Berdam")
-        else -> key
-    }
     fun addToList(l: String)       = t(l, "Listeye Ekle",     "Lîsteyê zêde bike")
     fun removeFromList(l: String)  = t(l, "Listeden Çıkar",   "Ji lîsteyê derxe")
     fun quotes(l: String)          = t(l, "Alıntılar",        "Gotinên Bijarte")
@@ -183,7 +176,6 @@ object Strings {
     fun likedBy(l: String)          = t(l, "Beğenenler",           "Hez Kirinên")
     fun reportPost(l: String)       = report(l)   // alias → report()
     fun newPost(l: String)          = t(l, "Yeni Gönderi",         "Nivîsek Nû")
-    fun addQuote(l: String)         = t(l, "Alıntı ekle",          "Alıntî")
     fun anonymous(l: String)        = t(l, "Anonim",               "Bênas")
     fun showMore(l: String)         = t(l, "Daha Fazla Göster",    "Zêdetir Nîşan Bide")
     fun likeAction(l: String)       = like(l)   // alias → like()
@@ -202,7 +194,6 @@ object Strings {
     fun chapterTitle(l: String)     = t(l, "Bölüm Başlığı",       "Sernavê Beşê")
     fun create(l: String)           = t(l, "Oluştur",             "Çêke")
     fun genre(l: String)            = t(l, "Tür",                 "Cûre")
-    fun wordCount(l: String, n: Int) = t(l, "$n kelime",             "$n peyv")
 
     // ── Yazar Paneli (yeni) ───────────────────────────────────────────────────
     fun loginToWrite(l: String)     = t(l, "Yazı göndermek için giriş yapmalısın", "Ji bo nivîsandina nivîsê têkeve")
@@ -216,12 +207,6 @@ object Strings {
 
     // ── Kurdi Ekranı (yeni) ───────────────────────────────────────────────────
     fun kurdiTitle(l: String)       = t(l, "Kurdî Öğren",          "Kurdî Fêrbibe")
-    fun lessonNotFound(l: String)   = t(l, "Ders bulunamadı",      "Ders tune")
-    fun levelLabel(l: String, n: Int) = t(l, "Seviye $n",           "Asta $n")
-    fun topicHintLabel(l: String)   = t(l, "Konu",                 "Mijar")
-    fun comingSoon(l: String)       = t(l, "Yakında",              "Zû tê")
-    fun dailyGoal(l: String)        = t(l, "Günlük hedef",         "Armanca rojane")
-    fun dailyGoalDesc(l: String)    = t(l, "Bugün 1 ders tamamla!","Îro 1 ders temam bike!")
     fun startLesson(l: String)      = t(l, "Başla!",               "Destpê Bike!")
     fun aiLessonTitle(l: String)    = t(l, "AI ile Kurdî Ders",    "Dersê Kurdî bi ZZ")
     fun aiLessonDesc(l: String)     = t(l, "OpenRouter API anahtarını gir, kaydedilir.", "Miftaya OpenRouter API binivîse, tê tomarkirin.")
@@ -242,9 +227,6 @@ object Strings {
     }
 
     // ── Mesajlar (yeni) ───────────────────────────────────────────────────────
-    fun newConversation(l: String)  = t(l, "Yeni bir konuşma başlat", "Peyamek nû dest pê bike")
-    fun deleteConvConfirm(l: String)= t(l, "Bu sohbeti silmek istiyor musun?", "Ev sohbet bê silîn?")
-    fun searchMessages(l: String)   = t(l, "Mesajlarda ara...", "Peyaman bigere...")
     fun online(l: String)           = t(l, "Çevrimiçi",            "Serhêl")
     fun offline(l: String)          = t(l, "Çevrimdışı",           "Nediyar")
     fun typing(l: String)           = t(l, "Yazıyor...",           "Dinivîse...")
@@ -272,15 +254,6 @@ object Strings {
 
     // ── Auth (yeni) ───────────────────────────────────────────────────────────
     fun welcome(l: String)          = t(l, "Hoş geldin",           "Xêr hatî")
-
-
-    fun post(l: String)               = t(l, "Gönderi",              "Nivîs")
-    fun postNotFound(l: String)       = t(l, "Gönderi bulunamadı",   "Nivîs nehate dîtin")
-    fun showLess(l: String)           = t(l, "Daha az göster",       "Kêmtir nîşan bide")
-    fun continueWithGoogle(l: String) = t(l, "Google ile devam et",  "Bi Google re berdewam bike")
-    fun orDivider(l: String)          = t(l, "  ya da  ",            "  an jî  ")
-    fun yourName(l: String)           = t(l, "Adın",                 "Navê te")
-    fun forgotPassTitle(l: String)    = t(l, "Şifremi Unuttum",      "Şîreya Xwe Ji Bîr Kir")
 
     // ── Bildirim mesajları ────────────────────────────────────────────────────
 
@@ -311,4 +284,113 @@ object Strings {
     fun sendVerification(l: String)      = t(l, "Doğrulama Gönder",                "Piştrastkirinê Bişîne")
     fun resetLinkSent(l: String)         = t(l, "Şifre sıfırlama bağlantısı gönderildi. E-posta kutunuzu kontrol edin.", "Lînka sifirkirinê hate şandin. E-postaya xwe kontrol bike.")
     fun resetLinkDesc(l: String)         = t(l, "Kayıtlı e-posta adresinize şifre sıfırlama bağlantısı göndereceğiz.", "Em ê lînka sifirkirinê ji bo e-postaya qeydkirî bişînin.")
+
+    // ── Feed - PostCard / Dialog metinleri ────────────────────────────────────
+    fun showMoreBtn(l: String)           = t(l, "Daha Fazla Göster",          "Zêdetir Nîşan Bide")
+    fun postThinkHint(l: String)         = t(l, "Ne düşünüyorsun?",           "Tu çi difikire?")
+    fun addQuote(l: String)              = t(l, "Alıntı ekle",                "Alıntî")
+    fun shareAction(l: String)           = t(l, "Paylaş",                     "Parve bike")
+    fun cancelAction(l: String)          = t(l, "İptal",                      "Betal bike")
+    fun newPostTitle(l: String)          = t(l, "Yeni Gönderi",               "Nivîsek Nû")
+    fun optionsDesc(l: String)           = t(l, "Seçenekler",                 "Vebijêrk")
+    fun editAction(l: String)            = t(l, "Düzenle",                    "Biguherîne")
+    fun deleteAction(l: String)          = t(l, "Sil",                        "Jê bibe")
+    fun repostAction(l: String)          = t(l, "Yeniden Paylaş",             "Ji Nû Ve Parve Bike")
+    fun shareWhatsApp(l: String)         = t(l, "WhatsApp'ta Paylaş",         "Di WhatsApp'ê de Parve Bike")
+    fun shareInstagram(l: String)        = t(l, "Instagram'da Paylaş",        "Di Instagram'ê de Parve Bike")
+    fun shareOtherApps(l: String)        = t(l, "Diğer Uygulamalar",          "Sepanên Din")
+    fun postTypeSerial(l: String)        = t(l, "Kitap",                      "Pirtûk")
+    fun postTypeBlog(l: String)          = t(l, "Blog Yazısı",                "Gotara Blogê")
+    fun postTypeFeed(l: String)          = t(l, "Paylaşım",                   "Parvekirî")
+    fun saveAction(l: String)            = t(l, "Kaydet",                     "Tomarkirin")
+    fun saveDesc(l: String)              = t(l, "Kaydet",                     "Tomarkirin")
+    fun deletePostTitle(l: String)       = t(l, "Gönderiyi sil?",             "Nivîs jê bibe?")
+    fun deletePostDesc(l: String)        = t(l, "Bu gönderi kalıcı olarak silinecek.", "Ev nivîs dê ji holê rabe.")
+    fun editPostTitle(l: String)         = t(l, "Gönderiyi Düzenle",          "Nivîsê Biguherîne")
+    fun deleteCommentTitle(l: String)    = t(l, "Yorumu Sil",                 "Şîrove Jê Bibe")
+    fun timeNow(l: String)               = t(l, "az önce",                    "niha")
+    fun timeMin(l: String, n: Int)       = t(l, "${n}dk",                     "${n}d")
+    fun timeHour(l: String, n: Int)      = t(l, "${n}sa",                     "${n}s")
+    fun timeDay(l: String, n: Int)       = t(l, "${n}g",                      "${n}r")
+    fun timeWeek(l: String, n: Int)      = t(l, "${n}hf",                     "${n}hf")
+    fun timeMon(l: String, n: Int)       = t(l, "${n}ay",                     "${n}m")
+    fun timeYear(l: String, n: Int)      = t(l, "${n}y",                      "${n}s")
+    fun reportDialogTitle(l: String, name: String) = t(l, "Hesap: $name",     "Hesab: $name")
+    fun reportConfirm(l: String)         = t(l, "Şikayet Et",                 "Rapor bike")
+
+    // ── Messages ──────────────────────────────────────────────────────────────
+    fun msgSearchHint(l: String)         = t(l, "Mesajlarda ara...",          "Peyaman bigere...")
+    fun msgListTitle(l: String)          = t(l, "Mesajlar",                   "Peyam")
+    fun msgLoading(l: String)            = t(l, "Yükleniyor...",              "Tê barkirin...")
+    fun msgEmpty(l: String)              = t(l, "Henüz mesajın yok",          "Peyam tune")
+    fun msgEmptyDesc(l: String)          = t(l, "Yeni bir konuşma başlat",    "Peyamek nû dest pê bike")
+    fun msgDeleteConvTitle(l: String)    = t(l, "Sohbeti Sil",                "Sohbet Sil")
+    fun msgDeleteConvDesc(l: String)     = t(l, "Bu sohbeti silmek istiyor musun?", "Ev sohbet bê silîn?")
+    fun msgUser(l: String)               = t(l, "Kullanıcı",                  "Bikarhêner")
+    fun msgTyping(l: String)             = t(l, "yazıyor...",                 "dinivîse...")
+    fun msgOnline(l: String)             = t(l, "çevrimiçi",                  "serhêl")
+    fun msgOffline(l: String)            = t(l, "çevrimdışı",                 "nediyar")
+    fun msgGoProfile(l: String)          = t(l, "Profile git",                "Profîl")
+    fun msgDeleteConv(l: String)         = t(l, "Sohbeti sil",                "Sohbetê jê bibe")
+    fun msgSaving(l: String)             = t(l, "Kayıt yapılıyor",            "Tê tomarkirin")
+    fun msgVoice(l: String)              = t(l, "Sesli mesaj",                "Dengbêjiya dengî")
+    fun msgYou(l: String)                = t(l, "Sen",                        "Tu")
+    fun msgEditTitle(l: String)          = t(l, "Mesajı düzenle",             "Peyamê biguherîne")
+    fun msgHint(l: String)               = t(l, "Mesaj yaz...",               "Peyamê binivîse...")
+    fun msgEmptyConv(l: String)          = t(l, "Henüz mesaj yok, konuşmayı başlat!", "Peyam tune, dest bi axaftinê bike!")
+    fun msgReply(l: String)              = t(l, "Yanıtla",                    "Bersiv bide")
+    fun msgEdit(l: String)               = t(l, "Düzenle",                    "Biguherîne")
+    fun msgDelete(l: String)             = t(l, "Sil",                        "Jê bibe")
+    fun msgLike(l: String)               = t(l, "Beğen",                      "Hez bike")
+    fun msgDeleted(l: String)            = t(l, "Bu mesaj silindi",           "Peyam hat jêbirin")
+    fun msgEdited(l: String)             = t(l, "(düzenlendi)",               "(guherî)")
+
+    // ── Auth ──────────────────────────────────────────────────────────────────
+    fun authCreateAccount(l: String)     = t(l, "Hesap oluştur",              "Hesabek nû çêke")
+    fun authWelcome(l: String)           = t(l, "Hoş geldin",                 "Xêr hatî")
+    fun authGoogleContinue(l: String)    = t(l, "Google ile devam et",        "Bi Google re berdewam bike")
+    fun authOr(l: String)                = t(l, "  ya da  ",                  "  an jî  ")
+    fun authNameLabel(l: String)         = t(l, "Adın",                       "Navê te")
+    fun authPasswordLabel(l: String)     = t(l, "Şifre",                      "Şîfre")
+    fun authForgotPw(l: String)          = t(l, "Şifremi unuttum",            "Şîfreya xwe ji bîr kir")
+    fun authRegister(l: String)          = t(l, "Kayıt ol",                   "Qeyd bibe")
+    fun authLogin(l: String)             = t(l, "Giriş yap",                  "Têkeve")
+    fun authHaveAccount(l: String)       = t(l, "Zaten hesabın var mı? Giriş yap", "Hesabê te heye? Têkeve")
+    fun authNoAccount(l: String)         = t(l, "Hesabın yok mu? Kayıt ol",   "Hesabê te tune? Qeyd bibe")
+    fun authForgotTitle(l: String)       = t(l, "Şifremi Unuttum",            "Şîreya Xwe Ji Bîr Kir")
+    fun authResetSent(l: String)         = t(l, "Şifre sıfırlama bağlantısı gönderildi. E-posta kutunuzu kontrol edin.", "Lînka sifirkirina şîfreyê hate şandin. E-postaya xwe kontrol bike.")
+    fun authResetDesc(l: String)         = t(l, "E-posta adresinizi girin, sıfırlama bağlantısı gönderelim.", "E-postaya qeydkirî binivîse, em lînka sifirkirinê bişînin.")
+
+    // ── Kitaplar / Seriler ────────────────────────────────────────────────────
+    fun booksTitle(l: String)            = t(l, "Kitaplar",                   "Pirtûk")
+    fun booksEmpty(l: String)            = t(l, "Henüz kitap yok",            "Pirtûk tune")
+    fun bookAddBtn(l: String)            = t(l, "Kitap Ekle",                 "Pirtûk Zêde Bike")
+    fun bookChaptersTitle(l: String, n: Int) = t(l, "Bölümler ($n)",          "Beş ($n)")
+    fun bookChaptersEmpty(l: String)     = t(l, "Henüz bölüm eklenmemiş",    "Beş tune")
+    fun bookNewTitle(l: String)          = t(l, "Yeni Kitap",                 "Pirtûk Nû")
+    fun bookNameLabel(l: String)         = t(l, "Kitap Adı *",                "Sernavê Pirtûkê *")
+    fun bookDescLabel(l: String)         = t(l, "Açıklama",                   "Danasîn")
+    fun bookGenreLabel(l: String)        = t(l, "Tür",                        "Cûre")
+    fun bookCreateBtn(l: String)         = t(l, "Oluştur",                    "Çêke")
+    fun prevChapter(l: String)           = t(l, "Önceki",                     "Berî")
+    fun nextChapter(l: String)           = t(l, "Sonraki",                    "Paşê")
+    fun wordCount(l: String)             = t(l, "kelime",                     "peyvên")
+    fun readingListEmpty(l: String)      = t(l, "Bu listede kitap yok",       "Di vê lîsteyê de pirtûk tune")
+    fun addToReadingList(l: String)      = t(l, "Okuma Listesine Ekle",       "Li Lîsteya Xwendinê Zêde Bike")
+
+    // ── Bildirimler (NotificationsScreen) ────────────────────────────────────
+    fun notifTitle(l: String)            = t(l, "Bildirimler",                "Agahdarî")
+    fun notifUnread(l: String, n: Int)   = t(l, "$n okunmamış",              "$n nexwendî")
+    fun notifBack(l: String)             = t(l, "Geri",                       "Vegere")
+    fun notifMarkAll(l: String)          = t(l, "Tümünü oku",                 "Hemû bixwîne")
+    fun notifEmpty(l: String)            = t(l, "Henüz bildirim yok",         "Agahdarî tune")
+    fun notifEmptyDesc(l: String)        = t(l, "Yeni bildirimler burada görünecek", "Agahdariyên nû dê li vir xuya bikin")
+
+    // ── PostDetail ────────────────────────────────────────────────────────────
+    fun likesCount(l: String, n: Int)    = t(l, "$n beğeni",                  "$n xweşandin")
+    fun replyingTo(l: String, name: String) = t(l, "@$name yanıtlanıyor",     "@$name bersiv dide")
+    fun replyHint(l: String, name: String)  = t(l, "@$name yanıtla...",       "@$name bersiv bide...")
+    fun replyAction(l: String)           = t(l, "Yanıtla",                    "Bersiv bide")
+    fun replyingToSuffix(l: String)      = t(l, "yanıtlanıyor",               "bersiv dide")
+    fun deleteFailed(l: String)          = t(l, "Silinemedi",                 "Nehat jêbirin")
 }

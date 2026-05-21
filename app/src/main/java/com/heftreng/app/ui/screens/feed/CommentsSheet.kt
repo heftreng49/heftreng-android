@@ -31,6 +31,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -53,6 +54,7 @@ private data class FeedComment(
 fun CommentsSheet(
     postId        : String,
     postAuthorUid : String,
+    language      : String = "tr",
     onDismiss     : () -> Unit,
 ) {
     val db    = FirebaseFirestore.getInstance()
@@ -142,7 +144,7 @@ fun CommentsSheet(
                 db.collection("feed").document(postId)
                     .update("cmtCount", FieldValue.increment(1)).await()
             } catch (e: Exception) {
-                errorMsg = e.message ?: "Hata"
+                errorMsg = e.message ?: Strings.error(language)
             }
         }
     }
@@ -156,7 +158,7 @@ fun CommentsSheet(
                 db.collection("feed").document(postId)
                     .update("cmtCount", FieldValue.increment(-1)).await()
             } catch (e: Exception) {
-                errorMsg = "Silinemedi: ${e.message}"
+                errorMsg = "${Strings.deleteFailed(language)}: ${e.message}"
             }
         }
     }
@@ -190,7 +192,7 @@ fun CommentsSheet(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("Yorumlar", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(Strings.comments(language), color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 if (comments.isNotEmpty()) {
                     Text("${comments.size}", color = Muted, fontSize = 13.sp)
                 }
@@ -209,7 +211,7 @@ fun CommentsSheet(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("💬", fontSize = 32.sp)
                             Spacer(Modifier.height(8.dp))
-                            Text("Henüz yorum yok", color = Muted, fontSize = 14.sp)
+                            Text(Strings.noComments(language), color = Muted, fontSize = 14.sp)
                         }
                     }
                 }
@@ -246,7 +248,7 @@ fun CommentsSheet(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        "@${replyTo!!.name} yanıtlanıyor",
+                        "@${replyTo!!.name} ${Strings.replyingToSuffix(language)}",
                         color    = Amber,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
@@ -255,7 +257,7 @@ fun CommentsSheet(
                         onClick        = { replyTo = null },
                         contentPadding = PaddingValues(0.dp),
                     ) {
-                        Text("İptal", color = Muted, fontSize = 12.sp)
+                        Text(Strings.cancelAction(language), color = Muted, fontSize = 12.sp)
                     }
                 }
             }
@@ -274,8 +276,8 @@ fun CommentsSheet(
                     onValueChange = { inputText = it },
                     placeholder   = {
                         Text(
-                            if (replyTo != null) "@${replyTo!!.name} yanıtla..."
-                            else "Yorum yaz...",
+                            if (replyTo != null) Strings.replyHint(language, replyTo!!.name)
+                            else Strings.commentHint(language),
                             color    = Muted,
                             fontSize = 14.sp,
                         )
@@ -306,7 +308,7 @@ fun CommentsSheet(
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Gönder",
+                        contentDescription = Strings.send(language),
                         tint     = if (inputText.isNotBlank()) Color.Black else Muted,
                         modifier = Modifier.size(20.dp),
                     )
@@ -320,16 +322,16 @@ fun CommentsSheet(
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             containerColor   = HeftSurface,
-            title  = { Text("Yorumu Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            title  = { Text(Strings.deleteCommentTitle(language), color = OnBackground, fontWeight = FontWeight.SemiBold) },
             text   = { Text(cmt.text.take(80), color = Muted, fontSize = 13.sp) },
             confirmButton = {
                 TextButton(onClick = { deleteComment(cmt); deleteTarget = null }) {
-                    Text("Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                    Text(Strings.deleteAction(language), color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { deleteTarget = null }) {
-                    Text("İptal", color = Muted)
+                    Text(Strings.cancelAction(language), color = Muted)
                 }
             },
         )
@@ -340,11 +342,11 @@ fun CommentsSheet(
         AlertDialog(
             onDismissRequest = { errorMsg = "" },
             containerColor   = HeftSurface,
-            title  = { Text("Hata", color = Color(0xFFEF4444), fontWeight = FontWeight.SemiBold) },
+            title  = { Text(Strings.error(language), color = Color(0xFFEF4444), fontWeight = FontWeight.SemiBold) },
             text   = { Text(errorMsg, color = Muted, fontSize = 13.sp) },
             confirmButton = {
                 TextButton(onClick = { errorMsg = "" }) {
-                    Text("Tamam", color = Amber)
+                    Text(Strings.confirm(language), color = Amber)
                 }
             },
         )
@@ -427,7 +429,7 @@ private fun CommentRow(
                 }
                 // Yanıtla
                 Text(
-                    "Yanıtla",
+                    Strings.replyAction(language),
                     color    = Muted,
                     fontSize = 11.sp,
                     modifier = Modifier.clickable { onReply() },
@@ -440,7 +442,7 @@ private fun CommentRow(
             IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                 Icon(
                     Icons.Default.Delete,
-                    contentDescription = "Sil",
+                    contentDescription = Strings.deleteAction(language),
                     tint     = Color(0xFFEF4444).copy(alpha = 0.7f),
                     modifier = Modifier.size(16.dp),
                 )

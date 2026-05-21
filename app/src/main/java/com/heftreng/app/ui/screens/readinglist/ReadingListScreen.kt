@@ -27,6 +27,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.data.model.ReadingListEntry
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.ReadingListViewModel
 import com.heftreng.app.viewmodel.RlStatus
@@ -38,8 +39,10 @@ import com.heftreng.app.viewmodel.RlStatus
 fun ReadingListScreen(
     uid           : String,
     navController : NavController,
+    language      : String = "tr",
     vm            : ReadingListViewModel = hiltViewModel(),
 ) {
+    val ku = language == "ku"
     val entries  by vm.entries.collectAsState()
     val loading  by vm.loading.collectAsState()
     var selectedStatus by remember { mutableStateOf(RlStatus.READING) }
@@ -50,7 +53,7 @@ fun ReadingListScreen(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text("Okuma Listesi", fontWeight = FontWeight.Bold, color = OnBackground) },
+                title = { Text(Strings.readingList(language), fontWeight = FontWeight.Bold, color = OnBackground) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, null, tint = OnBackground)
@@ -73,7 +76,7 @@ fun ReadingListScreen(
                     FilterChip(
                         selected = selected,
                         onClick  = { selectedStatus = status },
-                        label    = { Text(status.labelTr, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+                        label    = { Text(if (ku) status.labelKu else status.labelTr, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
                         colors   = FilterChipDefaults.filterChipColors(
                             selectedContainerColor   = bg.copy(alpha = 0.2f),
                             selectedLabelColor       = bg,
@@ -103,7 +106,7 @@ fun ReadingListScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Default.LibraryBooks, null, tint = Muted, modifier = Modifier.size(48.dp))
                             Spacer(Modifier.height(12.dp))
-                            Text("Bu listede kitap yok", color = Muted, fontSize = 14.sp)
+                            Text(Strings.readingListEmpty(language), color = Muted, fontSize = 14.sp)
                         }
                     }
                 } else {
@@ -185,7 +188,7 @@ private fun ReadingListBookCard(
                     .background(bg.copy(alpha = 0.85f))
                     .padding(horizontal = 4.dp, vertical = 2.dp),
             ) {
-                Text(status.labelTr, color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                Text(if (ku) status.labelKu else status.labelTr, color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
             }
             // Menü butonu
             Box(Modifier.align(Alignment.TopStart)) {
@@ -201,7 +204,7 @@ private fun ReadingListBookCard(
                     containerColor   = HeftSurface,
                 ) {
                     DropdownMenuItem(
-                        text    = { Text("Listeden Çıkar", color = Color(0xFFEF4444)) },
+                        text    = { Text(Strings.removeFromList(language), color = Color(0xFFEF4444)) },
                         onClick = { showMenu = false; onRemove() },
                     )
                 }
@@ -229,16 +232,18 @@ fun ReadingListStatusSheet(
     coverImg  : String,
     bg        : String,
     current   : RlStatus?,
+    language  : String = "tr",
     onDismiss : () -> Unit,
     onSelect  : (RlStatus?) -> Unit,
 ) {
+    val ku = language == "ku"
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor   = HeftSurface,
     ) {
         Column(modifier = Modifier.padding(bottom = 32.dp)) {
             Text(
-                "Okuma Listesine Ekle",
+                Strings.addToReadingList(language),
                 fontWeight = FontWeight.Bold,
                 color      = OnBackground,
                 fontSize   = 16.sp,
@@ -263,9 +268,9 @@ fun ReadingListStatusSheet(
                             .background(col)
                     )
                     Spacer(Modifier.width(12.dp))
-                    Text(status.labelTr, color = if (selected) col else OnBackground, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                    Text(if (ku) status.labelKu else status.labelTr, color = if (selected) col else OnBackground, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
                     Spacer(Modifier.width(6.dp))
-                    Text("/ ${status.labelKu}", color = Muted, fontSize = 12.sp)
+                    
                     if (selected) {
                         Spacer(Modifier.weight(1f))
                         Icon(Icons.Default.Check, null, tint = col, modifier = Modifier.size(18.dp))
@@ -283,7 +288,7 @@ fun ReadingListStatusSheet(
                 ) {
                     Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(12.dp))
-                    Text("Listeden Çıkar", color = Color(0xFFEF4444))
+                    Text(Strings.removeFromList(language), color = Color(0xFFEF4444))
                 }
             }
         }

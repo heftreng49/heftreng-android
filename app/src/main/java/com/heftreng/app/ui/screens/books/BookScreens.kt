@@ -40,6 +40,7 @@ import com.heftreng.app.data.model.Book
 import com.heftreng.app.data.model.BookChapter
 import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.ui.screens.social.UserAvatar
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.BookViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
@@ -63,7 +64,7 @@ fun BooksScreen(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text(if (language == "ku") "Pirtûk" else "Kitaplar", fontWeight = FontWeight.Bold, color = OnBackground) },
+                title = { Text(Strings.booksTitle(language), fontWeight = FontWeight.Bold, color = OnBackground) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
                 actions = {
                     IconButton(onClick = { showCreate = true }) {
@@ -81,9 +82,9 @@ fun BooksScreen(
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(Icons.Outlined.MenuBook, null, tint = Divider, modifier = Modifier.size(56.dp))
-                    Text(if (language == "ku") "Pirtûk tune" else "Henüz kitap yok", color = Muted)
+                    Text(Strings.booksEmpty(language), color = Muted)
                     TextButton(onClick = { showCreate = true }) {
-                        Text("+ ${if (language == "ku") "Pirtûk Zêde Bike" else "Kitap Ekle"}", color = Amber)
+                        Text("+ ${Strings.bookAddBtn(language)}", color = Amber)
                     }
                 }
             }
@@ -188,7 +189,7 @@ fun BookDetailScreen(
                         Icon(Icons.Default.FormatListNumbered, null, tint = Amber, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "${if (language == "ku") "Beş" else "Bölüm"}ler (${chapters.size})",
+                            Strings.bookChaptersTitle(language, chapters.size),
                             color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
                         )
                     }
@@ -203,7 +204,7 @@ fun BookDetailScreen(
             } else if (!loading) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        Text(if (language == "ku") "Beş tune" else "Henüz bölüm eklenmemiş", color = Muted, fontSize = 13.sp)
+                        Text(Strings.bookChaptersEmpty(language), color = Muted, fontSize = 13.sp)
                     }
                 }
             }
@@ -228,8 +229,10 @@ fun BookChapterReadScreen(
     bookId       : String,
     chapterId    : String,
     navController: NavController,
+    language     : String = "tr",
     vm           : BookViewModel = hiltViewModel(),
 ) {
+    val ku = language == "ku"
     val chapter  by vm.selectedChapter.collectAsState()
     val chapters by vm.chapters.collectAsState()
 
@@ -268,14 +271,14 @@ fun BookChapterReadScreen(
                 if (prevChapter != null) {
                     TextButton(onClick = { navController.navigate("book_chapter/$bookId/${prevChapter.id}") { popUpTo("book_chapter/$bookId/$chapterId") { inclusive = true } } }) {
                         Icon(Icons.Default.ChevronLeft, null, tint = Primary)
-                        Text("Önceki", color = Primary, fontSize = 13.sp)
+                        Text(Strings.prevChapter(language), color = Primary, fontSize = 13.sp)
                     }
                 } else {
                     Spacer(Modifier.width(1.dp))
                 }
                 if (nextChapter != null) {
                     TextButton(onClick = { navController.navigate("book_chapter/$bookId/${nextChapter.id}") { popUpTo("book_chapter/$bookId/$chapterId") { inclusive = true } } }) {
-                        Text("Sonraki", color = Amber, fontSize = 13.sp)
+                        Text(Strings.nextChapter(language), color = Amber, fontSize = 13.sp)
                         Icon(Icons.Default.ChevronRight, null, tint = Amber)
                     }
                 } else {
@@ -302,7 +305,7 @@ fun BookChapterReadScreen(
             Text(ch.title, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 20.sp, lineHeight = 28.sp)
             if (ch.wordCount > 0) {
                 Spacer(Modifier.height(4.dp))
-                Text("${ch.wordCount} kelime", color = Muted, fontSize = 12.sp)
+                Text("${ch.wordCount} ${Strings.wordCount(language)}", color = Muted, fontSize = 12.sp)
             }
             Spacer(Modifier.height(20.dp))
             HorizontalDivider(color = Divider)
@@ -561,26 +564,26 @@ fun CreateBookDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.MenuBook, null, tint = Amber, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(if (language == "ku") "Pirtûk Nû" else "Yeni Kitap", color = OnBackground, fontWeight = FontWeight.Bold)
+                Text(Strings.bookNewTitle(language), color = OnBackground, fontWeight = FontWeight.Bold)
             }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = title, onValueChange = { title = it },
-                    label = { Text(if (language == "ku") "Sernavê Pirtûkê *" else "Kitap Adı *") },
+                    label = { Text(Strings.bookNameLabel(language)) },
                     singleLine = true, modifier = Modifier.fillMaxWidth(),
                     colors = bookTextFieldColors(),
                 )
                 OutlinedTextField(
                     value = desc, onValueChange = { desc = it },
-                    label = { Text(if (language == "ku") "Danasîn" else "Açıklama") },
+                    label = { Text(Strings.bookDescLabel(language)) },
                     minLines = 2, modifier = Modifier.fillMaxWidth(),
                     colors = bookTextFieldColors(),
                 )
                 OutlinedTextField(
                     value = genre, onValueChange = { genre = it },
-                    label = { Text(if (language == "ku") "Cûre" else "Tür") },
+                    label = { Text(Strings.bookGenreLabel(language)) },
                     singleLine = true, modifier = Modifier.fillMaxWidth(),
                     colors = bookTextFieldColors(),
                     leadingIcon = { Icon(Icons.Default.Category, null, tint = Muted, modifier = Modifier.size(18.dp)) },
@@ -591,10 +594,10 @@ fun CreateBookDialog(
             TextButton(
                 onClick  = { if (title.isNotBlank()) onCreate(title.trim(), desc.trim(), genre.trim()) },
                 enabled  = title.isNotBlank(),
-            ) { Text(if (language == "ku") "Çêke" else "Oluştur", color = Amber, fontWeight = FontWeight.Bold) }
+            ) { Text(Strings.bookCreateBtn(language), color = Amber, fontWeight = FontWeight.Bold) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(if (language == "ku") "Betal bike" else "İptal", color = Muted) }
+            TextButton(onClick = onDismiss) { Text(Strings.cancelAction(language), color = Muted) }
         },
     )
 }
