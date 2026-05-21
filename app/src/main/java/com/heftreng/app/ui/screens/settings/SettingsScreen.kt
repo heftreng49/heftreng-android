@@ -31,6 +31,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.navigation.Screen
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
@@ -59,7 +60,7 @@ fun SettingsScreen(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text(if (language == "ku") "Mîheng" else "Ayarlar", fontWeight = FontWeight.SemiBold, color = OnBackground) },
+                title = { Text(Strings.settingsTitle(language), fontWeight = FontWeight.SemiBold, color = OnBackground) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
@@ -77,7 +78,7 @@ fun SettingsScreen(
 
             // ── Görünüm ──────────────────────────────────────────────────
             item {
-                SettingsSection(title = if (language == "ku") "Xuyangeh" else "Görünüm") {
+                SettingsSection(title = Strings.appearance(language)) {
                     Row(
                         modifier          = Modifier.fillMaxWidth().padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -89,8 +90,7 @@ fun SettingsScreen(
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
-                                if (isDark) (if (language == "ku") "Moda Tarî" else "Karanlık Mod")
-                                else (if (language == "ku") "Moda Ronahî" else "Aydınlık Mod"),
+                                if (isDark) Strings.darkMode(language) else Strings.lightMode(language),
                                 color = OnBackground, fontWeight = FontWeight.Medium,
                             )
                             Text(
@@ -117,8 +117,8 @@ fun SettingsScreen(
                             Icon(Icons.Outlined.Translate, null, tint = Amber, modifier = Modifier.size(22.dp))
                             Spacer(Modifier.width(14.dp))
                             Column {
-                                Text(if (language == "ku") "Ziman" else "Dil", color = OnBackground, fontWeight = FontWeight.Medium)
-                                Text(if (language == "ku") "Zimanê serîlêdanê hilbijêre" else "Uygulama dilini seç", color = Muted, fontSize = 12.sp)
+                                Text(Strings.appLanguage(language), color = OnBackground, fontWeight = FontWeight.Medium)
+                                Text(Strings.selectLang(language), color = Muted, fontSize = 12.sp)
                             }
                         }
                         Spacer(Modifier.height(10.dp))
@@ -142,34 +142,34 @@ fun SettingsScreen(
 
             // ── Hesap ────────────────────────────────────────────────────
             item {
-                SettingsSection(title = if (language == "ku") "Hesab" else "Hesap") {
+                SettingsSection(title = Strings.account(language)) {
                     SettingsRow(
                         Icons.Outlined.Person,
-                        if (language == "ku") "Profîlê Biguherîne" else "Profili Düzenle",
-                        if (language == "ku") "Profîla xwe nûve bike" else "Profil bilgilerini düzenle",
+                        Strings.editProfile(language),
+                        Strings.settingsEditSub(language),
                     ) { navController.navigate("edit_profile") }
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsRow(
                         Icons.Outlined.Lock,
-                        if (language == "ku") "Şîreya Biguherîne" else "Şifre Değiştir",
-                        if (language == "ku") "Şîreya nû destnîşan bike" else "Yeni şifre belirle",
+                        Strings.changePassword(language),
+                        Strings.settingsPasswordSub(language),
                     ) { showPasswordDialog = true }
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsRow(
                         Icons.Outlined.Email,
-                        if (language == "ku") "E-Postayê Biguherîne" else "E-posta Değiştir",
-                        vm.currentEmail.ifBlank { if (language == "ku") "Email biguherîne" else "E-posta adresi ekle" },
+                        Strings.changeEmail(language),
+                        vm.currentEmail.ifBlank { Strings.settingsEmailAdd(language) },
                     ) { showEmailDialog = true }
                 }
             }
 
             // ── Bildirimler ──────────────────────────────────────────────
             item {
-                SettingsSection(title = if (language == "ku") "Agahdarî" else "Bildirimler") {
+                SettingsSection(title = Strings.navNotifs(language)) {
                     SettingsSwitchRow(
                         icon    = Icons.Outlined.Notifications,
-                        label   = if (language == "ku") "Agahdariyên Push" else "Push Bildirimleri",
-                        sub     = if (language == "ku") "Agahdariyên push veke/bigire" else "Anlık bildirimleri aç/kapat",
+                        label   = Strings.pushNotifs(language),
+                        sub     = Strings.settingsPushSub(language),
                         checked = pushEnabled,
                         onCheck = { vm.togglePush() },
                     )
@@ -178,42 +178,42 @@ fun SettingsScreen(
 
             // ── Gizlilik ─────────────────────────────────────────────────
             item {
-                SettingsSection(title = if (language == "ku") "Nepenî" else "Gizlilik") {
+                SettingsSection(title = Strings.privacy(language)) {
                     SettingsSwitchRow(
                         icon    = Icons.Outlined.Lock,
-                        label   = if (language == "ku") "Hesabê Veşartî" else "Gizli Hesap",
-                        sub     = if (language == "ku") "Tenê şopîner dikarin bibînin" else "Sadece takipçiler görebilir",
+                        label   = Strings.privateAccount(language),
+                        sub     = Strings.settingsPrivateSub(language),
                         checked = privateAccount,
                         onCheck = { vm.togglePrivate() },
                     )
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsRow(
                         Icons.Outlined.Block,
-                        if (language == "ku") "Bikarhênerên Astengkirî" else "Engellenen Kullanıcılar",
-                        if (language == "ku") "Bikarhênerên astengkirî birêve bibe" else "Engellenen hesapları yönet",
+                        Strings.blockedUsers(language),
+                        Strings.settingsBlockedSub(language),
                     ) { showBlockedDialog = true }
                 }
             }
 
             // ── Diğer ────────────────────────────────────────────────────
             item {
-                SettingsSection(title = if (language == "ku") "Yên Din" else "Diğer") {
+                SettingsSection(title = Strings.settingsOther(language)) {
                     SettingsRow(
                         Icons.Outlined.Info,
-                        if (language == "ku") "Derbarê Heftreng" else "Heftreng Hakkında",
-                        if (language == "ku") "Serîlêdanê nas bike" else "Uygulama hakkında bilgi",
+                        Strings.settingsAbout(language),
+                        Strings.settingsAboutSub(language),
                     ) { navController.navigate(Screen.CmsPage.go("hakkinda")) }
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsRow(
                         Icons.Outlined.Description,
-                        if (language == "ku") "Şert û Mercên Bikarhanînê" else "Kullanım Koşulları",
-                        if (language == "ku") "Peymanname bixwîne" else "Kullanım şartlarını görüntüle",
+                        Strings.termsOfUse(language),
+                        Strings.settingsTermsSub(language),
                     ) { navController.navigate(Screen.CmsPage.go("kullanim-kosullari")) }
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsRow(
                         Icons.Outlined.Shield,
-                        if (language == "ku") "Siyaseta Nepeniyê" else "Gizlilik Politikası",
-                        if (language == "ku") "Siyaseta nepeniyê bixwîne" else "Gizlilik politikasını görüntüle",
+                        Strings.privacyPolicy(language),
+                        Strings.settingsPrivacySub(language),
                     ) { navController.navigate(Screen.CmsPage.go("gizlilik-politikasi")) }
                 }
             }
@@ -231,7 +231,7 @@ fun SettingsScreen(
                         ) {
                             Icon(Icons.Default.AdminPanelSettings, null, tint = Error, modifier = Modifier.size(22.dp))
                             Spacer(Modifier.width(14.dp))
-                            Text(if (language == "ku") "Panela Admin" else "Admin Paneli", color = Error, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text(Strings.settingsAdminPanel(language), color = Error, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                             Icon(Icons.Default.ChevronRight, null, tint = Error, modifier = Modifier.size(18.dp))
                         }
                     }
@@ -250,7 +250,7 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.AutoMirrored.Filled.Logout, null, tint = Color(0xFFEF4444), modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(14.dp))
-                        Text(if (language == "ku") "Derketin" else "Çıkış Yap", color = Color(0xFFEF4444), fontWeight = FontWeight.Medium)
+                        Text(Strings.logout(language), color = Color(0xFFEF4444), fontWeight = FontWeight.Medium)
                     }
                 }
                 Spacer(Modifier.height(16.dp))
@@ -313,7 +313,6 @@ private fun ChangePasswordDialog(
     vm        : SettingsViewModel,
     language  : String = "tr",
 ) {
-    val ku = language == "ku"
     var currentPw  by remember { mutableStateOf("") }
     var newPw      by remember { mutableStateOf("") }
     var newPwAgain by remember { mutableStateOf("") }
@@ -325,13 +324,13 @@ private fun ChangePasswordDialog(
     AlertDialog(
         onDismissRequest = { if (!loading) onDismiss() },
         containerColor   = HeftSurface,
-        title = { Text(if (ku) "Şîreya Biguherîne" else "Şifre Değiştir", color = OnBackground, fontWeight = FontWeight.Bold) },
+        title = { Text(Strings.changePassword(language), color = OnBackground, fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value         = currentPw,
                     onValueChange = { currentPw = it; error = null },
-                    label         = { Text(if (ku) "Şîreya Niha" else "Mevcut Şifre") },
+                    label         = { Text(Strings.currentPassword(language)) },
                     singleLine    = true,
                     modifier      = Modifier.fillMaxWidth(),
                     visualTransformation = if (showCurrent) VisualTransformation.None else PasswordVisualTransformation(),
@@ -345,7 +344,7 @@ private fun ChangePasswordDialog(
                 OutlinedTextField(
                     value         = newPw,
                     onValueChange = { newPw = it; error = null },
-                    label         = { Text(if (ku) "Şîreya Nû" else "Yeni Şifre") },
+                    label         = { Text(Strings.newPassword(language)) },
                     singleLine    = true,
                     modifier      = Modifier.fillMaxWidth(),
                     visualTransformation = if (showNew) VisualTransformation.None else PasswordVisualTransformation(),
@@ -359,7 +358,7 @@ private fun ChangePasswordDialog(
                 OutlinedTextField(
                     value         = newPwAgain,
                     onValueChange = { newPwAgain = it; error = null },
-                    label         = { Text(if (ku) "Şîreya Nû (Dubare)" else "Yeni Şifre (Tekrar)") },
+                    label         = { Text(Strings.pwRepeat(language)) },
                     singleLine    = true,
                     modifier      = Modifier.fillMaxWidth(),
                     visualTransformation = PasswordVisualTransformation(),
@@ -368,13 +367,12 @@ private fun ChangePasswordDialog(
                 )
                 if (error != null) Text(error!!, color = Error, fontSize = 12.sp)
                 if (newPwAgain.isNotBlank() && newPw != newPwAgain) {
-                    Text(if (ku) "Şîre li hev nayên" else "Şifreler eşleşmiyor", color = Error, fontSize = 12.sp)
+                    Text(Strings.passwordMismatch(language), color = Error, fontSize = 12.sp)
                 }
                 var showForgot by remember { mutableStateOf(false) }
                 TextButton(onClick = { showForgot = true }, contentPadding = PaddingValues(0.dp)) {
                     Text(
-                        if (ku) "Şîreya xwe ji bîr kir? Bi maîlê sifir bike →"
-                        else "Şifreni mi unuttun? Mail ile sıfırla →",
+                        Strings.forgotPassPrompt(language),
                         color = Amber, fontSize = 12.sp,
                     )
                 }
@@ -393,9 +391,9 @@ private fun ChangePasswordDialog(
             TextButton(
                 onClick = {
                     when {
-                        currentPw.isBlank() -> error = if (ku) "Şîreya niha binivîse" else "Mevcut şifreyi girin"
-                        newPw.length < 6    -> error = if (ku) "Şîreya nû divê herî kêm 6 tîp be" else "Yeni şifre en az 6 karakter olmalı"
-                        newPw != newPwAgain -> error = if (ku) "Şîre li hev nayên" else "Şifreler eşleşmiyor"
+                        currentPw.isBlank() -> error = Strings.errPwBlank(language)
+                        newPw.length < 6    -> error = Strings.errPwShort(language)
+                        newPw != newPwAgain -> error = Strings.passwordMismatch(language)
                         else -> {
                             loading = true
                             vm.changePassword(
@@ -410,12 +408,12 @@ private fun ChangePasswordDialog(
                 enabled = !loading,
             ) {
                 if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
-                else Text(if (ku) "Tomarkirin" else "Kaydet", color = Amber, fontWeight = FontWeight.Bold)
+                else Text(Strings.save(language), color = Amber, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = { if (!loading) onDismiss() }) {
-                Text(if (ku) "Betal bike" else "İptal", color = Muted)
+                Text(Strings.cancel(language), color = Muted)
             }
         },
     )
@@ -430,7 +428,6 @@ private fun ChangeEmailDialog(
     vm           : SettingsViewModel,
     language     : String = "tr",
 ) {
-    val ku = language == "ku"
     var password by remember { mutableStateOf("") }
     var newEmail by remember { mutableStateOf("") }
     var error    by remember { mutableStateOf<String?>(null) }
@@ -441,24 +438,23 @@ private fun ChangeEmailDialog(
     AlertDialog(
         onDismissRequest = { if (!loading) onDismiss() },
         containerColor   = HeftSurface,
-        title = { Text(if (ku) "E-Postayê Biguherîne" else "E-posta Değiştir", color = OnBackground, fontWeight = FontWeight.Bold) },
+        title = { Text(Strings.changeEmail(language), color = OnBackground, fontWeight = FontWeight.Bold) },
         text = {
             if (success) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF22C55E), modifier = Modifier.size(36.dp))
                     Text(
-                        if (ku) "E-posta piştrastkirinê hate şandin. Navnîşana nû bipejirîne."
-                        else "Doğrulama e-postası gönderildi. Yeni adresinizi onaylayın.",
+                        Strings.emailConfirmSent(language),
                         color = OnBackground, fontSize = 14.sp,
                     )
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("${if (ku) "Heyî" else "Mevcut"}: $currentEmail", color = Muted, fontSize = 12.sp)
+                    Text("${Strings.currentLabel(language)}: $currentEmail", color = Muted, fontSize = 12.sp)
                     OutlinedTextField(
                         value         = newEmail,
                         onValueChange = { newEmail = it; error = null },
-                        label         = { Text(if (ku) "E-Postaya Nû" else "Yeni E-Posta") },
+                        label         = { Text(Strings.newEmailLabel(language)) },
                         singleLine    = true,
                         modifier      = Modifier.fillMaxWidth(),
                         colors        = settingsTextFieldColors(),
@@ -466,7 +462,7 @@ private fun ChangeEmailDialog(
                     OutlinedTextField(
                         value         = password,
                         onValueChange = { password = it; error = null },
-                        label         = { Text(if (ku) "Şîreya Niha" else "Mevcut Şifre") },
+                        label         = { Text(Strings.currentPassword(language)) },
                         singleLine    = true,
                         modifier      = Modifier.fillMaxWidth(),
                         visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
@@ -487,8 +483,8 @@ private fun ChangeEmailDialog(
                     onClick = {
                         when {
                             newEmail.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(newEmail).matches() ->
-                                error = if (ku) "E-postayek derbasdar binivîse" else "Geçerli bir e-posta girin"
-                            password.isBlank() -> error = if (ku) "Şîreya xwe binivîse" else "Şifrenizi girin"
+                                error = Strings.errInvalidEmail(language)
+                            password.isBlank() -> error = Strings.errEnterPw(language)
                             else -> {
                                 loading = true
                                 vm.changeEmail(
@@ -503,17 +499,17 @@ private fun ChangeEmailDialog(
                     enabled = !loading,
                 ) {
                     if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
-                    else Text(if (ku) "Piştrastkirinê Bişîne" else "Doğrulama Gönder", color = Amber, fontWeight = FontWeight.Bold)
+                    else Text(Strings.sendVerification(language), color = Amber, fontWeight = FontWeight.Bold)
                 }
             } else {
                 TextButton(onClick = onDismiss) {
-                    Text(if (ku) "Temam" else "Tamam", color = Amber, fontWeight = FontWeight.Bold)
+                    Text(Strings.confirm(language), color = Amber, fontWeight = FontWeight.Bold)
                 }
             }
         },
         dismissButton = {
             if (!success) TextButton(onClick = { if (!loading) onDismiss() }) {
-                Text(if (ku) "Betal bike" else "İptal", color = Muted)
+                Text(Strings.cancel(language), color = Muted)
             }
         },
     )
@@ -528,13 +524,12 @@ private fun BlockedUsersDialog(
     onUnblock    : (String) -> Unit,
     onDismiss    : () -> Unit,
 ) {
-    val ku = language == "ku"
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor   = HeftSurface,
         title = {
             Text(
-                if (ku) "Bikarhênerên Astengkirî" else "Engellenen Kullanıcılar",
+                Strings.blockedUsers(language),
                 color = OnBackground, fontWeight = FontWeight.Bold,
             )
         },
@@ -545,7 +540,7 @@ private fun BlockedUsersDialog(
                     contentAlignment = Alignment.Center,
                 ) { CircularProgressIndicator(color = Amber, modifier = Modifier.size(28.dp)) }
                 blockedUsers.isEmpty() -> Text(
-                    if (ku) "Bikarhênerên astengkirî tune ne." else "Engellenmiş kullanıcı yok.",
+                    Strings.settingsNoBlocked(language),
                     color = Muted, fontSize = 14.sp,
                 )
                 else -> Column(
@@ -568,14 +563,14 @@ private fun BlockedUsersDialog(
                             )
                             Spacer(Modifier.width(10.dp))
                             Text(
-                                user.displayName.ifBlank { "Kullanıcı" },
+                                user.displayName.ifBlank { Strings.settingsAnonymous(language) },
                                 color    = OnBackground,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.weight(1f),
                             )
                             TextButton(onClick = { onUnblock(user.uid) }) {
                                 Text(
-                                    if (ku) "Astengiyê Berde" else "Engeli Kaldır",
+                                    Strings.unblock(language),
                                     color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                                 )
                             }
@@ -586,7 +581,7 @@ private fun BlockedUsersDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text(if (ku) "Bigire" else "Kapat", color = Amber, fontWeight = FontWeight.Bold)
+                Text(Strings.close(language), color = Amber, fontWeight = FontWeight.Bold)
             }
         },
     )
@@ -679,7 +674,6 @@ internal fun ForgotPasswordFromSettings(
     authVm      : AuthViewModel,
     language    : String = "tr",
 ) {
-    val ku = language == "ku"
     var resetEmail by remember { mutableStateOf(prefillEmail) }
     var error      by remember { mutableStateOf<String?>(null) }
     var loading    by remember { mutableStateOf(false) }
@@ -688,28 +682,26 @@ internal fun ForgotPasswordFromSettings(
     AlertDialog(
         onDismissRequest = { if (!loading) onDismiss() },
         containerColor   = HeftSurface,
-        title = { Text(if (ku) "Şîreya Xwe Sifir Bike" else "Şifreni Sıfırla", color = OnBackground, fontWeight = FontWeight.Bold) },
+        title = { Text(Strings.forgotPass(language), color = OnBackground, fontWeight = FontWeight.Bold) },
         text = {
             if (success) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("✅", fontSize = 32.sp)
                     Text(
-                        if (ku) "Lînka sifirkirinê hate şandin. E-postaya xwe kontrol bike."
-                        else "Şifre sıfırlama bağlantısı gönderildi. E-posta kutunuzu kontrol edin.",
+                        Strings.resetLinkSent(language),
                         color = OnBackground, fontSize = 14.sp,
                     )
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        if (ku) "Em ê lînka sifirkirinê ji bo e-postaya qeydkirî bişînin."
-                        else "Kayıtlı e-posta adresinize şifre sıfırlama bağlantısı göndereceğiz.",
+                        Strings.resetLinkDesc(language),
                         color = Muted, fontSize = 13.sp,
                     )
                     OutlinedTextField(
                         value         = resetEmail,
                         onValueChange = { resetEmail = it; error = null },
-                        label         = { Text("E-posta") },
+                        label         = { Text(Strings.email(language)) },
                         singleLine    = true,
                         modifier      = Modifier.fillMaxWidth(),
                         colors        = settingsTextFieldColors(),
@@ -732,17 +724,17 @@ internal fun ForgotPasswordFromSettings(
                     enabled = !loading,
                 ) {
                     if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
-                    else Text(if (ku) "Bişîne" else "Gönder", color = Amber, fontWeight = FontWeight.Bold)
+                    else Text(Strings.send(language), color = Amber, fontWeight = FontWeight.Bold)
                 }
             } else {
                 TextButton(onClick = onDismiss) {
-                    Text(if (ku) "Temam" else "Tamam", color = Amber, fontWeight = FontWeight.Bold)
+                    Text(Strings.confirm(language), color = Amber, fontWeight = FontWeight.Bold)
                 }
             }
         },
         dismissButton = {
             if (!success) TextButton(onClick = { if (!loading) onDismiss() }) {
-                Text(if (ku) "Betal bike" else "İptal", color = Muted)
+                Text(Strings.cancel(language), color = Muted)
             }
         },
     )

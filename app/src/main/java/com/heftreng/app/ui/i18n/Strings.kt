@@ -252,4 +252,39 @@ object Strings {
 
     // ── Auth (yeni) ───────────────────────────────────────────────────────────
     fun welcome(l: String)          = t(l, "Hoş geldin",           "Xêr hatî")
+
+    // ── Bildirim mesajları ────────────────────────────────────────────────────
+    fun notifLike(l: String)        = t(l, "gönderinizi beğendi",            "nivîsa we xweş dît")
+    fun notifComment(l: String)     = t(l, "gönderinize yorum yaptı",        "li ser nivîsa we şîrove kir")
+    fun notifFollow(l: String)      = t(l, "sizi takip etmeye başladı",      "dest bi şopandina we kir")
+    fun notifRepost(l: String)      = t(l, "gönderinizi paylaştı",           "nivîsa we parve kir")
+    fun notifNew(l: String)         = t(l, "yeni bir bildirim",              "agahdariya nû")
+
+    // ── Ayarlar - açıklama metinleri ──────────────────────────────────────────
+    fun settingsOther(l: String)         = t(l, "Diğer",                            "Yên Din")
+    fun settingsAbout(l: String)         = t(l, "Heftreng Hakkında",               "Derbarê Heftreng")
+    fun settingsAboutSub(l: String)      = t(l, "Uygulama hakkında bilgi",          "Serîlêdanê nas bike")
+    fun settingsTermsSub(l: String)      = t(l, "Kullanım şartlarını görüntüle",    "Peymanname bixwîne")
+    fun settingsPrivacySub(l: String)    = t(l, "Gizlilik politikasını görüntüle", "Siyaseta nepeniyê bixwîne")
+    fun settingsAdminPanel(l: String)    = t(l, "Admin Paneli",                     "Panela Admin")
+    fun settingsEditSub(l: String)       = t(l, "Profil bilgilerini düzenle",       "Profîla xwe nûve bike")
+    fun settingsPasswordSub(l: String)   = t(l, "Yeni şifre belirle",               "Şîreya nû destnîşan bike")
+    fun settingsEmailAdd(l: String)      = t(l, "E-posta adresi ekle",              "Email biguherîne")
+    fun settingsPushSub(l: String)       = t(l, "Anlık bildirimleri aç/kapat",     "Agahdariyên push veke/bigire")
+    fun settingsPrivateSub(l: String)    = t(l, "Sadece takipçiler görebilir",      "Tenê şopîner dikarin bibînin")
+    fun settingsBlockedSub(l: String)    = t(l, "Engellenen hesapları yönet",       "Bikarhênerên astengkirî birêve bibe")
+    fun settingsNoBlocked(l: String)     = t(l, "Engellenmiş kullanıcı yok.",       "Bikarhênerên astengkirî tune ne.")
+    fun settingsAnonymous(l: String)     = t(l, "Kullanıcı",                        "Bikarhêner")
+    fun forgotPassPrompt(l: String)      = t(l, "Şifreni mi unuttun? Mail ile sıfırla →", "Şîreya xwe ji bîr kir? Bi maîlê sifir bike →")
+    fun pwRepeat(l: String)              = t(l, "Yeni Şifre (Tekrar)",              "Şîreya Nû (Dubare)")
+    fun errPwBlank(l: String)            = t(l, "Mevcut şifreyi girin",             "Şîreya niha binivîse")
+    fun errPwShort(l: String)            = t(l, "Yeni şifre en az 6 karakter olmalı","Şîreya nû divê herî kêm 6 tîp be")
+    fun emailConfirmSent(l: String)      = t(l, "Doğrulama e-postası gönderildi. Yeni adresinizi onaylayın.", "E-posta piştrastkirinê hate şandin. Navnîşana nû bipejirîne.")
+    fun currentLabel(l: String)          = t(l, "Mevcut",                           "Heyî")
+    fun newEmailLabel(l: String)         = t(l, "Yeni E-Posta",                     "E-Postaya Nû")
+    fun errInvalidEmail(l: String)       = t(l, "Geçerli bir e-posta girin",        "E-postayek derbasdar binivîse")
+    fun errEnterPw(l: String)            = t(l, "Şifrenizi girin",                  "Şîreya xwe binivîse")
+    fun sendVerification(l: String)      = t(l, "Doğrulama Gönder",                "Piştrastkirinê Bişîne")
+    fun resetLinkSent(l: String)         = t(l, "Şifre sıfırlama bağlantısı gönderildi. E-posta kutunuzu kontrol edin.", "Lînka sifirkirinê hate şandin. E-postaya xwe kontrol bike.")
+    fun resetLinkDesc(l: String)         = t(l, "Kayıtlı e-posta adresinize şifre sıfırlama bağlantısı göndereceğiz.", "Em ê lînka sifirkirinê ji bo e-postaya qeydkirî bişînin.")
 }

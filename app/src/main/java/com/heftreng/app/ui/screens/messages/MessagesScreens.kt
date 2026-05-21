@@ -40,6 +40,7 @@ import com.heftreng.app.data.model.Message
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.component.LinkifyText
 import com.heftreng.app.ui.component.FullScreenImageViewer
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.MessagesViewModel
 import com.heftreng.app.viewmodel.PresenceViewModel
@@ -971,7 +972,7 @@ fun MessageDetailScreen(
 
 // ── Sesli Mesaj Oynatıcı ─────────────────────────────────────────────────────
 @Composable
-private fun AudioMessagePlayer(audioUrl: String, isMine: Boolean) {
+private fun AudioMessagePlayer(audioUrl: String, isMine: Boolean, language: String = "tr") {
     var isPlaying by remember { mutableStateOf(false) }
     var player    by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
     val context   = LocalContext.current
@@ -1031,7 +1032,7 @@ private fun AudioMessagePlayer(audioUrl: String, isMine: Boolean) {
             modifier = Modifier.size(20.dp),
         )
         Text(
-            if (isPlaying) "▶ Çalıyor" else "🎤 Ses",
+            if (isPlaying) Strings.playing(language) else Strings.voice(language),
             color    = if (isMine) Color.White.copy(alpha = 0.85f) else Color(0xFF8B5CF6),
             fontSize = 11.sp,
         )
@@ -1224,7 +1225,7 @@ private fun MsgRow(
                             Spacer(Modifier.height(4.dp))
                         }
                         if (msg.audioUrl.isNotBlank()) {
-                            AudioMessagePlayer(audioUrl = msg.audioUrl, isMine = isMine)
+                            AudioMessagePlayer(audioUrl = msg.audioUrl, isMine = isMine, language = language)
                             Spacer(Modifier.height(4.dp))
                         }
                         if (msg.text.isNotBlank())

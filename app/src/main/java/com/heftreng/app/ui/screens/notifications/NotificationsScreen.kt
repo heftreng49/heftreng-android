@@ -24,6 +24,7 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.data.model.Notification
 import com.heftreng.app.navigation.Screen
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.NotificationsViewModel
 
@@ -208,10 +209,13 @@ fun notifIconColor(type: String) = when (type) {
     else      -> androidx.compose.ui.graphics.Color(0xFFF59E0B)
 }
 
-fun notifDefaultMessage(type: String, ku: Boolean = false) = when (type) {
-    "like"    -> if (ku) "nivîsa we xweş dît"          else "gönderinizi beğendi"
-    "comment" -> if (ku) "li ser nivîsa we şîrove kir" else "gönderinize yorum yaptı"
-    "follow"  -> if (ku) "dest bi şopandina we kir"    else "sizi takip etmeye başladı"
-    "repost"  -> if (ku) "nivîsa we parve kir"         else "gönderinizi paylaştı"
-    else      -> if (ku) "agahdariya nû"                else "yeni bir bildirim"
+fun notifDefaultMessage(type: String, ku: Boolean = false): String {
+    val l = if (ku) "ku" else "tr"
+    return when (type) {
+        "like"    -> Strings.notifLike(l)
+        "comment" -> Strings.notifComment(l)
+        "follow"  -> Strings.notifFollow(l)
+        "repost"  -> Strings.notifRepost(l)
+        else      -> Strings.notifNew(l)
+    }
 }
