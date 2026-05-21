@@ -39,6 +39,7 @@ import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.SerialsViewModel
+import com.heftreng.app.viewmodel.SettingsViewModel
 
 // ── Seri listesi ekranı ────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
@@ -83,6 +84,7 @@ fun SerialsScreen(
                         serial   = serial,
                         onClick  = { navController.navigate("serial/${serial.id}") },
                         onLike   = { vm.toggleLikeSerial(serial) },
+                        language = language,
                     )
                 }
             }
@@ -92,6 +94,7 @@ fun SerialsScreen(
     if (showCreate) {
         CreateSerialDialog(
             onDismiss = { showCreate = false },
+            language  = language,
             onCreate  = { title, desc, genre ->
                 vm.createSerial(title, desc, genre)
                 showCreate = false
@@ -107,6 +110,7 @@ fun SerialCard(
     onClick : () -> Unit,
     onLike  : () -> Unit,
     modifier: Modifier = Modifier,
+    language: String = "tr",
 ) {
     Surface(
         modifier = modifier
@@ -218,11 +222,13 @@ fun SerialDetailScreen(
     navController : NavController,
     vm            : SerialsViewModel  = hiltViewModel(),
     socialVm      : com.heftreng.app.viewmodel.SocialViewModel = hiltViewModel(),
+    settingsVm    : SettingsViewModel = hiltViewModel(),
 ) {
     val serial   by vm.selectedSerial.collectAsState()
     val chapters by vm.chapters.collectAsState()
     val loading  by vm.loading.collectAsState()
     val likers   by socialVm.likers.collectAsState()
+    val language by settingsVm.language.collectAsState()
     val socialLoading by socialVm.loading.collectAsState()
     val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     var showAddChapter  by remember { mutableStateOf(false) }
@@ -317,6 +323,7 @@ fun SerialDetailScreen(
     if (showAddChapter) {
         AddChapterDialog(
             onDismiss = { showAddChapter = false },
+            language  = language,
             onAdd     = { title, body ->
                 vm.addChapter(serialId, title, body)
                 showAddChapter = false
@@ -328,6 +335,7 @@ fun SerialDetailScreen(
         EditChapterDialog(
             chapter   = ch,
             onDismiss = { chapterToEdit = null },
+            language  = language,
             onSave    = { newTitle, newBody ->
                 vm.updateChapter(serialId, ch.id, newTitle, newBody)
                 chapterToEdit = null
@@ -468,7 +476,7 @@ private fun ChapterRow(
 }
 
 @Composable
-private fun EditChapterDialog(chapter: Chapter, onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
+private fun EditChapterDialog(chapter: Chapter, onDismiss: () -> Unit, onSave: (String, String) -> Unit, language: String = "tr") {
     var title by remember { mutableStateOf(chapter.title) }
     var body  by remember { mutableStateOf(chapter.body) }
 
@@ -574,8 +582,10 @@ fun ChapterReadScreen(
     chapterId     : String,
     navController : NavController,
     vm            : SerialsViewModel = hiltViewModel(),
+    settingsVm    : SettingsViewModel = hiltViewModel(),
 ) {
-    val chapter by vm.selectedChapter.collectAsState()
+    val chapter  by vm.selectedChapter.collectAsState()
+    val language by settingsVm.language.collectAsState()
 
     LaunchedEffect(chapterId) { vm.loadChapter(serialId, chapterId) }
 
@@ -648,7 +658,7 @@ fun ChapterReadScreen(
 
 // ── Dialoglar ────────────────────────────────────────────────────────────────
 @Composable
-private fun CreateSerialDialog(onDismiss: () -> Unit, onCreate: (String, String, String) -> Unit) {
+private fun CreateSerialDialog(onDismiss: () -> Unit, onCreate: (String, String, String) -> Unit, language: String = "tr") {
     var title by remember { mutableStateOf("") }
     var desc  by remember { mutableStateOf("") }
     var genre by remember { mutableStateOf("") }
@@ -694,7 +704,7 @@ private fun CreateSerialDialog(onDismiss: () -> Unit, onCreate: (String, String,
 }
 
 @Composable
-private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> Unit) {
+private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> Unit, language: String = "tr") {
     var title by remember { mutableStateOf("") }
     var body  by remember { mutableStateOf("") }
 
