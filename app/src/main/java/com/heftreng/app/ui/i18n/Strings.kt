@@ -134,9 +134,11 @@ object Strings {
 
     // ── Bildirimler ───────────────────────────────────────────────────────────
     fun noNotif(l: String)         = t(l, "Henüz bildirim yok",          "Hîn agahî tune")
-    fun notifLike(l: String)       = t(l, "gönderini beğendi",           "nivîsa te hez kir")
-    fun notifComment(l: String)    = t(l, "yorum yaptı",                 "şîrove kir")
-    fun notifFollow(l: String)     = t(l, "seni takip etmeye başladı",   "dest bi şopîna te kir")
+    fun notifLike(l: String)       = t(l, "gönderinizi beğendi",         "nivîsa we xweş dît")
+    fun notifComment(l: String)    = t(l, "gönderinize yorum yaptı",     "li ser nivîsa we şîrove kir")
+    fun notifFollow(l: String)     = t(l, "sizi takip etmeye başladı",   "dest bi şopandina we kir")
+    fun notifRepost(l: String)     = t(l, "gönderinizi paylaştı",        "nivîsa we parve kir")
+    fun notifNew(l: String)        = t(l, "yeni bir bildirim",           "agahdariya nû")
 
     // ── Ayarlar ───────────────────────────────────────────────────────────────
     fun settingsTitle(l: String)   = t(l, "Ayarlar",          "Mîheng")
@@ -254,11 +256,6 @@ object Strings {
     fun welcome(l: String)          = t(l, "Hoş geldin",           "Xêr hatî")
 
     // ── Bildirim mesajları ────────────────────────────────────────────────────
-    fun notifLike(l: String)        = t(l, "gönderinizi beğendi",            "nivîsa we xweş dît")
-    fun notifComment(l: String)     = t(l, "gönderinize yorum yaptı",        "li ser nivîsa we şîrove kir")
-    fun notifFollow(l: String)      = t(l, "sizi takip etmeye başladı",      "dest bi şopandina we kir")
-    fun notifRepost(l: String)      = t(l, "gönderinizi paylaştı",           "nivîsa we parve kir")
-    fun notifNew(l: String)         = t(l, "yeni bir bildirim",              "agahdariya nû")
 
     // ── Ayarlar - açıklama metinleri ──────────────────────────────────────────
     fun settingsOther(l: String)         = t(l, "Diğer",                            "Yên Din")
