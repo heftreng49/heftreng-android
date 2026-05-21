@@ -255,6 +255,12 @@ object Strings {
     // ── Auth (yeni) ───────────────────────────────────────────────────────────
     fun welcome(l: String)          = t(l, "Hoş geldin",           "Xêr hatî")
 
+
+    fun continueWithGoogle(l: String) = t(l, "Google ile devam et",  "Bi Google re berdewam bike")
+    fun orDivider(l: String)          = t(l, "  ya da  ",            "  an jî  ")
+    fun yourName(l: String)           = t(l, "Adın",                 "Navê te")
+    fun forgotPassTitle(l: String)    = t(l, "Şifremi Unuttum",      "Şîreya Xwe Ji Bîr Kir")
+
     // ── Bildirim mesajları ────────────────────────────────────────────────────
 
     // ── Ayarlar - açıklama metinleri ──────────────────────────────────────────

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
@@ -88,9 +89,9 @@ fun AuthScreen(
             )
             Text(
                 text     = if (isRegister)
-                    (if (ku) "Hesabek nû çêke" else "Hesap oluştur")
+                    Strings.register(language)
                 else
-                    (if (ku) "Xêr hatî" else "Hoş geldin"),
+                    Strings.welcome(language),
                 fontSize = 14.sp,
                 color    = Muted,
             )
@@ -129,7 +130,7 @@ fun AuthScreen(
                 border   = androidx.compose.foundation.BorderStroke(1.dp, Divider),
             ) {
                 Text(
-                    if (ku) "Bi Google re berdewam bike" else "Google ile devam et",
+                    Strings.continueWithGoogle(language),
                     modifier = Modifier.padding(vertical = 4.dp),
                 )
             }
@@ -139,7 +140,7 @@ fun AuthScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 HorizontalDivider(modifier = Modifier.weight(1f), color = Divider)
-                Text(if (ku) "  an jî  " else "  ya da  ", color = Muted, fontSize = 12.sp)
+                Text(Strings.orDivider(language), color = Muted, fontSize = 12.sp)
                 HorizontalDivider(modifier = Modifier.weight(1f), color = Divider)
             }
 
@@ -148,7 +149,7 @@ fun AuthScreen(
                 OutlinedTextField(
                     value         = displayName,
                     onValueChange = { displayName = it },
-                    label         = { Text(if (ku) "Navê te" else "Adın") },
+                    label         = { Text(Strings.yourName(language)) },
                     modifier      = Modifier.fillMaxWidth(),
                     shape         = RoundedCornerShape(12.dp),
                     colors        = heftrangTextFieldColors(),
@@ -170,7 +171,7 @@ fun AuthScreen(
             OutlinedTextField(
                 value         = password,
                 onValueChange = { password = it },
-                label         = { Text(if (ku) "Şîfre" else "Şifre") },
+                label         = { Text(Strings.password(language)) },
                 modifier      = Modifier.fillMaxWidth(),
                 shape         = RoundedCornerShape(12.dp),
                 colors        = heftrangTextFieldColors(),
@@ -195,7 +196,7 @@ fun AuthScreen(
                         contentPadding = PaddingValues(0.dp),
                     ) {
                         Text(
-                            if (ku) "Şîfreya xwe ji bîr kir" else "Şifremi unuttum",
+                            Strings.forgotPass(language),
                             color = Amber, fontSize = 12.sp,
                         )
                     }
@@ -228,8 +229,7 @@ fun AuthScreen(
                     )
                 } else {
                     Text(
-                        if (isRegister) (if (ku) "Qeyd bibe" else "Kayıt ol")
-                        else (if (ku) "Têkeve" else "Giriş yap"),
+                        if (isRegister) Strings.register(language) else Strings.login(language),
                         fontWeight = FontWeight.SemiBold,
                         modifier   = Modifier.padding(vertical = 4.dp),
                     )
@@ -239,9 +239,9 @@ fun AuthScreen(
             TextButton(onClick = { isRegister = !isRegister }) {
                 Text(
                     if (isRegister)
-                        (if (ku) "Hesabê te heye? Têkeve" else "Zaten hesabın var mı? Giriş yap")
+                        Strings.hasAccount(language)
                     else
-                        (if (ku) "Hesabê te tune? Qeyd bibe" else "Hesabın yok mu? Kayıt ol"),
+                        Strings.noAccount(language),
                     color    = Amber,
                     fontSize = 13.sp,
                 )
@@ -255,6 +255,7 @@ fun AuthScreen(
             onDismiss    = { showForgotDialog = false },
             vm           = vm,
             ku           = ku,
+            language     = language,
         )
     }
 }
@@ -265,6 +266,7 @@ private fun ForgotPasswordDialog(
     onDismiss   : () -> Unit,
     vm          : AuthViewModel,
     ku          : Boolean = false,
+    language    : String  = "tr",
 ) {
     var resetEmail by remember { mutableStateOf(prefillEmail) }
     var error      by remember { mutableStateOf<String?>(null) }
@@ -276,7 +278,7 @@ private fun ForgotPasswordDialog(
         containerColor   = HeftSurface,
         title = {
             Text(
-                if (ku) "Şîreya Xwe Ji Bîr Kir" else "Şifremi Unuttum",
+                Strings.forgotPass(language),
                 color      = OnBackground,
                 fontWeight = FontWeight.Bold,
             )
@@ -286,8 +288,7 @@ private fun ForgotPasswordDialog(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("✅", fontSize = 32.sp)
                     Text(
-                        if (ku) "Lînka sifirkirina şîfreyê hate şandin. E-postaya xwe kontrol bike."
-                        else "Şifre sıfırlama bağlantısı gönderildi. E-posta kutunuzu kontrol edin.",
+                        Strings.resetLinkSent(language),
                         color    = OnBackground,
                         fontSize = 14.sp,
                     )
@@ -295,8 +296,7 @@ private fun ForgotPasswordDialog(
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        if (ku) "E-postaya qeydkirî binivîse, em lînka sifirkirinê bişînin."
-                        else "Kayıtlı e-posta adresinizi girin, şifre sıfırlama bağlantısı göndereceğiz.",
+                        Strings.resetLinkDesc(language),
                         color    = Muted,
                         fontSize = 13.sp,
                     )
@@ -341,19 +341,19 @@ private fun ForgotPasswordDialog(
                     if (loading) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
                     } else {
-                        Text(if (ku) "Bişîne" else "Gönder", color = Amber, fontWeight = FontWeight.Bold)
+                        Text(Strings.send(language), color = Amber, fontWeight = FontWeight.Bold)
                     }
                 }
             } else {
                 TextButton(onClick = onDismiss) {
-                    Text(if (ku) "Temam" else "Tamam", color = Amber, fontWeight = FontWeight.Bold)
+                    Text(Strings.confirm(language), color = Amber, fontWeight = FontWeight.Bold)
                 }
             }
         },
         dismissButton = {
             if (!success) {
                 TextButton(onClick = { if (!loading) onDismiss() }) {
-                    Text(if (ku) "Betal bike" else "İptal", color = Muted)
+                    Text(Strings.cancel(language), color = Muted)
                 }
             }
         },

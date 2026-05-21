@@ -36,6 +36,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.heftreng.app.data.model.Chapter
 import com.heftreng.app.data.model.Serial
 import com.heftreng.app.ui.screens.social.LikerListSheet
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.SerialsViewModel
 
@@ -57,7 +58,7 @@ fun SerialsScreen(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text(if (language == "ku") "Pirtûk" else "Kitaplar", fontWeight = FontWeight.Bold, color = OnBackground) },
+                title = { Text(Strings.navBooks(language), fontWeight = FontWeight.Bold, color = OnBackground) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
                 actions = {
                     IconButton(onClick = { showCreate = true }) {
@@ -192,7 +193,7 @@ fun SerialCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.MenuBook, null, tint = Muted, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(3.dp))
-                    Text("${serial.chapterCount} bölüm", color = Muted, fontSize = 11.sp)
+                    Text("${serial.chapterCount} " + Strings.chapter(language), color = Muted, fontSize = 11.sp)
                     Spacer(Modifier.width(10.dp))
                     IconButton(onClick = onLike, modifier = Modifier.size(20.dp)) {
                         Icon(
@@ -271,7 +272,7 @@ fun SerialDetailScreen(
 
             item {
                 Text(
-                    "Bölümler (${chapters.size})",
+                    Strings.chapters(language) + " (${chapters.size})",
                     fontWeight = FontWeight.SemiBold,
                     color      = Amber,
                     fontSize   = 13.sp,
@@ -287,7 +288,7 @@ fun SerialDetailScreen(
                 }
             } else if (chapters.isEmpty()) {
                 item {
-                    Text("Henüz bölüm yok.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(8.dp))
+                    Text(Strings.noChapters(language), color = Muted, fontSize = 13.sp, modifier = Modifier.padding(8.dp))
                 }
             } else {
                 items(chapters) { ch ->
@@ -305,7 +306,7 @@ fun SerialDetailScreen(
 
     if (showLikers) {
         LikerListSheet(
-            title     = "Beğenenler",
+            title     = Strings.likedBy(language),
             likers    = likers,
             loading   = socialLoading,
             onDismiss = { showLikers = false; socialVm.clearLikers() },
@@ -338,14 +339,14 @@ fun SerialDetailScreen(
         AlertDialog(
             onDismissRequest = { chapterToDelete = null },
             containerColor   = HeftSurface,
-            title = { Text("Bölümü Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            title = { Text(Strings.deleteChapter(language), color = OnBackground, fontWeight = FontWeight.SemiBold) },
             text  = { Text("\"${ch.title}\" bölümünü silmek istediğine emin misin?", color = Muted) },
             confirmButton = {
                 TextButton(onClick = { vm.deleteChapter(serialId, ch.id); chapterToDelete = null }) {
                     Text("Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                 }
             },
-            dismissButton = { TextButton(onClick = { chapterToDelete = null }) { Text("İptal", color = Muted) } },
+            dismissButton = { TextButton(onClick = { chapterToDelete = null }) { Text(Strings.cancel(language), color = Muted) } },
         )
     }
 }
@@ -496,7 +497,7 @@ private fun EditChapterDialog(chapter: Chapter, onDismiss: () -> Unit, onSave: (
                     verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text("Bölümü Düzenle", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(Strings.editChapter(language), color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, null, tint = Muted)
                     }
@@ -515,7 +516,7 @@ private fun EditChapterDialog(chapter: Chapter, onDismiss: () -> Unit, onSave: (
                     OutlinedTextField(
                         value         = title,
                         onValueChange = { title = it },
-                        label         = { Text("Bölüm Başlığı *") },
+                        label         = { Text(Strings.chapterTitle(language) + " *") },
                         singleLine    = true,
                         modifier      = Modifier.fillMaxWidth(),
                         colors        = hfTextFieldColors(),
@@ -524,7 +525,7 @@ private fun EditChapterDialog(chapter: Chapter, onDismiss: () -> Unit, onSave: (
                     RichTextEditor(
                         value       = body,
                         onChange    = { body = it },
-                        placeholder = "Bölüm içeriğini düzenleyin...",
+                        placeholder = Strings.editChapter(language) + "...",
                         modifier    = Modifier.fillMaxWidth(),
                     )
                     val wordCount = body.replace(Regex("<[^>]+>"), "").trim()
@@ -544,7 +545,7 @@ private fun EditChapterDialog(chapter: Chapter, onDismiss: () -> Unit, onSave: (
                     verticalAlignment     = Alignment.CenterVertically,
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("İptal", color = Muted)
+                        Text(Strings.cancel(language), color = Muted)
                     }
                     Button(
                         onClick  = { if (title.isNotBlank() && body.isNotBlank()) onSave(title, body) },
@@ -582,7 +583,7 @@ fun ChapterReadScreen(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text(chapter?.title ?: "Bölüm", color = OnBackground, fontWeight = FontWeight.SemiBold) },
+                title = { Text(chapter?.title ?: Strings.chapter(language), color = OnBackground, fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, null, tint = OnBackground)
@@ -607,7 +608,7 @@ fun ChapterReadScreen(
             item {
                 chapter?.let { ch ->
                     Text(
-                        "Bölüm ${ch.order} · ${ch.wordCount} kelime",
+                        "${Strings.chapter(language)} ${ch.order} · ${ch.wordCount} kelime",
                         color    = Muted,
                         fontSize = 12.sp,
                     )
@@ -660,7 +661,7 @@ private fun CreateSerialDialog(onDismiss: () -> Unit, onCreate: (String, String,
                 OutlinedTextField(
                     value       = title,
                     onValueChange = { title = it },
-                    label       = { Text("Başlık") },
+                    label       = { Text(Strings.titleLabel(language)) },
                     singleLine  = true,
                     modifier    = Modifier.fillMaxWidth(),
                     colors      = hfTextFieldColors(),
@@ -676,7 +677,7 @@ private fun CreateSerialDialog(onDismiss: () -> Unit, onCreate: (String, String,
                 OutlinedTextField(
                     value       = genre,
                     onValueChange = { genre = it },
-                    label       = { Text("Tür (Roman, Şiir…)") },
+                    label       = { Text("${Strings.genre(language)} (Roman, Şiir…)") },
                     singleLine  = true,
                     modifier    = Modifier.fillMaxWidth(),
                     colors      = hfTextFieldColors(),
@@ -685,10 +686,10 @@ private fun CreateSerialDialog(onDismiss: () -> Unit, onCreate: (String, String,
         },
         confirmButton = {
             TextButton(onClick = { if (title.isNotBlank()) onCreate(title, desc, genre) }) {
-                Text("Oluştur", color = Amber, fontWeight = FontWeight.Bold)
+                Text(Strings.create(language), color = Amber, fontWeight = FontWeight.Bold)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("İptal", color = Muted) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel(language), color = Muted) } },
     )
 }
 
@@ -722,7 +723,7 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                     verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text("Yeni Bölüm", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(Strings.newChapter(language), color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, null, tint = Muted)
                     }
@@ -741,7 +742,7 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                     OutlinedTextField(
                         value         = title,
                         onValueChange = { title = it },
-                        label         = { Text("Bölüm Başlığı *") },
+                        label         = { Text(Strings.chapterTitle(language) + " *") },
                         singleLine    = true,
                         modifier      = Modifier.fillMaxWidth(),
                         colors        = hfTextFieldColors(),
@@ -751,7 +752,7 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                     RichTextEditor(
                         value       = body,
                         onChange    = { body = it },
-                        placeholder = "Bölüm içeriğinizi buraya yazın...",
+                        placeholder = "${Strings.newChapter(language)}...",
                         modifier    = Modifier.fillMaxWidth().weight(1f),
                     )
                 }
@@ -768,7 +769,7 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("İptal", color = Muted)
+                        Text(Strings.cancel(language), color = Muted)
                     }
                     Button(
                         onClick  = { if (title.isNotBlank() && body.isNotBlank()) onAdd(title, body) },
@@ -779,7 +780,7 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                             contentColor   = androidx.compose.ui.graphics.Color.Black,
                         ),
                     ) {
-                        Text("Bölümü Ekle", fontWeight = FontWeight.Bold)
+                        Text(Strings.chapter(language) + " " + Strings.save(language), fontWeight = FontWeight.Bold)
                     }
                 }
             } // Column fillMaxSize end

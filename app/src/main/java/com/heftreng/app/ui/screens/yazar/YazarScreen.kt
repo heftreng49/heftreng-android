@@ -24,8 +24,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.PendingPost
+import com.heftreng.app.viewmodel.SettingsViewModel
 import com.heftreng.app.viewmodel.YazarViewModel
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -38,23 +40,26 @@ import com.heftreng.app.viewmodel.YazarViewModel
 fun YazarScreen(
     navController: NavController,
     vm: YazarViewModel = hiltViewModel(),
+    settingsVm: SettingsViewModel = hiltViewModel(),
 ) {
     val loading      by vm.loading.collectAsState()
     val myPosts      by vm.myPosts.collectAsState()
     val submitResult by vm.submitResult.collectAsState()
     var selectedTab  by remember { mutableIntStateOf(0) }
 
+    val language by settingsVm.language.collectAsState()
+
     // Giriş kontrolü
     if (!vm.isLoggedIn) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Default.Lock, null, tint = Muted, modifier = Modifier.size(48.dp))
-                Text("Yazı göndermek için giriş yapmalısın", color = Muted)
+                Text(Strings.loginToWrite(language), color = Muted)
                 Button(
                     onClick = { navController.popBackStack() },
                     colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
                     shape   = RoundedCornerShape(10.dp),
-                ) { Text("Geri Dön") }
+                ) { Text(Strings.back(language)) }
             }
         }
         return
@@ -66,7 +71,7 @@ fun YazarScreen(
         submitResult?.let { result ->
             when (result) {
                 is YazarViewModel.SubmitResult.Success -> {
-                    snackState.showSnackbar("✓ Yazın gönderildi! Admin onayı bekleniyor.")
+                    snackState.showSnackbar(Strings.submitSuccess(language))
                     selectedTab = 1
                 }
                 is YazarViewModel.SubmitResult.Error ->
@@ -124,7 +129,7 @@ fun YazarScreen(
                 },
                 divider = { HorizontalDivider(color = Divider, thickness = 0.5.dp) },
             ) {
-                listOf("✍️  Yaz", "📄  Yazılarım").forEachIndexed { i, title ->
+                listOf("✍️  " + Strings.yazarWrite(language), "📄  " + Strings.yazarMyPosts(language)).forEachIndexed { i, title ->
                     Tab(
                         selected               = selectedTab == i,
                         onClick                = {
@@ -139,8 +144,8 @@ fun YazarScreen(
             }
 
             when (selectedTab) {
-                0 -> WriteTab(vm = vm, loading = loading)
-                1 -> MyPostsTab(posts = myPosts, loading = loading, vm = vm)
+                0 -> WriteTab(vm = vm, loading = loading, language = language)
+                1 -> MyPostsTab(posts = myPosts, loading = loading, vm = vm, language = language)
             }
         }
     }
@@ -151,7 +156,7 @@ fun YazarScreen(
 // ═══════════════════════════════════════════════════════════════════════════════
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun WriteTab(vm: YazarViewModel, loading: Boolean) {
+private fun WriteTab(vm: YazarViewModel, loading: Boolean, language: String) {
     var title    by remember { mutableStateOf("") }
     var content  by remember { mutableStateOf("") }
     var summary  by remember { mutableStateOf("") }
@@ -199,7 +204,7 @@ private fun WriteTab(vm: YazarViewModel, loading: Boolean) {
             YazarField(
                 value    = title,
                 onChange = { if (it.length <= 150) title = it },
-                label    = "Başlık *",
+                label    = Strings.titleLabel(language) + " *",
                 counter  = "${title.length}/150",
             )
         }
@@ -239,7 +244,7 @@ private fun WriteTab(vm: YazarViewModel, loading: Boolean) {
                 // Dil seçimi
                 Column(Modifier.weight(0.8f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Dil", color = Muted, fontSize = 11.sp)
-                    listOf("tr" to "Türkçe", "ku" to "Kurmancî", "both" to "İkisi").forEach { (k, label) ->
+                    listOf("tr" to "Türkçe", "ku" to "Kurmancî", "both" to Strings.contentLangBoth(language)).forEach { (k, label) ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier          = Modifier
@@ -264,7 +269,7 @@ private fun WriteTab(vm: YazarViewModel, loading: Boolean) {
 
         // İçerik
         item {
-            Text("İçerik *", color = Muted, fontSize = 12.sp)
+            Text(Strings.contentLabel(language) + " *", color = Muted, fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))
             OutlinedTextField(
                 value         = content,
@@ -289,7 +294,7 @@ private fun WriteTab(vm: YazarViewModel, loading: Boolean) {
             YazarField(
                 value    = summary,
                 onChange = { if (it.length <= 280) summary = it },
-                label    = "Kısa Özet (opsiyonel)",
+                label    = Strings.summaryLabel(language),
                 minLines = 2,
                 counter  = "${summary.length}/280",
                 hint     = "Okuyucuyu çekecek kısa bir açıklama...",
@@ -382,11 +387,11 @@ private fun WriteTab(vm: YazarViewModel, loading: Boolean) {
                         strokeWidth = 2.dp,
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("Gönderiliyor...", fontWeight = FontWeight.Bold)
+                    Text(Strings.sending(language), fontWeight = FontWeight.Bold)
                 } else {
                     Icon(Icons.Default.Send, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Yazıyı Gönder", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text(Strings.yazarSubmit(language), fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -399,9 +404,10 @@ private fun WriteTab(vm: YazarViewModel, loading: Boolean) {
 // ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 private fun MyPostsTab(
-    posts  : List<PendingPost>,
-    loading: Boolean,
-    vm     : YazarViewModel,
+    posts   : List<PendingPost>,
+    loading : Boolean,
+    vm      : YazarViewModel,
+    language: String,
 ) {
     when {
         loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -410,7 +416,7 @@ private fun MyPostsTab(
         posts.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Default.EditNote, null, tint = Muted, modifier = Modifier.size(48.dp))
-                Text("Henüz yazı göndermedin", color = Muted)
+                Text(Strings.noSubmissions(language), color = Muted)
             }
         }
         else -> LazyColumn(
@@ -419,7 +425,7 @@ private fun MyPostsTab(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(posts, key = { it.id }) { post ->
-                PendingPostCard(post = post, onWithdraw = { vm.withdrawPost(post.id) })
+                PendingPostCard(post = post, onWithdraw = { vm.withdrawPost(post.id) }, language = language)
             }
         }
     }
@@ -429,11 +435,12 @@ private fun MyPostsTab(
 private fun PendingPostCard(
     post      : PendingPost,
     onWithdraw: () -> Unit,
+    language  : String,
 ) {
     val (statusColor, statusLabel, statusIcon) = when (post.status) {
-        "approved" -> Triple(Color(0xFF22C55E), "Yayında ✅", Icons.Default.CheckCircle)
-        "rejected" -> Triple(Color(0xFFEF4444), "Reddedildi ❌", Icons.Default.Cancel)
-        else       -> Triple(Color(0xFFFBBF24), "Bekliyor ⏳", Icons.Default.HourglassBottom)
+        "approved" -> Triple(Color(0xFF22C55E), Strings.yazarApproved(language), Icons.Default.CheckCircle)
+        "rejected" -> Triple(Color(0xFFEF4444), Strings.yazarRejected(language), Icons.Default.Cancel)
+        else       -> Triple(Color(0xFFFBBF24), Strings.yazarPending(language), Icons.Default.HourglassBottom)
     }
 
     Surface(
@@ -555,7 +562,7 @@ private fun PendingPostCard(
                 ) {
                     Icon(Icons.Default.Undo, null, tint = Error, modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Geri Çek", color = Error, fontSize = 12.sp)
+                    Text(Strings.yazarWithdraw(language), color = Error, fontSize = 12.sp)
                 }
             }
         }
