@@ -301,6 +301,7 @@ fun SerialDetailScreen(
                     ChapterRow(
                         chapter  = ch,
                         canEdit  = myUid == (serial?.uid ?: ""),
+                        language = language,
                         onClick  = { navController.navigate("chapter/${serialId}/${ch.id}") },
                         onEdit   = { chapterToEdit = ch },
                         onDelete = { chapterToDelete = ch },
@@ -414,6 +415,7 @@ private fun SerialHeader(serial: Serial, onLike: () -> Unit, onShowLikers: (() -
 private fun ChapterRow(
     chapter  : Chapter,
     canEdit  : Boolean,
+    language : String = "tr",
     onClick  : () -> Unit,
     onEdit   : () -> Unit,
     onDelete : () -> Unit,
