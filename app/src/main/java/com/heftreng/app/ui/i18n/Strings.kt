@@ -425,4 +425,5 @@ object Strings {
     fun newConversation(l: String)       = t(l, "Yeni Konuşma",               "Axaftinek Nû")
     fun deleteConvConfirm(l: String)     = t(l, "Sohbeti silmek istiyor musun?", "Dixwazî vê sohbetê jê bibî?")
     fun noComments(l: String)            = t(l, "Henüz yorum yok",            "Hîn şîrove tune")
+    fun post(l: String)                  = t(l, "Gönderi",                    "Nivîs")
 }
