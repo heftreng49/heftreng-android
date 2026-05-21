@@ -113,7 +113,8 @@ fun FeedScreen(
     var reportTargetUid  by remember { mutableStateOf("") }
     var reportTargetName by remember { mutableStateOf("") }
 
-    var likersPostId     by remember { mutableStateOf<String?>(null) }\n    val likers           by socialVm.likers.collectAsState()
+    var likersPostId     by remember { mutableStateOf<String?>(null) }
+    val likers           by socialVm.likers.collectAsState()
     val socialLoading    by socialVm.loading.collectAsState()
     var inlineText       by remember { mutableStateOf("") }
     var inlineQuote      by remember { mutableStateOf<QuotePayload?>(null) }
