@@ -98,6 +98,13 @@ object Strings {
 
     // ── Kitaplar ──────────────────────────────────────────────────────────────
     fun readingList(l: String)     = t(l, "Okuma Listesi",    "Lîsteya Xwendinê")
+    fun readingStatus(l: String, key: String) = when (key) {
+        "okuyorum"         -> t(l, "Okuyorum",         "Dixwînim")
+        "okumak_istiyorum" -> t(l, "Okumak İstiyorum", "Dixwazim Bixwînim")
+        "okudum"           -> t(l, "Okudum",           "Xwendim")
+        "biraktim"         -> t(l, "Bıraktım",         "Berdam")
+        else -> key
+    }
     fun addToList(l: String)       = t(l, "Listeye Ekle",     "Lîsteyê zêde bike")
     fun removeFromList(l: String)  = t(l, "Listeden Çıkar",   "Ji lîsteyê derxe")
     fun quotes(l: String)          = t(l, "Alıntılar",        "Gotinên Bijarte")
@@ -176,6 +183,7 @@ object Strings {
     fun likedBy(l: String)          = t(l, "Beğenenler",           "Hez Kirinên")
     fun reportPost(l: String)       = report(l)   // alias → report()
     fun newPost(l: String)          = t(l, "Yeni Gönderi",         "Nivîsek Nû")
+    fun addQuote(l: String)         = t(l, "Alıntı ekle",          "Alıntî")
     fun anonymous(l: String)        = t(l, "Anonim",               "Bênas")
     fun showMore(l: String)         = t(l, "Daha Fazla Göster",    "Zêdetir Nîşan Bide")
     fun likeAction(l: String)       = like(l)   // alias → like()
@@ -194,6 +202,7 @@ object Strings {
     fun chapterTitle(l: String)     = t(l, "Bölüm Başlığı",       "Sernavê Beşê")
     fun create(l: String)           = t(l, "Oluştur",             "Çêke")
     fun genre(l: String)            = t(l, "Tür",                 "Cûre")
+    fun wordCount(l: String, n: Int) = t(l, "$n kelime",             "$n peyv")
 
     // ── Yazar Paneli (yeni) ───────────────────────────────────────────────────
     fun loginToWrite(l: String)     = t(l, "Yazı göndermek için giriş yapmalısın", "Ji bo nivîsandina nivîsê têkeve")
@@ -207,6 +216,12 @@ object Strings {
 
     // ── Kurdi Ekranı (yeni) ───────────────────────────────────────────────────
     fun kurdiTitle(l: String)       = t(l, "Kurdî Öğren",          "Kurdî Fêrbibe")
+    fun lessonNotFound(l: String)   = t(l, "Ders bulunamadı",      "Ders tune")
+    fun levelLabel(l: String, n: Int) = t(l, "Seviye $n",           "Asta $n")
+    fun topicHintLabel(l: String)   = t(l, "Konu",                 "Mijar")
+    fun comingSoon(l: String)       = t(l, "Yakında",              "Zû tê")
+    fun dailyGoal(l: String)        = t(l, "Günlük hedef",         "Armanca rojane")
+    fun dailyGoalDesc(l: String)    = t(l, "Bugün 1 ders tamamla!","Îro 1 ders temam bike!")
     fun startLesson(l: String)      = t(l, "Başla!",               "Destpê Bike!")
     fun aiLessonTitle(l: String)    = t(l, "AI ile Kurdî Ders",    "Dersê Kurdî bi ZZ")
     fun aiLessonDesc(l: String)     = t(l, "OpenRouter API anahtarını gir, kaydedilir.", "Miftaya OpenRouter API binivîse, tê tomarkirin.")
@@ -227,6 +242,9 @@ object Strings {
     }
 
     // ── Mesajlar (yeni) ───────────────────────────────────────────────────────
+    fun newConversation(l: String)  = t(l, "Yeni bir konuşma başlat", "Peyamek nû dest pê bike")
+    fun deleteConvConfirm(l: String)= t(l, "Bu sohbeti silmek istiyor musun?", "Ev sohbet bê silîn?")
+    fun searchMessages(l: String)   = t(l, "Mesajlarda ara...", "Peyaman bigere...")
     fun online(l: String)           = t(l, "Çevrimiçi",            "Serhêl")
     fun offline(l: String)          = t(l, "Çevrimdışı",           "Nediyar")
     fun typing(l: String)           = t(l, "Yazıyor...",           "Dinivîse...")

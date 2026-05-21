@@ -100,7 +100,7 @@ fun ConversationsScreen(
                         OutlinedTextField(
                             value         = searchQuery,
                             onValueChange = { searchQuery = it },
-                            placeholder   = { Text(if (language == "ku") "Peyaman bigere..." else "Mesajlarda ara...", color = Muted, fontSize = 13.sp) },
+                            placeholder   = { Text(Strings.searchMessages(language), color = Muted, fontSize = 13.sp) },
                             singleLine    = true,
                             modifier      = Modifier.fillMaxWidth(),
                             shape         = RoundedCornerShape(20.dp),
@@ -115,7 +115,7 @@ fun ConversationsScreen(
                         )
                     } else {
                         Text(
-                            if (language == "ku") "Peyam" else "Mesajlar",
+                            Strings.messagesTitle(language),
                             fontWeight = FontWeight.ExtraBold,
                             color      = OnBackground,
                             fontSize   = 17.sp,
@@ -146,7 +146,7 @@ fun ConversationsScreen(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         CircularProgressIndicator(color = Primary, modifier = Modifier.size(28.dp))
-                        Text(if (language == "ku") "Tê barkirin..." else "Yükleniyor...", color = Muted, fontSize = 12.sp)
+                        Text(Strings.loading(language), color = Muted, fontSize = 12.sp)
                     }
                 }
             }
@@ -156,11 +156,11 @@ fun ConversationsScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Divider, modifier = Modifier.size(52.dp))
                         Text(
-                            if (language == "ku") "Peyam tune" else "Henüz mesajın yok",
+                            Strings.noMessages(language),
                             color = OnSurface, fontWeight = FontWeight.Bold, fontSize = 14.sp
                         )
                         Text(
-                            if (language == "ku") "Peyamek nû dest pê bike" else "Yeni bir konuşma başlat",
+                            Strings.newConversation(language),
                             color = Muted, fontSize = 12.sp
                         )
                     }
@@ -174,16 +174,16 @@ fun ConversationsScreen(
                     AlertDialog(
                         onDismissRequest = { convToDelete = null },
                         title = { Text(if (language == "ku") "Sohbet Sil" else "Sohbeti Sil", color = OnBackground) },
-                        text  = { Text(if (language == "ku") "Ev sohbet bê silîn?" else "Bu sohbeti silmek istiyor musun?", color = Muted) },
+                        text  = { Text(Strings.deleteConvConfirm(language), color = Muted) },
                         confirmButton = {
                             TextButton(onClick = {
                                 vm.deleteConversation(cid)
                                 convToDelete = null
-                            }) { Text(if (language == "ku") "Jêbibe" else "Sil", color = MaterialTheme.colorScheme.error) }
+                            }) { Text(Strings.delete(language), color = MaterialTheme.colorScheme.error) }
                         },
                         dismissButton = {
                             TextButton(onClick = { convToDelete = null }) {
-                                Text(if (language == "ku") "Betal" else "İptal", color = Muted)
+                                Text(Strings.cancel(language), color = Muted)
                             }
                         },
                         containerColor = HeftSurface,
@@ -452,15 +452,15 @@ fun MessageDetailScreen(
                             )
                             when {
                                 isOtherTyping -> Text(
-                                    if (language == "ku") "dinivîse..." else "yazıyor...",
+                                    Strings.typing(language),
                                     color = Amber, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
                                 )
                                 isOtherOnline -> Text(
-                                    if (language == "ku") "serhêl" else "çevrimiçi",
+                                    Strings.online(language),
                                     color = Color(0xFF22C55E), fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
                                 )
                                 else -> Text(
-                                    if (language == "ku") "nediyar" else "çevrimdışı",
+                                    Strings.offline(language),
                                     color = Muted, fontSize = 11.sp,
                                 )
                             }
@@ -708,7 +708,7 @@ fun MessageDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Icon(Icons.Default.Create, null, tint = Color(0xFFFBBF24), modifier = Modifier.size(16.dp))
-                        Text(if (language == "ku") "Peyamê biguherîne" else "Mesajı düzenle",
+                        Text(Strings.edit(language),
                             color = OnBackground, fontSize = 12.sp, modifier = Modifier.weight(1f))
                         IconButton(onClick = { editMsg = null; inputText = "" }, modifier = Modifier.size(28.dp)) {
                             Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
@@ -768,7 +768,7 @@ fun MessageDetailScreen(
                                 presenceVm.setTyping(convId, it.isNotEmpty())
                             },
                             placeholder   = {
-                                Text(if (language == "ku") "Peyamê binivîse..." else "Mesaj yaz...",
+                                Text(Strings.messageHint(language),
                                     color = Muted, fontSize = 13.sp)
                             },
                             modifier  = Modifier.weight(1f),
@@ -902,7 +902,7 @@ fun MessageDetailScreen(
     ) { padding ->
         if (messages.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text(if (language == "ku") "Peyam tune, dest bi axaftinê bike!" else "Henüz mesaj yok, konuşmayı başlat!",
+                Text(Strings.noMessages(language),
                     color = Muted, fontSize = 13.sp)
             }
         } else {
@@ -957,12 +957,12 @@ fun MessageDetailScreen(
                 border          = BorderStroke(1.dp, Divider),
             ) {
                 Column(modifier = Modifier.padding(5.dp)) {
-                    MsgCtxItem(Icons.Default.Reply, if (language == "ku") "Bersiv bide" else "Yanıtla", false) { replyTo = ctxMsg; ctxMsg = null }
+                    MsgCtxItem(Icons.Default.Reply, Strings.reply(language), false) { replyTo = ctxMsg; ctxMsg = null }
                     if (ctxMsg?.senderId == vm.uid) {
-                        MsgCtxItem(Icons.Default.Create, if (language == "ku") "Biguherîne" else "Düzenle", false) { editMsg = ctxMsg; ctxMsg = null }
-                        MsgCtxItem(Icons.Default.Delete, if (language == "ku") "Jê bibe" else "Sil", true) { vm.deleteMessage(ctxMsg!!); ctxMsg = null }
+                        MsgCtxItem(Icons.Default.Create, Strings.edit(language), false) { editMsg = ctxMsg; ctxMsg = null }
+                        MsgCtxItem(Icons.Default.Delete, Strings.delete(language), true) { vm.deleteMessage(ctxMsg!!); ctxMsg = null }
                     }
-                    MsgCtxItem(Icons.Default.FavoriteBorder, if (language == "ku") "Hez bike" else "Beğen", false) { vm.toggleLike(ctxMsg!!); ctxMsg = null }
+                    MsgCtxItem(Icons.Default.FavoriteBorder, Strings.like(language), false) { vm.toggleLike(ctxMsg!!); ctxMsg = null }
                 }
             }
         }
@@ -1206,7 +1206,7 @@ private fun MsgRow(
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 if (msg.deleted) {
-                    Text(if (language == "ku") "Peyam hat jêbirin" else "Bu mesaj silindi",
+                    Text(Strings.deleted(language),
                         color = Muted, fontSize = 15.sp, fontStyle = FontStyle.Italic)
                 } else {
                     Column {
@@ -1236,7 +1236,7 @@ private fun MsgRow(
                                 modifier   = Modifier,
                             )
                         if (msg.edited)
-                            Text(if (language == "ku") "(guherî)" else "(düzenlendi)",
+                            Text(Strings.edited(language),
                                 color = if (isMine) Color.White.copy(alpha = 0.55f) else Muted,
                                 fontSize = 11.sp)
                     }

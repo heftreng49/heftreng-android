@@ -347,7 +347,7 @@ fun FeedScreen(
                                     Icon(Icons.Default.ExpandMore, null, tint = Muted, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
                                     Text(
-                                        if (language == "ku") "Zêdetir Nîşan Bide" else "Daha Fazla Göster",
+                                        Strings.showMore(language),
                                         color = Muted, fontSize = 13.sp,
                                     )
                                 }
@@ -390,7 +390,7 @@ private fun ReportDialog(
         containerColor   = HeftSurface,
         title = {
             Text(
-                if (ku) "Rapor bike" else "Şikayet Et",
+                Strings.reportPost(language),
                 color = OnBackground, fontWeight = FontWeight.Bold,
             )
         },
@@ -419,12 +419,12 @@ private fun ReportDialog(
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(selected) }) {
-                Text(if (ku) "Bişîne" else "Gönder", color = Amber, fontWeight = FontWeight.Bold)
+                Text(Strings.send(language), color = Amber, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(if (ku) "Betal bike" else "İptal", color = Muted)
+                Text(Strings.cancel(language), color = Muted)
             }
         },
     )
@@ -470,7 +470,7 @@ private fun InlineComposeBox(
                     onValueChange   = onTextChange,
                     placeholder     = {
                         Text(
-                            if (language == "ku") "Tu çi difikire?" else "Ne düşünüyorsun?",
+                            Strings.whatsOnMind(language),
                             color = Muted, fontSize = 14.sp,
                         )
                     },
@@ -529,7 +529,7 @@ private fun InlineComposeBox(
                     )
                 }
                 Text(
-                    if (language == "ku") "Alıntî" else "Alıntı ekle",
+                    Strings.addQuote(language),
                     color    = if (quote != null) Primary else Muted,
                     fontSize = 11.sp,
                     modifier = Modifier.clickable { onQuoteAdd() },
@@ -569,7 +569,7 @@ private fun InlineComposeBox(
                     Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(5.dp))
                     Text(
-                        if (language == "ku") "Parve bike" else "Paylaş",
+                        Strings.share(language),
                         fontSize   = 12.sp,
                         fontWeight = FontWeight.Bold,
                     )
@@ -620,10 +620,10 @@ private fun ComposeBottomSheet(
                 verticalAlignment     = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text(if (language == "ku") "Betal bike" else "İptal", color = Muted)
+                    Text(Strings.cancel(language), color = Muted)
                 }
                 Text(
-                    if (language == "ku") "Nivîsek Nû" else "Yeni Gönderi",
+                    Strings.newPost(language),
                     fontWeight = FontWeight.SemiBold,
                     color      = OnBackground,
                     fontSize   = 15.sp,
@@ -633,7 +633,7 @@ private fun ComposeBottomSheet(
                     enabled  = text.isNotBlank() || quotePayload != null,
                 ) {
                     Text(
-                        if (language == "ku") "Parve bike" else "Paylaş",
+                        Strings.share(language),
                         color      = if (text.isNotBlank() || quotePayload != null) Primary else Muted,
                         fontWeight = FontWeight.Bold,
                     )
@@ -655,7 +655,7 @@ private fun ComposeBottomSheet(
                     value           = text,
                     onValueChange   = { text = it },
                     placeholder     = {
-                        Text(if (language == "ku") "Tu çi difikire?" else "Ne düşünüyorsun?", color = Muted)
+                        Text(Strings.whatsOnMind(language), color = Muted)
                     },
                     modifier        = Modifier.fillMaxWidth().heightIn(min = 120.dp),
                     colors          = OutlinedTextFieldDefaults.colors(
@@ -691,7 +691,7 @@ private fun ComposeBottomSheet(
                     )
                 }
                 Text(
-                    if (language == "ku") "Alıntî" else "Alıntı ekle",
+                    Strings.addQuote(language),
                     color    = if (quotePayload != null) Primary else Muted,
                     fontSize = 12.sp,
                     modifier = Modifier.clickable { showQuote = true },
@@ -776,7 +776,7 @@ fun PostCard(
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(post.displayName.ifBlank { if (ku) "Bênas" else "Anonim" }, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
+                    Text(post.displayName.ifBlank { Strings.anonymous(language) }, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
                             if (post.username.isNotBlank()) "@${post.username}" else "—",
@@ -800,19 +800,19 @@ fun PostCard(
                 ) {
                     if (isOwn) {
                         DropdownMenuItem(
-                            text        = { Text(if (ku) "Biguherîne" else "Düzenle", color = OnBackground) },
+                            text        = { Text(Strings.edit(language), color = OnBackground) },
                             leadingIcon = { Icon(Icons.Default.Create, null, tint = Muted) },
                             onClick     = { menuExpanded = false; showEditDialog = true },
                         )
                         DropdownMenuItem(
-                            text        = { Text(if (ku) "Jê bibe" else "Sil", color = Color(0xFFEF4444)) },
+                            text        = { Text(Strings.delete(language), color = Color(0xFFEF4444)) },
                             leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) },
                             onClick     = { menuExpanded = false; showDeleteDialog = true },
                         )
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     } else {
                         DropdownMenuItem(
-                            text        = { Text(if (ku) "Ji Nû Ve Parve Bike" else "Yeniden Paylaş", color = OnBackground) },
+                            text        = { Text(Strings.repost(language), color = OnBackground) },
                             leadingIcon = { Icon(Icons.Default.Repeat, null, tint = Muted) },
                             onClick     = { menuExpanded = false; onShare() },
                         )
@@ -943,7 +943,7 @@ fun PostCard(
                         // İçerik
                         if (post.repostTitle.isNotBlank())  Text(post.repostTitle,  color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
                         if (post.serialTitle.isNotBlank())  Text(post.serialTitle,  color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
-                        if (post.chapterTitle.isNotBlank()) Text("${if (ku) "Beş" else "Bölüm"} ${post.chapterOrder}: ${post.chapterTitle}", color = Muted, fontSize = 12.sp)
+                        if (post.chapterTitle.isNotBlank()) Text("${Strings.chapter(language)} ${post.chapterOrder}: ${post.chapterTitle}", color = Muted, fontSize = 12.sp)
                         if (post.repostText.isNotBlank())   Text(post.repostText,   color = OnSurface,    fontSize = 13.sp, maxLines = 4, lineHeight = 19.sp)
                         val rImg = listOf(post.repostImg, post.serialCover).firstOrNull { it.isNotBlank() } ?: ""
                         if (rImg.isNotBlank()) {
@@ -1033,7 +1033,7 @@ fun PostCard(
             IconButton(onClick = onSave) {
                 Icon(
                     if (post.isSavedByMe) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                    contentDescription = if (ku) "Tomarkirin" else "Kaydet",
+                    contentDescription = Strings.save(language),
                     tint               = if (post.isSavedByMe) Amber else Muted,
                     modifier           = Modifier.size(20.dp),
                 )
@@ -1065,16 +1065,16 @@ fun PostCard(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             containerColor   = HeftSurface,
-            title   = { Text(if (ku) "Nivîs jê bibe?" else "Gönderiyi sil?", color = OnBackground, fontWeight = FontWeight.SemiBold) },
-            text    = { Text(if (ku) "Ev nivîs dê ji holê rabe." else "Bu gönderi kalıcı olarak silinecek.", color = Muted, fontSize = 14.sp) },
+            title   = { Text(Strings.deletePost(language), color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            text    = { Text(Strings.deletePostConfirm(language), color = Muted, fontSize = 14.sp) },
             confirmButton = {
                 TextButton(onClick = { onDelete?.invoke(); showDeleteDialog = false }) {
-                    Text(if (ku) "Jê bibe" else "Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                    Text(Strings.delete(language), color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text(if (ku) "Betal bike" else "İptal", color = Muted)
+                    Text(Strings.cancel(language), color = Muted)
                 }
             },
         )
@@ -1090,7 +1090,7 @@ fun EditPostDialog(currentText: String, onDismiss: () -> Unit, onSave: (String) 
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = HeftSurface), modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(20.dp)) {
-                Text(if (ku) "Nivîsê Biguherîne" else "Gönderiyi Düzenle", fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 16.sp)
+                Text(Strings.edit(language), fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 16.sp)
                 Spacer(Modifier.height(14.dp))
                 OutlinedTextField(
                     value         = text,
@@ -1108,13 +1108,13 @@ fun EditPostDialog(currentText: String, onDismiss: () -> Unit, onSave: (String) 
                 )
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                    TextButton(onClick = onDismiss) { Text(if (ku) "Betal bike" else "İptal", color = Muted) }
+                    TextButton(onClick = onDismiss) { Text(Strings.cancel(language), color = Muted) }
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = { if (text.isNotBlank()) onSave(text) },
                         colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
                         shape   = RoundedCornerShape(10.dp),
-                    ) { Text(if (ku) "Tomarkirin" else "Kaydet", fontWeight = FontWeight.Bold) }
+                    ) { Text(Strings.save(language), fontWeight = FontWeight.Bold) }
                 }
             }
         }
@@ -1142,7 +1142,7 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel, language:
                 .navigationBarsPadding()
                 .imePadding(),
         ) {
-            Text(if (ku) "Şîrove" else "Yorumlar", fontWeight = FontWeight.SemiBold, color = OnBackground, modifier = Modifier.padding(vertical = 8.dp))
+            Text(Strings.comments(language), fontWeight = FontWeight.SemiBold, color = OnBackground, modifier = Modifier.padding(vertical = 8.dp))
             HorizontalDivider(color = Divider)
             LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(comments, key = { it.id }) { cmt ->
@@ -1166,7 +1166,7 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel, language:
                             ) {
                                 Icon(
                                     Icons.Default.Delete,
-                                    contentDescription = if (ku) "Jê bibe" else "Sil",
+                                    contentDescription = Strings.delete(language),
                                     tint     = Color(0xFFEF4444).copy(alpha = 0.7f),
                                     modifier = Modifier.size(16.dp),
                                 )
@@ -1179,7 +1179,7 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel, language:
             Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = commentText, onValueChange = { commentText = it },
-                    placeholder = { Text(if (ku) "Şîrove binivîse..." else "Yorum yaz...", color = Muted) },
+                    placeholder = { Text(Strings.commentHint(language), color = Muted) },
                     modifier = Modifier.weight(1f), shape = RoundedCornerShape(24.dp), singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Amber, unfocusedBorderColor = Divider,
@@ -1206,12 +1206,12 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel, language:
             text   = { Text(cmt.text.take(80), color = Muted, fontSize = 13.sp) },
             confirmButton = {
                 TextButton(onClick = { vm.deleteComment(post.id, cmt.id); deleteTarget = null }) {
-                    Text(if (ku) "Jê bibe" else "Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                    Text(Strings.delete(language), color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { deleteTarget = null }) {
-                    Text(if (ku) "Betal bike" else "İptal", color = Muted)
+                    Text(Strings.cancel(language), color = Muted)
                 }
             },
         )

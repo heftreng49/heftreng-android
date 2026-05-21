@@ -437,7 +437,7 @@ private fun ChapterRow(
         )
         Column(Modifier.weight(1f)) {
             Text(chapter.title, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            Text("${chapter.wordCount} kelime", color = Muted, fontSize = 11.sp)
+            Text(Strings.wordCount(language, chapter.wordCount), color = Muted, fontSize = 11.sp)
         }
         if (canEdit) {
             Box {
@@ -538,7 +538,7 @@ private fun EditChapterDialog(chapter: Chapter, onDismiss: () -> Unit, onSave: (
                     )
                     val wordCount = body.replace(Regex("<[^>]+>"), "").trim()
                         .split(Regex("\\s+")).count { it.isNotBlank() }
-                    Text("$wordCount kelime", color = Muted, fontSize = 11.sp)
+                    Text(Strings.wordCount(language, wordCount), color = Muted, fontSize = 11.sp)
                 }
 
                 HorizontalDivider(color = Divider)
@@ -618,7 +618,7 @@ fun ChapterReadScreen(
             item {
                 chapter?.let { ch ->
                     Text(
-                        "${Strings.chapter(language)} ${ch.order} · ${ch.wordCount} kelime",
+                        "${Strings.chapter(language)} ${ch.order} · ${Strings.wordCount(language, ch.wordCount)}",
                         color    = Muted,
                         fontSize = 12.sp,
                     )

@@ -106,7 +106,7 @@ fun ProfileScreen(
             TopAppBar(
                 title = {
                     Text(
-                        user?.let { u -> if (u.username.isNotBlank()) "@${u.username}" else u.displayName.ifBlank { if (ku) "Profîl" else "Profil" } } ?: if (ku) "Tê barkirin..." else "Yükleniyor...",
+                        user?.let { u -> if (u.username.isNotBlank()) "@${u.username}" else u.displayName.ifBlank { if (ku) "Profîl" else "Profil" } } ?: Strings.loading(language),
                         color = OnBackground, fontWeight = FontWeight.SemiBold,
                     )
                 },
@@ -237,7 +237,7 @@ fun ProfileScreen(
                                         modifier = Modifier.size(44.dp),
                                     )
                                     Spacer(Modifier.height(10.dp))
-                                    Text(if (ku) "Hîn nivîs tune" else "Henüz gönderi yok", color = Muted)
+                                    Text(Strings.noPosts(language), color = Muted)
                                 }
                             }
                         }
@@ -331,17 +331,8 @@ fun ProfileScreen(
                             }
                         }
                     } else {
-                        val statuses = if (ku) listOf(
-                            "okuyorum"         to "Dixwînim",
-                            "okumak_istiyorum" to "Dixwazim Bixwînim",
-                            "okudum"           to "Xwendim",
-                            "biraktim"         to "Berda",
-                        ) else listOf(
-                            "okuyorum"         to "Okuyorum",
-                            "okumak_istiyorum" to "Okumak İstiyorum",
-                            "okudum"           to "Okudum",
-                            "biraktim"         to "Bıraktım",
-                        )
+                        val statusKeys = listOf("okuyorum", "okumak_istiyorum", "okudum", "biraktim")
+                        val statuses = statusKeys.map { key -> key to Strings.readingStatus(language, key) }
                         val statusColors = mapOf(
                             "okuyorum"         to Color(0xFF2563EB),
                             "okumak_istiyorum" to Color(0xFF7C3AED),
@@ -505,7 +496,7 @@ private fun ProfileHeader(
                         shape   = RoundedCornerShape(10.dp),
                         border  = androidx.compose.foundation.BorderStroke(1.dp, Divider),
                         colors  = ButtonDefaults.outlinedButtonColors(contentColor = OnBackground),
-                    ) { Text(if (ku) "Biguherîne" else "Düzenle", fontSize = 13.sp) }
+                    ) { Text(Strings.edit(language), fontSize = 13.sp) }
                 } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         // Mesaj butonu
@@ -527,7 +518,7 @@ private fun ProfileHeader(
                             ),
                         ) {
                             Text(
-                                if (isFollowing) (if (ku) "Tê Şopandin" else "Takip Ediliyor") else (if (ku) "Bişopîne" else "Takip Et"),
+                                if (isFollowing) Strings.unfollow(language) else Strings.follow(language),
                                 fontSize = 13.sp,
                             )
                         }
@@ -704,7 +695,7 @@ fun EditProfileScreen(
             TopAppBar(
                 title = {
                     Text(
-                        if (ku) "Profîlê Biguherîne" else "Profili Düzenle",
+                        Strings.editProfile(language),
                         color      = OnBackground,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -743,7 +734,7 @@ fun EditProfileScreen(
                         },
                         enabled = !loading,
                     ) {
-                        Text(if (ku) "Tomarkirin" else "Kaydet", color = if (loading) Muted else Amber, fontWeight = FontWeight.Bold)
+                        Text(Strings.save(language), color = if (loading) Muted else Amber, fontWeight = FontWeight.Bold)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
@@ -767,7 +758,7 @@ fun EditProfileScreen(
                     shape    = RoundedCornerShape(10.dp),
                 ) {
                     if (loading) CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Amber, strokeWidth = 2.dp)
-                    else Text(if (ku) "📷 Wêneya Profîlê" else "📷 Profil Foto", fontSize = 12.sp)
+                    else Text(Strings.profilePhoto(language), fontSize = 12.sp)
                 }
                 OutlinedButton(
                     onClick  = { if (!loading) coverPicker.launch("image/*") },
@@ -775,7 +766,7 @@ fun EditProfileScreen(
                     shape    = RoundedCornerShape(10.dp),
                 ) {
                     if (loading) CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Amber, strokeWidth = 2.dp)
-                    else Text(if (ku) "🖼 Wêneya Bergê" else "🖼 Kapak Foto", fontSize = 12.sp)
+                    else Text(Strings.coverPhoto(language), fontSize = 12.sp)
                 }
             }
 
@@ -811,7 +802,7 @@ fun EditProfileScreen(
             OutlinedTextField(
                 value         = displayName,
                 onValueChange = { displayName = it },
-                label         = { Text(if (ku) "Navê te / Adın" else "Adın / Nav") },
+                label         = { Text(Strings.fullName(language)) },
                 singleLine    = true,
                 modifier      = Modifier.fillMaxWidth(),
                 shape         = RoundedCornerShape(12.dp),

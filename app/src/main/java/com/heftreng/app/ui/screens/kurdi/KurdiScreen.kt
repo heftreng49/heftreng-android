@@ -182,7 +182,7 @@ private fun XpStreakCard(xp: Int, streak: Int, level: Int, language: String) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    if (language == "ku") "Asta $level" else "Seviye $level",
+                    Strings.levelLabel(language, level),
                     fontWeight = FontWeight.Bold,
                     color      = Primary,
                     fontSize   = 13.sp,
@@ -232,7 +232,7 @@ private fun UnitsTab(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("📚", fontSize = 40.sp)
                 Spacer(Modifier.height(8.dp))
-                Text(if (language == "ku") "Ders tune" else "Ders bulunamadı", color = Muted, fontSize = 14.sp)
+                Text(Strings.lessonNotFound(language), color = Muted, fontSize = 14.sp)
             }
         }
         else -> LazyColumn(
@@ -307,13 +307,13 @@ private fun DailyNudgeCard(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (language == "ku") "Armanca rojane" else "Günlük hedef",
+                    Strings.dailyGoal(language),
                     fontWeight = FontWeight.Bold,
                     color      = OnBackground,
                     fontSize   = 14.sp,
                 )
                 Text(
-                    if (language == "ku") "Îro 1 ders temam bike!" else "Bugün 1 ders tamamla!",
+                    Strings.dailyGoalDesc(language),
                     color    = Muted,
                     fontSize = 12.sp,
                 )
@@ -324,7 +324,7 @@ private fun DailyNudgeCard(
                 color = Primary,
             ) {
                 Text(
-                    if (language == "ku") "Destpê Bike" else "Başla",
+                    Strings.startLesson(language),
                     color      = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize   = 12.sp,
@@ -585,11 +585,11 @@ fun LessonScreen(
         else -> false
     }
     val nextLabel = when {
-        allDone                              -> "Dersi Bitir 🎉"
-        !vocabDone && step == vocab.size - 1 -> "Sorulara Geç →"
-        !vocabDone                           -> "Sonraki →"
-        exStep == exercises.size - 1         -> "Tamamla 🎉"
-        else                                 -> "Devam"
+        allDone                              -> Strings.finishLesson(language)
+        !vocabDone && step == vocab.size - 1 -> Strings.toQuestions(language)
+        !vocabDone                           -> Strings.nextQuestion(language)
+        exStep == exercises.size - 1         -> Strings.complete(language)
+        else                                 -> Strings.continueLesson(language)
     }
 
     Scaffold(
@@ -1239,7 +1239,7 @@ private fun DictionaryTab(language: String) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("📖", fontSize = 48.sp)
             Text(Strings.kurdiDict(language), fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
-            Text(if (language == "ku") "Zû tê" else "Yakında", color = Muted, fontSize = 14.sp)
+            Text(Strings.comingSoon(language), color = Muted, fontSize = 14.sp)
         }
     }
 }
@@ -1251,7 +1251,7 @@ private fun GrammarTab(language: String) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("🎓", fontSize = 48.sp)
             Text(Strings.kurdiGrammar(language), fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
-            Text(if (language == "ku") "Zû tê" else "Yakında", color = Muted, fontSize = 14.sp)
+            Text(Strings.comingSoon(language), color = Muted, fontSize = 14.sp)
         }
     }
 }
@@ -1295,7 +1295,7 @@ fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
         item {
             OutlinedTextField(
                 value = topic, onValueChange = { topic = it },
-                label       = { Text(if (language == "ku") "Mijar" else "Konu", color = Muted, fontSize = 12.sp) },
+                label       = { Text(Strings.topicHintLabel(language), color = Muted, fontSize = 12.sp) },
                 placeholder = { Text(Strings.topicHint(language), color = Muted, fontSize = 12.sp) },
                 modifier    = Modifier.fillMaxWidth(), singleLine = true,
                 colors      = OutlinedTextFieldDefaults.colors(

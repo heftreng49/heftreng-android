@@ -47,7 +47,7 @@ fun NotificationsScreen(
                 title = {
                     Column {
                         Text(
-                            if (ku) "Agahdarî" else "Bildirimler",
+                            Strings.navNotifs(language),
                             fontWeight = FontWeight.SemiBold, color = OnBackground
                         )
                         if (unreadCount > 0)
@@ -59,7 +59,7 @@ fun NotificationsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = if (ku) "Vegere" else "Geri", tint = OnBackground)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = Strings.back(language), tint = OnBackground)
                     }
                 },
                 actions = {
@@ -88,7 +88,7 @@ fun NotificationsScreen(
                         Icon(Icons.Default.Notifications, contentDescription = null, tint = Muted, modifier = Modifier.size(52.dp))
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            if (ku) "Agahdarî tune" else "Henüz bildirim yok",
+                            Strings.noNotif(language),
                             color = Muted, fontSize = 15.sp
                         )
                         Text(
