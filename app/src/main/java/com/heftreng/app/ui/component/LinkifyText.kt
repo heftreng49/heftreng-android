@@ -11,6 +11,7 @@ import androidx.compose.ui.text.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.Amber
 import com.heftreng.app.ui.theme.Muted
 import com.heftreng.app.ui.theme.OnBackground
@@ -30,6 +31,7 @@ fun LinkifyText(
     maxLines   : Int       = Int.MAX_VALUE,
     overflow   : TextOverflow = TextOverflow.Clip,
     expandable : Boolean   = false,   // Feed listesinde true, detail'de false
+    language   : String    = "tr",
 ) {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
@@ -73,7 +75,7 @@ fun LinkifyText(
         // "Daha fazlasını göster / Daha az göster" butonu
         if (expandable && isLong) {
             Text(
-                text     = if (expanded) "Daha az göster" else "Daha fazlasını göster",
+                text     = if (expanded) Strings.showLess(language) else Strings.showMore(language),
                 color    = Amber,
                 fontSize = 13.sp,
                 modifier = Modifier.clickable { expanded = !expanded },

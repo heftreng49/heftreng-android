@@ -256,6 +256,9 @@ object Strings {
     fun welcome(l: String)          = t(l, "Hoş geldin",           "Xêr hatî")
 
 
+    fun post(l: String)               = t(l, "Gönderi",              "Nivîs")
+    fun postNotFound(l: String)       = t(l, "Gönderi bulunamadı",   "Nivîs nehate dîtin")
+    fun showLess(l: String)           = t(l, "Daha az göster",       "Kêmtir nîşan bide")
     fun continueWithGoogle(l: String) = t(l, "Google ile devam et",  "Bi Google re berdewam bike")
     fun orDivider(l: String)          = t(l, "  ya da  ",            "  an jî  ")
     fun yourName(l: String)           = t(l, "Adın",                 "Navê te")

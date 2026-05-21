@@ -41,6 +41,7 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.screens.social.LikerListSheet
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
@@ -239,7 +240,7 @@ fun PostDetailScreen(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text("Gönderi", color = OnBackground, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
+                title = { Text(Strings.post(language), color = OnBackground, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
@@ -253,7 +254,7 @@ fun PostDetailScreen(
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 if (loadTimeout) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Gönderi bulunamadı", color = Muted, fontSize = 15.sp)
+                        Text(if (ku) "Nivîs nehate dîtin" else Strings.postNotFound(language), color = Muted, fontSize = 15.sp)
                         Spacer(Modifier.height(12.dp))
                         TextButton(onClick = { navController.popBackStack() }) {
                             Text("Geri dön", color = Amber)
@@ -313,7 +314,7 @@ fun PostDetailScreen(
                         ) {
                             Icon(Icons.Filled.Favorite, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("${post.likesCount} ${if (ku) "xweşandin" else "beğeni"}", color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text("${post.likesCount} ${Strings.likes(language)}", color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         }
                         HorizontalDivider(color = Divider)
                     }
@@ -325,7 +326,7 @@ fun PostDetailScreen(
                         verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(if (ku) "Şîrove" else "Yorumlar", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(Strings.comments(language), color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                         if (comments.isNotEmpty()) {
                             Text("${comments.size}", color = Muted, fontSize = 13.sp)
                         }
@@ -347,7 +348,7 @@ fun PostDetailScreen(
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("💬", fontSize = 32.sp)
                                 Spacer(Modifier.height(8.dp))
-                                Text("Henüz yorum yok", color = Muted, fontSize = 14.sp)
+                                Text(Strings.noResult(language), color = Muted, fontSize = 14.sp)
                             }
                         }
                     }
@@ -407,7 +408,7 @@ fun PostDetailScreen(
                     onValueChange = { inputText = it },
                     placeholder   = {
                         Text(
-                            if (replyTo != null) "@${replyTo!!.name} ${if (ku) "bersiv bide..." else "yanıtla..."}" else if (ku) "Şîrove binivîse..." else "Yorum yaz...",
+                            if (replyTo != null) "@${replyTo!!.name} ${Strings.reply(language)}..." else Strings.commentHint(language),
                             color = Muted, fontSize = 14.sp,
                         )
                     },
