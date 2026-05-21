@@ -3,8 +3,10 @@ package com.heftreng.app.ui.screens.settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -17,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -28,6 +31,7 @@ import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
+import coil.compose.AsyncImage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -708,23 +712,23 @@ private fun BlockedUsersDialog(
                     color = Muted, fontSize = 14.sp,
                 )
             } else {
-                androidx.compose.foundation.lazy.LazyColumn(
-                    modifier           = Modifier.fillMaxWidth(),
+                Column(
+                    modifier            = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    androidx.compose.foundation.lazy.items(blockedUsers) { user ->
+                    blockedUsers.forEach { user ->
                         Row(
                             modifier          = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            coil.compose.AsyncImage(
+                            AsyncImage(
                                 model              = user.photoURL.ifEmpty { null },
                                 contentDescription = null,
                                 modifier           = Modifier
                                     .size(38.dp)
-                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                    .clip(CircleShape)
                                     .background(SurfaceVar),
-                                contentScale       = androidx.compose.ui.layout.ContentScale.Crop,
+                                contentScale       = ContentScale.Crop,
                             )
                             Spacer(Modifier.width(10.dp))
                             Text(

@@ -315,6 +315,11 @@ fun FeedScreen(
                                 else -> navController.navigate(Screen.PostDetail.go(repostId))
                             }
                         },
+                        onReport  = {
+                            reportPostId     = post.id
+                            reportTargetUid  = post.uid
+                            reportTargetName = post.displayName.ifBlank { post.name }
+                        },
                         language = language,
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
@@ -720,6 +725,7 @@ fun PostCard(
     onTapAuthor  : ((String) -> Unit)? = null,
     onTapBook    : ((String) -> Unit)? = null,
     onTapRepost  : ((postId: String, type: String) -> Unit)? = null,
+    onReport     : (() -> Unit)? = null,
     language     : String = "tr",
 ) {
     val ku = language == "ku"
@@ -840,9 +846,7 @@ fun PostCard(
                             leadingIcon = { Icon(Icons.Default.Flag, null, tint = Color(0xFFEF4444)) },
                             onClick     = {
                                 menuExpanded = false
-                                reportPostId     = post.id
-                                reportTargetUid  = post.uid
-                                reportTargetName = post.displayName.ifBlank { post.name }
+                                onReport?.invoke()
                             },
                         )
                     }
