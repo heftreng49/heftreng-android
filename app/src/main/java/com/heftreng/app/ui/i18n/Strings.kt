@@ -18,7 +18,7 @@ object Strings {
     private fun t(lang: String, tr: String, ku: String) = if (lang == "ku") ku else tr
 
     // ── Alt Navigasyon ────────────────────────────────────────────────────────
-    fun navFeed(l: String)         = t(l, "Nivis",       "Nivis")
+    fun navFeed(l: String)         = t(l, "Gönderiler",  "Nivîs")
     fun navBlog(l: String)         = t(l, "Blog",        "Blog")
     fun navBooks(l: String)        = t(l, "Kitaplar",    "Pirtûk")
     fun navKurdi(l: String)        = t(l, "Kurdî",       "Kurdî")
