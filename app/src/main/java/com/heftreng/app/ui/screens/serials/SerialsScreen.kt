@@ -235,6 +235,11 @@ fun SerialDetailScreen(
     var showLikers      by remember { mutableStateOf(false) }
     var chapterToEdit   by remember { mutableStateOf<Chapter?>(null) }
     var chapterToDelete by remember { mutableStateOf<Chapter?>(null) }
+    // Overlay state for editor
+    var addTitle   by remember { mutableStateOf("") }
+    var addBody    by remember { mutableStateOf("") }
+    var editTitle  by remember { mutableStateOf("") }
+    var editBody   by remember { mutableStateOf("") }
 
     LaunchedEffect(serialId) { vm.loadSerial(serialId) }
 
@@ -322,23 +327,42 @@ fun SerialDetailScreen(
     }
 
     if (showAddChapter) {
-        AddChapterDialog(
-            onDismiss = { showAddChapter = false },
-            language  = language,
-            onAdd     = { title, body ->
-                vm.addChapter(serialId, title, body)
+        ChapterEditorOverlay(
+            title         = addTitle,
+            body          = addBody,
+            onTitleChange = { addTitle = it },
+            onBodyChange  = { addBody  = it },
+            heading       = Strings.newChapter(language),
+            saveLabel     = Strings.save(language),
+            wordCount     = addBody.replace(Regex("<[^>]+>"), "").trim()
+                                .split(Regex("\s+")).count { it.isNotBlank() },
+            canSave       = addTitle.isNotBlank() && addBody.isNotBlank(),
+            language      = language,
+            onDismiss     = { showAddChapter = false; addTitle = ""; addBody = "" },
+            onSave        = {
+                vm.addChapter(serialId, addTitle, addBody)
                 showAddChapter = false
-            }
+                addTitle = ""; addBody = ""
+            },
         )
     }
 
     chapterToEdit?.let { ch ->
-        EditChapterDialog(
-            chapter   = ch,
-            onDismiss = { chapterToEdit = null },
-            language  = language,
-            onSave    = { newTitle, newBody ->
-                vm.updateChapter(serialId, ch.id, newTitle, newBody)
+        LaunchedEffect(ch.id) { editTitle = ch.title; editBody = ch.body }
+        ChapterEditorOverlay(
+            title         = editTitle,
+            body          = editBody,
+            onTitleChange = { editTitle = it },
+            onBodyChange  = { editBody  = it },
+            heading       = Strings.editChapter(language),
+            saveLabel     = Strings.save(language),
+            wordCount     = editBody.replace(Regex("<[^>]+>"), "").trim()
+                                .split(Regex("\s+")).count { it.isNotBlank() },
+            canSave       = editTitle.isNotBlank() && editBody.isNotBlank(),
+            language      = language,
+            onDismiss     = { chapterToEdit = null },
+            onSave        = {
+                vm.updateChapter(serialId, ch.id, editTitle, editBody)
                 chapterToEdit = null
             },
         )
@@ -478,105 +502,6 @@ private fun ChapterRow(
 }
 
 @Composable
-private fun EditChapterDialog(chapter: Chapter, onDismiss: () -> Unit, onSave: (String, String) -> Unit, language: String = "tr") {
-    var title by remember { mutableStateOf(chapter.title) }
-    var body  by remember { mutableStateOf(chapter.body) }
-
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows  = false,
-        ),
-    ) {
-        androidx.compose.material3.Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding(),
-            color = HeftSurface,
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-
-                // ── Başlık çubuğu ─────────────────────────────────────────
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(HeftSurface)
-                        .padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalAlignment     = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(Strings.editChapter(language), color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, null, tint = Muted)
-                    }
-                }
-
-                HorizontalDivider(color = Divider)
-
-                // ── Scrollable içerik ─────────────────────────────────────
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    OutlinedTextField(
-                        value         = title,
-                        onValueChange = { title = it },
-                        label         = { Text(Strings.chapterTitle(language) + " *") },
-                        singleLine    = true,
-                        modifier      = Modifier.fillMaxWidth(),
-                        colors        = hfTextFieldColors(),
-                    )
-                    // İçerik alanı — Rich Text Editör
-                    RichTextEditor(
-                        value       = body,
-                        onChange    = { body = it },
-                        placeholder = Strings.editChapter(language) + "...",
-                        modifier    = Modifier.fillMaxWidth(),
-                    )
-                    val wordCount = body.replace(Regex("<[^>]+>"), "").trim()
-                        .split(Regex("\\s+")).count { it.isNotBlank() }
-                    Text(Strings.wordCount(language, wordCount), color = Muted, fontSize = 11.sp)
-                }
-
-                HorizontalDivider(color = Divider)
-
-                // ── Sabit alt buton çubuğu — klavyenin ÜSTÜNDE durur ─────
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(HeftSurface)
-                        .imePadding()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                    verticalAlignment     = Alignment.CenterVertically,
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(Strings.cancel(language), color = Muted)
-                    }
-                    Button(
-                        onClick  = { if (title.isNotBlank() && body.isNotBlank()) onSave(title, body) },
-                        enabled  = title.isNotBlank() && body.isNotBlank(),
-                        shape    = RoundedCornerShape(12.dp),
-                        colors   = ButtonDefaults.buttonColors(
-                            containerColor = Amber,
-                            contentColor   = androidx.compose.ui.graphics.Color.Black,
-                        ),
-                    ) {
-                        Icon(Icons.Default.Save, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Kaydet", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-    }
-}
-
 // ── Bölüm okuma ekranı ───────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -659,6 +584,100 @@ fun ChapterReadScreen(
     }
 }
 
+// ── Tam ekran bölüm yazma overlay (Dialog yerine — IME sorunu bypass) ────────
+@Composable
+fun ChapterEditorOverlay(
+    title        : String,
+    body         : String,
+    onTitleChange: (String) -> Unit,
+    onBodyChange : (String) -> Unit,
+    heading      : String,
+    saveLabel    : String,
+    wordCount    : Int,
+    canSave      : Boolean,
+    language     : String,
+    onDismiss    : () -> Unit,
+    onSave       : () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(HeftSurface)
+            .statusBarsPadding()
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+
+            // Başlık çubuğu
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(HeftSurface)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, null, tint = Muted)
+                }
+                Text(heading, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                TextButton(
+                    onClick = onSave,
+                    enabled = canSave,
+                ) {
+                    Text(
+                        saveLabel,
+                        color      = if (canSave) Amber else Muted,
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 15.sp,
+                    )
+                }
+            }
+
+            HorizontalDivider(color = Divider)
+
+            // Başlık input
+            OutlinedTextField(
+                value         = title,
+                onValueChange = onTitleChange,
+                placeholder   = { Text(Strings.chapterTitle(language) + " *", color = Muted) },
+                singleLine    = true,
+                modifier      = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                colors        = hfTextFieldColors(),
+            )
+
+            // İçerik editörü + kelime sayısı — imePadding burada
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .imePadding()
+            ) {
+                RichTextEditor(
+                    value       = body,
+                    onChange    = onBodyChange,
+                    placeholder = heading + "...",
+                    modifier    = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                )
+                HorizontalDivider(color = Divider)
+                Text(
+                    Strings.wordCount(language, wordCount),
+                    color    = Muted,
+                    fontSize = 11.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                )
+            }
+        }
+    }
+}
+
 // ── Dialoglar ────────────────────────────────────────────────────────────────
 @Composable
 private fun CreateSerialDialog(onDismiss: () -> Unit, onCreate: (String, String, String) -> Unit, language: String = "tr") {
@@ -707,104 +726,6 @@ private fun CreateSerialDialog(onDismiss: () -> Unit, onCreate: (String, String,
 }
 
 @Composable
-private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> Unit, language: String = "tr") {
-    var title by remember { mutableStateOf("") }
-    var body  by remember { mutableStateOf("") }
-
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows  = false,
-        ),
-    ) {
-        androidx.compose.material3.Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding(),
-            color = HeftSurface,
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-
-                // ── Başlık çubuğu ─────────────────────────────────────────
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(HeftSurface)
-                        .padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalAlignment     = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(Strings.newChapter(language), color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, null, tint = Muted)
-                    }
-                }
-
-                HorizontalDivider(color = Divider)
-
-                // ── Başlık alanı + editör ────────────────────────────────
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    // Başlık alanı
-                    OutlinedTextField(
-                        value         = title,
-                        onValueChange = { title = it },
-                        label         = { Text(Strings.chapterTitle(language) + " *") },
-                        singleLine    = true,
-                        modifier      = Modifier.fillMaxWidth(),
-                        colors        = hfTextFieldColors(),
-                    )
-
-                    // İçerik — Rich Text Editör
-                    RichTextEditor(
-                        value       = body,
-                        onChange    = { body = it },
-                        placeholder = "${Strings.newChapter(language)}...",
-                        modifier    = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 300.dp),
-                    )
-                }
-
-                HorizontalDivider(color = Divider)
-
-                // ── Sabit alt buton çubuğu — klavyenin ÜSTÜNDE durur ─────
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(HeftSurface)
-                        .imePadding()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(Strings.cancel(language), color = Muted)
-                    }
-                    Button(
-                        onClick  = { if (title.isNotBlank() && body.isNotBlank()) onAdd(title, body) },
-                        enabled  = title.isNotBlank() && body.isNotBlank(),
-                        shape    = RoundedCornerShape(12.dp),
-                        colors   = ButtonDefaults.buttonColors(
-                            containerColor = Amber,
-                            contentColor   = androidx.compose.ui.graphics.Color.Black,
-                        ),
-                    ) {
-                        Text(Strings.chapter(language) + " " + Strings.save(language), fontWeight = FontWeight.Bold)
-                    }
-                }
-            } // Column fillMaxSize end
-        } // Surface end
-    } // Dialog end
-} // AddChapterDialog end
-
 @Composable
 fun hfTextFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedBorderColor      = Amber,
