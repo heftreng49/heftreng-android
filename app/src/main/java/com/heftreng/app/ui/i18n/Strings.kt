@@ -374,7 +374,14 @@ object Strings {
     fun bookCreateBtn(l: String)         = t(l, "Oluştur",                    "Çêke")
     fun prevChapter(l: String)           = t(l, "Önceki",                     "Berî")
     fun nextChapter(l: String)           = t(l, "Sonraki",                    "Paşê")
-    fun wordCount(l: String)             = t(l, "kelime",                     "peyvên")
+    fun wordCount(l: String, n: Any = "")    = if (n.toString().isBlank()) t(l, "kelime", "peyv") else t(l, "$n kelime", "$n peyv")
+    fun readingStatus(l: String, key: String) = when (key) {
+        "okuyorum"         -> t(l, "Okuyorum",        "Dixwînim")
+        "okumak_istiyorum" -> t(l, "Okumak İstiyorum","Dixwazim Bixwînim")
+        "okudum"           -> t(l, "Okudum",          "Xwendim")
+        "biraktim"         -> t(l, "Bıraktım",        "Berda")
+        else               -> key
+    }
     fun readingListEmpty(l: String)      = t(l, "Bu listede kitap yok",       "Di vê lîsteyê de pirtûk tune")
     fun addToReadingList(l: String)      = t(l, "Okuma Listesine Ekle",       "Li Lîsteya Xwendinê Zêde Bike")
 

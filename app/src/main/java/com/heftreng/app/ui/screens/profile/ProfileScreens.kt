@@ -332,7 +332,7 @@ fun ProfileScreen(
                         }
                     } else {
                         val statusKeys = listOf("okuyorum", "okumak_istiyorum", "okudum", "biraktim")
-                        val statuses = statusKeys.map { key -> key to Strings.readingStatus(language, key) }
+                        val statuses: List<Pair<String, String>> = statusKeys.map { key -> key to Strings.readingStatus(language, key) }
                         val statusColors = mapOf(
                             "okuyorum"         to Color(0xFF2563EB),
                             "okumak_istiyorum" to Color(0xFF7C3AED),

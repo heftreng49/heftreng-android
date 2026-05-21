@@ -121,6 +121,7 @@ fun ReadingListScreen(
                             ReadingListBookCard(
                                 entry    = entry,
                                 status   = selectedStatus,
+                                language = language,
                                 onClick  = {
                             if (entry.sid.startsWith("book_")) {
                                 navController.navigate("book/${entry.sid.removePrefix("book_")}")
@@ -140,12 +141,14 @@ fun ReadingListScreen(
 
 @Composable
 private fun ReadingListBookCard(
-    entry   : ReadingListEntry,
-    status  : RlStatus,
-    onClick : () -> Unit,
-    onRemove: () -> Unit,
+    entry    : ReadingListEntry,
+    status   : RlStatus,
+    language : String = "tr",
+    onClick  : () -> Unit,
+    onRemove : () -> Unit,
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    val ku = language == "ku"
     val bg = Color(status.color)
 
     Column(
