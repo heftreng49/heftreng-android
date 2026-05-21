@@ -34,6 +34,7 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.data.model.User
 import com.heftreng.app.navigation.Screen
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.SearchResult
 import com.heftreng.app.viewmodel.SearchViewModel
@@ -173,7 +174,7 @@ fun SearchScreen(
                         }
                     } else {
                         items(filtered, key = { it.type + it.id }) { result ->
-                            SearchResultRow(result, onClick = {
+                            SearchResultRow(result, language = language, onClick = {
                                 when (result.type) {
                                     "user"   -> navController.navigate("profile/${result.uid}")
                                     "post"   -> navController.navigate(Screen.PostDetail.go(result.id))
@@ -191,7 +192,7 @@ fun SearchScreen(
                     if (suggestions.isNotEmpty()) {
                         item {
                             Text(
-                                "Önerilen Kişiler",
+                                Strings.suggestedPeople(language),
                                 color      = Amber,
                                 fontWeight = FontWeight.Bold,
                                 fontSize   = 12.sp,
@@ -200,8 +201,9 @@ fun SearchScreen(
                         }
                         items(suggestions, key = { it.uid }) { user ->
                             SuggestionRow(
-                                user    = user,
-                                onClick = { navController.navigate("profile/${user.uid}") },
+                                user     = user,
+                                language = language,
+                                onClick  = { navController.navigate("profile/${user.uid}") },
                                 onFollow = { vm.toggleFollow(user.uid) },
                             )
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
@@ -215,7 +217,7 @@ fun SearchScreen(
 
 // ── Ortak arama sonucu satırı ─────────────────────────────────────────────────
 @Composable
-private fun SearchResultRow(result: SearchResult, onClick: () -> Unit) {
+private fun SearchResultRow(result: SearchResult, language: String = "tr", onClick: () -> Unit) {
     val (typeIcon, typeColor) = when (result.type) {
         "post"   -> Icons.Outlined.DynamicFeed to Primary
         "serial" -> Icons.Outlined.AutoStories  to Color(0xFF8B5CF6)
@@ -255,7 +257,7 @@ private fun SearchResultRow(result: SearchResult, onClick: () -> Unit) {
             color = typeColor.copy(alpha = 0.12f),
         ) {
             Text(
-                when (result.type) { "post" -> "Gönderi"; "serial" -> "Seri"; "book" -> "Kitap"; "author" -> "Yazar"; "book_quote" -> "Kitap Alıntısı"; else -> "Kişi" },
+                Strings.resultTypeLabel(language, result.type),
                 color    = typeColor,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
@@ -266,7 +268,7 @@ private fun SearchResultRow(result: SearchResult, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SuggestionRow(user: User, onClick: () -> Unit, onFollow: () -> Unit) {
+private fun SuggestionRow(user: User, language: String = "tr", onClick: () -> Unit, onFollow: () -> Unit) {
     Row(
         modifier          = Modifier
             .fillMaxWidth()
@@ -293,7 +295,7 @@ private fun SuggestionRow(user: User, onClick: () -> Unit, onFollow: () -> Unit)
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
             modifier       = Modifier.height(34.dp),
         ) {
-            Text("Şopîne", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text(Strings.followAction(language), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }

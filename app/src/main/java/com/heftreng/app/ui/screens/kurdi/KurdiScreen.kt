@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.*
 
@@ -57,7 +58,12 @@ fun KurdiScreen(
     val toast       by vm.toast.collectAsState()
 
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("Dersler", "Ferheng", "Rêziman", "AI Ders")
+    val tabs = listOf(
+        Strings.kurdiUnits(language),
+        Strings.kurdiDict(language),
+        Strings.kurdiGrammar(language),
+        Strings.kurdiAi(language),
+    )
 
     // Toast
     LaunchedEffect(toast) {
@@ -69,6 +75,7 @@ fun KurdiScreen(
     if (activeLesson != null) {
         LessonScreen(
             activeLesson = activeLesson!!,
+            language     = language,
             onComplete   = { vm.completeLesson(activeLesson!!.lesson.id); vm.closeLesson() },
             onClose      = { vm.closeLesson() },
         )
@@ -83,7 +90,7 @@ fun KurdiScreen(
     ) {
         // Başlık
         Text(
-            "Kurdî Fêrbibe",
+            Strings.kurdiTitle(language),
             fontWeight = FontWeight.ExtraBold,
             color      = OnBackground,
             fontSize   = 20.sp,
@@ -262,6 +269,7 @@ private fun UnitsTab(
                             lessons  = unitLessons,
                             doneIds  = doneIds,
                             color    = color,
+                            language = language,
                             onOpen   = onOpen,
                         )
                     }
@@ -394,10 +402,11 @@ private fun UnitHeader(
 // ── Ders yolu (site: .kp-lesson-path — daireler yol şeklinde) ────────────────
 @Composable
 private fun LessonPath(
-    lessons : List<KfLesson>,
-    doneIds : Set<String>,
-    color   : Color,
-    onOpen  : (String) -> Unit,
+    lessons  : List<KfLesson>,
+    doneIds  : Set<String>,
+    color    : Color,
+    language : String = "tr",
+    onOpen   : (String) -> Unit,
 ) {
     val firstNotDone = lessons.indexOfFirst { it.id !in doneIds }
         .let { if (it == -1) lessons.size else it }
@@ -420,6 +429,7 @@ private fun LessonPath(
                 color    = color,
                 index    = index,
                 total    = lessons.size,
+                language = language,
                 onClick  = {
                     if (!isLocked) onOpen(lesson.id)
                 },
@@ -437,6 +447,7 @@ private fun LessonPathNode(
     color    : Color,
     index    : Int,
     total    : Int,
+    language : String = "tr",
     onClick  : () -> Unit,
 ) {
     // Zigzag offset — site temasındaki gibi sola-ortaya-sağa sıralanır
@@ -496,7 +507,7 @@ private fun LessonPathNode(
                     color = color,
                 ) {
                     Text(
-                        "BAŞLA!",
+                        Strings.startLesson(language),
                         color      = Color.White,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize   = 10.sp,
@@ -536,6 +547,7 @@ private fun LessonPathNode(
 @Composable
 fun LessonScreen(
     activeLesson : ActiveLesson,
+    language     : String = "tr",
     onComplete   : () -> Unit,
     onClose      : () -> Unit,
 ) {
@@ -648,14 +660,14 @@ fun LessonScreen(
                             )
                             Column {
                                 Text(
-                                    if (isOk) "Doğru!" else "Yanlış!",
+                                    if (isOk) Strings.correctAnswer(language) else Strings.wrongAnswer(language),
                                     color      = if (isOk) Color(0xFF22C55E) else Color(0xFFEF4444),
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize   = 14.sp,
                                 )
                                 if (!isOk && currentEx.type != "build") {
                                     Text(
-                                        "Doğru cevap: ${currentEx.answer}",
+                                        Strings.correctAnswerIs(language, currentEx.answer),
                                         color    = Color(0xFFEF4444).copy(0.8f),
                                         fontSize = 12.sp,
                                     )
@@ -853,7 +865,7 @@ fun LessonScreen(
                                 OutlinedTextField(
                                     value         = fillAnswer,
                                     onValueChange = { if (!showResult) fillAnswer = it },
-                                    placeholder   = { Text("Cevabını yaz…", color = Muted) },
+                                    placeholder   = { Text(Strings.typeAnswer(language), color = Muted) },
                                     modifier      = Modifier.fillMaxWidth(),
                                     shape         = RoundedCornerShape(12.dp),
                                     singleLine    = true,
@@ -912,6 +924,7 @@ fun LessonScreen(
                                     question  = ex.question,
                                     words     = ex.words,
                                     tr        = ex.tr,
+                                    language  = language,
                                     onChecked = { isOk ->
                                         buildResult = isOk
                                         if (isOk) correctCount++
@@ -1061,6 +1074,7 @@ private fun BuildExercise(
     question : String  = "",
     words    : List<String>,
     tr       : String,
+    language : String  = "tr",
     onChecked: (Boolean) -> Unit,
 ) {
     // Bank: words'ü karıştır — her kelime kaç kez varsa o kadar görünür
@@ -1130,7 +1144,7 @@ private fun BuildExercise(
             contentAlignment = Alignment.Center,
         ) {
             if (placed.isEmpty()) {
-                Text("Kelimelere sırayla dokun", color = Muted, fontSize = 13.sp)
+                Text(Strings.tapInOrder(language), color = Muted, fontSize = 13.sp)
             } else {
                 androidx.compose.foundation.layout.FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
@@ -1212,7 +1226,7 @@ private fun BuildExercise(
                 shape    = RoundedCornerShape(12.dp),
                 colors   = ButtonDefaults.buttonColors(containerColor = Primary),
             ) {
-                Text("KONTROL ET", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, letterSpacing = 0.5.sp)
+                Text(Strings.checkAnswer(language).uppercase(), color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, letterSpacing = 0.5.sp)
             }
         }
     }
@@ -1224,7 +1238,7 @@ private fun DictionaryTab(language: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("📖", fontSize = 48.sp)
-            Text("Ferheng", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
+            Text(Strings.kurdiDict(language), fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
             Text(if (language == "ku") "Zû tê" else "Yakında", color = Muted, fontSize = 14.sp)
         }
     }
@@ -1236,7 +1250,7 @@ private fun GrammarTab(language: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("🎓", fontSize = 48.sp)
-            Text("Rêziman", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
+            Text(Strings.kurdiGrammar(language), fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
             Text(if (language == "ku") "Zû tê" else "Yakında", color = Muted, fontSize = 14.sp)
         }
     }
@@ -1260,8 +1274,8 @@ fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Text("AI ile Kurdî Ders", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
-            Text("OpenRouter API anahtarını gir, kaydedilir.", color = Muted, fontSize = 12.sp)
+            Text(Strings.aiLessonTitle(language), fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
+            Text(Strings.aiLessonDesc(language), color = Muted, fontSize = 12.sp)
         }
         item {
             OutlinedTextField(
@@ -1282,7 +1296,7 @@ fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
             OutlinedTextField(
                 value = topic, onValueChange = { topic = it },
                 label       = { Text(if (language == "ku") "Mijar" else "Konu", color = Muted, fontSize = 12.sp) },
-                placeholder = { Text("Renkler, Sayılar…", color = Muted, fontSize = 12.sp) },
+                placeholder = { Text(Strings.topicHint(language), color = Muted, fontSize = 12.sp) },
                 modifier    = Modifier.fillMaxWidth(), singleLine = true,
                 colors      = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar,
@@ -1313,7 +1327,7 @@ fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
                 shape    = RoundedCornerShape(12.dp),
             ) {
                 if (aiLoading) { CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp); Spacer(Modifier.width(8.dp)) }
-                Text(if (aiLoading) "Üretiliyor…" else "✨ Ders Oluştur", color = Color.White, fontWeight = FontWeight.Bold)
+                Text(if (aiLoading) Strings.aiGenerating(language) else Strings.aiGenerate(language), color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
         aiError?.let { err ->

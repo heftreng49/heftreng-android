@@ -167,4 +167,89 @@ object Strings {
     fun searchPeople(l: String)    = t(l, "Kişiler",    "Kes")
     fun searchPosts(l: String)     = t(l, "Gönderiler", "Nivîs")
     fun searchBooks(l: String)     = t(l, "Kitaplar",   "Pirtûk")
+
+    // ── Feed (yeni) ───────────────────────────────────────────────────────────
+    fun filterAll(l: String)        = t(l, "Herkes",               "Hemû")
+    fun filterFollowing(l: String)  = t(l, "Takip Edilenler",      "Şopîner")
+    fun likedBy(l: String)          = t(l, "Beğenenler",           "Hez Kirinên")
+    fun reportPost(l: String)       = report(l)   // alias → report()
+    fun newPost(l: String)          = t(l, "Yeni Gönderi",         "Nivîsek Nû")
+    fun anonymous(l: String)        = t(l, "Anonim",               "Bênas")
+    fun showMore(l: String)         = t(l, "Daha Fazla Göster",    "Zêdetir Nîşan Bide")
+    fun likeAction(l: String)       = like(l)   // alias → like()
+
+    // ── Profil (yeni) ─────────────────────────────────────────────────────────
+    fun followersTitle(l: String, count: Int) = t(l, "Takipçiler ($count)", "Şopîner ($count)")
+    fun followingTitle(l: String, count: Int) = t(l, "Takip ($count)",      "Şopandî ($count)")
+
+    // ── Seriler / Kitaplar (yeni) ─────────────────────────────────────────────
+    fun chapter(l: String)          = t(l, "Bölüm",               "Beş")
+    fun chapters(l: String)         = t(l, "Bölümler",            "Beşên")
+    fun noChapters(l: String)       = t(l, "Henüz bölüm yok",     "Hîn beş tune")
+    fun deleteChapter(l: String)    = t(l, "Bölümü Sil",          "Beşê jê bibe")
+    fun editChapter(l: String)      = t(l, "Bölümü Düzenle",      "Beşê biguherîne")
+    fun newChapter(l: String)       = t(l, "Yeni Bölüm",          "Beşa Nû")
+    fun chapterTitle(l: String)     = t(l, "Bölüm Başlığı",       "Sernavê Beşê")
+    fun create(l: String)           = t(l, "Oluştur",             "Çêke")
+    fun genre(l: String)            = t(l, "Tür",                 "Cûre")
+
+    // ── Yazar Paneli (yeni) ───────────────────────────────────────────────────
+    fun loginToWrite(l: String)     = t(l, "Yazı göndermek için giriş yapmalısın", "Ji bo nivîsandina nivîsê têkeve")
+    fun submitSuccess(l: String)    = t(l, "✓ Yazın gönderildi! Admin onayı bekleniyor.", "✓ Nivîsa te hat şandin! Li bendê admin e.")
+    fun noSubmissions(l: String)    = t(l, "Henüz yazı göndermedin", "Hîn tu nivîs neşandiye")
+    fun titleLabel(l: String)       = t(l, "Başlık",               "Sernavê")
+    fun contentLabel(l: String)     = t(l, "İçerik",               "Naverok")
+    fun summaryLabel(l: String)     = t(l, "Kısa Özet (opsiyonel)","Kurteya Nivîsê (vebijarkî)")
+    fun sending(l: String)          = t(l, "Gönderiliyor...",      "Tê şandin...")
+    fun contentLangBoth(l: String)  = t(l, "İkisi",                "Herdu")
+
+    // ── Kurdi Ekranı (yeni) ───────────────────────────────────────────────────
+    fun kurdiTitle(l: String)       = t(l, "Kurdî Öğren",          "Kurdî Fêrbibe")
+    fun startLesson(l: String)      = t(l, "Başla!",               "Destpê Bike!")
+    fun aiLessonTitle(l: String)    = t(l, "AI ile Kurdî Ders",    "Dersê Kurdî bi ZZ")
+    fun aiLessonDesc(l: String)     = t(l, "OpenRouter API anahtarını gir, kaydedilir.", "Miftaya OpenRouter API binivîse, tê tomarkirin.")
+    fun aiGenerating(l: String)     = t(l, "Üretiliyor…",          "Tê çêkirin…")
+    fun aiGenerate(l: String)       = t(l, "✨ Ders Oluştur",      "✨ Dersê Çêke")
+    fun topicHint(l: String)        = t(l, "Renkler, Sayılar…",    "Reng, Hejmar…")
+
+    // ── Arama (yeni) ──────────────────────────────────────────────────────────
+    fun suggestedPeople(l: String)  = t(l, "Önerilen Kişiler",     "Kesên Pêşniyarkirî")
+    fun followAction(l: String)     = follow(l)   // alias → follow()
+    fun resultTypeLabel(l: String, type: String) = when (type) {
+        "post"       -> t(l, "Gönderi",       "Nivîs")
+        "serial"     -> t(l, "Seri",          "Rêzedîmen")
+        "book"       -> t(l, "Kitap",         "Pirtûk")
+        "author"     -> t(l, "Yazar",         "Nivîskar")
+        "book_quote" -> t(l, "Kitap Alıntısı","Gotina Pirtûkê")
+        else         -> t(l, "Kişi",          "Kes")
+    }
+
+    // ── Mesajlar (yeni) ───────────────────────────────────────────────────────
+    fun online(l: String)           = t(l, "Çevrimiçi",            "Serhêl")
+    fun offline(l: String)          = t(l, "Çevrimdışı",           "Nediyar")
+    fun typing(l: String)           = t(l, "Yazıyor...",           "Dinivîse...")
+    fun edited(l: String)           = t(l, "(düzenlendi)",         "(guherî)")
+    fun deleted(l: String)          = t(l, "Bu mesaj silindi",     "Peyam hat jêbirin")
+    fun reply(l: String)            = t(l, "Yanıtla",              "Bersiv bide")
+    fun voiceMessage(l: String)     = t(l, "Sesli mesaj",          "Dengbêjiya dengî")
+    fun playing(l: String)          = t(l, "▶ Çalıyor",           "▶ Dide")
+    fun voice(l: String)            = t(l, "🎤 Ses",              "🎤 Deng")
+
+    // ── Ayarlar (yeni) ────────────────────────────────────────────────────────
+    fun appearance(l: String)       = t(l, "Görünüm",              "Xuyangeh")
+    fun changePassword(l: String)   = t(l, "Şifre Değiştir",       "Şîreya Biguherîne")
+    fun changeEmail(l: String)      = t(l, "E-posta Değiştir",     "E-Postayê Biguherîne")
+    fun pushNotifs(l: String)       = t(l, "Push Bildirimleri",    "Agahdariyên Push")
+    fun privateAccount(l: String)   = t(l, "Gizli Hesap",          "Hesabê Veşartî")
+    fun blockedUsers(l: String)     = t(l, "Engellenen Kullanıcılar", "Bikarhênerên Astengkirî")
+    fun unblock(l: String)          = t(l, "Engeli Kaldır",        "Astengiyê Berde")
+    fun termsOfUse(l: String)       = t(l, "Kullanım Koşulları",   "Şert û Mercên Bikarhanînê")
+    fun privacyPolicy(l: String)    = t(l, "Gizlilik Politikası",  "Siyaseta Nepeniyê")
+    fun passwordMismatch(l: String) = t(l, "Şifreler eşleşmiyor", "Şîre li hev nayên")
+    fun currentPassword(l: String)  = t(l, "Mevcut Şifre",         "Şîreya Niha")
+    fun newPassword(l: String)      = t(l, "Yeni Şifre",           "Şîreya Nû")
+    fun selectLang(l: String)       = t(l, "Uygulama dilini seç",  "Zimanê serîlêdanê hilbijêre")
+
+    // ── Auth (yeni) ───────────────────────────────────────────────────────────
+    fun welcome(l: String)          = t(l, "Hoş geldin",           "Xêr hatî")
 }

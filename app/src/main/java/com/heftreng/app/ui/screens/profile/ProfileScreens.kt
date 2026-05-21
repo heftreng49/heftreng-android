@@ -30,6 +30,7 @@ import com.heftreng.app.utils.openUrl
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.data.model.Post
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.data.model.ReadingListEntry
 import com.heftreng.app.data.model.Serial
 import com.heftreng.app.data.model.User
@@ -76,10 +77,11 @@ fun ProfileScreen(
     val ku = language == "ku"
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = if (ku)
-        listOf("Nivîs", "Rêzedîmen", "Lîsteya Xwendinê")
-    else
-        listOf("Gönderiler", "Seriler", "Okuma Listesi")
+    val tabs = listOf(
+        Strings.posts(language),
+        Strings.serials(language),
+        Strings.readingList(language),
+    )
 
     // Mesaj navigate state — composable dışında navigate yapabilmek için
     var navigateToConv by remember { mutableStateOf<String?>(null) }
@@ -395,7 +397,7 @@ fun ProfileScreen(
     // ── Takipçi/Takip sheet'leri ─────────────────────────────────────────────
     if (showFollowers) {
         FollowListSheet(
-            title     = "Şopîner ($followersCount)",
+            title     = Strings.followersTitle(language, followersCount),
             entries   = followers,
             loading   = socialLoading,
             onDismiss = { showFollowers = false; socialVm.clearFollowers() },
@@ -407,7 +409,7 @@ fun ProfileScreen(
     }
     if (showFollowing) {
         FollowListSheet(
-            title     = "Şopandî ($followingCount)",
+            title     = Strings.followingTitle(language, followingCount),
             entries   = following,
             loading   = socialLoading,
             onDismiss = { showFollowing = false; socialVm.clearFollowing() },
@@ -574,9 +576,9 @@ private fun ProfileHeader(
             Spacer(Modifier.height(12.dp))
             // İstatistikler
             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                StatItem(postsCount,     "Nivîs",   onClick = null)
-                StatItem(followersCount, "Şopîner", onClick = onFollowers)
-                StatItem(followingCount, "Şopandî", onClick = onFollowing)
+                StatItem(postsCount,     Strings.posts(language),      onClick = null)
+                StatItem(followersCount, Strings.followers(language),   onClick = onFollowers)
+                StatItem(followingCount, Strings.following(language),   onClick = onFollowing)
                 if ((user?.xp ?: 0) > 0) StatItem(user?.xp ?: 0, "XP", onClick = null)
             }
             Spacer(Modifier.height(12.dp))

@@ -40,6 +40,7 @@ import com.heftreng.app.data.model.Comment
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.component.AdBannerView
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.viewmodel.AdsViewModel
 import com.heftreng.app.ui.component.QuoteCard
 import com.heftreng.app.ui.component.LinkifyText
@@ -84,8 +85,8 @@ fun FeedScreen(
     var selectedFeedTab by remember { mutableIntStateOf(0) }
     val ku = language == "ku"
     val feedTabs = listOf(
-        if (ku) "Hemû" else "Herkes",
-        if (ku) "Şopîner" else "Takip Edilenler",
+        Strings.filterAll(language),
+        Strings.filterFollowing(language),
     )
 
     // Takip edilen kullanıcıların UID listesi
@@ -158,7 +159,7 @@ fun FeedScreen(
     // Beğenenler sheet
     if (likersPostId != null) {
         LikerListSheet(
-            title     = "Beğenenler",
+            title     = Strings.likedBy(language),
             likers    = likers,
             loading   = socialLoading,
             onDismiss = { likersPostId = null; socialVm.clearLikers() },
@@ -842,7 +843,7 @@ fun PostCard(
                     if (!isOwn) {
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         DropdownMenuItem(
-                            text        = { Text("Şikayet et", color = Color(0xFFEF4444)) },
+                            text        = { Text(Strings.reportPost(language), color = Color(0xFFEF4444)) },
                             leadingIcon = { Icon(Icons.Default.Flag, null, tint = Color(0xFFEF4444)) },
                             onClick     = {
                                 menuExpanded = false
@@ -976,7 +977,7 @@ fun PostCard(
             IconButton(onClick = onLike) {
                 Icon(
                     if (post.isLikedByMe) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = "Beğen",
+                    contentDescription = Strings.likeAction(language),
                     tint               = if (post.isLikedByMe) Color(0xFFEF4444) else Muted,
                     modifier           = Modifier.size(20.dp),
                 )
