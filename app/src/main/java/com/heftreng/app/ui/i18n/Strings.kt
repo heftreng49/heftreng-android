@@ -400,6 +400,9 @@ object Strings {
     fun replyAction(l: String)           = t(l, "Yanıtla",                    "Bersiv bide")
     fun replyingToSuffix(l: String)      = t(l, "yanıtlanıyor",               "bersiv dide")
     fun deleteFailed(l: String)          = t(l, "Silinemedi",                 "Nehat jêbirin")
+    fun editCommentTitle(l: String)      = t(l, "Yorumu Düzenle",             "Şîroveyê Biguherîne")
+    fun editCommentHint(l: String)       = t(l, "Yorumunu düzenle...",        "Şîroveya xwe biguherîne...")
+    fun editedLabel(l: String)           = t(l, "düzenlendi",                 "guherî")
 
     // ── LinkifyText ───────────────────────────────────────────────────────────
     fun showLess(l: String)              = t(l, "Daha Az Göster",             "Kêmtir Nîşan Bide")

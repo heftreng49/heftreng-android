@@ -492,8 +492,7 @@ private fun EditChapterDialog(chapter: Chapter, onDismiss: () -> Unit, onSave: (
         androidx.compose.material3.Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .imePadding(),
+                .statusBarsPadding(),
             color = HeftSurface,
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -545,11 +544,13 @@ private fun EditChapterDialog(chapter: Chapter, onDismiss: () -> Unit, onSave: (
 
                 HorizontalDivider(color = Divider)
 
-                // ── Sabit alt buton çubuğu ────────────────────────────────
+                // ── Sabit alt buton çubuğu — klavyenin ÜSTÜNDE durur ─────
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(HeftSurface)
+                        .imePadding()
+                        .navigationBarsPadding()
                         .padding(horizontal = 20.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
                     verticalAlignment     = Alignment.CenterVertically,
@@ -720,8 +721,7 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
         androidx.compose.material3.Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .imePadding(),
+                .statusBarsPadding(),
             color = HeftSurface,
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -747,6 +747,7 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                 Column(
                     modifier = Modifier
                         .weight(1f)
+                        .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -760,22 +761,26 @@ private fun AddChapterDialog(onDismiss: () -> Unit, onAdd: (String, String) -> U
                         colors        = hfTextFieldColors(),
                     )
 
-                    // İçerik — Rich Text Editör (kalan alanı doldurur)
+                    // İçerik — Rich Text Editör
                     RichTextEditor(
                         value       = body,
                         onChange    = { body = it },
                         placeholder = "${Strings.newChapter(language)}...",
-                        modifier    = Modifier.fillMaxWidth().weight(1f),
+                        modifier    = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 300.dp),
                     )
                 }
 
                 HorizontalDivider(color = Divider)
 
-                // ── Sabit alt buton çubuğu ────────────────────────────────
+                // ── Sabit alt buton çubuğu — klavyenin ÜSTÜNDE durur ─────
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(HeftSurface)
+                        .imePadding()
+                        .navigationBarsPadding()
                         .padding(horizontal = 20.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically,
