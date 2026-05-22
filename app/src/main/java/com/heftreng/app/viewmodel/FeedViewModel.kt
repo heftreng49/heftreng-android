@@ -613,7 +613,12 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val doc = firestore.collection("feed").document(postId).get().await()
-                val d   = doc.data ?: return@launch
+                val d   = doc.data
+                if (d == null) {
+                    // Döküman yok — _notFound state'ini set et
+                    _postNotFound.value = postId
+                    return@launch
+                }
                 val quoteObj   = d["quote"] as? Map<*, *>
                 val quoteText  = (quoteObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
                                  ?: d["quoteText"] as? String ?: ""
@@ -621,34 +626,58 @@ class FeedViewModel @Inject constructor(
                                  ?: d["bookName"] as? String ?: ""
                 val authorName = (quoteObj?.get("author") as? String)?.takeIf { it.isNotBlank() }
                                  ?: d["authorName"] as? String ?: ""
+                val displayName = (d["displayName"] as? String)?.takeIf { it.isNotBlank() }
+                                  ?: d["name"] as? String ?: ""
                 val post = Post(
                     id            = doc.id,
-                    uid           = d["uid"]          as? String ?: "",
-                    displayName   = (d["name"]        as? String)?.takeIf { it.isNotBlank() }
-                                   ?: d["displayName"] as? String ?: "",
-                    photoURL      = d["photoURL"]     as? String ?: "",
-                    text          = d["text"]         as? String ?: "",
+                    uid           = d["uid"]           as? String ?: "",
+                    displayName   = displayName,
+                    name          = displayName,
+                    username      = d["username"]      as? String ?: "",
+                    photoURL      = d["photoURL"]      as? String ?: "",
+                    text          = d["text"]          as? String ?: "",
                     imgUrl        = d["imgUrl"]        as? String ?: d["imageURL"] as? String ?: "",
-                    imageURL      = d["imageURL"]      as? String ?: d["imgUrl"] as? String ?: "",
+                    imageURL      = d["imageURL"]      as? String ?: d["imgUrl"]  as? String ?: "",
                     likesCount    = (d["likes"]        as? Long)?.toInt() ?: 0,
-                    commentsCount = (d["cmtC"]         as? Long)?.toInt()
+                    commentsCount = (d["cmtCount"]     as? Long)?.toInt()
                                    ?: (d["commentsCount"] as? Long)?.toInt() ?: 0,
                     repostsCount  = (d["reposts"]      as? Long)?.toInt() ?: 0,
+                    saves         = (d["saves"]        as? Long)?.toInt() ?: 0,
                     ts            = d["ts"]            as? com.google.firebase.Timestamp,
                     quoteText     = quoteText,
                     bookName      = bookName,
                     authorName    = authorName,
-                    repostType    = d["repostType"]    as? String ?: "",
-                    repostTitle   = d["repostTitle"]   as? String ?: "",
-                    repostText    = d["repostText"]    as? String ?: "",
-                    serialTitle   = d["serialTitle"]   as? String ?: "",
+                    repostType    = d["repostType"]         as? String ?: "",
+                    repostId      = d["repostId"]           as? String ?: "",
+                    repostTitle   = d["repostTitle"]        as? String ?: "",
+                    repostText    = d["repostText"]         as? String ?: "",
+                    repostAuthor  = d["repostAuthor"]       as? String ?: "",
+                    repostAuthorPhoto = d["repostAuthorPhoto"] as? String ?: "",
+                    repostAuthorUid   = d["repostAuthorUid"]   as? String ?: "",
+                    serialTitle   = d["serialTitle"]        as? String ?: "",
+                    serialCover   = d["serialCover"]        as? String ?: "",
+                    serialId      = d["serialId"]           as? String ?: "",
+                    chapterId     = d["chapterId"]          as? String ?: "",
+                    chapterTitle  = d["chapterTitle"]       as? String ?: "",
+                    chapterOrder  = (d["chapterOrder"]      as? Long)?.toInt() ?: 0,
+                    repostSerialId         = d["repostSerialId"]         as? String ?: "",
+                    repostSerialTitle      = d["repostSerialTitle"]      as? String ?: "",
+                    repostSerialDesc       = d["repostSerialDesc"]       as? String ?: "",
+                    repostSerialCover      = d["repostSerialCover"]      as? String ?: "",
+                    repostSerialAuthorName = d["repostSerialAuthorName"] as? String ?: "",
+                    repostSerialAuthorUid  = d["repostSerialAuthorUid"]  as? String ?: "",
+                    repostSerialBg         = d["repostSerialBg"]         as? String ?: "",
+                    repostSerialChCount    = (d["repostSerialChCount"]   as? Long)?.toInt() ?: 0,
                     isLikedByMe    = doc.id in likedIds,
                     isSavedByMe    = doc.id in savedIds,
                     isRepostedByMe = doc.id in myRepostMap,
                     myRepostId     = myRepostMap[doc.id] ?: "",
                 )
                 _posts.value = _posts.value + post
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _postNotFound.value = postId
+            }
         }
     }
 

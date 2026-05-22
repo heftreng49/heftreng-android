@@ -78,6 +78,7 @@ fun PostDetailScreen(
     val posts         by viewModel.posts.collectAsState()
     val likers        by socialVm.likers.collectAsState()
     val socialLoading by socialVm.loading.collectAsState()
+    val postNotFound  by viewModel.postNotFound.collectAsState()
     val post          = posts.find { it.id == postId }
 
     val db    = FirebaseFirestore.getInstance()
@@ -250,11 +251,7 @@ fun PostDetailScreen(
         if (posts.none { it.id == postId }) viewModel.ensurePost(postId)
     }
 
-    var loadTimeout by remember { mutableStateOf(false) }
-    LaunchedEffect(postId) {
-        kotlinx.coroutines.delay(8000)
-        if (posts.none { it.id == postId }) loadTimeout = true
-    }
+    val loadFailed = postNotFound == postId
 
     // ── Scaffold: imePadding Scaffold dışında — en dış Box'ta ─────────────────
     Box(modifier = Modifier.fillMaxSize().imePadding()) {
@@ -274,16 +271,25 @@ fun PostDetailScreen(
         ) { padding ->
             if (post == null) {
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                    if (loadTimeout) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(if (ku) "Nivîs nehate dîtin" else Strings.postNotFound(language), color = Muted, fontSize = 15.sp)
-                            Spacer(Modifier.height(12.dp))
+                    if (loadFailed) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("😕", fontSize = 40.sp)
+                            Text(
+                                if (ku) "Nivîs nehate dîtin" else "Gönderi bulunamadı",
+                                color = Muted, fontSize = 15.sp,
+                            )
                             TextButton(onClick = { navController.popBackStack() }) {
                                 Text(if (ku) "Vegere" else "Geri dön", color = Amber)
                             }
                         }
                     } else {
-                        CircularProgressIndicator(color = Amber)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            CircularProgressIndicator(color = Amber, modifier = Modifier.size(32.dp))
+                            Text(
+                                if (ku) "Bar dike..." else "Yükleniyor...",
+                                color = Muted, fontSize = 13.sp,
+                            )
+                        }
                     }
                 }
                 return@Scaffold

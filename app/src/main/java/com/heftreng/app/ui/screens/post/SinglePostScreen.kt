@@ -81,7 +81,9 @@ fun SinglePostScreen(
     val posts         by vm.posts.collectAsState()
     val likers        by socialVm.likers.collectAsState()
     val socialLoading by socialVm.loading.collectAsState()
+    val postNotFound  by vm.postNotFound.collectAsState()
     val post          = posts.find { it.id == postId }
+    val loadFailed    = postNotFound == postId
 
     val db    = FirebaseFirestore.getInstance()
     val auth  = FirebaseAuth.getInstance()
@@ -252,7 +254,26 @@ fun SinglePostScreen(
         ) { padding ->
             if (post == null) {
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Amber)
+                    if (loadFailed) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("😕", fontSize = 40.sp)
+                            Text(
+                                if (ku) "Nivîs nehate dîtin" else "Gönderi bulunamadı",
+                                color = Muted, fontSize = 15.sp,
+                            )
+                            TextButton(onClick = { navController.popBackStack() }) {
+                                Text(if (ku) "Vegere" else "Geri dön", color = Amber)
+                            }
+                        }
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            CircularProgressIndicator(color = Amber, modifier = Modifier.size(32.dp))
+                            Text(
+                                if (ku) "Bar dike..." else "Yükleniyor...",
+                                color = Muted, fontSize = 13.sp,
+                            )
+                        }
+                    }
                 }
                 return@Scaffold
             }
