@@ -1,0 +1,741 @@
+package com.heftreng.app.ui.screens.settings
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import com.heftreng.app.navigation.Screen
+import com.heftreng.app.ui.i18n.Strings
+import com.heftreng.app.ui.theme.*
+import com.heftreng.app.viewmodel.AuthViewModel
+import com.heftreng.app.viewmodel.SettingsViewModel
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreen(
+    navController : NavController,
+    vm            : SettingsViewModel = hiltViewModel(),
+    authVm        : AuthViewModel     = hiltViewModel(),
+) {
+    val isDark         by vm.darkMode.collectAsState()
+    val language       by vm.language.collectAsState()
+    val pushEnabled    by vm.pushEnabled.collectAsState()
+    val privateAccount by vm.privateAccount.collectAsState()
+    val blockedUsers   by vm.blockedUsers.collectAsState()
+    val blockedLoading by vm.blockedLoading.collectAsState()
+
+    var showPasswordDialog by remember { mutableStateOf(false) }
+    var showEmailDialog    by remember { mutableStateOf(false) }
+    var showBlockedDialog  by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { vm.loadBlockedUsers() }
+
+    Scaffold(
+        containerColor = Background,
+        topBar = {
+            TopAppBar(
+                title = { Text(Strings.settingsTitle(language), fontWeight = FontWeight.SemiBold, color = OnBackground) },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier            = Modifier.fillMaxSize().padding(padding),
+            contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+
+            // ── Görünüm ──────────────────────────────────────────────────
+            item {
+                SettingsSection(title = Strings.appearance(language)) {
+                    Row(
+                        modifier          = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            if (isDark) Icons.Filled.DarkMode else Icons.Outlined.LightMode,
+                            null, tint = Amber, modifier = Modifier.size(22.dp),
+                        )
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                if (isDark) Strings.darkMode(language) else Strings.lightMode(language),
+                                color = OnBackground, fontWeight = FontWeight.Medium,
+                            )
+                            Text(
+                                if (isDark) "Rêya Tarî" else "Rêya Ronahî",
+                                color = Muted, fontSize = 12.sp,
+                            )
+                        }
+                        Switch(
+                            checked         = isDark,
+                            onCheckedChange = { vm.toggleDarkMode() },
+                            colors          = SwitchDefaults.colors(
+                                checkedThumbColor   = Amber,
+                                checkedTrackColor   = Amber.copy(alpha = 0.35f),
+                                uncheckedThumbColor = Muted,
+                                uncheckedTrackColor = Muted.copy(alpha = 0.2f),
+                            ),
+                        )
+                    }
+
+                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
+
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.Translate, null, tint = Amber, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(14.dp))
+                            Column {
+                                Text(Strings.appLanguage(language), color = OnBackground, fontWeight = FontWeight.Medium)
+                                Text(Strings.selectLang(language), color = Muted, fontSize = 12.sp)
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("tr" to "Türkçe", "ku" to "Kurdî").forEach { (code, label) ->
+                                val selected = language == code
+                                Button(
+                                    onClick  = { vm.setLanguage(code) },
+                                    modifier = Modifier.weight(1f),
+                                    shape    = RoundedCornerShape(10.dp),
+                                    colors   = ButtonDefaults.buttonColors(
+                                        containerColor = if (selected) Amber else SurfaceVar,
+                                        contentColor   = if (selected) Color.Black else Muted,
+                                    ),
+                                ) { Text(label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Hesap ────────────────────────────────────────────────────
+            item {
+                SettingsSection(title = Strings.account(language)) {
+                    SettingsRow(
+                        Icons.Outlined.Person,
+                        Strings.editProfile(language),
+                        Strings.settingsEditSub(language),
+                    ) { navController.navigate("edit_profile") }
+                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
+                    SettingsRow(
+                        Icons.Outlined.Lock,
+                        Strings.changePassword(language),
+                        Strings.settingsPasswordSub(language),
+                    ) { showPasswordDialog = true }
+                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
+                    SettingsRow(
+                        Icons.Outlined.Email,
+                        Strings.changeEmail(language),
+                        vm.currentEmail.ifBlank { Strings.settingsEmailAdd(language) },
+                    ) { showEmailDialog = true }
+                }
+            }
+
+            // ── Bildirimler ──────────────────────────────────────────────
+            item {
+                SettingsSection(title = Strings.navNotifs(language)) {
+                    SettingsSwitchRow(
+                        icon    = Icons.Outlined.Notifications,
+                        label   = Strings.pushNotifs(language),
+                        sub     = Strings.settingsPushSub(language),
+                        checked = pushEnabled,
+                        onCheck = { vm.togglePush() },
+                    )
+                }
+            }
+
+            // ── Gizlilik ─────────────────────────────────────────────────
+            item {
+                SettingsSection(title = Strings.privacy(language)) {
+                    SettingsSwitchRow(
+                        icon    = Icons.Outlined.Lock,
+                        label   = Strings.privateAccount(language),
+                        sub     = Strings.settingsPrivateSub(language),
+                        checked = privateAccount,
+                        onCheck = { vm.togglePrivate() },
+                    )
+                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
+                    SettingsRow(
+                        Icons.Outlined.Block,
+                        Strings.blockedUsers(language),
+                        Strings.settingsBlockedSub(language),
+                    ) { showBlockedDialog = true }
+                }
+            }
+
+            // ── Diğer ────────────────────────────────────────────────────
+            item {
+                SettingsSection(title = Strings.settingsOther(language)) {
+                    SettingsRow(
+                        Icons.Outlined.Info,
+                        Strings.settingsAbout(language),
+                        Strings.settingsAboutSub(language),
+                    ) { navController.navigate(Screen.CmsPage.go("hakkinda")) }
+                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
+                    SettingsRow(
+                        Icons.Outlined.Description,
+                        Strings.termsOfUse(language),
+                        Strings.settingsTermsSub(language),
+                    ) { navController.navigate(Screen.CmsPage.go("kullanim-kosullari")) }
+                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
+                    SettingsRow(
+                        Icons.Outlined.Shield,
+                        Strings.privacyPolicy(language),
+                        Strings.settingsPrivacySub(language),
+                    ) { navController.navigate(Screen.CmsPage.go("gizlilik-politikasi")) }
+                }
+            }
+
+            // ── Admin ────────────────────────────────────────────────────
+            if (vm.isAdmin) {
+                item {
+                    SettingsSection {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { navController.navigate("admin") }
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.AdminPanelSettings, null, tint = Error, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(14.dp))
+                            Text(Strings.settingsAdminPanel(language), color = Error, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Icon(Icons.Default.ChevronRight, null, tint = Error, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+
+            // ── Çıkış ────────────────────────────────────────────────────
+            item {
+                SettingsSection {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { authVm.signOut() }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Logout, null, tint = Color(0xFFEF4444), modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(14.dp))
+                        Text(Strings.logout(language), color = Color(0xFFEF4444), fontWeight = FontWeight.Medium)
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+        }
+    }
+
+    // ── Şifre Değiştir Dialog ────────────────────────────────────────────────
+    if (showPasswordDialog) {
+        ChangePasswordDialog(
+            onDismiss = { showPasswordDialog = false },
+            onConfirm = { current, newPw ->
+                vm.changePassword(
+                    currentPassword = current,
+                    newPassword     = newPw,
+                    onSuccess       = { showPasswordDialog = false },
+                    onError         = {},
+                )
+            },
+            vm       = vm,
+            language = language,
+        )
+    }
+
+    // ── E-posta Değiştir Dialog ──────────────────────────────────────────────
+    if (showEmailDialog) {
+        ChangeEmailDialog(
+            currentEmail = vm.currentEmail,
+            onDismiss    = { showEmailDialog = false },
+            onConfirm    = { password, newEmail ->
+                vm.changeEmail(
+                    currentPassword = password,
+                    newEmail        = newEmail,
+                    onSuccess       = { showEmailDialog = false },
+                    onError         = {},
+                )
+            },
+            vm       = vm,
+            language = language,
+        )
+    }
+
+    // ── Engellenen Kullanıcılar Dialog ───────────────────────────────────────
+    if (showBlockedDialog) {
+        BlockedUsersDialog(
+            language     = language,
+            blockedUsers = blockedUsers,
+            loading      = blockedLoading,
+            onUnblock    = { uid -> vm.unblockUser(uid) },
+            onDismiss    = { showBlockedDialog = false },
+        )
+    }
+}
+
+// ── Şifre Değiştir Dialog ─────────────────────────────────────────────────────
+@Composable
+private fun ChangePasswordDialog(
+    onDismiss : () -> Unit,
+    onConfirm : (String, String) -> Unit,
+    vm        : SettingsViewModel,
+    language  : String = "tr",
+) {
+    var currentPw  by remember { mutableStateOf("") }
+    var newPw      by remember { mutableStateOf("") }
+    var newPwAgain by remember { mutableStateOf("") }
+    var error      by remember { mutableStateOf<String?>(null) }
+    var loading    by remember { mutableStateOf(false) }
+    var showCurrent by remember { mutableStateOf(false) }
+    var showNew     by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!loading) onDismiss() },
+        containerColor   = HeftSurface,
+        title = { Text(Strings.changePassword(language), color = OnBackground, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value         = currentPw,
+                    onValueChange = { currentPw = it; error = null },
+                    label         = { Text(Strings.currentPassword(language)) },
+                    singleLine    = true,
+                    modifier      = Modifier.fillMaxWidth(),
+                    visualTransformation = if (showCurrent) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showCurrent = !showCurrent }) {
+                            Icon(if (showCurrent) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, null, tint = Muted)
+                        }
+                    },
+                    colors = settingsTextFieldColors(),
+                )
+                OutlinedTextField(
+                    value         = newPw,
+                    onValueChange = { newPw = it; error = null },
+                    label         = { Text(Strings.newPassword(language)) },
+                    singleLine    = true,
+                    modifier      = Modifier.fillMaxWidth(),
+                    visualTransformation = if (showNew) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showNew = !showNew }) {
+                            Icon(if (showNew) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, null, tint = Muted)
+                        }
+                    },
+                    colors = settingsTextFieldColors(),
+                )
+                OutlinedTextField(
+                    value         = newPwAgain,
+                    onValueChange = { newPwAgain = it; error = null },
+                    label         = { Text(Strings.pwRepeat(language)) },
+                    singleLine    = true,
+                    modifier      = Modifier.fillMaxWidth(),
+                    visualTransformation = PasswordVisualTransformation(),
+                    isError       = newPwAgain.isNotBlank() && newPw != newPwAgain,
+                    colors = settingsTextFieldColors(),
+                )
+                if (error != null) Text(error!!, color = Error, fontSize = 12.sp)
+                if (newPwAgain.isNotBlank() && newPw != newPwAgain) {
+                    Text(Strings.passwordMismatch(language), color = Error, fontSize = 12.sp)
+                }
+                var showForgot by remember { mutableStateOf(false) }
+                TextButton(onClick = { showForgot = true }, contentPadding = PaddingValues(0.dp)) {
+                    Text(
+                        Strings.forgotPassPrompt(language),
+                        color = Amber, fontSize = 12.sp,
+                    )
+                }
+                if (showForgot) {
+                    val authVm2: AuthViewModel = hiltViewModel()
+                    ForgotPasswordFromSettings(
+                        prefillEmail = authVm2.currentEmail,
+                        onDismiss    = { showForgot = false },
+                        authVm       = authVm2,
+                        language     = language,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    when {
+                        currentPw.isBlank() -> error = Strings.errPwBlank(language)
+                        newPw.length < 6    -> error = Strings.errPwShort(language)
+                        newPw != newPwAgain -> error = Strings.passwordMismatch(language)
+                        else -> {
+                            loading = true
+                            vm.changePassword(
+                                currentPassword = currentPw,
+                                newPassword     = newPw,
+                                onSuccess       = { loading = false; onDismiss() },
+                                onError         = { msg -> loading = false; error = msg },
+                            )
+                        }
+                    }
+                },
+                enabled = !loading,
+            ) {
+                if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
+                else Text(Strings.save(language), color = Amber, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { if (!loading) onDismiss() }) {
+                Text(Strings.cancel(language), color = Muted)
+            }
+        },
+    )
+}
+
+// ── E-posta Değiştir Dialog ───────────────────────────────────────────────────
+@Composable
+private fun ChangeEmailDialog(
+    currentEmail : String,
+    onDismiss    : () -> Unit,
+    onConfirm    : (String, String) -> Unit,
+    vm           : SettingsViewModel,
+    language     : String = "tr",
+) {
+    var password by remember { mutableStateOf("") }
+    var newEmail by remember { mutableStateOf("") }
+    var error    by remember { mutableStateOf<String?>(null) }
+    var loading  by remember { mutableStateOf(false) }
+    var showPw   by remember { mutableStateOf(false) }
+    var success  by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!loading) onDismiss() },
+        containerColor   = HeftSurface,
+        title = { Text(Strings.changeEmail(language), color = OnBackground, fontWeight = FontWeight.Bold) },
+        text = {
+            if (success) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF22C55E), modifier = Modifier.size(36.dp))
+                    Text(
+                        Strings.emailConfirmSent(language),
+                        color = OnBackground, fontSize = 14.sp,
+                    )
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("${Strings.currentLabel(language)}: $currentEmail", color = Muted, fontSize = 12.sp)
+                    OutlinedTextField(
+                        value         = newEmail,
+                        onValueChange = { newEmail = it; error = null },
+                        label         = { Text(Strings.newEmailLabel(language)) },
+                        singleLine    = true,
+                        modifier      = Modifier.fillMaxWidth(),
+                        colors        = settingsTextFieldColors(),
+                    )
+                    OutlinedTextField(
+                        value         = password,
+                        onValueChange = { password = it; error = null },
+                        label         = { Text(Strings.currentPassword(language)) },
+                        singleLine    = true,
+                        modifier      = Modifier.fillMaxWidth(),
+                        visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showPw = !showPw }) {
+                                Icon(if (showPw) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, null, tint = Muted)
+                            }
+                        },
+                        colors = settingsTextFieldColors(),
+                    )
+                    if (error != null) Text(error!!, color = Error, fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            if (!success) {
+                TextButton(
+                    onClick = {
+                        when {
+                            newEmail.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(newEmail).matches() ->
+                                error = Strings.errInvalidEmail(language)
+                            password.isBlank() -> error = Strings.errEnterPw(language)
+                            else -> {
+                                loading = true
+                                vm.changeEmail(
+                                    currentPassword = password,
+                                    newEmail        = newEmail,
+                                    onSuccess       = { loading = false; success = true },
+                                    onError         = { msg -> loading = false; error = msg },
+                                )
+                            }
+                        }
+                    },
+                    enabled = !loading,
+                ) {
+                    if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
+                    else Text(Strings.sendVerification(language), color = Amber, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                TextButton(onClick = onDismiss) {
+                    Text(Strings.confirm(language), color = Amber, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        dismissButton = {
+            if (!success) TextButton(onClick = { if (!loading) onDismiss() }) {
+                Text(Strings.cancel(language), color = Muted)
+            }
+        },
+    )
+}
+
+// ── Engellenen Kullanıcılar Dialog ───────────────────────────────────────────
+@Composable
+private fun BlockedUsersDialog(
+    language     : String,
+    blockedUsers : List<com.heftreng.app.data.model.BlockedUser>,
+    loading      : Boolean,
+    onUnblock    : (String) -> Unit,
+    onDismiss    : () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Text(
+                Strings.blockedUsers(language),
+                color = OnBackground, fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            when {
+                loading -> Box(
+                    Modifier.fillMaxWidth().padding(24.dp),
+                    contentAlignment = Alignment.Center,
+                ) { CircularProgressIndicator(color = Amber, modifier = Modifier.size(28.dp)) }
+                blockedUsers.isEmpty() -> Text(
+                    Strings.settingsNoBlocked(language),
+                    color = Muted, fontSize = 14.sp,
+                )
+                else -> Column(
+                    modifier            = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    blockedUsers.forEach { user ->
+                        Row(
+                            modifier          = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            AsyncImage(
+                                model              = user.photoURL.ifEmpty { null },
+                                contentDescription = null,
+                                modifier           = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(SurfaceVar),
+                                contentScale       = ContentScale.Crop,
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                user.displayName.ifBlank { Strings.settingsAnonymous(language) },
+                                color    = OnBackground,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { onUnblock(user.uid) }) {
+                                Text(
+                                    Strings.unblock(language),
+                                    color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(Strings.close(language), color = Amber, fontWeight = FontWeight.Bold)
+            }
+        },
+    )
+}
+
+// ── Bileşenler ────────────────────────────────────────────────────────────────
+@Composable
+private fun SettingsSection(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
+    Column {
+        if (title != null) {
+            Text(
+                title,
+                color         = Muted,
+                fontSize      = 11.sp,
+                fontWeight    = FontWeight.SemiBold,
+                modifier      = Modifier.padding(start = 4.dp, bottom = 6.dp),
+                letterSpacing = 0.5.sp,
+            )
+        }
+        Surface(shape = RoundedCornerShape(16.dp), color = HeftSurface) {
+            Column(modifier = Modifier.fillMaxWidth(), content = content)
+        }
+    }
+}
+
+@Composable
+private fun SettingsRow(icon: ImageVector, label: String, sub: String, onClick: () -> Unit) {
+    Row(
+        modifier          = Modifier.fillMaxWidth().clickable { onClick() }.padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = Amber, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(label, color = OnBackground, fontWeight = FontWeight.Medium)
+            Text(sub, color = Muted, fontSize = 12.sp)
+        }
+        Icon(Icons.Default.ChevronRight, null, tint = Muted, modifier = Modifier.size(18.dp))
+    }
+}
+
+@Composable
+private fun SettingsSwitchRow(
+    icon   : ImageVector,
+    label  : String,
+    sub    : String,
+    checked: Boolean,
+    onCheck: () -> Unit,
+) {
+    Row(
+        modifier          = Modifier.fillMaxWidth().padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = Amber, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(label, color = OnBackground, fontWeight = FontWeight.Medium)
+            Text(sub, color = Muted, fontSize = 12.sp)
+        }
+        Switch(
+            checked         = checked,
+            onCheckedChange = { onCheck() },
+            colors          = SwitchDefaults.colors(
+                checkedThumbColor   = Amber,
+                checkedTrackColor   = Amber.copy(alpha = 0.35f),
+                uncheckedThumbColor = Muted,
+                uncheckedTrackColor = Muted.copy(alpha = 0.2f),
+            ),
+        )
+    }
+}
+
+@Composable
+private fun settingsTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor      = Amber,
+    unfocusedBorderColor    = Divider,
+    focusedTextColor        = OnBackground,
+    unfocusedTextColor      = OnBackground,
+    unfocusedContainerColor = SurfaceVar,
+    focusedContainerColor   = SurfaceVar,
+    focusedLabelColor       = Amber,
+    unfocusedLabelColor     = Muted,
+    cursorColor             = Amber,
+)
+
+@Composable
+internal fun ForgotPasswordFromSettings(
+    prefillEmail: String,
+    onDismiss   : () -> Unit,
+    authVm      : AuthViewModel,
+    language    : String = "tr",
+) {
+    var resetEmail by remember { mutableStateOf(prefillEmail) }
+    var error      by remember { mutableStateOf<String?>(null) }
+    var loading    by remember { mutableStateOf(false) }
+    var success    by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!loading) onDismiss() },
+        containerColor   = HeftSurface,
+        title = { Text(Strings.forgotPass(language), color = OnBackground, fontWeight = FontWeight.Bold) },
+        text = {
+            if (success) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("✅", fontSize = 32.sp)
+                    Text(
+                        Strings.resetLinkSent(language),
+                        color = OnBackground, fontSize = 14.sp,
+                    )
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        Strings.resetLinkDesc(language),
+                        color = Muted, fontSize = 13.sp,
+                    )
+                    OutlinedTextField(
+                        value         = resetEmail,
+                        onValueChange = { resetEmail = it; error = null },
+                        label         = { Text(Strings.email(language)) },
+                        singleLine    = true,
+                        modifier      = Modifier.fillMaxWidth(),
+                        colors        = settingsTextFieldColors(),
+                    )
+                    if (error != null) Text(error!!, color = Error, fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            if (!success) {
+                TextButton(
+                    onClick = {
+                        loading = true
+                        authVm.sendPasswordReset(
+                            email     = resetEmail,
+                            onSuccess = { loading = false; success = true },
+                            onError   = { msg -> loading = false; error = msg },
+                        )
+                    },
+                    enabled = !loading,
+                ) {
+                    if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
+                    else Text(Strings.send(language), color = Amber, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                TextButton(onClick = onDismiss) {
+                    Text(Strings.confirm(language), color = Amber, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        dismissButton = {
+            if (!success) TextButton(onClick = { if (!loading) onDismiss() }) {
+                Text(Strings.cancel(language), color = Muted)
+            }
+        },
+    )
+}
