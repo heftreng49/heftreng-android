@@ -54,7 +54,30 @@ class FeedViewModel @Inject constructor(
     private var lastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
     private val PAGE_SIZE = 20L
 
-    init { observeFeed() }
+    init {
+        observeFeed()
+        // Kullanıcı geç giriş yaparsa veya değişirse interactions'ı yenile
+        viewModelScope.launch {
+            var prevUid = ""
+            while (true) {
+                val currentUid = auth.currentUser?.uid ?: ""
+                if (currentUid.isNotEmpty() && currentUid != prevUid) {
+                    loadInteractions()
+                    // Mevcut post listesinin isSavedByMe / isLikedByMe değerlerini güncelle
+                    _posts.value = _posts.value.map { post ->
+                        post.copy(
+                            isLikedByMe    = post.id in likedIds,
+                            isSavedByMe    = post.id in savedIds,
+                            isRepostedByMe = post.id in myRepostMap,
+                            myRepostId     = myRepostMap[post.id] ?: "",
+                        )
+                    }
+                    prevUid = currentUid
+                }
+                kotlinx.coroutines.delay(1000)
+            }
+        }
+    }
 
     // İlk sayfa — realtime listener (son 20 gönderi)
     private fun observeFeed() {
@@ -65,7 +88,6 @@ class FeedViewModel @Inject constructor(
             .addSnapshotListener { snap, err ->
                 if (err != null || snap == null) { _loading.value = false; return@addSnapshotListener }
                 viewModelScope.launch {
-                    if (uid.isNotEmpty() && likedIds.isEmpty() && savedIds.isEmpty()) loadInteractions()
                     if (snap.documents.isNotEmpty()) lastDoc = snap.documents.last()
                     _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
                     val rawPosts = snap.documents.mapNotNull { doc ->
@@ -204,6 +226,17 @@ class FeedViewModel @Inject constructor(
                     val originalId = doc.getString("repostId") ?: return@mapNotNull null
                     originalId to doc.id
                 }.toMap()
+            // Mevcut post listesindeki isSavedByMe / isLikedByMe değerlerini yenile
+            if (_posts.value.isNotEmpty()) {
+                _posts.value = _posts.value.map { post ->
+                    post.copy(
+                        isLikedByMe    = post.id in likedIds,
+                        isSavedByMe    = post.id in savedIds,
+                        isRepostedByMe = post.id in myRepostMap,
+                        myRepostId     = myRepostMap[post.id] ?: "",
+                    )
+                }
+            }
         } catch (e: Exception) { e.printStackTrace() }
     }
 
@@ -274,6 +307,7 @@ class FeedViewModel @Inject constructor(
     fun toggleSave(post: Post) {
         if (uid.isEmpty()) return
         val nowSaved = !post.isSavedByMe
+        // Optimistic update
         savedIds = if (nowSaved) savedIds + post.id else savedIds - post.id
         _posts.value = _posts.value.map {
             if (it.id == post.id) it.copy(isSavedByMe = nowSaved) else it
@@ -289,7 +323,14 @@ class FeedViewModel @Inject constructor(
                     saveRef.delete().await()
                     firestore.collection("feed").document(post.id).update("saves", FieldValue.increment(-1)).await()
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // Hata durumunda rollback
+                savedIds = if (nowSaved) savedIds - post.id else savedIds + post.id
+                _posts.value = _posts.value.map {
+                    if (it.id == post.id) it.copy(isSavedByMe = !nowSaved) else it
+                }
+            }
         }
     }
 
