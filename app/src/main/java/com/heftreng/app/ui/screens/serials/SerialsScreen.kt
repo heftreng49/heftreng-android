@@ -334,8 +334,6 @@ fun SerialDetailScreen(
             onBodyChange  = { addBody  = it },
             heading       = Strings.newChapter(language),
             saveLabel     = Strings.save(language),
-            wordCount     = addBody.replace(Regex("<[^>]+>"), "").trim()
-                                .split(Regex("\\s+")).count { it.isNotBlank() },
             canSave       = addTitle.isNotBlank() && addBody.isNotBlank(),
             language      = language,
             onDismiss     = { showAddChapter = false; addTitle = ""; addBody = "" },
@@ -356,8 +354,6 @@ fun SerialDetailScreen(
             onBodyChange  = { editBody  = it },
             heading       = Strings.editChapter(language),
             saveLabel     = Strings.save(language),
-            wordCount     = editBody.replace(Regex("<[^>]+>"), "").trim()
-                                .split(Regex("\\s+")).count { it.isNotBlank() },
             canSave       = editTitle.isNotBlank() && editBody.isNotBlank(),
             language      = language,
             onDismiss     = { chapterToEdit = null },
@@ -598,7 +594,6 @@ fun ChapterEditorOverlay(
     onBodyChange : (String) -> Unit,
     heading      : String,
     saveLabel    : String,
-    wordCount    : Int,
     canSave      : Boolean,
     language     : String,
     onDismiss    : () -> Unit,
@@ -664,29 +659,22 @@ fun ChapterEditorOverlay(
             HorizontalDivider(color = Divider)
 
             // ── İçerik editörü — kalan alanı doldurur ────────────────────────
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            // RichTextEditor kendi içinde kelime sayacı gösteriyor.
+            // navigationBarsPadding burada — editör sistem çubuğunun üstünde biter.
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+            ) {
                 RichTextEditor(
                     value       = body,
                     onChange    = onBodyChange,
                     placeholder = "$heading...",
-                    modifier    = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                    modifier    = Modifier.fillMaxSize(),
                 )
             }
-
-            // ── Alt çubuk: kelime sayısı ──────────────────────────────────────
-            HorizontalDivider(color = Divider)
-            Text(
-                Strings.wordCount(language, wordCount),
-                color    = Muted,
-                fontSize = 11.sp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(HeftSurface)
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-            )
         }
     }
 }
