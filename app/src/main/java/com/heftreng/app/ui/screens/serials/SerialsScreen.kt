@@ -56,6 +56,10 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyListState
 import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
@@ -351,8 +355,8 @@ fun SerialDetailScreen(
         ChapterEditorOverlay(
             title         = addTitle,
             body          = addBody,
-            onTitleChange = { addTitle = it },
-            onBodyChange  = { addBody  = it },
+            onTitleChange = { v -> addTitle = v },
+            onBodyChange  = { v -> addBody  = v },
             heading       = Strings.newChapter(language),
             saveLabel     = Strings.save(language),
             canSave       = addTitle.isNotBlank() && addBody.isNotBlank(),
@@ -371,8 +375,8 @@ fun SerialDetailScreen(
         ChapterEditorOverlay(
             title         = editTitle,
             body          = editBody,
-            onTitleChange = { editTitle = it },
-            onBodyChange  = { editBody  = it },
+            onTitleChange = { v -> editTitle = v },
+            onBodyChange  = { v -> editBody  = v },
             heading       = Strings.editChapter(language),
             saveLabel     = Strings.save(language),
             canSave       = editTitle.isNotBlank() && editBody.isNotBlank(),
@@ -519,9 +523,8 @@ private fun ChapterRow(
 }
 
 // ── Bölüm okuma ekranı ───────────────────────────────────────────────────────
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
 fun ChapterReadScreen(
     serialId      : String,
     chapterId     : String,
@@ -951,6 +954,85 @@ private fun ChapterCommentRow(
     }
 }
 
+
+// ── Tam ekran bölüm yazma overlay ────────────────────────────────────────────
+@Composable
+fun ChapterEditorOverlay(
+    title        : String,
+    body         : String,
+    onTitleChange: (String) -> Unit,
+    onBodyChange : (String) -> Unit,
+    heading      : String,
+    saveLabel    : String,
+    canSave      : Boolean,
+    language     : String,
+    onDismiss    : () -> Unit,
+    onSave       : () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(HeftSurface)
+            .imePadding()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+        ) {
+            // Üst çubuk: X | Başlık | Kaydet
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(HeftSurface)
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, null, tint = Muted)
+                }
+                Text(heading, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                TextButton(onClick = onSave, enabled = canSave) {
+                    Text(
+                        saveLabel,
+                        color      = if (canSave) Amber else Muted,
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 15.sp,
+                    )
+                }
+            }
+            HorizontalDivider(color = Divider)
+            // Bölüm başlığı
+            OutlinedTextField(
+                value         = title,
+                onValueChange = onTitleChange,
+                placeholder   = { Text(Strings.chapterTitle(language) + " *", color = Muted) },
+                singleLine    = true,
+                modifier      = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                colors        = hfTextFieldColors(),
+            )
+            HorizontalDivider(color = Divider)
+            // İçerik editörü — kalan alanı doldurur
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+            ) {
+                RichTextEditor(
+                    value       = body,
+                    onChange    = onBodyChange,
+                    placeholder = "$heading...",
+                    modifier    = Modifier.fillMaxSize(),
+                )
+            }
+        }
+    }
+}
 
 // ── Dialoglar ────────────────────────────────────────────────────────────────
 @Composable
