@@ -465,8 +465,16 @@ class FeedViewModel @Inject constructor(
 
     // ── Yorum Sil ─────────────────────────────────────────────────────────────
     fun deleteComment(postId: String, commentId: String) {
+        if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
+                // Güvenlik: yorumun sahibi veya post sahibi mi kontrol et
+                val cmtDoc  = firestore.collection("feed").document(postId)
+                    .collection("comments").document(commentId).get().await()
+                val postDoc = firestore.collection("feed").document(postId).get().await()
+                val isCommentOwner = cmtDoc.getString("uid") == uid
+                val isPostOwner    = postDoc.getString("uid") == uid
+                if (!isCommentOwner && !isPostOwner) return@launch
                 firestore.collection("feed").document(postId)
                     .collection("comments").document(commentId).delete().await()
                 firestore.collection("feed").document(postId)
@@ -485,9 +493,13 @@ class FeedViewModel @Inject constructor(
     }
 
     fun editComment(postId: String, commentId: String, newText: String) {
-        if (newText.isBlank()) return
+        if (uid.isEmpty() || newText.isBlank()) return
         viewModelScope.launch {
             try {
+                // Güvenlik: yorumun sahibi mi kontrol et
+                val cmtDoc = firestore.collection("feed").document(postId)
+                    .collection("comments").document(commentId).get().await()
+                if (cmtDoc.getString("uid") != uid) return@launch
                 firestore.collection("feed").document(postId)
                     .collection("comments").document(commentId)
                     .update("text", newText.trim()).await()
@@ -578,16 +590,26 @@ class FeedViewModel @Inject constructor(
     }
 
     fun deletePost(postId: String) {
+        if (uid.isEmpty()) return
         viewModelScope.launch {
-            try { firestore.collection("feed").document(postId).delete().await()
+            try {
+                // Güvenlik: post sahibi mi kontrol et
+                val postDoc = firestore.collection("feed").document(postId).get().await()
+                if (postDoc.getString("uid") != uid) return@launch
+                firestore.collection("feed").document(postId).delete().await()
                   _posts.value = _posts.value.filter { it.id != postId }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
     fun editPost(postId: String, newText: String) {
+        if (uid.isEmpty() || newText.isBlank()) return
         viewModelScope.launch {
-            try { firestore.collection("feed").document(postId).update("text", newText.trim()).await()
+            try {
+                // Güvenlik: post sahibi mi kontrol et
+                val postDoc = firestore.collection("feed").document(postId).get().await()
+                if (postDoc.getString("uid") != uid) return@launch
+                firestore.collection("feed").document(postId).update("text", newText.trim()).await()
                   _posts.value = _posts.value.map { if (it.id == postId) it.copy(text = newText.trim()) else it }
             } catch (e: Exception) { e.printStackTrace() }
         }

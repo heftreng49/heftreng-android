@@ -256,17 +256,29 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun deleteOwnPost(postId: String) {
+        if (myUid.isEmpty()) return
         _posts.value = _posts.value.filter { it.id != postId }
         viewModelScope.launch {
-            try { firestore.collection("feed").document(postId).delete().await() }
+            try {
+                // Güvenlik: post sahibi mi kontrol et
+                val postDoc = firestore.collection("feed").document(postId).get().await()
+                if (postDoc.getString("uid") != myUid) return@launch
+                firestore.collection("feed").document(postId).delete().await()
+            }
             catch (e: Exception) { e.printStackTrace() }
         }
     }
 
     fun editOwnPost(postId: String, newText: String) {
-        _posts.value = _posts.value.map { if (it.id == postId) it.copy(text = newText) else it }
+        if (myUid.isEmpty() || newText.isBlank()) return
         viewModelScope.launch {
-            try { firestore.collection("feed").document(postId).update("text", newText).await() }
+            try {
+                // Güvenlik: post sahibi mi kontrol et
+                val postDoc = firestore.collection("feed").document(postId).get().await()
+                if (postDoc.getString("uid") != myUid) return@launch
+                firestore.collection("feed").document(postId).update("text", newText).await()
+                _posts.value = _posts.value.map { if (it.id == postId) it.copy(text = newText) else it }
+            }
             catch (e: Exception) { e.printStackTrace() }
         }
     }

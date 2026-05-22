@@ -131,6 +131,9 @@ class SerialsViewModel @Inject constructor(
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
+                // Güvenlik: serinin sahibi mi kontrol et
+                val serialDoc = firestore.collection("serials").document(serialId).get().await()
+                if (serialDoc.getString("uid") != uid) return@launch
                 val order = (_chapters.value.maxOfOrNull { it.order } ?: 0) + 1
                 val wc    = body.trim().split("\\s+".toRegex()).size
                 firestore.collection("serials").document(serialId)
@@ -300,8 +303,14 @@ class SerialsViewModel @Inject constructor(
     }
 
     fun editChapterComment(serialId: String, chapterId: String, commentId: String, newText: String) {
+        if (uid.isEmpty() || newText.isBlank()) return
         viewModelScope.launch {
             try {
+                // Güvenlik: yorumun sahibi mi kontrol et
+                val cmtDoc = firestore.collection("serials").document(serialId)
+                    .collection("chapters").document(chapterId)
+                    .collection("comments").document(commentId).get().await()
+                if (cmtDoc.getString("uid") != uid) return@launch
                 firestore.collection("serials").document(serialId)
                     .collection("chapters").document(chapterId)
                     .collection("comments").document(commentId)
@@ -311,8 +320,17 @@ class SerialsViewModel @Inject constructor(
     }
 
     fun deleteChapterComment(serialId: String, chapterId: String, commentId: String) {
+        if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
+                // Güvenlik: yorumun sahibi veya seri sahibi mi kontrol et
+                val cmtDoc = firestore.collection("serials").document(serialId)
+                    .collection("chapters").document(chapterId)
+                    .collection("comments").document(commentId).get().await()
+                val serialDoc = firestore.collection("serials").document(serialId).get().await()
+                val isCommentOwner = cmtDoc.getString("uid") == uid
+                val isSerialOwner  = serialDoc.getString("uid") == uid
+                if (!isCommentOwner && !isSerialOwner) return@launch
                 firestore.collection("serials").document(serialId)
                     .collection("chapters").document(chapterId)
                     .collection("comments").document(commentId).delete().await()
@@ -375,8 +393,12 @@ class SerialsViewModel @Inject constructor(
 
     // ── Bölüm Düzenle ────────────────────────────────────────────────────────
     fun updateChapter(serialId: String, chapterId: String, newTitle: String, newBody: String) {
+        if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
+                // Güvenlik: serinin sahibi mi kontrol et
+                val serialDoc = firestore.collection("serials").document(serialId).get().await()
+                if (serialDoc.getString("uid") != uid) return@launch
                 val wc = newBody.trim().split("\\s+".toRegex()).count { it.isNotBlank() }
                 firestore.collection("serials").document(serialId)
                     .collection("chapters").document(chapterId)
@@ -393,8 +415,12 @@ class SerialsViewModel @Inject constructor(
 
     // ── Bölüm Sil ─────────────────────────────────────────────────────────────
     fun deleteChapter(serialId: String, chapterId: String) {
+        if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
+                // Güvenlik: serinin sahibi mi kontrol et
+                val serialDoc = firestore.collection("serials").document(serialId).get().await()
+                if (serialDoc.getString("uid") != uid) return@launch
                 firestore.collection("serials").document(serialId)
                     .collection("chapters").document(chapterId).delete().await()
                 _chapters.value = _chapters.value.filter { it.id != chapterId }
