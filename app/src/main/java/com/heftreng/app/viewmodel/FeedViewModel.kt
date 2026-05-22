@@ -41,7 +41,9 @@ class FeedViewModel @Inject constructor(
     private val _hasMore  = MutableStateFlow(true)
     val hasMore = _hasMore.asStateFlow()
 
-    private val _loadingMore = MutableStateFlow(false)
+    private val _loadingMore   = MutableStateFlow(false)
+    private val _postNotFound  = MutableStateFlow<String?>(null)
+    val postNotFound = _postNotFound.asStateFlow()
     val loadingMore = _loadingMore.asStateFlow()
 
     val uid get() = auth.currentUser?.uid ?: ""
@@ -642,7 +644,6 @@ class FeedViewModel @Inject constructor(
                     commentsCount = (d["cmtCount"]     as? Long)?.toInt()
                                    ?: (d["commentsCount"] as? Long)?.toInt() ?: 0,
                     repostsCount  = (d["reposts"]      as? Long)?.toInt() ?: 0,
-                    saves         = (d["saves"]        as? Long)?.toInt() ?: 0,
                     ts            = d["ts"]            as? com.google.firebase.Timestamp,
                     quoteText     = quoteText,
                     bookName      = bookName,
