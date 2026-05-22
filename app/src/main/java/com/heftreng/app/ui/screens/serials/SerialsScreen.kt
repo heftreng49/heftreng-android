@@ -583,7 +583,13 @@ fun ChapterReadScreen(
     }
 }
 
-// ── Tam ekran bölüm yazma overlay (Dialog yerine — IME sorunu bypass) ────────
+// ── Tam ekran bölüm yazma overlay ────────────────────────────────────────────
+// Yorum ekranıyla aynı mantık:
+//   • imePadding() en dış Box'ta — Scaffold/Dialog bağımsız çalışır
+//   • Üst çubuk (geri + başlık + kaydet) sabit, klavyeden etkilenmez
+//   • Başlık OutlinedTextField sabit üstte
+//   • RichTextEditor ortada, kalan alanı doldurur
+//   • Alt çubuk (kelime sayısı) navigationBarsPadding ile sabit altta
 @Composable
 fun ChapterEditorOverlay(
     title        : String,
@@ -598,27 +604,36 @@ fun ChapterEditorOverlay(
     onDismiss    : () -> Unit,
     onSave       : () -> Unit,
 ) {
+    // imePadding en dışta — PostDetailScreen ile aynı pattern
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(HeftSurface)
-            .statusBarsPadding()
+            .imePadding()
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-
-            // Başlık çubuğu
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+        ) {
+            // ── Üst çubuk: Geri | Başlık | Kaydet ────────────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(HeftSurface)
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Default.Close, null, tint = Muted)
                 }
-                Text(heading, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text(
+                    heading,
+                    color      = OnBackground,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 17.sp,
+                )
                 TextButton(
                     onClick = onSave,
                     enabled = canSave,
@@ -634,7 +649,7 @@ fun ChapterEditorOverlay(
 
             HorizontalDivider(color = Divider)
 
-            // Başlık input
+            // ── Bölüm başlığı ─────────────────────────────────────────────────
             OutlinedTextField(
                 value         = title,
                 onValueChange = onTitleChange,
@@ -646,33 +661,32 @@ fun ChapterEditorOverlay(
                 colors        = hfTextFieldColors(),
             )
 
-            // İçerik editörü + kelime sayısı — imePadding burada
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .imePadding()
-            ) {
+            HorizontalDivider(color = Divider)
+
+            // ── İçerik editörü — kalan alanı doldurur ────────────────────────
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 RichTextEditor(
                     value       = body,
                     onChange    = onBodyChange,
-                    placeholder = heading + "...",
+                    placeholder = "$heading...",
                     modifier    = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                )
-                HorizontalDivider(color = Divider)
-                Text(
-                    Strings.wordCount(language, wordCount),
-                    color    = Muted,
-                    fontSize = 11.sp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                        .fillMaxSize()
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
                 )
             }
+
+            // ── Alt çubuk: kelime sayısı ──────────────────────────────────────
+            HorizontalDivider(color = Divider)
+            Text(
+                Strings.wordCount(language, wordCount),
+                color    = Muted,
+                fontSize = 11.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(HeftSurface)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+            )
         }
     }
 }
