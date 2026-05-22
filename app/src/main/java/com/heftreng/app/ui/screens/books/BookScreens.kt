@@ -43,6 +43,7 @@ import com.heftreng.app.ui.screens.social.UserAvatar
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.BookViewModel
+import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
 
 // ── Kitap Listesi ────────────────────────────────────────────────────────────
@@ -231,10 +232,13 @@ fun BookChapterReadScreen(
     navController: NavController,
     language     : String = "tr",
     vm           : BookViewModel = hiltViewModel(),
+    feedVm       : FeedViewModel  = hiltViewModel(),
 ) {
     val ku = language == "ku"
     val chapter  by vm.selectedChapter.collectAsState()
     val chapters by vm.chapters.collectAsState()
+    val book     by vm.selectedBook.collectAsState()
+    var repostDone by remember { mutableStateOf(false) }
 
     LaunchedEffect(bookId, chapterId) {
         vm.loadBook(bookId)
@@ -254,6 +258,37 @@ fun BookChapterReadScreen(
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
+                    }
+                },
+                actions = {
+                    // Repost butonu
+                    val ch = chapter
+                    val b  = book
+                    if (ch != null) {
+                        IconButton(
+                            onClick = {
+                                if (!repostDone) {
+                                    feedVm.repostBookChapter(
+                                        bookId        = bookId,
+                                        chapterId     = ch.id,
+                                        bookTitle     = b?.title ?: "",
+                                        chapterTitle  = ch.title,
+                                        chapterOrder  = ch.order,
+                                        chapterBody   = ch.body,
+                                        bookCoverImg  = b?.coverImg ?: "",
+                                        bookAuthorUid = b?.uid ?: ch.uid,
+                                        bookAuthorName= b?.name ?: "",
+                                    )
+                                    repostDone = true
+                                }
+                            }
+                        ) {
+                            Icon(
+                                if (repostDone) Icons.Default.Repeat else Icons.Default.Repeat,
+                                contentDescription = if (ku) "Dubarekirin" else "Paylaş",
+                                tint = if (repostDone) Amber else Muted,
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),

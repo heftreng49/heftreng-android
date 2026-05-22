@@ -27,7 +27,6 @@ import com.heftreng.app.viewmodel.SocialViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import kotlinx.coroutines.tasks.await
 import java.net.URLEncoder
 
@@ -56,11 +55,15 @@ fun SavedPostsScreen(
         try {
             val saveSnap = db.collection("feedSaves")
                 .whereEqualTo("uid", uid)
-                .orderBy("ts", Query.Direction.DESCENDING)
                 .limit(100)
                 .get().await()
 
-            val postIds = saveSnap.documents.mapNotNull {
+            // Client-side sırala (Firestore composite index gerekmez)
+            val sortedDocs = saveSnap.documents.sortedByDescending {
+                (it.getTimestamp("ts")?.seconds ?: 0L)
+            }
+
+            val postIds = sortedDocs.mapNotNull {
                 it.getString("feedId") ?: it.getString("postId")
             }.distinct()
 
@@ -193,16 +196,21 @@ fun SavedPostsScreen(
                             onTap        = { navController.navigate(Screen.PostDetail.go(post.id)) },
                             onTapRepost  = { repostId, repostType ->
                                 when (repostType) {
-                                    "feed"    -> navController.navigate(Screen.PostDetail.go(repostId))
-                                    "serial"  -> navController.navigate("serial/$repostId")
-                                    "chapter" -> {
+                                    "feed"         -> navController.navigate(Screen.PostDetail.go(repostId))
+                                    "serial"       -> navController.navigate("serial/$repostId")
+                                    "chapter"      -> {
                                         val sid = post.serialId.ifBlank { "" }
                                         val cid = post.chapterId.ifBlank { repostId }
                                         if (sid.isNotBlank()) navController.navigate("chapter/$sid/$cid")
                                         else navController.navigate("serial/$repostId")
                                     }
-                                    "blog"    -> navController.navigate("blog/$repostId")
-                                    else      -> navController.navigate(Screen.PostDetail.go(repostId))
+                                    "book_chapter" -> {
+                                        val bid = post.serialId.ifBlank { "" }
+                                        val cid = post.chapterId.ifBlank { repostId }
+                                        if (bid.isNotBlank()) navController.navigate("book_chapter/$bid/$cid")
+                                    }
+                                    "blog"         -> navController.navigate("blog/$repostId")
+                                    else           -> navController.navigate(Screen.PostDetail.go(repostId))
                                 }
                             },
                             onTapAuthor  = { author ->

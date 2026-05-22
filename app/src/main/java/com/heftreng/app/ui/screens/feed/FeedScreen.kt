@@ -309,9 +309,9 @@ fun FeedScreen(
                         },
                         onTapRepost = { repostId, repostType ->
                             when (repostType) {
-                                "feed"    -> navController.navigate(Screen.PostDetail.go(repostId))
-                                "serial"  -> navController.navigate("serial/$repostId")
-                                "chapter" -> {
+                                "feed"         -> navController.navigate(Screen.PostDetail.go(repostId))
+                                "serial"       -> navController.navigate("serial/$repostId")
+                                "chapter"      -> {
                                     // repostId = chapterId, serialId post'tan alınır
                                     val sid = post.serialId.ifBlank { "" }
                                     val cid = post.chapterId.ifBlank { repostId }
@@ -321,8 +321,15 @@ fun FeedScreen(
                                         navController.navigate("serial/${post.repostId}")
                                     }
                                 }
-                                "blog"    -> navController.navigate("blog/$repostId")
-                                else      -> navController.navigate(Screen.PostDetail.go(repostId))
+                                "book_chapter" -> {
+                                    val bid = post.serialId.ifBlank { "" }
+                                    val cid = post.chapterId.ifBlank { repostId }
+                                    if (bid.isNotBlank()) {
+                                        navController.navigate("book_chapter/$bid/$cid")
+                                    }
+                                }
+                                "blog"         -> navController.navigate("blog/$repostId")
+                                else           -> navController.navigate(Screen.PostDetail.go(repostId))
                             }
                         },
                         onReport  = {
@@ -890,7 +897,7 @@ fun PostCard(
                         if (post.repostType.isNotBlank() && post.repostType != "feed") {
                 Surface(shape = RoundedCornerShape(6.dp), color = Primary.copy(alpha = 0.12f),
                     modifier = Modifier.padding(bottom = 6.dp)) {
-                    Text(when(post.repostType){"serial"->"📖 Kitap";"chapter"->"📄 Bölüm";"blog"->"📝 Blog";else->post.repostType},
+                    Text(when(post.repostType){"serial"->"📖 Kitap";"chapter"->"📄 Bölüm";"book_chapter"->"📄 Kitap Bölümü";"blog"->"📝 Blog";else->post.repostType},
                         color = Primary, fontSize = 11.sp,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                 }
@@ -915,18 +922,20 @@ fun PostCard(
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Icon(
                                 when (post.repostType) {
-                                    "serial" -> Icons.Outlined.MenuBook
-                                    "blog"   -> Icons.Outlined.Article
-                                    else     -> Icons.Default.Repeat
+                                    "serial"       -> Icons.Outlined.MenuBook
+                                    "book_chapter" -> Icons.Outlined.MenuBook
+                                    "blog"         -> Icons.Outlined.Article
+                                    else           -> Icons.Default.Repeat
                                 },
                                 contentDescription = null, tint = Primary, modifier = Modifier.size(11.dp),
                             )
                             Text(
                                 when (post.repostType) {
-                                    "serial" -> if (ku) "Pirtûk" else "Kitap"
-                                    "blog"   -> if (ku) "Gotara Blogê" else "Blog Yazısı"
-                                    "feed"   -> if (ku) "Dîsa Parvekirî" else "Paylaşım"
-                                    else     -> if (ku) "Parvekirî" else "Paylaşım"
+                                    "serial"       -> if (ku) "Pirtûk" else "Kitap"
+                                    "book_chapter" -> if (ku) "Beşa Pirtûkê" else "Kitap Bölümü"
+                                    "blog"         -> if (ku) "Gotara Blogê" else "Blog Yazısı"
+                                    "feed"         -> if (ku) "Dîsa Parvekirî" else "Paylaşım"
+                                    else           -> if (ku) "Parvekirî" else "Paylaşım"
                                 },
                                 color = Primary, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp,
                             )

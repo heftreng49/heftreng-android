@@ -682,6 +682,60 @@ class FeedViewModel @Inject constructor(
         }
     }
 
+    // ── Kitap Bölümü Repost ────────────────────────────────────────────────────
+    fun repostBookChapter(
+        bookId       : String,
+        chapterId    : String,
+        bookTitle    : String,
+        chapterTitle : String,
+        chapterOrder : Int,
+        chapterBody  : String,
+        bookCoverImg : String = "",
+        bookAuthorUid: String = "",
+        bookAuthorName: String = "",
+    ) {
+        if (uid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val userDoc = firestore.collection("users").document(uid).get().await()
+                val myName  = userDoc.getString("displayName") ?: userDoc.getString("name") ?: ""
+                val myPhoto = userDoc.getString("photoURL") ?: ""
+                val preview = chapterBody
+                    .replace(Regex("<[^>]+>"), "") // HTML tag temizle
+                    .trim().take(200)
+                firestore.collection("feed").add(mapOf(
+                    "uid"          to uid,
+                    "name"         to myName,
+                    "displayName"  to myName,
+                    "username"     to (userDoc.getString("username") ?: ""),
+                    "photoURL"     to myPhoto,
+                    "text"         to "",
+                    "imgUrl"       to "",
+                    "imageURL"     to "",
+                    "repostType"   to "book_chapter",
+                    "repostId"     to chapterId,
+                    "repostTitle"  to bookTitle,
+                    "repostText"   to preview,
+                    "repostAuthor" to bookAuthorName,
+                    "repostAuthorPhoto" to "",
+                    "repostAuthorUid"   to bookAuthorUid,
+                    "repostImg"    to bookCoverImg,
+                    "serialTitle"  to bookTitle,
+                    "serialCover"  to bookCoverImg,
+                    "serialId"     to bookId,
+                    "chapterId"    to chapterId,
+                    "chapterTitle" to chapterTitle,
+                    "chapterOrder" to chapterOrder,
+                    "likes"  to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
+                    "ts"     to Timestamp.now(),
+                )).await()
+                if (bookAuthorUid.isNotBlank() && bookAuthorUid != uid) {
+                    sendNotif(bookAuthorUid, "repost", "$myName kitap bölümünü paylaştı", chapterTitle, chapterId)
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
     // Tema: userNotifs/{uid}/msgs, alan: feedId, title, sub, ico
     private suspend fun sendNotif(toUid: String, type: String, title: String, sub: String = "", feedId: String = "") {
         try {
