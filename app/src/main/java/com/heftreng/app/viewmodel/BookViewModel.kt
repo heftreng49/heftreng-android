@@ -189,6 +189,10 @@ class BookViewModel @Inject constructor(
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
+                // Güvenlik: kitabın sahibi mi kontrol et
+                val bookDoc = firestore.collection("books").document(bookId).get().await()
+                val bookOwner = bookDoc.getString("uid") ?: ""
+                if (bookOwner != uid) return@launch  // Sahip değilse işlemi durdur
                 val wordCount = body.trim().split("\\s+".toRegex()).size
                 firestore.collection("books").document(bookId)
                     .collection("chapters").add(mapOf(
@@ -242,8 +246,12 @@ class BookViewModel @Inject constructor(
     }
 
     fun deleteBook(bookId: String) {
+        if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
+                // Güvenlik: kitabın sahibi mi kontrol et
+                val bookDoc = firestore.collection("books").document(bookId).get().await()
+                if (bookDoc.getString("uid") != uid) return@launch
                 firestore.collection("books").document(bookId).delete().await()
                 _books.value   = _books.value.filter { it.id != bookId }
                 _myBooks.value = _myBooks.value.filter { it.id != bookId }
@@ -346,6 +354,10 @@ class BookViewModel @Inject constructor(
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
+                // Güvenlik: serinin sahibi mi kontrol et
+                val serialDoc = firestore.collection("serials").document(serialId).get().await()
+                val serialOwner = serialDoc.getString("uid") ?: ""
+                if (serialOwner != uid) return@launch  // Sahip değilse işlemi durdur
                 val order = (_serialChapters.value.maxOfOrNull { it.order } ?: 0) + 1
                 val wc    = body.trim().split("\\s+".toRegex()).size
                 firestore.collection("serials").document(serialId)
@@ -536,8 +548,12 @@ class BookViewModel @Inject constructor(
     }
 
     fun updateSerialChapter(serialId: String, chapterId: String, newTitle: String, newBody: String) {
+        if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
+                // Güvenlik: serinin sahibi mi kontrol et
+                val serialDoc = firestore.collection("serials").document(serialId).get().await()
+                if (serialDoc.getString("uid") != uid) return@launch
                 val wc = newBody.trim().split("\\s+".toRegex()).count { it.isNotBlank() }
                 firestore.collection("serials").document(serialId)
                     .collection("chapters").document(chapterId)
@@ -553,8 +569,12 @@ class BookViewModel @Inject constructor(
     }
 
     fun deleteSerialChapter(serialId: String, chapterId: String) {
+        if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
+                // Güvenlik: serinin sahibi mi kontrol et
+                val serialDoc = firestore.collection("serials").document(serialId).get().await()
+                if (serialDoc.getString("uid") != uid) return@launch
                 firestore.collection("serials").document(serialId)
                     .collection("chapters").document(chapterId).delete().await()
                 _serialChapters.value = _serialChapters.value.filter { it.id != chapterId }

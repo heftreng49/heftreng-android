@@ -280,8 +280,11 @@ fun SerialDetailScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
                 actions = {
-                    IconButton(onClick = { showAddChapter = true }) {
-                        Icon(Icons.Default.Add, null, tint = Amber)
+                    // Sadece serinin sahibi bölüm ekleyebilir
+                    if (myUid.isNotBlank() && myUid == serial?.uid) {
+                        IconButton(onClick = { showAddChapter = true }) {
+                            Icon(Icons.Default.Add, null, tint = Amber)
+                        }
                     }
                 }
             )
