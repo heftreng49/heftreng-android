@@ -63,7 +63,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
-import com.heftreng.app.viewmodel.SerialsViewModel
+import com.heftreng.app.viewmodel.BookViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
 
 // ── Seri listesi ekranı ────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ import com.heftreng.app.viewmodel.SettingsViewModel
 fun SerialsScreen(
     navController : NavController,
     language      : String = "tr",
-    vm            : SerialsViewModel = hiltViewModel(),
+    vm : BookViewModel = hiltViewModel(),
 ) {
     val serials by vm.serials.collectAsState()
     val loading by vm.loading.collectAsState()
@@ -245,12 +245,12 @@ fun SerialCard(
 fun SerialDetailScreen(
     serialId      : String,
     navController : NavController,
-    vm            : SerialsViewModel  = hiltViewModel(),
+    vm : BookViewModel = hiltViewModel(),
     socialVm      : com.heftreng.app.viewmodel.SocialViewModel = hiltViewModel(),
     settingsVm    : SettingsViewModel = hiltViewModel(),
 ) {
     val serial   by vm.selectedSerial.collectAsState()
-    val chapters by vm.chapters.collectAsState()
+    val chapters by vm.serialChapters.collectAsState()
     val loading  by vm.loading.collectAsState()
     val likers   by socialVm.likers.collectAsState()
     val language by settingsVm.language.collectAsState()
@@ -363,7 +363,7 @@ fun SerialDetailScreen(
             language      = language,
             onDismiss     = { showAddChapter = false; addTitle = ""; addBody = "" },
             onSave        = {
-                vm.addChapter(serialId, addTitle, addBody)
+                vm.addSerialChapter(serialId, addTitle, addBody)
                 showAddChapter = false
                 addTitle = ""; addBody = ""
             },
@@ -383,7 +383,7 @@ fun SerialDetailScreen(
             language      = language,
             onDismiss     = { chapterToEdit = null },
             onSave        = {
-                vm.updateChapter(serialId, ch.id, editTitle, editBody)
+                vm.updateSerialChapter(serialId, ch.id, editTitle, editBody)
                 chapterToEdit = null
             },
         )
@@ -396,7 +396,7 @@ fun SerialDetailScreen(
             title = { Text(Strings.deleteChapter(language), color = OnBackground, fontWeight = FontWeight.SemiBold) },
             text  = { Text("\"${ch.title}\" bölümünü silmek istediğine emin misin?", color = Muted) },
             confirmButton = {
-                TextButton(onClick = { vm.deleteChapter(serialId, ch.id); chapterToDelete = null }) {
+                TextButton(onClick = { vm.deleteSerialChapter(serialId, ch.id); chapterToDelete = null }) {
                     Text("Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                 }
             },
@@ -529,10 +529,10 @@ fun ChapterReadScreen(
     serialId      : String,
     chapterId     : String,
     navController : NavController,
-    vm            : SerialsViewModel  = hiltViewModel(),
+    vm : BookViewModel = hiltViewModel(),
     settingsVm    : SettingsViewModel = hiltViewModel(),
 ) {
-    val chapter  by vm.selectedChapter.collectAsState()
+    val chapter  by vm.selectedSerialChapter.collectAsState()
     val language by settingsVm.language.collectAsState()
     val ku = language == "ku"
     val auth  = FirebaseAuth.getInstance()
@@ -540,7 +540,7 @@ fun ChapterReadScreen(
     val scope = rememberCoroutineScope()
     val myUid = auth.currentUser?.uid ?: ""
 
-    LaunchedEffect(chapterId) { vm.loadChapter(serialId, chapterId) }
+    LaunchedEffect(chapterId) { vm.loadSerialChapter(serialId, chapterId) }
 
     // ── Yorum state ───────────────────────────────────────────────────────────
     data class ChCmt(
@@ -699,7 +699,7 @@ fun ChapterReadScreen(
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier.clickable {
-                                            val newLiked = vm.toggleLikeChapter(serialId, chapterId, ch.isLikedByMe)
+                                            val newLiked = vm.toggleLikeSerialChapter(serialId, chapterId, ch.isLikedByMe)
                                         },
                                     ) {
                                         Icon(
