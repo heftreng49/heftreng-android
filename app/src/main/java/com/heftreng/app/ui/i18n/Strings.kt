@@ -403,6 +403,8 @@ object Strings {
     fun editCommentTitle(l: String)      = t(l, "Yorumu Düzenle",             "Şîroveyê Biguherîne")
     fun editCommentHint(l: String)       = t(l, "Yorumunu düzenle...",        "Şîroveya xwe biguherîne...")
     fun editedLabel(l: String)           = t(l, "düzenlendi",                 "guherî")
+    fun savedPosts(l: String)            = t(l, "Kaydedilenler",              "Tomarkirin")
+    fun noSavedPosts(l: String)          = t(l, "Henüz kaydedilen yok",       "Hîn tomarkirin tune")
 
     // ── LinkifyText ───────────────────────────────────────────────────────────
     fun showLess(l: String)              = t(l, "Daha Az Göster",             "Kêmtir Nîşan Bide")

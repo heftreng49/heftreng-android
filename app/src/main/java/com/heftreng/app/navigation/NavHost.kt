@@ -35,6 +35,7 @@ import com.heftreng.app.ui.screens.auth.AuthScreen
 import com.heftreng.app.ui.screens.blog.BlogScreen
 import com.heftreng.app.ui.screens.blog.BlogPostScreen
 import com.heftreng.app.ui.screens.yazar.YazarScreen
+import com.heftreng.app.ui.screens.feed.SavedPostsScreen
 import com.heftreng.app.viewmodel.BlogViewModel
 import com.heftreng.app.ui.screens.feed.FeedScreen
 import com.heftreng.app.ui.screens.cms.CmsPageScreen
@@ -90,6 +91,7 @@ sealed class Screen(val route: String) {
     object CmsPage       : Screen("cms_page/{slug}")       { fun go(slug: String) = "cms_page/$slug" }
     object Yazar         : Screen("yazar")
     object KurdiAdmin    : Screen("kurdi_admin")
+    object SavedPosts    : Screen("saved_posts")
     object BookChapter   : Screen("book_chapter/{bid}/{cid}") { fun go(b: String, c: String) = "book_chapter/$b/$c" }
 }
 
@@ -403,6 +405,9 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     val bookId = back.arguments?.getString("bookId") ?: ""
                     BookDetailScreen(bookId = bookId, navController = navController, language = language)
                 }
+                composable(Screen.SavedPosts.route) {
+                    SavedPostsScreen(navController = navController)
+                }
                 composable("book_chapter/{bid}/{cid}") { back ->
                     val bid = back.arguments?.getString("bid") ?: ""
                     val cid = back.arguments?.getString("cid") ?: ""
@@ -480,6 +485,7 @@ fun DrawerContent(
                 Triple(Icons.Outlined.ChatBubbleOutline, "Peyam / Mesajlar (${if (totalUnread>0) totalUnread else ""})", Screen.Messages.route),
                 Triple(Icons.Outlined.Settings,       "Mîheng / Ayarlar",       Screen.Settings.route),
                 Triple(Icons.Outlined.Edit,           "Nivîskar / Yazar Paneli", Screen.Yazar.route),
+                Triple(Icons.Outlined.Bookmarks,      "Tomarkirin / Kaydedilenler", Screen.SavedPosts.route),
             )
 
             items.forEach { (icon, label, route) ->
