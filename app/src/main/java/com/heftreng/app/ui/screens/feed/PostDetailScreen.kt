@@ -2,8 +2,8 @@ package com.heftreng.app.ui.screens.feed
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -13,8 +13,11 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -57,10 +60,11 @@ private data class DetailComment(
     val replyTo      : String     = "",
     val replyToCmtId : String     = "",
     val likes        : Int        = 0,
+    val edited       : Boolean    = false,
     val ts           : Timestamp? = null,
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun PostDetailScreen(
     navController   : NavController,
@@ -84,7 +88,7 @@ fun PostDetailScreen(
     var myName  by remember { mutableStateOf(auth.currentUser?.displayName ?: "") }
     var myPhoto by remember { mutableStateOf(auth.currentUser?.photoUrl?.toString() ?: "") }
     DisposableEffect(Unit) {
-        val listener = com.google.firebase.auth.FirebaseAuth.AuthStateListener { a ->
+        val listener = FirebaseAuth.AuthStateListener { a ->
             myUid   = a.currentUser?.uid ?: ""
             myName  = a.currentUser?.displayName ?: ""
             myPhoto = a.currentUser?.photoUrl?.toString() ?: ""
@@ -97,14 +101,12 @@ fun PostDetailScreen(
     val focusRequester     = remember { FocusRequester() }
     var openKeyboard       by remember { mutableStateOf(false) }
 
-    // Feed'den yorum butonuna basılınca otomatik klavye aç
     LaunchedEffect(Unit) {
         if (autoOpenKeyboard) {
-            kotlinx.coroutines.delay(400) // ekran yüklensin
+            kotlinx.coroutines.delay(400)
             openKeyboard = true
         }
     }
-
     LaunchedEffect(openKeyboard) {
         if (openKeyboard) {
             focusRequester.requestFocus()
@@ -117,12 +119,22 @@ fun PostDetailScreen(
     var cmtLoading   by remember { mutableStateOf(true) }
     var inputText    by remember { mutableStateOf("") }
     var replyTo      by remember { mutableStateOf<DetailComment?>(null) }
+    var editTarget   by remember { mutableStateOf<DetailComment?>(null) }
     var deleteTarget by remember { mutableStateOf<DetailComment?>(null) }
+    var menuTarget   by remember { mutableStateOf<DetailComment?>(null) }
     var errorMsg     by remember { mutableStateOf("") }
     var showLikers   by remember { mutableStateOf(false) }
     val listState    = rememberLazyListState()
 
-    // Firestore'dan kullanıcı adını çek (yorum göndermek için)
+    // Düzenleme moduna girilince inputText'i doldur ve klavyeyi aç
+    LaunchedEffect(editTarget) {
+        editTarget?.let {
+            inputText = it.text
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
+
     var myFirestoreName  by remember { mutableStateOf("") }
     var myFirestorePhoto by remember { mutableStateOf("") }
     LaunchedEffect(myUid) {
@@ -134,7 +146,6 @@ fun PostDetailScreen(
         } catch (_: Exception) {}
     }
 
-    // Realtime yorum listener
     DisposableEffect(postId) {
         var reg: ListenerRegistration? = null
         reg = db.collection("feed").document(postId)
@@ -144,7 +155,6 @@ fun PostDetailScreen(
                 if (err != null || snap == null) { cmtLoading = false; return@addSnapshotListener }
                 comments = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
-                    // uid farklı field adlarıyla kaydedilmiş olabilir
                     val cmtUid = (d["uid"] as? String)?.takeIf { it.isNotBlank() }
                         ?: (d["userId"] as? String)?.takeIf { it.isNotBlank() }
                         ?: (d["authorId"] as? String)?.takeIf { it.isNotBlank() }
@@ -153,12 +163,13 @@ fun PostDetailScreen(
                         id           = doc.id,
                         uid          = cmtUid,
                         name         = (d["displayName"] as? String)?.ifBlank { null }
-                                       ?: d["name"]      as? String ?: "?",
+                                       ?: d["name"] as? String ?: "?",
                         photoURL     = d["photoURL"]     as? String ?: "",
                         text         = d["text"]         as? String ?: "",
                         replyTo      = d["replyTo"]      as? String ?: "",
                         replyToCmtId = d["replyToCmtId"] as? String ?: "",
                         likes        = (d["likes"]       as? Long)?.toInt() ?: 0,
+                        edited       = d["edited"]       as? Boolean ?: false,
                         ts           = d["ts"]           as? Timestamp,
                     )
                 }
@@ -167,10 +178,26 @@ fun PostDetailScreen(
         onDispose { reg?.remove() }
     }
 
-    fun sendComment() {
+    fun submitComment() {
         val text = inputText.trim()
         if (text.isBlank() || myUid.isBlank()) return
-        inputText = ""
+
+        val editing = editTarget
+        inputText  = ""
+        editTarget = null
+
+        if (editing != null) {
+            scope.launch {
+                try {
+                    db.collection("feed").document(postId)
+                        .collection("comments").document(editing.id)
+                        .update(mapOf("text" to text, "edited" to true))
+                        .await()
+                } catch (e: Exception) { errorMsg = e.message ?: "Hata" }
+            }
+            return
+        }
+
         val replyRef = replyTo
         replyTo = null
         scope.launch {
@@ -187,10 +214,10 @@ fun PostDetailScreen(
                         "replyTo"      to (replyRef?.name ?: ""),
                         "replyToCmtId" to (replyRef?.id   ?: ""),
                         "likes"        to 0,
+                        "edited"       to false,
                         "ts"           to Timestamp.now(),
                     )
                 ).await()
-                // cmtCount sadece bir kez artır
                 db.collection("feed").document(postId)
                     .update("cmtCount", FieldValue.increment(1)).await()
             } catch (e: Exception) {
@@ -213,258 +240,312 @@ fun PostDetailScreen(
     }
 
     var postAuthorUid by remember { mutableStateOf("") }
-
-    // postAuthorUid'yi post.uid'den veya Firestore'dan al
     LaunchedEffect(postId, post?.uid) {
         postAuthorUid = post?.uid?.takeIf { it.isNotBlank() } ?: try {
-            db.collection("feed").document(postId).get().await()
-                .getString("uid") ?: ""
+            db.collection("feed").document(postId).get().await().getString("uid") ?: ""
         } catch (_: Exception) { "" }
     }
 
-    // Post listede yoksa Firestore'dan yükle
     LaunchedEffect(postId) {
-        if (posts.none { it.id == postId }) {
-            viewModel.ensurePost(postId)
-        }
+        if (posts.none { it.id == postId }) viewModel.ensurePost(postId)
     }
 
-    // 8 saniye sonra hâlâ null ise hata göster
     var loadTimeout by remember { mutableStateOf(false) }
     LaunchedEffect(postId) {
         kotlinx.coroutines.delay(8000)
         if (posts.none { it.id == postId }) loadTimeout = true
     }
 
-    Scaffold(
-        containerColor = Background,
-        topBar = {
-            TopAppBar(
-                title = { Text(Strings.post(language), color = OnBackground, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
+    // ── Scaffold: imePadding Scaffold dışında — en dış Box'ta ─────────────────
+    Box(modifier = Modifier.fillMaxSize().imePadding()) {
+        Scaffold(
+            containerColor = Background,
+            topBar = {
+                TopAppBar(
+                    title = { Text(Strings.post(language), color = OnBackground, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                )
+            },
+        ) { padding ->
+            if (post == null) {
+                Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                    if (loadTimeout) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(if (ku) "Nivîs nehate dîtin" else Strings.postNotFound(language), color = Muted, fontSize = 15.sp)
+                            Spacer(Modifier.height(12.dp))
+                            TextButton(onClick = { navController.popBackStack() }) {
+                                Text(if (ku) "Vegere" else "Geri dön", color = Amber)
+                            }
+                        }
+                    } else {
+                        CircularProgressIndicator(color = Amber)
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
-            )
-        },
-    ) { padding ->
-        if (post == null) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                if (loadTimeout) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(if (ku) "Nivîs nehate dîtin" else Strings.postNotFound(language), color = Muted, fontSize = 15.sp)
-                        Spacer(Modifier.height(12.dp))
-                        TextButton(onClick = { navController.popBackStack() }) {
-                            Text("Geri dön", color = Amber)
+                }
+                return@Scaffold
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+            ) {
+                // ── Yorumlar listesi ──────────────────────────────────────────
+                LazyColumn(
+                    state          = listState,
+                    modifier       = Modifier.weight(1f),
+                    contentPadding = PaddingValues(bottom = 8.dp),
+                ) {
+                    item {
+                        PostCard(
+                            post         = post,
+                            onLike       = { viewModel.toggleLike(post) },
+                            onSave       = { viewModel.toggleSave(post) },
+                            onProfile    = { navController.navigate(Screen.Profile.go(post.uid)) },
+                            onComment    = { openKeyboard = true },
+                            onShare      = { viewModel.repost(post) },
+                            onShowLikers = { socialVm.loadPostLikers(post.id); showLikers = true },
+                            onTapRepost  = { repostId, repostType ->
+                                when (repostType) {
+                                    "feed"    -> navController.navigate(Screen.PostDetail.go(repostId))
+                                    "serial"  -> navController.navigate("serial/$repostId")
+                                    "chapter" -> navController.navigate("chapter/$repostId")
+                                    "blog"    -> navController.navigate("blog/$repostId")
+                                    else      -> navController.navigate(Screen.PostDetail.go(repostId))
+                                }
+                            },
+                            language = language,
+                        )
+                        HorizontalDivider(color = SurfaceVar, thickness = 6.dp)
+                    }
+
+                    if (post.likesCount > 0) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { socialVm.loadPostLikers(post.id); showLikers = true }
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Filled.Favorite, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("${post.likesCount} ${Strings.likes(language)}", color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            }
+                            HorizontalDivider(color = Divider)
                         }
                     }
-                } else {
-                    CircularProgressIndicator(color = Amber)
-                }
-            }
-            return@Scaffold
-        }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .navigationBarsPadding()
-                .imePadding(),
-        ) {
-            // Yorumlar listesi
-            LazyColumn(
-                state          = listState,
-                modifier       = Modifier.weight(1f),
-                contentPadding = PaddingValues(bottom = 8.dp),
-            ) {
-                item {
-                    PostCard(
-                        post         = post,
-                        onLike       = { viewModel.toggleLike(post) },
-                        onSave       = { viewModel.toggleSave(post) },
-                        onProfile    = { navController.navigate(Screen.Profile.go(post.uid)) },
-                        onComment    = { openKeyboard = true },
-                        onShare      = { viewModel.repost(post) },
-                        onShowLikers = { socialVm.loadPostLikers(post.id); showLikers = true },
-                        onTapRepost  = { repostId, repostType ->
-                            when (repostType) {
-                                "feed"    -> navController.navigate(Screen.PostDetail.go(repostId))
-                                "serial"  -> navController.navigate("serial/$repostId")
-                                "chapter" -> navController.navigate("chapter/$repostId")
-                                "blog"    -> navController.navigate("blog/$repostId")
-                                else      -> navController.navigate(Screen.PostDetail.go(repostId))
-                            }
-                        },
-                        language = language,
-                    )
-                    HorizontalDivider(color = SurfaceVar, thickness = 6.dp)
-                }
-
-                if (post.likesCount > 0) {
                     item {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { socialVm.loadPostLikers(post.id); showLikers = true }
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment     = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            Icon(Icons.Filled.Favorite, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("${post.likesCount} ${Strings.likes(language)}", color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(Strings.comments(language), color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            if (comments.isNotEmpty()) Text("${comments.size}", color = Muted, fontSize = 13.sp)
                         }
                         HorizontalDivider(color = Divider)
                     }
-                }
 
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment     = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(Strings.comments(language), color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        if (comments.isNotEmpty()) {
-                            Text("${comments.size}", color = Muted, fontSize = 13.sp)
-                        }
-                    }
-                    HorizontalDivider(color = Divider)
-                }
-
-                if (cmtLoading) {
-                    item {
-                        Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = Amber, modifier = Modifier.size(24.dp))
-                        }
-                    }
-                }
-
-                if (!cmtLoading && comments.isEmpty()) {
-                    item {
-                        Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("💬", fontSize = 32.sp)
-                                Spacer(Modifier.height(8.dp))
-                                Text(Strings.noResult(language), color = Muted, fontSize = 14.sp)
+                    if (cmtLoading) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = Amber, modifier = Modifier.size(24.dp))
                             }
                         }
                     }
+
+                    if (!cmtLoading && comments.isEmpty()) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("💬", fontSize = 32.sp)
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(Strings.noComments(language), color = Muted, fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    items(comments, key = { it.id }) { cmt ->
+                        val isOwner   = myUid.isNotBlank() && cmt.uid.isNotBlank() && cmt.uid == myUid
+                        val canDelete = isOwner || (myUid.isNotBlank() && myUid == postAuthorUid)
+                        DetailCommentRow(
+                            cmt         = cmt,
+                            canEdit     = isOwner,
+                            canDelete   = canDelete,
+                            onLongPress = { menuTarget = cmt },
+                            onDelete    = { deleteTarget = cmt },
+                            onReply     = { replyTo = cmt; editTarget = null; openKeyboard = true },
+                            onEdit      = { editTarget = cmt; replyTo = null },
+                            language    = language,
+                        )
+                        HorizontalDivider(
+                            color     = Divider.copy(alpha = 0.4f),
+                            thickness = 0.5.dp,
+                            modifier  = Modifier.padding(start = 56.dp),
+                        )
+                    }
                 }
 
-                items(comments, key = { it.id }) { cmt ->
-                    val canDelete = myUid.isNotBlank() && (
-                        (cmt.uid.isNotBlank() && cmt.uid == myUid) ||
-                        myUid == postAuthorUid
-                    )
-                    DetailCommentRow(
-                        cmt       = cmt,
-                        canDelete = canDelete,
-                        onDelete  = { deleteTarget = cmt },
-                        onReply   = { replyTo = cmt; openKeyboard = true },
-                        language  = language,
-                    )
-                    HorizontalDivider(
-                        color     = Divider.copy(alpha = 0.4f),
-                        thickness = 0.5.dp,
-                        modifier  = Modifier.padding(start = 56.dp),
-                    )
+                // ── Düzenleme / Yanıt göstergesi ─────────────────────────────
+                val indicator = editTarget ?: replyTo
+                if (indicator != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(SurfaceVar)
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            if (editTarget != null) {
+                                Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(Strings.editCommentTitle(language), color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            } else {
+                                Icon(Icons.AutoMirrored.Filled.Reply, null, tint = Amber, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("@${replyTo!!.name} ${Strings.replyingToSuffix(language)}", color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                        IconButton(
+                            onClick  = { editTarget = null; replyTo = null; inputText = "" },
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
+                        }
+                    }
                 }
-            }
 
-            // Yanıtlama göstergesi
-            if (replyTo != null) {
+                // ── Giriş kutusu ─────────────────────────────────────────────
+                HorizontalDivider(color = Divider)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(SurfaceVar)
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                    verticalAlignment     = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                        .background(Background)
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        "@${replyTo!!.name} ${if (ku) "bersiv dide" else "yanıtlanıyor"}",
-                        color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Medium,
-                    )
-                    TextButton(onClick = { replyTo = null }, contentPadding = PaddingValues(0.dp)) {
-                        Text(if (ku) "Betal bike" else "İptal", color = Muted, fontSize = 12.sp)
-                    }
-                }
-            }
-
-            // Yorum yazma alanı — klavye açık kalır, gönder butonu her zaman görünür
-            HorizontalDivider(color = Divider)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Background)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value         = inputText,
-                    onValueChange = { inputText = it },
-                    placeholder   = {
-                        Text(
-                            if (replyTo != null) "@${replyTo!!.name} ${Strings.reply(language)}..." else Strings.commentHint(language),
-                            color = Muted, fontSize = 14.sp,
-                        )
-                    },
-                    modifier = Modifier.weight(1f).focusRequester(focusRequester),
-                    shape    = RoundedCornerShape(24.dp),
-                    colors   = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor      = Amber,
-                        unfocusedBorderColor    = Divider,
-                        cursorColor             = Amber,
-                        focusedTextColor        = OnBackground,
-                        unfocusedTextColor      = OnBackground,
-                        focusedContainerColor   = SurfaceVar,
-                        unfocusedContainerColor = SurfaceVar,
-                    ),
-                    maxLines       = 4,
-                    // ImeAction.Send — klavyedeki gönder tuşu da çalışır, klavye kapanmaz
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { sendComment() }),
-                )
-                Spacer(Modifier.width(8.dp))
-                // IconButton kullan — clickable klavyeyi kapatır
-                IconButton(
-                    onClick  = { sendComment() },
-                    enabled  = inputText.isNotBlank(),
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(
-                            if (inputText.isNotBlank()) Amber else Muted.copy(alpha = 0.15f),
-                            CircleShape,
+                    OutlinedTextField(
+                        value         = inputText,
+                        onValueChange = { inputText = it },
+                        placeholder   = {
+                            Text(
+                                when {
+                                    editTarget != null -> Strings.editCommentHint(language)
+                                    replyTo    != null -> "@${replyTo!!.name} ${Strings.reply(language)}..."
+                                    else               -> Strings.commentHint(language)
+                                },
+                                color = Muted, fontSize = 14.sp,
+                            )
+                        },
+                        modifier = Modifier.weight(1f).focusRequester(focusRequester),
+                        shape    = RoundedCornerShape(24.dp),
+                        colors   = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor      = Amber,
+                            unfocusedBorderColor    = Divider,
+                            cursorColor             = Amber,
+                            focusedTextColor        = OnBackground,
+                            unfocusedTextColor      = OnBackground,
+                            focusedContainerColor   = SurfaceVar,
+                            unfocusedContainerColor = SurfaceVar,
                         ),
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Gönder",
-                        tint     = if (inputText.isNotBlank()) Color.Black else Muted,
-                        modifier = Modifier.size(20.dp),
+                        maxLines        = 4,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = { submitComment() }),
                     )
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(
+                        onClick  = { submitComment() },
+                        enabled  = inputText.isNotBlank(),
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(
+                                if (inputText.isNotBlank()) Amber else Muted.copy(alpha = 0.15f),
+                                CircleShape,
+                            ),
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = Strings.send(language),
+                            tint     = if (inputText.isNotBlank()) Color.Black else Muted,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
             }
         }
     }
 
-    // Silme onay dialogu
+    // ── Long-press menü ───────────────────────────────────────────────────────
+    menuTarget?.let { cmt ->
+        val isOwner   = myUid.isNotBlank() && cmt.uid.isNotBlank() && cmt.uid == myUid
+        val canDelete = isOwner || (myUid.isNotBlank() && myUid == postAuthorUid)
+        AlertDialog(
+            onDismissRequest = { menuTarget = null },
+            containerColor   = HeftSurface,
+            title = { Text(cmt.name, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
+            text  = { Text(cmt.text.take(100) + if (cmt.text.length > 100) "…" else "", color = Muted, fontSize = 13.sp) },
+            confirmButton = {
+                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(
+                        onClick  = { replyTo = cmt; editTarget = null; menuTarget = null; openKeyboard = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Reply, null, tint = Amber, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(Strings.replyAction(language), color = Amber)
+                    }
+                    if (isOwner) {
+                        TextButton(
+                            onClick  = { editTarget = cmt; replyTo = null; menuTarget = null },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Default.Edit, null, tint = OnBackground, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(Strings.editAction(language), color = OnBackground)
+                        }
+                    }
+                    if (canDelete) {
+                        TextButton(
+                            onClick  = { deleteTarget = cmt; menuTarget = null },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(Strings.deleteAction(language), color = Color(0xFFEF4444))
+                        }
+                    }
+                    TextButton(onClick = { menuTarget = null }, modifier = Modifier.fillMaxWidth()) {
+                        Text(Strings.cancelAction(language), color = Muted)
+                    }
+                }
+            },
+        )
+    }
+
+    // ── Silme onay ────────────────────────────────────────────────────────────
     deleteTarget?.let { cmt ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             containerColor   = HeftSurface,
-            title  = { Text(if (ku) "Şîrove Jê Bibe" else "Yorumu Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            title  = { Text(Strings.deleteCommentTitle(language), color = OnBackground, fontWeight = FontWeight.SemiBold) },
             text   = { Text(cmt.text.take(80), color = Muted, fontSize = 13.sp) },
             confirmButton = {
                 TextButton(onClick = { deleteComment(cmt); deleteTarget = null }) {
-                    Text(if (ku) "Jê bibe" else "Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                    Text(Strings.deleteAction(language), color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) { Text(if (ku) "Betal bike" else "İptal", color = Muted) }
+                TextButton(onClick = { deleteTarget = null }) { Text(Strings.cancelAction(language), color = Muted) }
             },
         )
     }
@@ -473,9 +554,9 @@ fun PostDetailScreen(
         AlertDialog(
             onDismissRequest = { errorMsg = "" },
             containerColor   = HeftSurface,
-            title  = { Text("Hata", color = Color(0xFFEF4444), fontWeight = FontWeight.SemiBold) },
+            title  = { Text(Strings.error(language), color = Color(0xFFEF4444), fontWeight = FontWeight.SemiBold) },
             text   = { Text(errorMsg, color = Muted, fontSize = 13.sp) },
-            confirmButton = { TextButton(onClick = { errorMsg = "" }) { Text("Tamam", color = Amber) } },
+            confirmButton = { TextButton(onClick = { errorMsg = "" }) { Text(Strings.confirm(language), color = Amber) } },
         )
     }
 
@@ -489,17 +570,25 @@ fun PostDetailScreen(
     }
 }
 
+// ── Yorum satırı ─────────────────────────────────────────────────────────────
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun DetailCommentRow(
-    cmt       : DetailComment,
-    canDelete : Boolean,
-    onDelete  : () -> Unit,
-    onReply   : () -> Unit,
-    language  : String = "tr",
+    cmt         : DetailComment,
+    canEdit     : Boolean,
+    canDelete   : Boolean,
+    onLongPress : () -> Unit,
+    onDelete    : () -> Unit,
+    onReply     : () -> Unit,
+    onEdit      : () -> Unit,
+    language    : String = "tr",
 ) {
     val ku = language == "ku"
     Row(
-        modifier          = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = {}, onLongClick = onLongPress)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.Top,
     ) {
         Box(
@@ -507,20 +596,20 @@ private fun DetailCommentRow(
             contentAlignment = Alignment.Center,
         ) {
             if (cmt.photoURL.isNotBlank()) {
-                AsyncImage(
-                    model = cmt.photoURL, contentDescription = null,
-                    modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
-                )
+                AsyncImage(model = cmt.photoURL, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             } else {
-                Text(
-                    cmt.name.firstOrNull()?.uppercase() ?: "?",
-                    color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                )
+                Text(cmt.name.firstOrNull()?.uppercase() ?: "?", color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
-            Text(cmt.name, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(cmt.name, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                if (cmt.edited) {
+                    Spacer(Modifier.width(4.dp))
+                    Text("· ${Strings.editedLabel(language)}", color = Muted, fontSize = 10.sp)
+                }
+            }
             if (cmt.replyTo.isNotBlank()) {
                 Text("@${cmt.replyTo}", color = Amber, fontSize = 11.sp, fontWeight = FontWeight.Medium)
             }
@@ -538,17 +627,13 @@ private fun DetailCommentRow(
                         Text("${cmt.likes}", color = Muted, fontSize = 11.sp)
                     }
                 }
-                Text(if (ku) "Bersiv bide" else "Yanıtla", color = Muted, fontSize = 11.sp, modifier = Modifier.clickable { onReply() })
-            }
-        }
-        if (canDelete) {
-            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = if (ku) "Jê bibe" else "Sil",
-                    tint     = Color(0xFFEF4444).copy(alpha = 0.8f),
-                    modifier = Modifier.size(18.dp),
-                )
+                Text(Strings.replyAction(language), color = Muted, fontSize = 11.sp, modifier = Modifier.clickable { onReply() })
+                if (canEdit) {
+                    Text(Strings.editAction(language), color = Muted, fontSize = 11.sp, modifier = Modifier.clickable { onEdit() })
+                }
+                if (canDelete) {
+                    Text(Strings.deleteAction(language), color = Color(0xFFEF4444).copy(alpha = 0.7f), fontSize = 11.sp, modifier = Modifier.clickable { onDelete() })
+                }
             }
         }
     }
