@@ -335,7 +335,7 @@ fun SerialDetailScreen(
             heading       = Strings.newChapter(language),
             saveLabel     = Strings.save(language),
             wordCount     = addBody.replace(Regex("<[^>]+>"), "").trim()
-                                .split(Regex("\s+")).count { it.isNotBlank() },
+                                .split(Regex("\\s+")).count { it.isNotBlank() },
             canSave       = addTitle.isNotBlank() && addBody.isNotBlank(),
             language      = language,
             onDismiss     = { showAddChapter = false; addTitle = ""; addBody = "" },
@@ -357,7 +357,7 @@ fun SerialDetailScreen(
             heading       = Strings.editChapter(language),
             saveLabel     = Strings.save(language),
             wordCount     = editBody.replace(Regex("<[^>]+>"), "").trim()
-                                .split(Regex("\s+")).count { it.isNotBlank() },
+                                .split(Regex("\\s+")).count { it.isNotBlank() },
             canSave       = editTitle.isNotBlank() && editBody.isNotBlank(),
             language      = language,
             onDismiss     = { chapterToEdit = null },
@@ -501,7 +501,6 @@ private fun ChapterRow(
     }
 }
 
-@Composable
 // ── Bölüm okuma ekranı ───────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -725,7 +724,6 @@ private fun CreateSerialDialog(onDismiss: () -> Unit, onCreate: (String, String,
     )
 }
 
-@Composable
 @Composable
 fun hfTextFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedBorderColor      = Amber,
