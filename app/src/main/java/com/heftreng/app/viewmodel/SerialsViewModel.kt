@@ -153,22 +153,34 @@ class SerialsViewModel @Inject constructor(
                 val userDoc = firestore.collection("users").document(uid).get().await()
                 val serial  = _selectedSerial.value
                 val myName = userDoc.getString("displayName") ?: userDoc.getString("name") ?: ""
+                // Yeni eklenen bölümün Firestore ID'sini al
+                val chapSnap2 = firestore.collection("serials").document(serialId)
+                    .collection("chapters")
+                    .orderBy("order", Query.Direction.DESCENDING)
+                    .limit(1).get().await()
+                val newChapterId = chapSnap2.documents.firstOrNull()?.id ?: ""
+
                 firestore.collection("feed").add(mapOf(
-                    "uid"         to uid,
-                    "name"        to myName,          // tema: name alanı
-                    "displayName" to myName,           // Android uyumu
-                    "username"    to (userDoc.getString("username") ?: ""),
-                    "photoURL"    to (userDoc.getString("photoURL") ?: ""),
-                    "text"        to "📖 ${serial?.title ?: ""} — Bölüm $order: $title",
-                    "imgUrl"      to (serial?.coverImg ?: ""),   // tema: imgUrl
-                    "imageURL"    to (serial?.coverImg ?: ""),   // Android uyumu
-                    "bookName"    to (serial?.title ?: ""),
-                    "authorName"  to myName,
-                    "repostType"  to "serial",         // tema: repostType
-                    "serialId"    to serialId,
-                    "chapterId"   to "",
-                    "likes"       to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
-                    "ts"          to FieldValue.serverTimestamp(),
+                    "uid"          to uid,
+                    "name"         to myName,
+                    "displayName"  to myName,
+                    "username"     to (userDoc.getString("username") ?: ""),
+                    "photoURL"     to (userDoc.getString("photoURL") ?: ""),
+                    "text"         to "📖 ${serial?.title ?: ""} — Bölüm $order: $title",
+                    "imgUrl"       to (serial?.coverImg ?: ""),
+                    "imageURL"     to (serial?.coverImg ?: ""),
+                    "bookName"     to (serial?.title ?: ""),
+                    "authorName"   to myName,
+                    "repostType"   to "chapter",
+                    "repostId"     to newChapterId,
+                    "serialId"     to serialId,
+                    "chapterId"    to newChapterId,
+                    "chapterTitle" to title,
+                    "chapterOrder" to order,
+                    "serialTitle"  to (serial?.title ?: ""),
+                    "serialCover"  to (serial?.coverImg ?: ""),
+                    "likes"        to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
+                    "ts"           to FieldValue.serverTimestamp(),
                 )).await()
                 loadSerial(serialId)
             } catch (e: Exception) { e.printStackTrace() }
@@ -201,34 +213,49 @@ class SerialsViewModel @Inject constructor(
         }
     }
 
-    // ── Bölüm beğeni toggle ────────────────────────────────────────────────────
-    // Tema: chapterLikes/{chId}_{uid} — {chapterId, serialId, uid, ts}
-    fun toggleLikeChapter(serialId: String, chapterId: String) {
-        if (uid.isEmpty()) return
+    // ── Bölüm beğeni toggle — optimistic update ──────────────────────────────
+    fun toggleLikeChapter(serialId: String, chapterId: String, currentlyLiked: Boolean): Boolean {
+        if (uid.isEmpty()) return currentlyLiked
+        val nowLiked = !currentlyLiked
+        // Optimistic: _selectedChapter güncelle
+        _selectedChapter.value?.let { ch ->
+            if (ch.id == chapterId) {
+                _selectedChapter.value = ch.copy(
+                    isLikedByMe = nowLiked,
+                    likes = ch.likes + if (nowLiked) 1 else -1,
+                )
+            }
+        }
+        _chapters.value = _chapters.value.map { ch ->
+            if (ch.id == chapterId) ch.copy(
+                isLikedByMe = nowLiked,
+                likes = ch.likes + if (nowLiked) 1 else -1,
+            ) else ch
+        }
         viewModelScope.launch {
             try {
                 val docId = "${chapterId}_$uid"
                 val ref   = firestore.collection("chapterLikes").document(docId)
                 val chRef = firestore.collection("serials").document(serialId)
                     .collection("chapters").document(chapterId)
-                val exists = ref.get().await().exists()
-                if (exists) {
-                    ref.delete().await()
-                    chRef.update("likes", com.google.firebase.firestore.FieldValue.increment(-1)).await()
-                } else {
+                if (nowLiked) {
                     ref.set(mapOf(
                         "chapterId" to chapterId,
                         "serialId"  to serialId,
                         "uid"       to uid,
-                        "ts"        to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                        "ts"        to FieldValue.serverTimestamp(),
                     )).await()
-                    chRef.update("likes", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                    chRef.update("likes", FieldValue.increment(1)).await()
+                } else {
+                    ref.delete().await()
+                    chRef.update("likes", FieldValue.increment(-1)).await()
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
+        return nowLiked
     }
 
-    // Bölüm beğeni durumu sorgula
+    // Beğeni durumu — artık Chapter.isLikedByMe kullanılıyor ama gerekirse:
     fun isChapterLiked(chapterId: String, callback: (Boolean) -> Unit) {
         if (uid.isEmpty()) { callback(false); return }
         viewModelScope.launch {
@@ -237,6 +264,62 @@ class SerialsViewModel @Inject constructor(
                     .document("${chapterId}_$uid").get().await().exists()
                 callback(exists)
             } catch (e: Exception) { callback(false) }
+        }
+    }
+
+    // ── Bölüm yorumları ───────────────────────────────────────────────────────
+    private val _chapterComments = MutableStateFlow<List<com.heftreng.app.data.model.ChapterComment>>(emptyList())
+    val chapterComments = _chapterComments.asStateFlow()
+
+    fun addChapterComment(serialId: String, chapterId: String, text: String, replyTo: String = "", replyToCmtId: String = "") {
+        if (uid.isEmpty() || text.isBlank()) return
+        viewModelScope.launch {
+            try {
+                val userDoc = firestore.collection("users").document(uid).get().await()
+                val name    = userDoc.getString("displayName") ?: userDoc.getString("name") ?: ""
+                val photo   = userDoc.getString("photoURL") ?: ""
+                firestore.collection("serials").document(serialId)
+                    .collection("chapters").document(chapterId)
+                    .collection("comments").add(mapOf(
+                        "uid"          to uid,
+                        "name"         to name,
+                        "displayName"  to name,
+                        "photoURL"     to photo,
+                        "text"         to text,
+                        "replyTo"      to replyTo,
+                        "replyToCmtId" to replyToCmtId,
+                        "likes"        to 0,
+                        "edited"       to false,
+                        "ts"           to FieldValue.serverTimestamp(),
+                    )).await()
+                firestore.collection("serials").document(serialId)
+                    .collection("chapters").document(chapterId)
+                    .update("cmtCount", FieldValue.increment(1)).await()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun editChapterComment(serialId: String, chapterId: String, commentId: String, newText: String) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("serials").document(serialId)
+                    .collection("chapters").document(chapterId)
+                    .collection("comments").document(commentId)
+                    .update(mapOf("text" to newText, "edited" to true)).await()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun deleteChapterComment(serialId: String, chapterId: String, commentId: String) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("serials").document(serialId)
+                    .collection("chapters").document(chapterId)
+                    .collection("comments").document(commentId).delete().await()
+                firestore.collection("serials").document(serialId)
+                    .collection("chapters").document(chapterId)
+                    .update("cmtCount", FieldValue.increment(-1)).await()
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
@@ -321,17 +404,20 @@ class SerialsViewModel @Inject constructor(
         }
     }
 
-    private fun com.google.firebase.firestore.DocumentSnapshot.toChapter(): Chapter? {
+    private fun com.google.firebase.firestore.DocumentSnapshot.toChapter(likedIds: Set<String> = emptySet()): Chapter? {
         val d = data ?: return null
         return Chapter(
-            id        = id,
-            serialId  = d["serialId"]  as? String ?: "",
-            title     = d["title"]     as? String ?: "",
-            body      = d["body"]      as? String ?: "",
-            order     = (d["order"]    as? Long)?.toInt() ?: 0,
-            wordCount = (d["wordCount"] as? Long)?.toInt() ?: 0,
-            uid       = d["uid"]       as? String ?: "",
-            ts        = d["ts"]        as? Timestamp,
+            id          = id,
+            serialId    = d["serialId"]   as? String ?: "",
+            title       = d["title"]      as? String ?: "",
+            body        = d["body"]       as? String ?: "",
+            order       = (d["order"]     as? Long)?.toInt() ?: 0,
+            wordCount   = (d["wordCount"] as? Long)?.toInt() ?: 0,
+            uid         = d["uid"]        as? String ?: "",
+            likes       = (d["likes"]     as? Long)?.toInt() ?: 0,
+            cmtCount    = (d["cmtCount"]  as? Long)?.toInt() ?: 0,
+            isLikedByMe = id in likedIds,
+            ts          = d["ts"]         as? Timestamp,
         )
     }
 }

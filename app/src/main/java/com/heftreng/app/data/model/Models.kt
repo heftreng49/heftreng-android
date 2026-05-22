@@ -66,6 +66,8 @@ data class Post(
     val repostSerialAuthorUid : String  = "",
     val repostSerialBg        : String  = "",
     val repostSerialChCount   : Int     = 0,
+    val serialId         : String     = "",   // chapter repost için
+    val chapterId        : String     = "",   // chapter repost için
     val isLikedByMe      : Boolean    = false,
     val isSavedByMe      : Boolean    = false,
     val isRepostedByMe   : Boolean    = false,
@@ -180,14 +182,17 @@ data class Serial(
 
 // ─── BÖLÜM ─────────────────────────────────────────────
 data class Chapter(
-    val id       : String     = "",
-    val serialId : String     = "",
-    val title    : String     = "",
-    val body     : String     = "",
-    val order    : Int        = 0,
-    val wordCount: Int        = 0,
-    val uid      : String     = "",
-    val ts       : Timestamp? = null,
+    val id          : String     = "",
+    val serialId    : String     = "",
+    val title       : String     = "",
+    val body        : String     = "",
+    val order       : Int        = 0,
+    val wordCount   : Int        = 0,
+    val uid         : String     = "",
+    val likes       : Int        = 0,
+    val cmtCount    : Int        = 0,
+    val isLikedByMe : Boolean    = false,
+    val ts          : Timestamp? = null,
 )
 
 // ─── KİTAP ─────────────────────────────────────────────
@@ -206,6 +211,20 @@ data class Book(
     val ts           : Timestamp? = null,
     val updatedAt    : Timestamp? = null,
     val isLikedByMe  : Boolean    = false,
+)
+
+// ─── BÖLÜM YORUMU ──────────────────────────────────────
+data class ChapterComment(
+    val id           : String     = "",
+    val uid          : String     = "",
+    val name         : String     = "",
+    val photoURL     : String     = "",
+    val text         : String     = "",
+    val replyTo      : String     = "",
+    val replyToCmtId : String     = "",
+    val likes        : Int        = 0,
+    val edited       : Boolean    = false,
+    val ts           : com.google.firebase.Timestamp? = null,
 )
 
 // ─── KİTAP BÖLÜMÜ ──────────────────────────────────────

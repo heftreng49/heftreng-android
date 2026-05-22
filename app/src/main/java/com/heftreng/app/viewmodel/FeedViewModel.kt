@@ -142,6 +142,8 @@ class FeedViewModel @Inject constructor(
                             repostSerialAuthorUid  = d["repostSerialAuthorUid"]  as? String ?: "",
                             repostSerialBg         = d["repostSerialBg"]         as? String ?: "",
                             repostSerialChCount    = (d["repostSerialChCount"]   as? Long)?.toInt() ?: 0,
+                            serialId               = d["serialId"]               as? String ?: "",
+                            chapterId              = d["chapterId"]              as? String ?: "",
                         )
                     }
                     _posts.value = enrichPostsWithUserData(rawPosts)

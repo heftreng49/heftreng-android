@@ -5,6 +5,10 @@ rules_version = '2';
 //  Proje: bloggerheftreng
 //  Güncelleme: v5 — light/dark tema uyumlu, uygulama koleksiyonları eklendi
 //
+//  Değişiklikler (v5→v6):
+//  + serials/chapters/comments: edit (text+edited) izni eklendi
+//  + serials/chapters: likes ve cmtCount update izni eklendi
+//
 //  Değişiklikler (v4→v5):
 //  + books/chapters koleksiyonu eklendi (kitap sistemi)
 //  + serialLikes update kuralı eklendi
@@ -161,7 +165,10 @@ service cloud.firestore {
         allow read: if true;
         allow create: if isAuth() && notBanned()
             && request.resource.data.uid == request.auth.uid;
-        allow update, delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
+        allow update: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin()
+            || (isAuth() && onlyChanging(['likes']))
+            || (isAuth() && onlyChanging(['cmtCount']));
+        allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
 
         match /comments/{cmtId} {
           allow read: if true;
@@ -169,8 +176,11 @@ service cloud.firestore {
               && request.resource.data.uid == request.auth.uid
               && request.resource.data.text is string
               && request.resource.data.text.size() >= 1
-              && request.resource.data.text.size() <= 500;
-          allow update: if false;
+              && request.resource.data.text.size() <= 1000;
+          allow update:
+              if (isAuth() && resource.data.uid == request.auth.uid
+                  && onlyChanging(['text', 'edited']))
+              || (isAuth() && onlyChanging(['likes']));
           allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
         }
       }

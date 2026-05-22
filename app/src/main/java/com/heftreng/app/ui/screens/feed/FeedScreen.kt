@@ -309,11 +309,20 @@ fun FeedScreen(
                         },
                         onTapRepost = { repostId, repostType ->
                             when (repostType) {
-                                "feed" -> navController.navigate(Screen.PostDetail.go(repostId))
-                                "serial" -> navController.navigate("serial/$repostId")
-                                "chapter" -> navController.navigate("chapter/$repostId")
-                                "blog" -> navController.navigate("blog/$repostId")
-                                else -> navController.navigate(Screen.PostDetail.go(repostId))
+                                "feed"    -> navController.navigate(Screen.PostDetail.go(repostId))
+                                "serial"  -> navController.navigate("serial/$repostId")
+                                "chapter" -> {
+                                    // repostId = chapterId, serialId post'tan alınır
+                                    val sid = post.serialId.ifBlank { "" }
+                                    val cid = post.chapterId.ifBlank { repostId }
+                                    if (sid.isNotBlank()) {
+                                        navController.navigate("chapter/$sid/$cid")
+                                    } else {
+                                        navController.navigate("serial/${post.repostId}")
+                                    }
+                                }
+                                "blog"    -> navController.navigate("blog/$repostId")
+                                else      -> navController.navigate(Screen.PostDetail.go(repostId))
                             }
                         },
                         onReport  = {
@@ -881,7 +890,7 @@ fun PostCard(
                         if (post.repostType.isNotBlank() && post.repostType != "feed") {
                 Surface(shape = RoundedCornerShape(6.dp), color = Primary.copy(alpha = 0.12f),
                     modifier = Modifier.padding(bottom = 6.dp)) {
-                    Text(when(post.repostType){"serial"->"📖 Serial";"chapter"->"📄 Bölüm";else->post.repostType},
+                    Text(when(post.repostType){"serial"->"📖 Kitap";"chapter"->"📄 Bölüm";"blog"->"📝 Blog";else->post.repostType},
                         color = Primary, fontSize = 11.sp,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                 }

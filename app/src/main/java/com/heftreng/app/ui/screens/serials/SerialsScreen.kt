@@ -35,6 +35,27 @@ import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
 import com.heftreng.app.data.model.Chapter
 import com.heftreng.app.data.model.Serial
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
@@ -500,184 +521,436 @@ private fun ChapterRow(
 // ── Bölüm okuma ekranı ───────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 fun ChapterReadScreen(
     serialId      : String,
     chapterId     : String,
     navController : NavController,
-    vm            : SerialsViewModel = hiltViewModel(),
+    vm            : SerialsViewModel  = hiltViewModel(),
     settingsVm    : SettingsViewModel = hiltViewModel(),
 ) {
     val chapter  by vm.selectedChapter.collectAsState()
     val language by settingsVm.language.collectAsState()
+    val ku = language == "ku"
+    val auth  = FirebaseAuth.getInstance()
+    val db    = FirebaseFirestore.getInstance()
+    val scope = rememberCoroutineScope()
+    val myUid = auth.currentUser?.uid ?: ""
 
     LaunchedEffect(chapterId) { vm.loadChapter(serialId, chapterId) }
 
-    Scaffold(
-        containerColor = Background,
-        topBar = {
-            TopAppBar(
-                title = { Text(chapter?.title ?: Strings.chapter(language), color = OnBackground, fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, null, tint = OnBackground)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
-                actions = {
-                    var liked by remember { mutableStateOf(false) }
-                    LaunchedEffect(chapterId) { vm.isChapterLiked(chapterId) { liked = it } }
-                    IconButton(onClick = { vm.toggleLikeChapter(serialId, chapterId); liked = !liked }) {
-                        Icon(if (liked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                            null, tint = if (liked) Color(0xFFEF4444) else Muted)
-                    }
-                },
-            )
-        }
-    ) { padding ->
-        LazyColumn(
-            modifier       = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-        ) {
-            item {
-                chapter?.let { ch ->
-                    Text(
-                        "${Strings.chapter(language)} ${ch.order} · ${Strings.wordCount(language, ch.wordCount)}",
-                        color    = Muted,
-                        fontSize = 12.sp,
+    // ── Yorum state ───────────────────────────────────────────────────────────
+    data class ChCmt(
+        val id: String = "", val uid: String = "", val name: String = "",
+        val photoURL: String = "", val text: String = "", val replyTo: String = "",
+        val replyToCmtId: String = "", val likes: Int = 0, val edited: Boolean = false,
+        val ts: com.google.firebase.Timestamp? = null,
+    )
+
+    var comments     by remember { mutableStateOf<List<ChCmt>>(emptyList()) }
+    var cmtLoading   by remember { mutableStateOf(true) }
+    var inputText    by remember { mutableStateOf("") }
+    var replyTo      by remember { mutableStateOf<ChCmt?>(null) }
+    var editTarget   by remember { mutableStateOf<ChCmt?>(null) }
+    var deleteTarget by remember { mutableStateOf<ChCmt?>(null) }
+    var menuTarget   by remember { mutableStateOf<ChCmt?>(null) }
+    val focusRequester  = remember { FocusRequester() }
+    val keyboardCtrl    = LocalSoftwareKeyboardController.current
+    val listState       = rememberLazyListState()
+
+    LaunchedEffect(editTarget) {
+        editTarget?.let { inputText = it.text; focusRequester.requestFocus(); keyboardCtrl?.show() }
+    }
+
+    // Kullanıcı adı + fotoğrafı
+    var myName  by remember { mutableStateOf("") }
+    var myPhoto by remember { mutableStateOf("") }
+    LaunchedEffect(myUid) {
+        if (myUid.isBlank()) return@LaunchedEffect
+        try {
+            val doc = db.collection("users").document(myUid).get().await()
+            myName  = doc.getString("displayName") ?: doc.getString("name") ?: ""
+            myPhoto = doc.getString("photoURL") ?: ""
+        } catch (_: Exception) {}
+    }
+
+    // Realtime yorum listener
+    DisposableEffect(chapterId) {
+        var reg: com.google.firebase.firestore.ListenerRegistration? = null
+        reg = db.collection("serials").document(serialId)
+            .collection("chapters").document(chapterId)
+            .collection("comments")
+            .orderBy("ts", Query.Direction.ASCENDING)
+            .addSnapshotListener { snap, _ ->
+                if (snap == null) { cmtLoading = false; return@addSnapshotListener }
+                comments = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    ChCmt(
+                        id           = doc.id,
+                        uid          = d["uid"]          as? String ?: "",
+                        name         = (d["displayName"] as? String)?.ifBlank { null } ?: d["name"] as? String ?: "?",
+                        photoURL     = d["photoURL"]     as? String ?: "",
+                        text         = d["text"]         as? String ?: "",
+                        replyTo      = d["replyTo"]      as? String ?: "",
+                        replyToCmtId = d["replyToCmtId"] as? String ?: "",
+                        likes        = (d["likes"]       as? Long)?.toInt() ?: 0,
+                        edited       = d["edited"]       as? Boolean ?: false,
+                        ts           = d["ts"]           as? com.google.firebase.Timestamp,
                     )
-                    Spacer(Modifier.height(16.dp))
-                    if (ch.body.contains("<") && ch.body.contains(">")) {
-                        AndroidView(
-                            modifier = Modifier.fillMaxWidth(),
-                            factory  = { ctx ->
-                                TextView(ctx).apply {
-                                    setTextColor(android.graphics.Color.parseColor("#E5E5EA"))
-                                    textSize = 16f
-                                    setLineSpacing(0f, 1.6f)
-                                    setPadding(0, 0, 0, 0)
-                                }
-                            },
-                            update = { tv ->
-                                @Suppress("DEPRECATION")
-                                val spanned: Spanned = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N)
-                                    Html.fromHtml(ch.body, Html.FROM_HTML_MODE_COMPACT)
-                                else Html.fromHtml(ch.body)
-                                tv.text = spanned
-                            }
-                        )
-                    } else {
+                }
+                cmtLoading = false
+            }
+        onDispose { reg?.remove() }
+    }
+
+    fun submitComment() {
+        val text = inputText.trim()
+        if (text.isBlank() || myUid.isBlank()) return
+        val editing  = editTarget
+        inputText    = ""
+        editTarget   = null
+        if (editing != null) {
+            vm.editChapterComment(serialId, chapterId, editing.id, text)
+            return
+        }
+        val rTo = replyTo
+        replyTo = null
+        vm.addChapterComment(serialId, chapterId, text, rTo?.name ?: "", rTo?.id ?: "")
+    }
+
+    fun deleteComment(cmt: ChCmt) { vm.deleteChapterComment(serialId, chapterId, cmt.id) }
+
+    // ── UI ────────────────────────────────────────────────────────────────────
+    Box(modifier = Modifier.fillMaxSize().imePadding()) {
+        Scaffold(
+            containerColor = Background,
+            topBar = {
+                TopAppBar(
+                    title = {
                         Text(
-                            ch.body,
-                            color      = OnBackground,
-                            fontSize   = 16.sp,
-                            lineHeight = 26.sp,
+                            chapter?.title ?: Strings.chapter(language),
+                            color = OnBackground, fontWeight = FontWeight.SemiBold,
+                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         )
-                    }
-                } ?: CircularProgressIndicator(color = Amber)
-            }
-        }
-    }
-}
-
-// ── Tam ekran bölüm yazma overlay ────────────────────────────────────────────
-// Yorum ekranıyla aynı mantık:
-//   • imePadding() en dış Box'ta — Scaffold/Dialog bağımsız çalışır
-//   • Üst çubuk (geri + başlık + kaydet) sabit, klavyeden etkilenmez
-//   • Başlık OutlinedTextField sabit üstte
-//   • RichTextEditor ortada, kalan alanı doldurur
-//   • Alt çubuk (kelime sayısı) navigationBarsPadding ile sabit altta
-@Composable
-fun ChapterEditorOverlay(
-    title        : String,
-    body         : String,
-    onTitleChange: (String) -> Unit,
-    onBodyChange : (String) -> Unit,
-    heading      : String,
-    saveLabel    : String,
-    canSave      : Boolean,
-    language     : String,
-    onDismiss    : () -> Unit,
-    onSave       : () -> Unit,
-) {
-    // imePadding en dışta — PostDetailScreen ile aynı pattern
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(HeftSurface)
-            .imePadding()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-        ) {
-            // ── Üst çubuk: Geri | Başlık | Kaydet ────────────────────────────
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(HeftSurface)
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, null, tint = Muted)
-                }
-                Text(
-                    heading,
-                    color      = OnBackground,
-                    fontWeight = FontWeight.Bold,
-                    fontSize   = 17.sp,
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.Default.ArrowBack, null, tint = OnBackground)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
                 )
-                TextButton(
-                    onClick = onSave,
-                    enabled = canSave,
+            },
+        ) { padding ->
+            Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+
+                // ── İçerik + yorumlar listesi ─────────────────────────────────
+                LazyColumn(
+                    state          = listState,
+                    modifier       = Modifier.weight(1f),
+                    contentPadding = PaddingValues(bottom = 16.dp),
                 ) {
-                    Text(
-                        saveLabel,
-                        color      = if (canSave) Amber else Muted,
-                        fontWeight = FontWeight.Bold,
-                        fontSize   = 15.sp,
+                    // Bölüm içeriği
+                    item {
+                        chapter?.let { ch ->
+                            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+                                // Meta: bölüm no + kelime sayısı
+                                Text(
+                                    "${Strings.chapter(language)} ${ch.order} · ${Strings.wordCount(language, ch.wordCount)}",
+                                    color = Muted, fontSize = 12.sp,
+                                )
+                                Spacer(Modifier.height(16.dp))
+
+                                // İçerik
+                                if (ch.body.contains("<") && ch.body.contains(">")) {
+                                    AndroidView(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        factory  = { ctx ->
+                                            android.widget.TextView(ctx).apply {
+                                                setTextColor(android.graphics.Color.parseColor("#E5E5EA"))
+                                                textSize = 16f
+                                                setLineSpacing(0f, 1.6f)
+                                            }
+                                        },
+                                        update = { tv ->
+                                            @Suppress("DEPRECATION")
+                                            val spanned = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N)
+                                                android.text.Html.fromHtml(ch.body, android.text.Html.FROM_HTML_MODE_COMPACT)
+                                            else android.text.Html.fromHtml(ch.body)
+                                            tv.text = spanned
+                                        }
+                                    )
+                                } else {
+                                    Text(ch.body, color = OnBackground, fontSize = 16.sp, lineHeight = 26.sp)
+                                }
+
+                                Spacer(Modifier.height(24.dp))
+
+                                // Beğeni + Yorum sayacı
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                                ) {
+                                    // Beğen
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.clickable {
+                                            val newLiked = vm.toggleLikeChapter(serialId, chapterId, ch.isLikedByMe)
+                                        },
+                                    ) {
+                                        Icon(
+                                            if (ch.isLikedByMe) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                            null,
+                                            tint     = if (ch.isLikedByMe) Color(0xFFEF4444) else Muted,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                        Spacer(Modifier.width(5.dp))
+                                        Text("${ch.likes}", color = Muted, fontSize = 13.sp)
+                                    }
+                                    // Yorum
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.clickable {
+                                            focusRequester.requestFocus(); keyboardCtrl?.show()
+                                        },
+                                    ) {
+                                        Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Muted, modifier = Modifier.size(20.dp))
+                                        Spacer(Modifier.width(5.dp))
+                                        Text("${ch.cmtCount}", color = Muted, fontSize = 13.sp)
+                                    }
+                                }
+                            }
+                        } ?: Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = Amber)
+                        }
+                        HorizontalDivider(color = SurfaceVar, thickness = 6.dp)
+                    }
+
+                    // Yorum başlığı
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment     = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(Strings.comments(language), color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            if (comments.isNotEmpty()) Text("${comments.size}", color = Muted, fontSize = 13.sp)
+                        }
+                        HorizontalDivider(color = Divider)
+                    }
+
+                    if (cmtLoading) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = Amber, modifier = Modifier.size(24.dp))
+                            }
+                        }
+                    }
+
+                    if (!cmtLoading && comments.isEmpty()) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("💬", fontSize = 32.sp)
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(Strings.noComments(language), color = Muted, fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    items(comments, key = { it.id }) { cmt ->
+                        val isOwner   = myUid.isNotBlank() && cmt.uid == myUid
+                        val canDelete = isOwner || (chapter?.uid?.let { it == myUid } ?: false)
+                        ChapterCommentRow(
+                            id          = cmt.id,
+                            uid         = cmt.uid,
+                            name        = cmt.name,
+                            photoURL    = cmt.photoURL,
+                            text        = cmt.text,
+                            replyTo     = cmt.replyTo,
+                            likes       = cmt.likes,
+                            edited      = cmt.edited,
+                            canEdit     = isOwner,
+                            canDelete   = canDelete,
+                            language    = language,
+                            onLongPress = { menuTarget = cmt },
+                            onReply     = { replyTo = cmt; editTarget = null; focusRequester.requestFocus(); keyboardCtrl?.show() },
+                            onEdit      = { editTarget = cmt; replyTo = null },
+                            onDelete    = { deleteTarget = cmt },
+                        )
+                        HorizontalDivider(color = Divider.copy(alpha = 0.4f), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp))
+                    }
+                }
+
+                // ── Düzenleme / Yanıt göstergesi ─────────────────────────────
+                val indicator = editTarget ?: replyTo
+                if (indicator != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().background(SurfaceVar).padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            if (editTarget != null) {
+                                Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(Strings.editCommentTitle(language), color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            } else {
+                                Icon(Icons.AutoMirrored.Filled.Reply, null, tint = Amber, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("@${replyTo!!.name} ${Strings.replyingToSuffix(language)}", color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                        IconButton(onClick = { editTarget = null; replyTo = null; inputText = "" }, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+
+                // ── Giriş kutusu ─────────────────────────────────────────────
+                HorizontalDivider(color = Divider)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Background)
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value         = inputText,
+                        onValueChange = { inputText = it },
+                        placeholder   = {
+                            Text(
+                                when {
+                                    editTarget != null -> Strings.editCommentHint(language)
+                                    replyTo    != null -> "@${replyTo!!.name} ${Strings.reply(language)}..."
+                                    else               -> Strings.commentHint(language)
+                                },
+                                color = Muted, fontSize = 14.sp,
+                            )
+                        },
+                        modifier        = Modifier.weight(1f).focusRequester(focusRequester),
+                        shape           = RoundedCornerShape(24.dp),
+                        colors          = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor      = Amber,
+                            unfocusedBorderColor    = Divider,
+                            cursorColor             = Amber,
+                            focusedTextColor        = OnBackground,
+                            unfocusedTextColor      = OnBackground,
+                            focusedContainerColor   = SurfaceVar,
+                            unfocusedContainerColor = SurfaceVar,
+                        ),
+                        maxLines        = 4,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = { submitComment() }),
                     )
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(
+                        onClick  = { submitComment() },
+                        enabled  = inputText.isNotBlank(),
+                        modifier = Modifier.size(44.dp).background(
+                            if (inputText.isNotBlank()) Amber else Muted.copy(alpha = 0.15f), CircleShape,
+                        ),
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Send, null,
+                            tint = if (inputText.isNotBlank()) Color.Black else Muted,
+                            modifier = Modifier.size(20.dp))
+                    }
                 }
             }
+        }
+    }
 
-            HorizontalDivider(color = Divider)
+    // ── Long-press menü ───────────────────────────────────────────────────────
+    menuTarget?.let { cmt ->
+        val isOwner   = myUid.isNotBlank() && cmt.uid == myUid
+        val canDelete = isOwner || (chapter?.uid?.let { it == myUid } ?: false)
+        AlertDialog(
+            onDismissRequest = { menuTarget = null },
+            containerColor   = HeftSurface,
+            title = { Text(cmt.name, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
+            text  = { Text(cmt.text.take(100) + if (cmt.text.length > 100) "…" else "", color = Muted, fontSize = 13.sp) },
+            confirmButton = {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { replyTo = cmt; editTarget = null; menuTarget = null; focusRequester.requestFocus(); keyboardCtrl?.show() }, Modifier.fillMaxWidth()) {
+                        Icon(Icons.AutoMirrored.Filled.Reply, null, tint = Amber, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(8.dp))
+                        Text(Strings.replyAction(language), color = Amber)
+                    }
+                    if (isOwner) TextButton(onClick = { editTarget = cmt; replyTo = null; menuTarget = null }, Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Edit, null, tint = OnBackground, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(8.dp))
+                        Text(Strings.editAction(language), color = OnBackground)
+                    }
+                    if (canDelete) TextButton(onClick = { deleteTarget = cmt; menuTarget = null }, Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp)); Spacer(Modifier.width(8.dp))
+                        Text(Strings.deleteAction(language), color = Color(0xFFEF4444))
+                    }
+                    TextButton(onClick = { menuTarget = null }, Modifier.fillMaxWidth()) {
+                        Text(Strings.cancelAction(language), color = Muted)
+                    }
+                }
+            },
+        )
+    }
 
-            // ── Bölüm başlığı ─────────────────────────────────────────────────
-            OutlinedTextField(
-                value         = title,
-                onValueChange = onTitleChange,
-                placeholder   = { Text(Strings.chapterTitle(language) + " *", color = Muted) },
-                singleLine    = true,
-                modifier      = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                colors        = hfTextFieldColors(),
-            )
+    deleteTarget?.let { cmt ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            containerColor   = HeftSurface,
+            title  = { Text(Strings.deleteCommentTitle(language), color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            text   = { Text(cmt.text.take(80), color = Muted, fontSize = 13.sp) },
+            confirmButton  = { TextButton(onClick = { deleteComment(cmt); deleteTarget = null }) { Text(Strings.deleteAction(language), color = Color(0xFFEF4444), fontWeight = FontWeight.Bold) } },
+            dismissButton  = { TextButton(onClick = { deleteTarget = null }) { Text(Strings.cancelAction(language), color = Muted) } },
+        )
+    }
+}
 
-            HorizontalDivider(color = Divider)
-
-            // ── İçerik editörü — kalan alanı doldurur ────────────────────────
-            // RichTextEditor kendi içinde kelime sayacı gösteriyor.
-            // navigationBarsPadding burada — editör sistem çubuğunun üstünde biter.
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-            ) {
-                RichTextEditor(
-                    value       = body,
-                    onChange    = onBodyChange,
-                    placeholder = "$heading...",
-                    modifier    = Modifier.fillMaxSize(),
-                )
+// ── Bölüm yorum satırı ───────────────────────────────────────────────────────
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun ChapterCommentRow(
+    id: String, uid: String, name: String, photoURL: String, text: String,
+    replyTo: String, likes: Int, edited: Boolean,
+    canEdit: Boolean, canDelete: Boolean, language: String,
+    onLongPress: () -> Unit, onReply: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .combinedClickable(onClick = {}, onLongClick = onLongPress)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(SurfaceVar), contentAlignment = Alignment.Center) {
+            if (photoURL.isNotBlank()) {
+                AsyncImage(model = photoURL, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            } else {
+                Text(name.firstOrNull()?.uppercase() ?: "?", color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                if (edited) { Spacer(Modifier.width(4.dp)); Text("· ${Strings.editedLabel(language)}", color = Muted, fontSize = 10.sp) }
+            }
+            if (replyTo.isNotBlank()) Text("@$replyTo", color = Amber, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.height(2.dp))
+            Text(text, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
+            Row(modifier = Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (likes > 0) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Favorite, null, tint = Color(0xFFEF4444), modifier = Modifier.size(11.dp))
+                    Spacer(Modifier.width(2.dp)); Text("$likes", color = Muted, fontSize = 11.sp)
+                }
+                Text(Strings.replyAction(language), color = Muted, fontSize = 11.sp, modifier = Modifier.clickable { onReply() })
+                if (canEdit) Text(Strings.editAction(language), color = Muted, fontSize = 11.sp, modifier = Modifier.clickable { onEdit() })
+                if (canDelete) Text(Strings.deleteAction(language), color = Color(0xFFEF4444).copy(alpha = 0.7f), fontSize = 11.sp, modifier = Modifier.clickable { onDelete() })
             }
         }
     }
 }
+
 
 // ── Dialoglar ────────────────────────────────────────────────────────────────
 @Composable
