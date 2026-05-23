@@ -58,6 +58,7 @@ import com.heftreng.app.ui.screens.quotes.AuthorDetailScreen
 import com.heftreng.app.ui.screens.quotes.LibraryBookDetailScreen
 import com.heftreng.app.ui.screens.quotes.AuthorQuotesSmartScreen
 import com.heftreng.app.ui.screens.quotes.BookQuotesSmartScreen
+import com.heftreng.app.ui.screens.library.LibraryScreen
 import com.heftreng.app.ui.screens.settings.SettingsScreen
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AppConfigViewModel
@@ -89,6 +90,7 @@ sealed class Screen(val route: String) {
     object Chapter       : Screen("chapter/{sid}/{cid}") { fun go(s: String, c: String) = "chapter/$s/$c" }
     object ReadingList   : Screen("reading_list/{uid}") { fun go(uid: String) = "reading_list/$uid" }
     object Books         : Screen("books")
+    object Library       : Screen("library")
     object BookDetail    : Screen("book/{bookId}")         { fun go(id: String) = "book/$id" }
     object CmsPage       : Screen("cms_page/{slug}")       { fun go(slug: String) = "cms_page/$slug" }
     object Yazar         : Screen("yazar")
@@ -101,7 +103,7 @@ sealed class Screen(val route: String) {
 data class BottomNavItem(val route: String, val label: String, val icon: ImageVector, val iconSel: ImageVector)
 
 private val bottomNavRoutes = setOf(
-    Screen.Feed.route, Screen.Blog.route, Screen.Serials.route,
+    Screen.Feed.route, Screen.Blog.route, Screen.Library.route,
     Screen.Kurdi.route, "profile/me",
 )
 
@@ -127,7 +129,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val bottomNavItems = listOf(
         BottomNavItem(Screen.Feed.route,    Strings.navFeed(language),    Icons.Outlined.DynamicFeed,  Icons.Filled.DynamicFeed),
         BottomNavItem(Screen.Blog.route,    Strings.navBlog(language),    Icons.Outlined.Article,       Icons.Filled.Article),
-        BottomNavItem(Screen.Serials.route, Strings.navBooks(language),   Icons.Outlined.AutoStories,  Icons.Filled.AutoStories),
+        BottomNavItem(Screen.Library.route, Strings.navLibrary(language), Icons.Outlined.LocalLibrary,  Icons.Filled.LocalLibrary),
         BottomNavItem(Screen.Kurdi.route,   Strings.navKurdi(language),   Icons.Outlined.Translate,     Icons.Filled.Translate),
         BottomNavItem("profile/me",         Strings.navProfile(language), Icons.Outlined.PersonOutline, Icons.Filled.Person),
     )
@@ -365,6 +367,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 }
                 composable(Screen.Search.route) { SearchScreen(navController, language = language) }
                 composable(Screen.Serials.route) { BooksScreen(navController, language) }
+                composable(Screen.Library.route) { LibraryScreen(navController, language) }
                 composable(Screen.Kurdi.route)   { KurdiScreen(language = language) }
                 composable("profile/{uid}") { back ->
                     ProfileScreen(
