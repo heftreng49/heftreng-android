@@ -213,11 +213,17 @@ fun SavedPostsScreen(
                                     else           -> navController.navigate(Screen.PostDetail.go(repostId))
                                 }
                             },
-                            onTapAuthor  = { author ->
-                                navController.navigate("author_quotes/${URLEncoder.encode(author, "UTF-8")}")
+                            onTapAuthor  = { _ ->
+                                if (post.libraryAuthorId.isNotBlank())
+                                    navController.navigate("author_detail/${post.libraryAuthorId}")
+                                else
+                                    navController.navigate("author_quotes/${URLEncoder.encode(post.authorName, "UTF-8")}")
                             },
-                            onTapBook    = { book ->
-                                navController.navigate("book_quotes/${URLEncoder.encode(book, "UTF-8")}")
+                            onTapBook    = { _ ->
+                                if (post.libraryBookId.isNotBlank())
+                                    navController.navigate("library_book_detail/${post.libraryBookId}")
+                                else
+                                    navController.navigate("book_quotes/${URLEncoder.encode(post.bookName, "UTF-8")}")
                             },
                             language = language,
                         )

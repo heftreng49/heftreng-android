@@ -73,6 +73,9 @@ data class Post(
     val isSavedByMe      : Boolean    = false,
     val isRepostedByMe   : Boolean    = false,
     val myRepostId       : String     = "",
+    // Kütüphane alıntı/inceleme için Firestore ID'leri
+    val libraryBookId    : String     = "",
+    val libraryAuthorId  : String     = "",
 )
 
 // ─── YORUM ─────────────────────────────────────────────
