@@ -566,27 +566,121 @@ class FeedViewModel @Inject constructor(
                 val myPhoto = userDoc.getString("photoURL") ?: auth.currentUser?.photoUrl?.toString() ?: ""
                 val myUser  = userDoc.getString("username") ?: ""
                 val myEmail = userDoc.getString("email") ?: auth.currentUser?.email ?: ""
-                firestore.collection("feed").add(mapOf(
-                    "uid"          to uid,
-                    "name"         to myName,
-                    "displayName"  to myName,
-                    "username"     to myUser,
-                    "photoURL"     to myPhoto,
-                    "authorEmail"  to myEmail,
-                    "text"         to text,
-                    "imgUrl"       to imageURL,
-                    "imageURL"     to imageURL,
-                    "quote"        to if (quoteText.isNotBlank()) mapOf(
+
+                // ── Alıntı varsa yazar ve kitap sayfalarını otomatik oluştur ──────
+                var libraryAuthorId = ""
+                var libraryBookId   = ""
+                if (quoteText.isNotBlank() && (authorName.isNotBlank() || bookName.isNotBlank())) {
+                    try {
+                        val (aid, bid) = ensureAuthorAndBook(authorName, bookName)
+                        libraryAuthorId = aid
+                        libraryBookId   = bid
+                    } catch (_: Exception) {}
+                }
+
+                val feedRef = firestore.collection("feed").add(mapOf(
+                    "uid"              to uid,
+                    "name"             to myName,
+                    "displayName"      to myName,
+                    "username"         to myUser,
+                    "photoURL"         to myPhoto,
+                    "authorEmail"      to myEmail,
+                    "text"             to text,
+                    "imgUrl"           to imageURL,
+                    "imageURL"         to imageURL,
+                    "quote"            to if (quoteText.isNotBlank()) mapOf(
                         "text" to quoteText, "book" to bookName, "author" to authorName,
                     ) else null,
-                    "quoteText"    to quoteText,
-                    "authorName"   to authorName,
-                    "bookName"     to bookName,
-                    "likes"        to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
-                    "ts"           to Timestamp.now(),
+                    "quoteText"        to quoteText,
+                    "authorName"       to authorName,
+                    "bookName"         to bookName,
+                    "libraryAuthorId"  to libraryAuthorId,
+                    "libraryBookId"    to libraryBookId,
+                    "likes"            to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
+                    "ts"               to Timestamp.now(),
                 )).await()
+
+                // ── Kütüphane alıntı alt koleksiyonuna da ekle ────────────────
+                if (quoteText.isNotBlank() && libraryBookId.isNotBlank()) {
+                    try {
+                        val quoteData = hashMapOf(
+                            "bookId"          to libraryBookId,
+                            "authorId"        to libraryAuthorId,
+                            "bookTitle"       to bookName,
+                            "authorName"      to authorName,
+                            "text"            to quoteText,
+                            "uid"             to uid,
+                            "userDisplayName" to myName,
+                            "userPhotoURL"    to myPhoto,
+                            "feedPostId"      to feedRef.id,
+                            "likesCount"      to 0,
+                            "ts"              to Timestamp.now(),
+                        )
+                        firestore.collection("library_books").document(libraryBookId)
+                            .collection("quotes").add(quoteData).await()
+                        // Sayaç güncelle
+                        firestore.collection("library_books").document(libraryBookId)
+                            .update("quoteCount", com.google.firebase.firestore.FieldValue.increment(1))
+                        if (libraryAuthorId.isNotBlank()) {
+                            firestore.collection("authors").document(libraryAuthorId)
+                                .update("quoteCount", com.google.firebase.firestore.FieldValue.increment(1))
+                        }
+                    } catch (_: Exception) {}
+                }
             } catch (e: Exception) { e.printStackTrace() }
         }
+    }
+
+    // ── Yazar ve kitap otomatik oluşturma ─────────────────────────────────
+    private suspend fun ensureAuthorAndBook(authorName: String, bookName: String): Pair<String, String> {
+        val authorId = if (authorName.isNotBlank()) {
+            try {
+                val snap = firestore.collection("authors")
+                    .whereEqualTo("name", authorName.trim()).limit(1).get().await()
+                if (!snap.isEmpty) snap.documents[0].id
+                else {
+                    firestore.collection("authors").add(hashMapOf(
+                        "name"          to authorName.trim(),
+                        "nameLower"     to authorName.trim().lowercase(),
+                        "bio"           to "", "photoURL" to "", "birthYear" to 0,
+                        "nationality"   to "", "bookCount" to 0, "quoteCount" to 0,
+                        "reviewCount"   to 0, "followerCount" to 0,
+                        "autoCreated"   to true,
+                        "ts"            to Timestamp.now(),
+                    )).await().id
+                }
+            } catch (_: Exception) { "" }
+        } else ""
+
+        val bookId = if (bookName.isNotBlank()) {
+            try {
+                val snap = firestore.collection("library_books")
+                    .whereEqualTo("title", bookName.trim()).limit(1).get().await()
+                if (!snap.isEmpty) snap.documents[0].id
+                else {
+                    val bid = firestore.collection("library_books").add(hashMapOf(
+                        "title"       to bookName.trim(),
+                        "titleLower"  to bookName.trim().lowercase(),
+                        "authorId"    to authorId,
+                        "authorName"  to authorName,
+                        "coverImg"    to "", "genre" to "", "publishYear" to 0,
+                        "synopsis"    to "", "pageCount" to 0,
+                        "quoteCount"  to 0, "reviewCount" to 0, "avgRating" to 0f,
+                        "autoCreated" to true,
+                        "ts"          to Timestamp.now(),
+                    )).await().id
+                    if (authorId.isNotBlank()) {
+                        try {
+                            firestore.collection("authors").document(authorId)
+                                .update("bookCount", com.google.firebase.firestore.FieldValue.increment(1))
+                        } catch (_: Exception) {}
+                    }
+                    bid
+                }
+            } catch (_: Exception) { "" }
+        } else ""
+
+        return Pair(authorId, bookId)
     }
 
     fun deletePost(postId: String) {

@@ -155,7 +155,7 @@ fun AuthorDetailScreen(
                             items(books, key = { it.id }) { book ->
                                 LibraryBookCard(
                                     book    = book,
-                                    onClick = { navController.navigate("library_book/${book.id}") },
+                                    onClick = { navController.navigate("library_book_detail/${book.id}") },
                                 )
                             }
                         }
@@ -977,6 +977,159 @@ private fun LegacyQuoteListPage(
                     )
                 }
             }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  AKILLI YÖNLENDIRME EKRANLARİ
+//
+//  author_quotes/{ad} veya book_quotes/{ad} rotasına gelindiğinde:
+//    1. Firestore'da o ada ait library kaydı ara
+//    2. Varsa → AuthorDetailScreen / LibraryBookDetailScreen'e git
+//    3. Yoksa → Kaydı otomatik oluştur ve detail ekranına git
+//    4. Hata durumunda → Eski legacy liste ekranı (hiç bir şey kırılmaz)
+//
+//  Bu şekilde eski alıntılara basıldığında da tam kütüphane sayfası açılır.
+// ═══════════════════════════════════════════════════════════════════════════
+
+@Composable
+fun AuthorQuotesSmartScreen(
+    authorName   : String,
+    navController: NavController,
+) {
+    val db = remember { FirebaseFirestore.getInstance() }
+    // null = yükleniyor, "" = bulunamadı, "id" = bulundu
+    var resolvedId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(authorName) {
+        if (authorName.isBlank()) { resolvedId = ""; return@LaunchedEffect }
+        try {
+            // 1. Tam ada göre ara
+            var snap = db.collection("authors")
+                .whereEqualTo("name", authorName.trim())
+                .limit(1).get().await()
+            if (!snap.isEmpty) {
+                resolvedId = snap.documents[0].id
+                return@LaunchedEffect
+            }
+            // 2. lowercase'e göre ara
+            snap = db.collection("authors")
+                .whereEqualTo("nameLower", authorName.trim().lowercase())
+                .limit(1).get().await()
+            if (!snap.isEmpty) {
+                resolvedId = snap.documents[0].id
+                return@LaunchedEffect
+            }
+            // 3. Bulunamadı → otomatik oluştur
+            val newId = db.collection("authors").add(hashMapOf(
+                "name"          to authorName.trim(),
+                "nameLower"     to authorName.trim().lowercase(),
+                "bio"           to "", "photoURL" to "", "birthYear" to 0,
+                "nationality"   to "", "bookCount" to 0, "quoteCount" to 0,
+                "reviewCount"   to 0, "followerCount" to 0,
+                "autoCreated"   to true,
+                "ts"            to com.google.firebase.Timestamp.now(),
+            )).await().id
+            resolvedId = newId
+        } catch (_: Exception) {
+            resolvedId = "" // Hata: legacy ekrana düş
+        }
+    }
+
+    when {
+        // Yükleniyor
+        resolvedId == null -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Primary)
+            }
+        }
+        // Bulundu / oluşturuldu → detail ekrana git
+        resolvedId!!.isNotBlank() -> {
+            LaunchedEffect(resolvedId) {
+                navController.navigate("author_detail/$resolvedId") {
+                    popUpTo("author_quotes/${authorName}") { inclusive = true }
+                }
+            }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Primary)
+            }
+        }
+        // Hata → eski ekran
+        else -> {
+            AuthorQuotesScreen(
+                authorName = authorName,
+                onBack     = { navController.popBackStack() },
+            )
+        }
+    }
+}
+
+@Composable
+fun BookQuotesSmartScreen(
+    bookName     : String,
+    navController: NavController,
+) {
+    val db = remember { FirebaseFirestore.getInstance() }
+    var resolvedId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(bookName) {
+        if (bookName.isBlank()) { resolvedId = ""; return@LaunchedEffect }
+        try {
+            // 1. Tam ada göre ara
+            var snap = db.collection("library_books")
+                .whereEqualTo("title", bookName.trim())
+                .limit(1).get().await()
+            if (!snap.isEmpty) {
+                resolvedId = snap.documents[0].id
+                return@LaunchedEffect
+            }
+            // 2. lowercase'e göre ara
+            snap = db.collection("library_books")
+                .whereEqualTo("titleLower", bookName.trim().lowercase())
+                .limit(1).get().await()
+            if (!snap.isEmpty) {
+                resolvedId = snap.documents[0].id
+                return@LaunchedEffect
+            }
+            // 3. Bulunamadı → otomatik oluştur
+            val newId = db.collection("library_books").add(hashMapOf(
+                "title"       to bookName.trim(),
+                "titleLower"  to bookName.trim().lowercase(),
+                "authorId"    to "", "authorName" to "",
+                "coverImg"    to "", "genre" to "", "publishYear" to 0,
+                "synopsis"    to "", "pageCount" to 0,
+                "quoteCount"  to 0, "reviewCount" to 0, "avgRating" to 0f,
+                "autoCreated" to true,
+                "ts"          to com.google.firebase.Timestamp.now(),
+            )).await().id
+            resolvedId = newId
+        } catch (_: Exception) {
+            resolvedId = ""
+        }
+    }
+
+    when {
+        resolvedId == null -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Primary)
+            }
+        }
+        resolvedId!!.isNotBlank() -> {
+            LaunchedEffect(resolvedId) {
+                navController.navigate("library_book_detail/$resolvedId") {
+                    popUpTo("book_quotes/${bookName}") { inclusive = true }
+                }
+            }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Primary)
+            }
+        }
+        else -> {
+            BookQuotesScreen(
+                bookName = bookName,
+                onBack   = { navController.popBackStack() },
+            )
         }
     }
 }

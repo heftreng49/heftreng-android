@@ -54,6 +54,10 @@ import com.heftreng.app.ui.screens.books.BookDetailScreen
 import com.heftreng.app.ui.screens.books.BooksScreen
 import com.heftreng.app.ui.screens.quotes.AuthorQuotesScreen
 import com.heftreng.app.ui.screens.quotes.BookQuotesScreen
+import com.heftreng.app.ui.screens.quotes.AuthorDetailScreen
+import com.heftreng.app.ui.screens.quotes.LibraryBookDetailScreen
+import com.heftreng.app.ui.screens.quotes.AuthorQuotesSmartScreen
+import com.heftreng.app.ui.screens.quotes.BookQuotesSmartScreen
 import com.heftreng.app.ui.screens.settings.SettingsScreen
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AppConfigViewModel
@@ -422,15 +426,38 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                         language      = language,
                     )
                 }
+                // ── Kütüphane: Yazar Detay ─────────────────────────────
+                composable("author_detail/{authorId}") { back ->
+                    AuthorDetailScreen(
+                        authorId      = back.arguments?.getString("authorId") ?: "",
+                        navController = navController,
+                    )
+                }
+                // ── Kütüphane: Kitap Detay ─────────────────────────────
+                composable("library_book_detail/{bookId}") { back ->
+                    LibraryBookDetailScreen(
+                        bookId        = back.arguments?.getString("bookId") ?: "",
+                        navController = navController,
+                    )
+                }
+                // ── Legacy: ad üzerinden akıllı yönlendirme ─────────────
+                // Firestore'da önce library kaydı aranır; bulunursa detail ekranı açılır,
+                // bulunamazsa eski liste ekranı gösterilir (tam uyumluluk).
                 composable("author_quotes/{author}") { back ->
                     val author = java.net.URLDecoder.decode(
                         back.arguments?.getString("author") ?: "", "UTF-8")
-                    AuthorQuotesScreen(authorName = author, onBack = { navController.popBackStack() })
+                    AuthorQuotesSmartScreen(
+                        authorName    = author,
+                        navController = navController,
+                    )
                 }
                 composable("book_quotes/{book}") { back ->
                     val book = java.net.URLDecoder.decode(
                         back.arguments?.getString("book") ?: "", "UTF-8")
-                    BookQuotesScreen(bookName = book, onBack = { navController.popBackStack() })
+                    BookQuotesSmartScreen(
+                        bookName      = book,
+                        navController = navController,
+                    )
                 }
                 composable(Screen.Books.route) { BooksScreen(navController, language) }
                 // book/{bookId}?type=book|serial

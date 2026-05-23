@@ -1,5 +1,6 @@
 package com.heftreng.app.ui.screens.admin
 
+
 import androidx.compose.foundation.background
 
 import androidx.compose.foundation.layout.*
@@ -21,6 +22,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.heftreng.app.viewmodel.LibraryViewModel
 import androidx.navigation.NavController
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AdminViewModel
@@ -31,6 +33,7 @@ import androidx.compose.foundation.clickable
 fun AdminScreen(
     navController: NavController,
     vm           : AdminViewModel = hiltViewModel(),
+    libraryVm    : LibraryViewModel = hiltViewModel(),
 ) {
     val isAdmin     by vm.isAdmin.collectAsState()
     val users       by vm.users.collectAsState()
@@ -62,7 +65,7 @@ fun AdminScreen(
     // Şikayetler
     val reports     by vm.reports.collectAsState()
 
-    val tabs = listOf("Push", "Bildirim", "Kullanıcılar", "Bekleyenler", "Şikayetler", "İstatistik", "Düzenle")
+    val tabs = listOf("Push", "Bildirim", "Kullanıcılar", "Bekleyenler", "Şikayetler", "İstatistik", "Düzenle", "Kütüphane")
 
     LaunchedEffect(Unit) {
         vm.checkAdmin()
@@ -608,6 +611,13 @@ fun AdminScreen(
                     }
                 }
             }
+                // ─────────────────────────────────────────────────────────
+                //  TAB 7 — KÜTÜPHANE: Yazar & Kitap Yönetimi
+                // ─────────────────────────────────────────────────────────
+                7 -> {
+                    AdminLibraryTab(libraryVm = libraryVm)
+                }
+            }
         }
     }
 
@@ -673,5 +683,455 @@ private fun adminTextField(
             unfocusedLabelColor     = Muted,
             cursorColor             = Amber,
         ),
+    )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ADMIN KÜTÜPHANESİ — Yazar & Kitap Düzenleme Tabı
+//  AdminScreen içinde "Kütüphane" tabı seçildiğinde gösterilir.
+// ═══════════════════════════════════════════════════════════════════════════
+
+@Composable
+private fun AdminLibraryTab(libraryVm: LibraryViewModel) {
+    val authors  by libraryVm.authors.collectAsState()
+    val loading  by libraryVm.loading.collectAsState()
+    val error    by libraryVm.error.collectAsState()
+    val scope    = rememberCoroutineScope()
+
+    var showNewAuthor by remember { mutableStateOf(false) }
+    var editAuthor    by remember { mutableStateOf<com.heftreng.app.data.model.Author?>(null) }
+    var editBook      by remember { mutableStateOf<com.heftreng.app.data.model.LibraryBook?>(null) }
+
+    var migrateStatus by remember { mutableStateOf("") }
+    var migrateRunning by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { libraryVm.loadAuthors() }
+
+    LazyColumn(
+        modifier       = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // ── Başlık ────────────────────────────────────────────────────────
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text("Kütüphane Yönetimi", color = OnBackground,
+                        fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Yazar & Kitap sayfalarını düzenle", color = Muted, fontSize = 12.sp)
+                }
+                Button(
+                    onClick = { showNewAuthor = true },
+                    colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color(0xFF1A1040)),
+                    shape   = RoundedCornerShape(10.dp),
+                ) {
+                    Icon(Icons.Default.PersonAdd, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Yazar Ekle", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // ── Eski Alıntı Migrasyonu ────────────────────────────────────────
+        item {
+            Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Sync, null, tint = Primary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Eski Alıntıları Eşleştir", color = OnBackground,
+                            fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Feed'deki mevcut alıntıları kitap/yazar sayfalarına otomatik bağlar. " +
+                        "Yeni oluşturulan yazar ve kitap sayfaları da dahil edilir.",
+                        color = Muted, fontSize = 12.sp, lineHeight = 18.sp,
+                    )
+                    if (migrateStatus.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(migrateStatus, color = Primary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Button(
+                        onClick  = {
+                            if (!migrateRunning) {
+                                migrateRunning = true
+                                migrateStatus  = "Başlatılıyor…"
+                                libraryVm.migrateLegacyFeedQuotes { done, total ->
+                                    migrateStatus = if (done >= total) "✓ Tamamlandı ($total gönderi işlendi)"
+                                                    else "İşleniyor… $done / $total"
+                                    if (done >= total) migrateRunning = false
+                                }
+                            }
+                        },
+                        enabled  = !migrateRunning,
+                        colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                        shape    = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (migrateRunning) {
+                            CircularProgressIndicator(color = Color.White,
+                                modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(if (migrateRunning) "Çalışıyor…" else "Eşleştirmeyi Başlat",
+                            fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // ── Yazar Listesi ─────────────────────────────────────────────────
+        item {
+            Text("Yazarlar (${authors.size})", color = OnBackground,
+                fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        }
+
+        if (loading && authors.isEmpty()) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Amber, strokeWidth = 2.dp,
+                        modifier = Modifier.size(28.dp))
+                }
+            }
+        }
+
+        items(authors, key = { it.id }) { author ->
+            AdminAuthorCard(
+                author       = author,
+                onEditAuthor = { editAuthor = author },
+                onEditBooks  = { libraryVm.loadAuthor(author.id) },
+                libraryVm    = libraryVm,
+                onEditBook   = { editBook = it },
+            )
+        }
+
+        if (authors.isEmpty() && !loading) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                    Text("Henüz yazar yok", color = Muted, fontSize = 13.sp)
+                }
+            }
+        }
+    }
+
+    // ── Hata Toast ────────────────────────────────────────────────────────
+    error?.let { msg ->
+        LaunchedEffect(msg) {
+            kotlinx.coroutines.delay(3000)
+            libraryVm.clearError()
+        }
+        Box(
+            modifier = Modifier.fillMaxSize().padding(bottom = 16.dp, start = 16.dp, end = 16.dp),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Surface(shape = RoundedCornerShape(10.dp), color = Error) {
+                Text(msg, color = Color.White, fontSize = 13.sp,
+                    modifier = Modifier.padding(12.dp))
+            }
+        }
+    }
+
+    // ── Yeni Yazar Dialog ─────────────────────────────────────────────────
+    if (showNewAuthor) {
+        AdminCreateAuthorDialog(
+            onDismiss = { showNewAuthor = false },
+            onCreate  = { name, bio, photo, year, nat ->
+                libraryVm.createAuthor(name, bio, photo, year, nat)
+                showNewAuthor = false
+            },
+        )
+    }
+
+    // ── Yazar Düzenleme Dialog ────────────────────────────────────────────
+    editAuthor?.let { au ->
+        AdminEditAuthorDialog(
+            author    = au,
+            onDismiss = { editAuthor = null },
+            onSave    = { name, bio, photo, year, nat ->
+                libraryVm.updateAuthor(au.id, name, bio, photo, year, nat)
+                editAuthor = null
+            },
+        )
+    }
+
+    // ── Kitap Düzenleme Dialog ────────────────────────────────────────────
+    editBook?.let { bk ->
+        AdminEditBookDialog(
+            book      = bk,
+            onDismiss = { editBook = null },
+            onSave    = { title, synopsis, genre, year, pages, cover ->
+                libraryVm.updateLibraryBook(bk.id, title, synopsis, genre, year, pages, cover)
+                editBook = null
+            },
+        )
+    }
+}
+
+// ─── Yazar Kartı (admin görünümü) ───────────────────────────────────────────
+@Composable
+private fun AdminAuthorCard(
+    author      : com.heftreng.app.data.model.Author,
+    onEditAuthor: () -> Unit,
+    onEditBooks : () -> Unit,
+    libraryVm   : LibraryViewModel,
+    onEditBook  : (com.heftreng.app.data.model.LibraryBook) -> Unit,
+) {
+    val authorBooks by libraryVm.authorBooks.collectAsState()
+    var expanded    by remember { mutableStateOf(false) }
+
+    Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Avatar
+                Box(
+                    modifier = Modifier.size(44.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(SurfaceVar),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (author.photoURL.isNotBlank()) {
+                        AsyncImage(model = author.photoURL, contentDescription = null,
+                            contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    } else {
+                        Text(
+                            author.name.firstOrNull()?.uppercase() ?: "?",
+                            color = Amber, fontWeight = FontWeight.Bold, fontSize = 16.sp,
+                        )
+                    }
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(author.name, color = OnBackground, fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp)
+                    val meta = buildList {
+                        if (author.nationality.isNotBlank()) add(author.nationality)
+                        if (author.birthYear > 0) add("${author.birthYear}")
+                    }.joinToString(" · ")
+                    if (meta.isNotBlank()) Text(meta, color = Muted, fontSize = 11.sp)
+                    Text(
+                        "${author.bookCount} kitap  ·  ${author.quoteCount} alıntı  ·  ${author.reviewCount} inceleme",
+                        color = Muted, fontSize = 11.sp,
+                    )
+                }
+                // Düzenle butonu
+                IconButton(onClick = onEditAuthor, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(18.dp))
+                }
+                // Kitapları aç
+                IconButton(
+                    onClick = {
+                        if (!expanded) onEditBooks()
+                        expanded = !expanded
+                    },
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        null, tint = Muted, modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+
+            // Biyografi özeti
+            if (author.bio.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(author.bio, color = OnSurface, fontSize = 12.sp, lineHeight = 17.sp, maxLines = 2,
+                    overflow = TextOverflow.Ellipsis)
+            }
+
+            // Genişletilmiş kitap listesi
+            if (expanded) {
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider(color = Divider)
+                Spacer(Modifier.height(8.dp))
+                Text("Kitapları", color = Primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                if (authorBooks.isEmpty()) {
+                    Text("Bu yazara ait kitap yok.", color = Muted, fontSize = 12.sp)
+                }
+                authorBooks.forEach { book ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.AutoStories, null, tint = Muted,
+                            modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(book.title, color = OnBackground, fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium)
+                            val bMeta = buildList {
+                                if (book.genre.isNotBlank()) add(book.genre)
+                                if (book.publishYear > 0) add("${book.publishYear}")
+                                if (book.pageCount > 0) add("${book.pageCount} s.")
+                            }.joinToString(" · ")
+                            if (bMeta.isNotBlank()) Text(bMeta, color = Muted, fontSize = 11.sp)
+                        }
+                        IconButton(onClick = { onEditBook(book) }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── Yeni Yazar Dialog ──────────────────────────────────────────────────────
+@Composable
+private fun AdminCreateAuthorDialog(
+    onDismiss: () -> Unit,
+    onCreate : (name: String, bio: String, photo: String, birthYear: Int, nationality: String) -> Unit,
+) {
+    var name    by remember { mutableStateOf("") }
+    var bio     by remember { mutableStateOf("") }
+    var photo   by remember { mutableStateOf("") }
+    var year    by remember { mutableStateOf("") }
+    var nat     by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = { Text("Yeni Yazar", color = OnBackground, fontWeight = FontWeight.Bold) },
+        text  = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                adminTextField(name,  { name  = it }, "Yazar Adı *")
+                adminTextField(nat,   { nat   = it }, "Milliyet")
+                adminTextField(year,  { year  = it }, "Doğum Yılı")
+                adminTextField(photo, { photo = it }, "Fotoğraf URL")
+                adminTextField(bio,   { bio   = it }, "Biyografi", minLines = 3)
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick  = {
+                    if (name.isNotBlank())
+                        onCreate(name.trim(), bio.trim(), photo.trim(), year.toIntOrNull() ?: 0, nat.trim())
+                },
+                enabled = name.isNotBlank(),
+            ) { Text("Oluştur", color = Amber, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("İptal", color = Muted) }
+        },
+    )
+}
+
+// ─── Yazar Düzenleme Dialog ─────────────────────────────────────────────────
+@Composable
+private fun AdminEditAuthorDialog(
+    author   : com.heftreng.app.data.model.Author,
+    onDismiss: () -> Unit,
+    onSave   : (name: String, bio: String, photo: String, birthYear: Int, nationality: String) -> Unit,
+) {
+    var name  by remember { mutableStateOf(author.name) }
+    var bio   by remember { mutableStateOf(author.bio) }
+    var photo by remember { mutableStateOf(author.photoURL) }
+    var year  by remember { mutableStateOf(if (author.birthYear > 0) author.birthYear.toString() else "") }
+    var nat   by remember { mutableStateOf(author.nationality) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Yazarı Düzenle", color = OnBackground, fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                adminTextField(name,  { name  = it }, "Ad *")
+                adminTextField(nat,   { nat   = it }, "Milliyet")
+                adminTextField(year,  { year  = it }, "Doğum Yılı")
+                adminTextField(photo, { photo = it }, "Fotoğraf URL")
+                adminTextField(bio,   { bio   = it }, "Biyografi", minLines = 4)
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick  = {
+                    if (name.isNotBlank())
+                        onSave(name.trim(), bio.trim(), photo.trim(), year.toIntOrNull() ?: 0, nat.trim())
+                },
+                enabled = name.isNotBlank(),
+            ) { Text("Kaydet", color = Amber, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("İptal", color = Muted) }
+        },
+    )
+}
+
+// ─── Kitap Düzenleme Dialog ─────────────────────────────────────────────────
+@Composable
+private fun AdminEditBookDialog(
+    book     : com.heftreng.app.data.model.LibraryBook,
+    onDismiss: () -> Unit,
+    onSave   : (title: String, synopsis: String, genre: String, publishYear: Int, pageCount: Int, coverImg: String) -> Unit,
+) {
+    var title    by remember { mutableStateOf(book.title) }
+    var synopsis by remember { mutableStateOf(book.synopsis) }
+    var genre    by remember { mutableStateOf(book.genre) }
+    var year     by remember { mutableStateOf(if (book.publishYear > 0) book.publishYear.toString() else "") }
+    var pages    by remember { mutableStateOf(if (book.pageCount > 0) book.pageCount.toString() else "") }
+    var cover    by remember { mutableStateOf(book.coverImg) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.AutoStories, null, tint = Amber, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Kitabı Düzenle", color = OnBackground, fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Yazar bilgisi (salt okunur)
+                Surface(shape = RoundedCornerShape(8.dp), color = SurfaceVar) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Person, null, tint = Muted, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(book.authorName, color = Muted, fontSize = 12.sp)
+                    }
+                }
+                adminTextField(title,    { title    = it }, "Kitap Adı *")
+                adminTextField(genre,    { genre    = it }, "Tür (Roman, Şiir…)")
+                adminTextField(year,     { year     = it }, "Basım Yılı")
+                adminTextField(pages,    { pages    = it }, "Sayfa Sayısı")
+                adminTextField(cover,    { cover    = it }, "Kapak Resmi URL")
+                adminTextField(synopsis, { synopsis = it }, "Hakkında / Özet", minLines = 4)
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick  = {
+                    if (title.isNotBlank())
+                        onSave(
+                            title.trim(), synopsis.trim(), genre.trim(),
+                            year.toIntOrNull() ?: 0, pages.toIntOrNull() ?: 0, cover.trim(),
+                        )
+                },
+                enabled = title.isNotBlank(),
+            ) { Text("Kaydet", color = Amber, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("İptal", color = Muted) }
+        },
     )
 }
