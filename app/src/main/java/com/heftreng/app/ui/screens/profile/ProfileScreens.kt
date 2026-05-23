@@ -63,7 +63,9 @@ fun ProfileScreen(
     val followersCount by vm.followersCount.collectAsState()
     val followingCount by vm.followingCount.collectAsState()
     val loading        by vm.loading.collectAsState()
-    val mySerials      by bookVm.myBooks.collectAsState()
+    val allMyBooks     by bookVm.myBooks.collectAsState()
+    val mySerials      = allMyBooks.filter { it.type == "serial" }
+    val myBooks        = allMyBooks.filter { it.type == "book" }
     val rlEntries      by rlVm.entries.collectAsState()
 
     val followers     by socialVm.followers.collectAsState()
@@ -80,6 +82,7 @@ fun ProfileScreen(
     val tabs = listOf(
         Strings.posts(language),
         Strings.serials(language),
+        Strings.booksTitle(language),
         Strings.readingList(language),
     )
 
@@ -311,8 +314,49 @@ fun ProfileScreen(
                     }
                 }
 
-                // ─── Okuma Listesi ────────────────────────────────────────
+                // ─── Kitaplar ─────────────────────────────────────────────
                 2 -> {
+                    if (myBooks.isEmpty()) {
+                        item(key = "books_empty") {
+                            Box(
+                                Modifier.fillMaxWidth().height(200.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Outlined.MenuBook, null,
+                                        tint     = Muted,
+                                        modifier = Modifier.size(44.dp),
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    Text(if (ku) "Pirtûk tune" else "Henüz kitap yok", color = Muted)
+                                    if (isMe) {
+                                        Spacer(Modifier.height(8.dp))
+                                        TextButton(
+                                            onClick = { navController.navigate("serials") },
+                                        ) {
+                                            Text("+ Yeni Kitap", color = Amber)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        items(myBooks, key = { "book_${it.id}" }) { book ->
+                            Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                                BookCard(
+                                    book      = book,
+                                    onClick   = { navController.navigate("book/${book.id}?type=${book.type}") },
+                                    onLike    = { bookVm.toggleLikeBook(book) },
+                                    onProfile = { navController.navigate("profile/${book.uid}") },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // ─── Okuma Listesi ────────────────────────────────────────
+                3 -> {
                     val allEmpty = rlEntries.values.all { it.isEmpty() }
                     if (allEmpty) {
                         item(key = "rl_empty") {
