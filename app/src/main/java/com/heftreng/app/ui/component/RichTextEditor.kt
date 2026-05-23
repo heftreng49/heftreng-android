@@ -150,8 +150,8 @@ fun RichTextEditor(
     modifier   : Modifier = Modifier,
     placeholder: String   = "İçeriğinizi buraya yazın...",
 ) {
-    var tfv       by remember(value.hashCode()) {
-        mutableStateOf(TextFieldValue(htmlStrip(value)))
+    var tfv by remember(value) {
+        mutableStateOf(TextFieldValue(text = htmlStrip(value)))
     }
     var spans     by remember { mutableStateOf(listOf<RichSpan>()) }
     var isFocused by remember { mutableStateOf(false) }
@@ -378,13 +378,16 @@ fun RichTextEditor(
         }
 
         // ── Yazı alanı ────────────────────────────────────────────────────
+        val annotated = buildAnnotated(tfv.text, spans)
         BasicTextField(
-            value         = tfv.copy(annotatedString = buildAnnotated(tfv.text, spans)),
+            value         = tfv.copy(annotatedString = annotated),
             onValueChange = { new ->
-                val oldLen = tfv.text.length
-                val newLen = new.text.length
-                val diff   = newLen - oldLen
-                tfv = new
+                // Sadece text veya selection değiştiyse işle
+                val oldText = tfv.text
+                val newText = new.text
+                val diff    = newText.length - oldText.length
+                // tfv'yi her zaman güncelle ama annotatedString'i temizle
+                tfv = new.copy(annotatedString = AnnotatedString(new.text))
 
                 if (diff != 0) {
                     val cursor = new.selection.start
@@ -400,9 +403,9 @@ fun RichTextEditor(
                                 if (ne <= s.start) null else s.copy(end = ne)
                             }
                         }
-                    }.filter { it.start < it.end && it.end <= new.text.length }
+                    }.filter { it.start < it.end && it.end <= newText.length }
                 }
-                onChange(spansToHtml(new.text, spans))
+                onChange(spansToHtml(newText, spans))
             },
             cursorBrush   = SolidColor(Amber),
             textStyle     = LocalTextStyle.current.copy(
