@@ -409,7 +409,7 @@ fun RichTextEditor(
                 color         = OnBackground,
                 fontSize      = 15.sp,
                 lineHeight    = 24.sp,
-                textDirection = TextDirection.Content,  // LTR/RTL otomatik algıla
+                textDirection = TextDirection.Ltr,
             ),
             modifier      = Modifier
                 .fillMaxWidth()
