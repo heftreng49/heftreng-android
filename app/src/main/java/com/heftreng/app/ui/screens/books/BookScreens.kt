@@ -15,6 +15,8 @@ import android.text.Html
 import android.text.Spanned
 import android.widget.TextView
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -59,6 +61,7 @@ import com.heftreng.app.viewmodel.BookViewModel
 import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import androidx.compose.ui.text.style.TextDirection
 
