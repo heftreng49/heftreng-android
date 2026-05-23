@@ -822,13 +822,13 @@ fun BookCard(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(
                     Modifier.clip(RoundedCornerShape(4.dp))
-                        .background(if (isSerial) Color(0xFF7C3AED).copy(alpha = 0.15f) else Amber.copy(alpha = 0.15f))
+                        .background(if (isSerial) Primary.copy(alpha = 0.15f) else Amber.copy(alpha = 0.15f))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
                         if (isSerial) (if (language == "ku") "Rêze" else "Seri")
                         else          (if (language == "ku") "Pirtûk" else "Kitap"),
-                        color = if (isSerial) Color(0xFF7C3AED) else Amber,
+                        color = if (isSerial) Primary else Amber,
                         fontSize = 9.sp, fontWeight = FontWeight.Bold,
                     )
                 }
@@ -913,7 +913,7 @@ fun BookDetailHeader(
             Box(
                 Modifier.align(Alignment.TopEnd).padding(10.dp)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(if (isSerial) Color(0xFF7C3AED) else Amber)
+                    .background(if (isSerial) Primary else Amber)
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
                 Text(
@@ -1152,7 +1152,7 @@ fun CreateBookDialog(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (typeSerial == isSerial) (if (isSerial) Color(0xFF7C3AED) else Amber) else Color.Transparent)
+                                .background(if (typeSerial == isSerial) (if (isSerial) Primary else Amber) else Color.Transparent)
                                 .clickable { typeSerial = isSerial }
                                 .padding(vertical = 8.dp),
                             contentAlignment = Alignment.Center,

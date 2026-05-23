@@ -79,7 +79,6 @@ fun spansToHtml(text: String, spans: List<RichSpan>): String {
     if (text.isBlank() && spans.isEmpty()) return ""
     if (spans.isEmpty()) return "<p>${text.replace("\n", "<br/>")}</p>"
 
-    // Her karakter için style belirle, sonra komşuları birleştir
     val result = buildString {
         append("<p>")
         text.forEachIndexed { i, ch ->
@@ -150,9 +149,19 @@ fun RichTextEditor(
     modifier   : Modifier = Modifier,
     placeholder: String   = "İçeriğinizi buraya yazın...",
 ) {
-    var tfv by remember(value) {
-        mutableStateOf(TextFieldValue(text = htmlStrip(value)))
+    // FIX: remember(value) her onChange'de cursor pozisyonunu sıfırlıyordu.
+    // Şimdi sadece ilk açılışta (rememberSaveable boş) ya da dışarıdan gerçek
+    // bir reset geldiğinde (örn. "yeni bölüm aç") TFV güncelleniyor.
+    val stripped = remember(value) { htmlStrip(value) }
+    var tfv by remember { mutableStateOf(TextFieldValue(text = stripped)) }
+
+    // Dışarıdan farklı bir metin gelirse (örn. düzenle butonuna basıldı) sync et
+    LaunchedEffect(stripped) {
+        if (tfv.text != stripped) {
+            tfv = TextFieldValue(text = stripped)
+        }
     }
+
     var spans     by remember { mutableStateOf(listOf<RichSpan>()) }
     var isFocused by remember { mutableStateOf(false) }
 
@@ -165,6 +174,13 @@ fun RichTextEditor(
     var textColor by remember { mutableStateOf<Color?>(null) }
     var showSize  by remember { mutableStateOf(false) }
     var showColor by remember { mutableStateOf(false) }
+
+    // Tema renkleri
+    val surface    = HeftSurface
+    val surfaceVar = SurfaceVar
+    val onBg       = OnBackground
+    val muted      = Muted
+    val divider    = Divider
 
     fun applyToSelection(
         bold: Boolean? = null, italic: Boolean? = null,
@@ -183,7 +199,6 @@ fun RichTextEditor(
             size   = size   ?: fontSize,
             color  = color  ?: textColor,
         )
-        // Aynı aralıktaki eski span'ları temizle, yenisini ekle
         spans = spans.filter { it.start >= sel.end || it.end <= sel.start } + newSpan
         onChange(spansToHtml(tfv.text, spans))
     }
@@ -195,7 +210,7 @@ fun RichTextEditor(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                .background(Color(0xFF1C1C1E)),
+                .background(surfaceVar),   // FIX: hardcoded siyah yerine tema rengi
         ) {
             // Ana butonlar
             Row(
@@ -206,20 +221,20 @@ fun RichTextEditor(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                FmtBtn(Icons.Default.FormatBold,          "Kalın",        boldOn)   {
+                FmtBtn(Icons.Default.FormatBold,          "Kalın",        boldOn,   onBg) {
                     boldOn = !boldOn; applyToSelection(bold = boldOn)
                 }
-                FmtBtn(Icons.Default.FormatItalic,        "İtalik",       italicOn) {
+                FmtBtn(Icons.Default.FormatItalic,        "İtalik",       italicOn, onBg) {
                     italicOn = !italicOn; applyToSelection(italic = italicOn)
                 }
-                FmtBtn(Icons.Default.FormatUnderlined,    "Altı çizili",  underOn)  {
+                FmtBtn(Icons.Default.FormatUnderlined,    "Altı çizili",  underOn,  onBg) {
                     underOn = !underOn; applyToSelection(under = underOn)
                 }
-                FmtBtn(Icons.Default.FormatStrikethrough, "Üstü çizili",  strikeOn) {
+                FmtBtn(Icons.Default.FormatStrikethrough, "Üstü çizili",  strikeOn, onBg) {
                     strikeOn = !strikeOn; applyToSelection(strike = strikeOn)
                 }
 
-                ThinDivider()
+                ThinDivider(divider)
 
                 // Font boyutu butonu
                 TextButton(
@@ -231,17 +246,17 @@ fun RichTextEditor(
                         .background(if (showSize) Amber.copy(.15f) else Color.Transparent),
                 ) {
                     Icon(Icons.Default.FormatSize, null,
-                        tint = if (showSize) Amber else Color.White,
+                        tint = if (showSize) Amber else onBg,   // FIX: tema rengi
                         modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
                     Text(
                         if (fontSize != null) "${fontSize}px" else "Boyut",
-                        color    = if (showSize) Amber else Color.White,
+                        color    = if (showSize) Amber else onBg,   // FIX: tema rengi
                         fontSize = 12.sp,
                     )
                 }
 
-                ThinDivider()
+                ThinDivider(divider)
 
                 // Renk butonu
                 val colorBrush = if (textColor != null)
@@ -265,12 +280,12 @@ fun RichTextEditor(
                     }
                 }
 
-                ThinDivider()
+                ThinDivider(divider)
 
-                FmtBtn(Icons.Default.FormatQuote, "Alıntı", false) {
+                FmtBtn(Icons.Default.FormatQuote, "Alıntı", false, onBg) {
                     applyToSelection()
                 }
-                FmtBtn(Icons.Default.FormatClear, "Temizle", false) {
+                FmtBtn(Icons.Default.FormatClear, "Temizle", false, onBg) {
                     val sel = tfv.selection
                     if (!sel.collapsed) {
                         spans = spans.filter { it.start >= sel.end || it.end <= sel.start }
@@ -286,7 +301,7 @@ fun RichTextEditor(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF2C2C2E))
+                        .background(surface)
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment     = Alignment.CenterVertically,
@@ -313,7 +328,7 @@ fun RichTextEditor(
                         ) {
                             Text(
                                 label,
-                                color    = if (sel) Amber else Color.White,
+                                color    = if (sel) Amber else onBg,   // FIX: tema rengi
                                 fontSize = (s * 0.55f).sp,
                                 fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
                             )
@@ -323,21 +338,21 @@ fun RichTextEditor(
             }
 
             // Renk seçici
+            // FIX: "Beyaz" seçeneği kaldırıldı — açık temada beyaz metin görünmez.
+            // Tema-güvenli renkler kullanılıyor (koyu ve açık temada kontrast sağlar).
             if (showColor) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF2C2C2E))
+                        .background(surface)
                         .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 10.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment     = Alignment.CenterVertically,
                 ) {
-                    Text("Renk:", color = Color(0xFF888888), fontSize = 11.sp)
+                    Text("Renk:", color = muted, fontSize = 11.sp)
                     listOf(
                         null                  to "Varsayılan",
-                        Color(0xFFFFFFFF)     to "Beyaz",
-                        Color(0xFF111111)     to "Siyah",
                         Color(0xFFF59E0B)     to "Amber",
                         Color(0xFF3B82F6)     to "Mavi",
                         Color(0xFF22C55E)     to "Yeşil",
@@ -367,6 +382,21 @@ fun RichTextEditor(
                                     textColor = c
                                     showColor = false
                                     if (c != null) applyToSelection(color = c)
+                                    else {
+                                        // Varsayılan seçilince seçim aralığındaki renk span'larını sil
+                                        val sel = tfv.selection
+                                        if (!sel.collapsed) {
+                                            spans = spans.mapNotNull { s ->
+                                                when {
+                                                    s.start >= sel.end || s.end <= sel.start -> s
+                                                    else -> s.copy(color = null).takeIf {
+                                                        it.bold || it.italic || it.under || it.strike || it.size != null
+                                                    }
+                                                }
+                                            }
+                                            onChange(spansToHtml(tfv.text, spans))
+                                        }
+                                    }
                                 },
                             contentAlignment = Alignment.Center,
                         ) {
@@ -382,11 +412,10 @@ fun RichTextEditor(
         BasicTextField(
             value         = tfv.copy(annotatedString = annotated),
             onValueChange = { new ->
-                // Sadece text veya selection değiştiyse işle
                 val oldText = tfv.text
                 val newText = new.text
                 val diff    = newText.length - oldText.length
-                // tfv'yi her zaman güncelle ama annotatedString'i temizle
+                // FIX: annotatedString'i temizleyerek cursor pozisyonunu koru
                 tfv = new.copy(annotatedString = AnnotatedString(new.text))
 
                 if (diff != 0) {
@@ -409,22 +438,22 @@ fun RichTextEditor(
             },
             cursorBrush   = SolidColor(Amber),
             textStyle     = LocalTextStyle.current.copy(
-                color         = OnBackground,
+                color         = onBg,
                 fontSize      = 15.sp,
                 lineHeight    = 24.sp,
-                textDirection = TextDirection.Ltr,
+                textDirection = TextDirection.Ltr,  // Kurmancî Latin — her zaman LTR
             ),
             modifier      = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
                 .heightIn(min = 160.dp)
                 .background(
-                    color = SurfaceVar,
+                    color = surfaceVar,
                     shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),
                 )
                 .border(
                     width = 1.dp,
-                    color = if (isFocused) Amber else Divider,
+                    color = if (isFocused) Amber else divider,
                     shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),
                 )
                 .padding(14.dp)
@@ -432,7 +461,7 @@ fun RichTextEditor(
             decorationBox = { inner ->
                 Box {
                     if (tfv.text.isEmpty()) {
-                        Text(placeholder, color = Muted, fontSize = 15.sp)
+                        Text(placeholder, color = muted, fontSize = 15.sp)
                     }
                     inner()
                 }
@@ -443,7 +472,7 @@ fun RichTextEditor(
         val wordCount = tfv.text.trim().split(Regex("\\s+")).count { it.isNotBlank() }
         Text(
             "$wordCount kelime",
-            color    = Muted,
+            color    = muted,
             fontSize = 11.sp,
             modifier = Modifier.padding(top = 4.dp, start = 2.dp),
         )
@@ -453,7 +482,13 @@ fun RichTextEditor(
 // ── Yardımcı composable'lar ───────────────────────────────────────────────────
 
 @Composable
-private fun FmtBtn(icon: ImageVector, tooltip: String, active: Boolean, onClick: () -> Unit) {
+private fun FmtBtn(
+    icon    : ImageVector,
+    tooltip : String,
+    active  : Boolean,
+    onBg    : Color,     // FIX: tema rengi parametre olarak alınıyor
+    onClick : () -> Unit,
+) {
     IconButton(
         onClick  = onClick,
         modifier = Modifier
@@ -464,18 +499,18 @@ private fun FmtBtn(icon: ImageVector, tooltip: String, active: Boolean, onClick:
         Icon(
             imageVector        = icon,
             contentDescription = tooltip,
-            tint               = if (active) Amber else Color.White,
+            tint               = if (active) Amber else onBg,   // FIX: tema rengi
             modifier           = Modifier.size(18.dp),
         )
     }
 }
 
 @Composable
-private fun ThinDivider() {
+private fun ThinDivider(color: Color) {   // FIX: tema rengi parametre olarak alınıyor
     Box(
         modifier = Modifier
             .width(1.dp)
             .height(22.dp)
-            .background(Color(0xFF3A3A3C)),
+            .background(color),
     )
 }
