@@ -2,20 +2,13 @@ rules_version = '2';
 
 // ═══════════════════════════════════════════════════════════════
 //  HEFTRENG — Firestore Security Rules
-//  v7 — Gizli hesap koruması + güvenlik açıkları kapatıldı
+//  v8 — Yazar/Kitap Kütüphanesi eklendi
 //
-//  Değişiklikler (v6→v7):
-//  + isPrivateUser() yardımcı fonksiyonu eklendi
-//  + isFollowing() yardımcı fonksiyonu eklendi
-//  + feed: gizli hesap gönderileri takipçi olmayana kapalı
-//  + feed/comments: gizli hesap yorumları korumalı
-//  + serials/chapters: gizli hesap içerikleri korumalı
-//  + books/chapters: gizli hesap içerikleri korumalı
-//  + posts: gizli hesap koruması
-//  + notifications: sadece alıcı okuyabilir, create kısıtlandı
-//  + sessions: create kısıtlandı (anonimden kötüye kullanım engeli)
-//  + readingLists: sadece owner okuyabilir (private içerik)
-//  + users/readProgress: yeni okuma ilerlemesi koleksiyonu eklendi
+//  Değişiklikler (v7→v8):
+//  + authors: herkes okur, giriş yapmış oluşturur, takip alt kol.
+//  + library_books: herkes okur, giriş yapmış oluşturur
+//  + library_books/quotes: giriş yapmış ekler, sahibi siler
+//  + library_books/reviews: giriş yapmış ekler, sahibi siler
 // ═══════════════════════════════════════════════════════════════
 
 service cloud.firestore {
@@ -44,18 +37,14 @@ service cloud.firestore {
     }
 
     // ── Gizli hesap yardımcıları ──────────────────────────────
-    // Bir kullanıcının hesabı gizli mi?
     function isPrivateUser(uid) {
       return exists(/databases/$(database)/documents/users/$(uid))
           && get(/databases/$(database)/documents/users/$(uid)).data.get('private', false) == true;
     }
-    // Giriş yapmış kullanıcı, hedef kullanıcıyı takip ediyor mu?
     function isFollowing(targetUid) {
       return isAuth() &&
           exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + targetUid));
     }
-    // İçeriğe erişim hakkı var mı?
-    // Kendi içeriği | Gizli değil | Takip ediyor | Admin
     function canViewContent(ownerUid) {
       return isOwner(ownerUid)
           || !isPrivateUser(ownerUid)
@@ -70,12 +59,10 @@ service cloud.firestore {
       allow update: if isOwner(uid) || isAdmin();
       allow delete: if isOwner(uid) || isAdmin();
 
-      // Kurdî fêrbibe ilerleme
       match /kf_progress/{doc} {
         allow read:  if isOwner(uid) || isAdmin();
         allow write: if isOwner(uid) || isAdmin();
       }
-      // Okuma ilerlemesi (Firestore'a taşındı)
       match /readProgress/{doc} {
         allow read:  if isOwner(uid) || isAdmin();
         allow write: if isOwner(uid);
@@ -84,7 +71,6 @@ service cloud.firestore {
 
     // ─── FEED ─────────────────────────────────────────────────
     match /feed/{postId} {
-      // Gizli hesap gönderisi: sadece takipçi, kendisi veya admin okuyabilir
       allow read: if canViewContent(resource.data.uid);
       allow create: if isAuth() && notBanned()
           && request.resource.data.uid == request.auth.uid
@@ -100,7 +86,6 @@ service cloud.firestore {
       allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
 
       match /comments/{cmtId} {
-        // Gönderinin sahibi gizliyse yorumları da koru
         allow read: if canViewContent(get(/databases/$(database)/documents/feed/$(postId)).data.uid);
         allow create: if isAuth() && notBanned()
             && request.resource.data.uid == request.auth.uid
@@ -221,7 +206,7 @@ service cloud.firestore {
       }
     }
 
-    // ─── KİTAPLAR ────────────────────────────────────────────
+    // ─── KİTAPLAR (kullanıcı kitapları) ──────────────────────
     match /books/{bookId} {
       allow read: if canViewContent(resource.data.uid);
       allow create: if isAuth() && notBanned()
@@ -250,9 +235,7 @@ service cloud.firestore {
 
     // ─── NOTIFICATIONS ────────────────────────────────────────
     match /notifications/{notifId} {
-      // Sadece alıcı okuyabilir
       allow read:   if isAuth() && (resource.data.toUid == request.auth.uid || isAdmin());
-      // Bildirim oluşturma: sadece kimliği doğrulanmış kullanıcılar, kendi adına
       allow create: if isAuth() && notBanned()
           && request.resource.data.fromUid == request.auth.uid;
       allow update: if isAuth() && resource.data.toUid == request.auth.uid
@@ -273,7 +256,6 @@ service cloud.firestore {
     // ─── SESSIONS ─────────────────────────────────────────────
     match /sessions/{sessionId} {
       allow read, delete: if isAdmin();
-      // Sadece kimliği doğrulanmış kullanıcılar session oluşturabilir
       allow create: if isAuth();
       allow update: if isAuth() && resource.data.uid == request.auth.uid;
     }
@@ -339,7 +321,6 @@ service cloud.firestore {
     }
 
     // ─── OKUMA LİSTESİ ────────────────────────────────────────
-    // Sadece hesap sahibi okuyabilir (özel içerik)
     match /readingLists/{uid} {
       allow read: if isOwner(uid) || isAdmin();
       allow write: if false;
@@ -377,13 +358,13 @@ service cloud.firestore {
           && resource.data.uid == request.auth.uid;
     }
 
-    // ─── CMS ─────────────────────────────────────────────────
-    match /cms/{docId}              { allow read: if isAuth(); allow write: if isAdmin(); }
-    match /cms_pages/{docId}        { allow read: if true;     allow write: if isAdmin(); }
-    match /cms_banners/{docId}      { allow read: if true;     allow write: if isAdmin(); }
-    match /cms_announcements/{docId}{ allow read: if true;     allow write: if isAdmin(); }
-    match /cms_categories/{docId}   { allow read: if true;     allow write: if isAdmin(); }
-    match /cms_ads/{docId}          { allow read: if isAuth(); allow write: if isAdmin(); }
+    // ─── CMS ──────────────────────────────────────────────────
+    match /cms/{docId}               { allow read: if isAuth(); allow write: if isAdmin(); }
+    match /cms_pages/{docId}         { allow read: if true;     allow write: if isAdmin(); }
+    match /cms_banners/{docId}       { allow read: if true;     allow write: if isAdmin(); }
+    match /cms_announcements/{docId} { allow read: if true;     allow write: if isAdmin(); }
+    match /cms_categories/{docId}    { allow read: if true;     allow write: if isAdmin(); }
+    match /cms_ads/{docId}           { allow read: if isAuth(); allow write: if isAdmin(); }
 
     // ─── APP CONFIG ───────────────────────────────────────────
     match /appConfig/{docId} {
@@ -396,5 +377,73 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
       allow create: if isAuth() && maxLen('reason', 500);
     }
+
+    // ══════════════════════════════════════════════════════════
+    //  YENİ v8 — YAZAR / KİTAP KÜTÜPHANESİ
+    // ══════════════════════════════════════════════════════════
+
+    // ─── AUTHORS ──────────────────────────────────────────────
+    match /authors/{authorId} {
+      // Herkes okuyabilir
+      allow read: if true;
+      // Yeni yazar oluşturma: giriş yapmış herkes (ilerleyen sürümde isAdmin() yapılabilir)
+      allow create: if isAuth() && notBanned();
+      // Güncelleme: sadece sayaç alanları veya admin
+      allow update: if isAdmin()
+          || (isAuth() && onlyChanging(['bookCount', 'quoteCount', 'reviewCount', 'followerCount']));
+      allow delete: if isAdmin();
+
+      // Yazar takip koleksiyonu
+      match /follows/{uid} {
+        allow read:   if true;
+        allow create: if isOwner(uid) && notBanned();
+        allow delete: if isOwner(uid);
+      }
+    }
+
+    // ─── LIBRARY BOOKS ────────────────────────────────────────
+    match /library_books/{bookId} {
+      // Herkes okuyabilir
+      allow read: if true;
+      // Oluşturma: giriş yapmış herkes (ilerleyen sürümde kısıtlanabilir)
+      allow create: if isAuth() && notBanned();
+      // Güncelleme: sayaçlar ve puan alanları veya admin
+      allow update: if isAdmin()
+          || (isAuth() && onlyChanging(['quoteCount', 'reviewCount', 'avgRating']));
+      allow delete: if isAdmin();
+
+      // ── Alıntılar ──────────────────────────────────────────
+      match /quotes/{quoteId} {
+        allow read: if true;
+        allow create: if isAuth() && notBanned()
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.text is string
+            && request.resource.data.text.size() >= 1
+            && request.resource.data.text.size() <= 2000;
+        // Sahibi feedPostId güncelleyebilir veya silebilir
+        allow update: if isAuth()
+            && resource.data.uid == request.auth.uid
+            && onlyChanging(['feedPostId', 'likesCount']);
+        allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
+      }
+
+      // ── İncelemeler ────────────────────────────────────────
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if isAuth() && notBanned()
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.text is string
+            && request.resource.data.text.size() >= 1
+            && request.resource.data.text.size() <= 3000
+            && request.resource.data.rating is number
+            && request.resource.data.rating >= 1
+            && request.resource.data.rating <= 5;
+        allow update: if isAuth()
+            && resource.data.uid == request.auth.uid
+            && onlyChanging(['feedPostId', 'text', 'rating']);
+        allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
+      }
+    }
+
   }
 }
