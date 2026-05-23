@@ -128,8 +128,8 @@ fun BooksScreen(
         CreateBookDialog(
             language  = language,
             onDismiss = { showCreate = false },
-            onCreate  = { title, desc, genre, type ->
-                vm.createBook(title, desc, genre, type = type)
+            onCreate  = { title, desc, genre, type, coverImg ->
+                vm.createBook(title, desc, genre, coverImg = coverImg, type = type)
                 showCreate = false
             },
         )
@@ -1117,15 +1117,38 @@ fun ChapterEditorOverlay(
 fun CreateBookDialog(
     language  : String,
     onDismiss : () -> Unit,
-    onCreate  : (String, String, String, String) -> Unit,  // title, desc, genre, type
+    onCreate  : (title: String, desc: String, genre: String, type: String, coverImg: String) -> Unit,
 ) {
-    var title    by remember { mutableStateOf("") }
-    var desc     by remember { mutableStateOf("") }
-    var genre    by remember { mutableStateOf("") }
+    val context    = LocalContext.current
+    var title      by remember { mutableStateOf("") }
+    var desc       by remember { mutableStateOf("") }
+    var genre      by remember { mutableStateOf("") }
     var typeSerial by remember { mutableStateOf(false) }
+    var coverUri   by remember { mutableStateOf<android.net.Uri?>(null) }
+    var uploading  by remember { mutableStateOf(false) }
+    val scope      = rememberCoroutineScope()
+
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        coverUri = uri
+    }
+    val imagePermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) imagePicker.launch("image/*")
+    }
+
+    fun pickImage() {
+        val perm = if (android.os.Build.VERSION.SDK_INT >= 33)
+            android.Manifest.permission.READ_MEDIA_IMAGES
+        else android.Manifest.permission.READ_EXTERNAL_STORAGE
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, perm)
+            == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            imagePicker.launch("image/*")
+        } else {
+            imagePermLauncher.launch(perm)
+        }
+    }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!uploading) onDismiss() },
         containerColor   = HeftSurface,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1136,7 +1159,7 @@ fun CreateBookDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Tür seçimi — toggle
+                // Tür seçimi
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1160,6 +1183,40 @@ fun CreateBookDialog(
                         }
                     }
                 }
+                // Kapak fotoğrafı seç
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceVar)
+                        .border(1.dp, Divider, RoundedCornerShape(12.dp))
+                        .clickable { pickImage() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (coverUri != null) {
+                        AsyncImage(
+                            model              = coverUri,
+                            contentDescription = null,
+                            contentScale       = ContentScale.Crop,
+                            modifier           = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
+                        )
+                        Box(
+                            modifier         = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Default.Edit, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                        }
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.AddPhotoAlternate, null, tint = Muted, modifier = Modifier.size(28.dp))
+                            Text(
+                                if (language == "ku") "Wêneyê bergê zêde bike" else "Kapak fotoğrafı ekle",
+                                color = Muted, fontSize = 12.sp,
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = title, onValueChange = { title = it },
                     label = { Text(Strings.bookNameLabel(language)) },
@@ -1180,12 +1237,40 @@ fun CreateBookDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { if (title.isNotBlank()) onCreate(title.trim(), desc.trim(), genre.trim(), if (typeSerial) "serial" else "book") },
-                enabled = title.isNotBlank(),
-            ) { Text(Strings.bookCreateBtn(language), color = Amber, fontWeight = FontWeight.Bold) }
+                onClick = {
+                    if (title.isBlank() || uploading) return@TextButton
+                    val uri = coverUri
+                    if (uri != null) {
+                        uploading = true
+                        scope.launch {
+                            try {
+                                val ref = com.google.firebase.storage.FirebaseStorage.getInstance()
+                                    .reference.child("bookCovers/${System.currentTimeMillis()}.jpg")
+                                ref.putFile(uri).await()
+                                val url = ref.downloadUrl.await().toString()
+                                onCreate(title.trim(), desc.trim(), genre.trim(), if (typeSerial) "serial" else "book", url)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                onCreate(title.trim(), desc.trim(), genre.trim(), if (typeSerial) "serial" else "book", "")
+                            } finally { uploading = false }
+                        }
+                    } else {
+                        onCreate(title.trim(), desc.trim(), genre.trim(), if (typeSerial) "serial" else "book", "")
+                    }
+                },
+                enabled = title.isNotBlank() && !uploading,
+            ) {
+                if (uploading) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp)
+                } else {
+                    Text(Strings.bookCreateBtn(language), color = Amber, fontWeight = FontWeight.Bold)
+                }
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(Strings.cancelAction(language), color = Muted) }
+            TextButton(onClick = { if (!uploading) onDismiss() }) {
+                Text(Strings.cancelAction(language), color = Muted)
+            }
         },
     )
 }

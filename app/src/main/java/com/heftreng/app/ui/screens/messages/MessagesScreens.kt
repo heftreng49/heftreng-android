@@ -336,10 +336,25 @@ fun MessageDetailScreen(
         ActivityResultContracts.GetContent()
     ) { uri -> selectedImage = uri }
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope             = rememberCoroutineScope()
+
     // Runtime izin launcher — ses kaydı
     val audioPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { /* izin sonucu — kullanıcı tekrar basınca kayıt başlar */ }
+    ) { granted ->
+        if (!granted) {
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    message     = if (language == "ku")
+                        "Destûra mîkrofonê nehat dayîn. Ji mîhengên têlefonê destûrê bide."
+                    else
+                        "Mikrofon izni verilmedi. Telefon ayarlarından izin ver.",
+                    duration    = SnackbarDuration.Long,
+                )
+            }
+        }
+    }
 
     // Runtime izin launcher — galeri
     val imagePermLauncher = rememberLauncherForActivityResult(
@@ -409,6 +424,7 @@ fun MessageDetailScreen(
     Scaffold(
         modifier       = Modifier.imePadding(),
         containerColor = Background,
+        snackbarHost   = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {

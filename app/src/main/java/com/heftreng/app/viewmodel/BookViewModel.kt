@@ -461,26 +461,77 @@ class BookViewModel @Inject constructor(
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  OKUMA İLERLEMESİ
+    //  OKUMA İLERLEMESİ — Firestore: users/{uid}/readProgress/{parentId_chapterId}
+    //  SharedPreferences yerine Firestore — farklı kullanıcılar aynı cihazı paylaşsa bile
+    //  doğru ilerleme gösterilir.
     // ════════════════════════════════════════════════════════════════════════
 
-    private var _readPrefs: android.content.SharedPreferences? = null
-
-    fun initReadPrefs(context: Context) {
-        _readPrefs = context.getSharedPreferences("heft_read_progress", Context.MODE_PRIVATE)
-    }
+    // initReadPrefs artık gerekmiyor; geriye dönük uyumluluk için boş bırakıldı
+    fun initReadPrefs(context: Context) { /* no-op: Firestore kullanılıyor */ }
 
     fun saveReadProgress(parentId: String, chapterId: String, scrollPct: Float) {
+        if (uid.isEmpty()) return
         val pct = (scrollPct * 1000).toInt().coerceIn(0, 1000)
-        _readPrefs?.edit()?.putInt("rp_${parentId}_$chapterId", pct)?.apply()
+        viewModelScope.launch {
+            try {
+                firestore.collection("users").document(uid)
+                    .collection("readProgress")
+                    .document("${parentId}_$chapterId")
+                    .set(mapOf(
+                        "parentId"  to parentId,
+                        "chapterId" to chapterId,
+                        "pct"       to pct,
+                        "updatedAt" to com.google.firebase.Timestamp.now(),
+                    )).await()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
     }
 
-    fun loadReadProgress(parentId: String, chapterId: String): Float {
-        return (_readPrefs?.getInt("rp_${parentId}_$chapterId", 0) ?: 0) / 1000f
+    fun loadReadProgress(parentId: String, chapterId: String, onResult: (Float) -> Unit) {
+        if (uid.isEmpty()) { onResult(0f); return }
+        viewModelScope.launch {
+            try {
+                val doc = firestore.collection("users").document(uid)
+                    .collection("readProgress")
+                    .document("${parentId}_$chapterId")
+                    .get().await()
+                val pct = (doc.getLong("pct") ?: 0L).toInt()
+                onResult(pct / 1000f)
+            } catch (e: Exception) { onResult(0f) }
+        }
+    }
+
+    // Senkron versiyon (ilk yükleme için State flow ile çalışır)
+    private val _readProgressCache = mutableMapOf<String, Float>()
+
+    fun loadReadProgress(parentId: String, chapterId: String): Float =
+        _readProgressCache["${parentId}_$chapterId"] ?: 0f
+
+    fun prefetchReadProgress(parentId: String, chapterId: String) {
+        if (uid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val doc = firestore.collection("users").document(uid)
+                    .collection("readProgress")
+                    .document("${parentId}_$chapterId")
+                    .get().await()
+                val pct = (doc.getLong("pct") ?: 0L).toInt()
+                _readProgressCache["${parentId}_$chapterId"] = pct / 1000f
+            } catch (e: Exception) { /* önbellek boş kalır */ }
+        }
     }
 
     fun clearReadProgress(parentId: String, chapterId: String) {
-        _readPrefs?.edit()?.remove("rp_${parentId}_$chapterId")?.apply()
+        _readProgressCache.remove("${parentId}_$chapterId")
+        if (uid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("users").document(uid)
+                    .collection("readProgress")
+                    .document("${parentId}_$chapterId")
+                    .delete().await()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
     }
 
     // ════════════════════════════════════════════════════════════════════════
