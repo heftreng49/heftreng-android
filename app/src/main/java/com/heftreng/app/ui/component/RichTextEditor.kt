@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.heftreng.app.ui.theme.*
@@ -188,6 +189,8 @@ fun RichTextEditor(
         onChange(spansToHtml(tfv.text, spans))
     }
 
+    // Sistem dili RTL olsa bile editör her zaman LTR — Kurmancî Latin alfabesi
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
     Column(modifier = modifier.fillMaxHeight()) {
 
         // ── Araç çubuğu ──────────────────────────────────────────────────
@@ -445,6 +448,7 @@ fun RichTextEditor(
             modifier = Modifier.padding(top = 4.dp, start = 2.dp),
         )
     }
+    } // CompositionLocalProvider
 }
 
 // ── Yardımcı composable'lar ───────────────────────────────────────────────────
