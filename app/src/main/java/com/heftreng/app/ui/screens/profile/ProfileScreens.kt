@@ -81,8 +81,7 @@ fun ProfileScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf(
         Strings.posts(language),
-        Strings.serials(language),
-        Strings.booksTitle(language),
+        if (ku) "Pirtûk & Rêze" else "Kitaplar & Seriler",
         Strings.readingList(language),
     )
 
@@ -273,10 +272,11 @@ fun ProfileScreen(
                     }
                 }
 
-                // ─── Seriler ──────────────────────────────────────────────
+                // ─── Kitaplar & Seriler ───────────────────────────────────
                 1 -> {
-                    if (mySerials.isEmpty()) {
-                        item(key = "serials_empty") {
+                    val allMyContent = allMyBooks
+                    if (allMyContent.isEmpty()) {
+                        item(key = "books_serials_empty") {
                             Box(
                                 Modifier.fillMaxWidth().height(200.dp),
                                 contentAlignment = Alignment.Center,
@@ -288,75 +288,84 @@ fun ProfileScreen(
                                         modifier = Modifier.size(44.dp),
                                     )
                                     Spacer(Modifier.height(10.dp))
-                                    Text(if (ku) "Hîn rêzedîmen tune" else "Henüz seri yok", color = Muted)
-                                    if (isMe) {
-                                        Spacer(Modifier.height(8.dp))
-                                        TextButton(
-                                            onClick = { navController.navigate("serials") },
-                                        ) {
-                                            Text("+ Yeni Seri", color = Amber)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        items(mySerials, key = { "serial_${it.id}" }) { book ->
-                            Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                                BookCard(
-                                    book      = book,
-                                    onClick   = { navController.navigate("book/${book.id}?type=${book.type}") },
-                                    onLike    = { bookVm.toggleLikeBook(book) },
-                                    onProfile = { navController.navigate("profile/${book.uid}") },
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // ─── Kitaplar ─────────────────────────────────────────────
-                2 -> {
-                    if (myBooks.isEmpty()) {
-                        item(key = "books_empty") {
-                            Box(
-                                Modifier.fillMaxWidth().height(200.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        Icons.Outlined.MenuBook, null,
-                                        tint     = Muted,
-                                        modifier = Modifier.size(44.dp),
+                                    Text(
+                                        if (ku) "Hîn pirtûk/rêze tune" else "Henüz kitap veya seri yok",
+                                        color = Muted,
                                     )
-                                    Spacer(Modifier.height(10.dp))
-                                    Text(if (ku) "Pirtûk tune" else "Henüz kitap yok", color = Muted)
                                     if (isMe) {
                                         Spacer(Modifier.height(8.dp))
-                                        TextButton(
-                                            onClick = { navController.navigate("serials") },
-                                        ) {
-                                            Text("+ Yeni Kitap", color = Amber)
+                                        TextButton(onClick = { navController.navigate("serials") }) {
+                                            Text(if (ku) "+ Nû Zêde Bike" else "+ Yeni Ekle", color = Amber)
                                         }
                                     }
                                 }
                             }
                         }
                     } else {
-                        items(myBooks, key = { "book_${it.id}" }) { book ->
-                            Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                                BookCard(
-                                    book      = book,
-                                    onClick   = { navController.navigate("book/${book.id}?type=${book.type}") },
-                                    onLike    = { bookVm.toggleLikeBook(book) },
-                                    onProfile = { navController.navigate("profile/${book.uid}") },
-                                )
+                        // Seriler önce, kitaplar sonra — her gruba küçük başlık
+                        if (mySerials.isNotEmpty()) {
+                            item(key = "serials_header") {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Icon(Icons.Outlined.AutoStories, null, tint = Primary, modifier = Modifier.size(16.dp))
+                                    Text(
+                                        if (ku) "Rêze" else "Seriler",
+                                        color      = Primary,
+                                        fontSize   = 12.sp,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                    )
+                                }
+                            }
+                            items(mySerials, key = { "serial_${it.id}" }) { book ->
+                                Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                                    BookCard(
+                                        book      = book,
+                                        onClick   = { navController.navigate("book/${book.id}?type=${book.type}") },
+                                        onLike    = { bookVm.toggleLikeBook(book) },
+                                        onProfile = { navController.navigate("profile/${book.uid}") },
+                                    )
+                                }
+                            }
+                        }
+                        if (myBooks.isNotEmpty()) {
+                            item(key = "books_header") {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Icon(Icons.Outlined.MenuBook, null, tint = Amber, modifier = Modifier.size(16.dp))
+                                    Text(
+                                        if (ku) "Pirtûk" else "Kitaplar",
+                                        color      = Amber,
+                                        fontSize   = 12.sp,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                    )
+                                }
+                            }
+                            items(myBooks, key = { "book_${it.id}" }) { book ->
+                                Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                                    BookCard(
+                                        book      = book,
+                                        onClick   = { navController.navigate("book/${book.id}?type=${book.type}") },
+                                        onLike    = { bookVm.toggleLikeBook(book) },
+                                        onProfile = { navController.navigate("profile/${book.uid}") },
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
                 // ─── Okuma Listesi ────────────────────────────────────────
-                3 -> {
+                2 -> {
                     val allEmpty = rlEntries.values.all { it.isEmpty() }
                     if (allEmpty) {
                         item(key = "rl_empty") {
