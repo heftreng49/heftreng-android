@@ -216,39 +216,37 @@ class BookViewModel @Inject constructor(
                     "updatedAt",    Timestamp.now(),
                 ).await()
 
-                // Serials için feed'e de paylaş
-                if (type == "serial") {
-                    val userDoc   = firestore.collection("users").document(uid).get().await()
-                    val myName    = userDoc.getString("displayName") ?: userDoc.getString("name") ?: ""
-                    val serial    = _selectedBook.value
-                    val chapSnap  = firestore.collection("serials").document(parentId)
-                        .collection("chapters")
-                        .orderBy("order", Query.Direction.DESCENDING)
-                        .limit(1).get().await()
-                    val newChId = chapSnap.documents.firstOrNull()?.id ?: ""
-                    firestore.collection("feed").add(mapOf(
-                        "uid"          to uid,
-                        "name"         to myName,
-                        "displayName"  to myName,
-                        "username"     to (userDoc.getString("username") ?: ""),
-                        "photoURL"     to (userDoc.getString("photoURL") ?: ""),
-                        "text"         to "📖 ${serial?.title ?: ""} — Bölüm $order: $title",
-                        "imgUrl"       to (serial?.coverImg ?: ""),
-                        "imageURL"     to (serial?.coverImg ?: ""),
-                        "bookName"     to (serial?.title ?: ""),
-                        "authorName"   to myName,
-                        "repostType"   to "chapter",
-                        "repostId"     to newChId,
-                        "serialId"     to parentId,
-                        "chapterId"    to newChId,
-                        "chapterTitle" to title,
-                        "chapterOrder" to order,
-                        "serialTitle"  to (serial?.title ?: ""),
-                        "serialCover"  to (serial?.coverImg ?: ""),
-                        "likes"        to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
-                        "ts"           to FieldValue.serverTimestamp(),
-                    )).await()
-                }
+                // Hem serial hem book için feed'e paylaş
+                val userDoc   = firestore.collection("users").document(uid).get().await()
+                val myName    = userDoc.getString("displayName") ?: userDoc.getString("name") ?: ""
+                val parent    = _selectedBook.value
+                val chapSnap  = firestore.collection(col).document(parentId)
+                    .collection("chapters")
+                    .orderBy("order", Query.Direction.DESCENDING)
+                    .limit(1).get().await()
+                val newChId = chapSnap.documents.firstOrNull()?.id ?: ""
+                firestore.collection("feed").add(mapOf(
+                    "uid"          to uid,
+                    "name"         to myName,
+                    "displayName"  to myName,
+                    "username"     to (userDoc.getString("username") ?: ""),
+                    "photoURL"     to (userDoc.getString("photoURL") ?: ""),
+                    "text"         to "📖 ${parent?.title ?: ""} — Bölüm $order: $title",
+                    "imgUrl"       to (parent?.coverImg ?: ""),
+                    "imageURL"     to (parent?.coverImg ?: ""),
+                    "bookName"     to (parent?.title ?: ""),
+                    "authorName"   to myName,
+                    "repostType"   to if (type == "serial") "chapter" else "book_chapter",
+                    "repostId"     to newChId,
+                    if (type == "serial") "serialId" to parentId else "bookId" to parentId,
+                    "chapterId"    to newChId,
+                    "chapterTitle" to title,
+                    "chapterOrder" to order,
+                    if (type == "serial") "serialTitle" to (parent?.title ?: "") else "bookTitle" to (parent?.title ?: ""),
+                    if (type == "serial") "serialCover" to (parent?.coverImg ?: "") else "bookCover" to (parent?.coverImg ?: ""),
+                    "likes"        to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
+                    "ts"           to FieldValue.serverTimestamp(),
+                )).await()
                 loadBook(parentId, type)
             } catch (e: Exception) { e.printStackTrace() }
         }

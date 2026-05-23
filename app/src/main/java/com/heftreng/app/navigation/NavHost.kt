@@ -56,6 +56,7 @@ import com.heftreng.app.ui.screens.quotes.AuthorQuotesScreen
 import com.heftreng.app.ui.screens.quotes.BookQuotesScreen
 import com.heftreng.app.ui.screens.settings.SettingsScreen
 import com.heftreng.app.ui.theme.*
+import com.heftreng.app.viewmodel.AppConfigViewModel
 import com.heftreng.app.viewmodel.AuthViewModel
 import com.heftreng.app.viewmodel.MessagesViewModel
 import com.heftreng.app.viewmodel.NotificationsViewModel
@@ -92,18 +93,8 @@ sealed class Screen(val route: String) {
     object BookChapter   : Screen("book_chapter/{bid}/{cid}") { fun go(b: String, c: String) = "book_chapter/$b/$c" }
 }
 
-// ── Alt bar — temadaki gibi: Nivîs | Bigere | Pirtûk | Profîl ───────────────
+// ── Alt bar ───────────────────────────────────────────────────────────────────
 data class BottomNavItem(val route: String, val label: String, val icon: ImageVector, val iconSel: ImageVector)
-
-// bottomNavItems composable içinde language ile dinamik üretiliyor
-// (Bu statik liste artık kullanılmıyor — aşağıdaki composable içindeki listeyi kullan)
-val bottomNavItems = listOf(
-    BottomNavItem(Screen.Feed.route,   "Nivis",    Icons.Outlined.DynamicFeed,  Icons.Filled.DynamicFeed),
-    BottomNavItem(Screen.Blog.route,   "Blog",     Icons.Outlined.Article,       Icons.Filled.Article),
-    BottomNavItem(Screen.Serials.route,"Kitaplar", Icons.Outlined.AutoStories,  Icons.Filled.AutoStories),
-    BottomNavItem(Screen.Kurdi.route,  "Kurdî",    Icons.Outlined.Translate,     Icons.Filled.Translate),
-    BottomNavItem("profile/me",        "Profil",   Icons.Outlined.PersonOutline, Icons.Filled.Person),
-)
 
 private val bottomNavRoutes = setOf(
     Screen.Feed.route, Screen.Blog.route, Screen.Serials.route,
@@ -120,11 +111,14 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val notifVm        : NotificationsViewModel = hiltViewModel()
     val msgsVm         : MessagesViewModel      = hiltViewModel()
     val blogVm         : BlogViewModel          = hiltViewModel()
+    val appConfigVm    : AppConfigViewModel     = hiltViewModel()
 
     val currentUser by authVm.currentUser.collectAsState()
     val isDark      by settingsVm.darkMode.collectAsState()
     val language    by settingsVm.language.collectAsState()
     val totalUnread by msgsVm.totalUnread.collectAsState()
+    val appConfig   by appConfigVm.config.collectAsState()
+    val configLoaded by appConfigVm.loaded.collectAsState()
     // Dile göre alt bar etiketleri
     val bottomNavItems = listOf(
         BottomNavItem(Screen.Feed.route,    Strings.navFeed(language),    Icons.Outlined.DynamicFeed,  Icons.Filled.DynamicFeed),
@@ -137,6 +131,41 @@ fun HeftrangNavHost(initialRoute: String? = null) {
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope       = rememberCoroutineScope()
+
+    // ── Bakım modu ────────────────────────────────────────────────────────────
+    if (configLoaded && appConfig.maintenanceMode) {
+        Box(
+            modifier         = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF0A0A14)),
+            contentAlignment = androidx.compose.ui.Alignment.Center,
+        ) {
+            androidx.compose.material3.Surface(
+                shape          = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                color          = androidx.compose.ui.graphics.Color(0xFF1A1A2E),
+                modifier       = Modifier.padding(32.dp),
+            ) {
+                Column(
+                    modifier              = Modifier.padding(28.dp),
+                    horizontalAlignment   = androidx.compose.ui.Alignment.CenterHorizontally,
+                    verticalArrangement   = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+                ) {
+                    Text("🔧", fontSize = 40.sp)
+                    Text(
+                        "Bakım Modu",
+                        color      = androidx.compose.ui.graphics.Color(0xFFFFB300),
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        fontSize   = 18.sp,
+                    )
+                    Text(
+                        appConfig.maintenanceMessage,
+                        color    = androidx.compose.ui.graphics.Color(0xFF888899),
+                        fontSize = 14.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
+            }
+        }
+        return
+    }
 
     if (currentUser == null) {
         // Tema MainActivity'de zaten uygulanıyor

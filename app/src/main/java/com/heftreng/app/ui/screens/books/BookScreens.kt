@@ -14,6 +14,7 @@ package com.heftreng.app.ui.screens.books
 import android.text.Html
 import android.text.Spanned
 import android.widget.TextView
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -59,9 +60,7 @@ import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
 import kotlinx.coroutines.tasks.await
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextDirection
-import androidx.compose.ui.unit.LayoutDirection
 
 // ── Birleşik Kitap Listesi ────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
@@ -357,6 +356,14 @@ fun BookDetailScreen(
     }
 }
 
+// ── Bölüm yorumu veri sınıfı — composable dışında tanımlanmalı ───────────────
+data class ChCmt(
+    val id: String = "", val uid: String = "", val name: String = "",
+    val photoURL: String = "", val text: String = "", val replyTo: String = "",
+    val replyToCmtId: String = "", val likes: Int = 0, val edited: Boolean = false,
+    val ts: com.google.firebase.Timestamp? = null,
+)
+
 // ── Bölüm Okuma ──────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -387,14 +394,6 @@ fun BookChapterReadScreen(
     val currentIndex = chapters.indexOfFirst { it.id == chapterId }
     val prevChapter  = if (currentIndex > 0) chapters[currentIndex - 1] else null
     val nextChapter  = if (currentIndex in 0 until chapters.size - 1) chapters[currentIndex + 1] else null
-
-    // Yorum state
-    data class ChCmt(
-        val id: String = "", val uid: String = "", val name: String = "",
-        val photoURL: String = "", val text: String = "", val replyTo: String = "",
-        val replyToCmtId: String = "", val likes: Int = 0, val edited: Boolean = false,
-        val ts: com.google.firebase.Timestamp? = null,
-    )
 
     var comments     by remember { mutableStateOf<List<ChCmt>>(emptyList()) }
     var cmtLoading   by remember { mutableStateOf(true) }
@@ -1080,8 +1079,8 @@ fun ChapterEditorOverlay(
     onDismiss    : () -> Unit,
     onSave       : () -> Unit,
 ) {
-    // Tüm editör LTR — sistem dili RTL olsa bile (Kurmancî Latin alfabesi)
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+    // BackHandler: geri tuşu overlay'i kapatır, sistem navigasyonunu tetiklemez
+    BackHandler(onBack = onDismiss)
     Box(modifier = Modifier.fillMaxSize().background(HeftSurface).imePadding()) {
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
             Row(
@@ -1111,7 +1110,6 @@ fun ChapterEditorOverlay(
             }
         }
     }
-    } // CompositionLocalProvider
 }
 
 // ── Kitap/Seri oluşturma dialog ───────────────────────────────────────────────
