@@ -289,6 +289,8 @@ fun BookDetailScreen(
             },
         )
     }
+
+    if (showLikers) {
         LikerListSheet(
             title     = Strings.likedBy(language),
             likers    = likers,
