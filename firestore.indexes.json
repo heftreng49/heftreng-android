@@ -104,8 +104,6 @@
         { "fieldPath": "read", "order": "ASCENDING" }
       ]
     },
-
-    // ─── YENİ: library_books koleksiyonu ─────────────────────────────────
     {
       "collectionGroup": "library_books",
       "queryScope": "COLLECTION",
@@ -118,12 +116,10 @@
       "collectionGroup": "library_books",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "authorId",  "order": "ASCENDING" },
-        { "fieldPath": "ts",        "order": "DESCENDING" }
+        { "fieldPath": "authorId", "order": "ASCENDING"  },
+        { "fieldPath": "ts",       "order": "DESCENDING" }
       ]
     },
-
-    // ─── YENİ: quotes (collection group — tüm kitapların alıntıları) ─────
     {
       "collectionGroup": "quotes",
       "queryScope": "COLLECTION_GROUP",
@@ -140,8 +136,6 @@
         { "fieldPath": "ts",     "order": "DESCENDING" }
       ]
     },
-
-    // ─── YENİ: reviews (collection group) ────────────────────────────────
     {
       "collectionGroup": "reviews",
       "queryScope": "COLLECTION_GROUP",
@@ -156,15 +150,6 @@
       "fields": [
         { "fieldPath": "bookId", "order": "ASCENDING"  },
         { "fieldPath": "ts",     "order": "DESCENDING" }
-      ]
-    },
-
-    // ─── YENİ: authors koleksiyonu ────────────────────────────────────────
-    {
-      "collectionGroup": "authors",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "name", "order": "ASCENDING" }
       ]
     }
   ],
