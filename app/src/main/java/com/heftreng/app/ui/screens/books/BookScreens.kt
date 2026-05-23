@@ -59,6 +59,9 @@ import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
 import kotlinx.coroutines.tasks.await
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.LayoutDirection
 
 // ── Birleşik Kitap Listesi ────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1077,6 +1080,8 @@ fun ChapterEditorOverlay(
     onDismiss    : () -> Unit,
     onSave       : () -> Unit,
 ) {
+    // Tüm editör LTR — sistem dili RTL olsa bile (Kurmancî Latin alfabesi)
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
     Box(modifier = Modifier.fillMaxSize().background(HeftSurface).imePadding()) {
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
             Row(
@@ -1098,6 +1103,7 @@ fun ChapterEditorOverlay(
                 singleLine    = true,
                 modifier      = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 colors        = hfTextFieldColors(),
+                textStyle     = LocalTextStyle.current.copy(textDirection = TextDirection.Ltr),
             )
             HorizontalDivider(color = Divider)
             Box(modifier = Modifier.weight(1f).fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp)) {
@@ -1105,6 +1111,7 @@ fun ChapterEditorOverlay(
             }
         }
     }
+    } // CompositionLocalProvider
 }
 
 // ── Kitap/Seri oluşturma dialog ───────────────────────────────────────────────
