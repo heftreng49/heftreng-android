@@ -78,6 +78,9 @@ fun ProfileScreen(
     val targetUid = if (uid == "me") vm.myUid else uid
     val ku = language == "ku"
 
+    val isPrivate      = user?.isPrivate ?: false
+    val canSeeContent  = isMe || !isPrivate || isFollowing
+
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf(
         Strings.posts(language),
@@ -210,7 +213,38 @@ fun ProfileScreen(
             }
 
             // ── 3. Tab içerikleri — inline items ─────────────────────────
-            when (selectedTab) {
+            if (!canSeeContent) {
+                // Gizli hesap — takipçi değil
+                item(key = "locked_profile") {
+                    Column(
+                        modifier              = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp, horizontal = 32.dp),
+                        horizontalAlignment   = Alignment.CenterHorizontally,
+                        verticalArrangement   = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = null,
+                            tint               = Muted,
+                            modifier           = Modifier.size(52.dp),
+                        )
+                        Text(
+                            if (ku) "Ev hesab taybet e" else "Bu hesap gizli",
+                            color      = OnBackground,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize   = 16.sp,
+                        )
+                        Text(
+                            if (ku) "Ji bo dîtina barkirin û nivîsên vê hesabê, pêwîste hûn bişopînin."
+                            else    "Gönderileri görmek için takip et.",
+                            color    = Muted,
+                            fontSize = 13.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
+                }
+            } else when (selectedTab) {
 
                 // ─── Gönderiler ───────────────────────────────────────────
                 0 -> {

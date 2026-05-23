@@ -68,7 +68,20 @@ class ProfileViewModel @Inject constructor(
                     level      = (d["level"] as? Long)?.toInt() ?: 1,
                     xp         = (d["xp"] as? Long)?.toInt() ?: 0,
                     streak     = (d["streak"] as? Long)?.toInt() ?: 0,
+                    isPrivate  = d["private"] as? Boolean ?: false,
                 )
+
+                val isOwnProfile = (targetUid == myUid)
+                val isPrivate    = _user.value?.isPrivate ?: false
+
+                // Takip durumunu önceden yükle — private kontrol için gerekli
+                if (targetUid != myUid) {
+                    val followDoc = firestore.collection("follows")
+                        .document("${myUid}_$targetUid").get().await()
+                    _isFollowing.value = followDoc.exists()
+                }
+
+                val canSeeContent = isOwnProfile || !isPrivate || _isFollowing.value
 
                 // Takipçi sayıları — follows koleksiyonundan say
                 val followersSnap = firestore.collection("follows")
@@ -78,9 +91,13 @@ class ProfileViewModel @Inject constructor(
                 _followersCount.value = followersSnap.size()
                 _followingCount.value = followingSnap.size()
 
+                // Gizli hesap — takipçi değilse gönderileri yükleme
+                if (!canSeeContent) {
+                    _posts.value = emptyList()
+                    return@launch
+                }
+
                 // Gönderiler
-                // orderBy kaldırıldı — composite index gerektirmez
-                // XML temasıyla aynı: where + limit, sonra client-side sort
                 val snap = firestore.collection("feed")
                     .whereEqualTo("uid", targetUid)
                     .limit(50).get().await()
@@ -129,13 +146,6 @@ class ProfileViewModel @Inject constructor(
                     )
                 }.sortedByDescending { it.ts?.seconds ?: 0L }
                 _posts.value = enrichPostsWithUserData(rawProfilePosts)
-
-                // Takip durumu
-                if (targetUid != myUid) {
-                    val followDoc = firestore.collection("follows")
-                        .document("${myUid}_$targetUid").get().await()
-                    _isFollowing.value = followDoc.exists()
-                }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {

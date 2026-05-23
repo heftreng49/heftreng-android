@@ -20,6 +20,7 @@ data class User(
     val xp             : Int    = 0,
     val streak         : Int    = 0,
     val banned         : Boolean= false,
+    val isPrivate      : Boolean= false,   // Gizli hesap
 )
 
 // ─── FEED GÖNDERISI ────────────────────────────────────
