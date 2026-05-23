@@ -154,6 +154,7 @@ fun BookDetailScreen(
 
     var showLikers     by remember { mutableStateOf(false) }
     var showAddChapter by remember { mutableStateOf(false) }
+    var showDeleteBook by remember { mutableStateOf(false) }
     var chapterToEdit   by remember { mutableStateOf<BookChapter?>(null) }
     var chapterToDelete by remember { mutableStateOf<BookChapter?>(null) }
     var addTitle by remember { mutableStateOf("") }
@@ -180,6 +181,9 @@ fun BookDetailScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
                 actions = {
                     if (myUid.isNotBlank() && myUid == book?.uid) {
+                        IconButton(onClick = { showDeleteBook = true }) {
+                            Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444))
+                        }
                         IconButton(onClick = { showAddChapter = true }) {
                             Icon(Icons.Default.Add, null, tint = Amber)
                         }
@@ -250,7 +254,41 @@ fun BookDetailScreen(
         }
     }
 
-    if (showLikers) {
+    // Kitap/Seri silme dialog
+    if (showDeleteBook) {
+        val label = if (type == "serial") "seriyi" else "kitabı"
+        AlertDialog(
+            onDismissRequest = { showDeleteBook = false },
+            containerColor   = HeftSurface,
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444), modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("${if (type == "serial") "Seriyi" else "Kitabı"} Sil", color = OnBackground, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            text = {
+                Text(
+                    "\"${book?.title}\" adlı $label ve tüm bölümlerini kalıcı olarak silmek istediğine emin misin?",
+                    color = Muted,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteBook(bookId, type)
+                    showDeleteBook = false
+                    navController.popBackStack()
+                }) {
+                    Text("Evet, Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteBook = false }) {
+                    Text(Strings.cancel(language), color = Muted)
+                }
+            },
+        )
+    }
         LikerListSheet(
             title     = Strings.likedBy(language),
             likers    = likers,

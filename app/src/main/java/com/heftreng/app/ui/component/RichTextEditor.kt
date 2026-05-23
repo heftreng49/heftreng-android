@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.heftreng.app.ui.theme.*
@@ -405,9 +406,10 @@ fun RichTextEditor(
             },
             cursorBrush   = SolidColor(Amber),
             textStyle     = LocalTextStyle.current.copy(
-                color      = OnBackground,
-                fontSize   = 15.sp,
-                lineHeight = 24.sp,
+                color         = OnBackground,
+                fontSize      = 15.sp,
+                lineHeight    = 24.sp,
+                textDirection = TextDirection.Content,  // LTR/RTL otomatik algıla
             ),
             modifier      = Modifier
                 .fillMaxWidth()
