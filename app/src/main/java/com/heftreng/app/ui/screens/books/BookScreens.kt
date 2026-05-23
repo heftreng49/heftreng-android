@@ -1,52 +1,66 @@
 package com.heftreng.app.ui.screens.books
 
-// ═══════════════════════════════════════════════════════
-//  BookScreens — Kitap listesi, detay, bölüm okuma
+// ═══════════════════════════════════════════════════════════════════════════
+//  BookScreens — Birleşik kitap/seri listesi, detay, bölüm okuma
 //
-//  Tema (site) ile tam uyumlu:
-//  - Firestore: books/{bookId}
-//  - Firestore: books/{bookId}/chapters/{chapterId}
-//  - chapterLikes/{bookId_uid} — beğeni
-//  - readingLists/{uid}/books/{bookId} — okuma listesi
-// ═══════════════════════════════════════════════════════
+//  Firestore koleksiyonları değişmez:
+//    books/{id}/chapters/{id}   → type=="book"
+//    serials/{id}/chapters/{id} → type=="serial"
+//
+//  UI katmanı sadece Book / BookChapter modelini görür.
+//  Tür farkı yalnızca küçük bir rozet ile gösterilir.
+// ═══════════════════════════════════════════════════════════════════════════
 
-import androidx.compose.foundation.*
 import android.text.Html
 import android.text.Spanned
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.TextView
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.*
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.Book
 import com.heftreng.app.data.model.BookChapter
+import com.heftreng.app.ui.component.RichTextEditor
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.ui.screens.social.UserAvatar
-import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.BookViewModel
 import com.heftreng.app.viewmodel.FeedViewModel
+import com.heftreng.app.viewmodel.SettingsViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
+import kotlinx.coroutines.tasks.await
 
-// ── Kitap Listesi ────────────────────────────────────────────────────────────
+// ── Birleşik Kitap Listesi ────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BooksScreen(
@@ -97,9 +111,10 @@ fun BooksScreen(
             ) {
                 items(books, key = { it.id }) { book ->
                     BookCard(
-                        book    = book,
-                        onClick = { navController.navigate("book/${book.id}") },
-                        onLike  = { vm.toggleLikeBook(book) },
+                        book      = book,
+                        language  = language,
+                        onClick   = { navController.navigate("book/${book.id}?type=${book.type}") },
+                        onLike    = { vm.toggleLikeBook(book) },
                         onProfile = { navController.navigate("profile/${book.uid}") },
                     )
                 }
@@ -111,19 +126,20 @@ fun BooksScreen(
         CreateBookDialog(
             language  = language,
             onDismiss = { showCreate = false },
-            onCreate  = { title, desc, genre ->
-                vm.createBook(title, desc, genre)
+            onCreate  = { title, desc, genre, type ->
+                vm.createBook(title, desc, genre, type = type)
                 showCreate = false
             },
         )
     }
 }
 
-// ── Kitap Detay ──────────────────────────────────────────────────────────────
+// ── Kitap/Seri Detay ──────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookDetailScreen(
     bookId       : String,
+    type         : String = "book",
     navController: NavController,
     language     : String = "tr",
     vm           : BookViewModel  = hiltViewModel(),
@@ -134,23 +150,41 @@ fun BookDetailScreen(
     val loading  by vm.loading.collectAsState()
     val likers   by socialVm.likers.collectAsState()
     val socialLoading by socialVm.loading.collectAsState()
+    val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
-    var showLikers by remember { mutableStateOf(false) }
+    var showLikers     by remember { mutableStateOf(false) }
+    var showAddChapter by remember { mutableStateOf(false) }
+    var chapterToEdit   by remember { mutableStateOf<BookChapter?>(null) }
+    var chapterToDelete by remember { mutableStateOf<BookChapter?>(null) }
+    var addTitle by remember { mutableStateOf("") }
+    var addBody  by remember { mutableStateOf("") }
+    var editTitle by remember { mutableStateOf("") }
+    var editBody  by remember { mutableStateOf("") }
 
-    LaunchedEffect(bookId) { vm.loadBook(bookId) }
+    LaunchedEffect(bookId) { vm.loadBook(bookId, type) }
 
     Scaffold(
         modifier = Modifier.imePadding(),
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text(book?.title ?: "", color = OnBackground, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = {
+                    Text(book?.title ?: "", color = OnBackground, fontWeight = FontWeight.SemiBold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                actions = {
+                    if (myUid.isNotBlank() && myUid == book?.uid) {
+                        IconButton(onClick = { showAddChapter = true }) {
+                            Icon(Icons.Default.Add, null, tint = Amber)
+                        }
+                    }
+                }
             )
         }
     ) { padding ->
@@ -167,20 +201,20 @@ fun BookDetailScreen(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(bottom = 80.dp),
         ) {
-            // Kapak + bilgi
             item {
                 BookDetailHeader(
-                    book       = b,
-                    onProfile  = { navController.navigate("profile/${b.uid}") },
-                    onLike     = { vm.toggleLikeBook(b) },
+                    book         = b,
+                    language     = language,
+                    onProfile    = { navController.navigate("profile/${b.uid}") },
+                    onLike       = { vm.toggleLikeBook(b) },
                     onShowLikers = {
-                        socialVm.loadPostLikers(b.id)
+                        if (type == "serial") socialVm.loadSerialLikers(b.id)
+                        else socialVm.loadPostLikers(b.id)
                         showLikers = true
                     },
                 )
             }
 
-            // Bölüm listesi başlığı
             if (chapters.isNotEmpty()) {
                 item {
                     Row(
@@ -196,9 +230,13 @@ fun BookDetailScreen(
                     }
                 }
                 items(chapters, key = { it.id }) { chapter ->
-                    ChapterListItem(
-                        chapter = chapter,
-                        onClick = { navController.navigate("book_chapter/${b.id}/${chapter.id}") },
+                    UnifiedChapterRow(
+                        chapter  = chapter,
+                        canEdit  = myUid.isNotBlank() && myUid == b.uid,
+                        language = language,
+                        onClick  = { navController.navigate("book_chapter/${b.id}/${chapter.id}?type=$type") },
+                        onEdit   = { chapterToEdit = chapter; editTitle = chapter.title; editBody = chapter.body },
+                        onDelete = { chapterToDelete = chapter },
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp))
                 }
@@ -214,186 +252,503 @@ fun BookDetailScreen(
 
     if (showLikers) {
         LikerListSheet(
-            title     = "Beğenenler",
+            title     = Strings.likedBy(language),
             likers    = likers,
             loading   = socialLoading,
             onDismiss = { showLikers = false; socialVm.clearLikers() },
             onProfile = { uid -> showLikers = false; navController.navigate("profile/$uid") },
         )
     }
+
+    if (showAddChapter) {
+        ChapterEditorOverlay(
+            title         = addTitle,
+            body          = addBody,
+            onTitleChange = { addTitle = it },
+            onBodyChange  = { addBody = it },
+            heading       = Strings.newChapter(language),
+            saveLabel     = Strings.save(language),
+            canSave       = addTitle.isNotBlank() && addBody.isNotBlank(),
+            language      = language,
+            onDismiss     = { showAddChapter = false; addTitle = ""; addBody = "" },
+            onSave        = {
+                vm.addChapter(bookId, addTitle, addBody, type)
+                showAddChapter = false; addTitle = ""; addBody = ""
+            },
+        )
+    }
+
+    chapterToEdit?.let { ch ->
+        ChapterEditorOverlay(
+            title         = editTitle,
+            body          = editBody,
+            onTitleChange = { editTitle = it },
+            onBodyChange  = { editBody = it },
+            heading       = Strings.editChapter(language),
+            saveLabel     = Strings.save(language),
+            canSave       = editTitle.isNotBlank() && editBody.isNotBlank(),
+            language      = language,
+            onDismiss     = { chapterToEdit = null },
+            onSave        = {
+                vm.updateChapter(bookId, ch.id, editTitle, editBody, type)
+                chapterToEdit = null
+            },
+        )
+    }
+
+    chapterToDelete?.let { ch ->
+        AlertDialog(
+            onDismissRequest = { chapterToDelete = null },
+            containerColor   = HeftSurface,
+            title = { Text(Strings.deleteChapter(language), color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            text  = { Text("\"${ch.title}\" bölümünü silmek istediğine emin misin?", color = Muted) },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteChapter(bookId, ch.id, type); chapterToDelete = null }) {
+                    Text("Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { chapterToDelete = null }) { Text(Strings.cancel(language), color = Muted) }
+            },
+        )
+    }
 }
 
 // ── Bölüm Okuma ──────────────────────────────────────────────────────────────
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun BookChapterReadScreen(
-    bookId       : String,
+    parentId     : String,
     chapterId    : String,
+    type         : String = "book",
     navController: NavController,
     language     : String = "tr",
     vm           : BookViewModel = hiltViewModel(),
     feedVm       : FeedViewModel  = hiltViewModel(),
 ) {
-    val ku = language == "ku"
     val chapter  by vm.selectedChapter.collectAsState()
     val chapters by vm.chapters.collectAsState()
     val book     by vm.selectedBook.collectAsState()
+    val auth     = FirebaseAuth.getInstance()
+    val db       = FirebaseFirestore.getInstance()
+    val myUid    = auth.currentUser?.uid ?: ""
+    val scope    = rememberCoroutineScope()
+
     var repostDone by remember { mutableStateOf(false) }
 
-    LaunchedEffect(bookId, chapterId) {
-        vm.loadBook(bookId)
-        vm.loadChapter(bookId, chapterId)
+    LaunchedEffect(parentId, chapterId) {
+        vm.loadBook(parentId, type)
+        vm.loadChapter(parentId, chapterId, type)
     }
 
     val currentIndex = chapters.indexOfFirst { it.id == chapterId }
     val prevChapter  = if (currentIndex > 0) chapters[currentIndex - 1] else null
-    val nextChapter  = if (currentIndex >= 0 && currentIndex < chapters.size - 1) chapters[currentIndex + 1] else null
+    val nextChapter  = if (currentIndex in 0 until chapters.size - 1) chapters[currentIndex + 1] else null
 
-    Scaffold(
-        modifier = Modifier.imePadding(),
-        containerColor = Background,
-        topBar = {
-            TopAppBar(
-                title = { Text(chapter?.title ?: "", color = OnBackground, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
-                    }
-                },
-                actions = {
-                    // Repost butonu
-                    val ch = chapter
-                    val b  = book
-                    if (ch != null) {
-                        IconButton(
-                            onClick = {
+    // Yorum state
+    data class ChCmt(
+        val id: String = "", val uid: String = "", val name: String = "",
+        val photoURL: String = "", val text: String = "", val replyTo: String = "",
+        val replyToCmtId: String = "", val likes: Int = 0, val edited: Boolean = false,
+        val ts: com.google.firebase.Timestamp? = null,
+    )
+
+    var comments     by remember { mutableStateOf<List<ChCmt>>(emptyList()) }
+    var cmtLoading   by remember { mutableStateOf(true) }
+    var inputText    by remember { mutableStateOf("") }
+    var replyTo      by remember { mutableStateOf<ChCmt?>(null) }
+    var editTarget   by remember { mutableStateOf<ChCmt?>(null) }
+    var deleteTarget by remember { mutableStateOf<ChCmt?>(null) }
+    var menuTarget   by remember { mutableStateOf<ChCmt?>(null) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardCtrl   = LocalSoftwareKeyboardController.current
+    val listState      = rememberLazyListState()
+
+    var myName  by remember { mutableStateOf("") }
+    var myPhoto by remember { mutableStateOf("") }
+    LaunchedEffect(myUid) {
+        if (myUid.isBlank()) return@LaunchedEffect
+        try {
+            val doc = db.collection("users").document(myUid).get().await()
+            myName  = doc.getString("displayName") ?: doc.getString("name") ?: ""
+            myPhoto = doc.getString("photoURL") ?: ""
+        } catch (_: Exception) {}
+    }
+
+    LaunchedEffect(editTarget) {
+        editTarget?.let { inputText = it.text; focusRequester.requestFocus(); keyboardCtrl?.show() }
+    }
+
+    // Realtime yorum listener — type'a göre doğru koleksiyon
+    val cmtCol = if (type == "serial") "serials" else "books"
+    DisposableEffect(chapterId) {
+        val reg = db.collection(cmtCol).document(parentId)
+            .collection("chapters").document(chapterId)
+            .collection("comments")
+            .orderBy("ts", Query.Direction.ASCENDING)
+            .addSnapshotListener { snap, _ ->
+                if (snap == null) { cmtLoading = false; return@addSnapshotListener }
+                comments = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    ChCmt(
+                        id           = doc.id,
+                        uid          = d["uid"]          as? String ?: "",
+                        name         = (d["displayName"] as? String)?.ifBlank { null } ?: d["name"] as? String ?: "?",
+                        photoURL     = d["photoURL"]     as? String ?: "",
+                        text         = d["text"]         as? String ?: "",
+                        replyTo      = d["replyTo"]      as? String ?: "",
+                        replyToCmtId = d["replyToCmtId"] as? String ?: "",
+                        likes        = (d["likes"]       as? Long)?.toInt() ?: 0,
+                        edited       = d["edited"]       as? Boolean ?: false,
+                        ts           = d["ts"]           as? com.google.firebase.Timestamp,
+                    )
+                }
+                cmtLoading = false
+            }
+        onDispose { reg.remove() }
+    }
+
+    fun submitComment() {
+        val text    = inputText.trim()
+        if (text.isBlank() || myUid.isBlank()) return
+        val editing = editTarget
+        inputText   = ""
+        editTarget  = null
+        if (editing != null) {
+            vm.editChapterComment(parentId, chapterId, editing.id, text, type)
+            return
+        }
+        val rTo = replyTo
+        replyTo = null
+        vm.addChapterComment(parentId, chapterId, text, rTo?.name ?: "", rTo?.id ?: "", type)
+    }
+
+    Box(modifier = Modifier.fillMaxSize().imePadding()) {
+        Scaffold(
+            containerColor = Background,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(chapter?.title ?: "", color = OnBackground, fontWeight = FontWeight.SemiBold,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
+                        }
+                    },
+                    actions = {
+                        val ch = chapter; val b = book
+                        if (ch != null && type == "serial") {
+                            IconButton(onClick = {
                                 if (!repostDone) {
                                     feedVm.repostBookChapter(
-                                        bookId        = bookId,
-                                        chapterId     = ch.id,
-                                        bookTitle     = b?.title ?: "",
-                                        chapterTitle  = ch.title,
-                                        chapterOrder  = ch.order,
-                                        chapterBody   = ch.body,
-                                        bookCoverImg  = b?.coverImg ?: "",
-                                        bookAuthorUid = b?.uid ?: ch.uid,
-                                        bookAuthorName= b?.name ?: "",
+                                        bookId         = parentId,
+                                        chapterId      = ch.id,
+                                        bookTitle      = b?.title ?: "",
+                                        chapterTitle   = ch.title,
+                                        chapterOrder   = ch.order,
+                                        chapterBody    = ch.body,
+                                        bookCoverImg   = b?.coverImg ?: "",
+                                        bookAuthorUid  = b?.uid ?: ch.uid,
+                                        bookAuthorName = b?.name ?: "",
                                     )
                                     repostDone = true
                                 }
+                            }) {
+                                Icon(Icons.Default.Repeat, null,
+                                    tint = if (repostDone) Amber else Muted)
                             }
-                        ) {
-                            Icon(
-                                if (repostDone) Icons.Default.Repeat else Icons.Default.Repeat,
-                                contentDescription = if (ku) "Dubarekirin" else "Paylaş",
-                                tint = if (repostDone) Amber else Muted,
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
-            )
-        },
-        bottomBar = {
-            // Önceki / Sonraki bölüm gezinme
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(HeftSurface)
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                if (prevChapter != null) {
-                    TextButton(onClick = { navController.navigate("book_chapter/$bookId/${prevChapter.id}") { popUpTo("book_chapter/$bookId/$chapterId") { inclusive = true } } }) {
-                        Icon(Icons.Default.ChevronLeft, null, tint = Primary)
-                        Text(Strings.prevChapter(language), color = Primary, fontSize = 13.sp)
-                    }
-                } else {
-                    Spacer(Modifier.width(1.dp))
-                }
-                if (nextChapter != null) {
-                    TextButton(onClick = { navController.navigate("book_chapter/$bookId/${nextChapter.id}") { popUpTo("book_chapter/$bookId/$chapterId") { inclusive = true } } }) {
-                        Text(Strings.nextChapter(language), color = Amber, fontSize = 13.sp)
-                        Icon(Icons.Default.ChevronRight, null, tint = Amber)
-                    }
-                } else {
-                    Spacer(Modifier.width(1.dp))
-                }
-            }
-        }
-    ) { padding ->
-        if (chapter == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Amber)
-            }
-            return@Scaffold
-        }
-        val ch = chapter!!
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-        ) {
-            Text(ch.title, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 20.sp, lineHeight = 28.sp)
-            if (ch.wordCount > 0) {
-                Spacer(Modifier.height(4.dp))
-                Text("${ch.wordCount} ${Strings.wordCount(language)}", color = Muted, fontSize = 12.sp)
-            }
-            Spacer(Modifier.height(20.dp))
-            HorizontalDivider(color = Divider)
-            Spacer(Modifier.height(16.dp))
-            // HTML içerik render — body HTML tag içeriyorsa AndroidView/TextView kullan
-            val ctx = LocalContext.current
-            if (ch.body.contains("<") && ch.body.contains(">")) {
-                AndroidView(
-                    modifier = Modifier.fillMaxWidth(),
-                    factory  = { context ->
-                        TextView(context).apply {
-                            setTextColor(android.graphics.Color.parseColor("#E5E5EA"))
-                            textSize = 16f
-                            setLineSpacing(0f, 1.6f)
-                            setPadding(0, 0, 0, 0)
-                            setLinkTextColor(android.graphics.Color.parseColor("#F59E0B"))
-                            movementMethod = android.text.method.LinkMovementMethod.getInstance()
                         }
                     },
-                    update = { tv ->
-                        val htmlStr = ch.body
-                            .replace("<hr>", "<hr/>")
-                            .replace("<hr >", "<hr/>")
-                        @Suppress("DEPRECATION")
-                        val spanned: Spanned = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N)
-                            Html.fromHtml(htmlStr, Html.FROM_HTML_MODE_COMPACT)
-                        else Html.fromHtml(htmlStr)
-                        tv.text = spanned
-                    }
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
                 )
-            } else {
-                // Düz metin
-                Text(
-                    ch.body,
-                    color      = OnSurface,
-                    fontSize   = 16.sp,
-                    lineHeight = 28.sp,
-                )
+            },
+            bottomBar = {
+                Row(
+                    modifier = Modifier.fillMaxWidth().background(HeftSurface).padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    if (prevChapter != null) {
+                        TextButton(onClick = {
+                            navController.navigate("book_chapter/$parentId/${prevChapter.id}?type=$type") {
+                                popUpTo("book_chapter/$parentId/$chapterId") { inclusive = true }
+                            }
+                        }) {
+                            Icon(Icons.Default.ChevronLeft, null, tint = Primary)
+                            Text(Strings.prevChapter(language), color = Primary, fontSize = 13.sp)
+                        }
+                    } else Spacer(Modifier.width(1.dp))
+                    if (nextChapter != null) {
+                        TextButton(onClick = {
+                            navController.navigate("book_chapter/$parentId/${nextChapter.id}?type=$type") {
+                                popUpTo("book_chapter/$parentId/$chapterId") { inclusive = true }
+                            }
+                        }) {
+                            Text(Strings.nextChapter(language), color = Amber, fontSize = 13.sp)
+                            Icon(Icons.Default.ChevronRight, null, tint = Amber)
+                        }
+                    } else Spacer(Modifier.width(1.dp))
+                }
             }
-            Spacer(Modifier.height(40.dp))
+        ) { padding ->
+            Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                LazyColumn(
+                    state          = listState,
+                    modifier       = Modifier.weight(1f),
+                    contentPadding = PaddingValues(bottom = 16.dp),
+                ) {
+                    // Bölüm içeriği
+                    item {
+                        chapter?.let { ch ->
+                            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+                                Text(
+                                    "${Strings.chapter(language)} ${ch.order} · ${Strings.wordCount(language, ch.wordCount)}",
+                                    color = Muted, fontSize = 12.sp,
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                if (ch.body.contains("<") && ch.body.contains(">")) {
+                                    AndroidView(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        factory  = { ctx ->
+                                            TextView(ctx).apply {
+                                                setTextColor(android.graphics.Color.parseColor("#E5E5EA"))
+                                                textSize = 16f; setLineSpacing(0f, 1.6f)
+                                            }
+                                        },
+                                        update = { tv ->
+                                            @Suppress("DEPRECATION")
+                                            val spanned: Spanned = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N)
+                                                Html.fromHtml(ch.body, Html.FROM_HTML_MODE_COMPACT)
+                                            else Html.fromHtml(ch.body)
+                                            tv.text = spanned
+                                        }
+                                    )
+                                } else {
+                                    Text(ch.body, color = OnBackground, fontSize = 16.sp, lineHeight = 26.sp)
+                                }
+                                Spacer(Modifier.height(24.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.clickable {
+                                            vm.toggleLikeChapter(parentId, chapterId, ch.isLikedByMe, type)
+                                        },
+                                    ) {
+                                        Icon(
+                                            if (ch.isLikedByMe) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                            null, tint = if (ch.isLikedByMe) Color(0xFFEF4444) else Muted,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                        Spacer(Modifier.width(5.dp))
+                                        Text("${ch.likes}", color = Muted, fontSize = 13.sp)
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.clickable { focusRequester.requestFocus(); keyboardCtrl?.show() },
+                                    ) {
+                                        Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Muted, modifier = Modifier.size(20.dp))
+                                        Spacer(Modifier.width(5.dp))
+                                        Text("${ch.cmtCount}", color = Muted, fontSize = 13.sp)
+                                    }
+                                }
+                            }
+                        } ?: Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = Amber)
+                        }
+                        HorizontalDivider(color = SurfaceVar, thickness = 6.dp)
+                    }
+
+                    // Yorumlar
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(Strings.comments(language), color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            if (comments.isNotEmpty()) Text("${comments.size}", color = Muted, fontSize = 13.sp)
+                        }
+                        HorizontalDivider(color = Divider)
+                    }
+
+                    if (cmtLoading) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = Amber, modifier = Modifier.size(24.dp))
+                            }
+                        }
+                    }
+                    if (!cmtLoading && comments.isEmpty()) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("💬", fontSize = 32.sp)
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(Strings.noComments(language), color = Muted, fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    items(comments, key = { it.id }) { cmt ->
+                        val isOwner   = myUid.isNotBlank() && cmt.uid == myUid
+                        val canDelete = isOwner || chapter?.uid == myUid
+                        ChapterCommentRow(
+                            id          = cmt.id,
+                            uid         = cmt.uid,
+                            name        = cmt.name,
+                            photoURL    = cmt.photoURL,
+                            text        = cmt.text,
+                            replyTo     = cmt.replyTo,
+                            likes       = cmt.likes,
+                            edited      = cmt.edited,
+                            canEdit     = isOwner,
+                            canDelete   = canDelete,
+                            language    = language,
+                            onLongPress = { menuTarget = cmt },
+                            onReply     = { replyTo = cmt; editTarget = null; focusRequester.requestFocus(); keyboardCtrl?.show() },
+                            onEdit      = { editTarget = cmt; replyTo = null },
+                            onDelete    = { deleteTarget = cmt },
+                        )
+                        HorizontalDivider(color = Divider.copy(alpha = 0.4f), thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp))
+                    }
+                }
+
+                // Düzenleme / Yanıt göstergesi
+                val indicator = editTarget ?: replyTo
+                if (indicator != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().background(SurfaceVar).padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            if (editTarget != null) {
+                                Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(Strings.editCommentTitle(language), color = Amber, fontSize = 12.sp)
+                            } else {
+                                Icon(Icons.AutoMirrored.Filled.Reply, null, tint = Amber, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("@${replyTo!!.name} ${Strings.replyingToSuffix(language)}", color = Amber, fontSize = 12.sp)
+                            }
+                        }
+                        IconButton(onClick = { editTarget = null; replyTo = null; inputText = "" }, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+
+                // Giriş kutusu
+                HorizontalDivider(color = Divider)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Background)
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value         = inputText,
+                        onValueChange = { inputText = it },
+                        placeholder   = {
+                            Text(
+                                when {
+                                    editTarget != null -> Strings.editCommentHint(language)
+                                    replyTo    != null -> "@${replyTo!!.name} ${Strings.reply(language)}..."
+                                    else               -> Strings.commentHint(language)
+                                },
+                                color = Muted, fontSize = 14.sp,
+                            )
+                        },
+                        modifier        = Modifier.weight(1f).focusRequester(focusRequester),
+                        shape           = RoundedCornerShape(24.dp),
+                        colors          = hfTextFieldColors(),
+                        maxLines        = 4,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = { submitComment() }),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(
+                        onClick  = { submitComment() },
+                        enabled  = inputText.isNotBlank(),
+                        modifier = Modifier.size(44.dp).background(
+                            if (inputText.isNotBlank()) Amber else Muted.copy(alpha = 0.15f), CircleShape,
+                        ),
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Send, null,
+                            tint = if (inputText.isNotBlank()) Color.Black else Muted,
+                            modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
         }
+    }
+
+    // Long-press menü
+    menuTarget?.let { cmt ->
+        val isOwner   = myUid.isNotBlank() && cmt.uid == myUid
+        val canDelete = isOwner || chapter?.uid == myUid
+        AlertDialog(
+            onDismissRequest = { menuTarget = null },
+            containerColor   = HeftSurface,
+            title = { Text(cmt.name, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
+            text  = { Text(cmt.text.take(100) + if (cmt.text.length > 100) "…" else "", color = Muted, fontSize = 13.sp) },
+            confirmButton = {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { replyTo = cmt; editTarget = null; menuTarget = null; focusRequester.requestFocus(); keyboardCtrl?.show() }, Modifier.fillMaxWidth()) {
+                        Icon(Icons.AutoMirrored.Filled.Reply, null, tint = Amber, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(8.dp))
+                        Text(Strings.replyAction(language), color = Amber)
+                    }
+                    if (isOwner) TextButton(onClick = { editTarget = cmt; replyTo = null; menuTarget = null }, Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Edit, null, tint = OnBackground, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(8.dp))
+                        Text(Strings.editAction(language), color = OnBackground)
+                    }
+                    if (canDelete) TextButton(onClick = { deleteTarget = cmt; menuTarget = null }, Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp)); Spacer(Modifier.width(8.dp))
+                        Text(Strings.deleteAction(language), color = Color(0xFFEF4444))
+                    }
+                    TextButton(onClick = { menuTarget = null }, Modifier.fillMaxWidth()) {
+                        Text(Strings.cancelAction(language), color = Muted)
+                    }
+                }
+            },
+        )
+    }
+
+    deleteTarget?.let { cmt ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            containerColor   = HeftSurface,
+            title  = { Text(Strings.deleteCommentTitle(language), color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            text   = { Text(cmt.text.take(80), color = Muted, fontSize = 13.sp) },
+            confirmButton  = {
+                TextButton(onClick = { vm.deleteChapterComment(parentId, cmt.id, chapterId, type); deleteTarget = null }) {
+                    Text(Strings.deleteAction(language), color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton  = { TextButton(onClick = { deleteTarget = null }) { Text(Strings.cancelAction(language), color = Muted) } },
+        )
     }
 }
 
-// ── Alt bileşenler ───────────────────────────────────────────────────────────
+// ── Alt bileşenler ────────────────────────────────────────────────────────────
 
 @Composable
 fun BookCard(
     book      : Book,
+    language  : String = "tr",
     onClick   : () -> Unit,
     onLike    : () -> Unit,
     onProfile : () -> Unit,
 ) {
+    val isSerial = book.type == "serial"
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -404,45 +759,53 @@ fun BookCard(
             .padding(12.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        // Kapak
         Box(
-            modifier = Modifier
-                .size(64.dp, 88.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(SurfaceVar),
+            modifier = Modifier.size(64.dp, 88.dp).clip(RoundedCornerShape(8.dp)).background(SurfaceVar),
             contentAlignment = Alignment.Center,
         ) {
             if (book.coverImg.isNotBlank()) {
-                AsyncImage(
-                    model = book.coverImg, contentDescription = null,
-                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
-                )
+                AsyncImage(model = book.coverImg, contentDescription = null,
+                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             } else {
-                Icon(Icons.Default.MenuBook, null, tint = Muted, modifier = Modifier.size(28.dp))
+                Icon(
+                    if (isSerial) Icons.Default.AutoStories else Icons.Default.MenuBook,
+                    null, tint = Muted, modifier = Modifier.size(28.dp),
+                )
             }
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
+            // Tür rozeti
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(
+                    Modifier.clip(RoundedCornerShape(4.dp))
+                        .background(if (isSerial) Color(0xFF7C3AED).copy(alpha = 0.15f) else Amber.copy(alpha = 0.15f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        if (isSerial) (if (language == "ku") "Rêze" else "Seri")
+                        else          (if (language == "ku") "Pirtûk" else "Kitap"),
+                        color = if (isSerial) Color(0xFF7C3AED) else Amber,
+                        fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                    )
+                }
+                if (book.genre.isNotBlank()) {
+                    Box(Modifier.clip(RoundedCornerShape(4.dp)).background(SurfaceVar).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                        Text(book.genre, color = Primary, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
             Text(book.title, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(4.dp))
-            // Yazar
-            Row(
-                modifier = Modifier.clickable { onProfile() },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            Row(modifier = Modifier.clickable { onProfile() }, verticalAlignment = Alignment.CenterVertically) {
                 UserAvatar(name = book.name, photoURL = book.photoURL, size = 18)
                 Spacer(Modifier.width(5.dp))
                 Text(book.name, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Spacer(Modifier.height(4.dp))
             if (book.desc.isNotBlank()) {
-                Text(book.desc, color = OnSurface, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp)
                 Spacer(Modifier.height(4.dp))
-            }
-            if (book.genre.isNotBlank()) {
-                Box(
-                    Modifier.clip(RoundedCornerShape(6.dp)).background(SurfaceVar).padding(horizontal = 8.dp, vertical = 3.dp)
-                ) { Text(book.genre, color = Primary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold) }
+                Text(book.desc, color = OnSurface, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp)
             }
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -458,7 +821,7 @@ fun BookCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.FormatListNumbered, null, tint = Muted, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("${book.chapterCount} bölüm", color = Muted, fontSize = 11.sp)
+                    Text("${book.chapterCount} ${Strings.chapter(language)}", color = Muted, fontSize = 11.sp)
                 }
             }
         }
@@ -468,12 +831,13 @@ fun BookCard(
 @Composable
 fun BookDetailHeader(
     book        : Book,
+    language    : String = "tr",
     onProfile   : () -> Unit,
     onLike      : () -> Unit,
     onShowLikers: () -> Unit,
 ) {
+    val isSerial = book.type == "serial"
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Kapak banner
         Box(
             Modifier.fillMaxWidth().height(180.dp)
                 .background(
@@ -483,37 +847,44 @@ fun BookDetailHeader(
                 )
         ) {
             if (book.coverImg.isNotBlank()) {
-                AsyncImage(
-                    model = book.coverImg, contentDescription = null,
+                AsyncImage(model = book.coverImg, contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 0.5f },
-                )
-            }
-            // Kapak kitap görseli — ortada dik
-            if (book.coverImg.isNotBlank()) {
-                AsyncImage(
-                    model = book.coverImg, contentDescription = null,
+                    modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 0.5f })
+                AsyncImage(model = book.coverImg, contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.align(Alignment.Center).size(100.dp, 140.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .shadow(16.dp, RoundedCornerShape(8.dp)),
-                )
+                        .clip(RoundedCornerShape(8.dp)))
             } else {
                 Box(
                     Modifier.align(Alignment.Center).size(100.dp, 140.dp)
                         .clip(RoundedCornerShape(8.dp)).background(SurfaceVar),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Default.MenuBook, null, tint = Muted, modifier = Modifier.size(40.dp)) }
+                ) {
+                    Icon(
+                        if (isSerial) Icons.Default.AutoStories else Icons.Default.MenuBook,
+                        null, tint = Muted, modifier = Modifier.size(40.dp),
+                    )
+                }
+            }
+            // Tür rozeti — sağ üst
+            Box(
+                Modifier.align(Alignment.TopEnd).padding(10.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (isSerial) Color(0xFF7C3AED) else Amber)
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    if (isSerial) (if (language == "ku") "Rêze" else "Seri")
+                    else          (if (language == "ku") "Pirtûk" else "Kitap"),
+                    color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                )
             }
         }
 
         Column(Modifier.padding(16.dp)) {
             Text(book.title, color = OnBackground, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
             Spacer(Modifier.height(6.dp))
-            Row(
-                modifier = Modifier.clickable { onProfile() },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            Row(modifier = Modifier.clickable { onProfile() }, verticalAlignment = Alignment.CenterVertically) {
                 UserAvatar(name = book.name, photoURL = book.photoURL, size = 22)
                 Spacer(Modifier.width(6.dp))
                 Text(book.name, color = Muted, fontSize = 13.sp)
@@ -530,7 +901,6 @@ fun BookDetailHeader(
             }
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                // Beğen
                 Row(
                     modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(SurfaceVar)
                         .clickable { onLike() }.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -544,9 +914,8 @@ fun BookDetailHeader(
                     Spacer(Modifier.width(6.dp))
                     Text("${book.likes}", color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 }
-                // Beğenenler listesi
                 TextButton(onClick = onShowLikers) {
-                    Text("Beğenenler", color = Muted, fontSize = 12.sp)
+                    Text(Strings.likedBy(language), color = Muted, fontSize = 12.sp)
                 }
             }
         }
@@ -555,42 +924,160 @@ fun BookDetailHeader(
 }
 
 @Composable
-fun ChapterListItem(chapter: BookChapter, onClick: () -> Unit) {
+fun UnifiedChapterRow(
+    chapter  : BookChapter,
+    canEdit  : Boolean,
+    language : String = "tr",
+    onClick  : () -> Unit,
+    onEdit   : () -> Unit,
+    onDelete : () -> Unit,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(HeftSurface)
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(start = 14.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier.size(32.dp).clip(CircleShape).background(SurfaceVar),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("${chapter.order + 1}", color = Primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-        }
-        Spacer(Modifier.width(12.dp))
+        Text("${chapter.order}", color = Amber, fontWeight = FontWeight.Bold, fontSize = 13.sp,
+            modifier = Modifier.width(28.dp))
         Column(Modifier.weight(1f)) {
-            Text(chapter.title, color = OnBackground, fontWeight = FontWeight.Medium, fontSize = 14.sp)
-            if (chapter.wordCount > 0) {
-                Text("${chapter.wordCount} kelime", color = Muted, fontSize = 11.sp)
-            }
+            Text(chapter.title, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Text(Strings.wordCount(language, chapter.wordCount), color = Muted, fontSize = 11.sp)
         }
-        Icon(Icons.Default.ChevronRight, null, tint = Muted, modifier = Modifier.size(18.dp))
+        if (canEdit) {
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.MoreVert, null, tint = Muted, modifier = Modifier.size(18.dp))
+                }
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }, containerColor = HeftSurface) {
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(16.dp))
+                                Text(Strings.editAction(language), color = OnBackground, fontSize = 14.sp)
+                            }
+                        },
+                        onClick = { menuExpanded = false; onEdit() },
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                                Text(Strings.deleteAction(language), color = Color(0xFFEF4444), fontSize = 14.sp)
+                            }
+                        },
+                        onClick = { menuExpanded = false; onDelete() },
+                    )
+                }
+            }
+        } else {
+            Icon(Icons.Default.ChevronRight, null, tint = Muted, modifier = Modifier.size(18.dp))
+        }
     }
 }
 
-// ── Kitap oluşturma dialog ────────────────────────────────────────────────────
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ChapterCommentRow(
+    id: String, uid: String, name: String, photoURL: String, text: String,
+    replyTo: String, likes: Int, edited: Boolean,
+    canEdit: Boolean, canDelete: Boolean, language: String,
+    onLongPress: () -> Unit, onReply: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .combinedClickable(onClick = {}, onLongClick = onLongPress)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(SurfaceVar), contentAlignment = Alignment.Center) {
+            if (photoURL.isNotBlank()) {
+                AsyncImage(model = photoURL, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            } else {
+                Text(name.firstOrNull()?.uppercase() ?: "?", color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                if (edited) { Spacer(Modifier.width(4.dp)); Text("· ${Strings.editedLabel(language)}", color = Muted, fontSize = 10.sp) }
+            }
+            if (replyTo.isNotBlank()) Text("@$replyTo", color = Amber, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.height(2.dp))
+            Text(text, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
+            Row(modifier = Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (likes > 0) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Favorite, null, tint = Color(0xFFEF4444), modifier = Modifier.size(11.dp))
+                    Spacer(Modifier.width(2.dp)); Text("$likes", color = Muted, fontSize = 11.sp)
+                }
+                Text(Strings.replyAction(language), color = Muted, fontSize = 11.sp, modifier = Modifier.clickable { onReply() })
+                if (canEdit) Text(Strings.editAction(language), color = Muted, fontSize = 11.sp, modifier = Modifier.clickable { onEdit() })
+                if (canDelete) Text(Strings.deleteAction(language), color = Color(0xFFEF4444).copy(alpha = 0.7f), fontSize = 11.sp, modifier = Modifier.clickable { onDelete() })
+            }
+        }
+    }
+}
+
+// ── Bölüm yazma overlay ───────────────────────────────────────────────────────
+@Composable
+fun ChapterEditorOverlay(
+    title        : String,
+    body         : String,
+    onTitleChange: (String) -> Unit,
+    onBodyChange : (String) -> Unit,
+    heading      : String,
+    saveLabel    : String,
+    canSave      : Boolean,
+    language     : String,
+    onDismiss    : () -> Unit,
+    onSave       : () -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxSize().background(HeftSurface).imePadding()) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().background(HeftSurface).padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null, tint = Muted) }
+                Text(heading, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                TextButton(onClick = onSave, enabled = canSave) {
+                    Text(saveLabel, color = if (canSave) Amber else Muted, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+            }
+            HorizontalDivider(color = Divider)
+            OutlinedTextField(
+                value         = title,
+                onValueChange = onTitleChange,
+                placeholder   = { Text("${Strings.chapterTitle(language)} *", color = Muted) },
+                singleLine    = true,
+                modifier      = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                colors        = hfTextFieldColors(),
+            )
+            HorizontalDivider(color = Divider)
+            Box(modifier = Modifier.weight(1f).fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp)) {
+                RichTextEditor(value = body, onChange = onBodyChange, placeholder = "$heading...", modifier = Modifier.fillMaxSize())
+            }
+        }
+    }
+}
+
+// ── Kitap/Seri oluşturma dialog ───────────────────────────────────────────────
 @Composable
 fun CreateBookDialog(
     language  : String,
     onDismiss : () -> Unit,
-    onCreate  : (String, String, String) -> Unit,
+    onCreate  : (String, String, String, String) -> Unit,  // title, desc, genre, type
 ) {
-    var title by remember { mutableStateOf("") }
-    var desc  by remember { mutableStateOf("") }
-    var genre by remember { mutableStateOf("") }
+    var title    by remember { mutableStateOf("") }
+    var desc     by remember { mutableStateOf("") }
+    var genre    by remember { mutableStateOf("") }
+    var typeSerial by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -604,31 +1091,52 @@ fun CreateBookDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Tür seçimi — toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(SurfaceVar)
+                        .padding(4.dp),
+                ) {
+                    listOf(false to (if (language == "ku") "Pirtûk" else "Kitap"),
+                           true  to (if (language == "ku") "Rêze"   else "Seri")).forEach { (isSerial, label) ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (typeSerial == isSerial) (if (isSerial) Color(0xFF7C3AED) else Amber) else Color.Transparent)
+                                .clickable { typeSerial = isSerial }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(label, color = if (typeSerial == isSerial) Color.White else Muted,
+                                fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = title, onValueChange = { title = it },
                     label = { Text(Strings.bookNameLabel(language)) },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    colors = bookTextFieldColors(),
+                    singleLine = true, modifier = Modifier.fillMaxWidth(), colors = hfTextFieldColors(),
                 )
                 OutlinedTextField(
                     value = desc, onValueChange = { desc = it },
                     label = { Text(Strings.bookDescLabel(language)) },
-                    minLines = 2, modifier = Modifier.fillMaxWidth(),
-                    colors = bookTextFieldColors(),
+                    minLines = 2, modifier = Modifier.fillMaxWidth(), colors = hfTextFieldColors(),
                 )
                 OutlinedTextField(
                     value = genre, onValueChange = { genre = it },
                     label = { Text(Strings.bookGenreLabel(language)) },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    colors = bookTextFieldColors(),
+                    singleLine = true, modifier = Modifier.fillMaxWidth(), colors = hfTextFieldColors(),
                     leadingIcon = { Icon(Icons.Default.Category, null, tint = Muted, modifier = Modifier.size(18.dp)) },
                 )
             }
         },
         confirmButton = {
             TextButton(
-                onClick  = { if (title.isNotBlank()) onCreate(title.trim(), desc.trim(), genre.trim()) },
-                enabled  = title.isNotBlank(),
+                onClick = { if (title.isNotBlank()) onCreate(title.trim(), desc.trim(), genre.trim(), if (typeSerial) "serial" else "book") },
+                enabled = title.isNotBlank(),
             ) { Text(Strings.bookCreateBtn(language), color = Amber, fontWeight = FontWeight.Bold) }
         },
         dismissButton = {
@@ -637,8 +1145,9 @@ fun CreateBookDialog(
     )
 }
 
+// ── TextField renkleri ────────────────────────────────────────────────────────
 @Composable
-private fun bookTextFieldColors() = OutlinedTextFieldDefaults.colors(
+fun hfTextFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedBorderColor      = Amber,
     unfocusedBorderColor    = Divider,
     focusedTextColor        = OnBackground,
@@ -649,5 +1158,3 @@ private fun bookTextFieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedLabelColor     = Muted,
     cursorColor             = Amber,
 )
-
-private fun Modifier.shadow(elevation: androidx.compose.ui.unit.Dp, shape: androidx.compose.ui.graphics.Shape): Modifier = this

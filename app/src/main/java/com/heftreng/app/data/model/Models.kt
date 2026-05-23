@@ -211,6 +211,8 @@ data class Book(
     val ts           : Timestamp? = null,
     val updatedAt    : Timestamp? = null,
     val isLikedByMe  : Boolean    = false,
+    // "book" veya "serial" — Firestore'da hangi koleksiyondan geldiğini belirtir
+    val type         : String     = "book",
 )
 
 // ─── BÖLÜM YORUMU ──────────────────────────────────────
@@ -230,14 +232,21 @@ data class ChapterComment(
 // ─── KİTAP BÖLÜMÜ ──────────────────────────────────────
 data class BookChapter(
     val id        : String     = "",
-    val bookId    : String     = "",
+    val bookId    : String     = "",   // books koleksiyonu için
+    val serialId  : String     = "",   // serials koleksiyonu için (type=="serial")
     val title     : String     = "",
     val body      : String     = "",
     val order     : Int        = 0,
     val wordCount : Int        = 0,
     val uid       : String     = "",
+    val likes     : Int        = 0,
+    val cmtCount  : Int        = 0,
+    val isLikedByMe: Boolean   = false,
     val ts        : Timestamp? = null,
-)
+) {
+    // Hangi koleksiyonda olursa olsun parent ID'yi döner
+    val parentId get() = serialId.ifBlank { bookId }
+}
 
 // ─── OKUMA LİSTESİ ─────────────────────────────────────
 data class ReadingListEntry(

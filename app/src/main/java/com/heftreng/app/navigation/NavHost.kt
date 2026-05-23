@@ -54,9 +54,6 @@ import com.heftreng.app.ui.screens.books.BookDetailScreen
 import com.heftreng.app.ui.screens.books.BooksScreen
 import com.heftreng.app.ui.screens.quotes.AuthorQuotesScreen
 import com.heftreng.app.ui.screens.quotes.BookQuotesScreen
-import com.heftreng.app.ui.screens.serials.ChapterReadScreen
-import com.heftreng.app.ui.screens.serials.SerialDetailScreen
-import com.heftreng.app.ui.screens.serials.SerialsScreen
 import com.heftreng.app.ui.screens.settings.SettingsScreen
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
@@ -334,7 +331,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     FeedScreen(navController = navController, language = language)
                 }
                 composable(Screen.Search.route) { SearchScreen(navController, language = language) }
-                composable(Screen.Serials.route) { SerialsScreen(navController, language) }
+                composable(Screen.Serials.route) { BooksScreen(navController, language) }
                 composable(Screen.Kurdi.route)   { KurdiScreen(language = language) }
                 composable("profile/{uid}") { back ->
                     ProfileScreen(
@@ -377,17 +374,23 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                         language      = language,
                     )
                 }
+                // serial/{id} → birleşik BookDetailScreen'e yönlendir (type=serial)
                 composable("serial/{id}") { back ->
-                    SerialDetailScreen(
-                        serialId      = back.arguments?.getString("id") ?: "",
+                    BookDetailScreen(
+                        bookId        = back.arguments?.getString("id") ?: "",
+                        type          = "serial",
                         navController = navController,
+                        language      = language,
                     )
                 }
+                // chapter/{sid}/{cid} → birleşik okuma ekranına yönlendir
                 composable("chapter/{sid}/{cid}") { back ->
-                    ChapterReadScreen(
-                        serialId      = back.arguments?.getString("sid") ?: "",
+                    BookChapterReadScreen(
+                        parentId      = back.arguments?.getString("sid") ?: "",
                         chapterId     = back.arguments?.getString("cid") ?: "",
+                        type          = "serial",
                         navController = navController,
+                        language      = language,
                     )
                 }
                 composable("author_quotes/{author}") { back ->
@@ -401,17 +404,40 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     BookQuotesScreen(bookName = book, onBack = { navController.popBackStack() })
                 }
                 composable(Screen.Books.route) { BooksScreen(navController, language) }
-                composable("book/{bookId}") { back ->
-                    val bookId = back.arguments?.getString("bookId") ?: ""
-                    BookDetailScreen(bookId = bookId, navController = navController, language = language)
+                // book/{bookId}?type=book|serial
+                composable(
+                    route = "book/{bookId}?type={type}",
+                    arguments = listOf(
+                        androidx.navigation.navArgument("bookId") { type = androidx.navigation.NavType.StringType },
+                        androidx.navigation.navArgument("type")   { type = androidx.navigation.NavType.StringType; defaultValue = "book" },
+                    )
+                ) { back ->
+                    BookDetailScreen(
+                        bookId        = back.arguments?.getString("bookId") ?: "",
+                        type          = back.arguments?.getString("type") ?: "book",
+                        navController = navController,
+                        language      = language,
+                    )
                 }
                 composable(Screen.SavedPosts.route) {
                     SavedPostsScreen(navController = navController)
                 }
-                composable("book_chapter/{bid}/{cid}") { back ->
-                    val bid = back.arguments?.getString("bid") ?: ""
-                    val cid = back.arguments?.getString("cid") ?: ""
-                    BookChapterReadScreen(bookId = bid, chapterId = cid, navController = navController, language = language)
+                // book_chapter/{bid}/{cid}?type=book|serial
+                composable(
+                    route = "book_chapter/{bid}/{cid}?type={type}",
+                    arguments = listOf(
+                        androidx.navigation.navArgument("bid")  { type = androidx.navigation.NavType.StringType },
+                        androidx.navigation.navArgument("cid")  { type = androidx.navigation.NavType.StringType },
+                        androidx.navigation.navArgument("type") { type = androidx.navigation.NavType.StringType; defaultValue = "book" },
+                    )
+                ) { back ->
+                    BookChapterReadScreen(
+                        parentId      = back.arguments?.getString("bid") ?: "",
+                        chapterId     = back.arguments?.getString("cid") ?: "",
+                        type          = back.arguments?.getString("type") ?: "book",
+                        navController = navController,
+                        language      = language,
+                    )
                 }
                 composable("reading_list/{uid}") { back ->
                     ReadingListScreen(

@@ -32,13 +32,13 @@ import coil.compose.AsyncImage
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.data.model.ReadingListEntry
-import com.heftreng.app.data.model.Serial
+import com.heftreng.app.data.model.Book
 import com.heftreng.app.data.model.User
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.screens.auth.heftrangTextFieldColors
 import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.ui.component.FullScreenImageViewer
-import com.heftreng.app.ui.screens.serials.SerialCard
+import com.heftreng.app.ui.screens.books.BookCard
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.FollowListSheet
 import com.heftreng.app.viewmodel.*
@@ -52,7 +52,7 @@ fun ProfileScreen(
     language     : String = "tr",
     vm           : ProfileViewModel     = hiltViewModel(),
     feedVm       : FeedViewModel        = hiltViewModel(),
-    serialsVm    : SerialsViewModel     = hiltViewModel(),
+    bookVm       : BookViewModel        = hiltViewModel(),
     rlVm         : ReadingListViewModel = hiltViewModel(),
     msgsVm       : MessagesViewModel    = hiltViewModel(),
     socialVm     : SocialViewModel      = hiltViewModel(),
@@ -63,7 +63,7 @@ fun ProfileScreen(
     val followersCount by vm.followersCount.collectAsState()
     val followingCount by vm.followingCount.collectAsState()
     val loading        by vm.loading.collectAsState()
-    val mySerials      by serialsVm.mySerials.collectAsState()
+    val mySerials      by bookVm.myBooks.collectAsState()
     val rlEntries      by rlVm.entries.collectAsState()
 
     val followers     by socialVm.followers.collectAsState()
@@ -95,7 +95,7 @@ fun ProfileScreen(
 
     LaunchedEffect(uid) {
         vm.load(uid)
-        serialsVm.loadMySerials(targetUid)
+        bookVm.loadMyBooks(targetUid)
         rlVm.load(targetUid)
     }
 
@@ -298,12 +298,13 @@ fun ProfileScreen(
                             }
                         }
                     } else {
-                        items(mySerials, key = { "serial_${it.id}" }) { serial ->
+                        items(mySerials, key = { "serial_${it.id}" }) { book ->
                             Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                                SerialCard(
-                                    serial  = serial,
-                                    onClick = { navController.navigate("serial/${serial.id}") },
-                                    onLike  = { serialsVm.toggleLikeSerial(serial) },
+                                BookCard(
+                                    book      = book,
+                                    onClick   = { navController.navigate("book/${book.id}?type=${book.type}") },
+                                    onLike    = { bookVm.toggleLikeBook(book) },
+                                    onProfile = { navController.navigate("profile/${book.uid}") },
                                 )
                             }
                         }
