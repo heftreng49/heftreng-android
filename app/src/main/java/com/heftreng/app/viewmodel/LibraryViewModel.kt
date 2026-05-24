@@ -915,4 +915,55 @@ class LibraryViewModel @Inject constructor(
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
+
+    // ── Sayaçları Yeniden Hesapla (Admin) ──────────────────────────────
+    fun rebuildCounters(onComplete: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val authors = firestore.collection("authors").get().await()
+                var processed = 0
+                for (authorDoc in authors.documents) {
+                    val authorId = authorDoc.id
+                    val books = firestore.collection("library_books")
+                        .whereEqualTo("authorId", authorId).get().await()
+                    var totalQuotes  = 0
+                    var totalReviews = 0
+                    for (bookDoc in books.documents) {
+                        val qCount = firestore.collection("library_books")
+                            .document(bookDoc.id).collection("quotes").get().await().size()
+                        val rCount = firestore.collection("library_books")
+                            .document(bookDoc.id).collection("reviews").get().await().size()
+                        firestore.collection("library_books").document(bookDoc.id)
+                            .update("quoteCount", qCount, "reviewCount", rCount).await()
+                        totalQuotes  += qCount
+                        totalReviews += rCount
+                    }
+                    firestore.collection("authors").document(authorId)
+                        .update(
+                            "bookCount",   books.size(),
+                            "quoteCount",  totalQuotes,
+                            "reviewCount", totalReviews,
+                        ).await()
+                    processed++
+                }
+                onComplete("$processed yazar güncellendi ✓")
+            } catch (e: Exception) {
+                onComplete("Hata: ${e.message}")
+            }
+        }
+    }
+
+    // ── Yazar Kitaplarını Getir (suspend) ──────────────────────────────
+    suspend fun fetchBooksForAuthor(authorId: String): List<LibraryBook> {
+        return try {
+            firestore.collection("library_books")
+                .whereEqualTo("authorId", authorId)
+                .get().await()
+                .documents.mapNotNull { doc ->
+                    doc.toObject(LibraryBook::class.java)?.copy(id = doc.id)
+                }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
 }
