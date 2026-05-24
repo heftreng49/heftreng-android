@@ -41,8 +41,9 @@ class LibraryRepository @Inject constructor(
 
     private suspend fun findOrCreateAuthor(name: String): String {
         return try {
+            // Büyük/küçük harf duyarsız arama — "Jan Yekta" ve "jan yekta" aynı kayda eşlenir
             val snap = firestore.collection("authors")
-                .whereEqualTo("name", name)
+                .whereEqualTo("nameLower", name.lowercase())
                 .limit(1).get().await()
             if (!snap.isEmpty) {
                 snap.documents[0].id
@@ -73,8 +74,9 @@ class LibraryRepository @Inject constructor(
         authorName: String,
     ): String {
         return try {
+            // Büyük/küçük harf duyarsız arama — "Xem" ve "xem" aynı kitaba eşlenir
             val snap = firestore.collection("library_books")
-                .whereEqualTo("title", title)
+                .whereEqualTo("titleLower", title.lowercase())
                 .limit(1).get().await()
             if (!snap.isEmpty) {
                 snap.documents[0].id
