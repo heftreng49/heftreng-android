@@ -77,28 +77,56 @@ fun LibraryScreen(
     var reviews by remember { mutableStateOf<List<BookReview>>(emptyList()) }
     val authors by libraryVm.authors.collectAsState()
     var books   by remember { mutableStateOf<List<LibraryBook>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
+    var loading   by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        loading = true
+        loading   = true
+        loadError = null
+        val errors = mutableListOf<String>()
+
+        // Alıntılar (COLLECTION_GROUP index gerekir)
         try {
             val qSnap = db.collectionGroup("quotes")
                 .orderBy("ts", Query.Direction.DESCENDING)
                 .limit(50).get().await()
             quotes = qSnap.documents.mapNotNull { it.toObject(BookQuote::class.java)?.copy(id = it.id) }
+        } catch (e: Exception) {
+            errors.add("Alıntılar yüklenemedi")
+            android.util.Log.e("LibraryScreen", "quotes load error: ${e.message}")
+        }
 
+        // İncelemeler
+        try {
             val rSnap = db.collectionGroup("reviews")
                 .orderBy("ts", Query.Direction.DESCENDING)
                 .limit(50).get().await()
             reviews = rSnap.documents.mapNotNull { it.toObject(BookReview::class.java)?.copy(id = it.id) }
+        } catch (e: Exception) {
+            errors.add("İncelemeler yüklenemedi")
+            android.util.Log.e("LibraryScreen", "reviews load error: ${e.message}")
+        }
 
+        // Yazarlar
+        try {
             libraryVm.loadAuthors()
+        } catch (e: Exception) {
+            errors.add("Yazarlar yüklenemedi")
+            android.util.Log.e("LibraryScreen", "authors load error: ${e.message}")
+        }
 
+        // Kitaplar
+        try {
             val bSnap = db.collection("library_books")
                 .orderBy("ts", Query.Direction.DESCENDING)
                 .limit(50).get().await()
             books = bSnap.documents.mapNotNull { it.toObject(LibraryBook::class.java)?.copy(id = it.id) }
-        } catch (_: Exception) { }
+        } catch (e: Exception) {
+            errors.add("Kitaplar yüklenemedi")
+            android.util.Log.e("LibraryScreen", "books load error: ${e.message}")
+        }
+
+        if (errors.isNotEmpty()) loadError = errors.joinToString(" · ")
         loading = false
     }
 
@@ -178,6 +206,21 @@ fun LibraryScreen(
                     CircularProgressIndicator(color = Primary)
                 }
             } else {
+                // Hata banner — sadece geliştirici modunda göster (debug loglarına da düşüyor)
+                if (loadError != null) {
+                    androidx.compose.material3.Surface(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        shape    = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                        color    = androidx.compose.ui.graphics.Color(0xFFDC2626).copy(alpha = 0.15f),
+                    ) {
+                        Text(
+                            "⚠ ${loadError}",
+                            color    = androidx.compose.ui.graphics.Color(0xFFDC2626),
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(8.dp),
+                        )
+                    }
+                }
                 when (selectedTab) {
                     0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language)
                     1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language)
