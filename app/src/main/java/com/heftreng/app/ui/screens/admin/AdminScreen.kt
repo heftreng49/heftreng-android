@@ -769,8 +769,10 @@ private fun AdminLibraryTab(libraryVm: LibraryViewModel) {
                                 migrateRunning = true
                                 migrateStatus  = "Başlatılıyor…"
                                 libraryVm.migrateLegacyFeedQuotes { done, total ->
-                                    migrateStatus = if (done >= total) "✓ Tamamlandı ($total gönderi işlendi)"
-                                                    else "İşleniyor… $done / $total"
+                                    migrateStatus = if (done >= total) {
+                                        libraryVm.loadAuthors() // tamamlanınca yazar listesini yenile
+                                        "✓ Tamamlandı ($total alıntı işlendi)"
+                                    } else "İşleniyor… $done / $total"
                                     if (done >= total) migrateRunning = false
                                 }
                             }

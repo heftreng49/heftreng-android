@@ -530,34 +530,29 @@ class LibraryViewModel @Inject constructor(
     fun migrateLegacyFeedQuotes(onProgress: (Int, Int) -> Unit = { _, _ -> }) {
         viewModelScope.launch {
             try {
-                // 1a. libraryBookId alanı boş string olan postlar (Android tarafından oluşturulan)
-                val snapEmpty = firestore.collection("feed")
-                    .whereEqualTo("libraryBookId", "")
-                    .limit(200).get().await()
+                // Firestore'daki eski web postlarında:
+                //   - "type" alanı YOK → whereEqualTo("type","quote") 0 sonuç döndürür
+                //   - "libraryBookId" alanı YOK (absent, "" değil) → whereEqualTo("libraryBookId","") eşleşmez
+                //
+                // Tek güvenilir yol: feed'i toplu çek, bellekte filtrele.
+                // "bookName" veya "quote.book" dolu olan her postu işle.
 
-                // 1b. libraryBookId alanı hiç olmayan postlar (web/tema tarafından oluşturulan eski postlar)
-                // Firestore whereEqualTo("field","") null/absent alanlarla eşleşmez,
-                // bu yüzden ayrı bir sorgu gerekiyor.
-                val snapAbsent = firestore.collection("feed")
-                    .whereEqualTo("type", "quote")   // sadece alıntı postları
-                    .limit(200).get().await()
+                val snap = firestore.collection("feed")
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(500).get().await()
 
-                // İki sorgunun sonuçlarını birleştir, ID'ye göre deduplicate et
-                val allDocs = (snapEmpty.documents + snapAbsent.documents)
-                    .distinctBy { it.id }
-
-                val docs = allDocs.filter { doc ->
+                val docs = snap.documents.filter { doc ->
                     val d = doc.data ?: return@filter false
                     // libraryBookId zaten dolu olanları atla
                     val existingBookId = d["libraryBookId"] as? String ?: ""
                     if (existingBookId.isNotBlank()) return@filter false
-                    // Alıntı metni ve kitap adı olan postları al
-                    val qObj   = d["quote"] as? Map<*, *>
-                    val qText  = (qObj?.get("text") as? String)?.isNotBlank() == true
-                        || (d["quoteText"] as? String)?.isNotBlank() == true
-                    val bName  = (qObj?.get("book") as? String)?.isNotBlank() == true
-                        || (d["bookName"] as? String)?.isNotBlank() == true
-                    qText && bName
+                    // quote.book veya bookName dolu olmalı
+                    val qObj  = d["quote"] as? Map<*, *>
+                    val bName = (qObj?.get("book") as? String)?.trim()?.isNotBlank() == true
+                        || (d["bookName"] as? String)?.trim()?.isNotBlank() == true
+                    val qText = (qObj?.get("text") as? String)?.trim()?.isNotBlank() == true
+                        || (d["quoteText"] as? String)?.trim()?.isNotBlank() == true
+                    bName && qText
                 }
 
                 val total = docs.size
