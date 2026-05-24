@@ -1,0 +1,210 @@
+/**
+ * migrate-library.js
+ * ─────────────────────────────────────────────────────────────────
+ * Heftreng — Kütüphane Migration Scripti
+ * GitHub Actions ile çalışır (FIREBASE_SERVICE_ACCOUNT secret gerekir)
+ *
+ * Yapılan işlemler:
+ *   1. authors → nameLower eksik olanlara ekle
+ *   2. library_books → titleLower eksik olanlara ekle
+ *   3. feed → library_books/quotes'a düşmemiş alıntıları sync et
+ * ─────────────────────────────────────────────────────────────────
+ */
+
+const admin = require("firebase-admin");
+const sa = require("./serviceAccount.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(sa),
+  projectId: "bloggerheftreng",
+});
+
+const db = admin.firestore();
+
+// ────────────────────────────────────────────────────────────────
+//  ADIM 1 — authors: nameLower eksik olanlara ekle
+// ────────────────────────────────────────────────────────────────
+async function fixAuthors() {
+  console.log("\n── ADIM 1: authors → nameLower ──");
+  const snap = await db.collection("authors").get();
+  let fixed = 0;
+  const batch = db.batch();
+
+  snap.docs.forEach((doc) => {
+    const d = doc.data();
+    if (!d.nameLower && d.name) {
+      const nameLower = d.name.toLowerCase().trim();
+      batch.update(doc.ref, { nameLower });
+      console.log(`  [FIX] "${d.name}" → nameLower: "${nameLower}"`);
+      fixed++;
+    }
+  });
+
+  if (fixed > 0) {
+    await batch.commit();
+    console.log(`  ✓ ${fixed} yazar güncellendi`);
+  } else {
+    console.log("  ✓ Tüm yazarlarda nameLower zaten var");
+  }
+}
+
+// ────────────────────────────────────────────────────────────────
+//  ADIM 2 — library_books: titleLower eksik olanlara ekle
+// ────────────────────────────────────────────────────────────────
+async function fixBooks() {
+  console.log("\n── ADIM 2: library_books → titleLower ──");
+  const snap = await db.collection("library_books").get();
+  let fixed = 0;
+  const batch = db.batch();
+
+  snap.docs.forEach((doc) => {
+    const d = doc.data();
+    if (!d.titleLower && d.title) {
+      const titleLower = d.title.toLowerCase().trim();
+      batch.update(doc.ref, { titleLower });
+      console.log(`  [FIX] "${d.title}" → titleLower: "${titleLower}"`);
+      fixed++;
+    }
+  });
+
+  if (fixed > 0) {
+    await batch.commit();
+    console.log(`  ✓ ${fixed} kitap güncellendi`);
+  } else {
+    console.log("  ✓ Tüm kitaplarda titleLower zaten var");
+  }
+}
+
+// ────────────────────────────────────────────────────────────────
+//  ADIM 3 — feed → library_books/quotes sync
+// ────────────────────────────────────────────────────────────────
+async function syncFeedQuotesToLibrary() {
+  console.log("\n── ADIM 3: feed alıntıları → library_books/quotes sync ──");
+
+  // Tüm kitapları yükle (titleLower → doc map)
+  const booksSnap = await db.collection("library_books").get();
+  const bookByTitleLower = {};
+  booksSnap.docs.forEach((doc) => {
+    const d = doc.data();
+    const tl = (d.titleLower || (d.title || "").toLowerCase()).trim();
+    if (tl) bookByTitleLower[tl] = { ...d, id: doc.id };
+  });
+
+  // Tüm yazarları yükle (nameLower → doc map)
+  const authorsSnap = await db.collection("authors").get();
+  const authorByNameLower = {};
+  authorsSnap.docs.forEach((doc) => {
+    const d = doc.data();
+    const nl = (d.nameLower || (d.name || "").toLowerCase()).trim();
+    if (nl) authorByNameLower[nl] = { ...d, id: doc.id };
+  });
+
+  // Feed'den alıntı postlarını çek
+  const feedSnap = await db.collection("feed")
+    .orderBy("ts", "desc")
+    .limit(500)
+    .get();
+
+  let synced = 0;
+  let skipped = 0;
+  let noBook = 0;
+
+  for (const doc of feedSnap.docs) {
+    const d = doc.data();
+
+    const quoteObj   = d.quote;
+    const quoteText  = (quoteObj?.text  || d.quoteText  || "").trim();
+    const bookName   = (quoteObj?.book  || d.bookName   || "").trim();
+    const authorName = (quoteObj?.author || d.authorName || "").trim();
+
+    if (!quoteText || !bookName) continue;
+
+    // libraryBookId zaten varsa kullan, yoksa isimden bul
+    let bookId   = (d.libraryBookId   || "").trim();
+    let authorId = (d.libraryAuthorId || "").trim();
+
+    if (!bookId) {
+      const found = bookByTitleLower[bookName.toLowerCase().trim()];
+      if (found) bookId = found.id;
+    }
+    if (!authorId && authorName) {
+      const found = authorByNameLower[authorName.toLowerCase().trim()];
+      if (found) authorId = found.id;
+    }
+
+    if (!bookId) {
+      console.log(`  [SKIP] Kitap bulunamadı: "${bookName}" (feedId: ${doc.id})`);
+      noBook++;
+      continue;
+    }
+
+    // Bu feed postu daha önce quotes'a yazıldı mı?
+    const existingSnap = await db
+      .collection("library_books").doc(bookId)
+      .collection("quotes")
+      .where("feedPostId", "==", doc.id)
+      .limit(1).get();
+
+    if (!existingSnap.empty) {
+      skipped++;
+      continue;
+    }
+
+    // quotes sub-koleksiyonuna yaz
+    await db.collection("library_books").doc(bookId)
+      .collection("quotes").add({
+        bookId,
+        authorId,
+        bookTitle:        bookName,
+        authorName,
+        text:             quoteText,
+        uid:              d.uid            || "",
+        userDisplayName:  d.name || d.displayName || "",
+        userPhotoURL:     d.photoURL       || "",
+        feedPostId:       doc.id,
+        likesCount:       0,
+        ts:               d.ts || admin.firestore.Timestamp.now(),
+      });
+
+    // quoteCount artır
+    await db.collection("library_books").doc(bookId)
+      .update({ quoteCount: admin.firestore.FieldValue.increment(1) });
+
+    if (authorId) {
+      await db.collection("authors").doc(authorId)
+        .update({ quoteCount: admin.firestore.FieldValue.increment(1) })
+        .catch(() => {});
+    }
+
+    // feed post'ta libraryBookId/libraryAuthorId eksikse güncelle
+    if (!d.libraryBookId) {
+      await db.collection("feed").doc(doc.id).update({
+        libraryBookId:   bookId,
+        libraryAuthorId: authorId,
+        type:            "library_quote",
+      }).catch(() => {});
+    }
+
+    console.log(`  [SYNC] "${bookName}" — "${quoteText.slice(0, 50)}..."`);
+    synced++;
+  }
+
+  console.log(`\n  Synced: ${synced} | Zaten vardı: ${skipped} | Kitap bulunamadı: ${noBook}`);
+}
+
+// ────────────────────────────────────────────────────────────────
+//  Ana akış
+// ────────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    await fixAuthors();
+    await fixBooks();
+    await syncFeedQuotesToLibrary();
+    console.log("\n✅ Migration tamamlandı.");
+  } catch (e) {
+    console.error("❌ Hata:", e);
+    process.exit(1);
+  } finally {
+    process.exit(0);
+  }
+})();
