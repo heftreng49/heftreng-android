@@ -219,12 +219,14 @@ object Strings {
     fun suggestedPeople(l: String)  = t(l, "Önerilen Kişiler",     "Kesên Pêşniyarkirî")
     fun followAction(l: String)     = follow(l)   // alias → follow()
     fun resultTypeLabel(l: String, type: String) = when (type) {
-        "post"       -> t(l, "Gönderi",       "Nivîs")
-        "serial"     -> t(l, "Seri",          "Rêzedîmen")
-        "book"       -> t(l, "Kitap",         "Pirtûk")
-        "author"     -> t(l, "Yazar",         "Nivîskar")
-        "book_quote" -> t(l, "Kitap Alıntısı","Gotina Pirtûkê")
-        else         -> t(l, "Kişi",          "Kes")
+        "post"           -> t(l, "Gönderi",         "Nivîs")
+        "serial"         -> t(l, "Seri",            "Rêzedîmen")
+        "library_book"   -> t(l, "Kütüphane Kitabı","Pirtûka Pirtûkxanê")
+        "library_author" -> t(l, "Yazar",           "Nivîskar")
+        "book"           -> t(l, "Kitap",           "Pirtûk")
+        "author"         -> t(l, "Yazar",           "Nivîskar")
+        "book_quote"     -> t(l, "Kitap Alıntısı",  "Gotina Pirtûkê")
+        else             -> t(l, "Kişi",            "Kes")
     }
 
     // ── Mesajlar (yeni) ───────────────────────────────────────────────────────

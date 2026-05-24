@@ -65,6 +65,7 @@ fun AuthorDetailScreen(
     authorId     : String,
     navController: NavController,
     vm           : LibraryViewModel = hiltViewModel(),
+    feedVm       : com.heftreng.app.viewmodel.FeedViewModel = hiltViewModel(),
 ) {
     val author      by vm.selectedAuthor.collectAsState()
     val books       by vm.authorBooks.collectAsState()
@@ -73,7 +74,12 @@ fun AuthorDetailScreen(
     val loading     by vm.loading.collectAsState()
     val isFollowing by vm.isFollowingAuthor.collectAsState()
 
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab       by remember { mutableIntStateOf(0) }
+    var showAddQuoteFab   by remember { mutableStateOf(false) }
+    var showAddReviewFab  by remember { mutableStateOf(false) }
+    var reviewTargetBook  by remember { mutableStateOf<com.heftreng.app.data.model.LibraryBook?>(null) }
+    var showBookPicker    by remember { mutableStateOf(false) }
+
     val tabs = listOf("Kitapları", "Alıntılar", "İncelemeler")
 
     LaunchedEffect(authorId) { vm.loadAuthor(authorId) }
@@ -90,7 +96,24 @@ fun AuthorDetailScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
             )
-        }
+        },
+        floatingActionButton = {
+            when (selectedTab) {
+                1 -> FloatingActionButton(
+                    onClick        = { showAddQuoteFab = true },
+                    containerColor = Primary,
+                    contentColor   = androidx.compose.ui.graphics.Color.White,
+                    shape          = androidx.compose.foundation.shape.CircleShape,
+                ) { Icon(Icons.Default.FormatQuote, null) }
+                2 -> FloatingActionButton(
+                    onClick        = { showBookPicker = true },
+                    containerColor = Amber,
+                    contentColor   = androidx.compose.ui.graphics.Color(0xFF1A1040),
+                    shape          = androidx.compose.foundation.shape.CircleShape,
+                ) { Icon(Icons.Default.RateReview, null) }
+                else -> {}
+            }
+        },
     ) { padding ->
         if (loading && author == null) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
@@ -281,6 +304,48 @@ private fun AuthorHeaderSection(
             Spacer(Modifier.width(6.dp))
             Text(if (isFollowing) "Takip Ediliyor" else "Takip Et", fontSize = 13.sp)
         }
+    }
+
+    // ── Alıntı FAB Dialog (yazar adı pre-filled) ──────────────────────
+    if (showAddQuoteFab) {
+        QuoteDialog(
+            initialAuthor = author?.name ?: "",
+            onDismiss     = { showAddQuoteFab = false },
+            onConfirm     = { payload ->
+                feedVm.createPost(
+                    text       = "",
+                    quoteText  = payload.text,
+                    authorName = payload.authorName,
+                    bookName   = payload.bookName,
+                )
+                showAddQuoteFab = false
+            },
+        )
+    }
+
+    // ── İnceleme FAB: önce kitap seç, sonra dialog ────────────────────
+    if (showBookPicker) {
+        AuthorBookPickerDialog(
+            books    = books,
+            language = "tr",
+            onDismiss = { showBookPicker = false },
+            onSelect  = { book ->
+                reviewTargetBook = book
+                showBookPicker   = false
+                showAddReviewFab = true
+            },
+        )
+    }
+    if (showAddReviewFab && reviewTargetBook != null) {
+        AddReviewDialog(
+            bookTitle = reviewTargetBook!!.title,
+            onDismiss = { showAddReviewFab = false; reviewTargetBook = null },
+            onSubmit  = { text, rating ->
+                vm.addBookReview(reviewTargetBook!!, text, rating)
+                showAddReviewFab = false
+                reviewTargetBook = null
+            },
+        )
     }
 }
 
@@ -1500,6 +1565,59 @@ fun RlStatusPickerDialog(
         confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("İptal", color = Muted) }
+        },
+    )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Kitap Seçici Dialog — AuthorDetailScreen FAB için
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun AuthorBookPickerDialog(
+    books    : List<com.heftreng.app.data.model.LibraryBook>,
+    language : String,
+    onDismiss: () -> Unit,
+    onSelect : (com.heftreng.app.data.model.LibraryBook) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Text(
+                if (language == "ku") "Pirtûkê hilbijêre" else "Kitap Seçin",
+                color = OnBackground, fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier.heightIn(max = 320.dp),
+            ) {
+                items(books, key = { it.id }) { book ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(book) }
+                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Outlined.AutoStories, null, tint = Primary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text(book.title, color = OnBackground, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            if (book.authorName.isNotBlank())
+                                Text(book.authorName, color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                    HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(if (language == "ku") "Betal bike" else "İptal", color = Muted)
+            }
         },
     )
 }

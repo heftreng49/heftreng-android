@@ -151,8 +151,8 @@ fun SearchScreen(
                         1    -> searchResults.filter { it.type == "user" }
                         2    -> searchResults.filter { it.type == "post" }
                         3    -> searchResults.filter { it.type == "serial" }
-                        4    -> searchResults.filter { it.type == "book" }
-                        5    -> searchResults.filter { it.type == "author" || it.type == "book_quote" }
+                        4    -> searchResults.filter { it.type == "library_book" || it.type == "book_quote" }
+                        5    -> searchResults.filter { it.type == "library_author" || it.type == "author" }
                         else -> searchResults
                     }
 
@@ -176,12 +176,13 @@ fun SearchScreen(
                         items(filtered, key = { it.type + it.id }) { result ->
                             SearchResultRow(result, language = language, onClick = {
                                 when (result.type) {
-                                    "user"   -> navController.navigate("profile/${result.uid}")
-                                    "post"   -> navController.navigate(Screen.PostDetail.go(result.id))
-                                    "serial" -> navController.navigate(Screen.SerialDetail.go(result.id))
-                                    "book"       -> navController.navigate("book/${result.id}")
-                                    "author"     -> navController.navigate("author_quotes/${java.net.URLEncoder.encode(result.id, "UTF-8")}")
-                                    "book_quote" -> navController.navigate("book_quotes/${java.net.URLEncoder.encode(result.id, "UTF-8")}")
+                                    "user"           -> navController.navigate("profile/${result.uid}")
+                                    "post"           -> navController.navigate(Screen.PostDetail.go(result.id))
+                                    "serial"         -> navController.navigate(Screen.SerialDetail.go(result.id))
+                                    "library_book"   -> navController.navigate("library_book_detail/${result.id}")
+                                    "library_author" -> navController.navigate("author_detail/${result.id}")
+                                    "author"         -> navController.navigate("author_quotes/${java.net.URLEncoder.encode(result.id, "UTF-8")}")
+                                    "book_quote"     -> navController.navigate("book_quotes/${java.net.URLEncoder.encode(result.id, "UTF-8")}")
                                 }
                             })
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
@@ -219,9 +220,13 @@ fun SearchScreen(
 @Composable
 private fun SearchResultRow(result: SearchResult, language: String = "tr", onClick: () -> Unit) {
     val (typeIcon, typeColor) = when (result.type) {
-        "post"   -> Icons.Outlined.DynamicFeed to Primary
-        "serial" -> Icons.Outlined.AutoStories  to Color(0xFF8B5CF6)
-        else     -> Icons.Outlined.PersonOutline to Amber
+        "post"           -> Icons.Outlined.DynamicFeed   to Primary
+        "serial"         -> Icons.Outlined.AutoStories   to Color(0xFF8B5CF6)
+        "library_book"   -> Icons.Outlined.MenuBook      to Amber
+        "library_author" -> Icons.Outlined.Person        to Primary
+        "author"         -> Icons.Outlined.FormatQuote   to Amber
+        "book_quote"     -> Icons.Outlined.FormatQuote   to Amber
+        else             -> Icons.Outlined.PersonOutline to Amber
     }
     Row(
         modifier          = Modifier
@@ -230,8 +235,12 @@ private fun SearchResultRow(result: SearchResult, language: String = "tr", onCli
             .padding(horizontal = 16.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Avatar / Kapak
         Box(
-            modifier         = Modifier.size(44.dp).clip(if (result.type == "user") CircleShape else RoundedCornerShape(10.dp)).background(SurfaceVar),
+            modifier         = Modifier
+                .size(44.dp)
+                .clip(if (result.type == "user" || result.type == "library_author") CircleShape else RoundedCornerShape(10.dp))
+                .background(SurfaceVar),
             contentAlignment = Alignment.Center,
         ) {
             if (result.imageUrl.isNotBlank()) {
@@ -247,10 +256,19 @@ private fun SearchResultRow(result: SearchResult, language: String = "tr", onCli
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(result.title, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp,
-                maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                result.title,
+                fontWeight = FontWeight.SemiBold,
+                color      = OnBackground,
+                fontSize   = 14.sp,
+                maxLines   = 2,
+                overflow   = TextOverflow.Ellipsis,
+            )
             if (result.subtitle.isNotBlank())
                 Text(result.subtitle, color = Muted, fontSize = 12.sp, maxLines = 1)
+            // extra bilgi (kitap puanı, alıntı sayısı vb.)
+            if (result.extra.isNotBlank())
+                Text(result.extra, color = typeColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
         }
         Surface(
             shape = RoundedCornerShape(6.dp),
@@ -258,10 +276,10 @@ private fun SearchResultRow(result: SearchResult, language: String = "tr", onCli
         ) {
             Text(
                 Strings.resultTypeLabel(language, result.type),
-                color    = typeColor,
-                fontSize = 10.sp,
+                color      = typeColor,
+                fontSize   = 10.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                modifier   = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
     }

@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.Author
 import com.heftreng.app.data.model.BookQuote
 import com.heftreng.app.data.model.BookReview
@@ -46,6 +48,7 @@ import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.LibraryViewModel
+import kotlinx.coroutines.tasks.await
 import kotlin.math.roundToInt
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -68,18 +71,35 @@ fun LibraryScreen(
     )
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    // Adım 4.1 — Firestore sorguları LibraryViewModel'e taşındı.
-    // LibraryViewModel'e loadLibraryOverview() eklenmeli; şimdilik
-    // mevcut state flow'ları tüketiyoruz, ek sorgular VM'den yapılıyor.
-    val quotes  by libraryVm.bookQuotes.collectAsState()
-    val reviews by libraryVm.bookReviews.collectAsState()
+    val db = remember { FirebaseFirestore.getInstance() }
+
+    var quotes  by remember { mutableStateOf<List<BookQuote>>(emptyList()) }
+    var reviews by remember { mutableStateOf<List<BookReview>>(emptyList()) }
     val authors by libraryVm.authors.collectAsState()
-    val books   by libraryVm.authorBooks.collectAsState()
-    val loading by libraryVm.loading.collectAsState()
+    var books   by remember { mutableStateOf<List<LibraryBook>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        libraryVm.loadAuthors()
-        libraryVm.loadLibraryOverview()
+        loading = true
+        try {
+            val qSnap = db.collectionGroup("quotes")
+                .orderBy("ts", Query.Direction.DESCENDING)
+                .limit(50).get().await()
+            quotes = qSnap.documents.mapNotNull { it.toObject(BookQuote::class.java)?.copy(id = it.id) }
+
+            val rSnap = db.collectionGroup("reviews")
+                .orderBy("ts", Query.Direction.DESCENDING)
+                .limit(50).get().await()
+            reviews = rSnap.documents.mapNotNull { it.toObject(BookReview::class.java)?.copy(id = it.id) }
+
+            libraryVm.loadAuthors()
+
+            val bSnap = db.collection("library_books")
+                .orderBy("ts", Query.Direction.DESCENDING)
+                .limit(50).get().await()
+            books = bSnap.documents.mapNotNull { it.toObject(LibraryBook::class.java)?.copy(id = it.id) }
+        } catch (_: Exception) { }
+        loading = false
     }
 
     // ── Dialog state ──────────────────────────────────────────────────────
@@ -456,7 +476,7 @@ private fun LibraryBookRow(book: LibraryBook, navController: NavController) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun LibraryBookPickerDialog(
+internal fun LibraryBookPickerDialog(
     books    : List<LibraryBook>,
     language : String,
     onDismiss: () -> Unit,

@@ -11,14 +11,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
-// Arama sonucu tipi — kullanıcı / post / serial
+// Arama sonucu tipi — kullanıcı / post / serial / library
 data class SearchResult(
     val id         : String,
-    val type       : String,   // "user" | "post" | "serial"
+    val type       : String,   // "user" | "post" | "serial" | "library_book" | "library_author" | "author" | "book_quote"
     val title      : String,
     val subtitle   : String,
     val imageUrl   : String = "",
     val uid        : String = "",
+    val extra      : String = "",  // avgRating, quoteCount vb. özet bilgi
 )
 
 @HiltViewModel
@@ -232,6 +233,66 @@ class SearchViewModel @Inject constructor(
                     subtitle = d["displayName"] as? String ?: d["name"] as? String ?: "",
                     imageUrl = "",
                 )
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+
+        _searchResults.value = results
+
+        // ── Kütüphane Yazarları — authors koleksiyonu ───────────────────
+        try {
+            val seenAuthorIds = mutableSetOf<String>()
+            for (prefix in listOf(q, qLower, qCap).distinct()) {
+                val aSnap = firestore.collection("authors")
+                    .orderBy("nameLower")
+                    .startAt(prefix.lowercase()).endAt(prefix.lowercase() + "\uF8FF")
+                    .limit(8).get().await()
+                for (doc in aSnap.documents) {
+                    if (!seenAuthorIds.add(doc.id)) continue
+                    val d = doc.data ?: continue
+                    val name = d["name"] as? String ?: continue
+                    val bookCount  = (d["bookCount"]  as? Long)?.toInt() ?: 0
+                    val quoteCount = (d["quoteCount"] as? Long)?.toInt() ?: 0
+                    results += SearchResult(
+                        id       = doc.id,
+                        type     = "library_author",
+                        title    = name,
+                        subtitle = d["nationality"] as? String ?: "",
+                        imageUrl = d["photoURL"] as? String ?: "",
+                        extra    = buildString {
+                            if (bookCount  > 0) append("$bookCount kitap")
+                            if (quoteCount > 0) append(" · $quoteCount alıntı")
+                        }.trim(' ', '·'),
+                    )
+                }
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+
+        // ── Kütüphane Kitapları — library_books koleksiyonu ─────────────
+        try {
+            val seenBookIds = mutableSetOf<String>()
+            for (prefix in listOf(q, qLower, qCap).distinct()) {
+                val bSnap = firestore.collection("library_books")
+                    .orderBy("titleLower")
+                    .startAt(prefix.lowercase()).endAt(prefix.lowercase() + "\uF8FF")
+                    .limit(8).get().await()
+                for (doc in bSnap.documents) {
+                    if (!seenBookIds.add(doc.id)) continue
+                    val d = doc.data ?: continue
+                    val title = d["title"] as? String ?: continue
+                    val avgRating  = (d["avgRating"]  as? Number)?.toFloat() ?: 0f
+                    val quoteCount = (d["quoteCount"] as? Long)?.toInt() ?: 0
+                    results += SearchResult(
+                        id       = doc.id,
+                        type     = "library_book",
+                        title    = title,
+                        subtitle = d["authorName"] as? String ?: "",
+                        imageUrl = d["coverImg"]   as? String ?: "",
+                        extra    = buildString {
+                            if (avgRating  > 0f) append("★ ${"%.1f".format(avgRating)}")
+                            if (quoteCount > 0)  append(" · $quoteCount alıntı")
+                        }.trim(' ', '·'),
+                    )
+                }
             }
         } catch (e: Exception) { e.printStackTrace() }
 
