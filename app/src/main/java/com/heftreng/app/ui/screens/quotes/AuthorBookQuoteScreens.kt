@@ -785,47 +785,62 @@ private fun AddQuoteDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuthorQuotesScreen(
-    authorName : String,
-    onBack     : () -> Unit,
+    authorName   : String,
+    onBack       : () -> Unit,
+    language     : String = "tr",
+    navController: NavController? = null,
+    feedVm       : com.heftreng.app.viewmodel.FeedViewModel? = null,
 ) {
     LegacyQuoteListPage(
-        title    = authorName,
-        subtitle = "Yazar Alıntıları",
-        icon     = Icons.Default.Person,
-        field    = "quote.author",
-        flatField = "authorName",
-        value    = authorName,
-        onBack   = onBack,
+        title         = authorName,
+        subtitle      = "Yazar Alıntıları",
+        icon          = Icons.Default.Person,
+        field         = "quote.author",
+        flatField     = "authorName",
+        value         = authorName,
+        onBack        = onBack,
+        language      = language,
+        navController = navController,
+        feedVm        = feedVm,
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookQuotesScreen(
-    bookName : String,
-    onBack   : () -> Unit,
+    bookName     : String,
+    onBack       : () -> Unit,
+    language     : String = "tr",
+    navController: NavController? = null,
+    feedVm       : com.heftreng.app.viewmodel.FeedViewModel? = null,
 ) {
     LegacyQuoteListPage(
-        title    = bookName,
-        subtitle = "Kitap Alıntıları",
-        icon     = Icons.Default.AutoStories,
-        field    = "quote.book",
-        flatField = "bookName",
-        value    = bookName,
-        onBack   = onBack,
+        title         = bookName,
+        subtitle      = "Kitap Alıntıları",
+        icon          = Icons.Default.AutoStories,
+        field         = "quote.book",
+        flatField     = "bookName",
+        value         = bookName,
+        onBack        = onBack,
+        language      = language,
+        navController = navController,
+        feedVm        = feedVm,
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LegacyQuoteListPage(
-    title    : String,
-    subtitle : String,
-    icon     : androidx.compose.ui.graphics.vector.ImageVector,
-    field    : String,
-    flatField: String,
-    value    : String,
-    onBack   : () -> Unit,
+    title        : String,
+    subtitle     : String,
+    icon         : androidx.compose.ui.graphics.vector.ImageVector,
+    field        : String,
+    flatField    : String,
+    value        : String,
+    onBack       : () -> Unit,
+    language     : String = "tr",
+    navController: NavController? = null,
+    feedVm       : com.heftreng.app.viewmodel.FeedViewModel? = null,
 ) {
     val db      = remember { FirebaseFirestore.getInstance() }
     var posts   by remember { mutableStateOf<List<Post>>(emptyList()) }
@@ -889,11 +904,11 @@ private fun LegacyQuoteListPage(
                     PostCard(
                         post      = post,
                         language  = language,
-                        onLike    = { feedVm.toggleLike(post) },
-                        onSave    = { feedVm.toggleSave(post) },
-                        onProfile = { navController.navigate("profile/${post.uid}") },
-                        onComment = { navController.navigate("post_detail/${post.id}") },
-                        onShare   = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
+                        onLike    = { feedVm?.toggleLike(post) },
+                        onSave    = { feedVm?.toggleSave(post) },
+                        onProfile = { navController?.navigate("profile/${post.uid}") },
+                        onComment = { navController?.navigate("post_detail/${post.id}") },
+                        onShare   = { if (post.isRepostedByMe) feedVm?.unrepost(post) else feedVm?.repost(post) },
                     )
                 }
             }
