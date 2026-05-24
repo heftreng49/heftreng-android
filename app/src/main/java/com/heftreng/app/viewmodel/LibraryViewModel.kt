@@ -741,3 +741,55 @@ class LibraryViewModel @Inject constructor(
         }
     }
 }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  SAYAÇ DÜZELTME
+    //  Migration sonrası bookCount / quoteCount sayaçları tutarsız kalabilir.
+    //  Bu fonksiyon Firestore'daki gerçek verileri sayarak tüm yazar ve kitap
+    //  sayaçlarını sıfırdan yazar.
+    // ══════════════════════════════════════════════════════════════════════
+    fun rebuildCounters(onDone: (String) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val authorsSnap = firestore.collection("authors").get().await()
+                var fixed = 0
+
+                authorsSnap.documents.forEach { authorDoc ->
+                    val authorId = authorDoc.id
+
+                    // Bu yazara ait kitapları say
+                    val booksSnap = firestore.collection("library_books")
+                        .whereEqualTo("authorId", authorId).get().await()
+                    val bookCount = booksSnap.size()
+
+                    // Bu yazara ait alıntıları say
+                    val quotesSnap = firestore.collectionGroup("quotes")
+                        .whereEqualTo("authorId", authorId).get().await()
+                    val quoteCount = quotesSnap.size()
+
+                    // Yazarı güncelle
+                    firestore.collection("authors").document(authorId)
+                        .update(mapOf(
+                            "bookCount"  to bookCount,
+                            "quoteCount" to quoteCount,
+                        )).await()
+
+                    // Her kitabın quoteCount'unu da düzelt
+                    booksSnap.documents.forEach { bookDoc ->
+                        val bookId = bookDoc.id
+                        val bqSnap = firestore.collection("library_books")
+                            .document(bookId).collection("quotes").get().await()
+                        firestore.collection("library_books").document(bookId)
+                            .update("quoteCount", bqSnap.size()).await()
+                    }
+
+                    fixed++
+                }
+
+                onDone("✓ $fixed yazar düzeltildi")
+            } catch (e: Exception) {
+                onDone("Hata: ${e.message}")
+            }
+        }
+    }
+}

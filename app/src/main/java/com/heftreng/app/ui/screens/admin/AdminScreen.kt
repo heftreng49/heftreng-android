@@ -708,8 +708,10 @@ private fun AdminLibraryTab(libraryVm: LibraryViewModel) {
     var editAuthor    by remember { mutableStateOf<com.heftreng.app.data.model.Author?>(null) }
     var editBook      by remember { mutableStateOf<com.heftreng.app.data.model.LibraryBook?>(null) }
 
-    var migrateStatus by remember { mutableStateOf("") }
+    var migrateStatus  by remember { mutableStateOf("") }
     var migrateRunning by remember { mutableStateOf(false) }
+    var counterStatus  by remember { mutableStateOf("") }
+    var counterRunning by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { libraryVm.loadAuthors() }
 
@@ -789,6 +791,55 @@ private fun AdminLibraryTab(libraryVm: LibraryViewModel) {
                         }
                         Text(if (migrateRunning) "Çalışıyor…" else "Eşleştirmeyi Başlat",
                             fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // ── Sayaç Düzeltme ────────────────────────────────────────────────
+        item {
+            Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Refresh, null, tint = Amber, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Sayaçları Düzelt", color = OnBackground,
+                            fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Yazar ve kitap alıntı/kitap sayaçlarını Firestore'daki gerçek veriye göre yeniden hesaplar.",
+                        color = Muted, fontSize = 12.sp, lineHeight = 18.sp,
+                    )
+                    if (counterStatus.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(counterStatus, color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            if (!counterRunning) {
+                                counterRunning = true
+                                counterStatus  = "Hesaplanıyor…"
+                                libraryVm.rebuildCounters { msg ->
+                                    counterStatus  = msg
+                                    counterRunning = false
+                                    libraryVm.loadAuthors()
+                                }
+                            }
+                        },
+                        enabled  = !counterRunning,
+                        colors   = ButtonDefaults.buttonColors(containerColor = Amber),
+                        shape    = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (counterRunning) {
+                            CircularProgressIndicator(color = Color.White,
+                                modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(if (counterRunning) "Hesaplanıyor…" else "Sayaçları Düzelt",
+                            fontWeight = FontWeight.Bold, color = Color.Black)
                     }
                 }
             }
