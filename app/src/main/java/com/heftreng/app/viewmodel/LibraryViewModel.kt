@@ -530,13 +530,28 @@ class LibraryViewModel @Inject constructor(
     fun migrateLegacyFeedQuotes(onProgress: (Int, Int) -> Unit = { _, _ -> }) {
         viewModelScope.launch {
             try {
-                // 1. libraryBookId boş olan, quoteText dolu feed belgelerini getir
-                val snap = firestore.collection("feed")
+                // 1a. libraryBookId alanı boş string olan postlar (Android tarafından oluşturulan)
+                val snapEmpty = firestore.collection("feed")
                     .whereEqualTo("libraryBookId", "")
                     .limit(200).get().await()
 
-                val docs = snap.documents.filter { doc ->
+                // 1b. libraryBookId alanı hiç olmayan postlar (web/tema tarafından oluşturulan eski postlar)
+                // Firestore whereEqualTo("field","") null/absent alanlarla eşleşmez,
+                // bu yüzden ayrı bir sorgu gerekiyor.
+                val snapAbsent = firestore.collection("feed")
+                    .whereEqualTo("type", "quote")   // sadece alıntı postları
+                    .limit(200).get().await()
+
+                // İki sorgunun sonuçlarını birleştir, ID'ye göre deduplicate et
+                val allDocs = (snapEmpty.documents + snapAbsent.documents)
+                    .distinctBy { it.id }
+
+                val docs = allDocs.filter { doc ->
                     val d = doc.data ?: return@filter false
+                    // libraryBookId zaten dolu olanları atla
+                    val existingBookId = d["libraryBookId"] as? String ?: ""
+                    if (existingBookId.isNotBlank()) return@filter false
+                    // Alıntı metni ve kitap adı olan postları al
                     val qObj   = d["quote"] as? Map<*, *>
                     val qText  = (qObj?.get("text") as? String)?.isNotBlank() == true
                         || (d["quoteText"] as? String)?.isNotBlank() == true
@@ -566,6 +581,22 @@ class LibraryViewModel @Inject constructor(
 
                     if (updates.isNotEmpty()) {
                         try { doc.reference.update(updates).await() } catch (_: Exception) {}
+                    }
+
+                    // library_books kaydında authorId boşsa güncelle
+                    if (bookId.isNotBlank() && authorId.isNotBlank()) {
+                        try {
+                            val bookDoc = firestore.collection("library_books")
+                                .document(bookId).get().await()
+                            val existingAuthorId = bookDoc.getString("authorId") ?: ""
+                            if (existingAuthorId.isBlank()) {
+                                firestore.collection("library_books").document(bookId)
+                                    .update(mapOf(
+                                        "authorId"   to authorId,
+                                        "authorName" to authorName,
+                                    )).await()
+                            }
+                        } catch (_: Exception) {}
                     }
 
                     // Ayrıca library_books/{bookId}/quotes'a ekle (yoksa)
