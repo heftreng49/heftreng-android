@@ -105,6 +105,9 @@ fun AuthorDetailScreen(
     var showAddReviewFab  by remember { mutableStateOf(false) }
     var reviewTargetBook  by remember { mutableStateOf<com.heftreng.app.data.model.LibraryBook?>(null) }
     var showBookPicker    by remember { mutableStateOf(false) }
+    var showEditAuthor    by remember { mutableStateOf(false) }
+    var showAddBook       by remember { mutableStateOf(false) }
+    val isAdmin = vm.isAdmin
 
     val tabs = listOf("Kitapları", "Alıntılar", "İncelemeler")
 
@@ -120,24 +123,44 @@ fun AuthorDetailScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
                     }
                 },
+                actions = {
+                    if (isAdmin) {
+                        IconButton(onClick = { showEditAuthor = true }) {
+                            Icon(Icons.Default.Edit, null, tint = Amber)
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
             )
         },
         floatingActionButton = {
-            when (selectedTab) {
-                1 -> FloatingActionButton(
-                    onClick        = { showAddQuoteFab = true },
-                    containerColor = Primary,
-                    contentColor   = androidx.compose.ui.graphics.Color.White,
-                    shape          = androidx.compose.foundation.shape.CircleShape,
-                ) { Icon(Icons.Default.FormatQuote, null) }
-                2 -> FloatingActionButton(
-                    onClick        = { showBookPicker = true },
-                    containerColor = Amber,
-                    contentColor   = androidx.compose.ui.graphics.Color(0xFF1A1040),
-                    shape          = androidx.compose.foundation.shape.CircleShape,
-                ) { Icon(Icons.Default.RateReview, null) }
-                else -> {}
+            androidx.compose.foundation.layout.Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalAlignment = Alignment.End,
+            ) {
+                if (isAdmin && selectedTab == 0) {
+                    androidx.compose.material3.SmallFloatingActionButton(
+                        onClick        = { showAddBook = true },
+                        containerColor = androidx.compose.ui.graphics.Color(0xFF2E7D32),
+                        contentColor   = androidx.compose.ui.graphics.Color.White,
+                        shape          = androidx.compose.foundation.shape.CircleShape,
+                    ) { Icon(Icons.Default.Add, null) }
+                }
+                when (selectedTab) {
+                    1 -> FloatingActionButton(
+                        onClick        = { showAddQuoteFab = true },
+                        containerColor = Primary,
+                        contentColor   = androidx.compose.ui.graphics.Color.White,
+                        shape          = androidx.compose.foundation.shape.CircleShape,
+                    ) { Icon(Icons.Default.FormatQuote, null) }
+                    2 -> FloatingActionButton(
+                        onClick        = { showBookPicker = true },
+                        containerColor = Amber,
+                        contentColor   = androidx.compose.ui.graphics.Color(0xFF1A1040),
+                        shape          = androidx.compose.foundation.shape.CircleShape,
+                    ) { Icon(Icons.Default.RateReview, null) }
+                    else -> {}
+                }
             }
         },
     ) { padding ->
@@ -293,6 +316,40 @@ fun AuthorDetailScreen(
             },
         )
     }
+
+    // ── Admin: Yazar Düzenle ───────────────────────────────────────────
+    if (showEditAuthor && author != null) {
+        AdminEditAuthorDialog(
+            author    = author!!,
+            onDismiss = { showEditAuthor = false },
+            onSave    = { name, bio, photoURL, birthYear, nationality ->
+                vm.updateAuthor(authorId, name, bio, photoURL, birthYear, nationality)
+                showEditAuthor = false
+            },
+        )
+    }
+
+    // ── Admin: Kitap Ekle ──────────────────────────────────────────────
+    if (showAddBook && author != null) {
+        AdminAddBookDialog(
+            authorId   = authorId,
+            authorName = author!!.name,
+            onDismiss  = { showAddBook = false },
+            onSave     = { title, synopsis, genre, publishYear, pageCount, coverImg ->
+                vm.createLibraryBook(
+                    title       = title,
+                    authorId    = authorId,
+                    authorName  = author!!.name,
+                    synopsis    = synopsis,
+                    genre       = genre,
+                    publishYear = publishYear,
+                    pageCount   = pageCount,
+                    coverImg    = coverImg,
+                )
+                showAddBook = false
+            },
+        )
+    }
 }
 
 // ─── Yazar Başlık Bölümü ────────────────────────────────────────────────────
@@ -424,6 +481,8 @@ fun LibraryBookDetailScreen(
     var showAddQuote     by remember { mutableStateOf(false) }
     var showAddReview    by remember { mutableStateOf(false) }
     var showRlSheet      by remember { mutableStateOf(false) }
+    var showEditBook     by remember { mutableStateOf(false) }
+    val isAdmin = vm.isAdmin
 
     LaunchedEffect(bookId) {
         vm.loadLibraryBook(bookId)
@@ -441,6 +500,13 @@ fun LibraryBookDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
+                    }
+                },
+                actions = {
+                    if (isAdmin) {
+                        IconButton(onClick = { showEditBook = true }) {
+                            Icon(Icons.Default.Edit, null, tint = Amber)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
@@ -609,6 +675,18 @@ fun LibraryBookDetailScreen(
             onRemove = {
                 rlVm.removeLibraryBook(b.id)
                 showRlSheet = false
+            },
+        )
+    }
+
+    // ── Admin: Kitap Düzenle ───────────────────────────────────────────
+    if (showEditBook && book != null) {
+        AdminEditBookDialog(
+            book      = book!!,
+            onDismiss = { showEditBook = false },
+            onSave    = { title, synopsis, genre, publishYear, pageCount, coverImg ->
+                vm.updateLibraryBook(bookId, title, synopsis, genre, publishYear, pageCount, coverImg)
+                showEditBook = false
             },
         )
     }
@@ -1167,3 +1245,185 @@ fun RlStatusPickerDialog(
 }
 
 // AuthorBookPickerDialog → BookPickerDialog (UnifiedCards.kt) ile değiştirildi
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Admin Dialog: Yazar Düzenle
+// ═══════════════════════════════════════════════════════════════════════════
+@Composable
+private fun AdminEditAuthorDialog(
+    author   : com.heftreng.app.data.model.Author,
+    onDismiss: () -> Unit,
+    onSave   : (name: String, bio: String, photoURL: String, birthYear: Int, nationality: String) -> Unit,
+) {
+    var name        by remember { mutableStateOf(author.name) }
+    var bio         by remember { mutableStateOf(author.bio) }
+    var photoURL    by remember { mutableStateOf(author.photoURL) }
+    var birthYearTxt by remember { mutableStateOf(if (author.birthYear > 0) author.birthYear.toString() else "") }
+    var nationality by remember { mutableStateOf(author.nationality) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(18.dp))
+                Text("Yazar Düzenle", color = OnBackground, fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                AdminTextField("Ad / Nav", name) { name = it }
+                AdminTextField("Biyografi / Biyografi", bio, minLines = 3) { bio = it }
+                AdminTextField("Fotoğraf URL / Wêne URL", photoURL) { photoURL = it }
+                AdminTextField("Doğum Yılı / Sala Jidayikbûnê", birthYearTxt) { birthYearTxt = it }
+                AdminTextField("Milliyet / Netewe", nationality) { nationality = it }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (name.isNotBlank()) onSave(name.trim(), bio.trim(), photoURL.trim(), birthYearTxt.toIntOrNull() ?: 0, nationality.trim())
+                },
+                enabled = name.isNotBlank(),
+            ) { Text("Kaydet / Tomarkirin", color = Amber, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("İptal / Betal", color = Muted) }
+        },
+    )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Admin Dialog: Kitap Düzenle
+// ═══════════════════════════════════════════════════════════════════════════
+@Composable
+private fun AdminEditBookDialog(
+    book     : LibraryBook,
+    onDismiss: () -> Unit,
+    onSave   : (title: String, synopsis: String, genre: String, publishYear: Int, pageCount: Int, coverImg: String) -> Unit,
+) {
+    var title       by remember { mutableStateOf(book.title) }
+    var synopsis    by remember { mutableStateOf(book.synopsis) }
+    var genre       by remember { mutableStateOf(book.genre) }
+    var publishYearTxt by remember { mutableStateOf(if (book.publishYear > 0) book.publishYear.toString() else "") }
+    var pageCountTxt   by remember { mutableStateOf(if (book.pageCount > 0) book.pageCount.toString() else "") }
+    var coverImg    by remember { mutableStateOf(book.coverImg) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(18.dp))
+                Text("Kitap Düzenle / Pirtûk Biguherîne", color = OnBackground, fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                AdminTextField("Başlık / Sernavê", title) { title = it }
+                AdminTextField("Açıklama / Danasîn", synopsis, minLines = 3) { synopsis = it }
+                AdminTextField("Tür / Celeb", genre) { genre = it }
+                AdminTextField("Yayın Yılı / Sala Weşanê", publishYearTxt) { publishYearTxt = it }
+                AdminTextField("Sayfa Sayısı / Hejmara Rûpelên", pageCountTxt) { pageCountTxt = it }
+                AdminTextField("Kapak URL / URL ya Bergê", coverImg) { coverImg = it }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (title.isNotBlank()) onSave(title.trim(), synopsis.trim(), genre.trim(), publishYearTxt.toIntOrNull() ?: 0, pageCountTxt.toIntOrNull() ?: 0, coverImg.trim())
+                },
+                enabled = title.isNotBlank(),
+            ) { Text("Kaydet / Tomarkirin", color = Amber, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("İptal / Betal", color = Muted) }
+        },
+    )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Admin Dialog: Yeni Kitap Ekle
+// ═══════════════════════════════════════════════════════════════════════════
+@Composable
+private fun AdminAddBookDialog(
+    authorId  : String,
+    authorName: String,
+    onDismiss : () -> Unit,
+    onSave    : (title: String, synopsis: String, genre: String, publishYear: Int, pageCount: Int, coverImg: String) -> Unit,
+) {
+    var title       by remember { mutableStateOf("") }
+    var synopsis    by remember { mutableStateOf("") }
+    var genre       by remember { mutableStateOf("") }
+    var publishYearTxt by remember { mutableStateOf("") }
+    var pageCountTxt   by remember { mutableStateOf("") }
+    var coverImg    by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Add, null, tint = androidx.compose.ui.graphics.Color(0xFF2E7D32), modifier = Modifier.size(18.dp))
+                Column {
+                    Text("Yeni Kitap Ekle", color = OnBackground, fontWeight = FontWeight.Bold)
+                    Text(authorName, color = Muted, fontSize = 12.sp)
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                AdminTextField("Başlık / Sernavê *", title) { title = it }
+                AdminTextField("Açıklama / Danasîn", synopsis, minLines = 3) { synopsis = it }
+                AdminTextField("Tür / Celeb", genre) { genre = it }
+                AdminTextField("Yayın Yılı / Sala Weşanê", publishYearTxt) { publishYearTxt = it }
+                AdminTextField("Sayfa Sayısı / Hejmara Rûpelên", pageCountTxt) { pageCountTxt = it }
+                AdminTextField("Kapak URL / URL ya Bergê", coverImg) { coverImg = it }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (title.isNotBlank()) onSave(title.trim(), synopsis.trim(), genre.trim(), publishYearTxt.toIntOrNull() ?: 0, pageCountTxt.toIntOrNull() ?: 0, coverImg.trim())
+                },
+                enabled = title.isNotBlank(),
+            ) { Text("Ekle / Zêde Bike", color = androidx.compose.ui.graphics.Color(0xFF2E7D32), fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("İptal / Betal", color = Muted) }
+        },
+    )
+}
+
+// ── Paylaşılan admin text field ────────────────────────────────────────────
+@Composable
+private fun AdminTextField(
+    label    : String,
+    value    : String,
+    minLines : Int = 1,
+    onChange : (String) -> Unit,
+) {
+    OutlinedTextField(
+        value         = value,
+        onValueChange = onChange,
+        label         = { Text(label, color = Muted, fontSize = 12.sp) },
+        minLines      = minLines,
+        modifier      = Modifier.fillMaxWidth(),
+        colors        = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor   = Amber,
+            unfocusedBorderColor = Divider,
+            focusedTextColor     = OnBackground,
+            unfocusedTextColor   = OnBackground,
+            focusedLabelColor    = Amber,
+        ),
+    )
+}
