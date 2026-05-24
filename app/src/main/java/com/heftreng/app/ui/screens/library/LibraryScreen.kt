@@ -54,6 +54,8 @@ import com.heftreng.app.ui.component.BookPickerDialog
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
+import com.heftreng.app.ui.screens.feed.PostCard
+import com.heftreng.app.data.model.Post
 import com.heftreng.app.viewmodel.LibraryViewModel
 import kotlinx.coroutines.tasks.await
 import kotlin.math.roundToInt
@@ -80,7 +82,7 @@ fun LibraryScreen(
 
     val db = remember { FirebaseFirestore.getInstance() }
 
-    var quotes  by remember { mutableStateOf<List<BookQuote>>(emptyList()) }
+    val quotes by feedVm.libraryQuotes.collectAsState()
     var reviews by remember { mutableStateOf<List<BookReview>>(emptyList()) }
     val authors by libraryVm.authors.collectAsState()
     var books   by remember { mutableStateOf<List<LibraryBook>>(emptyList()) }
@@ -89,40 +91,8 @@ fun LibraryScreen(
     LaunchedEffect(Unit) {
         loading = true
 
-        // Alintılar: library_books/{id}/quotes alt koleksiyonundan oku (index gerekmez)
-        try {
-            val bSnap = db.collection("library_books").limit(100).get().await()
-            val allQuotes = mutableListOf<BookQuote>()
-            bSnap.documents.forEach { bookDoc ->
-                val qSnap = db.collection("library_books")
-                    .document(bookDoc.id).collection("quotes")
-                    .limit(20).get().await()
-                qSnap.documents.mapNotNullTo(allQuotes) { doc ->
-                    val d = doc.data ?: return@mapNotNullTo null
-                    val qObj = d["quote"] as? Map<*, *>
-                    val text = (qObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
-                        ?: (d["quoteText"] as? String)?.takeIf { it.isNotBlank() }
-                        ?: (d["text"] as? String)?.takeIf { it.isNotBlank() }
-                        ?: return@mapNotNullTo null
-                    BookQuote(
-                        id              = doc.id,
-                        bookId          = d["bookId"] as? String ?: bookDoc.id,
-                        authorId        = d["authorId"] as? String ?: "",
-                        bookTitle       = (qObj?.get("book") as? String)?.takeIf { it.isNotBlank() }
-                                          ?: d["bookName"] as? String ?: "",
-                        authorName      = (d["authorName"] as? String)?.trim() ?: "",
-                        text            = text,
-                        uid             = d["uid"] as? String ?: "",
-                        userDisplayName = (d["name"] as? String) ?: d["displayName"] as? String ?: "",
-                        userPhotoURL    = d["photoURL"] as? String ?: "",
-                        ts              = d["ts"] as? com.google.firebase.Timestamp,
-                    )
-                }
-            }
-            quotes = allQuotes.sortedByDescending { it.ts?.seconds ?: 0L }
-        } catch (e: Exception) {
-            android.util.Log.e("LibraryScreen", "quotes load error: ${e.message}")
-        }
+        // Alintılar: FeedViewModel.loadLibraryQuotes() ile feed'den PostCard ile gösterilir
+        feedVm.loadLibraryQuotes()
 
         // Incelemeler: library_books/{id}/reviews alt koleksiyonundan oku
         try {
@@ -250,7 +220,7 @@ fun LibraryScreen(
                 }
             } else {
                 when (selectedTab) {
-                    0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, vm = libraryVm)
+                    0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm)
                     1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm)
                     2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language)
                     3 -> LibraryBooksTab(books = books, navController = navController, language = language)
@@ -313,19 +283,30 @@ fun LibraryScreen(
 
 @Composable
 private fun LibraryQuotesTab(
-    quotes       : List<BookQuote>,
+    quotes       : List<Post>,
     language     : String,
     navController: NavController,
-    vm           : LibraryViewModel? = null,
+    feedVm       : FeedViewModel,
 ) {
     if (quotes.isEmpty()) {
         EmptyState(Icons.Outlined.FormatQuote, Strings.libraryNoQuotes(language))
         return
     }
-    val actions = BookCardActions(vm = vm, navController = navController)
-    LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
-        items(quotes, key = { it.id }) { quote ->
-            BookQuoteCard(quote = quote, actions = actions, language = language)
+    LazyColumn(contentPadding = PaddingValues(vertical = 0.dp)) {
+        items(quotes, key = { it.id }) { post ->
+            PostCard(
+                post         = post,
+                language     = language,
+                onLike       = { feedVm.toggleLike(post) },
+                onSave       = { feedVm.toggleSave(post) },
+                onProfile    = { navController.navigate("profile/${post.uid}") },
+                onComment    = { navController.navigate("post_detail/${post.id}") },
+                onShare      = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
+                onDelete     = if (post.uid == com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid)
+                                   {{ feedVm.deletePost(post.id) }} else null,
+                onTapAuthor  = { authorId -> navController.navigate("author_detail/$authorId") },
+                onTapBook    = { bookId   -> navController.navigate("library_book_detail/$bookId") },
+            )
         }
     }
 }

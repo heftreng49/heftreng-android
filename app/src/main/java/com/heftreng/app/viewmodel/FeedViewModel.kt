@@ -37,6 +37,10 @@ class FeedViewModel @Inject constructor(
     private val _posts    = MutableStateFlow<List<Post>>(emptyList())
     val posts = _posts.asStateFlow()
 
+    // Kütüphane — alıntı postları (bookName dolu feed postları)
+    private val _libraryQuotes = MutableStateFlow<List<Post>>(emptyList())
+    val libraryQuotes = _libraryQuotes.asStateFlow()
+
     private val _comments = MutableStateFlow<List<Comment>>(emptyList())
     val comments = _comments.asStateFlow()
 
@@ -109,7 +113,7 @@ class FeedViewModel @Inject constructor(
     // ── Firestore doc → Post dönüştürücü ──────────────────────────────────────
     // Adım 1.2 / 2.2 — name→displayName, imgUrl→imageURL normalize edilir.
     // Eski nested "quote" objesi okunur ama artık yazılmaz.
-    private fun com.google.firebase.firestore.DocumentSnapshot.toPost(): Post? {
+    internal fun com.google.firebase.firestore.DocumentSnapshot.toPost(): Post? {
         val d = data ?: return null
         // Adım 1.2 — displayName/name normalizasyonu
         val displayName = (d["displayName"] as? String)?.takeIf { it.isNotBlank() }
@@ -762,5 +766,33 @@ class FeedViewModel @Inject constructor(
                 "ts"        to Timestamp.now(),
             )).await()
         } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    // ── Kütüphane alıntı postları ─────────────────────────────────────────
+    // Feed'den bookName dolu postları çeker; LibraryScreen PostCard ile gösterir.
+    fun loadLibraryQuotes() {
+        viewModelScope.launch {
+            try {
+                // bookName dolu AND quoteText dolu postları çek
+                // "whereNotEqualTo" index gerektirir — tüm feed'i çekip bellekte filtrele
+                val snap = firestore.collection("feed")
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(300).get().await()
+                val result = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    val qObj      = d["quote"] as? Map<*, *>
+                    val bookName  = (qObj?.get("book") as? String)?.takeIf { it.isNotBlank() }
+                        ?: (d["bookName"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: return@mapNotNull null   // bookName yoksa atla
+                    val quoteText = (qObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
+                        ?: (d["quoteText"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: return@mapNotNull null   // quoteText yoksa atla
+                    doc.toPost()
+                }
+                _libraryQuotes.value = result
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 }
