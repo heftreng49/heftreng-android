@@ -77,6 +77,8 @@ data class Post(
     // Kütüphane alıntı/inceleme için Firestore ID'leri
     val libraryBookId    : String     = "",
     val libraryAuthorId  : String     = "",
+    // Post tipi: "", "library_quote", "library_review", "book_chapter" vb.
+    val type             : String     = "",
 )
 
 // ─── YORUM ─────────────────────────────────────────────

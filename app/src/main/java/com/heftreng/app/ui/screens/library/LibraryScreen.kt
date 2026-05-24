@@ -256,6 +256,7 @@ fun LibraryScreen(
                     quoteText  = payload.text,
                     authorName = payload.authorName,
                     bookName   = payload.bookName,
+                    type       = "library_quote",
                 )
             },
         )

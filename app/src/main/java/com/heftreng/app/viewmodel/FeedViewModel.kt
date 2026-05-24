@@ -175,6 +175,7 @@ class FeedViewModel @Inject constructor(
             chapterId              = d["chapterId"]              as? String ?: "",
             libraryBookId          = d["libraryBookId"]          as? String ?: "",
             libraryAuthorId        = d["libraryAuthorId"]        as? String ?: "",
+            type                   = d["type"]                   as? String ?: "",
         )
     }
 
@@ -516,7 +517,7 @@ class FeedViewModel @Inject constructor(
                 val ref = storage.reference.child("posts/$uid/${System.currentTimeMillis()}.jpg")
                 ref.putFile(imageUri).await()
                 val url = ref.downloadUrl.await().toString()
-                createPost(text = text, imageURL = url, quoteText = quoteText, authorName = authorName, bookName = bookName)
+                createPost(text = text, imageURL = url, quoteText = quoteText, authorName = authorName, bookName = bookName, type = if (quoteText.isNotBlank()) "library_quote" else "")
             } catch (e: Exception) { e.printStackTrace() }
             finally { _uploading.value = false }
         }
@@ -536,7 +537,7 @@ class FeedViewModel @Inject constructor(
     // Adım 4.3 — ensureAuthorAndBook başarısız olursa post YINE oluşturulur (libraryBookId boş kalır)
     //            ama kullanıcıya bilgi verilir. addQuoteToLibrary başarısız olursa feedPostId
     //            üzerinden sonradan migrateLegacyFeedQuotes() ile kurtarılabilir.
-    fun createPost(text: String, imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "") {
+    fun createPost(text: String, imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "", type: String = "") {
         if (uid.isEmpty()) return
         viewModelScope.launch {
             _createPostLoading.value = true
@@ -578,6 +579,8 @@ class FeedViewModel @Inject constructor(
                     "bookName"        to bookName,
                     "libraryAuthorId" to libraryAuthorId,
                     "libraryBookId"   to libraryBookId,
+                    // type: alıntılı post ise "library_quote", değilse boş string
+                    "type"            to if (quoteText.isNotBlank() && type.isBlank()) "library_quote" else type,
                     "likes"           to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
                     "ts"              to Timestamp.now(),
                 )).await()
