@@ -210,6 +210,48 @@ fun AuthorDetailScreen(
             }
         }
     }
+
+    // ── Alıntı FAB Dialog (yazar adı pre-filled) ──────────────────────
+    if (showAddQuoteFab) {
+        QuoteDialog(
+            initialAuthor = author?.name ?: "",
+            onDismiss     = { showAddQuoteFab = false },
+            onConfirm     = { payload ->
+                feedVm.createPost(
+                    text       = "",
+                    quoteText  = payload.text,
+                    authorName = payload.authorName,
+                    bookName   = payload.bookName,
+                )
+                showAddQuoteFab = false
+            },
+        )
+    }
+
+    // ── İnceleme FAB: önce kitap seç, sonra dialog ────────────────────
+    if (showBookPicker) {
+        AuthorBookPickerDialog(
+            books    = books,
+            language = "tr",
+            onDismiss = { showBookPicker = false },
+            onSelect  = { book ->
+                reviewTargetBook = book
+                showBookPicker   = false
+                showAddReviewFab = true
+            },
+        )
+    }
+    if (showAddReviewFab && reviewTargetBook != null) {
+        AddReviewDialog(
+            bookTitle = reviewTargetBook!!.title,
+            onDismiss = { showAddReviewFab = false; reviewTargetBook = null },
+            onSubmit  = { text, rating ->
+                vm.addBookReview(reviewTargetBook!!, text, rating)
+                showAddReviewFab = false
+                reviewTargetBook = null
+            },
+        )
+    }
 }
 
 // ─── Yazar Başlık Bölümü ────────────────────────────────────────────────────
@@ -304,48 +346,6 @@ private fun AuthorHeaderSection(
             Spacer(Modifier.width(6.dp))
             Text(if (isFollowing) "Takip Ediliyor" else "Takip Et", fontSize = 13.sp)
         }
-    }
-
-    // ── Alıntı FAB Dialog (yazar adı pre-filled) ──────────────────────
-    if (showAddQuoteFab) {
-        QuoteDialog(
-            initialAuthor = author?.name ?: "",
-            onDismiss     = { showAddQuoteFab = false },
-            onConfirm     = { payload ->
-                feedVm.createPost(
-                    text       = "",
-                    quoteText  = payload.text,
-                    authorName = payload.authorName,
-                    bookName   = payload.bookName,
-                )
-                showAddQuoteFab = false
-            },
-        )
-    }
-
-    // ── İnceleme FAB: önce kitap seç, sonra dialog ────────────────────
-    if (showBookPicker) {
-        AuthorBookPickerDialog(
-            books    = books,
-            language = "tr",
-            onDismiss = { showBookPicker = false },
-            onSelect  = { book ->
-                reviewTargetBook = book
-                showBookPicker   = false
-                showAddReviewFab = true
-            },
-        )
-    }
-    if (showAddReviewFab && reviewTargetBook != null) {
-        AddReviewDialog(
-            bookTitle = reviewTargetBook!!.title,
-            onDismiss = { showAddReviewFab = false; reviewTargetBook = null },
-            onSubmit  = { text, rating ->
-                vm.addBookReview(reviewTargetBook!!, text, rating)
-                showAddReviewFab = false
-                reviewTargetBook = null
-            },
-        )
     }
 }
 
@@ -820,6 +820,7 @@ fun BookQuoteCard(
     }
 }
 
+@Composable
 fun BookReviewCard(
     review   : BookReview,
     vm       : LibraryViewModel? = null,
