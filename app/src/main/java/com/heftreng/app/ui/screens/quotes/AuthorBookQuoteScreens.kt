@@ -61,6 +61,8 @@ import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.viewmodel.ReadingListViewModel
 import com.heftreng.app.viewmodel.RlStatus
 import kotlinx.coroutines.tasks.await
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import kotlin.math.roundToInt
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1272,7 +1274,7 @@ private fun AdminEditAuthorDialog(
         },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 AdminTextField("Ad / Nav", name) { name = it }
@@ -1323,7 +1325,7 @@ private fun AdminEditBookDialog(
         },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 AdminTextField("Başlık / Sernavê", title) { title = it }
@@ -1379,7 +1381,7 @@ private fun AdminAddBookDialog(
         },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 AdminTextField("Başlık / Sernavê *", title) { title = it }

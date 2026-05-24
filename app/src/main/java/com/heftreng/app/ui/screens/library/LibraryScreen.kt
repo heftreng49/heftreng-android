@@ -58,6 +58,8 @@ import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.viewmodel.LibraryViewModel
 import kotlinx.coroutines.tasks.await
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import kotlin.math.roundToInt
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -316,7 +318,7 @@ fun LibraryScreen(
             authors   = libraryVm.authors.collectAsState().value,
             onDismiss = { showAddBook = false },
             onSave    = { title, authorId, authorName, synopsis, genre, publishYear, pageCount, coverImg ->
-                libraryVm.createLibraryBook(title, authorId, authorName, synopsis, genre, publishYear, pageCount, coverImg)
+                libraryVm.createLibraryBook(title = title, authorId = authorId, authorName = authorName, synopsis = synopsis, genre = genre, publishYear = publishYear, pageCount = pageCount, coverImg = coverImg)
                 showAddBook = false
             },
         )
@@ -492,7 +494,7 @@ private fun LibraryAdminAddAuthorDialog(
         },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 LibAdminTextField("Ad * / Nav *", name) { name = it }
@@ -542,7 +544,7 @@ private fun LibraryAdminAddBookDialog(
         },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 LibAdminTextField("Başlık * / Sernavê *", title) { title = it }
