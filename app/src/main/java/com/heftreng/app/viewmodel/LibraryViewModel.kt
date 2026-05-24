@@ -177,6 +177,22 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Admin kartı gibi her kart kendi kitaplarını bağımsız yükleyebilsin diye
+     * paylaşılan state'e dokunmadan doğrudan liste döner.
+     */
+    suspend fun fetchBooksForAuthor(authorId: String): List<com.heftreng.app.data.model.LibraryBook> {
+        return try {
+            val snap = firestore.collection("library_books")
+                .whereEqualTo("authorId", authorId)
+                .orderBy("publishYear", Query.Direction.DESCENDING)
+                .limit(50).get().await()
+            snap.documents.mapNotNull { doc ->
+                doc.toObject(com.heftreng.app.data.model.LibraryBook::class.java)?.copy(id = doc.id)
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
     private suspend fun loadAuthorQuotes(authorId: String) {
         // authors/{authorId} için tüm library_books altındaki quotes collection group
         val snap = firestore.collectionGroup("quotes")

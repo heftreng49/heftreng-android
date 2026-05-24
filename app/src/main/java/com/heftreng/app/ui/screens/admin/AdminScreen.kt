@@ -811,7 +811,7 @@ private fun AdminLibraryTab(libraryVm: LibraryViewModel) {
             AdminAuthorCard(
                 author       = author,
                 onEditAuthor = { editAuthor = author },
-                onEditBooks  = { libraryVm.loadAuthor(author.id) },
+                
                 libraryVm    = libraryVm,
                 onEditBook   = { editBook = it },
             )
@@ -884,12 +884,17 @@ private fun AdminLibraryTab(libraryVm: LibraryViewModel) {
 private fun AdminAuthorCard(
     author      : com.heftreng.app.data.model.Author,
     onEditAuthor: () -> Unit,
-    onEditBooks : () -> Unit,
+
     libraryVm   : LibraryViewModel,
     onEditBook  : (com.heftreng.app.data.model.LibraryBook) -> Unit,
 ) {
-    val authorBooks by libraryVm.authorBooks.collectAsState()
+    // Her kart kendi kitap listesini tutar — global authorBooks state'i kullanmıyoruz
+    // çünkü o state tüm kartlar arasında paylaşılıyor ve son yüklenen yazarın
+    // kitaplarını gösteriyor.
+    var localBooks  by remember { mutableStateOf<List<com.heftreng.app.data.model.LibraryBook>>(emptyList()) }
+    var booksLoaded by remember { mutableStateOf(false) }
     var expanded    by remember { mutableStateOf(false) }
+    val scope       = rememberCoroutineScope()
 
     Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -932,11 +937,16 @@ private fun AdminAuthorCard(
                 IconButton(onClick = onEditAuthor, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(18.dp))
                 }
-                // Kitapları aç
+                // Kitapları aç — her kart kendi kitaplarını yükler
                 IconButton(
                     onClick = {
-                        if (!expanded) onEditBooks()
                         expanded = !expanded
+                        if (expanded && !booksLoaded) {
+                            booksLoaded = true
+                            scope.launch {
+                                localBooks = libraryVm.fetchBooksForAuthor(author.id)
+                            }
+                        }
                     },
                     modifier = Modifier.size(36.dp),
                 ) {
@@ -961,10 +971,10 @@ private fun AdminAuthorCard(
                 Spacer(Modifier.height(8.dp))
                 Text("Kitapları", color = Primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
-                if (authorBooks.isEmpty()) {
+                if (localBooks.isEmpty()) {
                     Text("Bu yazara ait kitap yok.", color = Muted, fontSize = 12.sp)
                 }
-                authorBooks.forEach { book ->
+                localBooks.forEach { book ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
