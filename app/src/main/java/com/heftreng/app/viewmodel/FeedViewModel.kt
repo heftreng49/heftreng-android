@@ -805,16 +805,44 @@ class FeedViewModel @Inject constructor(
     fun loadLibraryQuotes() {
         viewModelScope.launch {
             try {
-                // type == "library_quote" olan postları doğrudan Firestore'dan çek
-                // Bu postlar herkese açık (firestore.rules'da library_quote için read: true)
-                val snap = firestore.collection("feed")
+                // İki query: yeni postlar (type=="library_quote") + eski postlar (bookName dolu)
+                // Firestore'da OR query olmadığı için ayrı ayrı çekip birleştiriyoruz
+                val newSnap = firestore.collection("feed")
                     .whereEqualTo("type", "library_quote")
                     .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
                     .limit(200).get().await()
-                _libraryQuotes.value = snap.documents.mapNotNull { doc ->
-                    doc.data ?: return@mapNotNull null
-                    doc.toPost()
+
+                val oldSnap = firestore.collection("feed")
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(300).get().await()
+
+                val seenIds = mutableSetOf<String>()
+                val result = mutableListOf<Post>()
+
+                // Yeni tip postlar
+                newSnap.documents.forEach { doc ->
+                    if (seenIds.add(doc.id)) {
+                        doc.toPost()?.let { result.add(it) }
+                    }
                 }
+
+                // Eski tip postlar — bookName ve quoteText dolu olanlar
+                oldSnap.documents.forEach { doc ->
+                    if (seenIds.contains(doc.id)) return@forEach
+                    val d = doc.data ?: return@forEach
+                    val qObj = d["quote"] as? Map<*, *>
+                    val bookName = (qObj?.get("book") as? String)?.takeIf { it.isNotBlank() }
+                        ?: (d["bookName"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: return@forEach
+                    val quoteText = (qObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
+                        ?: (d["quoteText"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: return@forEach
+                    if (seenIds.add(doc.id)) {
+                        doc.toPost()?.let { result.add(it) }
+                    }
+                }
+
+                _libraryQuotes.value = result.sortedByDescending { it.ts?.seconds ?: 0L }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
