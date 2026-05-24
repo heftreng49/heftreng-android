@@ -77,56 +77,83 @@ fun LibraryScreen(
     var reviews by remember { mutableStateOf<List<BookReview>>(emptyList()) }
     val authors by libraryVm.authors.collectAsState()
     var books   by remember { mutableStateOf<List<LibraryBook>>(emptyList()) }
-    var loading   by remember { mutableStateOf(true) }
-    var loadError by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        loading   = true
-        loadError = null
-        val errors = mutableListOf<String>()
+        loading = true
 
-        // Alıntılar (COLLECTION_GROUP index gerekir)
+        // ── Alıntılar — feed'den type=="library_quote" ile çek ──────────
         try {
-            val qSnap = db.collectionGroup("quotes")
+            val qSnap = db.collection("feed")
+                .whereEqualTo("type", "library_quote")
                 .orderBy("ts", Query.Direction.DESCENDING)
                 .limit(50).get().await()
-            quotes = qSnap.documents.mapNotNull { it.toObject(BookQuote::class.java)?.copy(id = it.id) }
+            quotes = qSnap.documents.mapNotNull { doc ->
+                val d = doc.data ?: return@mapNotNull null
+                val qObj = d["quote"] as? Map<*, *>
+                val text = (qObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
+                    ?: d["quoteText"] as? String ?: return@mapNotNull null
+                BookQuote(
+                    id              = doc.id,
+                    bookId          = d["libraryBookId"] as? String ?: "",
+                    authorId        = d["libraryAuthorId"] as? String ?: "",
+                    bookTitle       = (qObj?.get("book") as? String) ?: d["bookName"] as? String ?: "",
+                    authorName      = d["authorName"] as? String ?: "",
+                    text            = text,
+                    uid             = d["uid"] as? String ?: "",
+                    userDisplayName = (d["name"] as? String) ?: d["displayName"] as? String ?: "",
+                    userPhotoURL    = d["photoURL"] as? String ?: "",
+                    ts              = d["ts"] as? com.google.firebase.Timestamp,
+                )
+            }
         } catch (e: Exception) {
-            errors.add("Alıntılar yüklenemedi")
             android.util.Log.e("LibraryScreen", "quotes load error: ${e.message}")
         }
 
-        // İncelemeler
+        // ── İncelemeler — feed'den type=="library_review" ile çek ───────
         try {
-            val rSnap = db.collectionGroup("reviews")
+            val rSnap = db.collection("feed")
+                .whereEqualTo("type", "library_review")
                 .orderBy("ts", Query.Direction.DESCENDING)
                 .limit(50).get().await()
-            reviews = rSnap.documents.mapNotNull { it.toObject(BookReview::class.java)?.copy(id = it.id) }
+            reviews = rSnap.documents.mapNotNull { doc ->
+                val d = doc.data ?: return@mapNotNull null
+                val text = d["text"] as? String ?: return@mapNotNull null
+                BookReview(
+                    id              = doc.id,
+                    bookId          = d["libraryBookId"] as? String ?: "",
+                    authorId        = d["libraryAuthorId"] as? String ?: "",
+                    bookTitle       = d["bookName"] as? String ?: "",
+                    authorName      = d["authorName"] as? String ?: "",
+                    text            = text,
+                    rating          = (d["rating"] as? Number)?.toFloat() ?: 0f,
+                    uid             = d["uid"] as? String ?: "",
+                    userDisplayName = (d["name"] as? String) ?: d["displayName"] as? String ?: "",
+                    userPhotoURL    = d["photoURL"] as? String ?: "",
+                    ts              = d["ts"] as? com.google.firebase.Timestamp,
+                )
+            }
         } catch (e: Exception) {
-            errors.add("İncelemeler yüklenemedi")
             android.util.Log.e("LibraryScreen", "reviews load error: ${e.message}")
         }
 
-        // Yazarlar
+        // ── Yazarlar ─────────────────────────────────────────────────────
         try {
             libraryVm.loadAuthors()
         } catch (e: Exception) {
-            errors.add("Yazarlar yüklenemedi")
             android.util.Log.e("LibraryScreen", "authors load error: ${e.message}")
         }
 
-        // Kitaplar
+        // ── Kitaplar ─────────────────────────────────────────────────────
         try {
             val bSnap = db.collection("library_books")
                 .orderBy("ts", Query.Direction.DESCENDING)
                 .limit(50).get().await()
             books = bSnap.documents.mapNotNull { it.toObject(LibraryBook::class.java)?.copy(id = it.id) }
         } catch (e: Exception) {
-            errors.add("Kitaplar yüklenemedi")
             android.util.Log.e("LibraryScreen", "books load error: ${e.message}")
         }
 
-        if (errors.isNotEmpty()) loadError = errors.joinToString(" · ")
         loading = false
     }
 
@@ -206,21 +233,6 @@ fun LibraryScreen(
                     CircularProgressIndicator(color = Primary)
                 }
             } else {
-                // Hata banner — sadece geliştirici modunda göster (debug loglarına da düşüyor)
-                if (loadError != null) {
-                    androidx.compose.material3.Surface(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                        shape    = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-                        color    = androidx.compose.ui.graphics.Color(0xFFDC2626).copy(alpha = 0.15f),
-                    ) {
-                        Text(
-                            "⚠ ${loadError}",
-                            color    = androidx.compose.ui.graphics.Color(0xFFDC2626),
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(8.dp),
-                        )
-                    }
-                }
                 when (selectedTab) {
                     0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language)
                     1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language)
