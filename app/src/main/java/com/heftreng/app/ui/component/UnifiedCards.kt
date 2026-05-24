@@ -1,7 +1,7 @@
 package com.heftreng.app.ui.component
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  UnifiedCards.kt  —  Evrensel Kart Sistemi
+//  UnifiedCards.kt  —  Evrensel Kart + Ortak Bileşen Sistemi
 //
 //  Tüm ekranlarda (Feed, Profil, Kütüphane, Yazar/Kitap Detay) aynı
 //  BookQuoteCard ve BookReviewCard kullanılır. PostCard tasarım diliyle
@@ -12,9 +12,19 @@ package com.heftreng.app.ui.component
 //   • Aksiyon çubuğu: beğeni · yorum (opsiyonel) · paylaş · kaydet (opsiyonel)
 //   • 3-nokta menü: düzenle / sil (sahip/admin)
 //
+//  Ortak bileşenler (tüm kütüphane ekranları buradan import eder):
+//   • EmptyState          — boş liste gösterimi
+//   • LibraryBookCard     — kitap listesi satırı (AuthorDetail + LibraryScreen)
+//   • AddReviewDialog     — yıldız + metin ile inceleme dialog'u
+//   • BookPickerDialog    — kitap seçici dialog (FAB menüsü için)
+//
 //  KULLANIM:
 //    BookQuoteCard(quote = q, actions = BookCardActions(vm = vm, navController = nav))
 //    BookReviewCard(review = r, actions = BookCardActions(vm = vm, navController = nav))
+//    EmptyState(Icons.Outlined.MenuBook, "Henüz kitap yok")
+//    LibraryBookCard(book = b, onClick = { … })
+//    AddReviewDialog(bookTitle = "…", onDismiss = {}, onSubmit = { text, rating -> … })
+//    BookPickerDialog(books = list, language = "tr", onDismiss = {}, onSelect = { … })
 // ═══════════════════════════════════════════════════════════════════════════
 
 import androidx.compose.foundation.background
@@ -32,6 +42,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
@@ -45,6 +56,7 @@ import coil.request.ImageRequest
 import com.google.firebase.Timestamp
 import com.heftreng.app.data.model.BookQuote
 import com.heftreng.app.data.model.BookReview
+import com.heftreng.app.data.model.LibraryBook
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.LibraryViewModel
 import java.util.concurrent.TimeUnit
@@ -57,7 +69,7 @@ import kotlin.math.roundToInt
 data class BookCardActions(
     val vm           : LibraryViewModel? = null,
     val navController: NavController?    = null,
-    val onComment    : (() -> Unit)?      = null,   // şimdilik feed yorumları farklı
+    val onComment    : (() -> Unit)?      = null,
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -93,7 +105,6 @@ fun BookQuoteCard(
             modifier          = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Avatar
             UserAvatar(
                 photoURL    = quote.userPhotoURL,
                 displayName = quote.userDisplayName,
@@ -113,7 +124,6 @@ fun BookQuoteCard(
                     fontSize = 12.sp,
                 )
             }
-            // 3-nokta menü (sahip/admin için)
             if (canEdit) {
                 Box {
                     IconButton(onClick = { menuExpanded = true }) {
@@ -158,7 +168,6 @@ fun BookQuoteCard(
             )
             Spacer(Modifier.width(10.dp))
             Column {
-                // Kitap / Yazar referansı
                 if (quote.bookTitle.isNotBlank() || quote.authorName.isNotBlank()) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -186,7 +195,6 @@ fun BookQuoteCard(
                     }
                     Spacer(Modifier.height(4.dp))
                 }
-                // Alıntı metni
                 Text(
                     "❝ ${quote.text}",
                     color      = OnSurface,
@@ -204,7 +212,6 @@ fun BookQuoteCard(
             modifier          = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Beğeni
             IconButton(
                 onClick  = { vm?.toggleLikeQuote(quote.bookId, quote.id) },
                 modifier = Modifier.size(36.dp),
@@ -219,7 +226,6 @@ fun BookQuoteCard(
             if (quote.likesCount > 0)
                 Text(quote.likesCount.toString(), color = Muted, fontSize = 13.sp)
 
-            // Yorum (opsiyonel)
             actions.onComment?.let { onComment ->
                 Spacer(Modifier.width(4.dp))
                 IconButton(onClick = onComment, modifier = Modifier.size(36.dp)) {
@@ -229,7 +235,6 @@ fun BookQuoteCard(
 
             Spacer(Modifier.weight(1f))
 
-            // Kitap sayfasına git (eğer bookId varsa)
             if (quote.bookId.isNotBlank() && navController != null) {
                 TextButton(
                     onClick      = { navController.navigate("library_book_detail/${quote.bookId}") },
@@ -249,7 +254,6 @@ fun BookQuoteCard(
         HorizontalDivider(color = Divider, thickness = 0.5.dp)
     }
 
-    // ── Düzenle Dialog ─────────────────────────────────────────────────
     if (showEditDialog) {
         var editText by remember { mutableStateOf(quote.text) }
         AlertDialog(
@@ -286,7 +290,6 @@ fun BookQuoteCard(
         )
     }
 
-    // ── Sil Dialog ─────────────────────────────────────────────────────
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -336,7 +339,6 @@ fun BookReviewCard(
             .background(Background)
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
-        // ── Başlık ────────────────────────────────────────────────────────
         Row(
             modifier          = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -392,7 +394,6 @@ fun BookReviewCard(
 
         Spacer(Modifier.height(10.dp))
 
-        // ── Kitap referansı ───────────────────────────────────────────────
         if (review.bookTitle.isNotBlank()) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -418,7 +419,6 @@ fun BookReviewCard(
             }
         }
 
-        // ── İnceleme metni ────────────────────────────────────────────────
         Text(
             review.text,
             color      = OnBackground,
@@ -428,7 +428,6 @@ fun BookReviewCard(
 
         Spacer(Modifier.height(8.dp))
 
-        // ── Aksiyon çubuğu ────────────────────────────────────────────────
         Row(
             modifier          = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -475,7 +474,6 @@ fun BookReviewCard(
         HorizontalDivider(color = Divider, thickness = 0.5.dp)
     }
 
-    // ── Düzenle Dialog ─────────────────────────────────────────────────
     if (showEditDialog) {
         var editText   by remember { mutableStateOf(review.text) }
         var editRating by remember { mutableFloatStateOf(review.rating) }
@@ -528,7 +526,6 @@ fun BookReviewCard(
         )
     }
 
-    // ── Sil Dialog ─────────────────────────────────────────────────────
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -548,6 +545,291 @@ fun BookReviewCard(
             },
         )
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  EmptyState — tüm kütüphane ekranlarında ortak boş durum gösterimi
+//  (LibraryScreen, AuthorDetailScreen, LibraryBookDetailScreen)
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun EmptyState(
+    icon    : ImageVector,
+    message : String,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier         = modifier
+            .fillMaxWidth()
+            .padding(vertical = 56.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector        = icon,
+                contentDescription = null,
+                tint               = Muted,
+                modifier           = Modifier.size(56.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text      = message,
+                color     = Muted,
+                fontSize  = 15.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                lineHeight = 22.sp,
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  LibraryBookCard — kitap listesi satırı
+//  Kullanım: AuthorDetailScreen (yazarın kitapları) + LibraryScreen (Kitaplar sekmesi)
+//  LibraryScreen'deki eski private LibraryBookRow bunu çağırır artık.
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun LibraryBookCard(
+    book    : LibraryBook,
+    onClick : () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier  = modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape     = RoundedCornerShape(14.dp),
+        colors    = CardDefaults.cardColors(containerColor = HeftSurface),
+        elevation = CardDefaults.cardElevation(1.dp),
+    ) {
+        Row(modifier = Modifier.padding(12.dp)) {
+            // Kapak
+            Box(
+                modifier = Modifier
+                    .width(54.dp)
+                    .height(76.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(SurfaceVar),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (book.coverImg.isNotBlank()) {
+                    AsyncImage(
+                        model             = book.coverImg,
+                        contentDescription = book.title,
+                        contentScale      = ContentScale.Crop,
+                        modifier          = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.AutoStories,
+                        contentDescription = null,
+                        tint     = Muted,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            // Bilgiler
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    book.title,
+                    color      = OnBackground,
+                    fontSize   = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines   = 2,
+                    overflow   = TextOverflow.Ellipsis,
+                )
+                if (book.authorName.isNotBlank()) {
+                    Text(
+                        book.authorName,
+                        color    = Primary,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (book.avgRating > 0f) StarRow(book.avgRating, size = 13.dp)
+                    if (book.quoteCount > 0) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.FormatQuote, null, tint = Muted, modifier = Modifier.size(12.dp))
+                            Spacer(Modifier.width(3.dp))
+                            Text("${book.quoteCount}", color = Muted, fontSize = 11.sp)
+                        }
+                    }
+                }
+                if (book.genre.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(book.genre, color = Muted, fontSize = 11.sp)
+                }
+            }
+
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint     = Muted,
+                modifier = Modifier
+                    .size(20.dp)
+                    .align(Alignment.CenterVertically),
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  AddReviewDialog — yıldız + metin ile inceleme ekleme
+//  Eskiden AuthorBookQuoteScreens + LibraryScreen'de birer kopyası vardı.
+//  Artık tek yer burası.
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun AddReviewDialog(
+    bookTitle: String,
+    language : String = "tr",
+    onDismiss: () -> Unit,
+    onSubmit : (text: String, rating: Float) -> Unit,
+) {
+    var text   by remember { mutableStateOf("") }
+    var rating by remember { mutableFloatStateOf(0f) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Text(
+                if (language == "ku") "Nirxandinê binivîse" else "İnceleme Yaz",
+                color = OnBackground, fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(bookTitle, color = Primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (language == "ku") "Xalê bide:" else "Puan ver:",
+                    color = Muted, fontSize = 12.sp,
+                )
+                Row {
+                    repeat(5) { i ->
+                        IconButton(
+                            onClick  = { rating = (i + 1).toFloat() },
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                if (i < rating.roundToInt()) Icons.Default.Star
+                                else Icons.Outlined.StarBorder,
+                                contentDescription = null,
+                                tint     = Amber,
+                                modifier = Modifier.size(28.dp),
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value         = text,
+                    onValueChange = { text = it },
+                    placeholder   = {
+                        Text(
+                            if (language == "ku") "Nirxandina xwe binivîse…" else "İncelemenizi yazın…",
+                            color = Muted,
+                        )
+                    },
+                    minLines = 4,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors   = unifiedFieldColors(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick  = { if (text.isNotBlank() && rating > 0) onSubmit(text.trim(), rating) },
+                enabled  = text.isNotBlank() && rating > 0,
+            ) {
+                Text(
+                    if (language == "ku") "Parve bike" else "Paylaş",
+                    color = Primary, fontWeight = FontWeight.Bold,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    if (language == "ku") "Betal bike" else "İptal",
+                    color = Muted,
+                )
+            }
+        },
+    )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  BookPickerDialog — inceleme FAB'ı için kitap seçici
+//  Eskiden AuthorBookPickerDialog + LibraryBookPickerDialog iki ayrı kopyaydı.
+//  Artık tek yer burası.
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun BookPickerDialog(
+    books    : List<LibraryBook>,
+    language : String = "tr",
+    onDismiss: () -> Unit,
+    onSelect : (LibraryBook) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Text(
+                if (language == "ku") "Pirtûkê hilbijêre" else "Kitap Seçin",
+                color = OnBackground, fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+                items(books, key = { it.id }) { book ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(book) }
+                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Outlined.AutoStories,
+                            contentDescription = null,
+                            tint     = Primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                book.title,
+                                color      = OnBackground,
+                                fontSize   = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines   = 1,
+                                overflow   = TextOverflow.Ellipsis,
+                            )
+                            if (book.authorName.isNotBlank())
+                                Text(book.authorName, color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                    HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    if (language == "ku") "Betal bike" else "İptal",
+                    color = Muted,
+                )
+            }
+        },
+    )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -585,9 +867,9 @@ fun UserAvatar(
 
 @Composable
 fun StarRow(
-    rating : Float,
-    size   : androidx.compose.ui.unit.Dp = 14.dp,
-    active : Color = Amber,
+    rating  : Float,
+    size    : androidx.compose.ui.unit.Dp = 14.dp,
+    active  : Color = Amber,
     inactive: Color = Muted,
 ) {
     val full = rating.roundToInt().coerceIn(0, 5)

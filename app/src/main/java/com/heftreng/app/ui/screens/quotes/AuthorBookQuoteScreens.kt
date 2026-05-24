@@ -51,6 +51,10 @@ import com.heftreng.app.ui.component.QuoteDialog
 import com.heftreng.app.ui.component.BookQuoteCard
 import com.heftreng.app.ui.component.BookReviewCard
 import com.heftreng.app.ui.component.BookCardActions
+import com.heftreng.app.ui.component.EmptyState
+import com.heftreng.app.ui.component.LibraryBookCard
+import com.heftreng.app.ui.component.AddReviewDialog
+import com.heftreng.app.ui.component.BookPickerDialog
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.LibraryViewModel
 import com.heftreng.app.viewmodel.ReadingListViewModel
@@ -243,7 +247,7 @@ fun AuthorDetailScreen(
 
     // ── İnceleme FAB: önce kitap seç, sonra dialog ────────────────────
     if (showBookPicker) {
-        AuthorBookPickerDialog(
+        BookPickerDialog(
             books    = books,
             language = "tr",
             onDismiss = { showBookPicker = false },
@@ -741,68 +745,6 @@ private fun AddQuoteDialog(
     )
 }
 
-@Composable
-private fun AddReviewDialog(
-    bookTitle: String,
-    onDismiss: () -> Unit,
-    onSubmit : (String, Float) -> Unit,
-) {
-    var text   by remember { mutableStateOf("") }
-    var rating by remember { mutableFloatStateOf(0f) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor   = HeftSurface,
-        title = {
-            Text("İnceleme Yaz", color = OnBackground, fontWeight = FontWeight.Bold)
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(bookTitle, color = Primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-
-                // Yıldız seçici
-                Text("Puan ver:", color = Muted, fontSize = 12.sp)
-                Row {
-                    repeat(5) { i ->
-                        IconButton(onClick = { rating = (i + 1).toFloat() }, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                if (i < rating.roundToInt()) Icons.Default.Star
-                                else Icons.Outlined.StarBorder,
-                                null, tint = Amber, modifier = Modifier.size(28.dp),
-                            )
-                        }
-                    }
-                }
-
-                OutlinedTextField(
-                    value         = text,
-                    onValueChange = { text = it },
-                    placeholder   = { Text("İncelemenizi yazın…", color = Muted) },
-                    minLines      = 4,
-                    modifier      = Modifier.fillMaxWidth(),
-                    colors        = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor   = Primary,
-                        unfocusedBorderColor = Divider,
-                        focusedTextColor     = OnBackground,
-                        unfocusedTextColor   = OnBackground,
-                    ),
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { if (text.isNotBlank() && rating > 0) onSubmit(text.trim(), rating) },
-                enabled = text.isNotBlank() && rating > 0,
-            ) {
-                Text("Paylaş", color = Primary, fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("İptal", color = Muted) }
-        },
-    )
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 //  5. LEGACY ROTALAR — Eski nav bağlantıları için uyumluluk katmanı
 //     (Feed'deki mevcut author_quotes/{ad} ve book_quotes/{ad} rotaları
@@ -1180,55 +1122,4 @@ fun RlStatusPickerDialog(
     )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Kitap Seçici Dialog — AuthorDetailScreen FAB için
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-fun AuthorBookPickerDialog(
-    books    : List<com.heftreng.app.data.model.LibraryBook>,
-    language : String,
-    onDismiss: () -> Unit,
-    onSelect : (com.heftreng.app.data.model.LibraryBook) -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor   = HeftSurface,
-        title = {
-            Text(
-                if (language == "ku") "Pirtûkê hilbijêre" else "Kitap Seçin",
-                color = OnBackground, fontWeight = FontWeight.Bold,
-            )
-        },
-        text = {
-            androidx.compose.foundation.lazy.LazyColumn(
-                modifier = Modifier.heightIn(max = 320.dp),
-            ) {
-                items(books, key = { it.id }) { book ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(book) }
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Outlined.AutoStories, null, tint = Primary, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Column {
-                            Text(book.title, color = OnBackground, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                            if (book.authorName.isNotBlank())
-                                Text(book.authorName, color = Muted, fontSize = 12.sp)
-                        }
-                    }
-                    HorizontalDivider(color = Divider, thickness = 0.5.dp)
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(if (language == "ku") "Betal bike" else "İptal", color = Muted)
-            }
-        },
-    )
-}
+// AuthorBookPickerDialog → BookPickerDialog (UnifiedCards.kt) ile değiştirildi

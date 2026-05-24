@@ -47,6 +47,10 @@ import com.heftreng.app.ui.component.QuoteDialog
 import com.heftreng.app.ui.component.BookQuoteCard
 import com.heftreng.app.ui.component.BookReviewCard
 import com.heftreng.app.ui.component.BookCardActions
+import com.heftreng.app.ui.component.EmptyState
+import com.heftreng.app.ui.component.LibraryBookCard
+import com.heftreng.app.ui.component.AddReviewDialog
+import com.heftreng.app.ui.component.BookPickerDialog
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
@@ -267,7 +271,7 @@ fun LibraryScreen(
 
     // ── İnceleme: Kitap Seç ───────────────────────────────────────────────
     if (showReviewBookPicker) {
-        LibraryBookPickerDialog(
+        BookPickerDialog(
             books    = books,
             language = language,
             onDismiss = { showReviewBookPicker = false },
@@ -281,8 +285,9 @@ fun LibraryScreen(
 
     // ── İnceleme Ekle ────────────────────────────────────────────────────
     if (showReviewDialog && reviewTargetBook != null) {
-        LibraryAddReviewDialog(
+        AddReviewDialog(
             bookTitle = reviewTargetBook!!.title,
+            language  = language,
             onDismiss = { showReviewDialog = false; reviewTargetBook = null },
             onSubmit  = { text, rating ->
                 libraryVm.addBookReview(reviewTargetBook!!, text, rating)
@@ -305,7 +310,7 @@ private fun LibraryQuotesTab(
     vm           : LibraryViewModel? = null,
 ) {
     if (quotes.isEmpty()) {
-        LibraryEmptyState(Icons.Outlined.FormatQuote, Strings.libraryNoQuotes(language))
+        EmptyState(Icons.Outlined.FormatQuote, Strings.libraryNoQuotes(language))
         return
     }
     val actions = BookCardActions(vm = vm, navController = navController)
@@ -324,7 +329,7 @@ private fun LibraryReviewsTab(
     vm           : LibraryViewModel? = null,
 ) {
     if (reviews.isEmpty()) {
-        LibraryEmptyState(Icons.Outlined.RateReview, Strings.libraryNoReviews(language))
+        EmptyState(Icons.Outlined.RateReview, Strings.libraryNoReviews(language))
         return
     }
     val actions = BookCardActions(vm = vm, navController = navController)
@@ -342,7 +347,7 @@ private fun LibraryAuthorsTab(
     navController: NavController,
 ) {
     if (authors.isEmpty()) {
-        LibraryEmptyState(Icons.Outlined.Person, Strings.libraryNoAuthors(language))
+        EmptyState(Icons.Outlined.Person, Strings.libraryNoAuthors(language))
         return
     }
     LazyColumn(
@@ -362,7 +367,7 @@ private fun LibraryBooksTab(
     navController: NavController,
 ) {
     if (books.isEmpty()) {
-        LibraryEmptyState(Icons.Outlined.AutoStories, Strings.libraryNoBooks(language))
+        EmptyState(Icons.Outlined.AutoStories, Strings.libraryNoBooks(language))
         return
     }
     LazyColumn(
@@ -370,13 +375,16 @@ private fun LibraryBooksTab(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(books, key = { it.id }) { book ->
-            LibraryBookRow(book = book, navController = navController)
+            LibraryBookCard(
+                book    = book,
+                onClick = { navController.navigate("library_book_detail/${book.id}") },
+            )
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Kartlar
+//  Yazar listesi satırı — yalnızca LibraryScreen'e özgü
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -410,186 +418,9 @@ private fun LibraryAuthorRow(author: Author, navController: NavController) {
     }
 }
 
-@Composable
-private fun LibraryBookRow(book: LibraryBook, navController: NavController) {
-    Card(
-        modifier  = Modifier
-            .fillMaxWidth()
-            .clickable { navController.navigate("library_book_detail/${book.id}") },
-        shape     = RoundedCornerShape(14.dp),
-        colors    = CardDefaults.cardColors(containerColor = HeftSurface),
-        elevation = CardDefaults.cardElevation(1.dp),
-    ) {
-        Row(modifier = Modifier.padding(12.dp)) {
-            if (book.coverImg.isNotBlank()) {
-                AsyncImage(
-                    model             = book.coverImg,
-                    contentDescription = book.title,
-                    modifier          = Modifier.size(width = 54.dp, height = 76.dp).clip(RoundedCornerShape(8.dp)).background(HeftSurface),
-                )
-                Spacer(Modifier.width(12.dp))
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(book.title, color = OnBackground, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(book.authorName, color = Primary, fontSize = 13.sp, maxLines = 1)
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (book.avgRating  > 0f) StarRatingRow(book.avgRating)
-                    if (book.quoteCount > 0)  StatChip("${book.quoteCount}", Icons.Filled.FormatQuote)
-                }
-                if (book.genre.isNotBlank()) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(book.genre, color = Muted, fontSize = 11.sp)
-                }
-            }
-            Icon(Icons.Filled.ChevronRight, null, tint = Muted, modifier = Modifier.size(20.dp).align(Alignment.CenterVertically))
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Diyaloglar
-// ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-internal fun LibraryBookPickerDialog(
-    books    : List<LibraryBook>,
-    language : String,
-    onDismiss: () -> Unit,
-    onSelect : (LibraryBook) -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor   = HeftSurface,
-        title = { Text(Strings.libraryReviewBook(language), color = OnBackground, fontWeight = FontWeight.Bold) },
-        text = {
-            LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
-                items(books, key = { it.id }) { book ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(book) }
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Outlined.AutoStories, null, tint = Primary, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Column {
-                            Text(book.title, color = OnBackground, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                            if (book.authorName.isNotBlank())
-                                Text(book.authorName, color = Muted, fontSize = 12.sp)
-                        }
-                    }
-                    HorizontalDivider(color = Divider, thickness = 0.5.dp)
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(Strings.cancel(language), color = Muted) }
-        },
-    )
-}
-
-@Composable
-private fun LibraryAddReviewDialog(
-    bookTitle: String,
-    onDismiss: () -> Unit,
-    onSubmit : (String, Float) -> Unit,
-) {
-    var text   by remember { mutableStateOf("") }
-    var rating by remember { mutableFloatStateOf(0f) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor   = HeftSurface,
-        title = { Text("İnceleme Yaz", color = OnBackground, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(bookTitle, color = Primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Text("Puan ver:", color = Muted, fontSize = 12.sp)
-                Row {
-                    repeat(5) { i ->
-                        IconButton(onClick = { rating = (i + 1).toFloat() }, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                if (i < rating.roundToInt()) Icons.Default.Star else Icons.Outlined.StarBorder,
-                                null, tint = Amber, modifier = Modifier.size(28.dp),
-                            )
-                        }
-                    }
-                }
-                OutlinedTextField(
-                    value         = text,
-                    onValueChange = { text = it },
-                    placeholder   = { Text("İncelemenizi yazın…", color = Muted) },
-                    minLines      = 4,
-                    modifier      = Modifier.fillMaxWidth(),
-                    colors        = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor   = Primary,
-                        unfocusedBorderColor = Divider,
-                        focusedTextColor     = OnBackground,
-                        unfocusedTextColor   = OnBackground,
-                    ),
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick  = { if (text.isNotBlank() && rating > 0) onSubmit(text.trim(), rating) },
-                enabled  = text.isNotBlank() && rating > 0,
-            ) { Text("Paylaş", color = Primary, fontWeight = FontWeight.Bold) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("İptal", color = Muted) }
-        },
-    )
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 //  Yardımcı bileşenler
 // ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun LibraryEmptyState(
-    icon   : androidx.compose.ui.graphics.vector.ImageVector,
-    message: String,
-) {
-    Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, null, tint = Muted, modifier = Modifier.size(56.dp))
-            Spacer(Modifier.height(12.dp))
-            Text(message, color = Muted, fontSize = 15.sp)
-        }
-    }
-}
-
-@Composable
-private fun UserMiniRow(displayName: String, photoURL: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        AsyncImage(
-            model             = photoURL.ifBlank { null },
-            contentDescription = displayName,
-            modifier          = Modifier.size(22.dp).clip(CircleShape).background(Primary.copy(alpha = 0.15f)),
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(displayName.ifBlank { "—" }, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-@Composable
-private fun StarRatingRow(rating: Float) {
-    val full = rating.roundToInt().coerceIn(0, 5)
-    Row {
-        repeat(5) { i ->
-            Icon(
-                if (i < full) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                null,
-                tint     = if (i < full) Color(0xFFFFC107) else Muted,
-                modifier = Modifier.size(14.dp),
-            )
-        }
-    }
-}
 
 @Composable
 private fun StatChip(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
