@@ -11,7 +11,6 @@ import com.heftreng.app.data.model.Author
 import com.heftreng.app.data.model.BookQuote
 import com.heftreng.app.data.model.BookReview
 import com.heftreng.app.data.model.LibraryBook
-import com.heftreng.app.data.repository.LibraryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -40,7 +39,6 @@ import javax.inject.Inject
 class LibraryViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
-    private val library  : LibraryRepository,   // Adım 2.1 — ensureAuthorAndBook buradan
 ) : ViewModel() {
 
     // ── State ─────────────────────────────────────────────────────────────
@@ -80,50 +78,6 @@ class LibraryViewModel @Inject constructor(
     val myUid get() = auth.currentUser?.uid ?: ""
     val myName get() = auth.currentUser?.displayName ?: ""
     val myPhoto get() = auth.currentUser?.photoUrl?.toString() ?: ""
-
-    // ── Kütüphane Genel Bakışı — LibraryScreen için ───────────────────────
-    // Adım 4.1 — Daha önce bu sorgular doğrudan LibraryScreen Composable'ında
-    // LaunchedEffect içinde çalışıyordu. MVVM ihlali düzeltildi.
-    fun loadLibraryOverview() {
-        viewModelScope.launch {
-            _loading.value = true
-            try {
-                // 1. Tüm kitapları çek (index gerektirmez — filter/orderBy yok)
-                val bSnap = firestore.collection("library_books")
-                    .limit(100).get().await()
-                val books = bSnap.documents.mapNotNull { doc ->
-                    doc.toObject(LibraryBook::class.java)?.copy(id = doc.id)
-                }
-                _authorBooks.value = books.sortedByDescending { it.ts?.seconds ?: 0L }
-
-                // 2. Her kitabın quotes alt koleksiyonunu topla
-                //    (alt koleksiyon get = index gerektirmez)
-                val allQuotes = mutableListOf<BookQuote>()
-                val allReviews = mutableListOf<BookReview>()
-                books.forEach { book ->
-                    val qSnap = firestore.collection("library_books")
-                        .document(book.id).collection("quotes")
-                        .limit(20).get().await()
-                    qSnap.documents.mapNotNullTo(allQuotes) { doc ->
-                        doc.toObject(BookQuote::class.java)?.copy(id = doc.id)
-                    }
-                    val rSnap = firestore.collection("library_books")
-                        .document(book.id).collection("reviews")
-                        .limit(20).get().await()
-                    rSnap.documents.mapNotNullTo(allReviews) { doc ->
-                        doc.toObject(BookReview::class.java)?.copy(id = doc.id)
-                    }
-                }
-                _bookQuotes.value  = allQuotes.sortedByDescending  { it.ts?.seconds ?: 0L }
-                _bookReviews.value = allReviews.sortedByDescending { it.ts?.seconds ?: 0L }
-
-            } catch (e: Exception) {
-                _error.value = e.message
-            } finally {
-                _loading.value = false
-            }
-        }
-    }
 
     // ── Yazar Listesi ─────────────────────────────────────────────────────
     fun loadAuthors() {
@@ -185,54 +139,25 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Admin kartı gibi her kart kendi kitaplarını bağımsız yükleyebilsin diye
-     * paylaşılan state'e dokunmadan doğrudan liste döner.
-     */
-    suspend fun fetchBooksForAuthor(authorId: String): List<com.heftreng.app.data.model.LibraryBook> {
-        return try {
-            val snap = firestore.collection("library_books")
-                .whereEqualTo("authorId", authorId)
-                .limit(50).get().await()
-            snap.documents.mapNotNull { doc ->
-                doc.toObject(com.heftreng.app.data.model.LibraryBook::class.java)?.copy(id = doc.id)
-            }.sortedBy { it.title }
-        } catch (_: Exception) { emptyList() }
-    }
-
     private suspend fun loadAuthorQuotes(authorId: String) {
-        // collectionGroup index gerektirdiği için kitap kitap toplayarak alıyoruz
-        val booksSnap = firestore.collection("library_books")
+        // authors/{authorId} için tüm library_books altındaki quotes collection group
+        val snap = firestore.collectionGroup("quotes")
             .whereEqualTo("authorId", authorId)
-            .get().await()
-        val allQuotes = mutableListOf<BookQuote>()
-        booksSnap.documents.forEach { bookDoc ->
-            val qSnap = firestore.collection("library_books")
-                .document(bookDoc.id).collection("quotes")
-                .orderBy("ts", Query.Direction.DESCENDING)
-                .limit(20).get().await()
-            qSnap.documents.mapNotNullTo(allQuotes) { doc ->
-                doc.toObject(BookQuote::class.java)?.copy(id = doc.id)
-            }
+            .orderBy("ts", Query.Direction.DESCENDING)
+            .limit(50).get().await()
+        _authorQuotes.value = snap.documents.mapNotNull { doc ->
+            doc.toObject(BookQuote::class.java)?.copy(id = doc.id)
         }
-        _authorQuotes.value = allQuotes.sortedByDescending { it.ts?.seconds ?: 0L }
     }
 
     private suspend fun loadAuthorReviews(authorId: String) {
-        val booksSnap = firestore.collection("library_books")
+        val snap = firestore.collectionGroup("reviews")
             .whereEqualTo("authorId", authorId)
-            .get().await()
-        val allReviews = mutableListOf<BookReview>()
-        booksSnap.documents.forEach { bookDoc ->
-            val rSnap = firestore.collection("library_books")
-                .document(bookDoc.id).collection("reviews")
-                .orderBy("ts", Query.Direction.DESCENDING)
-                .limit(20).get().await()
-            rSnap.documents.mapNotNullTo(allReviews) { doc ->
-                doc.toObject(BookReview::class.java)?.copy(id = doc.id)
-            }
+            .orderBy("ts", Query.Direction.DESCENDING)
+            .limit(50).get().await()
+        _authorReviews.value = snap.documents.mapNotNull { doc ->
+            doc.toObject(BookReview::class.java)?.copy(id = doc.id)
         }
-        _authorReviews.value = allReviews.sortedByDescending { it.ts?.seconds ?: 0L }
     }
 
     // ── Yazar Takip ───────────────────────────────────────────────────────
@@ -390,20 +315,24 @@ class LibraryViewModel @Inject constructor(
                 val quoteRef = firestore.collection("library_books").document(book.id)
                     .collection("quotes").add(quoteData).await()
 
-                // 2. feed'e yaz — Adım 2.2: nested "quote" objesi kaldırıldı, yalnızca flat alanlar
+                // 2. feed'e yaz
                 val feedData = hashMapOf(
-                    "uid"             to myUid,
-                    "displayName"     to myName,
-                    "name"            to myName,   // legacy tema uyumu
-                    "photoURL"        to myPhoto,
-                    "quoteText"       to quoteText,
-                    "bookName"        to book.title,
-                    "authorName"      to book.authorName,
-                    "libraryBookId"   to book.id,
+                    "uid"          to myUid,
+                    "displayName"  to myName,
+                    "name"         to myName,
+                    "photoURL"     to myPhoto,
+                    "quoteText"    to quoteText,
+                    "bookName"     to book.title,
+                    "authorName"   to book.authorName,
+                    "libraryBookId" to book.id,
                     "libraryAuthorId" to book.authorId,
-                    "type"            to "library_quote",
-                    "likes" to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
-                    "ts"              to now,
+                    "quote"        to mapOf(
+                        "text"   to quoteText,
+                        "book"   to book.title,
+                        "author" to book.authorName,
+                    ),
+                    "type"         to "library_quote",
+                    "ts"           to now,
                 )
                 val feedRef = firestore.collection("feed").add(feedData).await()
 
@@ -533,14 +462,154 @@ class LibraryViewModel @Inject constructor(
 
     // ══════════════════════════════════════════════════════════════════════
     //  OTOMATİK YAZAR / KİTAP OLUŞTURMA
-    //  Adım 2.1 — Duplicate implementasyon kaldırıldı.
-    //  LibraryRepository.ensureAuthorAndBook() kullanılır.
+    //  Feed'de alıntı paylaşıldığında bookName + authorName alanlarından
+    //  Firestore'da eşleşen kayıt aranır; bulunamazsa otomatik oluşturulur.
+    //  Dönen değer: Pair(authorId, bookId) — her ikisi de boş olabilir.
     // ══════════════════════════════════════════════════════════════════════
 
+    /**
+     * Kullanılacak yer: FeedScreen / PostComposer — alıntılı post paylaşılmadan önce çağrılır.
+     * Hem yazar hem kitap mevcutsa sadece ID'lerini döner, yoksa oluşturur.
+     * Geri dönen Pair: (authorId, bookId)
+     */
     suspend fun ensureAuthorAndBook(
         authorName: String,
         bookName  : String,
-    ): Pair<String, String> = library.ensureAuthorAndBook(authorName, bookName)
+    ): Pair<String, String> {
+        if (authorName.isBlank() && bookName.isBlank()) return Pair("", "")
+
+        val authorId = if (authorName.isNotBlank()) {
+            findOrCreateAuthor(authorName)
+        } else ""
+
+        val bookId = if (bookName.isNotBlank() && authorId.isNotBlank()) {
+            findOrCreateLibraryBook(bookName, authorId, authorName)
+        } else if (bookName.isNotBlank()) {
+            findOrCreateLibraryBook(bookName, "", authorName)
+        } else ""
+
+        return Pair(authorId, bookId)
+    }
+
+    private suspend fun findOrCreateAuthor(name: String): String {
+        return try {
+            // Ad üzerinden ara (case-insensitive Firestore desteklemediği için lowercase slug ile)
+            val snap = firestore.collection("authors")
+                .whereEqualTo("nameLower", name.trim().lowercase())
+                .limit(1).get().await()
+            if (!snap.isEmpty) {
+                snap.documents[0].id
+            } else {
+                val data = hashMapOf(
+                    "name"          to name.trim(),
+                    "nameLower"     to name.trim().lowercase(),
+                    "bio"           to "",
+                    "photoURL"      to "",
+                    "birthYear"     to 0,
+                    "nationality"   to "",
+                    "bookCount"     to 0,
+                    "quoteCount"    to 0,
+                    "reviewCount"   to 0,
+                    "followerCount" to 0,
+                    "autoCreated"   to true,
+                    "ts"            to com.google.firebase.Timestamp.now(),
+                )
+                firestore.collection("authors").add(data).await().id
+            }
+        } catch (e: Exception) {
+            // nameLower indeksi henüz yoksa ada göre ara
+            try {
+                val fallback = firestore.collection("authors")
+                    .whereEqualTo("name", name.trim())
+                    .limit(1).get().await()
+                if (!fallback.isEmpty) fallback.documents[0].id
+                else {
+                    val data = hashMapOf(
+                        "name"          to name.trim(),
+                        "nameLower"     to name.trim().lowercase(),
+                        "bio"           to "",
+                        "photoURL"      to "",
+                        "birthYear"     to 0,
+                        "nationality"   to "",
+                        "bookCount"     to 0,
+                        "quoteCount"    to 0,
+                        "reviewCount"   to 0,
+                        "followerCount" to 0,
+                        "autoCreated"   to true,
+                        "ts"            to com.google.firebase.Timestamp.now(),
+                    )
+                    firestore.collection("authors").add(data).await().id
+                }
+            } catch (_: Exception) { "" }
+        }
+    }
+
+    private suspend fun findOrCreateLibraryBook(
+        title     : String,
+        authorId  : String,
+        authorName: String,
+    ): String {
+        return try {
+            val snap = firestore.collection("library_books")
+                .whereEqualTo("titleLower", title.trim().lowercase())
+                .limit(1).get().await()
+            if (!snap.isEmpty) {
+                snap.documents[0].id
+            } else {
+                val data = hashMapOf(
+                    "title"       to title.trim(),
+                    "titleLower"  to title.trim().lowercase(),
+                    "authorId"    to authorId,
+                    "authorName"  to authorName,
+                    "coverImg"    to "",
+                    "genre"       to "",
+                    "publishYear" to 0,
+                    "synopsis"    to "",
+                    "pageCount"   to 0,
+                    "quoteCount"  to 0,
+                    "reviewCount" to 0,
+                    "avgRating"   to 0f,
+                    "autoCreated" to true,
+                    "ts"          to com.google.firebase.Timestamp.now(),
+                )
+                val bookId = firestore.collection("library_books").add(data).await().id
+                // Yazar kitap sayacını artır
+                if (authorId.isNotBlank()) {
+                    try {
+                        firestore.collection("authors").document(authorId)
+                            .update("bookCount", com.google.firebase.firestore.FieldValue.increment(1))
+                    } catch (_: Exception) {}
+                }
+                bookId
+            }
+        } catch (e: Exception) {
+            try {
+                val fallback = firestore.collection("library_books")
+                    .whereEqualTo("title", title.trim())
+                    .limit(1).get().await()
+                if (!fallback.isEmpty) fallback.documents[0].id
+                else {
+                    val data = hashMapOf(
+                        "title"       to title.trim(),
+                        "titleLower"  to title.trim().lowercase(),
+                        "authorId"    to authorId,
+                        "authorName"  to authorName,
+                        "coverImg"    to "",
+                        "genre"       to "",
+                        "publishYear" to 0,
+                        "synopsis"    to "",
+                        "pageCount"   to 0,
+                        "quoteCount"  to 0,
+                        "reviewCount" to 0,
+                        "avgRating"   to 0f,
+                        "autoCreated" to true,
+                        "ts"          to com.google.firebase.Timestamp.now(),
+                    )
+                    firestore.collection("library_books").add(data).await().id
+                }
+            } catch (_: Exception) { "" }
+        }
+    }
 
     // ══════════════════════════════════════════════════════════════════════
     //  ESKİ FEED ALINTILARI → KİTAP / YAZAR SAYFASINA ENTEGRASYON
@@ -551,29 +620,19 @@ class LibraryViewModel @Inject constructor(
     fun migrateLegacyFeedQuotes(onProgress: (Int, Int) -> Unit = { _, _ -> }) {
         viewModelScope.launch {
             try {
-                // Firestore'daki eski web postlarında:
-                //   - "type" alanı YOK → whereEqualTo("type","quote") 0 sonuç döndürür
-                //   - "libraryBookId" alanı YOK (absent, "" değil) → whereEqualTo("libraryBookId","") eşleşmez
-                //
-                // Tek güvenilir yol: feed'i toplu çek, bellekte filtrele.
-                // "bookName" veya "quote.book" dolu olan her postu işle.
-
+                // 1. libraryBookId boş olan, quoteText dolu feed belgelerini getir
                 val snap = firestore.collection("feed")
-                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(500).get().await()
+                    .whereEqualTo("libraryBookId", "")
+                    .limit(200).get().await()
 
                 val docs = snap.documents.filter { doc ->
                     val d = doc.data ?: return@filter false
-                    // libraryBookId zaten dolu olanları atla
-                    val existingBookId = d["libraryBookId"] as? String ?: ""
-                    if (existingBookId.isNotBlank()) return@filter false
-                    // quote.book veya bookName dolu olmalı
-                    val qObj  = d["quote"] as? Map<*, *>
-                    val bName = (qObj?.get("book") as? String)?.trim()?.isNotBlank() == true
-                        || (d["bookName"] as? String)?.trim()?.isNotBlank() == true
-                    val qText = (qObj?.get("text") as? String)?.trim()?.isNotBlank() == true
-                        || (d["quoteText"] as? String)?.trim()?.isNotBlank() == true
-                    bName && qText
+                    val qObj   = d["quote"] as? Map<*, *>
+                    val qText  = (qObj?.get("text") as? String)?.isNotBlank() == true
+                        || (d["quoteText"] as? String)?.isNotBlank() == true
+                    val bName  = (qObj?.get("book") as? String)?.isNotBlank() == true
+                        || (d["bookName"] as? String)?.isNotBlank() == true
+                    qText && bName
                 }
 
                 val total = docs.size
@@ -597,22 +656,6 @@ class LibraryViewModel @Inject constructor(
 
                     if (updates.isNotEmpty()) {
                         try { doc.reference.update(updates).await() } catch (_: Exception) {}
-                    }
-
-                    // library_books kaydında authorId boşsa güncelle
-                    if (bookId.isNotBlank() && authorId.isNotBlank()) {
-                        try {
-                            val bookDoc = firestore.collection("library_books")
-                                .document(bookId).get().await()
-                            val existingAuthorId = bookDoc.getString("authorId") ?: ""
-                            if (existingAuthorId.isBlank()) {
-                                firestore.collection("library_books").document(bookId)
-                                    .update(mapOf(
-                                        "authorId"   to authorId,
-                                        "authorName" to authorName,
-                                    )).await()
-                            }
-                        } catch (_: Exception) {}
                     }
 
                     // Ayrıca library_books/{bookId}/quotes'a ekle (yoksa)
@@ -763,59 +806,113 @@ class LibraryViewModel @Inject constructor(
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    //  SAYAÇ DÜZELTME
-    //  collectionGroup sorguları Firestore composite index gerektirir.
-    //  Bu versiyon index gerektirmeyen sade sorgular kullanır:
-    //  - library_books → whereEqualTo("authorId") → bookCount
-    //  - library_books/{id}/quotes → get() → quoteCount (kitap bazında)
-    //  - Yazar quoteCount = tüm kitaplarının quoteCount toplamı
+    //  Alıntı & İnceleme — Beğeni / Silme / Düzenleme
     // ══════════════════════════════════════════════════════════════════════
-    fun rebuildCounters(onDone: (String) -> Unit = {}) {
+
+    val isAdmin: Boolean
+        get() = auth.currentUser?.email == "siirgibi49@gmail.com"
+
+    // ── Alıntı Beğen ───────────────────────────────────────────────────
+    fun toggleLikeQuote(bookId: String, quoteId: String) {
+        val uid = myUid.ifBlank { return }
         viewModelScope.launch {
             try {
-                val authorsSnap = firestore.collection("authors").get().await()
-                var fixed = 0
-
-                authorsSnap.documents.forEach { authorDoc ->
-                    val authorId = authorDoc.id
-
-                    // 1. Bu yazara ait kitapları getir (index gerektirmez)
-                    val booksSnap = firestore.collection("library_books")
-                        .whereEqualTo("authorId", authorId)
-                        .get().await()
-                    val bookCount = booksSnap.size()
-
-                    // 2. Her kitabın quotes alt koleksiyonunu say, topla
-                    //    (alt koleksiyon direkt get — index gerektirmez)
-                    var totalQuoteCount = 0
-                    booksSnap.documents.forEach { bookDoc ->
-                        val bookId = bookDoc.id
-                        val bqSnap = firestore.collection("library_books")
-                            .document(bookId).collection("quotes")
-                            .get().await()
-                        val bqCount = bqSnap.size()
-                        totalQuoteCount += bqCount
-                        // Kitabın quoteCount'unu da düzelt
-                        if ((bookDoc.getLong("quoteCount") ?: 0L).toInt() != bqCount) {
-                            firestore.collection("library_books").document(bookId)
-                                .update("quoteCount", bqCount).await()
-                        }
-                    }
-
-                    // 3. Yazarı güncelle
-                    firestore.collection("authors").document(authorId)
-                        .update(mapOf(
-                            "bookCount"  to bookCount,
-                            "quoteCount" to totalQuoteCount,
-                        )).await()
-
-                    fixed++
+                val ref = firestore.collection("library_books").document(bookId)
+                    .collection("quotes").document(quoteId)
+                val snap = ref.get().await()
+                @Suppress("UNCHECKED_CAST")
+                val likedBy = (snap.get("likedBy") as? List<String>) ?: emptyList()
+                if (uid in likedBy) {
+                    ref.update(
+                        "likedBy",    com.google.firebase.firestore.FieldValue.arrayRemove(uid),
+                        "likesCount", com.google.firebase.firestore.FieldValue.increment(-1),
+                    ).await()
+                } else {
+                    ref.update(
+                        "likedBy",    com.google.firebase.firestore.FieldValue.arrayUnion(uid),
+                        "likesCount", com.google.firebase.firestore.FieldValue.increment(1),
+                    ).await()
                 }
+                loadBookQuotes(bookId)
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
 
-                onDone("✓ $fixed yazar düzeltildi")
-            } catch (e: Exception) {
-                onDone("Hata: ${e.message}")
-            }
+    // ── Alıntı Sil ─────────────────────────────────────────────────────
+    fun deleteQuote(bookId: String, quoteId: String, quoteUid: String) {
+        if (myUid != quoteUid && !isAdmin) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("library_books").document(bookId)
+                    .collection("quotes").document(quoteId).delete().await()
+                firestore.collection("library_books").document(bookId)
+                    .update("quoteCount", com.google.firebase.firestore.FieldValue.increment(-1))
+                loadBookQuotes(bookId)
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Alıntı Düzenle ─────────────────────────────────────────────────
+    fun editQuote(bookId: String, quoteId: String, quoteUid: String, newText: String) {
+        if (myUid != quoteUid && !isAdmin) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("library_books").document(bookId)
+                    .collection("quotes").document(quoteId)
+                    .update("text", newText).await()
+                loadBookQuotes(bookId)
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── İnceleme Beğen ─────────────────────────────────────────────────
+    fun toggleLikeReview(bookId: String, reviewId: String) {
+        val uid = myUid.ifBlank { return }
+        viewModelScope.launch {
+            try {
+                val ref = firestore.collection("library_books").document(bookId)
+                    .collection("reviews").document(reviewId)
+                val snap = ref.get().await()
+                @Suppress("UNCHECKED_CAST")
+                val likedBy = (snap.get("likedBy") as? List<String>) ?: emptyList()
+                if (uid in likedBy) {
+                    ref.update(
+                        "likedBy",    com.google.firebase.firestore.FieldValue.arrayRemove(uid),
+                        "likesCount", com.google.firebase.firestore.FieldValue.increment(-1),
+                    ).await()
+                } else {
+                    ref.update(
+                        "likedBy",    com.google.firebase.firestore.FieldValue.arrayUnion(uid),
+                        "likesCount", com.google.firebase.firestore.FieldValue.increment(1),
+                    ).await()
+                }
+                loadBookReviews(bookId)
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── İnceleme Sil ───────────────────────────────────────────────────
+    fun deleteReview(bookId: String, reviewId: String, reviewUid: String) {
+        if (myUid != reviewUid && !isAdmin) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("library_books").document(bookId)
+                    .collection("reviews").document(reviewId).delete().await()
+                loadBookReviews(bookId)
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── İnceleme Düzenle ───────────────────────────────────────────────
+    fun editReview(bookId: String, reviewId: String, reviewUid: String, newText: String, newRating: Float) {
+        if (myUid != reviewUid && !isAdmin) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("library_books").document(bookId)
+                    .collection("reviews").document(reviewId)
+                    .update("text", newText, "rating", newRating).await()
+                loadBookReviews(bookId)
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 }

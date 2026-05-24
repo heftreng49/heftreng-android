@@ -1,12 +1,13 @@
 package com.heftreng.app.data.model
 
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.Exclude
 
 // ─── KULLANICI ─────────────────────────────────────────
 data class User(
     val uid            : String = "",
     val displayName    : String = "",
-    val name           : String = "",   // Legacy — web'den gelen eski alan; yeni okumalar effectiveName kullanır
+    val name           : String = "",
     val username       : String = "",
     val email          : String = "",
     val photoURL       : String = "",
@@ -20,29 +21,24 @@ data class User(
     val xp             : Int    = 0,
     val streak         : Int    = 0,
     val banned         : Boolean= false,
-    val isPrivate      : Boolean= false,
-) {
-    // Adım 1.3 — Her iki alan adını tek noktadan çöz.
-    // Yeni kod her zaman effectiveName kullanır; Firestore'a her zaman displayName yazar.
-    val effectiveName: String get() = displayName.ifBlank { name }
-}
+    val isPrivate      : Boolean= false,   // Gizli hesap
+)
 
 // ─── FEED GÖNDERISI ────────────────────────────────────
 data class Post(
     val id            : String     = "",
     val uid           : String     = "",
-    val displayName   : String     = "",   // Birincil isim alanı
-    val name          : String     = "",   // Legacy — tema ve eski ekranlar için; yeni kod displayName kullanır
+    val displayName   : String     = "",
     val username      : String     = "",
     val photoURL      : String     = "",
     val text          : String     = "",
-    val imageURL      : String     = "",   // Birincil resim alanı
-    val imgUrl        : String     = "",   // Legacy — tema ve eski ekranlar için; yeni kod imageURL kullanır
-    val ytVid         : String     = "",
+    val imgUrl        : String     = "",   // tema: imgUrl
+    val ytVid         : String     = "",   // tema: ytVid
     val badges        : List<String> = emptyList(),
     val repostTitle   : String     = "",
     val repostUrl     : String     = "",
     val repostImg     : String     = "",
+    val imageURL      : String     = "",
     val likesCount    : Int        = 0,
     val commentsCount : Int        = 0,
     val repostsCount  : Int        = 0,
@@ -52,16 +48,18 @@ data class Post(
     val authorName    : String     = "",
     val repostOf      : String     = "",
     val repostUid     : String     = "",
-    val repostType    : String     = "",
-    val repostId      : String     = "",
-    val repostText       : String     = "",
-    val repostAuthor     : String     = "",
-    val repostAuthorPhoto: String     = "",
-    val repostAuthorUid  : String     = "",
-    val serialTitle      : String     = "",
-    val serialCover      : String     = "",
-    val chapterTitle     : String     = "",
-    val chapterOrder     : Int        = 0,
+    val name          : String     = "",   // tema: name (displayName alternatifi)
+    val repostType    : String     = "",   // tema: repostType
+    val repostId      : String     = "",   // tema: repostId
+    val repostText       : String     = "",   // tema: orijinal post metni
+    val repostAuthor     : String     = "",   // tema: orijinal yazar adı
+    val repostAuthorPhoto: String     = "",   // tema: orijinal yazar fotoğrafı
+    val repostAuthorUid  : String     = "",   // tema: orijinal yazar uid
+    val serialTitle      : String     = "",   // tema: serial başlığı
+    val serialCover      : String     = "",   // tema: serial kapak
+    val chapterTitle     : String     = "",   // tema: bölüm başlığı
+    val chapterOrder     : Int        = 0,    // tema: bölüm sırası
+    // tema: repostSerial alanları
     val repostSerialId        : String  = "",
     val repostSerialTitle     : String  = "",
     val repostSerialDesc      : String  = "",
@@ -70,19 +68,16 @@ data class Post(
     val repostSerialAuthorUid : String  = "",
     val repostSerialBg        : String  = "",
     val repostSerialChCount   : Int     = 0,
-    val serialId         : String     = "",
-    val chapterId        : String     = "",
+    val serialId         : String     = "",   // chapter repost için
+    val chapterId        : String     = "",   // chapter repost için
     val isLikedByMe      : Boolean    = false,
     val isSavedByMe      : Boolean    = false,
     val isRepostedByMe   : Boolean    = false,
     val myRepostId       : String     = "",
+    // Kütüphane alıntı/inceleme için Firestore ID'leri
     val libraryBookId    : String     = "",
     val libraryAuthorId  : String     = "",
-) {
-    // Adım 1.2 — Hangi alanın dolu olduğundan bağımsız tek okuma noktası
-    val effectiveName: String get() = displayName.ifBlank { name }
-    val effectiveImageURL: String get() = imageURL.ifBlank { imgUrl }
-}
+)
 
 // ─── YORUM ─────────────────────────────────────────────
 data class Comment(
@@ -173,10 +168,39 @@ data class Conversation(
     val unreadCount   : Int          = 0,
 )
 
-// ─── KİTAP/SERİ ────────────────────────────────────────
-// Adım 1.1 — Serial modeli kaldırıldı. Book(type="serial") kullan.
-// Firestore koleksiyonları değişmedi: books/ ve serials/ hâlâ ayrı durmaktadır.
-// BookViewModel type parametresiyle doğru koleksiyona gider.
+// ─── SERİ (KİTAP/ROMAN) ────────────────────────────────
+data class Serial(
+    val id           : String     = "",
+    val uid          : String     = "",
+    val name         : String     = "",
+    val photoURL     : String     = "",
+    val title        : String     = "",
+    val desc         : String     = "",
+    val genre        : String     = "",
+    val coverImg     : String     = "",
+    val chapterCount : Int        = 0,
+    val likes        : Int        = 0,
+    val ts           : Timestamp? = null,
+    val updatedAt    : Timestamp? = null,
+    val isLikedByMe  : Boolean    = false,
+)
+
+// ─── BÖLÜM ─────────────────────────────────────────────
+data class Chapter(
+    val id          : String     = "",
+    val serialId    : String     = "",
+    val title       : String     = "",
+    val body        : String     = "",
+    val order       : Int        = 0,
+    val wordCount   : Int        = 0,
+    val uid         : String     = "",
+    val likes       : Int        = 0,
+    val cmtCount    : Int        = 0,
+    val isLikedByMe : Boolean    = false,
+    val ts          : Timestamp? = null,
+)
+
+// ─── KİTAP ─────────────────────────────────────────────
 data class Book(
     val id           : String     = "",
     val uid          : String     = "",
@@ -196,8 +220,21 @@ data class Book(
     val type         : String     = "book",
 )
 
+// ─── BÖLÜM YORUMU ──────────────────────────────────────
+data class ChapterComment(
+    val id           : String     = "",
+    val uid          : String     = "",
+    val name         : String     = "",
+    val photoURL     : String     = "",
+    val text         : String     = "",
+    val replyTo      : String     = "",
+    val replyToCmtId : String     = "",
+    val likes        : Int        = 0,
+    val edited       : Boolean    = false,
+    val ts           : com.google.firebase.Timestamp? = null,
+)
+
 // ─── KİTAP BÖLÜMÜ ──────────────────────────────────────
-// Adım 1.1 — Chapter modeli kaldırıldı. BookChapter(serialId=...) kullan.
 data class BookChapter(
     val id        : String     = "",
     val bookId    : String     = "",   // books koleksiyonu için
@@ -216,33 +253,16 @@ data class BookChapter(
     val parentId get() = serialId.ifBlank { bookId }
 }
 
-// ─── BÖLÜM YORUMU ──────────────────────────────────────
-data class ChapterComment(
-    val id           : String     = "",
-    val uid          : String     = "",
-    val name         : String     = "",
-    val photoURL     : String     = "",
-    val text         : String     = "",
-    val replyTo      : String     = "",
-    val replyToCmtId : String     = "",
-    val likes        : Int        = 0,
-    val edited       : Boolean    = false,
-    val ts           : com.google.firebase.Timestamp? = null,
-)
-
 // ─── OKUMA LİSTESİ ─────────────────────────────────────
 data class ReadingListEntry(
-    val sid          : String     = "",
-    val title        : String     = "",
-    val coverImg     : String     = "",
-    val bg           : String     = "",
-    val status       : String     = "",
-    val updatedAt    : Timestamp? = null,
-    // ── Kütüphane entegrasyonu ──────────────────────────────────────────
-    // source = "serial"  → books/serials koleksiyonu, serial/{sid} rotası
-    // source = "library" → library_books koleksiyonu, library_book_detail/{sid} rotası
-    val source       : String     = "serial",
-    val authorName   : String     = "",
+    val sid        : String     = "",
+    val title      : String     = "",
+    val coverImg   : String     = "",
+    val bg         : String     = "",
+    val status     : String     = "",
+    val updatedAt  : Timestamp? = null,
+    val source     : String     = "serial",   // "serial" | "library"
+    val authorName : String     = "",
 )
 
 // ─── KURDİ DERS ────────────────────────────────────────
@@ -314,12 +334,15 @@ data class AiExercise(
 
 // ─── CMS REKLAM KONFİGÜRASYONU ─────────────────────────────
 data class CmsAdConfig(
-    val id          : String  = "",
-    val unitId      : String  = "",
+    val id          : String  = "",   // Firestore doc ID (ör. "banner_feed")
+    val unitId      : String  = "",   // AdMob unit ID
     val enabled     : Boolean = false,
     val testMode    : Boolean = true,
-    val position    : Int     = 5,
-    val frequency   : Int     = 3,
+    // Banner özel
+    val position    : Int     = 5,    // Feed'de kaçıncı kart sonrası
+    // Interstitial özel
+    val frequency   : Int     = 3,    // Kaç chapter'da bir
+    // Rewarded özel
     val xpReward    : Int     = 50,
 )
 
@@ -330,9 +353,9 @@ data class Report(
     val reporterName: String     = "",
     val targetUid   : String     = "",
     val targetName  : String     = "",
-    val targetPostId: String     = "",
+    val targetPostId: String     = "",   // boşsa kullanıcı şikayeti
     val reason      : String     = "",
-    val status      : String     = "pending",
+    val status      : String     = "pending",  // pending | reviewed | dismissed
     val ts          : Timestamp? = null,
 )
 
@@ -344,8 +367,9 @@ data class BlockedUser(
     val blockedAt   : Timestamp? = null,
 )
 
-// ─── APP CONFIG ─────────────────────────────────────────────────────
+// ─── APP CONFIG (CMS Özellik Yönetimi) ─────────────────────────────
 data class AppConfig(
+    // Ekran aktiflik
     val feedEnabled         : Boolean = true,
     val messagesEnabled     : Boolean = true,
     val serialsEnabled      : Boolean = true,
@@ -354,40 +378,53 @@ data class AppConfig(
     val notificationsEnabled: Boolean = true,
     val searchEnabled       : Boolean = true,
     val storiesEnabled      : Boolean = true,
+
+    // Feed özellikleri
     val feedShowImages      : Boolean = true,
     val feedShowReposts     : Boolean = true,
     val feedAllowQuotes     : Boolean = true,
     val feedMaxTextLength   : Int     = 1000,
+
+    // Mesaj özellikleri
     val messagesAllowImages : Boolean = true,
     val messagesAllowVoice  : Boolean = true,
+
+    // Profil özellikleri
     val profileShowXp       : Boolean = true,
     val profileShowStreak   : Boolean = true,
     val profileShowBadges   : Boolean = true,
     val profileShowReadList : Boolean = true,
+
+    // Kurdî Fêrbibe
     val kurdiShowAiLesson   : Boolean = true,
     val kurdiShowWordOfDay  : Boolean = true,
+
+    // Bakım modu
     val maintenanceMode     : Boolean = false,
     val maintenanceMessage  : String  = "Uygulama güncelleniyor, lütfen bekleyin.",
     val minVersion          : Int     = 1,
+
+    // Özel başlıklar
     val feedTitle           : String  = "",
     val messagesTitle       : String  = "",
     val kurdiTitle          : String  = "",
 )
 
+// Test Unit ID'leri — testMode = true olduğunda bunlar kullanılır
 object AdMobTestIds {
     const val BANNER        = "ca-app-pub-3940256099942544/6300978111"
     const val INTERSTITIAL  = "ca-app-pub-3940256099942544/1033173712"
     const val REWARDED      = "ca-app-pub-3940256099942544/5224354917"
 }
 
+// Gerçek Unit ID'ler — testMode = false olduğunda bunlar kullanılır
 object AdMobProdIds {
     const val BANNER        = "ca-app-pub-6463746824939277/7866834575"
     const val INTERSTITIAL  = "ca-app-pub-6463746824939277/4989839500"
     const val REWARDED      = "ca-app-pub-6463746824939277/9693325673"
 }
-
 // ─────────────────────────────────────────────────────────
-//  KÜTÜPHANE — Author / LibraryBook / BookQuote / BookReview
+//  KÜTÜPHANE — Yazar / LibraryBook / BookQuote / BookReview
 //  Firestore yapısı:
 //    authors/{authorId}
 //      books/ (sub) → {bookId} referansları
@@ -433,11 +470,14 @@ data class BookQuote(
     val bookTitle   : String    = "",
     val authorName  : String    = "",
     val text        : String    = "",
+    // Paylaşan kullanıcı
     val uid         : String    = "",
     val userDisplayName: String = "",
     val userPhotoURL: String    = "",
-    val feedPostId  : String    = "",
+    val feedPostId  : String    = "",   // feed'deki post id (ters referans)
     val likesCount  : Int       = 0,
+    val likedBy     : List<String> = emptyList(),  // uid listesi
+    @get:Exclude val isLikedByMe: Boolean = false, // runtime hesaplanır
     val ts          : com.google.firebase.Timestamp? = null,
 )
 
@@ -448,10 +488,14 @@ data class BookReview(
     val bookTitle   : String    = "",
     val authorName  : String    = "",
     val text        : String    = "",
-    val rating      : Float     = 0f,
+    val rating      : Float     = 0f,  // 1..5
+    // Paylaşan kullanıcı
     val uid         : String    = "",
     val userDisplayName: String = "",
     val userPhotoURL: String    = "",
     val feedPostId  : String    = "",
+    val likesCount  : Int       = 0,
+    val likedBy     : List<String> = emptyList(),  // uid listesi
+    @get:Exclude val isLikedByMe: Boolean = false, // runtime hesaplanır
     val ts          : com.google.firebase.Timestamp? = null,
 )

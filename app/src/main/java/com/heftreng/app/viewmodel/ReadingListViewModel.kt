@@ -90,7 +90,6 @@ class ReadingListViewModel @Inject constructor(
                         "coverImg"  to coverImg,
                         "bg"        to bg,
                         "status"    to status.key,
-                        "source"    to "serial",
                         "updatedAt" to FieldValue.serverTimestamp(),
                     )).await()
                 }
@@ -148,9 +147,7 @@ class ReadingListViewModel @Inject constructor(
         }
     }
 
-    /** library_books koleksiyonundaki kitabın mevcut durumunu döner */
     fun getLibraryBookStatus(bookId: String): RlStatus? = getStatus(bookId)
 
-    /** library_books kitabını listeden sil */
     fun removeLibraryBook(bookId: String) = setLibraryBookStatus(bookId, "", "", "", null)
 }
