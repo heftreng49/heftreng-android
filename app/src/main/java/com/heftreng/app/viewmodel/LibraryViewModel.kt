@@ -700,12 +700,23 @@ class LibraryViewModel @Inject constructor(
         userPhoto : String,
         ts        : com.google.firebase.Timestamp?,
     ) {
-        // Aynı feedPostId zaten varsa ekleme
+        // Aynı feedPostId zaten varsa — userDisplayName boşsa güncelle, yoksa atla
         val existing = firestore.collection("library_books").document(bookId)
             .collection("quotes")
             .whereEqualTo("feedPostId", feedDocId)
             .limit(1).get().await()
-        if (!existing.isEmpty) return
+        if (!existing.isEmpty) {
+            val existingDoc = existing.documents[0]
+            val existingName = existingDoc.getString("userDisplayName") ?: ""
+            if (existingName.isBlank() && userName.isNotBlank()) {
+                existingDoc.reference.update(mapOf(
+                    "userDisplayName" to userName,
+                    "userPhotoURL"    to userPhoto,
+                    "uid"             to uid,
+                )).await()
+            }
+            return
+        }
 
         val data = hashMapOf(
             "bookId"          to bookId,
