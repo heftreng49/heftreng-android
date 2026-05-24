@@ -697,6 +697,8 @@ class FeedViewModel @Inject constructor(
 
     fun getPostById(postId: String): Post? = _posts.value.find { it.id == postId }
 
+    private val _fetchingPostIds = mutableSetOf<String>()
+
     fun ensurePost(postId: String) {
         if (_posts.value.any { it.id == postId }) return
         if (_fetchingPostIds.contains(postId)) return
