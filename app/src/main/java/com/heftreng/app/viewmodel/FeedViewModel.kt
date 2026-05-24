@@ -523,11 +523,23 @@ class FeedViewModel @Inject constructor(
     }
 
     // ── Post oluştur ─────────────────────────────────────────────────────────
+    // Adım 4.3 — Post oluşturma hatası UI'ya iletilir
+    private val _createPostError = MutableStateFlow<String?>(null)
+    val createPostError = _createPostError.asStateFlow()
+    fun clearCreatePostError() { _createPostError.value = null }
+
+    private val _createPostLoading = MutableStateFlow(false)
+    val createPostLoading = _createPostLoading.asStateFlow()
+
     // Adım 2.1 — ensureAuthorAndBook → library.ensureAuthorAndBook
     // Adım 2.2 — nested "quote" objesi artık YAZILMAZ; yalnızca flat alanlar yazılır.
+    // Adım 4.3 — ensureAuthorAndBook başarısız olursa post YINE oluşturulur (libraryBookId boş kalır)
+    //            ama kullanıcıya bilgi verilir. addQuoteToLibrary başarısız olursa feedPostId
+    //            üzerinden sonradan migrateLegacyFeedQuotes() ile kurtarılabilir.
     fun createPost(text: String, imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "") {
         if (uid.isEmpty()) return
         viewModelScope.launch {
+            _createPostLoading.value = true
             try {
                 val userDoc = firestore.collection("users").document(uid).get().await()
                 val myName  = userDoc.getString("displayName") ?: userDoc.getString("name") ?: auth.currentUser?.displayName ?: ""
@@ -535,27 +547,32 @@ class FeedViewModel @Inject constructor(
                 val myUser  = userDoc.getString("username") ?: ""
                 val myEmail = userDoc.getString("email") ?: auth.currentUser?.email ?: ""
 
+                // Adım 4.3 — ensureAuthorAndBook hatası post oluşturmayı engellemez;
+                // libraryBookId boş kalır, post feed'e yazar ama kütüphane bağlantısı kurulmaz.
                 var libraryAuthorId = ""
                 var libraryBookId   = ""
+                var libraryLinkFailed = false
                 if (quoteText.isNotBlank() && (authorName.isNotBlank() || bookName.isNotBlank())) {
                     try {
                         val (aid, bid) = library.ensureAuthorAndBook(authorName, bookName)
                         libraryAuthorId = aid
                         libraryBookId   = bid
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) {
+                        libraryLinkFailed = true
+                        e.printStackTrace()
+                    }
                 }
 
                 val feedRef = firestore.collection("feed").add(mapOf(
                     "uid"             to uid,
-                    "name"            to myName,      // legacy uyumu (tema okur)
+                    "name"            to myName,
                     "displayName"     to myName,
                     "username"        to myUser,
                     "photoURL"        to myPhoto,
                     "authorEmail"     to myEmail,
                     "text"            to text,
-                    "imgUrl"          to imageURL,    // legacy uyumu (tema okur)
+                    "imgUrl"          to imageURL,
                     "imageURL"        to imageURL,
-                    // Adım 2.2 — nested "quote" objesi kaldırıldı; yalnızca flat alanlar yazılır
                     "quoteText"       to quoteText,
                     "authorName"      to authorName,
                     "bookName"        to bookName,
@@ -565,21 +582,38 @@ class FeedViewModel @Inject constructor(
                     "ts"              to Timestamp.now(),
                 )).await()
 
-                // Kütüphane alt koleksiyonuna ekle — Adım 2.1
+                // Adım 4.3 — Kütüphane yazma hatası feed yazmasını geri almaz;
+                // migrateLegacyFeedQuotes() ile sonradan kurtarılabilir.
                 if (quoteText.isNotBlank() && libraryBookId.isNotBlank()) {
-                    library.addQuoteToLibrary(
-                        libraryBookId   = libraryBookId,
-                        libraryAuthorId = libraryAuthorId,
-                        bookName        = bookName,
-                        authorName      = authorName,
-                        quoteText       = quoteText,
-                        uid             = uid,
-                        userDisplayName = myName,
-                        userPhotoURL    = myPhoto,
-                        feedPostId      = feedRef.id,
-                    )
+                    try {
+                        library.addQuoteToLibrary(
+                            libraryBookId   = libraryBookId,
+                            libraryAuthorId = libraryAuthorId,
+                            bookName        = bookName,
+                            authorName      = authorName,
+                            quoteText       = quoteText,
+                            uid             = uid,
+                            userDisplayName = myName,
+                            userPhotoURL    = myPhoto,
+                            feedPostId      = feedRef.id,
+                        )
+                    } catch (e: Exception) {
+                        libraryLinkFailed = true
+                        e.printStackTrace()
+                    }
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+
+                // Adım 4.3 — Kütüphane bağlantısı kurulamazsa UI'ya soft uyarı ver
+                if (libraryLinkFailed) {
+                    _createPostError.value = "Gönderi paylaşıldı, ancak kütüphane bağlantısı kurulamadı."
+                }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _createPostError.value = "Gönderi paylaşılamadı: ${e.message}"
+            } finally {
+                _createPostLoading.value = false
+            }
         }
     }
 
