@@ -185,33 +185,46 @@ class LibraryViewModel @Inject constructor(
         return try {
             val snap = firestore.collection("library_books")
                 .whereEqualTo("authorId", authorId)
-                .orderBy("publishYear", Query.Direction.DESCENDING)
                 .limit(50).get().await()
             snap.documents.mapNotNull { doc ->
                 doc.toObject(com.heftreng.app.data.model.LibraryBook::class.java)?.copy(id = doc.id)
-            }
+            }.sortedBy { it.title }
         } catch (_: Exception) { emptyList() }
     }
 
     private suspend fun loadAuthorQuotes(authorId: String) {
-        // authors/{authorId} için tüm library_books altındaki quotes collection group
-        val snap = firestore.collectionGroup("quotes")
+        // collectionGroup index gerektirdiği için kitap kitap toplayarak alıyoruz
+        val booksSnap = firestore.collection("library_books")
             .whereEqualTo("authorId", authorId)
-            .orderBy("ts", Query.Direction.DESCENDING)
-            .limit(50).get().await()
-        _authorQuotes.value = snap.documents.mapNotNull { doc ->
-            doc.toObject(BookQuote::class.java)?.copy(id = doc.id)
+            .get().await()
+        val allQuotes = mutableListOf<BookQuote>()
+        booksSnap.documents.forEach { bookDoc ->
+            val qSnap = firestore.collection("library_books")
+                .document(bookDoc.id).collection("quotes")
+                .orderBy("ts", Query.Direction.DESCENDING)
+                .limit(20).get().await()
+            qSnap.documents.mapNotNullTo(allQuotes) { doc ->
+                doc.toObject(BookQuote::class.java)?.copy(id = doc.id)
+            }
         }
+        _authorQuotes.value = allQuotes.sortedByDescending { it.ts?.seconds ?: 0L }
     }
 
     private suspend fun loadAuthorReviews(authorId: String) {
-        val snap = firestore.collectionGroup("reviews")
+        val booksSnap = firestore.collection("library_books")
             .whereEqualTo("authorId", authorId)
-            .orderBy("ts", Query.Direction.DESCENDING)
-            .limit(50).get().await()
-        _authorReviews.value = snap.documents.mapNotNull { doc ->
-            doc.toObject(BookReview::class.java)?.copy(id = doc.id)
+            .get().await()
+        val allReviews = mutableListOf<BookReview>()
+        booksSnap.documents.forEach { bookDoc ->
+            val rSnap = firestore.collection("library_books")
+                .document(bookDoc.id).collection("reviews")
+                .orderBy("ts", Query.Direction.DESCENDING)
+                .limit(20).get().await()
+            rSnap.documents.mapNotNullTo(allReviews) { doc ->
+                doc.toObject(BookReview::class.java)?.copy(id = doc.id)
+            }
         }
+        _authorReviews.value = allReviews.sortedByDescending { it.ts?.seconds ?: 0L }
     }
 
     // ── Yazar Takip ───────────────────────────────────────────────────────
@@ -744,9 +757,11 @@ class LibraryViewModel @Inject constructor(
 
     // ══════════════════════════════════════════════════════════════════════
     //  SAYAÇ DÜZELTME
-    //  Migration sonrası bookCount / quoteCount sayaçları tutarsız kalabilir.
-    //  Bu fonksiyon Firestore'daki gerçek verileri sayarak tüm yazar ve kitap
-    //  sayaçlarını sıfırdan yazar.
+    //  collectionGroup sorguları Firestore composite index gerektirir.
+    //  Bu versiyon index gerektirmeyen sade sorgular kullanır:
+    //  - library_books → whereEqualTo("authorId") → bookCount
+    //  - library_books/{id}/quotes → get() → quoteCount (kitap bazında)
+    //  - Yazar quoteCount = tüm kitaplarının quoteCount toplamı
     // ══════════════════════════════════════════════════════════════════════
     fun rebuildCounters(onDone: (String) -> Unit = {}) {
         viewModelScope.launch {
@@ -757,31 +772,35 @@ class LibraryViewModel @Inject constructor(
                 authorsSnap.documents.forEach { authorDoc ->
                     val authorId = authorDoc.id
 
-                    // Bu yazara ait kitapları say
+                    // 1. Bu yazara ait kitapları getir (index gerektirmez)
                     val booksSnap = firestore.collection("library_books")
-                        .whereEqualTo("authorId", authorId).get().await()
+                        .whereEqualTo("authorId", authorId)
+                        .get().await()
                     val bookCount = booksSnap.size()
 
-                    // Bu yazara ait alıntıları say
-                    val quotesSnap = firestore.collectionGroup("quotes")
-                        .whereEqualTo("authorId", authorId).get().await()
-                    val quoteCount = quotesSnap.size()
-
-                    // Yazarı güncelle
-                    firestore.collection("authors").document(authorId)
-                        .update(mapOf(
-                            "bookCount"  to bookCount,
-                            "quoteCount" to quoteCount,
-                        )).await()
-
-                    // Her kitabın quoteCount'unu da düzelt
+                    // 2. Her kitabın quotes alt koleksiyonunu say, topla
+                    //    (alt koleksiyon direkt get — index gerektirmez)
+                    var totalQuoteCount = 0
                     booksSnap.documents.forEach { bookDoc ->
                         val bookId = bookDoc.id
                         val bqSnap = firestore.collection("library_books")
-                            .document(bookId).collection("quotes").get().await()
-                        firestore.collection("library_books").document(bookId)
-                            .update("quoteCount", bqSnap.size()).await()
+                            .document(bookId).collection("quotes")
+                            .get().await()
+                        val bqCount = bqSnap.size()
+                        totalQuoteCount += bqCount
+                        // Kitabın quoteCount'unu da düzelt
+                        if ((bookDoc.getLong("quoteCount") ?: 0L).toInt() != bqCount) {
+                            firestore.collection("library_books").document(bookId)
+                                .update("quoteCount", bqCount).await()
+                        }
                     }
+
+                    // 3. Yazarı güncelle
+                    firestore.collection("authors").document(authorId)
+                        .update(mapOf(
+                            "bookCount"  to bookCount,
+                            "quoteCount" to totalQuoteCount,
+                        )).await()
 
                     fixed++
                 }
