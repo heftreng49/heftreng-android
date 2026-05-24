@@ -89,74 +89,83 @@ fun LibraryScreen(
     LaunchedEffect(Unit) {
         loading = true
 
-        // ── Alıntılar — feed'den type=="library_quote" ile çek ──────────
+        // Alintılar: library_books/{id}/quotes alt koleksiyonundan oku (index gerekmez)
         try {
-            val qSnap = db.collection("feed")
-                .whereEqualTo("type", "library_quote")
-                .orderBy("ts", Query.Direction.DESCENDING)
-                .limit(50).get().await()
-            quotes = qSnap.documents.mapNotNull { doc ->
-                val d = doc.data ?: return@mapNotNull null
-                val qObj = d["quote"] as? Map<*, *>
-                val text = (qObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
-                    ?: d["quoteText"] as? String ?: return@mapNotNull null
-                BookQuote(
-                    id              = doc.id,
-                    bookId          = d["libraryBookId"] as? String ?: "",
-                    authorId        = d["libraryAuthorId"] as? String ?: "",
-                    bookTitle       = (qObj?.get("book") as? String) ?: d["bookName"] as? String ?: "",
-                    authorName      = d["authorName"] as? String ?: "",
-                    text            = text,
-                    uid             = d["uid"] as? String ?: "",
-                    userDisplayName = (d["name"] as? String) ?: d["displayName"] as? String ?: "",
-                    userPhotoURL    = d["photoURL"] as? String ?: "",
-                    ts              = d["ts"] as? com.google.firebase.Timestamp,
-                )
+            val bSnap = db.collection("library_books").limit(100).get().await()
+            val allQuotes = mutableListOf<BookQuote>()
+            bSnap.documents.forEach { bookDoc ->
+                val qSnap = db.collection("library_books")
+                    .document(bookDoc.id).collection("quotes")
+                    .limit(20).get().await()
+                qSnap.documents.mapNotNullTo(allQuotes) { doc ->
+                    val d = doc.data ?: return@mapNotNullTo null
+                    val qObj = d["quote"] as? Map<*, *>
+                    val text = (qObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
+                        ?: (d["quoteText"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: (d["text"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: return@mapNotNullTo null
+                    BookQuote(
+                        id              = doc.id,
+                        bookId          = d["bookId"] as? String ?: bookDoc.id,
+                        authorId        = d["authorId"] as? String ?: "",
+                        bookTitle       = (qObj?.get("book") as? String)?.takeIf { it.isNotBlank() }
+                                          ?: d["bookName"] as? String ?: "",
+                        authorName      = (d["authorName"] as? String)?.trim() ?: "",
+                        text            = text,
+                        uid             = d["uid"] as? String ?: "",
+                        userDisplayName = (d["name"] as? String) ?: d["displayName"] as? String ?: "",
+                        userPhotoURL    = d["photoURL"] as? String ?: "",
+                        ts              = d["ts"] as? com.google.firebase.Timestamp,
+                    )
+                }
             }
+            quotes = allQuotes.sortedByDescending { it.ts?.seconds ?: 0L }
         } catch (e: Exception) {
             android.util.Log.e("LibraryScreen", "quotes load error: ${e.message}")
         }
 
-        // ── İncelemeler — feed'den type=="library_review" ile çek ───────
+        // Incelemeler: library_books/{id}/reviews alt koleksiyonundan oku
         try {
-            val rSnap = db.collection("feed")
-                .whereEqualTo("type", "library_review")
-                .orderBy("ts", Query.Direction.DESCENDING)
-                .limit(50).get().await()
-            reviews = rSnap.documents.mapNotNull { doc ->
-                val d = doc.data ?: return@mapNotNull null
-                val text = d["text"] as? String ?: return@mapNotNull null
-                BookReview(
-                    id              = doc.id,
-                    bookId          = d["libraryBookId"] as? String ?: "",
-                    authorId        = d["libraryAuthorId"] as? String ?: "",
-                    bookTitle       = d["bookName"] as? String ?: "",
-                    authorName      = d["authorName"] as? String ?: "",
-                    text            = text,
-                    rating          = (d["rating"] as? Number)?.toFloat() ?: 0f,
-                    uid             = d["uid"] as? String ?: "",
-                    userDisplayName = (d["name"] as? String) ?: d["displayName"] as? String ?: "",
-                    userPhotoURL    = d["photoURL"] as? String ?: "",
-                    ts              = d["ts"] as? com.google.firebase.Timestamp,
-                )
+            val bSnap = db.collection("library_books").limit(100).get().await()
+            val allReviews = mutableListOf<BookReview>()
+            bSnap.documents.forEach { bookDoc ->
+                val rSnap = db.collection("library_books")
+                    .document(bookDoc.id).collection("reviews")
+                    .limit(20).get().await()
+                rSnap.documents.mapNotNullTo(allReviews) { doc ->
+                    val d = doc.data ?: return@mapNotNullTo null
+                    val text = d["text"] as? String ?: return@mapNotNullTo null
+                    BookReview(
+                        id              = doc.id,
+                        bookId          = d["bookId"] as? String ?: bookDoc.id,
+                        authorId        = d["authorId"] as? String ?: "",
+                        bookTitle       = d["bookName"] as? String ?: "",
+                        authorName      = (d["authorName"] as? String)?.trim() ?: "",
+                        text            = text,
+                        rating          = (d["rating"] as? Number)?.toFloat() ?: 0f,
+                        uid             = d["uid"] as? String ?: "",
+                        userDisplayName = (d["name"] as? String) ?: d["displayName"] as? String ?: "",
+                        userPhotoURL    = d["photoURL"] as? String ?: "",
+                        ts              = d["ts"] as? com.google.firebase.Timestamp,
+                    )
+                }
             }
+            reviews = allReviews.sortedByDescending { it.ts?.seconds ?: 0L }
         } catch (e: Exception) {
             android.util.Log.e("LibraryScreen", "reviews load error: ${e.message}")
         }
 
-        // ── Yazarlar ─────────────────────────────────────────────────────
-        try {
-            libraryVm.loadAuthors()
-        } catch (e: Exception) {
+        // Yazarlar
+        try { libraryVm.loadAuthors() } catch (e: Exception) {
             android.util.Log.e("LibraryScreen", "authors load error: ${e.message}")
         }
 
-        // ── Kitaplar ─────────────────────────────────────────────────────
+        // Kitaplar: orderBy kaldirildi (index gerektiriyordu)
         try {
-            val bSnap = db.collection("library_books")
-                .orderBy("ts", Query.Direction.DESCENDING)
-                .limit(50).get().await()
-            books = bSnap.documents.mapNotNull { it.toObject(LibraryBook::class.java)?.copy(id = it.id) }
+            val bSnap = db.collection("library_books").limit(100).get().await()
+            books = bSnap.documents
+                .mapNotNull { it.toObject(LibraryBook::class.java)?.copy(id = it.id) }
+                .sortedByDescending { it.ts?.seconds ?: 0L }
         } catch (e: Exception) {
             android.util.Log.e("LibraryScreen", "books load error: ${e.message}")
         }
