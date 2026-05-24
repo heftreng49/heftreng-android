@@ -861,6 +861,10 @@ private fun AddReviewDialog(
 //      hâlâ çalışır; sadece ad üzerinden feed alıntılarını gösterir)
 // ═══════════════════════════════════════════════════════════════════════════
 
+@Deprecated(
+    message = "AuthorQuotesSmartScreen kullan. Bu fonksiyon yalnızca feed koleksiyonunu sorgular; kütüphane sistemiyle entegre değildir.",
+    replaceWith = ReplaceWith("AuthorQuotesSmartScreen(authorName, navController, language)"),
+)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuthorQuotesScreen(
@@ -878,6 +882,10 @@ fun AuthorQuotesScreen(
     )
 }
 
+@Deprecated(
+    message = "BookQuotesSmartScreen kullan. Bu fonksiyon yalnızca feed koleksiyonunu sorgular; kütüphane sistemiyle entegre değildir.",
+    replaceWith = ReplaceWith("BookQuotesSmartScreen(bookName, navController, language)"),
+)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookQuotesScreen(

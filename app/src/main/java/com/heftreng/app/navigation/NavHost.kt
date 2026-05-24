@@ -52,8 +52,6 @@ import com.heftreng.app.ui.screens.search.SearchScreen
 import com.heftreng.app.ui.screens.books.BookChapterReadScreen
 import com.heftreng.app.ui.screens.books.BookDetailScreen
 import com.heftreng.app.ui.screens.books.BooksScreen
-import com.heftreng.app.ui.screens.quotes.AuthorQuotesScreen
-import com.heftreng.app.ui.screens.quotes.BookQuotesScreen
 import com.heftreng.app.ui.screens.quotes.AuthorDetailScreen
 import com.heftreng.app.ui.screens.quotes.LibraryBookDetailScreen
 import com.heftreng.app.ui.screens.quotes.AuthorQuotesSmartScreen
@@ -462,7 +460,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                         navController = navController,
                     )
                 }
-                composable(Screen.Books.route) { BooksScreen(navController, language) }
+                // Adım 3.1 — Screen.Books route kaldırıldı. Screen.Serials.route tek giriş noktası.
                 // book/{bookId}?type=book|serial
                 composable(
                     route = "book/{bookId}?type={type}",
