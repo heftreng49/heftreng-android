@@ -232,12 +232,17 @@ data class ChapterComment(
 
 // ─── OKUMA LİSTESİ ─────────────────────────────────────
 data class ReadingListEntry(
-    val sid       : String     = "",
-    val title     : String     = "",
-    val coverImg  : String     = "",
-    val bg        : String     = "",
-    val status    : String     = "",
-    val updatedAt : Timestamp? = null,
+    val sid          : String     = "",
+    val title        : String     = "",
+    val coverImg     : String     = "",
+    val bg           : String     = "",
+    val status       : String     = "",
+    val updatedAt    : Timestamp? = null,
+    // ── Kütüphane entegrasyonu ──────────────────────────────────────────
+    // source = "serial"  → books/serials koleksiyonu, serial/{sid} rotası
+    // source = "library" → library_books koleksiyonu, library_book_detail/{sid} rotası
+    val source       : String     = "serial",
+    val authorName   : String     = "",
 )
 
 // ─── KURDİ DERS ────────────────────────────────────────

@@ -456,7 +456,14 @@ fun ProfileScreen(
                                 items(list, key = { "rl_${it.sid}" }) { entry ->
                                     RlEntryRow(
                                         entry   = entry,
-                                        onClick = { navController.navigate("serial/${entry.sid}") },
+                                        onClick = {
+                                            // source alanına göre doğru rotaya git
+                                            if (entry.source == "library") {
+                                                navController.navigate("library_book_detail/${entry.sid}")
+                                            } else {
+                                                navController.navigate("serial/${entry.sid}")
+                                            }
+                                        },
                                     )
                                 }
                                 item(key = "rl_div_$key") {
@@ -697,14 +704,25 @@ private fun RlEntryRow(entry: ReadingListEntry, onClick: () -> Unit) {
             }
         }
         Spacer(Modifier.width(10.dp))
-        Text(
-            entry.title,
-            color      = OnBackground,
-            fontSize   = 13.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines   = 2,
-            overflow   = TextOverflow.Ellipsis,
-        )
+        Column {
+            Text(
+                entry.title,
+                color      = OnBackground,
+                fontSize   = 13.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines   = 2,
+                overflow   = TextOverflow.Ellipsis,
+            )
+            if (entry.authorName.isNotBlank()) {
+                Text(
+                    entry.authorName,
+                    color    = Muted,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 

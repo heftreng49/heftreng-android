@@ -49,6 +49,8 @@ import com.heftreng.app.data.model.LibraryBook
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.LibraryViewModel
+import com.heftreng.app.viewmodel.ReadingListViewModel
+import com.heftreng.app.viewmodel.RlStatus
 import kotlinx.coroutines.tasks.await
 import kotlin.math.roundToInt
 
@@ -298,18 +300,27 @@ private fun AuthorStat(value: String, label: String) {
 fun LibraryBookDetailScreen(
     bookId       : String,
     navController: NavController,
-    vm           : LibraryViewModel = hiltViewModel(),
+    vm           : LibraryViewModel     = hiltViewModel(),
+    rlVm         : ReadingListViewModel = hiltViewModel(),
 ) {
     val book    by vm.selectedBook.collectAsState()
     val quotes  by vm.bookQuotes.collectAsState()
     val reviews by vm.bookReviews.collectAsState()
     val loading by vm.loading.collectAsState()
 
+    // Okuma listesi durumu
+    val rlEntries    by rlVm.entries.collectAsState()
+    val currentStatus = remember(rlEntries, bookId) { rlVm.getLibraryBookStatus(bookId) }
+    var showRlSheet  by remember { mutableStateOf(false) }
+
     var selectedTab      by remember { mutableIntStateOf(0) }
     var showAddQuote     by remember { mutableStateOf(false) }
     var showAddReview    by remember { mutableStateOf(false) }
 
-    LaunchedEffect(bookId) { vm.loadLibraryBook(bookId) }
+    LaunchedEffect(bookId) {
+        vm.loadLibraryBook(bookId)
+        rlVm.load()
+    }
 
     Scaffold(
         containerColor = Background,
@@ -369,6 +380,17 @@ fun LibraryBookDetailScreen(
                             },
                         )
                     }
+                }
+
+                // ── Okuma Durumu Butonu ──────────────────────────────────
+                item {
+                    ReadingStatusButton(
+                        currentStatus = currentStatus,
+                        onClick       = { showRlSheet = true },
+                        modifier      = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 4.dp),
+                    )
                 }
 
                 // ── Tab Bar ─────────────────────────────────────────────
@@ -445,6 +467,29 @@ fun LibraryBookDetailScreen(
             onSubmit  = { text, rating ->
                 vm.addBookReview(book!!, text, rating)
                 showAddReview = false
+            },
+        )
+    }
+
+    // ── Okuma Durumu BottomSheet ────────────────────────────────────────
+    if (showRlSheet && book != null) {
+        ReadingStatusSheet(
+            currentStatus = currentStatus,
+            bookTitle     = book!!.title,
+            onDismiss     = { showRlSheet = false },
+            onSelect      = { status ->
+                rlVm.setLibraryBookStatus(
+                    bookId     = bookId,
+                    title      = book!!.title,
+                    coverImg   = book!!.coverImg,
+                    authorName = book!!.authorName,
+                    status     = status,
+                )
+                showRlSheet = false
+            },
+            onRemove      = {
+                rlVm.removeLibraryBook(bookId)
+                showRlSheet = false
             },
         )
     }
@@ -1138,6 +1183,156 @@ fun BookQuotesSmartScreen(
                 bookName = bookName,
                 onBack   = { navController.popBackStack() },
             )
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  OKUMA DURUMU BİLEŞENLERİ
+//  LibraryBookDetailScreen ve ilerleyen aşamalarda AuthorDetailScreen'de kullanılır.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Kitap sayfasında okuma durumunu gösteren / değiştiren buton */
+@Composable
+fun ReadingStatusButton(
+    currentStatus: RlStatus?,
+    onClick      : () -> Unit,
+    modifier     : Modifier = Modifier,
+) {
+    val (label, containerColor, contentColor) = when (currentStatus) {
+        RlStatus.READING  -> Triple("📖 Okuyorum",           Color(0xFF2563EB), Color.White)
+        RlStatus.WANT     -> Triple("🔖 Okumak İstiyorum",   Color(0xFF7C3AED), Color.White)
+        RlStatus.READ     -> Triple("✅ Okudum",              Color(0xFF059669), Color.White)
+        RlStatus.DROPPED  -> Triple("❌ Bıraktım",            Color(0xFFDC2626), Color.White)
+        null              -> Triple("+ Okuma Listesine Ekle", HeftSurface,      Primary)
+    }
+
+    Button(
+        onClick        = onClick,
+        modifier       = modifier.height(44.dp),
+        shape          = RoundedCornerShape(12.dp),
+        colors         = ButtonDefaults.buttonColors(
+            containerColor = containerColor,
+            contentColor   = contentColor,
+        ),
+        border         = if (currentStatus == null)
+            androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.4f))
+        else null,
+    ) {
+        Text(label, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+        Spacer(Modifier.width(6.dp))
+        Icon(Icons.Default.ExpandMore, null, modifier = Modifier.size(16.dp))
+    }
+}
+
+/** Okuma durumu seçim BottomSheet */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ReadingStatusSheet(
+    currentStatus: RlStatus?,
+    bookTitle    : String,
+    onDismiss    : () -> Unit,
+    onSelect     : (RlStatus) -> Unit,
+    onRemove     : () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState       = sheetState,
+        containerColor   = HeftSurface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+        ) {
+            Text(
+                text       = bookTitle,
+                color      = OnBackground,
+                fontWeight = FontWeight.Bold,
+                fontSize   = 16.sp,
+                maxLines   = 2,
+                overflow   = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text("Okuma durumunu seç", color = Muted, fontSize = 13.sp)
+            Spacer(Modifier.height(16.dp))
+
+            // Durum seçenekleri
+            val options = listOf(
+                Triple(RlStatus.READING, "📖", "Okuyorum"),
+                Triple(RlStatus.WANT,    "🔖", "Okumak İstiyorum"),
+                Triple(RlStatus.READ,    "✅", "Okudum"),
+                Triple(RlStatus.DROPPED, "❌", "Bıraktım"),
+            )
+
+            options.forEach { (status, emoji, label) ->
+                val isSelected  = currentStatus == status
+                val statusColor = Color(status.color)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (isSelected) statusColor.copy(alpha = 0.12f)
+                            else Color.Transparent
+                        )
+                        .clickable { onSelect(status) }
+                        .padding(vertical = 14.dp, horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(emoji, fontSize = 20.sp)
+                    Spacer(Modifier.width(14.dp))
+                    Text(
+                        label,
+                        color      = if (isSelected) statusColor else OnBackground,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        fontSize   = 15.sp,
+                        modifier   = Modifier.weight(1f),
+                    )
+                    if (isSelected) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            null,
+                            tint     = statusColor,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+            }
+
+            // Listeden çıkar (zaten listede ise)
+            if (currentStatus != null) {
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider(color = Divider)
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onRemove() }
+                        .padding(vertical = 14.dp, horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Default.RemoveCircleOutline,
+                        null,
+                        tint     = Error,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(14.dp))
+                    Text(
+                        "Listeden Çıkar",
+                        color      = Error,
+                        fontSize   = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
         }
     }
 }

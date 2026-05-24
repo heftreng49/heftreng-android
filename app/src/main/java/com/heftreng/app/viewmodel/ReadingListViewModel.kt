@@ -55,12 +55,14 @@ class ReadingListViewModel @Inject constructor(
                 snap.documents.forEach { doc ->
                     val d   = doc.data ?: return@forEach
                     val ent = ReadingListEntry(
-                        sid       = d["sid"]      as? String ?: doc.id,
-                        title     = d["title"]    as? String ?: "",
-                        coverImg  = d["coverImg"] as? String ?: "",
-                        bg        = d["bg"]       as? String ?: "",
-                        status    = d["status"]   as? String ?: "",
-                        updatedAt = d["updatedAt"] as? com.google.firebase.Timestamp,
+                        sid        = d["sid"]        as? String ?: doc.id,
+                        title      = d["title"]      as? String ?: "",
+                        coverImg   = d["coverImg"]   as? String ?: "",
+                        bg         = d["bg"]         as? String ?: "",
+                        status     = d["status"]     as? String ?: "",
+                        updatedAt  = d["updatedAt"]  as? com.google.firebase.Timestamp,
+                        source     = d["source"]     as? String ?: "serial",
+                        authorName = d["authorName"] as? String ?: "",
                     )
                     map.getOrPut(ent.status) { mutableListOf() }.add(ent)
                 }
@@ -88,6 +90,7 @@ class ReadingListViewModel @Inject constructor(
                         "coverImg"  to coverImg,
                         "bg"        to bg,
                         "status"    to status.key,
+                        "source"    to "serial",
                         "updatedAt" to FieldValue.serverTimestamp(),
                     )).await()
                 }
@@ -108,4 +111,46 @@ class ReadingListViewModel @Inject constructor(
 
     // ── Sil ────────────────────────────────────────────
     fun remove(sid: String) = setStatus(sid, "", "", "", null)
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  KÜTÜPHANEKİTABI — library_books koleksiyonu için ayrı fonksiyonlar
+    //  source = "library" olarak kaydeder, profil navigate ayrımı buradan
+    // ══════════════════════════════════════════════════════════════════════
+
+    fun setLibraryBookStatus(
+        bookId    : String,
+        title     : String,
+        coverImg  : String,
+        authorName: String,
+        status    : RlStatus?,
+    ) {
+        if (uid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val ref = firestore.collection("readingLists")
+                    .document(uid).collection("books").document(bookId)
+                if (status == null) {
+                    ref.delete().await()
+                } else {
+                    ref.set(mapOf(
+                        "sid"        to bookId,
+                        "title"      to title,
+                        "coverImg"   to coverImg,
+                        "bg"         to "",
+                        "authorName" to authorName,
+                        "source"     to "library",
+                        "status"     to status.key,
+                        "updatedAt"  to FieldValue.serverTimestamp(),
+                    )).await()
+                }
+                load()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    /** library_books koleksiyonundaki kitabın mevcut durumunu döner */
+    fun getLibraryBookStatus(bookId: String): RlStatus? = getStatus(bookId)
+
+    /** library_books kitabını listeden sil */
+    fun removeLibraryBook(bookId: String) = setLibraryBookStatus(bookId, "", "", "", null)
 }
