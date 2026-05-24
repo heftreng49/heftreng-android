@@ -267,26 +267,6 @@
       ]
     },
     {
-      "collectionGroup": "quotes",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "ts",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "reviews",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "ts",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "feed",
       "queryScope": "COLLECTION",
       "fields": [
@@ -350,16 +330,6 @@
           "fieldPath": "titleLower",
           "order": "ASCENDING"
         },
-        {
-          "fieldPath": "ts",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "library_books",
-      "queryScope": "COLLECTION",
-      "fields": [
         {
           "fieldPath": "ts",
           "order": "DESCENDING"
