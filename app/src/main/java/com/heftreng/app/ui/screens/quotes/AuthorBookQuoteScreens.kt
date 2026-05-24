@@ -57,6 +57,7 @@ import com.heftreng.app.ui.component.AddReviewDialog
 import com.heftreng.app.ui.component.BookPickerDialog
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.LibraryViewModel
+import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.viewmodel.ReadingListViewModel
 import com.heftreng.app.viewmodel.RlStatus
 import kotlinx.coroutines.tasks.await
@@ -65,6 +66,23 @@ import kotlin.math.roundToInt
 // ═══════════════════════════════════════════════════════════════════════════
 //  1. YAZAR DETAY EKRANI
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ── BookQuote → Post dönüştürücü (PostCard kullanımı için) ────────────────
+private fun BookQuote.toPost() = Post(
+    id            = id,
+    uid           = uid,
+    displayName   = userDisplayName,
+    name          = userDisplayName,
+    username      = "",
+    photoURL      = userPhotoURL,
+    quoteText     = text,
+    bookName      = bookTitle,
+    authorName    = authorName,
+    text          = "",
+    likesCount    = likesCount,
+    ts            = ts,
+)
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -200,10 +218,16 @@ fun AuthorDetailScreen(
                             item { EmptyState(Icons.Default.FormatQuote, "Henüz alıntı yok") }
                         } else {
                             items(quotes, key = { it.id }) { quote ->
-                                BookQuoteCard(
-                                    quote    = quote,
-                                    actions  = BookCardActions(vm = vm, navController = navController),
-                                    language = language,
+                                val post = quote.toPost()
+                                PostCard(
+                                    post      = post,
+                                    language  = language,
+                                    onLike    = { feedVm.toggleLike(post) },
+                                    onSave    = { feedVm.toggleSave(post) },
+                                    onProfile = { navController.navigate("profile/${post.uid}") },
+                                    onComment = { navController.navigate("post_detail/${post.id}") },
+                                    onShare   = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
+                                    onTapBook = { navController.navigate("library_book_detail/${quote.bookId}") },
                                 )
                             }
                         }
@@ -386,6 +410,7 @@ fun LibraryBookDetailScreen(
     language     : String = "tr",
     vm           : LibraryViewModel     = hiltViewModel(),
     rlVm         : ReadingListViewModel = hiltViewModel(),
+    feedVm       : com.heftreng.app.viewmodel.FeedViewModel = hiltViewModel(),
 ) {
     val book    by vm.selectedBook.collectAsState()
     val quotes  by vm.bookQuotes.collectAsState()
@@ -510,10 +535,16 @@ fun LibraryBookDetailScreen(
                         item { EmptyState(Icons.Default.FormatQuote, "Henüz alıntı yok.\nİlk alıntıyı sen ekle!") }
                     } else {
                         items(quotes, key = { it.id }) { quote ->
-                            BookQuoteCard(
-                                quote    = quote,
-                                actions  = BookCardActions(vm = vm, navController = navController),
-                                language = language,
+                            val post = quote.toPost()
+                            PostCard(
+                                post      = post,
+                                language  = language,
+                                onLike    = { feedVm.toggleLike(post) },
+                                onSave    = { feedVm.toggleSave(post) },
+                                onProfile = { navController.navigate("profile/${post.uid}") },
+                                onComment = { navController.navigate("post_detail/${post.id}") },
+                                onShare   = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
+                                onTapAuthor = { navController.navigate("author_detail/${quote.authorId}") },
                             )
                         }
                     }
@@ -855,16 +886,14 @@ private fun LegacyQuoteListPage(
                 contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
             ) {
                 items(posts, key = { it.id }) { post ->
-                    BookQuoteCard(
-                        quote = BookQuote(
-                            id              = post.id,
-                            text            = post.quoteText,
-                            bookTitle       = post.bookName,
-                            authorName      = post.authorName,
-                            userDisplayName = post.displayName,
-                            userPhotoURL    = post.photoURL,
-                        ),
-                        actions = BookCardActions(),
+                    PostCard(
+                        post      = post,
+                        language  = language,
+                        onLike    = { feedVm.toggleLike(post) },
+                        onSave    = { feedVm.toggleSave(post) },
+                        onProfile = { navController.navigate("profile/${post.uid}") },
+                        onComment = { navController.navigate("post_detail/${post.id}") },
+                        onShare   = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
                     )
                 }
             }
