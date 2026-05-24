@@ -44,6 +44,9 @@ import com.heftreng.app.data.model.BookQuote
 import com.heftreng.app.data.model.BookReview
 import com.heftreng.app.data.model.LibraryBook
 import com.heftreng.app.ui.component.QuoteDialog
+import com.heftreng.app.ui.component.BookQuoteCard
+import com.heftreng.app.ui.component.BookReviewCard
+import com.heftreng.app.ui.component.BookCardActions
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
@@ -234,8 +237,8 @@ fun LibraryScreen(
                 }
             } else {
                 when (selectedTab) {
-                    0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language)
-                    1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language)
+                    0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, vm = libraryVm)
+                    1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm)
                     2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language)
                     3 -> LibraryBooksTab(books = books, navController = navController, language = language)
                 }
@@ -299,17 +302,16 @@ private fun LibraryQuotesTab(
     quotes       : List<BookQuote>,
     language     : String,
     navController: NavController,
+    vm           : LibraryViewModel? = null,
 ) {
     if (quotes.isEmpty()) {
         LibraryEmptyState(Icons.Outlined.FormatQuote, Strings.libraryNoQuotes(language))
         return
     }
-    LazyColumn(
-        contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    val cardActions = BookCardActions(vm = vm, navController = navController)
+    LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
         items(quotes, key = { it.id }) { quote ->
-            LibraryQuoteCard(quote = quote, navController = navController)
+            BookQuoteCard(quote = quote, actions = cardActions, language = language)
         }
     }
 }
@@ -319,17 +321,16 @@ private fun LibraryReviewsTab(
     reviews      : List<BookReview>,
     language     : String,
     navController: NavController,
+    vm           : LibraryViewModel? = null,
 ) {
     if (reviews.isEmpty()) {
         LibraryEmptyState(Icons.Outlined.RateReview, Strings.libraryNoReviews(language))
         return
     }
-    LazyColumn(
-        contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    val cardActions = BookCardActions(vm = vm, navController = navController)
+    LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
         items(reviews, key = { it.id }) { review ->
-            LibraryReviewCard(review = review, navController = navController)
+            BookReviewCard(review = review, actions = cardActions, language = language)
         }
     }
 }
@@ -379,85 +380,6 @@ private fun LibraryBooksTab(
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun LibraryQuoteCard(quote: BookQuote, navController: NavController) {
-    Card(
-        modifier  = Modifier.fillMaxWidth(),
-        shape     = RoundedCornerShape(16.dp),
-        colors    = CardDefaults.cardColors(containerColor = HeftSurface),
-        elevation = CardDefaults.cardElevation(2.dp),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.Top) {
-                Icon(Icons.Filled.FormatQuote, null, tint = Primary, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text      = quote.text,
-                    color     = OnBackground,
-                    fontSize  = 15.sp,
-                    fontStyle = FontStyle.Italic,
-                    lineHeight = 22.sp,
-                )
-            }
-            if (quote.bookTitle.isNotBlank() || quote.authorName.isNotBlank()) {
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text       = buildString {
-                        if (quote.bookTitle.isNotBlank())  append("— ${quote.bookTitle}")
-                        if (quote.authorName.isNotBlank()) append(", ${quote.authorName}")
-                    },
-                    color      = Primary,
-                    fontSize   = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier   = Modifier.clickable {
-                        if (quote.bookId.isNotBlank())
-                            navController.navigate("library_book_detail/${quote.bookId}")
-                        else if (quote.authorId.isNotBlank())
-                            navController.navigate("author_detail/${quote.authorId}")
-                    },
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            UserMiniRow(quote.userDisplayName, quote.userPhotoURL)
-        }
-    }
-}
-
-@Composable
-private fun LibraryReviewCard(review: BookReview, navController: NavController) {
-    Card(
-        modifier  = Modifier.fillMaxWidth(),
-        shape     = RoundedCornerShape(16.dp),
-        colors    = CardDefaults.cardColors(containerColor = HeftSurface),
-        elevation = CardDefaults.cardElevation(2.dp),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier              = Modifier
-                    .fillMaxWidth()
-                    .clickable(enabled = review.bookId.isNotBlank()) {
-                        navController.navigate("library_book_detail/${review.bookId}")
-                    },
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text       = review.bookTitle.ifBlank { review.authorName },
-                    color      = Primary,
-                    fontSize   = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines   = 1,
-                    overflow   = TextOverflow.Ellipsis,
-                    modifier   = Modifier.weight(1f),
-                )
-                if (review.rating > 0f) StarRatingRow(review.rating)
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(text = review.text, color = OnBackground, fontSize = 14.sp, lineHeight = 21.sp)
-            Spacer(Modifier.height(10.dp))
-            UserMiniRow(review.userDisplayName, review.userPhotoURL)
-        }
-    }
-}
 
 @Composable
 private fun LibraryAuthorRow(author: Author, navController: NavController) {

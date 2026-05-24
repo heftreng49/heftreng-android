@@ -48,6 +48,11 @@ import com.heftreng.app.data.model.BookReview
 import com.heftreng.app.data.model.LibraryBook
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.ui.component.QuoteDialog
+import com.heftreng.app.ui.component.BookQuoteCard
+import com.heftreng.app.ui.component.BookReviewCard
+import com.heftreng.app.ui.component.BookCardActions
+import com.heftreng.app.ui.component.StarRow
+import com.heftreng.app.ui.component.timeAgo
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.LibraryViewModel
 import com.heftreng.app.viewmodel.ReadingListViewModel
@@ -192,7 +197,11 @@ fun AuthorDetailScreen(
                             item { EmptyState(Icons.Default.FormatQuote, "Henüz alıntı yok") }
                         } else {
                             items(quotes, key = { it.id }) { quote ->
-                                BookQuoteCard(quote = quote)
+                                BookQuoteCard(
+                                    quote    = quote,
+                                    actions  = BookCardActions(vm = vm, navController = navController),
+                                    language = language,
+                                )
                             }
                         }
                     }
@@ -202,7 +211,11 @@ fun AuthorDetailScreen(
                             item { EmptyState(Icons.Outlined.RateReview, "Henüz inceleme yok") }
                         } else {
                             items(reviews, key = { it.id }) { review ->
-                                BookReviewCard(review = review)
+                                BookReviewCard(
+                                    review   = review,
+                                    actions  = BookCardActions(vm = vm, navController = navController),
+                                    language = language,
+                                )
                             }
                         }
                     }
@@ -493,7 +506,11 @@ fun LibraryBookDetailScreen(
                         item { EmptyState(Icons.Default.FormatQuote, "Henüz alıntı yok.\nİlk alıntıyı sen ekle!") }
                     } else {
                         items(quotes, key = { it.id }) { quote ->
-                            BookQuoteCard(quote = quote, vm = vm)
+                            BookQuoteCard(
+                                quote    = quote,
+                                actions  = BookCardActions(vm = vm, navController = navController),
+                                language = language,
+                            )
                         }
                     }
                 } else {
@@ -502,7 +519,11 @@ fun LibraryBookDetailScreen(
                         item { EmptyState(Icons.Outlined.RateReview, "Henüz inceleme yok.\nBu kitabı incele!") }
                     } else {
                         items(reviews, key = { it.id }) { review ->
-                            BookReviewCard(review = review, vm = vm)
+                            BookReviewCard(
+                                review   = review,
+                                actions  = BookCardActions(vm = vm, navController = navController),
+                                language = language,
+                            )
                         }
                     }
                 }
@@ -666,422 +687,9 @@ private fun LibraryBookHeader(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  3. ORTAK KARTLAR
+//  3. KARTLAR — com.heftreng.app.ui.component.UnifiedCards'tan import edilir
+//     BookQuoteCard ve BookReviewCard artık ui/component/UnifiedCards.kt'de
 // ═══════════════════════════════════════════════════════════════════════════
-
-@Composable
-fun BookQuoteCard(
-    quote    : BookQuote,
-    vm       : LibraryViewModel? = null,
-) {
-    var showEditDialog   by remember { mutableStateOf(false) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var expanded         by remember { mutableStateOf(false) }
-
-    val myUid    = vm?.myUid ?: ""
-    val isOwner  = myUid.isNotBlank() && myUid == quote.uid
-    val isAdmin  = vm?.isAdmin ?: false
-    val canEdit  = isOwner || isAdmin
-    val isLiked  = myUid in quote.likedBy
-
-    Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-        shape    = RoundedCornerShape(14.dp),
-        color    = HeftSurface,
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.Top) {
-                Box(
-                    Modifier.width(3.dp).fillMaxHeight()
-                        .clip(RoundedCornerShape(2.dp)).background(Primary)
-                )
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    "❝ ${quote.text}",
-                    color = OnSurface, fontSize = 14.sp,
-                    fontStyle = FontStyle.Italic, lineHeight = 22.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                // 3-nokta menü
-                if (canEdit) {
-                    Box {
-                        IconButton(onClick = { expanded = true }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.MoreVert, null, tint = Muted, modifier = Modifier.size(16.dp))
-                        }
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            DropdownMenuItem(
-                                text    = { Text("Düzenle", color = OnBackground) },
-                                onClick = { expanded = false; showEditDialog = true },
-                                leadingIcon = { Icon(Icons.Default.Edit, null, tint = Primary) },
-                            )
-                            DropdownMenuItem(
-                                text    = { Text("Sil", color = Color(0xFFDC2626)) },
-                                onClick = { expanded = false; showDeleteDialog = true },
-                                leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFDC2626)) },
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (quote.bookTitle.isNotBlank() || quote.authorName.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AutoStories, null, tint = Amber, modifier = Modifier.size(12.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        buildString {
-                            if (quote.bookTitle.isNotBlank()) append(quote.bookTitle)
-                            if (quote.bookTitle.isNotBlank() && quote.authorName.isNotBlank()) append(" — ")
-                            if (quote.authorName.isNotBlank()) append(quote.authorName)
-                        },
-                        color = Amber, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
-
-            HorizontalDivider(color = Divider, modifier = Modifier.padding(vertical = 10.dp))
-
-            Row(
-                modifier              = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.CenterVertically,
-            ) {
-                UserRow(displayName = quote.userDisplayName, photoURL = quote.userPhotoURL)
-                // Beğeni butonu
-                if (vm != null) {
-                    Row(
-                        modifier          = Modifier.clickable { vm.toggleLikeQuote(quote.bookId, quote.id) },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            if (isLiked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-                            null,
-                            tint     = if (isLiked) Color(0xFFE53935) else Muted,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        if (quote.likesCount > 0) {
-                            Spacer(Modifier.width(4.dp))
-                            Text("${quote.likesCount}", color = Muted, fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // ── Düzenle Dialog ─────────────────────────────────────────────────
-    if (showEditDialog) {
-        var editText by remember { mutableStateOf(quote.text) }
-        AlertDialog(
-            onDismissRequest = { showEditDialog = false },
-            containerColor   = HeftSurface,
-            title = { Text("Alıntıyı Düzenle", color = OnBackground, fontWeight = FontWeight.Bold) },
-            text  = {
-                OutlinedTextField(
-                    value         = editText,
-                    onValueChange = { editText = it },
-                    minLines      = 3,
-                    modifier      = Modifier.fillMaxWidth(),
-                    colors        = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Primary, unfocusedBorderColor = Divider,
-                        focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
-                    ),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm?.editQuote(quote.bookId, quote.id, quote.uid, editText.trim())
-                    showEditDialog = false
-                }) { Text("Kaydet", color = Primary, fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEditDialog = false }) { Text("İptal", color = Muted) }
-            },
-        )
-    }
-
-    // ── Sil Onay Dialog ────────────────────────────────────────────────
-    if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            containerColor   = HeftSurface,
-            title = { Text("Alıntıyı Sil", color = OnBackground, fontWeight = FontWeight.Bold) },
-            text  = { Text("Bu alıntıyı silmek istediğinizden emin misiniz?", color = Muted) },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm?.deleteQuote(quote.bookId, quote.id, quote.uid)
-                    showDeleteDialog = false
-                }) { Text("Sil", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("İptal", color = Muted) }
-            },
-        )
-    }
-}
-
-@Composable
-fun BookReviewCard(
-    review   : BookReview,
-    vm       : LibraryViewModel? = null,
-) {
-    var showEditDialog   by remember { mutableStateOf(false) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var expanded         by remember { mutableStateOf(false) }
-
-    val myUid   = vm?.myUid ?: ""
-    val isOwner = myUid.isNotBlank() && myUid == review.uid
-    val isAdmin = vm?.isAdmin ?: false
-    val canEdit = isOwner || isAdmin
-    val isLiked = myUid in review.likedBy
-
-    Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-        shape    = RoundedCornerShape(14.dp),
-        color    = HeftSurface,
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            // Başlık satırı: yıldızlar + 3-nokta
-            Row(
-                modifier              = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.CenterVertically,
-            ) {
-                if (review.rating > 0) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        repeat(5) { i ->
-                            Icon(
-                                if (i < review.rating.roundToInt()) Icons.Default.Star
-                                else Icons.Outlined.StarBorder,
-                                null,
-                                tint     = Amber,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
-                        Spacer(Modifier.width(6.dp))
-                        Text("${review.rating}", color = Amber, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                } else {
-                    Spacer(Modifier.weight(1f))
-                }
-                if (canEdit) {
-                    Box {
-                        IconButton(onClick = { expanded = true }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.MoreVert, null, tint = Muted, modifier = Modifier.size(16.dp))
-                        }
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            DropdownMenuItem(
-                                text    = { Text("Düzenle", color = OnBackground) },
-                                onClick = { expanded = false; showEditDialog = true },
-                                leadingIcon = { Icon(Icons.Default.Edit, null, tint = Primary) },
-                            )
-                            DropdownMenuItem(
-                                text    = { Text("Sil", color = Color(0xFFDC2626)) },
-                                onClick = { expanded = false; showDeleteDialog = true },
-                                leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFDC2626)) },
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (review.bookTitle.isNotBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AutoStories, null, tint = Primary, modifier = Modifier.size(12.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(review.bookTitle, color = Primary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                }
-                Spacer(Modifier.height(6.dp))
-            }
-
-            Text(review.text, color = OnSurface, fontSize = 14.sp, lineHeight = 21.sp)
-
-            HorizontalDivider(color = Divider, modifier = Modifier.padding(vertical = 10.dp))
-
-            Row(
-                modifier              = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.CenterVertically,
-            ) {
-                UserRow(displayName = review.userDisplayName, photoURL = review.userPhotoURL)
-                if (vm != null) {
-                    Row(
-                        modifier          = Modifier.clickable { vm.toggleLikeReview(review.bookId, review.id) },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            if (isLiked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-                            null,
-                            tint     = if (isLiked) Color(0xFFE53935) else Muted,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        if (review.likesCount > 0) {
-                            Spacer(Modifier.width(4.dp))
-                            Text("${review.likesCount}", color = Muted, fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // ── Düzenle Dialog ─────────────────────────────────────────────────
-    if (showEditDialog) {
-        var editText   by remember { mutableStateOf(review.text) }
-        var editRating by remember { mutableFloatStateOf(review.rating) }
-        AlertDialog(
-            onDismissRequest = { showEditDialog = false },
-            containerColor   = HeftSurface,
-            title = { Text("İncelemeyi Düzenle", color = OnBackground, fontWeight = FontWeight.Bold) },
-            text  = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row {
-                        repeat(5) { i ->
-                            IconButton(onClick = { editRating = (i + 1).toFloat() }, modifier = Modifier.size(36.dp)) {
-                                Icon(
-                                    if (i < editRating.roundToInt()) Icons.Default.Star else Icons.Outlined.StarBorder,
-                                    null, tint = Amber, modifier = Modifier.size(26.dp),
-                                )
-                            }
-                        }
-                    }
-                    OutlinedTextField(
-                        value         = editText,
-                        onValueChange = { editText = it },
-                        minLines      = 3,
-                        modifier      = Modifier.fillMaxWidth(),
-                        colors        = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Primary, unfocusedBorderColor = Divider,
-                            focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
-                        ),
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm?.editReview(review.bookId, review.id, review.uid, editText.trim(), editRating)
-                    showEditDialog = false
-                }) { Text("Kaydet", color = Primary, fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEditDialog = false }) { Text("İptal", color = Muted) }
-            },
-        )
-    }
-
-    // ── Sil Onay Dialog ────────────────────────────────────────────────
-    if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            containerColor   = HeftSurface,
-            title = { Text("İncelemeyi Sil", color = OnBackground, fontWeight = FontWeight.Bold) },
-            text  = { Text("Bu incelemeyi silmek istediğinizden emin misiniz?", color = Muted) },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm?.deleteReview(review.bookId, review.id, review.uid)
-                    showDeleteDialog = false
-                }) { Text("Sil", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("İptal", color = Muted) }
-            },
-        )
-    }
-}
-
-@Composable
-private fun LibraryBookCard(
-    book   : LibraryBook,
-    onClick: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        color = HeftSurface,
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Küçük kapak
-            Box(
-                modifier = Modifier.width(52.dp).height(72.dp)
-                    .clip(RoundedCornerShape(8.dp)).background(SurfaceVar),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (book.coverImg.isNotBlank()) {
-                    AsyncImage(model = book.coverImg, contentDescription = null,
-                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                } else {
-                    Icon(Icons.Default.AutoStories, null, tint = Muted, modifier = Modifier.size(24.dp))
-                }
-            }
-
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(book.title, color = OnBackground, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (book.genre.isNotBlank()) {
-                    Spacer(Modifier.height(3.dp))
-                    Text(book.genre, color = Muted, fontSize = 12.sp)
-                }
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (book.avgRating > 0) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Star, null, tint = Amber, modifier = Modifier.size(12.dp))
-                            Spacer(Modifier.width(2.dp))
-                            Text("${(book.avgRating * 10).roundToInt() / 10f}", color = Amber, fontSize = 11.sp)
-                        }
-                    }
-                    Text("${book.quoteCount} alıntı", color = Muted, fontSize = 11.sp)
-                }
-            }
-            Icon(Icons.Default.ChevronRight, null, tint = Muted, modifier = Modifier.size(20.dp))
-        }
-    }
-}
-
-@Composable
-private fun UserRow(displayName: String, photoURL: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier.size(28.dp).clip(CircleShape).background(SurfaceVar),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (photoURL.isNotBlank()) {
-                AsyncImage(model = photoURL, contentDescription = null,
-                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            } else {
-                Text(
-                    displayName.firstOrNull()?.uppercase() ?: "?",
-                    color = OnBackground, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                )
-            }
-        }
-        Spacer(Modifier.width(8.dp))
-        Text(displayName.ifBlank { "Kullanıcı" }, color = Muted, fontSize = 12.sp,
-            fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, message: String) {
-    Box(
-        modifier = Modifier.fillMaxWidth().padding(48.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(icon, null, tint = Divider, modifier = Modifier.size(52.dp))
-            Text(message, color = Muted, fontSize = 14.sp,
-                lineHeight = 20.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        }
-    }
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  4. DIALOGLAR
