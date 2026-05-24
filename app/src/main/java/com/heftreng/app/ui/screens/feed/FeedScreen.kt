@@ -55,6 +55,10 @@ import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
 import kotlinx.coroutines.tasks.await
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
@@ -62,7 +66,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.heftreng.app.data.model.AppConfig
 import androidx.core.content.ContextCompat
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun FeedScreen(
     navController: NavController,
@@ -78,6 +82,17 @@ fun FeedScreen(
     val loadingMore by vm.loadingMore.collectAsState()
     val bannerUnitId by adsVm.bannerUnitId.collectAsState()
     val bannerPos    by adsVm.bannerPosition.collectAsState()
+
+    var isRefreshing by remember { mutableStateOf(false) }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh  = {
+            isRefreshing = true
+            vm.refresh()
+        }
+    )
+    // isRefreshing'i loading bitince kapat
+    LaunchedEffect(loading) { if (!loading) isRefreshing = false }
 
     LaunchedEffect(Unit) { adsVm.loadAdConfigs() }
 
@@ -225,6 +240,7 @@ fun FeedScreen(
                 CircularProgressIndicator(color = Primary)
             }
         } else {
+            Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
             LazyColumn(
                 modifier       = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 100.dp),
@@ -378,6 +394,13 @@ fun FeedScreen(
                     }
                 }
             }
+                PullRefreshIndicator(
+                    refreshing = isRefreshing,
+                    state      = pullRefreshState,
+                    modifier   = Modifier.align(Alignment.TopCenter),
+                    contentColor = Primary,
+                )
+            } // pullRefresh Box
         }
         } // Column
     } // Box

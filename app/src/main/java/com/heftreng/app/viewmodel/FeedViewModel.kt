@@ -67,7 +67,7 @@ class FeedViewModel @Inject constructor(
     private var savedIds    = emptySet<String>()
     private var myRepostMap = emptyMap<String, String>()
     private var lastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
-    private val PAGE_SIZE = 20L
+    private val PAGE_SIZE = 30L
 
     init {
         observeFeed()
@@ -650,6 +650,30 @@ class FeedViewModel @Inject constructor(
     }
 
     // ── Pagination ────────────────────────────────────────────────────────────
+    fun refresh() {
+        lastDoc = null
+        _hasMore.value = true
+        _postNotFound.value = null
+        _loading.value = true
+        viewModelScope.launch {
+            try {
+                val snap = firestore.collection("feed")
+                    .orderBy("ts", Query.Direction.DESCENDING)
+                    .limit(PAGE_SIZE)
+                    .get().await()
+                if (snap.documents.isNotEmpty()) lastDoc = snap.documents.last()
+                _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
+                val rawPosts = snap.documents.mapNotNull { it.toPost() }
+                _posts.value = enrichPostsWithUserData(rawPosts)
+                loadInteractions()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _loading.value = false
+            }
+        }
+    }
+
     fun loadMore() {
         val last = lastDoc ?: return
         if (_loadingMore.value || !_hasMore.value) return
@@ -675,18 +699,24 @@ class FeedViewModel @Inject constructor(
 
     fun ensurePost(postId: String) {
         if (_posts.value.any { it.id == postId }) return
+        if (_fetchingPostIds.contains(postId)) return
+        _fetchingPostIds.add(postId)
+        if (_postNotFound.value == postId) _postNotFound.value = null
         viewModelScope.launch {
             try {
                 val doc = firestore.collection("feed").document(postId).get().await()
                 val post = doc.toPost()
                 if (post == null) {
                     _postNotFound.value = postId
-                    return@launch
+                } else {
+                    val enriched = enrichPostsWithUserData(listOf(post))
+                    _posts.value = _posts.value + enriched
                 }
-                _posts.value = _posts.value + post
             } catch (e: Exception) {
                 e.printStackTrace()
                 _postNotFound.value = postId
+            } finally {
+                _fetchingPostIds.remove(postId)
             }
         }
     }

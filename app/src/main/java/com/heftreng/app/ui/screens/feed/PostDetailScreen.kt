@@ -248,7 +248,7 @@ fun PostDetailScreen(
     }
 
     LaunchedEffect(postId) {
-        if (posts.none { it.id == postId }) viewModel.ensurePost(postId)
+        viewModel.ensurePost(postId)
     }
 
     val loadFailed = postNotFound == postId
