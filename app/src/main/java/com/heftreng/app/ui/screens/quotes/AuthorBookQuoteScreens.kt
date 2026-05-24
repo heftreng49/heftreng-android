@@ -51,8 +51,6 @@ import com.heftreng.app.ui.component.QuoteDialog
 import com.heftreng.app.ui.component.BookQuoteCard
 import com.heftreng.app.ui.component.BookReviewCard
 import com.heftreng.app.ui.component.BookCardActions
-import com.heftreng.app.ui.component.StarRow
-import com.heftreng.app.ui.component.timeAgo
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.LibraryViewModel
 import com.heftreng.app.viewmodel.ReadingListViewModel
@@ -69,6 +67,7 @@ import kotlin.math.roundToInt
 fun AuthorDetailScreen(
     authorId     : String,
     navController: NavController,
+    language     : String = "tr",
     vm           : LibraryViewModel = hiltViewModel(),
     feedVm       : com.heftreng.app.viewmodel.FeedViewModel = hiltViewModel(),
 ) {
@@ -380,6 +379,7 @@ private fun AuthorStat(value: String, label: String) {
 fun LibraryBookDetailScreen(
     bookId       : String,
     navController: NavController,
+    language     : String = "tr",
     vm           : LibraryViewModel     = hiltViewModel(),
     rlVm         : ReadingListViewModel = hiltViewModel(),
 ) {
@@ -686,9 +686,9 @@ private fun LibraryBookHeader(
     }
 }
 
+
 // ═══════════════════════════════════════════════════════════════════════════
-//  3. KARTLAR — com.heftreng.app.ui.component.UnifiedCards'tan import edilir
-//     BookQuoteCard ve BookReviewCard artık ui/component/UnifiedCards.kt'de
+//  3. KARTLAR — ui/component/UnifiedCards.kt'ten import edilir
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -921,7 +921,8 @@ private fun LegacyQuoteListPage(
                             authorName      = post.authorName,
                             userDisplayName = post.displayName,
                             userPhotoURL    = post.photoURL,
-                        )
+                        ),
+                        actions = BookCardActions(),
                     )
                 }
             }

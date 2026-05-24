@@ -308,10 +308,10 @@ private fun LibraryQuotesTab(
         LibraryEmptyState(Icons.Outlined.FormatQuote, Strings.libraryNoQuotes(language))
         return
     }
-    val cardActions = BookCardActions(vm = vm, navController = navController)
+    val actions = BookCardActions(vm = vm, navController = navController)
     LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
         items(quotes, key = { it.id }) { quote ->
-            BookQuoteCard(quote = quote, actions = cardActions, language = language)
+            BookQuoteCard(quote = quote, actions = actions, language = language)
         }
     }
 }
@@ -327,10 +327,10 @@ private fun LibraryReviewsTab(
         LibraryEmptyState(Icons.Outlined.RateReview, Strings.libraryNoReviews(language))
         return
     }
-    val cardActions = BookCardActions(vm = vm, navController = navController)
+    val actions = BookCardActions(vm = vm, navController = navController)
     LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
         items(reviews, key = { it.id }) { review ->
-            BookReviewCard(review = review, actions = cardActions, language = language)
+            BookReviewCard(review = review, actions = actions, language = language)
         }
     }
 }
@@ -378,8 +378,6 @@ private fun LibraryBooksTab(
 // ─────────────────────────────────────────────────────────────────────────────
 //  Kartlar
 // ─────────────────────────────────────────────────────────────────────────────
-
-@Composable
 
 @Composable
 private fun LibraryAuthorRow(author: Author, navController: NavController) {
