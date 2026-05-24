@@ -300,7 +300,7 @@ private fun LibraryQuotesTab(
                 onLike       = { feedVm.toggleLike(post) },
                 onSave       = { feedVm.toggleSave(post) },
                 onProfile    = { navController.navigate("profile/${post.uid}") },
-                onComment    = { navController.navigate("post_detail/${post.id}") },
+                onComment    = { navController.navigate("post/${post.id}") },
                 onShare      = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
                 onDelete     = if (post.uid == com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid)
                                    {{ feedVm.deletePost(post.id) }} else null,

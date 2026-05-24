@@ -225,7 +225,7 @@ fun AuthorDetailScreen(
                                     onLike    = { feedVm.toggleLike(post) },
                                     onSave    = { feedVm.toggleSave(post) },
                                     onProfile = { navController.navigate("profile/${post.uid}") },
-                                    onComment = { navController.navigate("post_detail/${post.id}") },
+                                    onComment = { navController.navigate("post/${post.id}") },
                                     onShare   = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
                                     onTapBook = { navController.navigate("library_book_detail/${quote.bookId}") },
                                 )
@@ -542,7 +542,7 @@ fun LibraryBookDetailScreen(
                                 onLike    = { feedVm.toggleLike(post) },
                                 onSave    = { feedVm.toggleSave(post) },
                                 onProfile = { navController.navigate("profile/${post.uid}") },
-                                onComment = { navController.navigate("post_detail/${post.id}") },
+                                onComment = { navController.navigate("post/${post.id}") },
                                 onShare   = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
                                 onTapAuthor = { navController.navigate("author_detail/${quote.authorId}") },
                             )
@@ -907,7 +907,7 @@ private fun LegacyQuoteListPage(
                         onLike    = { feedVm?.toggleLike(post) },
                         onSave    = { feedVm?.toggleSave(post) },
                         onProfile = { navController?.navigate("profile/${post.uid}") },
-                        onComment = { navController?.navigate("post_detail/${post.id}") },
+                        onComment = { navController?.navigate("post/${post.id}") },
                         onShare   = { if (post.isRepostedByMe) feedVm?.unrepost(post) else feedVm?.repost(post) },
                     )
                 }
