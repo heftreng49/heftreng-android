@@ -31,11 +31,13 @@ data class User(
 data class Post(
     val id            : String     = "",
     val uid           : String     = "",
-    val displayName   : String     = "",   // Tek isim alanı (normalize edilmiş)
+    val displayName   : String     = "",   // Birincil isim alanı
+    val name          : String     = "",   // Legacy — tema ve eski ekranlar için; yeni kod displayName kullanır
     val username      : String     = "",
     val photoURL      : String     = "",
     val text          : String     = "",
-    val imageURL      : String     = "",   // Tek resim URL alanı (normalize edilmiş)
+    val imageURL      : String     = "",   // Birincil resim alanı
+    val imgUrl        : String     = "",   // Legacy — tema ve eski ekranlar için; yeni kod imageURL kullanır
     val ytVid         : String     = "",
     val badges        : List<String> = emptyList(),
     val repostTitle   : String     = "",
@@ -77,13 +79,9 @@ data class Post(
     val libraryBookId    : String     = "",
     val libraryAuthorId  : String     = "",
 ) {
-    // Adım 1.2 — Legacy alan uyumluluğu: eski kod Post.name veya Post.imgUrl kullanıyorsa
-    // bu computed property'ler kırılma yaratmadan köprü kurar.
-    @Deprecated("displayName kullan", ReplaceWith("displayName"))
-    val name: String get() = displayName
-
-    @Deprecated("imageURL kullan", ReplaceWith("imageURL"))
-    val imgUrl: String get() = imageURL
+    // Adım 1.2 — Hangi alanın dolu olduğundan bağımsız tek okuma noktası
+    val effectiveName: String get() = displayName.ifBlank { name }
+    val effectiveImageURL: String get() = imageURL.ifBlank { imgUrl }
 }
 
 // ─── YORUM ─────────────────────────────────────────────

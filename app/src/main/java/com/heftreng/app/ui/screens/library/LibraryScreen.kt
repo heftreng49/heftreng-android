@@ -68,8 +68,6 @@ fun LibraryScreen(
     )
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    val db = remember { FirebaseFirestore.getInstance() }
-
     // Adım 4.1 — Firestore sorguları LibraryViewModel'e taşındı.
     // LibraryViewModel'e loadLibraryOverview() eklenmeli; şimdilik
     // mevcut state flow'ları tüketiyoruz, ek sorgular VM'den yapılıyor.

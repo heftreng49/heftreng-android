@@ -131,10 +131,12 @@ class FeedViewModel @Inject constructor(
             id            = id,
             uid           = d["uid"]      as? String ?: "",
             displayName   = displayName,
+            name          = displayName,   // legacy uyumu
             username      = d["username"] as? String ?: "",
             photoURL      = d["photoURL"] as? String ?: "",
             text          = d["text"]     as? String ?: "",
             imageURL      = imageURL,
+            imgUrl        = imageURL,      // legacy uyumu
             ytVid         = d["ytVid"]       as? String ?: "",
             badges        = badges,
             repostTitle   = d["repostTitle"] as? String ?: "",
@@ -197,6 +199,7 @@ class FeedViewModel @Inject constructor(
             val (freshName, freshPhoto) = userMap[post.uid] ?: return@map post
             post.copy(
                 displayName = freshName.ifBlank { post.displayName },
+                name        = freshName.ifBlank { post.name },
                 photoURL    = freshPhoto.ifBlank { post.photoURL },
             )
         }
