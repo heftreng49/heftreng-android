@@ -88,27 +88,35 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
             try {
-                // Tüm alıntılar (collectionGroup)
-                val qSnap = firestore.collectionGroup("quotes")
-                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(50).get().await()
-                _bookQuotes.value = qSnap.documents.mapNotNull { doc ->
-                    doc.toObject(BookQuote::class.java)?.copy(id = doc.id)
-                }
-                // Tüm incelemeler (collectionGroup)
-                val rSnap = firestore.collectionGroup("reviews")
-                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(50).get().await()
-                _bookReviews.value = rSnap.documents.mapNotNull { doc ->
-                    doc.toObject(BookReview::class.java)?.copy(id = doc.id)
-                }
-                // Kütüphane kitapları (library_books koleksiyonu)
+                // 1. Tüm kitapları çek (index gerektirmez — filter/orderBy yok)
                 val bSnap = firestore.collection("library_books")
-                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(50).get().await()
-                _authorBooks.value = bSnap.documents.mapNotNull { doc ->
+                    .limit(100).get().await()
+                val books = bSnap.documents.mapNotNull { doc ->
                     doc.toObject(LibraryBook::class.java)?.copy(id = doc.id)
                 }
+                _authorBooks.value = books.sortedByDescending { it.ts?.seconds ?: 0L }
+
+                // 2. Her kitabın quotes alt koleksiyonunu topla
+                //    (alt koleksiyon get = index gerektirmez)
+                val allQuotes = mutableListOf<BookQuote>()
+                val allReviews = mutableListOf<BookReview>()
+                books.forEach { book ->
+                    val qSnap = firestore.collection("library_books")
+                        .document(book.id).collection("quotes")
+                        .limit(20).get().await()
+                    qSnap.documents.mapNotNullTo(allQuotes) { doc ->
+                        doc.toObject(BookQuote::class.java)?.copy(id = doc.id)
+                    }
+                    val rSnap = firestore.collection("library_books")
+                        .document(book.id).collection("reviews")
+                        .limit(20).get().await()
+                    rSnap.documents.mapNotNullTo(allReviews) { doc ->
+                        doc.toObject(BookReview::class.java)?.copy(id = doc.id)
+                    }
+                }
+                _bookQuotes.value  = allQuotes.sortedByDescending  { it.ts?.seconds ?: 0L }
+                _bookReviews.value = allReviews.sortedByDescending { it.ts?.seconds ?: 0L }
+
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
