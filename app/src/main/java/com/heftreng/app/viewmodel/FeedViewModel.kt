@@ -805,23 +805,16 @@ class FeedViewModel @Inject constructor(
     fun loadLibraryQuotes() {
         viewModelScope.launch {
             try {
-                // bookName dolu AND quoteText dolu postları çek
-                // "whereNotEqualTo" index gerektirir — tüm feed'i çekip bellekte filtrele
+                // type == "library_quote" olan postları doğrudan Firestore'dan çek
+                // Bu postlar herkese açık (firestore.rules'da library_quote için read: true)
                 val snap = firestore.collection("feed")
+                    .whereEqualTo("type", "library_quote")
                     .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(300).get().await()
-                val result = snap.documents.mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    val qObj      = d["quote"] as? Map<*, *>
-                    val bookName  = (qObj?.get("book") as? String)?.takeIf { it.isNotBlank() }
-                        ?: (d["bookName"] as? String)?.takeIf { it.isNotBlank() }
-                        ?: return@mapNotNull null   // bookName yoksa atla
-                    val quoteText = (qObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
-                        ?: (d["quoteText"] as? String)?.takeIf { it.isNotBlank() }
-                        ?: return@mapNotNull null   // quoteText yoksa atla
+                    .limit(200).get().await()
+                _libraryQuotes.value = snap.documents.mapNotNull { doc ->
+                    doc.data ?: return@mapNotNull null
                     doc.toPost()
                 }
-                _libraryQuotes.value = result
             } catch (e: Exception) {
                 e.printStackTrace()
             }

@@ -61,6 +61,7 @@ import kotlinx.coroutines.tasks.await
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import kotlin.math.roundToInt
+import java.net.URLEncoder
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Ana ekran
@@ -352,8 +353,18 @@ private fun LibraryQuotesTab(
                 onShare      = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
                 onDelete     = if (post.uid == com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid)
                                    {{ feedVm.deletePost(post.id) }} else null,
-                onTapAuthor  = { authorId -> navController.navigate("author_detail/$authorId") },
-                onTapBook    = { bookId   -> navController.navigate("library_book_detail/$bookId") },
+                onTapAuthor  = { _ ->
+                    if (post.libraryAuthorId.isNotBlank())
+                        navController.navigate("author_detail/${post.libraryAuthorId}")
+                    else if (post.authorName.isNotBlank())
+                        navController.navigate("author_quotes/${URLEncoder.encode(post.authorName, "UTF-8")}")
+                },
+                onTapBook    = { _ ->
+                    if (post.libraryBookId.isNotBlank())
+                        navController.navigate("library_book_detail/${post.libraryBookId}")
+                    else if (post.bookName.isNotBlank())
+                        navController.navigate("book_quotes/${URLEncoder.encode(post.bookName, "UTF-8")}")
+                },
             )
         }
     }

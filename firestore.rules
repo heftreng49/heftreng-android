@@ -71,7 +71,9 @@ service cloud.firestore {
 
     // ─── FEED ─────────────────────────────────────────────────
     match /feed/{postId} {
-      allow read: if canViewContent(resource.data.uid);
+      // library_quote postları herkese açık (Kütüphane sekmesi)
+      allow read: if resource.data.get('type', '') == 'library_quote'
+                  || canViewContent(resource.data.uid);
       allow create: if isAuth() && notBanned()
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.likes == 0
