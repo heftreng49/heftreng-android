@@ -41,17 +41,30 @@ class LibraryRepository @Inject constructor(
 
     private suspend fun findOrCreateAuthor(name: String): String {
         return try {
-            // Büyük/küçük harf duyarsız arama — "Jan Yekta" ve "jan yekta" aynı kayda eşlenir
-            val snap = firestore.collection("authors")
-                .whereEqualTo("nameLower", name.lowercase())
+            val nameLower = name.lowercase().trim()
+            // Önce nameLower ile ara
+            var snap = firestore.collection("authors")
+                .whereEqualTo("nameLower", nameLower)
                 .limit(1).get().await()
+            // Bulamazsa name field ile ara (admin panelinden eklenen yazarlar nameLower olmayabilir)
+            if (snap.isEmpty) {
+                snap = firestore.collection("authors")
+                    .whereEqualTo("name", name.trim())
+                    .limit(1).get().await()
+            }
             if (!snap.isEmpty) {
-                snap.documents[0].id
+                val doc = snap.documents[0]
+                // nameLower eksikse retroaktif yaz
+                if (doc.getString("nameLower") == null) {
+                    try { firestore.collection("authors").document(doc.id)
+                        .update("nameLower", nameLower) } catch (_: Exception) {}
+                }
+                doc.id
             } else {
                 firestore.collection("authors").add(
                     hashMapOf(
-                        "name"          to name,
-                        "nameLower"     to name.lowercase(),
+                        "name"          to name.trim(),
+                        "nameLower"     to nameLower,
                         "bio"           to "",
                         "photoURL"      to "",
                         "birthYear"     to 0,
@@ -74,12 +87,25 @@ class LibraryRepository @Inject constructor(
         authorName: String,
     ): String {
         return try {
-            // Büyük/küçük harf duyarsız arama — "Xem" ve "xem" aynı kitaba eşlenir
-            val snap = firestore.collection("library_books")
-                .whereEqualTo("titleLower", title.lowercase())
+            val titleLower = title.lowercase().trim()
+            // Önce titleLower ile ara
+            var snap = firestore.collection("library_books")
+                .whereEqualTo("titleLower", titleLower)
                 .limit(1).get().await()
+            // Bulamazsa title field ile ara (admin panelinden eklenen kitaplar titleLower olmayabilir)
+            if (snap.isEmpty) {
+                snap = firestore.collection("library_books")
+                    .whereEqualTo("title", title.trim())
+                    .limit(1).get().await()
+            }
             if (!snap.isEmpty) {
-                snap.documents[0].id
+                val doc = snap.documents[0]
+                // titleLower eksikse retroaktif yaz
+                if (doc.getString("titleLower") == null) {
+                    try { firestore.collection("library_books").document(doc.id)
+                        .update("titleLower", titleLower) } catch (_: Exception) {}
+                }
+                doc.id
             } else {
                 val bookId = firestore.collection("library_books").add(
                     hashMapOf(
