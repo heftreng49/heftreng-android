@@ -282,6 +282,7 @@ fun AuthorDetailScreen(
             initialAuthor = author?.name ?: "",
             onDismiss     = { showAddQuoteFab = false },
             onConfirm     = { payload ->
+                // 1. Feed'e yaz (ensureAuthorAndBook + library_books/quotes dahil)
                 feedVm.createPost(
                     text       = "",
                     quoteText  = payload.text,
@@ -289,6 +290,16 @@ fun AuthorDetailScreen(
                     bookName   = payload.bookName,
                     type       = "library_quote",
                 )
+                // 2. Kitap bu yazara aitse direkt vm.addBookQuote → anında state güncellenir
+                val matchedBook = books.firstOrNull {
+                    it.title.trim().equals(payload.bookName.trim(), ignoreCase = true)
+                }
+                if (matchedBook != null) {
+                    vm.addBookQuote(matchedBook, payload.text)
+                } else {
+                    // Kitap eşleşmesi yoksa authorQuotes state'ini yenile
+                    vm.loadAuthor(authorId)
+                }
                 showAddQuoteFab = false
             },
         )
