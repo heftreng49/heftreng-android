@@ -807,14 +807,31 @@ class FeedViewModel @Inject constructor(
             val seenIds = mutableSetOf<String>()
             val result  = mutableListOf<Post>()
 
-            // ── 1. collectionGroup("quotes") — index gerektirmez, sadece limit
+            // ── 1. feed'den type=="library_quote" — whereEqualTo tek başına,
+            //       orderBy YOK → Firestore composite index gerekmez
             try {
-                val snap = firestore.collectionGroup("quotes")
-                    .limit(500).get().await()
+                val snap = firestore.collection("feed")
+                    .whereEqualTo("type", "library_quote")
+                    .get().await()
                 snap.documents.forEach { doc ->
-                    val d    = doc.data ?: return@forEach
-                    val text = d["text"] as? String ?: return@forEach
                     if (seenIds.add(doc.id)) {
+                        doc.toPost()?.let { result.add(it) }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("FeedVM", "feed type query: ${e.message}")
+            }
+
+            // ── 2. library_books/{id}/quotes collectionGroup — orderBy YOK
+            try {
+                val cgSnap = firestore.collectionGroup("quotes").get().await()
+                cgSnap.documents.forEach { doc ->
+                    val d    = doc.data ?: return@forEach
+                    val text = (d["text"] as? String)?.takeIf { it.isNotBlank() } ?: return@forEach
+                    // feedPostId varsa feed'deki versiyonla zaten seenIds'de
+                    val feedPostId = d["feedPostId"] as? String
+                    if (feedPostId != null && seenIds.contains(feedPostId)) return@forEach
+                    if (seenIds.add("cg_${doc.id}")) {
                         result.add(Post(
                             id            = doc.id,
                             uid           = d["uid"] as? String ?: "",
@@ -831,34 +848,10 @@ class FeedViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                android.util.Log.w("FeedVM", "collectionGroup quotes: ${e.message}")
+                android.util.Log.w("FeedVM", "collectionGroup: ${e.message}")
             }
 
-            // ── 2. feed koleksiyonundan orderBy olmadan çek — index gerekmez
-            try {
-                val feedSnap = firestore.collection("feed")
-                    .limit(500).get().await()
-                feedSnap.documents.forEach { doc ->
-                    val d = doc.data ?: return@forEach
-                    // Sadece alıntı tipindeki postları al
-                    val type      = d["type"] as? String ?: ""
-                    val quoteText = d["quoteText"] as? String
-                        ?: (d["quote"] as? Map<*, *>)?.get("text") as? String
-                        ?: ""
-                    val bookName  = d["bookName"] as? String
-                        ?: (d["quote"] as? Map<*, *>)?.get("book") as? String
-                        ?: ""
-                    if ((type == "library_quote" || quoteText.isNotBlank()) && seenIds.add(doc.id)) {
-                        doc.toPost()?.let { result.add(it) }
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("FeedVM", "feed fallback: ${e.message}")
-            }
-
-            if (result.isNotEmpty()) {
-                _libraryQuotes.value = result.sortedByDescending { it.ts?.seconds ?: 0L }
-            }
+            _libraryQuotes.value = result.sortedByDescending { it.ts?.seconds ?: 0L }
         }
     }
 }
