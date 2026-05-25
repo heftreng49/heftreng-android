@@ -104,6 +104,8 @@ fun AuthorDetailScreen(
 
     var selectedTab       by remember { mutableIntStateOf(0) }
     var showAddQuoteFab   by remember { mutableStateOf(false) }
+    var showAddQuoteBook  by remember { mutableStateOf(false) }
+    var quoteTargetBook   by remember { mutableStateOf<com.heftreng.app.data.model.LibraryBook?>(null) }
     var showAddReviewFab  by remember { mutableStateOf(false) }
     var reviewTargetBook  by remember { mutableStateOf<com.heftreng.app.data.model.LibraryBook?>(null) }
     var showBookPicker    by remember { mutableStateOf(false) }
@@ -276,31 +278,28 @@ fun AuthorDetailScreen(
         }
     }
 
-    // ── Alıntı FAB Dialog (yazar adı pre-filled) ──────────────────────
+    // ── Alıntı FAB: önce kitap seç, sonra alıntı yaz ────────────────
+    // Kitap sayfasıyla aynı mantık: vm.addBookQuote → state anında güncellenir
     if (showAddQuoteFab) {
-        QuoteDialog(
-            initialAuthor = author?.name ?: "",
-            onDismiss     = { showAddQuoteFab = false },
-            onConfirm     = { payload ->
-                // 1. Feed'e yaz (ensureAuthorAndBook + library_books/quotes dahil)
-                feedVm.createPost(
-                    text       = "",
-                    quoteText  = payload.text,
-                    authorName = payload.authorName,
-                    bookName   = payload.bookName,
-                    type       = "library_quote",
-                )
-                // 2. Kitap bu yazara aitse direkt vm.addBookQuote → anında state güncellenir
-                val matchedBook = books.firstOrNull {
-                    it.title.trim().equals(payload.bookName.trim(), ignoreCase = true)
-                }
-                if (matchedBook != null) {
-                    vm.addBookQuote(matchedBook, payload.text)
-                } else {
-                    // Kitap eşleşmesi yoksa authorQuotes state'ini yenile
-                    vm.loadAuthor(authorId)
-                }
-                showAddQuoteFab = false
+        BookPickerDialog(
+            books    = books,
+            language = language,
+            onDismiss = { showAddQuoteFab = false },
+            onSelect  = { book ->
+                quoteTargetBook  = book
+                showAddQuoteFab  = false
+                showAddQuoteBook = true
+            },
+        )
+    }
+    if (showAddQuoteBook && quoteTargetBook != null) {
+        AddQuoteDialog(
+            bookTitle = quoteTargetBook!!.title,
+            onDismiss = { showAddQuoteBook = false; quoteTargetBook = null },
+            onSubmit  = { text ->
+                vm.addBookQuote(quoteTargetBook!!, text)
+                showAddQuoteBook = false
+                quoteTargetBook  = null
             },
         )
     }
