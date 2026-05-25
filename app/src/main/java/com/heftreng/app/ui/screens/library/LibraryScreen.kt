@@ -102,8 +102,8 @@ fun LibraryScreen(
     LaunchedEffect(Unit) {
         loading = true
 
-        // Alintılar: FeedViewModel.loadLibraryQuotes() ile feed'den PostCard ile gösterilir
-        feedVm.loadLibraryQuotes()
+        // Alintılar paralel başlatılır; loading=false ANCAK tamamlandıktan sonra olur
+        val quotesJob = launch { feedVm.loadLibraryQuotesAsync() }
 
         // Incelemeler: library_books/{id}/reviews alt koleksiyonundan oku
         try {
@@ -151,6 +151,7 @@ fun LibraryScreen(
             android.util.Log.e("LibraryScreen", "books load error: ${e.message}")
         }
 
+        quotesJob.join()  // quotes yüklenene kadar bekle
         loading = false
     }
 

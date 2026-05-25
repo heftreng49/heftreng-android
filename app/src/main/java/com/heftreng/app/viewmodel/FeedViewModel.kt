@@ -802,10 +802,10 @@ class FeedViewModel @Inject constructor(
 
     // ── Kütüphane alıntı postları ─────────────────────────────────────────
     // Feed'den bookName dolu postları çeker; LibraryScreen PostCard ile gösterir.
-    fun loadLibraryQuotes() {
-        viewModelScope.launch {
-            val seenIds = mutableSetOf<String>()
-            val result  = mutableListOf<Post>()
+    // suspend versiyonu — LibraryScreen LaunchedEffect join() ile bekleyebilir
+    suspend fun loadLibraryQuotesAsync() {
+        val seenIds = mutableSetOf<String>()
+        val result  = mutableListOf<Post>()
 
             // ── 1. feed'den type=="library_quote" — whereEqualTo tek başına,
             //       orderBy YOK → Firestore composite index gerekmez
@@ -852,6 +852,39 @@ class FeedViewModel @Inject constructor(
             }
 
             _libraryQuotes.value = result.sortedByDescending { it.ts?.seconds ?: 0L }
-        }
+
+            // ── 3. Eski nested quote map'i olan kayıtlar için fallback
+            //       (type alanı YOK veya boş, ama quote:{author,book,text} map var)
+            try {
+                val legacySnap = firestore.collection("feed").get().await()
+                legacySnap.documents.forEach { doc ->
+                    if (seenIds.contains(doc.id)) return@forEach
+                    val d = doc.data ?: return@forEach
+                    val type = d["type"] as? String ?: ""
+                    if (type == "library_quote") return@forEach  // zaten 1. kolda alındı
+                    // nested quote map veya flat quoteText kontrolü
+                    val quoteObj   = d["quote"] as? Map<*, *>
+                    val text       = (quoteObj?.get("text")   as? String)?.takeIf { it.isNotBlank() }
+                        ?: (d["quoteText"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: return@forEach
+                    val bookName   = (quoteObj?.get("book")   as? String)?.takeIf { it.isNotBlank() }
+                        ?: d["bookName"] as? String ?: ""
+                    val authorName = (quoteObj?.get("author") as? String)?.takeIf { it.isNotBlank() }
+                        ?: d["authorName"] as? String ?: ""
+                    if (bookName.isBlank() && authorName.isBlank()) return@forEach
+                    if (seenIds.add(doc.id)) {
+                        doc.toPost()?.let { result.add(it) }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("FeedVM", "legacy quote fallback: ${e.message}")
+            }
+
+            _libraryQuotes.value = result.sortedByDescending { it.ts?.seconds ?: 0L }
+    }
+
+    // Fire-and-forget wrapper — geriye dönük uyumluluk için korunur
+    fun loadLibraryQuotes() {
+        viewModelScope.launch { loadLibraryQuotesAsync() }
     }
 }

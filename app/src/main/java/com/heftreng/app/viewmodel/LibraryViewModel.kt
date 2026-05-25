@@ -140,14 +140,63 @@ class LibraryViewModel @Inject constructor(
     }
 
     private suspend fun loadAuthorQuotes(authorId: String) {
-        // authors/{authorId} için tüm library_books altındaki quotes collection group
-        val snap = firestore.collectionGroup("quotes")
-            .whereEqualTo("authorId", authorId)
-            .orderBy("ts", Query.Direction.DESCENDING)
-            .limit(50).get().await()
-        _authorQuotes.value = snap.documents.mapNotNull { doc ->
-            doc.toObject(BookQuote::class.java)?.copy(id = doc.id)
+        val allQuotes = mutableListOf<BookQuote>()
+        val seenIds   = mutableSetOf<String>()
+
+        // ── 1. library_books/{id}/quotes collectionGroup
+        try {
+            val snap = firestore.collectionGroup("quotes")
+                .whereEqualTo("authorId", authorId)
+                .orderBy("ts", Query.Direction.DESCENDING)
+                .limit(50).get().await()
+            snap.documents.forEach { doc ->
+                val q = doc.toObject(BookQuote::class.java)?.copy(id = doc.id)
+                if (q != null && seenIds.add(doc.id)) {
+                    allQuotes.add(q)
+                    q.feedPostId.takeIf { it.isNotBlank() }?.let { seenIds.add(it) }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("LibraryVM", "loadAuthorQuotes collectionGroup: ${e.message}")
         }
+
+        // ── 2. feed fallback — libraryAuthorId eşleşen postları da çek
+        //       (alt koleksiyona yazılamayan eski kayıtlar burada yakalanır)
+        try {
+            val feedSnap = firestore.collection("feed")
+                .whereEqualTo("libraryAuthorId", authorId)
+                .get().await()
+            feedSnap.documents.forEach { doc ->
+                if (seenIds.contains(doc.id)) return@forEach
+                val d    = doc.data ?: return@forEach
+                // nested quote map veya flat quoteText
+                val quoteObj = d["quote"] as? Map<*, *>
+                val text  = (quoteObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
+                    ?: (d["quoteText"] as? String)?.takeIf { it.isNotBlank() }
+                    ?: return@forEach
+                if (seenIds.add(doc.id)) {
+                    allQuotes.add(BookQuote(
+                        id              = doc.id,
+                        bookId          = d["libraryBookId"]  as? String ?: "",
+                        authorId        = authorId,
+                        bookTitle       = (d["bookName"]      as? String)?.takeIf { it.isNotBlank() }
+                                          ?: quoteObj?.get("book") as? String ?: "",
+                        authorName      = (d["authorName"]    as? String)?.takeIf { it.isNotBlank() }
+                                          ?: quoteObj?.get("author") as? String ?: "",
+                        text            = text,
+                        uid             = d["uid"]            as? String ?: "",
+                        userDisplayName = (d["displayName"]   as? String)?.takeIf { it.isNotBlank() }
+                                          ?: d["name"] as? String ?: "",
+                        userPhotoURL    = d["photoURL"]       as? String ?: "",
+                        ts              = d["ts"]             as? com.google.firebase.Timestamp,
+                    ))
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("LibraryVM", "loadAuthorQuotes feed fallback: ${e.message}")
+        }
+
+        _authorQuotes.value = allQuotes.sortedByDescending { it.ts?.seconds ?: 0L }
     }
 
     private suspend fun loadAuthorReviews(authorId: String) {

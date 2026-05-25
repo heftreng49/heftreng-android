@@ -193,6 +193,77 @@ async function syncFeedQuotesToLibrary() {
 }
 
 // ────────────────────────────────────────────────────────────────
+//  ADIM 4 — feed: eski alıntı postlarına type="library_quote" yaz
+//
+//  Hedef kayıtlar:
+//    a) nested quote map'i olan  (quote.text dolu)
+//    b) flat quoteText dolu olan
+//  Her ikisinde de bookName veya authorName bulunmalı.
+//  type zaten "library_quote" olanlar atlanır.
+// ────────────────────────────────────────────────────────────────
+async function fixQuoteTypes() {
+  console.log("\n── ADIM 4: feed → type=\"library_quote\" eksik alıntıları düzelt ──");
+
+  // Firestore whereEqualTo("type","") güvenilmez, tüm feed çekiyoruz
+  // (mevcut migration zaten bunu yapıyor, tutarlı)
+  const feedSnap = await db.collection("feed").get();
+
+  let fixed = 0;
+  let skipped = 0;
+
+  // Firestore batch limiti 500; büyük koleksiyonlar için parçalı commit
+  let batch = db.batch();
+  let batchCount = 0;
+
+  for (const doc of feedSnap.docs) {
+    const d = doc.data();
+
+    // Zaten doğru type varsa geç
+    if (d.type === "library_quote") {
+      skipped++;
+      continue;
+    }
+
+    // Alıntı metni: nested map veya flat
+    const quoteObj   = d.quote;
+    const quoteText  = (
+      (quoteObj?.text   || "").trim() ||
+      (d.quoteText      || "").trim()
+    );
+    const bookName   = (
+      (quoteObj?.book   || "").trim() ||
+      (d.bookName       || "").trim()
+    );
+    const authorName = (
+      (quoteObj?.author || "").trim() ||
+      (d.authorName     || "").trim()
+    );
+
+    // Alıntı metni yoksa veya kitap+yazar ikisi de yoksa bu bir alıntı postu değil
+    if (!quoteText || (!bookName && !authorName)) {
+      skipped++;
+      continue;
+    }
+
+    batch.update(doc.ref, { type: "library_quote" });
+    fixed++;
+    batchCount++;
+    console.log(`  [FIX] ${doc.id} — "${(quoteText).slice(0, 60)}..."`);
+
+    // 500 limitine gelince commit et, yeni batch başlat
+    if (batchCount === 500) {
+      await batch.commit();
+      batch = db.batch();
+      batchCount = 0;
+    }
+  }
+
+  if (batchCount > 0) await batch.commit();
+
+  console.log(`\n  Güncellendi: ${fixed} | Atlandı (zaten doğru veya alıntı değil): ${skipped}`);
+}
+
+// ────────────────────────────────────────────────────────────────
 //  Ana akış
 // ────────────────────────────────────────────────────────────────
 (async () => {
@@ -200,6 +271,7 @@ async function syncFeedQuotesToLibrary() {
     await fixAuthors();
     await fixBooks();
     await syncFeedQuotesToLibrary();
+    await fixQuoteTypes();
     console.log("\n✅ Migration tamamlandı.");
   } catch (e) {
     console.error("❌ Hata:", e);
