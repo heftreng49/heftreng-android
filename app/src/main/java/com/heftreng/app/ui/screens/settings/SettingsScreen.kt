@@ -270,6 +270,26 @@ fun SettingsScreen(
                 }
             }
 
+            // ── Hesap Ekle ──────────────────────────────────────────────
+            item {
+                SettingsSection {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { authVm.signOut() }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.PersonAdd, null, tint = Primary, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(14.dp))
+                        Text(
+                            if (language == "ku") "Hesabek din lê zêde bike" else "Hesap ekle",
+                            color = OnBackground, fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
+            }
+
             // ── Hesap Değiştir ───────────────────────────────────────────
             if (savedAccounts.size > 1) {
                 item {
@@ -322,7 +342,7 @@ fun SettingsScreen(
     // ── Şifre Değiştir Dialog ────────────────────────────────────────────────
     // ── Hesap Değiştirme Sheet ───────────────────────────────────────────
     if (showAccountsSheet) {
-        AccountSwitcherSheet(
+        com.heftreng.app.navigation.InstagramAccountSwitcherDialog(
             accounts     = savedAccounts,
             currentEmail = authVm.currentEmail,
             language     = language,
@@ -331,6 +351,10 @@ fun SettingsScreen(
                 authVm.switchAccount(account, context)
             },
             onRemove     = { email -> authVm.removeAccount(email) },
+            onAddAccount = {
+                showAccountsSheet = false
+                authVm.signOut()
+            },
             onDismiss    = { showAccountsSheet = false },
         )
     }

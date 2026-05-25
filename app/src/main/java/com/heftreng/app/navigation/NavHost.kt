@@ -64,6 +64,14 @@ import com.heftreng.app.viewmodel.AuthViewModel
 import com.heftreng.app.viewmodel.MessagesViewModel
 import com.heftreng.app.viewmodel.NotificationsViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.window.Dialog
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.common.api.ApiException
 import kotlinx.coroutines.launch
 
 // ── Routes ───────────────────────────────────────────────────────────────────
@@ -106,7 +114,7 @@ private val bottomNavRoutes = setOf(
 )
 
 // ── NavHost ───────────────────────────────────────────────────────────────────
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HeftrangNavHost(initialRoute: String? = null) {
     val navController  = rememberNavController()
@@ -118,7 +126,33 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val appConfigVm    : AppConfigViewModel     = hiltViewModel()
 
     val currentUser by authVm.currentUser.collectAsState()
-    val isDark      by settingsVm.darkMode.collectAsState()
+    val isDark         by settingsVm.darkMode.collectAsState()
+    val savedAccounts  by authVm.savedAccounts.collectAsState()
+    val switchToGoogle by authVm.switchToGoogle.collectAsState()
+    var showAccountSwitch by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // Google ile hesap geçişi launcher
+    val switchGoogleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                account.idToken?.let { authVm.signInWithGoogle(it) }
+            } catch (_: ApiException) {}
+        }
+    }
+    LaunchedEffect(switchToGoogle) {
+        if (switchToGoogle) {
+            val client = authVm.getGoogleSignInClient(context)
+            client.signOut().addOnCompleteListener {
+                switchGoogleLauncher.launch(client.signInIntent)
+            }
+            authVm.clearSwitchToGoogle()
+        }
+    }
     val language    by settingsVm.language.collectAsState()
     val totalUnread by msgsVm.totalUnread.collectAsState()
     val appConfig   by appConfigVm.config.collectAsState()
@@ -325,6 +359,45 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                                         }) {
                                             Icon(if (selected) item.iconSel else item.icon, item.label)
                                         }
+                                    } else if (item.route == "profile/me") {
+                                        // ── Instagram gibi: profil ikonu = avatar, uzun bas = hesap değiştir
+                                        val avatarUrl = currentUser?.photoUrl?.toString()
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .clip(CircleShape)
+                                                .background(if (selected) Amber.copy(alpha = 0.2f) else Muted.copy(alpha = 0.15f))
+                                                .combinedClickable(
+                                                    onClick      = {},   // NavigationBarItem onClick ile handle ediliyor
+                                                    onLongClick  = { if (savedAccounts.size > 1) showAccountSwitch = true },
+                                                ),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            if (!avatarUrl.isNullOrBlank()) {
+                                                AsyncImage(
+                                                    model              = avatarUrl,
+                                                    contentDescription = null,
+                                                    modifier           = Modifier.fillMaxSize(),
+                                                    contentScale       = ContentScale.Crop,
+                                                )
+                                            } else {
+                                                Icon(
+                                                    if (selected) item.iconSel else item.icon,
+                                                    item.label,
+                                                    modifier = Modifier.size(20.dp),
+                                                )
+                                            }
+                                        }
+                                        // Halka: aktif göstergesi
+                                        if (selected) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .padding(top = 2.dp)
+                                                    .size(4.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Amber),
+                                            )
+                                        }
                                     } else {
                                         Icon(if (selected) item.iconSel else item.icon, item.label)
                                     }
@@ -345,6 +418,24 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 }
             },
         ) { innerPadding ->
+            // ── Hesap Değiştirme Dialog (Instagram stili) ─────────────────
+            if (showAccountSwitch) {
+                InstagramAccountSwitcherDialog(
+                    accounts     = savedAccounts,
+                    currentEmail = currentUser?.email ?: "",
+                    language     = language,
+                    onSelect     = { account ->
+                        showAccountSwitch = false
+                        authVm.switchAccount(account, context)
+                    },
+                    onRemove     = { email -> authVm.removeAccount(email) },
+                    onAddAccount = {
+                        showAccountSwitch = false
+                        authVm.signOut()
+                    },
+                    onDismiss    = { showAccountSwitch = false },
+                )
+            }
             NavHost(
                 navController    = navController,
                 startDestination = Screen.Feed.route,
@@ -659,6 +750,175 @@ fun DrawerContent(
                 Icon(Icons.Outlined.Logout, null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Derketin / Çıkış", color = Color(0xFFEF4444), fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Instagram Stili Hesap Değiştirici
+//  Tetikleme: Bottom bar profil ikonuna uzun basış
+// ─────────────────────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun InstagramAccountSwitcherDialog(
+    accounts    : List<AuthViewModel.SavedAccount>,
+    currentEmail: String,
+    language    : String,
+    onSelect    : (AuthViewModel.SavedAccount) -> Unit,
+    onRemove    : (String) -> Unit,
+    onAddAccount: () -> Unit,
+    onDismiss   : () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape         = RoundedCornerShape(20.dp),
+            color         = HeftSurface,
+            tonalElevation = 8.dp,
+            modifier       = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(vertical = 8.dp)) {
+
+                // Başlık
+                Text(
+                    if (language == "ku") "Hesabê hilbijêre" else "Hesap seç",
+                    modifier   = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                    color      = OnBackground,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 16.sp,
+                )
+
+                HorizontalDivider(color = Divider)
+
+                // Hesap listesi
+                accounts.forEach { account ->
+                    val isCurrent = account.email == currentEmail
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (!isCurrent)
+                                    Modifier.clickable { onSelect(account) }
+                                else Modifier
+                            )
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        // Avatar
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(CircleShape)
+                                .background(Primary.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (account.photoURL.isNotBlank()) {
+                                AsyncImage(
+                                    model              = account.photoURL,
+                                    contentDescription = null,
+                                    modifier           = Modifier.fillMaxSize(),
+                                    contentScale       = ContentScale.Crop,
+                                )
+                            } else {
+                                Text(
+                                    account.displayName.firstOrNull()?.uppercase() ?: "?",
+                                    color      = Primary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize   = 18.sp,
+                                )
+                            }
+                            // Aktif yeşil nokta
+                            if (isCurrent) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .size(13.dp)
+                                        .clip(CircleShape)
+                                        .background(HeftSurface)
+                                        .padding(2.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF22C55E))
+                                    )
+                                }
+                            }
+                        }
+
+                        // İsim + email
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                account.displayName.ifBlank { account.email.substringBefore("@") },
+                                color      = OnBackground,
+                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                                fontSize   = 15.sp,
+                                maxLines   = 1,
+                            )
+                            Text(
+                                account.email,
+                                color    = Muted,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                            )
+                        }
+
+                        // Aktif checkmark veya kaldır butonu
+                        if (isCurrent) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint     = Amber,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        } else {
+                            IconButton(
+                                onClick  = { onRemove(account.email) },
+                                modifier = Modifier.size(34.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = null,
+                                    tint     = Muted,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    }
+                    HorizontalDivider(
+                        color    = Divider,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
+
+                // Hesap ekle butonu
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onAddAccount() }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Box(
+                        modifier         = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .background(SurfaceVar),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Default.Add, null, tint = OnBackground, modifier = Modifier.size(22.dp))
+                    }
+                    Text(
+                        if (language == "ku") "Hesabekî din lê zêde bike" else "Hesap ekle",
+                        color      = OnBackground,
+                        fontWeight = FontWeight.Medium,
+                        fontSize   = 15.sp,
+                    )
+                }
             }
         }
     }
