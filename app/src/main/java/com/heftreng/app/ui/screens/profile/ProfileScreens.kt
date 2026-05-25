@@ -13,7 +13,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,7 +87,9 @@ fun ProfileScreen(
     val isPrivate      = user?.isPrivate ?: false
     val canSeeContent  = isMe || !isPrivate || isFollowing
 
-    var selectedTab by remember { mutableIntStateOf(0) }
+    val pagerState  = rememberPagerState { tabs.size }
+    val selectedTab by derivedStateOf { pagerState.currentPage }
+    val scope       = rememberCoroutineScope()
     val tabs = listOf(
         Strings.posts(language),
         if (ku) "Pirtûk & Rêze" else "Kitaplar & Seriler",
@@ -203,7 +211,7 @@ fun ProfileScreen(
                     tabs.forEachIndexed { i, title ->
                         Tab(
                             selected               = selectedTab == i,
-                            onClick                = { selectedTab = i },
+                            onClick                = { scope.launch { pagerState.animateScrollToPage(i) } },
                             text                   = { Text(title, fontSize = 12.sp) },
                             selectedContentColor   = Amber,
                             unselectedContentColor = Muted,

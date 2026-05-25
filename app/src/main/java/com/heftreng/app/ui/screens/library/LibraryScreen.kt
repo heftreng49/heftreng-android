@@ -24,7 +24,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
@@ -81,7 +87,9 @@ fun LibraryScreen(
         Strings.libraryTabAuthors(language),
         Strings.libraryTabBooks(language),
     )
-    var selectedTab by remember { mutableIntStateOf(0) }
+    val pagerState  = rememberPagerState { tabs.size }
+    val selectedTab by derivedStateOf { pagerState.currentPage }
+    val scope       = rememberCoroutineScope()
 
     val db = remember { FirebaseFirestore.getInstance() }
 
@@ -226,7 +234,7 @@ fun LibraryScreen(
                 tabs.forEachIndexed { index, title ->
                     Tab(
                         selected = selectedTab == index,
-                        onClick  = { selectedTab = index },
+                        onClick  = { scope.launch { pagerState.animateScrollToPage(index) } },
                         text     = {
                             Text(
                                 text       = title,
@@ -245,11 +253,18 @@ fun LibraryScreen(
                     CircularProgressIndicator(color = Primary)
                 }
             } else {
-                when (selectedTab) {
-                    0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm)
-                    1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm)
-                    2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language)
-                    3 -> LibraryBooksTab(books = books, navController = navController, language = language)
+                HorizontalPager(
+                    state                   = pagerState,
+                    beyondViewportPageCount = 1,
+                    modifier                = Modifier.fillMaxSize(),
+                ) { page ->
+                    when (page) {
+                        0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm)
+                        1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm)
+                        2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language)
+                        3 -> LibraryBooksTab(books = books, navController = navController, language = language)
+                        else -> {}
+                    }
                 }
             }
         }

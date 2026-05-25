@@ -16,7 +16,13 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
 import java.net.URLEncoder
 import androidx.compose.ui.Alignment
@@ -97,7 +103,9 @@ fun FeedScreen(
     LaunchedEffect(Unit) { adsVm.loadAdConfigs() }
 
     // ── Feed sekme (Herkes / Takip edilenler) ────────────────────────────────
-    var selectedFeedTab by remember { mutableIntStateOf(0) }
+    val feedPagerState = rememberPagerState { feedTabs.size }
+    val selectedFeedTab by derivedStateOf { feedPagerState.currentPage }
+    val feedScope       = rememberCoroutineScope()
     val ku = language == "ku"
     val feedTabs = listOf(
         Strings.filterAll(language),
@@ -227,7 +235,7 @@ fun FeedScreen(
                 feedTabs.forEachIndexed { i, title ->
                     Tab(
                         selected               = selectedFeedTab == i,
-                        onClick                = { selectedFeedTab = i },
+                        onClick                = { feedScope.launch { feedPagerState.animateScrollToPage(i) } },
                         text                   = { Text(title, fontSize = 13.sp, fontWeight = if (selectedFeedTab == i) FontWeight.Bold else FontWeight.Normal) },
                         selectedContentColor   = Primary,
                         unselectedContentColor = Muted,

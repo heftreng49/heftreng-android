@@ -26,7 +26,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
@@ -102,10 +108,11 @@ fun AuthorDetailScreen(
     val loading     by vm.loading.collectAsState()
     val isFollowing by vm.isFollowingAuthor.collectAsState()
 
-    var selectedTab       by remember { mutableIntStateOf(0) }
+    val authorTabs  = listOf("Kitapları", "Alıntılar", "İncelemeler")
+    val pagerState  = rememberPagerState { authorTabs.size }
+    val selectedTab by derivedStateOf { pagerState.currentPage }
+    val scope       = rememberCoroutineScope()
     var showAddQuoteFab   by remember { mutableStateOf(false) }
-    var showAddQuoteBook  by remember { mutableStateOf(false) }
-    var quoteTargetBook   by remember { mutableStateOf<com.heftreng.app.data.model.LibraryBook?>(null) }
     var showAddReviewFab  by remember { mutableStateOf(false) }
     var reviewTargetBook  by remember { mutableStateOf<com.heftreng.app.data.model.LibraryBook?>(null) }
     var showBookPicker    by remember { mutableStateOf(false) }
@@ -173,133 +180,131 @@ fun AuthorDetailScreen(
                 CircularProgressIndicator(color = Primary)
             }
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(bottom = 24.dp),
-            ) {
+            Column(modifier = Modifier.fillMaxSize().padding(padding)) {
                 // ── Yazar Başlık / Profil ──────────────────────────────────
-                item {
-                    AuthorHeaderSection(
-                        photoURL    = author?.photoURL ?: "",
-                        name        = author?.name ?: "",
-                        bio         = author?.bio ?: "",
-                        birthYear   = author?.birthYear ?: 0,
-                        nationality = author?.nationality ?: "",
-                        bookCount   = author?.bookCount ?: 0,
-                        quoteCount  = author?.quoteCount ?: 0,
-                        reviewCount = author?.reviewCount ?: 0,
-                        followerCount = author?.followerCount ?: 0,
-                        isFollowing = isFollowing,
-                        onFollowClick = { vm.toggleFollowAuthor(authorId) },
-                    )
-                }
+                AuthorHeaderSection(
+                    photoURL      = author?.photoURL ?: "",
+                    name          = author?.name ?: "",
+                    bio           = author?.bio ?: "",
+                    birthYear     = author?.birthYear ?: 0,
+                    nationality   = author?.nationality ?: "",
+                    bookCount     = author?.bookCount ?: 0,
+                    quoteCount    = author?.quoteCount ?: 0,
+                    reviewCount   = author?.reviewCount ?: 0,
+                    followerCount = author?.followerCount ?: 0,
+                    isFollowing   = isFollowing,
+                    onFollowClick = { vm.toggleFollowAuthor(authorId) },
+                )
 
                 // ── Tab Bar ───────────────────────────────────────────────
-                item {
-                    TabRow(
-                        selectedTabIndex = selectedTab,
-                        containerColor   = HeftSurface,
-                        contentColor     = Primary,
-                        indicator        = { tabPositions ->
-                            TabRowDefaults.SecondaryIndicator(
-                                modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                                color    = Primary,
-                            )
-                        },
-                    ) {
-                        tabs.forEachIndexed { idx, label ->
-                            Tab(
-                                selected = selectedTab == idx,
-                                onClick  = { selectedTab = idx },
-                                text = {
-                                    Text(
-                                        label,
-                                        fontSize   = 13.sp,
-                                        fontWeight = if (selectedTab == idx) FontWeight.Bold else FontWeight.Normal,
-                                        color      = if (selectedTab == idx) Primary else Muted,
-                                    )
-                                }
-                            )
-                        }
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor   = HeftSurface,
+                    contentColor     = Primary,
+                    indicator        = { tabPositions ->
+                        TabRowDefaults.SecondaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                            color    = Primary,
+                        )
+                    },
+                ) {
+                    authorTabs.forEachIndexed { idx, label ->
+                        Tab(
+                            selected = selectedTab == idx,
+                            onClick  = { scope.launch { pagerState.animateScrollToPage(idx) } },
+                            text = {
+                                Text(
+                                    label,
+                                    fontSize   = 13.sp,
+                                    fontWeight = if (selectedTab == idx) FontWeight.Bold else FontWeight.Normal,
+                                    color      = if (selectedTab == idx) Primary else Muted,
+                                )
+                            }
+                        )
                     }
                 }
 
-                // ── Tab İçeriği ───────────────────────────────────────────
-                when (selectedTab) {
-                    // Kitaplar
-                    0 -> {
-                        if (books.isEmpty()) {
-                            item { EmptyState(Icons.Outlined.MenuBook, "Henüz kitap yok") }
-                        } else {
-                            items(books, key = { it.id }) { book ->
-                                LibraryBookCard(
-                                    book    = book,
-                                    onClick = { navController.navigate("library_book_detail/${book.id}") },
-                                )
+                // ── Tab İçeriği: HorizontalPager ──────────────────────────
+                HorizontalPager(
+                    state                   = pagerState,
+                    beyondViewportPageCount = 1,
+                    modifier                = Modifier.fillMaxSize(),
+                ) { page ->
+                    when (page) {
+                        0 -> LazyColumn(
+                            modifier       = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 80.dp),
+                        ) {
+                            if (books.isEmpty()) {
+                                item { EmptyState(Icons.Outlined.MenuBook, "Henüz kitap yok") }
+                            } else {
+                                items(books, key = { it.id }) { book ->
+                                    LibraryBookCard(
+                                        book    = book,
+                                        onClick = { navController.navigate("library_book_detail/${book.id}") },
+                                    )
+                                }
                             }
                         }
-                    }
-                    // Alıntılar
-                    1 -> {
-                        if (quotes.isEmpty()) {
-                            item { EmptyState(Icons.Default.FormatQuote, "Henüz alıntı yok") }
-                        } else {
-                            items(quotes, key = { it.id }) { quote ->
-                                val post = quote.toPost()
-                                PostCard(
-                                    post      = post,
-                                    language  = language,
-                                    onLike    = { feedVm.toggleLike(post) },
-                                    onSave    = { feedVm.toggleSave(post) },
-                                    onProfile = { navController.navigate("profile/${post.uid}") },
-                                    onComment = { navController.navigate("post/${post.id}") },
-                                    onShare   = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
-                                    onTapBook = { navController.navigate("library_book_detail/${quote.bookId}") },
-                                )
+                        1 -> LazyColumn(
+                            modifier       = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 80.dp),
+                        ) {
+                            if (quotes.isEmpty()) {
+                                item { EmptyState(Icons.Default.FormatQuote, "Henüz alıntı yok") }
+                            } else {
+                                items(quotes, key = { it.id }) { quote ->
+                                    val post = quote.toPost()
+                                    PostCard(
+                                        post      = post,
+                                        language  = language,
+                                        onLike    = { feedVm.toggleLike(post) },
+                                        onSave    = { feedVm.toggleSave(post) },
+                                        onProfile = { navController.navigate("profile/${post.uid}") },
+                                        onComment = { navController.navigate("post/${post.id}") },
+                                        onShare   = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
+                                        onTapBook = { navController.navigate("library_book_detail/${quote.bookId}") },
+                                    )
+                                }
                             }
                         }
-                    }
-                    // İncelemeler
-                    2 -> {
-                        if (reviews.isEmpty()) {
-                            item { EmptyState(Icons.Outlined.RateReview, "Henüz inceleme yok") }
-                        } else {
-                            items(reviews, key = { it.id }) { review ->
-                                BookReviewCard(
-                                    review   = review,
-                                    actions  = BookCardActions(vm = vm, navController = navController),
-                                    language = language,
-                                )
+                        2 -> LazyColumn(
+                            modifier       = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 80.dp),
+                        ) {
+                            if (reviews.isEmpty()) {
+                                item { EmptyState(Icons.Outlined.RateReview, "Henüz inceleme yok") }
+                            } else {
+                                items(reviews, key = { it.id }) { review ->
+                                    BookReviewCard(
+                                        review   = review,
+                                        actions  = BookCardActions(vm = vm, navController = navController),
+                                        language = language,
+                                    )
+                                }
                             }
                         }
+                        else -> {}
                     }
                 }
             }
         }
     }
 
-    // ── Alıntı FAB: önce kitap seç, sonra alıntı yaz ────────────────
-    // Kitap sayfasıyla aynı mantık: vm.addBookQuote → state anında güncellenir
+    // ── Alıntı FAB Dialog (yazar adı pre-filled) ──────────────────────
     if (showAddQuoteFab) {
-        BookPickerDialog(
-            books    = books,
-            language = language,
-            onDismiss = { showAddQuoteFab = false },
-            onSelect  = { book ->
-                quoteTargetBook  = book
-                showAddQuoteFab  = false
-                showAddQuoteBook = true
-            },
-        )
-    }
-    if (showAddQuoteBook && quoteTargetBook != null) {
-        AddQuoteDialog(
-            bookTitle = quoteTargetBook!!.title,
-            onDismiss = { showAddQuoteBook = false; quoteTargetBook = null },
-            onSubmit  = { text ->
-                vm.addBookQuote(quoteTargetBook!!, text)
-                showAddQuoteBook = false
-                quoteTargetBook  = null
+        QuoteDialog(
+            initialAuthor = author?.name ?: "",
+            onDismiss     = { showAddQuoteFab = false },
+            onConfirm     = { payload ->
+                feedVm.createPost(
+                    text       = "",
+                    quoteText  = payload.text,
+                    authorName = payload.authorName,
+                    bookName   = payload.bookName,
+                    type       = "library_quote",
+                )
+                showAddQuoteFab = false
             },
         )
     }
@@ -489,7 +494,10 @@ fun LibraryBookDetailScreen(
     val rlEntries by rlVm.entries.collectAsState()
     val currentRlStatus = remember(rlEntries, bookId) { rlVm.getLibraryBookStatus(bookId) }
 
-    var selectedTab      by remember { mutableIntStateOf(0) }
+    val bookTabs    = listOf("Alıntılar", "İncelemeler")
+    val pagerState2 = rememberPagerState { bookTabs.size }
+    val selectedTab by derivedStateOf { pagerState2.currentPage }
+    val scope2      = rememberCoroutineScope()
     var showAddQuote     by remember { mutableStateOf(false) }
     var showAddReview    by remember { mutableStateOf(false) }
     var showRlSheet      by remember { mutableStateOf(false) }
@@ -551,93 +559,99 @@ fun LibraryBookDetailScreen(
                 CircularProgressIndicator(color = Primary)
             }
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(bottom = 96.dp),
-            ) {
+            Column(modifier = Modifier.fillMaxSize().padding(padding)) {
                 // ── Kitap Başlık ────────────────────────────────────────
-                item {
-                    book?.let { b ->
-                        LibraryBookHeader(
-                            book          = b,
-                            onAuthorClick = {
-                                if (b.authorId.isNotBlank())
-                                    navController.navigate("author_detail/${b.authorId}")
-                            },
-                        )
-                        // ── Okuma Durumu Butonu ─────────────────────────────
-                        ReadingStatusButton(
-                            currentStatus = currentRlStatus,
-                            onClick       = { showRlSheet = true },
-                            modifier      = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 4.dp),
-                        )
-                    }
+                book?.let { b ->
+                    LibraryBookHeader(
+                        book          = b,
+                        onAuthorClick = {
+                            if (b.authorId.isNotBlank())
+                                navController.navigate("author_detail/${b.authorId}")
+                        },
+                    )
+                    ReadingStatusButton(
+                        currentStatus = currentRlStatus,
+                        onClick       = { showRlSheet = true },
+                        modifier      = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 4.dp),
+                    )
                 }
 
                 // ── Tab Bar ─────────────────────────────────────────────
-                item {
-                    TabRow(
-                        selectedTabIndex = selectedTab,
-                        containerColor   = HeftSurface,
-                        contentColor     = Primary,
-                        indicator        = { tabPositions ->
-                            TabRowDefaults.SecondaryIndicator(
-                                modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                                color    = Primary,
-                            )
-                        },
-                    ) {
-                        listOf("Alıntılar", "İncelemeler").forEachIndexed { idx, label ->
-                            Tab(
-                                selected = selectedTab == idx,
-                                onClick  = { selectedTab = idx },
-                                text = {
-                                    Text(
-                                        label,
-                                        fontSize   = 13.sp,
-                                        fontWeight = if (selectedTab == idx) FontWeight.Bold else FontWeight.Normal,
-                                        color      = if (selectedTab == idx) Primary else Muted,
-                                    )
-                                }
-                            )
-                        }
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor   = HeftSurface,
+                    contentColor     = Primary,
+                    indicator        = { tabPositions ->
+                        TabRowDefaults.SecondaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                            color    = Primary,
+                        )
+                    },
+                ) {
+                    bookTabs.forEachIndexed { idx, label ->
+                        Tab(
+                            selected = selectedTab == idx,
+                            onClick  = { scope2.launch { pagerState2.animateScrollToPage(idx) } },
+                            text = {
+                                Text(
+                                    label,
+                                    fontSize   = 13.sp,
+                                    fontWeight = if (selectedTab == idx) FontWeight.Bold else FontWeight.Normal,
+                                    color      = if (selectedTab == idx) Primary else Muted,
+                                )
+                            }
+                        )
                     }
                 }
 
-                // ── Tab İçeriği ─────────────────────────────────────────
-                if (selectedTab == 0) {
-                    // Alıntılar
-                    if (quotes.isEmpty()) {
-                        item { EmptyState(Icons.Default.FormatQuote, "Henüz alıntı yok.\nİlk alıntıyı sen ekle!") }
-                    } else {
-                        items(quotes, key = { it.id }) { quote ->
-                            val post = quote.toPost()
-                            PostCard(
-                                post      = post,
-                                language  = language,
-                                onLike    = { feedVm.toggleLike(post) },
-                                onSave    = { feedVm.toggleSave(post) },
-                                onProfile = { navController.navigate("profile/${post.uid}") },
-                                onComment = { navController.navigate("post/${post.id}") },
-                                onShare   = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
-                                onTapAuthor = { navController.navigate("author_detail/${quote.authorId}") },
-                            )
+                // ── Tab İçeriği: HorizontalPager ────────────────────────
+                HorizontalPager(
+                    state                   = pagerState2,
+                    beyondViewportPageCount = 1,
+                    modifier                = Modifier.fillMaxSize(),
+                ) { page ->
+                    when (page) {
+                        0 -> LazyColumn(
+                            modifier       = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 80.dp),
+                        ) {
+                            if (quotes.isEmpty()) {
+                                item { EmptyState(Icons.Default.FormatQuote, "Henüz alıntı yok.\nİlk alıntıyı sen ekle!") }
+                            } else {
+                                items(quotes, key = { it.id }) { quote ->
+                                    val post = quote.toPost()
+                                    PostCard(
+                                        post        = post,
+                                        language    = language,
+                                        onLike      = { feedVm.toggleLike(post) },
+                                        onSave      = { feedVm.toggleSave(post) },
+                                        onProfile   = { navController.navigate("profile/${post.uid}") },
+                                        onComment   = { navController.navigate("post/${post.id}") },
+                                        onShare     = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
+                                        onTapAuthor = { navController.navigate("author_detail/${quote.authorId}") },
+                                    )
+                                }
+                            }
                         }
-                    }
-                } else {
-                    // İncelemeler
-                    if (reviews.isEmpty()) {
-                        item { EmptyState(Icons.Outlined.RateReview, "Henüz inceleme yok.\nBu kitabı incele!") }
-                    } else {
-                        items(reviews, key = { it.id }) { review ->
-                            BookReviewCard(
-                                review   = review,
-                                actions  = BookCardActions(vm = vm, navController = navController),
-                                language = language,
-                            )
+                        1 -> LazyColumn(
+                            modifier       = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 80.dp),
+                        ) {
+                            if (reviews.isEmpty()) {
+                                item { EmptyState(Icons.Outlined.RateReview, "Henüz inceleme yok.\nBu kitabı incele!") }
+                            } else {
+                                items(reviews, key = { it.id }) { review ->
+                                    BookReviewCard(
+                                        review   = review,
+                                        actions  = BookCardActions(vm = vm, navController = navController),
+                                        language = language,
+                                    )
+                                }
+                            }
                         }
+                        else -> {}
                     }
                 }
             }
