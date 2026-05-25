@@ -805,46 +805,41 @@ class FeedViewModel @Inject constructor(
     fun loadLibraryQuotes() {
         viewModelScope.launch {
             try {
-                // İki query: yeni postlar (type=="library_quote") + eski postlar (bookName dolu)
-                // Firestore'da OR query olmadığı için ayrı ayrı çekip birleştiriyoruz
-                val newSnap = firestore.collection("feed")
-                    .whereEqualTo("type", "library_quote")
+                // collectionGroup("quotes") — her alıntı library_books/{id}/quotes'a yazılıyor
+                // Bu sorgu tüm kullanıcıların alıntılarını limit olmadan getirir
+                val snap = firestore.collectionGroup("quotes")
                     .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
                     .limit(200).get().await()
 
-                val oldSnap = firestore.collection("feed")
-                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(300).get().await()
-
-                val seenIds = mutableSetOf<String>()
-                val result = mutableListOf<Post>()
-
-                // Yeni tip postlar
-                newSnap.documents.forEach { doc ->
-                    if (seenIds.add(doc.id)) {
-                        doc.toPost()?.let { result.add(it) }
-                    }
+                val result = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    val text = d["text"] as? String ?: return@mapNotNull null
+                    Post(
+                        id            = doc.id,
+                        uid           = d["uid"] as? String ?: "",
+                        displayName   = d["userDisplayName"] as? String ?: "",
+                        name          = d["userDisplayName"] as? String ?: "",
+                        photoURL      = d["userPhotoURL"] as? String ?: "",
+                        quoteText     = text,
+                        bookName      = d["bookTitle"] as? String ?: "",
+                        authorName    = d["authorName"] as? String ?: "",
+                        libraryBookId = d["bookId"] as? String ?: "",
+                        ts            = d["ts"] as? com.google.firebase.Timestamp,
+                        type          = "library_quote",
+                    )
                 }
 
-                // Eski tip postlar — bookName ve quoteText dolu olanlar
-                oldSnap.documents.forEach { doc ->
-                    if (seenIds.contains(doc.id)) return@forEach
-                    val d = doc.data ?: return@forEach
-                    val qObj = d["quote"] as? Map<*, *>
-                    val bookName = (qObj?.get("book") as? String)?.takeIf { it.isNotBlank() }
-                        ?: (d["bookName"] as? String)?.takeIf { it.isNotBlank() }
-                        ?: return@forEach
-                    val quoteText = (qObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
-                        ?: (d["quoteText"] as? String)?.takeIf { it.isNotBlank() }
-                        ?: return@forEach
-                    if (seenIds.add(doc.id)) {
-                        doc.toPost()?.let { result.add(it) }
-                    }
-                }
-
-                _libraryQuotes.value = result.sortedByDescending { it.ts?.seconds ?: 0L }
+                _libraryQuotes.value = result
             } catch (e: Exception) {
                 e.printStackTrace()
+                // Firestore index henüz aktif değilse feed'den fallback
+                try {
+                    val fallback = firestore.collection("feed")
+                        .whereEqualTo("type", "library_quote")
+                        .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                        .limit(200).get().await()
+                    _libraryQuotes.value = fallback.documents.mapNotNull { it.toPost() }
+                } catch (_: Exception) {}
             }
         }
     }
