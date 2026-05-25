@@ -804,42 +804,60 @@ class FeedViewModel @Inject constructor(
     // Feed'den bookName dolu postları çeker; LibraryScreen PostCard ile gösterir.
     fun loadLibraryQuotes() {
         viewModelScope.launch {
+            val seenIds = mutableSetOf<String>()
+            val result  = mutableListOf<Post>()
+
+            // ── 1. collectionGroup("quotes") — index gerektirmez, sadece limit
             try {
-                // collectionGroup("quotes") — her alıntı library_books/{id}/quotes'a yazılıyor
-                // Bu sorgu tüm kullanıcıların alıntılarını limit olmadan getirir
                 val snap = firestore.collectionGroup("quotes")
-                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(200).get().await()
-
-                val result = snap.documents.mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    val text = d["text"] as? String ?: return@mapNotNull null
-                    Post(
-                        id            = doc.id,
-                        uid           = d["uid"] as? String ?: "",
-                        displayName   = d["userDisplayName"] as? String ?: "",
-                        name          = d["userDisplayName"] as? String ?: "",
-                        photoURL      = d["userPhotoURL"] as? String ?: "",
-                        quoteText     = text,
-                        bookName      = d["bookTitle"] as? String ?: "",
-                        authorName    = d["authorName"] as? String ?: "",
-                        libraryBookId = d["bookId"] as? String ?: "",
-                        ts            = d["ts"] as? com.google.firebase.Timestamp,
-                        type          = "library_quote",
-                    )
+                    .limit(500).get().await()
+                snap.documents.forEach { doc ->
+                    val d    = doc.data ?: return@forEach
+                    val text = d["text"] as? String ?: return@forEach
+                    if (seenIds.add(doc.id)) {
+                        result.add(Post(
+                            id            = doc.id,
+                            uid           = d["uid"] as? String ?: "",
+                            displayName   = d["userDisplayName"] as? String ?: "",
+                            name          = d["userDisplayName"] as? String ?: "",
+                            photoURL      = d["userPhotoURL"] as? String ?: "",
+                            quoteText     = text,
+                            bookName      = d["bookTitle"] as? String ?: d["bookName"] as? String ?: "",
+                            authorName    = d["authorName"] as? String ?: "",
+                            libraryBookId = d["bookId"] as? String ?: "",
+                            ts            = d["ts"] as? com.google.firebase.Timestamp,
+                            type          = "library_quote",
+                        ))
+                    }
                 }
-
-                _libraryQuotes.value = result
             } catch (e: Exception) {
-                e.printStackTrace()
-                // Firestore index henüz aktif değilse feed'den fallback
-                try {
-                    val fallback = firestore.collection("feed")
-                        .whereEqualTo("type", "library_quote")
-                        .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                        .limit(200).get().await()
-                    _libraryQuotes.value = fallback.documents.mapNotNull { it.toPost() }
-                } catch (_: Exception) {}
+                android.util.Log.w("FeedVM", "collectionGroup quotes: ${e.message}")
+            }
+
+            // ── 2. feed koleksiyonundan orderBy olmadan çek — index gerekmez
+            try {
+                val feedSnap = firestore.collection("feed")
+                    .limit(500).get().await()
+                feedSnap.documents.forEach { doc ->
+                    val d = doc.data ?: return@forEach
+                    // Sadece alıntı tipindeki postları al
+                    val type      = d["type"] as? String ?: ""
+                    val quoteText = d["quoteText"] as? String
+                        ?: (d["quote"] as? Map<*, *>)?.get("text") as? String
+                        ?: ""
+                    val bookName  = d["bookName"] as? String
+                        ?: (d["quote"] as? Map<*, *>)?.get("book") as? String
+                        ?: ""
+                    if ((type == "library_quote" || quoteText.isNotBlank()) && seenIds.add(doc.id)) {
+                        doc.toPost()?.let { result.add(it) }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("FeedVM", "feed fallback: ${e.message}")
+            }
+
+            if (result.isNotEmpty()) {
+                _libraryQuotes.value = result.sortedByDescending { it.ts?.seconds ?: 0L }
             }
         }
     }
