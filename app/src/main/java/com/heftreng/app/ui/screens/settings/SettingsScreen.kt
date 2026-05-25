@@ -34,6 +34,11 @@ import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.common.api.ApiException
 import com.heftreng.app.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,7 +55,34 @@ fun SettingsScreen(
     val blockedUsers   by vm.blockedUsers.collectAsState()
     val blockedLoading by vm.blockedLoading.collectAsState()
 
-    var showPasswordDialog by remember { mutableStateOf(false) }
+    val savedAccounts  by authVm.savedAccounts.collectAsState()
+    val switchToGoogle by authVm.switchToGoogle.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    var showPasswordDialog   by remember { mutableStateOf(false) }
+    var showAccountsSheet    by remember { mutableStateOf(false) }
+
+    // Google ile hesap geçişi için launcher
+    val switchGoogleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                account.idToken?.let { authVm.signInWithGoogle(it) }
+            } catch (_: ApiException) {}
+        }
+    }
+    LaunchedEffect(switchToGoogle) {
+        if (switchToGoogle) {
+            val client = authVm.getGoogleSignInClient(context)
+            client.signOut().addOnCompleteListener {
+                switchGoogleLauncher.launch(client.signInIntent)
+            }
+            authVm.clearSwitchToGoogle()
+        }
+    }
     var showEmailDialog    by remember { mutableStateOf(false) }
     var showBlockedDialog  by remember { mutableStateOf(false) }
 
@@ -238,6 +270,35 @@ fun SettingsScreen(
                 }
             }
 
+            // ── Hesap Değiştir ───────────────────────────────────────────
+            if (savedAccounts.size > 1) {
+                item {
+                    SettingsSection {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showAccountsSheet = true }
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.SwitchAccount, null, tint = Primary, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(14.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    if (language == "ku") "Hesabê biguhere" else "Hesap Değiştir",
+                                    color = OnBackground, fontWeight = FontWeight.Medium,
+                                )
+                                Text(
+                                    "${savedAccounts.size} hesap kayıtlı",
+                                    color = Muted, fontSize = 12.sp,
+                                )
+                            }
+                            Icon(Icons.Default.ChevronRight, null, tint = Muted, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+
             // ── Çıkış ────────────────────────────────────────────────────
             item {
                 SettingsSection {
@@ -259,6 +320,21 @@ fun SettingsScreen(
     }
 
     // ── Şifre Değiştir Dialog ────────────────────────────────────────────────
+    // ── Hesap Değiştirme Sheet ───────────────────────────────────────────
+    if (showAccountsSheet) {
+        AccountSwitcherSheet(
+            accounts     = savedAccounts,
+            currentEmail = authVm.currentEmail,
+            language     = language,
+            onSelect     = { account ->
+                showAccountsSheet = false
+                authVm.switchAccount(account, context)
+            },
+            onRemove     = { email -> authVm.removeAccount(email) },
+            onDismiss    = { showAccountsSheet = false },
+        )
+    }
+
     if (showPasswordDialog) {
         ChangePasswordDialog(
             onDismiss = { showPasswordDialog = false },
@@ -738,4 +814,122 @@ internal fun ForgotPasswordFromSettings(
             }
         },
     )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Hesap Değiştirme Bottom Sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AccountSwitcherSheet(
+    accounts    : List<AuthViewModel.SavedAccount>,
+    currentEmail: String,
+    language    : String,
+    onSelect    : (AuthViewModel.SavedAccount) -> Unit,
+    onRemove    : (String) -> Unit,
+    onDismiss   : () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        dragHandle       = { BottomSheetDefaults.DragHandle(color = Muted) },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp),
+        ) {
+            Text(
+                if (language == "ku") "Hesabê hilbijêre" else "Hesap Seç",
+                modifier       = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                fontWeight     = FontWeight.Bold,
+                color          = OnBackground,
+                fontSize       = 17.sp,
+            )
+            HorizontalDivider(color = Divider)
+
+            accounts.forEach { account ->
+                val isCurrent = account.email == currentEmail
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !isCurrent) { onSelect(account) }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Avatar
+                    Box(
+                        modifier         = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Primary.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (account.photoURL.isNotBlank()) {
+                            AsyncImage(
+                                model              = account.photoURL,
+                                contentDescription = account.displayName,
+                                modifier           = Modifier.fillMaxSize(),
+                                contentScale       = ContentScale.Crop,
+                            )
+                        } else {
+                            Text(
+                                account.displayName.firstOrNull()?.uppercase() ?: "?",
+                                color      = Primary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize   = 18.sp,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                account.displayName.ifBlank { account.email },
+                                color      = OnBackground,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize   = 15.sp,
+                                maxLines   = 1,
+                            )
+                            if (isCurrent) {
+                                Spacer(Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Primary.copy(alpha = 0.15f),
+                                ) {
+                                    Text(
+                                        "aktif",
+                                        color    = Primary,
+                                        fontSize = 10.sp,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            account.email,
+                            color    = Muted,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                        )
+                    }
+                    if (!isCurrent) {
+                        IconButton(
+                            onClick  = { onRemove(account.email) },
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Kaldır",
+                                tint     = Muted,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
+            }
+        }
+    }
 }

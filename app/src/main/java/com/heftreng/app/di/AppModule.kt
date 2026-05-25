@@ -1,6 +1,7 @@
 package com.heftreng.app.di
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
@@ -10,6 +11,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Module
@@ -30,4 +32,9 @@ object AppModule {
 
     @Provides @Singleton
     fun provideContext(@ApplicationContext context: Context): Context = context
+
+    @Provides @Singleton
+    @Named("auth_prefs")
+    fun provideAuthPrefs(@ApplicationContext context: Context): SharedPreferences =
+        context.getSharedPreferences("heft_auth_accounts", Context.MODE_PRIVATE)
 }

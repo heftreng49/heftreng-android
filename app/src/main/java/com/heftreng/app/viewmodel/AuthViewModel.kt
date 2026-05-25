@@ -12,6 +12,8 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.heftreng.app.R
+import android.content.SharedPreferences
+import javax.inject.Named
 import com.heftreng.app.utils.HeftrangMessagingService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,9 +24,98 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val auth: FirebaseAuth,
+    private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    @Named("auth_prefs") private val prefs: SharedPreferences,
 ) : ViewModel() {
+
+    // ── Kayıtlı Hesaplar ─────────────────────────────────────────────────────
+    // Format: "email1::pass1|||email2::pass2"  (Google hesapları pass="__google__")
+    // Güvenlik notu: şifre cihaz-local SharedPreferences'ta şifrelenmemiş tutulur.
+    // Production için EncryptedSharedPreferences kullanılabilir.
+
+    private val _savedAccounts = MutableStateFlow<List<SavedAccount>>(emptyList())
+    val savedAccounts = _savedAccounts.asStateFlow()
+
+    data class SavedAccount(
+        val email      : String,
+        val displayName: String,
+        val photoURL   : String,
+        val password   : String,   // Google için "__google__"
+        val uid        : String,
+    )
+
+    init {
+        auth.addAuthStateListener { _currentUser.value = it.currentUser }
+        loadSavedAccounts()
+    }
+
+    private fun loadSavedAccounts() {
+        val raw = prefs.getString("saved_accounts", "") ?: ""
+        _savedAccounts.value = raw.split("|||")
+            .filter { it.contains("::") }
+            .mapNotNull { entry ->
+                val parts = entry.split("::")
+                if (parts.size < 5) return@mapNotNull null
+                SavedAccount(
+                    email       = parts[0],
+                    displayName = parts[1],
+                    photoURL    = parts[2],
+                    password    = parts[3],
+                    uid         = parts[4],
+                )
+            }
+    }
+
+    private fun saveAccount(email: String, displayName: String, photoURL: String, password: String, uid: String) {
+        val accounts = _savedAccounts.value.toMutableList()
+        accounts.removeAll { it.email == email }   // güncelleme için önce sil
+        accounts.add(0, SavedAccount(email, displayName, photoURL, password, uid))
+        val raw = accounts.take(5).joinToString("|||") {
+            "${it.email}::${it.displayName}::${it.photoURL}::${it.password}::${it.uid}"
+        }
+        prefs.edit().putString("saved_accounts", raw).apply()
+        _savedAccounts.value = accounts.take(5)
+    }
+
+    fun removeAccount(email: String) {
+        val accounts = _savedAccounts.value.filter { it.email != email }
+        val raw = accounts.joinToString("|||") {
+            "${it.email}::${it.displayName}::${it.photoURL}::${it.password}::${it.uid}"
+        }
+        prefs.edit().putString("saved_accounts", raw).apply()
+        _savedAccounts.value = accounts
+    }
+
+    // Kaydedilmiş hesaba tek dokunuşla geçiş
+    fun switchAccount(account: SavedAccount, context: Context) {
+        viewModelScope.launch {
+            _loading.value = true
+            try {
+                if (account.password == "__google__") {
+                    // Google hesabı: mevcut oturumu kapat, Google picker aç
+                    // Çağıran taraf googleLauncher'ı başlatmalı — sadece signOut yapıyoruz
+                    auth.signOut()
+                    _currentUser.value = null
+                    _switchToGoogle.value = true
+                } else {
+                    auth.signOut()
+                    val result = auth.signInWithEmailAndPassword(account.email, account.password).await()
+                    val user = result.user ?: return@launch
+                    syncFcmToken(user.uid)
+                    _currentUser.value = user
+                }
+            } catch (e: Exception) {
+                _error.value = e.message
+            } finally {
+                _loading.value = false
+            }
+        }
+    }
+
+    private val _switchToGoogle = MutableStateFlow(false)
+    val switchToGoogle = _switchToGoogle.asStateFlow()
+    fun clearSwitchToGoogle() { _switchToGoogle.value = false }
 
     private val _currentUser = MutableStateFlow<FirebaseUser?>(auth.currentUser)
     val currentUser = _currentUser.asStateFlow()
@@ -37,7 +128,6 @@ class AuthViewModel @Inject constructor(
     private val _loading = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
-    init { auth.addAuthStateListener { _currentUser.value = it.currentUser } }
 
     fun getGoogleSignInClient(context: Context) = GoogleSignIn.getClient(
         context,
@@ -80,6 +170,14 @@ class AuthViewModel @Inject constructor(
                 }
                 _currentUser.value = user
                 syncFcmToken(user.uid)
+                // Hesabı kaydet
+                saveAccount(
+                    email       = user.email ?: "",
+                    displayName = user.displayName ?: user.email?.substringBefore("@") ?: "",
+                    photoURL    = user.photoUrl?.toString() ?: "",
+                    password    = "__google__",
+                    uid         = user.uid,
+                )
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -112,6 +210,18 @@ class AuthViewModel @Inject constructor(
                     } catch (e: Exception) { e.printStackTrace() }
                 }
                 syncFcmToken(user.uid)
+                // Hesabı kaydet
+                val nameForSave = try {
+                    firestore.collection("users").document(user.uid).get().await()
+                        .getString("displayName")?.ifBlank { null }
+                } catch (_: Exception) { null } ?: user.displayName ?: ""
+                saveAccount(
+                    email       = user.email ?: "",
+                    displayName = nameForSave,
+                    photoURL    = user.photoUrl?.toString() ?: "",
+                    password    = password,
+                    uid         = user.uid,
+                )
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
