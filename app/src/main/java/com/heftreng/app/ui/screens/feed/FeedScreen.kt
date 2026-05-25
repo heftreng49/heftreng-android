@@ -103,14 +103,14 @@ fun FeedScreen(
     LaunchedEffect(Unit) { adsVm.loadAdConfigs() }
 
     // ── Feed sekme (Herkes / Takip edilenler) ────────────────────────────────
-    val feedPagerState = rememberPagerState { feedTabs.size }
-    val selectedFeedTab by derivedStateOf { feedPagerState.currentPage }
-    val feedScope       = rememberCoroutineScope()
     val ku = language == "ku"
     val feedTabs = listOf(
         Strings.filterAll(language),
         Strings.filterFollowing(language),
     )
+    val feedPagerState  = rememberPagerState { feedTabs.size }
+    val selectedFeedTab by derivedStateOf { feedPagerState.currentPage }
+    val feedScope       = rememberCoroutineScope()
 
     // Takip edilen kullanıcıların UID listesi
     val currentUserUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""

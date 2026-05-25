@@ -87,14 +87,14 @@ fun ProfileScreen(
     val isPrivate      = user?.isPrivate ?: false
     val canSeeContent  = isMe || !isPrivate || isFollowing
 
-    val pagerState  = rememberPagerState { tabs.size }
-    val selectedTab by derivedStateOf { pagerState.currentPage }
-    val scope       = rememberCoroutineScope()
     val tabs = listOf(
         Strings.posts(language),
         if (ku) "Pirtûk & Rêze" else "Kitaplar & Seriler",
         Strings.readingList(language),
     )
+    val pagerState  = rememberPagerState { tabs.size }
+    val selectedTab by derivedStateOf { pagerState.currentPage }
+    val scope       = rememberCoroutineScope()
 
     // Mesaj navigate state — composable dışında navigate yapabilmek için
     var navigateToConv by remember { mutableStateOf<String?>(null) }
