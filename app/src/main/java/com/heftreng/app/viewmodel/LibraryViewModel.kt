@@ -85,12 +85,26 @@ class LibraryViewModel @Inject constructor(
             _loading.value = true
             try {
                 val snap = firestore.collection("authors")
-                    .orderBy("name")
                     .limit(100)
                     .get().await()
                 _authors.value = snap.documents.mapNotNull { doc ->
-                    doc.toObject(Author::class.java)?.copy(id = doc.id)
-                }
+                    try { doc.toObject(Author::class.java)?.copy(id = doc.id) }
+                    catch (_: Exception) {
+                        val d = doc.data ?: return@mapNotNull null
+                        Author(
+                            id           = doc.id,
+                            name         = d["name"] as? String ?: "",
+                            bio          = d["bio"] as? String ?: "",
+                            photoURL     = d["photoURL"] as? String ?: "",
+                            birthYear    = (d["birthYear"] as? Number)?.toInt() ?: 0,
+                            nationality  = d["nationality"] as? String ?: "",
+                            bookCount    = (d["bookCount"] as? Number)?.toInt() ?: 0,
+                            quoteCount   = (d["quoteCount"] as? Number)?.toInt() ?: 0,
+                            reviewCount  = (d["reviewCount"] as? Number)?.toInt() ?: 0,
+                            followerCount= (d["followerCount"] as? Number)?.toInt() ?: 0,
+                        )
+                    }
+                }.sortedBy { it.name }
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -105,7 +119,24 @@ class LibraryViewModel @Inject constructor(
             _loading.value = true
             try {
                 val doc = firestore.collection("authors").document(authorId).get().await()
-                val author = doc.toObject(Author::class.java)?.copy(id = doc.id)
+                // toObject bazen Firestore type mismatch yüzünden null döner — manuel map ile güvenli al
+                val author: Author? = try {
+                    doc.toObject(Author::class.java)?.copy(id = doc.id)
+                } catch (_: Exception) { null } ?: run {
+                    val d = doc.data
+                    if (d != null) Author(
+                        id           = doc.id,
+                        name         = d["name"] as? String ?: "",
+                        bio          = d["bio"] as? String ?: "",
+                        photoURL     = d["photoURL"] as? String ?: "",
+                        birthYear    = (d["birthYear"] as? Number)?.toInt() ?: 0,
+                        nationality  = d["nationality"] as? String ?: "",
+                        bookCount    = (d["bookCount"] as? Number)?.toInt() ?: 0,
+                        quoteCount   = (d["quoteCount"] as? Number)?.toInt() ?: 0,
+                        reviewCount  = (d["reviewCount"] as? Number)?.toInt() ?: 0,
+                        followerCount= (d["followerCount"] as? Number)?.toInt() ?: 0,
+                    ) else null
+                }
                 _selectedAuthor.value = author
 
                 // Takip durumu
@@ -121,6 +152,22 @@ class LibraryViewModel @Inject constructor(
                 loadAuthorQuotes(authorId)
                 // Yazarın incelemeleri
                 loadAuthorReviews(authorId)
+
+                // Sayaçları gerçek veriden hesapla ve author objesini güncelle
+                val bookCount  = _authorBooks.value.size
+                val quoteCount = _authorQuotes.value.size
+                if (author != null && (author.bookCount != bookCount || author.quoteCount != quoteCount)) {
+                    _selectedAuthor.value = author.copy(
+                        bookCount  = bookCount,
+                        quoteCount = quoteCount,
+                    )
+                    // Firestore'a da yaz (arka planda)
+                    try {
+                        firestore.collection("authors").document(authorId)
+                            .update(mapOf("bookCount" to bookCount, "quoteCount" to quoteCount))
+                            .await()
+                    } catch (_: Exception) {}
+                }
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -132,11 +179,11 @@ class LibraryViewModel @Inject constructor(
     private suspend fun loadBooksByAuthor(authorId: String) {
         val snap = firestore.collection("library_books")
             .whereEqualTo("authorId", authorId)
-            .orderBy("publishYear", Query.Direction.DESCENDING)
             .limit(50).get().await()
-        _authorBooks.value = snap.documents.mapNotNull { doc ->
+        val books = snap.documents.mapNotNull { doc ->
             doc.toObject(LibraryBook::class.java)?.copy(id = doc.id)
-        }
+        }.sortedByDescending { it.publishYear }
+        _authorBooks.value = books
     }
 
     private suspend fun loadAuthorQuotes(authorId: String) {
