@@ -898,7 +898,7 @@ fun PostCard(
                                                     "postId"          to post.id,
                                                     "postOwnerUid"    to post.uid,
                                                     "postOwnerName"   to post.displayName,
-                                                    "moderationStatus"to post.moderationStatus,
+                                                    "moderationStatus" to post.moderationStatus,
                                                     "text"            to appealText,
                                                     "status"          to "pending",
                                                     "ts"              to com.google.firebase.Timestamp.now(),

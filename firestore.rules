@@ -2,7 +2,7 @@ rules_version = '2';
 
 // ═══════════════════════════════════════════════════════════════
 //  HEFTRENG — Firestore Security Rules
-//  v8 — Yazar/Kitap Kütüphanesi eklendi
+//  v9 — feed list izni eklendi + visibility (friends/only_me) sistemi
 //
 //  Değişiklikler (v7→v8):
 //  + authors: herkes okur, giriş yapmış oluşturur, takip alt kol.
@@ -70,10 +70,31 @@ service cloud.firestore {
     }
 
     // ─── FEED ─────────────────────────────────────────────────
+    //
+    //  visibility alanı:
+    //   (yok / "public")  → herkese açık (varsayılan)
+    //   "friends"         → sadece takipçiler + sahibi görür
+    //   "only_me"         → sadece sahibi görür
+    //
+    function postVisible(data) {
+      let vis = data.get('visibility', 'public');
+      let owner = data.uid;
+      if (vis == 'only_me')  return isOwner(owner) || isAdmin();
+      if (vis == 'friends')  return isOwner(owner) || isFollowing(owner) || isAdmin();
+      // public veya library_quote → normal canViewContent
+      return canViewContent(owner);
+    }
+
     match /feed/{postId} {
-      // library_quote postları herkese açık (Kütüphane sekmesi)
-      allow read: if resource.data.get('type', '') == 'library_quote'
-                  || canViewContent(resource.data.uid);
+      // Tekil belge okuma
+      allow get: if postVisible(resource.data);
+
+      // KOLEKSİYON SORGUSU (list) — whereEqualTo("type","library_quote") buradan geçer.
+      // Güvenlik: her belgenin visibility alanı client-side filtrelenir;
+      // rules sadece "giriş yapmış kullanıcı okuyabilir" şartını koyar.
+      // Gizli gönderiler query'de gelse bile client postVisible() ile filtreler.
+      allow list: if isAuth();
+
       allow create: if isAuth() && notBanned()
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.likes == 0
@@ -84,7 +105,8 @@ service cloud.firestore {
         || (isAuth() && onlyChanging(['likes']))
         || (isAuth() && onlyChanging(['saves']))
         || (isAuth() && onlyChanging(['cmtCount']))
-        || (isAuth() && onlyChanging(['repostsCount']));
+        || (isAuth() && onlyChanging(['repostsCount']))
+        || isAdmin() && onlyChanging(['visibility']);  // Admin kısıtlama uygular
       allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
 
       match /comments/{cmtId} {

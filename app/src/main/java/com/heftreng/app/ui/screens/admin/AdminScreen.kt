@@ -502,7 +502,7 @@ fun AdminScreen(
                         Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface) {
                             androidx.compose.foundation.layout.Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Outlined.Gavel, null, tint = Amber, modifier = Modifier.size(14.dp))
+                                    Icon(Icons.Outlined.Balance, null, tint = Amber, modifier = Modifier.size(14.dp))
                                     Spacer(Modifier.width(6.dp))
                                     Text(appeal.postOwnerName, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                                     Spacer(Modifier.weight(1f))
