@@ -77,11 +77,13 @@ fun AdminScreen(
 
     val tabs = listOf("Push", "Bildirim", "Kullanıcılar", "Bekleyenler", "Şikayetler", "İtirazlar", "İstatistik", "Düzenle", "Kütüphane")
 
+    val platformStats by vm.platformStats.collectAsState()
+
     LaunchedEffect(Unit) {
         vm.checkAdmin()
         vm.loadUsers()
         vm.loadPendingPosts()
-        vm.loadStats()
+        vm.startStatsListener()   // realtime listener — loadStats'ın yerini aldı
         vm.loadFeedPosts()
         vm.loadReports()
         vm.loadAppeals()
@@ -544,161 +546,160 @@ fun AdminScreen(
 
                 // ── İstatistikler ──────────────────────────────────────────────
                 6 -> LazyColumn(
-                    modifier       = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier            = Modifier.fillMaxSize(),
+                    contentPadding      = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    // Yenile butonu
                     item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("Platform İstatistikleri", color = Amber,
-                                fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            if (statsLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp),
-                                    color = Amber, strokeWidth = 2.dp)
-                            } else {
-                                IconButton(onClick = { vm.loadStats() }, modifier = Modifier.size(32.dp)) {
-                                    Icon(Icons.Default.Refresh, null, tint = Amber,
-                                        modifier = Modifier.size(18.dp))
-                                }
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                            Column {
+                                Text("Platform İstatistikleri", color = Amber,
+                                    fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                if (platformStats.lastUpdated > 0L)
+                                    Text("Güncellendi: ${formatLastSeen(platformStats.lastUpdated)}",
+                                        color = Muted, fontSize = 11.sp)
                             }
+                            if (statsLoading)
+                                CircularProgressIndicator(Modifier.size(20.dp), color = Amber, strokeWidth = 2.dp)
+                            else
+                                IconButton(onClick = { vm.loadStats() }, modifier = Modifier.size(36.dp)) {
+                                    Icon(Icons.Default.Refresh, null, tint = Amber, modifier = Modifier.size(20.dp))
+                                }
                         }
                     }
 
-                    // ── Özet kartlar ─────────────────────────────────────────
+                    // Platform ayrımı
                     item {
-                        val statCards = listOf(
-                            Triple("👤 Toplam Kullanıcı", stats["users"].toStatStr(), Color(0xFF7C3AED)),
-                            Triple("🟢 Şu An Online",    stats["online"].toStatStr(), Color(0xFF16A34A)),
-                            Triple("📝 Toplam Gönderi",  stats["posts"].toStatStr(), Color(0xFF2563EB)),
-                            Triple("🆕 Bugün Kayıt",     stats["newUsers"].toStatStr(), Color(0xFFD97706)),
-                            Triple("📬 Bugün Gönderi",   stats["newPosts"].toStatStr(), Color(0xFF0891B2)),
-                            Triple("📚 Seri",            stats["serials"].toStatStr(), Color(0xFF9333EA)),
-                            Triple("📖 Kitap",           stats["books"].toStatStr(), Color(0xFFB45309)),
-                            Triple("⏳ Bekleyen",        stats["pending"].toStatStr(), Color(0xFFEA580C)),
-                            Triple("🚩 Şikayet",         stats["reports"].toStatStr(), Color(0xFFDC2626)),
-                            Triple("🚫 Banlı",           stats["banned"].toStatStr(), Color(0xFF6B7280)),
-                        )
+                        Text("Kullanıcı Platformları", color = OnBackground,
+                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            PlatformCard(Modifier.weight(1f), "🤖", "Android",
+                                platformStats.androidUsers, platformStats.totalUsers, Color(0xFF16A34A))
+                            PlatformCard(Modifier.weight(1f), "🌐", "Web",
+                                platformStats.webUsers, platformStats.totalUsers, Color(0xFF2563EB))
+                        }
+                    }
+
+                    // Canlı durum
+                    item {
+                        Text("Canlı Durum", color = OnBackground,
+                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MiniStatCard(Modifier.weight(1f), "🟢 Şu An Online",
+                                "${platformStats.onlineNow}", Color(0xFF16A34A))
+                            MiniStatCard(Modifier.weight(1f), "👤 Toplam Üye",
+                                "${platformStats.totalUsers}", Color(0xFF7C3AED))
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MiniStatCard(Modifier.weight(1f), "🆕 Bugün Kayıt",
+                                "${platformStats.newUsersToday}", Color(0xFFD97706))
+                            MiniStatCard(Modifier.weight(1f), "🚫 Banlı",
+                                "${platformStats.bannedUsers}", Color(0xFF6B7280))
+                        }
+                    }
+
+                    // İçerik
+                    item {
+                        Text("İçerik", color = OnBackground,
+                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Spacer(Modifier.height(8.dp))
                         androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
                             columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
-                            modifier = Modifier.fillMaxWidth().heightIn(max = 600.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             userScrollEnabled = false,
                         ) {
-                            items(statCards.size) { i ->
-                                val (label, value, color) = statCards[i]
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape    = RoundedCornerShape(12.dp),
-                                    colors   = CardDefaults.cardColors(containerColor = HeftSurface),
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                                    ) {
+                            val cells = listOf(
+                                Triple("📝 Gönderi",      "${platformStats.totalPosts}",    Color(0xFF2563EB)),
+                                Triple("📬 Bugün",        "${platformStats.newPostsToday}", Color(0xFF0891B2)),
+                                Triple("💬 Alıntı",       "${platformStats.totalQuotes}",   Color(0xFF9333EA)),
+                                Triple("⭐ İnceleme",     "${platformStats.totalReviews}",  Color(0xFFB45309)),
+                                Triple("📚 Seri",         "${platformStats.totalSerials}",  Color(0xFF7C3AED)),
+                                Triple("📖 Kitap",        "${platformStats.totalBooks}",    Color(0xFFB45309)),
+                            )
+                            items(cells.size) { i ->
+                                val (label, value, color) = cells[i]
+                                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(containerColor = HeftSurface)) {
+                                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Text(label, color = Muted, fontSize = 11.sp)
-                                        Text(value, color = color,
-                                            fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                                        Text(value, color = color, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                                     }
                                 }
                             }
                         }
                     }
 
-                    // ── Son Aktif Kullanıcılar ────────────────────────────────
+                    // Moderasyon
+                    item {
+                        Text("Moderasyon", color = OnBackground,
+                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MiniStatCard(Modifier.weight(1f), "⏳ Bekleyen",
+                                "${platformStats.pendingPosts}", Color(0xFFEA580C))
+                            MiniStatCard(Modifier.weight(1f), "🚩 Şikayet",
+                                "${platformStats.pendingReports}", Color(0xFFDC2626))
+                        }
+                    }
+
+                    // Son aktif kullanıcılar
                     item {
                         Spacer(Modifier.height(4.dp))
                         Text("Son Aktif Kullanıcılar", color = Amber,
                             fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                        Spacer(Modifier.height(4.dp))
-                        Text("Son 7 gün • presence verisi",
-                            color = Muted, fontSize = 11.sp)
+                        Text("Son 7 gün • presence verisi", color = Muted, fontSize = 11.sp)
                     }
 
                     if (activeUsers.isEmpty() && !statsLoading) {
-                        item {
-                            Text("Henüz veri yok", color = Muted, fontSize = 12.sp,
-                                modifier = Modifier.padding(vertical = 8.dp))
-                        }
+                        item { Text("Henüz veri yok", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp)) }
                     }
 
                     items(activeUsers.size) { i ->
                         val u = activeUsers[i]
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape    = RoundedCornerShape(10.dp),
-                            colors   = CardDefaults.cardColors(containerColor = HeftSurface),
-                        ) {
-                            Row(
-                                modifier          = Modifier.fillMaxWidth().padding(10.dp),
+                        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = HeftSurface)) {
+                            Row(Modifier.fillMaxWidth().padding(10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                // Avatar + online dot
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Box(contentAlignment = Alignment.BottomEnd) {
-                                    Box(
-                                        modifier = Modifier.size(38.dp)
-                                            .clip(CircleShape)
-                                            .background(SurfaceVar),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        if (u.photoURL.isNotBlank()) {
-                                            coil.compose.AsyncImage(
-                                                model = u.photoURL,
-                                                contentDescription = null,
-                                                modifier = Modifier.fillMaxSize(),
-                                                contentScale = ContentScale.Crop,
-                                            )
-                                        } else {
+                                    Box(Modifier.size(38.dp).clip(CircleShape).background(SurfaceVar),
+                                        contentAlignment = Alignment.Center) {
+                                        if (u.photoURL.isNotBlank())
+                                            coil.compose.AsyncImage(u.photoURL, null, Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop)
+                                        else
                                             Text(u.displayName.firstOrNull()?.uppercase() ?: "?",
-                                                color = OnBackground, fontWeight = FontWeight.Bold,
-                                                fontSize = 14.sp)
-                                        }
+                                                color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                     }
-                                    Box(
-                                        modifier = Modifier.size(10.dp)
-                                            .clip(CircleShape)
-                                            .background(
-                                                if (u.online) Color(0xFF16A34A)
-                                                else Color(0xFF6B7280)
-                                            )
-                                    )
+                                    Box(Modifier.size(10.dp).clip(CircleShape)
+                                        .background(if (u.online) Color(0xFF16A34A) else Color(0xFF6B7280)))
                                 }
-                                // Bilgiler
-                                Column(modifier = Modifier.weight(1f)) {
+                                Column(Modifier.weight(1f)) {
                                     Text(u.displayName, color = OnBackground,
-                                        fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
-                                        maxLines = 1)
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            if (u.online) "🟢 Online"
-                                            else "⏱ ${formatLastSeen(u.lastSeenMs)}",
-                                            color = if (u.online) Color(0xFF16A34A) else Muted,
-                                            fontSize = 11.sp,
-                                        )
-                                        if (u.appVersion != "—" && u.appVersion.isNotBlank()) {
-                                            Text("v${u.appVersion}", color = Muted, fontSize = 11.sp)
-                                        }
+                                            if (u.online) "🟢 Online" else "⏱ ${formatLastSeen(u.lastSeenMs)}",
+                                            color = if (u.online) Color(0xFF16A34A) else Muted, fontSize = 11.sp)
+                                        Text(if (u.platform == "android") "🤖" else "🌐", fontSize = 11.sp)
+                                        if (u.appVersion.isNotBlank() && u.appVersion != "—")
+                                            Text("v${u.appVersion}", color = Muted, fontSize = 10.sp)
                                     }
                                 }
-                                // Level + gönderi sayısı
                                 Column(horizontalAlignment = Alignment.End) {
-                                    Text("Lv.${u.level}", color = Amber,
-                                        fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    Text("${u.postsCount} gönderi",
-                                        color = Muted, fontSize = 10.sp)
+                                    Text("Lv.${u.level}", color = Amber, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text("${u.postsCount} gönderi", color = Muted, fontSize = 10.sp)
                                 }
                             }
                         }
                     }
                 }
-
-
                 // ── Düzenle ───────────────────────────────────────────────────
                 7 -> {
                     LazyColumn(
@@ -1482,5 +1483,50 @@ private fun formatLastSeen(lastSeenMs: Long): String {
         diffMin < 60  -> "${diffMin}dk önce"
         diffHr  < 24  -> "${diffHr}sa önce"
         else          -> "${diffDay}g önce"
+    }
+}
+
+// ─── PlatformCard ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun PlatformCard(
+    modifier : Modifier,
+    icon     : String,
+    label    : String,
+    count    : Int,
+    total    : Int,
+    color    : Color,
+) {
+    val pct = if (total > 0) (count * 100f / total) else 0f
+    Card(modifier, shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = HeftSurface)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(icon, fontSize = 16.sp)
+                Text(label, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            }
+            Text("$count", color = color, fontWeight = FontWeight.Bold, fontSize = 26.sp)
+            // Yüzde bar
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
+                .background(SurfaceVar)) {
+                Box(Modifier.fillMaxWidth(pct / 100f).fillMaxHeight()
+                    .clip(RoundedCornerShape(2.dp)).background(color))
+            }
+            Text(""%.0f%%".format(pct), color = Muted, fontSize = 10.sp)
+        }
+    }
+}
+
+// ─── MiniStatCard ────────────────────────────────────────────────────────────
+
+@Composable
+private fun MiniStatCard(modifier: Modifier, label: String, value: String, color: Color) {
+    Card(modifier, shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = HeftSurface)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, color = Muted, fontSize = 11.sp)
+            Text(value, color = color, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+        }
     }
 }

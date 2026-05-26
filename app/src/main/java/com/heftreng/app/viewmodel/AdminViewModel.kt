@@ -7,6 +7,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.data.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -39,8 +40,31 @@ class AdminViewModel @Inject constructor(
     private val _pushResult   = MutableStateFlow("")
     val pushResult = _pushResult.asStateFlow()
 
+    data class PlatformStats(
+        val totalUsers    : Int  = 0,
+        val androidUsers  : Int  = 0,
+        val webUsers      : Int  = 0,
+        val onlineNow     : Int  = 0,
+        val newUsersToday : Int  = 0,
+        val totalPosts    : Int  = 0,
+        val newPostsToday : Int  = 0,
+        val totalQuotes   : Int  = 0,
+        val totalReviews  : Int  = 0,
+        val totalComments : Int  = 0,
+        val totalSerials  : Int  = 0,
+        val totalBooks    : Int  = 0,
+        val pendingPosts  : Int  = 0,
+        val pendingReports: Int  = 0,
+        val bannedUsers   : Int  = 0,
+        val lastUpdated   : Long = 0L,
+    )
+    private val _platformStats = MutableStateFlow(PlatformStats())
+    val platformStats = _platformStats.asStateFlow()
+
     private val _stats        = MutableStateFlow<Map<String, Int>>(emptyMap())
     val stats = _stats.asStateFlow()
+
+    private var statsListener: ListenerRegistration? = null
 
     // ── Detaylı istatistikler ─────────────────────────────────────────────────
     data class UserActivity(
@@ -286,83 +310,121 @@ class AdminViewModel @Inject constructor(
     fun clearEditResult() { _editResult.value = "" }
 
     // ── İstatistikler ─────────────────────────────────────────────────────────
+    fun startStatsListener() {
+        if (statsListener != null) return
+        statsListener = firestore.collection("appConfig").document("stats")
+            .addSnapshotListener { snap, _ ->
+                val d = snap?.data ?: return@addSnapshotListener
+                fun i(k: String) = (d[k] as? Long)?.toInt() ?: (d[k] as? Int) ?: 0
+                val ps = PlatformStats(
+                    totalUsers     = i("totalUsers"),
+                    androidUsers   = i("androidUsers"),
+                    webUsers       = i("webUsers"),
+                    onlineNow      = i("onlineNow"),
+                    newUsersToday  = i("newUsersToday"),
+                    totalPosts     = i("totalPosts"),
+                    newPostsToday  = i("newPostsToday"),
+                    totalQuotes    = i("totalQuotes"),
+                    totalReviews   = i("totalReviews"),
+                    totalComments  = i("totalComments"),
+                    totalSerials   = i("totalSerials"),
+                    totalBooks     = i("totalBooks"),
+                    pendingPosts   = i("pendingPosts"),
+                    pendingReports = i("pendingReports"),
+                    bannedUsers    = i("bannedUsers"),
+                    lastUpdated    = (d["lastUpdated"] as? Long) ?: 0L,
+                )
+                _platformStats.value = ps
+                _stats.value = mapOf(
+                    "users"    to ps.totalUsers,  "online"   to ps.onlineNow,
+                    "posts"    to ps.totalPosts,  "newUsers" to ps.newUsersToday,
+                    "newPosts" to ps.newPostsToday, "serials" to ps.totalSerials,
+                    "books"    to ps.totalBooks,  "pending"  to ps.pendingPosts,
+                    "reports"  to ps.pendingReports, "banned" to ps.bannedUsers,
+                )
+            }
+        viewModelScope.launch { loadActiveUsers() }
+    }
+
     fun loadStats() {
         viewModelScope.launch {
             _statsLoading.value = true
             try {
-                // Her sorgu bağımsız — biri hata verse diğerleri çalışmaya devam eder
-                val users   = try { firestore.collection("users").get().await().size() } catch (_: Exception) { -1 }
-                val posts   = try { firestore.collection("feed").limit(500).get().await().size() } catch (_: Exception) { -1 }
-                val serials = try { firestore.collection("serials").get().await().size() } catch (_: Exception) { -1 }
-                val books   = try { firestore.collection("library_books").get().await().size() } catch (_: Exception) { -1 }
-                // pending: feed'de moderationStatus="suspended" olan postlar
-                val pending = try {
-                    firestore.collection("feed")
-                        .whereEqualTo("moderationStatus", "suspended")
-                        .get().await().size()
-                } catch (_: Exception) { -1 }
-                val reports = try { firestore.collection("reports").whereEqualTo("status", "pending").get().await().size() } catch (_: Exception) { -1 }
-                val banned  = try { firestore.collection("users").whereEqualTo("banned", true).get().await().size() } catch (_: Exception) { -1 }
-
-                // Son 24 saatte kayıt olan kullanıcılar
-                // whereGreaterThan index gerektirebilir — client-side filtre kullan
-                val oneDayAgo = com.google.firebase.Timestamp(
-                    System.currentTimeMillis() / 1000 - 86400, 0
-                )
-                val newUsers = try {
-                    firestore.collection("users")
-                        .get().await().documents.count { doc ->
-                            val ts = doc.getTimestamp("createdAt")
-                                ?: doc.getTimestamp("ts")
-                            ts != null && ts.seconds > oneDayAgo.seconds
-                        }
-                } catch (_: Exception) { -1 }
-
-                // Son 24 saatte atılan gönderiler — client-side filtre
-                val newPosts = try {
-                    firestore.collection("feed")
-                        .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                        .limit(500).get().await().documents.count { doc ->
-                            val ts = doc.getTimestamp("ts")
-                            ts != null && ts.seconds > oneDayAgo.seconds
-                        }
-                } catch (_: Exception) { -1 }
-
-                // Online kullanıcılar — whereEqualTo + whereGreaterThan composite index gerektirebilir
-                // Güvenli fallback: sadece online=true filtrele, lastSeen'i client-side filtrele
-                val twoMinAgo = com.google.firebase.Timestamp(
-                    System.currentTimeMillis() / 1000 - 120, 0
-                )
-                val onlineCount = try {
-                    firestore.collection("presence")
-                        .whereEqualTo("online", true)
-                        .get().await()
-                        .documents.count { doc ->
-                            val ls = doc.getTimestamp("lastSeen")?.seconds ?: 0L
-                            (System.currentTimeMillis() / 1000 - ls) < 120
-                        }
-                } catch (_: Exception) { -1 }
-
-                _stats.value = mapOf(
-                    "users"    to users,
-                    "posts"    to posts,
-                    "serials"  to serials,
-                    "books"    to books,
-                    "pending"  to pending,
-                    "reports"  to reports,
-                    "banned"   to banned,
-                    "newUsers" to newUsers,
-                    "newPosts" to newPosts,
-                    "online"   to onlineCount,
-                )
-
-                // Aktif kullanıcı hareketleri — presence + users join
+                com.google.firebase.functions.FirebaseFunctions
+                    .getInstance().getHttpsCallable("refreshStats").call().await()
                 loadActiveUsers()
-            } catch (e: Exception) { e.printStackTrace() }
-            finally { _statsLoading.value = false }
+            } catch (_: Exception) {
+                loadStatsFallback()
+            } finally {
+                _statsLoading.value = false
+            }
         }
     }
 
+    private suspend fun loadStatsFallback() {
+        try {
+            val todaySec = run {
+                val c = java.util.Calendar.getInstance()
+                c.set(java.util.Calendar.HOUR_OF_DAY, 0); c.set(java.util.Calendar.MINUTE, 0)
+                c.set(java.util.Calendar.SECOND, 0); c.timeInMillis / 1000
+            }
+            val twoMinAgo = System.currentTimeMillis() / 1000 - 120
+
+            val usersSnap    = firestore.collection("users").get().await()
+            val totalUsers   = usersSnap.size()
+            val androidUsers = usersSnap.documents.count { it.getString("platform") == "android" }
+            val webUsers     = usersSnap.documents.count {
+                val p = it.getString("platform") ?: ""; p == "web" || p.isBlank()
+            }
+            val newUsersToday = usersSnap.documents.count {
+                (it.getTimestamp("createdAt") ?: it.getTimestamp("ts"))?.seconds?.let { s -> s >= todaySec } == true
+            }
+            val bannedUsers = usersSnap.documents.count { it.getBoolean("banned") == true }
+
+            val onlineNow = try {
+                firestore.collection("presence").whereEqualTo("online", true).get().await()
+                    .documents.count { (it.getTimestamp("lastSeen")?.seconds ?: 0L) >= twoMinAgo }
+            } catch (_: Exception) { 0 }
+
+            val postsSnap     = firestore.collection("feed").get().await()
+            val totalPosts    = postsSnap.documents.count { (it.getString("moderationStatus") ?: "active") == "active" }
+            val newPostsToday = postsSnap.documents.count {
+                (it.getString("moderationStatus") ?: "active") == "active" &&
+                (it.getTimestamp("ts")?.seconds ?: 0L) >= todaySec
+            }
+            val pendingPosts  = postsSnap.documents.count { it.getString("moderationStatus") == "suspended" }
+
+            val totalQuotes   = try { firestore.collectionGroup("quotes").get().await().size() } catch (_: Exception) { 0 }
+            val totalReviews  = try { firestore.collectionGroup("reviews").get().await().size() } catch (_: Exception) { 0 }
+            val totalSerials  = try { firestore.collection("serials").get().await().size() } catch (_: Exception) { 0 }
+            val totalBooks    = try { firestore.collection("library_books").get().await().size() } catch (_: Exception) { 0 }
+            val pendingReports = try {
+                firestore.collection("reports").whereEqualTo("status", "pending").get().await().size()
+            } catch (_: Exception) { 0 }
+
+            val ps = PlatformStats(
+                totalUsers = totalUsers, androidUsers = androidUsers, webUsers = webUsers,
+                onlineNow = onlineNow, newUsersToday = newUsersToday,
+                totalPosts = totalPosts, newPostsToday = newPostsToday,
+                totalQuotes = totalQuotes, totalReviews = totalReviews,
+                totalSerials = totalSerials, totalBooks = totalBooks,
+                pendingPosts = pendingPosts, pendingReports = pendingReports,
+                bannedUsers = bannedUsers, lastUpdated = System.currentTimeMillis(),
+            )
+            _platformStats.value = ps
+
+            val map = mapOf(
+                "totalUsers" to totalUsers, "androidUsers" to androidUsers, "webUsers" to webUsers,
+                "onlineNow" to onlineNow, "newUsersToday" to newUsersToday,
+                "totalPosts" to totalPosts, "newPostsToday" to newPostsToday,
+                "totalQuotes" to totalQuotes, "totalReviews" to totalReviews,
+                "totalComments" to 0, "totalSerials" to totalSerials, "totalBooks" to totalBooks,
+                "pendingPosts" to pendingPosts, "pendingReports" to pendingReports,
+                "bannedUsers" to bannedUsers, "lastUpdated" to System.currentTimeMillis(),
+            )
+            try { firestore.collection("appConfig").document("stats").set(map).await() } catch (_: Exception) {}
+        } catch (e: Exception) { e.printStackTrace() }
+    }
     private suspend fun loadActiveUsers() {
         try {
             val oneWeekAgo = com.google.firebase.Timestamp(
@@ -617,5 +679,12 @@ class AdminViewModel @Inject constructor(
                 _appeals.value = _appeals.value.filter { it.id != appeal.id }
             } catch (e: Exception) { e.printStackTrace() }
         }
+    }
+
+
+    override fun onCleared() {
+        super.onCleared()
+        statsListener?.remove()
+        statsListener = null
     }
 }

@@ -255,3 +255,119 @@ exports.repairAllUsers = onRequest(async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  refreshStats — appConfig/stats belgesini taze verilerle günceller
+//  Admin "Yenile" butonuna basınca çağrılır.
+//  Sonuç realtime listener üzerinden Android'e anında gelir.
+// ─────────────────────────────────────────────────────────────────────────────
+exports.refreshStats = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Giriş gerekli");
+
+  const db    = admin.firestore();
+  const now   = Date.now();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const todaySec  = Math.floor(today.getTime() / 1000);
+  const twoMinAgo = Math.floor(now / 1000) - 120;
+
+  const [
+    usersSnap, postsSnap, serialsSnap, booksSnap,
+    presenceSnap, reportsSnap, quotesSnap, reviewsSnap,
+  ] = await Promise.all([
+    db.collection("users").get(),
+    db.collection("feed").get(),
+    db.collection("serials").get(),
+    db.collection("library_books").get(),
+    db.collection("presence").where("online", "==", true).get(),
+    db.collection("reports").where("status", "==", "pending").get(),
+    db.collectionGroup("quotes").get(),
+    db.collectionGroup("reviews").get(),
+  ]);
+
+  const totalUsers    = usersSnap.size;
+  const androidUsers  = usersSnap.docs.filter(d => d.data().platform === "android").length;
+  const webUsers      = usersSnap.docs.filter(d => {
+    const p = d.data().platform || ""; return p === "web" || p === "";
+  }).length;
+  const newUsersToday = usersSnap.docs.filter(d => {
+    const ts = d.data().createdAt?._seconds || d.data().ts?._seconds || 0;
+    return ts >= todaySec;
+  }).length;
+  const bannedUsers = usersSnap.docs.filter(d => d.data().banned === true).length;
+
+  const onlineNow = presenceSnap.docs.filter(d => {
+    const ls = d.data().lastSeen?._seconds || 0;
+    return ls >= twoMinAgo;
+  }).length;
+
+  const activePosts   = postsSnap.docs.filter(d => (d.data().moderationStatus || "active") === "active");
+  const totalPosts    = activePosts.length;
+  const newPostsToday = activePosts.filter(d => (d.data().ts?._seconds || 0) >= todaySec).length;
+  const pendingPosts  = postsSnap.docs.filter(d => d.data().moderationStatus === "suspended").length;
+
+  const stats = {
+    totalUsers, androidUsers, webUsers, onlineNow, newUsersToday,
+    totalPosts, newPostsToday, pendingPosts,
+    totalQuotes  : quotesSnap.size,
+    totalReviews : reviewsSnap.size,
+    totalSerials : serialsSnap.size,
+    totalBooks   : booksSnap.size,
+    pendingReports: reportsSnap.size,
+    bannedUsers,
+    totalComments: 0,   // collectionGroup("comments") pahalı — ayrı sayaçla eklenebilir
+    lastUpdated  : now,
+  };
+
+  await db.collection("appConfig").doc("stats").set(stats);
+  console.log("[refreshStats] güncellendi:", stats);
+  return { success: true };
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Otomatik güncelleme — her gece 02:00'de refreshStats çalışır
+//  Böylece sabah açıldığında istatistikler zaten hazır
+// ─────────────────────────────────────────────────────────────────────────────
+exports.scheduledRefreshStats = functions.pubsub
+  .schedule("0 2 * * *")
+  .timeZone("Europe/Istanbul")
+  .onRun(async () => {
+    const db    = admin.firestore();
+    const now   = Date.now();
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todaySec  = Math.floor(today.getTime() / 1000);
+    const twoMinAgo = Math.floor(now / 1000) - 120;
+
+    const [usersSnap, postsSnap, serialsSnap, booksSnap,
+           presenceSnap, reportsSnap, quotesSnap, reviewsSnap] = await Promise.all([
+      db.collection("users").get(),
+      db.collection("feed").get(),
+      db.collection("serials").get(),
+      db.collection("library_books").get(),
+      db.collection("presence").where("online", "==", true).get(),
+      db.collection("reports").where("status", "==", "pending").get(),
+      db.collectionGroup("quotes").get(),
+      db.collectionGroup("reviews").get(),
+    ]);
+
+    await db.collection("appConfig").doc("stats").set({
+      totalUsers   : usersSnap.size,
+      androidUsers : usersSnap.docs.filter(d => d.data().platform === "android").length,
+      webUsers     : usersSnap.docs.filter(d => { const p = d.data().platform||""; return p==="web"||p===""; }).length,
+      bannedUsers  : usersSnap.docs.filter(d => d.data().banned===true).length,
+      newUsersToday: usersSnap.docs.filter(d => (d.data().createdAt?._seconds||0) >= todaySec).length,
+      onlineNow    : presenceSnap.docs.filter(d => (d.data().lastSeen?._seconds||0) >= twoMinAgo).length,
+      totalPosts   : postsSnap.docs.filter(d => (d.data().moderationStatus||"active")==="active").length,
+      newPostsToday: postsSnap.docs.filter(d => (d.data().moderationStatus||"active")==="active" && (d.data().ts?._seconds||0)>=todaySec).length,
+      pendingPosts : postsSnap.docs.filter(d => d.data().moderationStatus==="suspended").length,
+      totalQuotes  : quotesSnap.size,
+      totalReviews : reviewsSnap.size,
+      totalSerials : serialsSnap.size,
+      totalBooks   : booksSnap.size,
+      pendingReports: reportsSnap.size,
+      totalComments: 0,
+      lastUpdated  : now,
+    });
+
+    console.log("[scheduledRefreshStats] tamamlandı");
+    return null;
+  });
