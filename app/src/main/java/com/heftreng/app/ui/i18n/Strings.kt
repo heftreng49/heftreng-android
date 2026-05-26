@@ -452,4 +452,5 @@ object Strings {
     fun deleteConvConfirm(l: String)     = t(l, "Sohbeti silmek istiyor musun?", "Dixwazî vê sohbetê jê bibî?")
     fun noComments(l: String)            = t(l, "Henüz yorum yok",            "Hîn şîrove tune")
     fun post(l: String)                  = t(l, "Gönderi",                    "Nivîs")
+    fun followSomeone(l: String)         = t(l, "Takip ettiğin kimse gönderi paylaşmadı", "Kesek ku şopandî nivîs par nekir")
 }

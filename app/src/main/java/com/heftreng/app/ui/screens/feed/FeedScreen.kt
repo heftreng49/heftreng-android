@@ -127,9 +127,12 @@ fun FeedScreen(
         }
     }
 
-    val displayedPosts = remember(posts, selectedFeedTab, followingUids) {
-        if (selectedFeedTab == 1) posts.filter { it.uid in followingUids }
-        else posts
+    val displayedPosts = remember(posts, selectedFeedTab, followingUids, currentUserUid) {
+        if (selectedFeedTab == 1) {
+            // Takip edilenler + kendi postları
+            val allowed = followingUids + setOf(currentUserUid)
+            posts.filter { it.uid in allowed }
+        } else posts
     }
 
     // ── Şikayet dialog ──────────────────────────────────────────────────────
@@ -307,6 +310,30 @@ fun FeedScreen(
                     )
                 }
                 // ── Gönderi listesi ───────────────────────────────────
+                if (displayedPosts.isEmpty() && !loading && selectedFeedTab == 1) {
+                    item {
+                        Box(
+                            Modifier.fillMaxWidth().padding(top = 80.dp),
+                            contentAlignment = androidx.compose.ui.Alignment.Center,
+                        ) {
+                            androidx.compose.foundation.layout.Column(
+                                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Icon(
+                                    Icons.Outlined.PersonAdd, null,
+                                    tint = Muted,
+                                    modifier = Modifier.size(48.dp),
+                                )
+                                Text(
+                                    Strings.followSomeone(language),
+                                    color = Muted, fontSize = 14.sp,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                )
+                            }
+                        }
+                    }
+                }
                 items(displayedPosts, key = { it.id }) { post ->
                     PostCard(
                         post      = post,
