@@ -77,12 +77,11 @@ service cloud.firestore {
     //   "only_me"         → sadece sahibi görür
     //
     function postVisible(data) {
-      let vis = data.get('visibility', 'public');
-      let owner = data.uid;
-      if (vis == 'only_me')  return isOwner(owner) || isAdmin();
-      if (vis == 'friends')  return isOwner(owner) || isFollowing(owner) || isAdmin();
-      // public veya library_quote → normal canViewContent
-      return canViewContent(owner);
+      return data.get('visibility', 'public') == 'only_me'
+          ? (isOwner(data.uid) || isAdmin())
+          : data.get('visibility', 'public') == 'friends'
+          ? (isOwner(data.uid) || isFollowing(data.uid) || isAdmin())
+          : canViewContent(data.uid);
     }
 
     match /feed/{postId} {
@@ -106,7 +105,7 @@ service cloud.firestore {
         || (isAuth() && onlyChanging(['saves']))
         || (isAuth() && onlyChanging(['cmtCount']))
         || (isAuth() && onlyChanging(['repostsCount']))
-        || isAdmin() && onlyChanging(['visibility']);  // Admin kısıtlama uygular
+        || (isAdmin() && onlyChanging(['visibility']));
       allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
 
       match /comments/{cmtId} {
