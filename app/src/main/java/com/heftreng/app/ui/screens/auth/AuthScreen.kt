@@ -28,6 +28,8 @@ import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 
 @Composable
 fun AuthScreen(
@@ -239,6 +241,7 @@ fun AuthScreen(
 
             // Kullanım koşulları bildirimi
             val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+            @OptIn(ExperimentalLayoutApi::class)
             androidx.compose.foundation.layout.FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,

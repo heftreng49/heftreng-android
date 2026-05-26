@@ -43,17 +43,19 @@ class AdminViewModel @Inject constructor(
     val stats = _stats.asStateFlow()
 
     fun checkAdmin() {
-        val currentUser = auth.currentUser ?: run { _isAdmin.value = false; return@launch }
-        // Önce Firestore admins/{uid} koleksiyonunu kontrol et
-        try {
-            val adminDoc = firestore.collection("admins").document(currentUser.uid).get().await()
-            if (adminDoc.exists()) {
-                _isAdmin.value = true
-                return@launch
-            }
-        } catch (_: Exception) {}
-        // Fallback: email kontrolü (admins koleksiyonu henüz kurulmamışsa)
-        _isAdmin.value = currentUser.email == ADMIN_EMAIL
+        viewModelScope.launch {
+            val currentUser = auth.currentUser ?: run { _isAdmin.value = false; return@launch }
+            // Önce Firestore admins/{uid} koleksiyonunu kontrol et
+            try {
+                val adminDoc = firestore.collection("admins").document(currentUser.uid).get().await()
+                if (adminDoc.exists()) {
+                    _isAdmin.value = true
+                    return@launch
+                }
+            } catch (_: Exception) {}
+            // Fallback: email kontrolü (admins koleksiyonu henüz kurulmamışsa)
+            _isAdmin.value = currentUser.email == ADMIN_EMAIL
+        }
     }
 
     // ── Kullanıcıları listele ──────────────────────────────────────────────────

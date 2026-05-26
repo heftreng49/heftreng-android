@@ -39,11 +39,11 @@ object AppModule {
         try {
             // AES256-GCM şifrelemeli SharedPreferences — şifreler güvenli saklanır
             androidx.security.crypto.EncryptedSharedPreferences.create(
+                context,
                 "heft_auth_accounts",
                 androidx.security.crypto.MasterKey.Builder(context)
                     .setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM)
                     .build(),
-                context,
                 androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
             )
