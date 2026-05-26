@@ -36,5 +36,19 @@ object AppModule {
     @Provides @Singleton
     @Named("auth_prefs")
     fun provideAuthPrefs(@ApplicationContext context: Context): SharedPreferences =
-        context.getSharedPreferences("heft_auth_accounts", Context.MODE_PRIVATE)
+        try {
+            // AES256-GCM şifrelemeli SharedPreferences — şifreler güvenli saklanır
+            androidx.security.crypto.EncryptedSharedPreferences.create(
+                "heft_auth_accounts",
+                androidx.security.crypto.MasterKey.Builder(context)
+                    .setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM)
+                    .build(),
+                context,
+                androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+            )
+        } catch (_: Exception) {
+            // Cihaz desteklemiyorsa düz metin fallback
+            context.getSharedPreferences("heft_auth_accounts", Context.MODE_PRIVATE)
+        }
 }

@@ -123,6 +123,7 @@ fun AuthScreen(
                 onClick = {
                     val client = vm.getGoogleSignInClient(context)
                     googleLauncher.launch(client.signInIntent)
+                    vm.acceptTerms()
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape    = RoundedCornerShape(12.dp),
@@ -210,7 +211,7 @@ fun AuthScreen(
 
             Button(
                 onClick = {
-                    if (isRegister) vm.registerWithEmail(email, password, displayName)
+                    if (isRegister) { vm.registerWithEmail(email, password, displayName); vm.acceptTerms() }
                     else vm.signInWithEmail(email, password)
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -234,6 +235,34 @@ fun AuthScreen(
                         modifier   = Modifier.padding(vertical = 4.dp),
                     )
                 }
+            }
+
+            // Kullanım koşulları bildirimi
+            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+            androidx.compose.foundation.layout.FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    if (isRegister) "Kaydolarak " else "Giriş yaparak ",
+                    color = Muted, fontSize = 11.sp,
+                )
+                Text(
+                    "Kullanım Koşullarını",
+                    color = Primary, fontSize = 11.sp,
+                    modifier = Modifier.clickable {
+                        uriHandler.openUri("https://heft-reng.blogspot.com/p/kullanim-kosullari.html")
+                    },
+                )
+                Text(" ve ", color = Muted, fontSize = 11.sp)
+                Text(
+                    "Gizlilik Politikasını",
+                    color = Primary, fontSize = 11.sp,
+                    modifier = Modifier.clickable {
+                        uriHandler.openUri("https://heft-reng.blogspot.com/p/gizlilik-politikasi.html")
+                    },
+                )
+                Text(" kabul etmiş olursunuz.", color = Muted, fontSize = 11.sp)
             }
 
             TextButton(onClick = { isRegister = !isRegister }) {

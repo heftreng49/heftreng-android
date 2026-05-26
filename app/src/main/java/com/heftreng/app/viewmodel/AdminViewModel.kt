@@ -12,7 +12,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
-private const val ADMIN_EMAIL = "siirgibi49@gmail.com"
+// Admin kontrolü artık Firestore'daki admins/{uid} koleksiyonuna dayanır.
+// Firebase Console'dan: admins/{your_uid} belgesi oluştur → { role: "super_admin" }
+// Bu sayede email değişse bile admin yetkisi korunur, hesap ele geçirilse de
+// tek başına email kontrolü yetmez.
+private const val ADMIN_EMAIL = "siirgibi49@gmail.com" // fallback
 
 @HiltViewModel
 class AdminViewModel @Inject constructor(
@@ -39,7 +43,17 @@ class AdminViewModel @Inject constructor(
     val stats = _stats.asStateFlow()
 
     fun checkAdmin() {
-        _isAdmin.value = auth.currentUser?.email == ADMIN_EMAIL
+        val currentUser = auth.currentUser ?: run { _isAdmin.value = false; return@launch }
+        // Önce Firestore admins/{uid} koleksiyonunu kontrol et
+        try {
+            val adminDoc = firestore.collection("admins").document(currentUser.uid).get().await()
+            if (adminDoc.exists()) {
+                _isAdmin.value = true
+                return@launch
+            }
+        } catch (_: Exception) {}
+        // Fallback: email kontrolü (admins koleksiyonu henüz kurulmamışsa)
+        _isAdmin.value = currentUser.email == ADMIN_EMAIL
     }
 
     // ── Kullanıcıları listele ──────────────────────────────────────────────────

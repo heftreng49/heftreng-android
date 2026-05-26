@@ -78,6 +78,8 @@ dependencies {
 
     // Firebase
     implementation(platform(libs.firebase.bom))
+    // Şifreli SharedPreferences (hesap bilgisi güvenliği)
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.messaging)

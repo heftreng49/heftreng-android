@@ -334,7 +334,88 @@ fun SettingsScreen(
                         Text(Strings.logout(language), color = Color(0xFFEF4444), fontWeight = FontWeight.Medium)
                     }
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(8.dp))
+            }
+
+            // ── Hesabı Sil (Play Store Zorunluluğu) ───────────────────────
+            item {
+                var showDeleteDialog by remember { mutableStateOf(false) }
+                var deleteError      by remember { mutableStateOf("") }
+                var deleting         by remember { mutableStateOf(false) }
+
+                if (showDeleteDialog) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { if (!deleting) showDeleteDialog = false },
+                        icon  = { Icon(Icons.Outlined.DeleteForever, null, tint = Color(0xFFEF4444), modifier = Modifier.size(32.dp)) },
+                        title = { Text("Hesabı Kalıcı Olarak Sil", fontWeight = FontWeight.Bold, color = Color(0xFFEF4444)) },
+                        text  = {
+                            androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    "Hesabınız ve profil bilgileriniz kalıcı olarak silinecek. Bu işlem geri alınamaz.",
+                                    color = OnBackground, fontSize = 14.sp,
+                                )
+                                Text(
+                                    "Gönderileriniz platformda anonim olarak kalabilir.",
+                                    color = Muted, fontSize = 12.sp,
+                                )
+                                if (deleteError.isNotBlank()) {
+                                    Text(deleteError, color = Color(0xFFEF4444), fontSize = 12.sp)
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    deleting = true
+                                    deleteError = ""
+                                    authVm.deleteAccount(
+                                        onSuccess = {
+                                            showDeleteDialog = false
+                                            navController.navigate("auth") {
+                                                popUpTo(0) { inclusive = true }
+                                            }
+                                        },
+                                        onError = { msg ->
+                                            deleteError = msg
+                                            deleting = false
+                                        }
+                                    )
+                                },
+                                enabled = !deleting,
+                                colors  = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                            ) {
+                                if (deleting) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Text("Hesabı Sil", color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        },
+                        dismissButton = {
+                            OutlinedButton(onClick = { showDeleteDialog = false }, enabled = !deleting) {
+                                Text("İptal")
+                            }
+                        },
+                    )
+                }
+
+                SettingsSection {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showDeleteDialog = true }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Outlined.DeleteForever, null, tint = Color(0xFFEF4444).copy(alpha = 0.7f), modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(14.dp))
+                        androidx.compose.foundation.layout.Column {
+                            Text("Hesabı Kalıcı Olarak Sil", color = Color(0xFFEF4444).copy(alpha = 0.7f), fontWeight = FontWeight.Medium)
+                            Text("Tüm verileriniz silinir, geri alınamaz", color = Muted, fontSize = 11.sp)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(32.dp))
             }
         }
     }

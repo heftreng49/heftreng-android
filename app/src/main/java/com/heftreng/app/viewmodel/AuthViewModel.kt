@@ -368,4 +368,64 @@ class AuthViewModel @Inject constructor(
     }
 
     fun clearError() { _error.value = null }
+    // ══════════════════════════════════════════════════════════════════════
+    //  KULLANIM KOŞULLARI KABULU
+    //  users/{uid}.termsAcceptedAt → hukuki ispat için timestamp
+    // ══════════════════════════════════════════════════════════════════════
+    fun acceptTerms() {
+        val uid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                firestore.collection("users").document(uid).update(
+                    mapOf(
+                        "termsAcceptedAt"      to com.google.firebase.Timestamp.now(),
+                        "termsAcceptedVersion" to "1.0",
+                    )
+                ).await()
+            } catch (_: Exception) {}
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  HESAP SİLME  (Play Store Politikası — Kasım 2023 zorunluluğu)
+    //  1. Firestore kullanıcı belgesi silinir
+    //  2. Firebase Auth hesabı silinir
+    //  Büyük veriler (gönderiler, yorumlar) Cloud Function ile cascade silinir
+    // ══════════════════════════════════════════════════════════════════════
+    fun deleteAccount(
+        onSuccess : () -> Unit,
+        onError   : (String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            try {
+                val user = auth.currentUser ?: run { onError("Oturum bulunamadı"); return@launch }
+                val uid  = user.uid
+
+                // 1. Firestore kullanıcı belgesi
+                try { firestore.collection("users").document(uid).delete().await() }
+                catch (_: Exception) {}
+
+                // 2. Kullanıcının bildirim belgesi
+                try { firestore.collection("userNotifs").document(uid).delete().await() }
+                catch (_: Exception) {}
+
+                // 3. Kayıtlı hesabı SharedPreferences'tan kaldır
+                try {
+                    val saved = prefs.getString("saved_accounts", "") ?: ""
+                    val remaining = saved.split("|").filter { !it.contains("::$uid") }.joinToString("|")
+                    prefs.edit().putString("saved_accounts", remaining).apply()
+                } catch (_: Exception) {}
+
+                // 4. Firebase Auth hesabını sil (son adım — sonrası auth dinleyicisi tetiklenir)
+                user.delete().await()
+
+                onSuccess()
+            } catch (e: com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException) {
+                // Google hesapları yeniden giriş gerektirebilir
+                onError("Hesabı silmek için lütfen tekrar giriş yapın.")
+            } catch (e: Exception) {
+                onError(e.message ?: "Hesap silinirken hata oluştu")
+            }
+        }
+    }
 }
