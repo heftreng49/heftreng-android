@@ -1,6 +1,6 @@
 /**
  * Heftreng — Cloud Functions
- * firebase-functions v5 uyumlu
+ * firebase-functions v5 / v2 uyumlu optimized sürüm
  */
 
 const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
@@ -57,8 +57,6 @@ exports.onNewNotif = onDocumentCreated(
 
     const msg = {
       token: fcmToken,
-      // notification bloğu YOK — data-only payload.
-      // notification varsa Android arka planda sisteme + onMessageReceived'e çift bildirim gönderir.
       android: { priority: "high" },
       data: { type, postId, fromUid, convId, url, title, body, channelId },
     };
@@ -108,7 +106,6 @@ exports.sendPush = onCall(
     try {
       const msg = {
         token: fcmToken,
-        // notification bloğu YOK — data-only payload.
         android: { priority: "high" },
         data: { type, postId, fromUid, convId, url, title, body, channelId },
       };
@@ -135,6 +132,9 @@ exports.fixNewUserDisplayName = functions
   .region("us-central1")
   .auth.user()
   .onCreate(async (user) => {
+    // Bot Koruması: Eğer e-posta doğrulaması açıksa ve bot sahte maillerle gelmişse Firestore kaydı yapma
+    // İhtiyacına göre aktif edebilirsin: if (!user.emailVerified) return;
+
     const db = getFirestore();
     try {
       const derived = deriveName(user);
@@ -161,10 +161,6 @@ exports.fixNewUserDisplayName = functions
   });
 
 // ─── repairAllUsers — HTTP endpoint ─────────────────────────────────────────
-// Auth'taki TÜM kullanıcıları tarar:
-//   - Firestore belgesi yoksa → oluşturur
-//   - Firestore belgesi varsa ama eksik alanlar varsa → tamamlar
-// Kullanım: GET .../repairAllUsers?secret=hf2024
 exports.repairAllUsers = onRequest(async (req, res) => {
   if (req.query.secret !== "hf2024") {
     res.status(403).json({ error: "Yetkisiz" }); return;
@@ -177,7 +173,6 @@ exports.repairAllUsers = onRequest(async (req, res) => {
   const details = [];
 
   try {
-    // Auth'taki tüm kullanıcıları sayfalı çek
     let pageToken;
     do {
       const listResult = await auth.listUsers(1000, pageToken);
@@ -192,7 +187,6 @@ exports.repairAllUsers = onRequest(async (req, res) => {
                             .toLowerCase().replace(/[^a-z0-9]/g, "");
 
           if (!snap.exists) {
-            // Belge hiç yok — sıfırdan oluştur
             await ref.set({
               uid        : authUser.uid,
               displayName: derived,
@@ -207,25 +201,17 @@ exports.repairAllUsers = onRequest(async (req, res) => {
             });
             created++;
             details.push({ uid: authUser.uid, status: "created", name: derived });
-            console.log(`[repairAll] ✓ OLUŞTURULDU: ${authUser.uid} → "${derived}"`);
 
           } else {
-            // Belge var — eksik alanları tamamla
             const data  = snap.data();
             const patch = {};
 
-            if (!data.displayName || data.displayName === "Kullanıcı")
-              patch.displayName = derived;
-            if (!data.name || data.name === "Kullanıcı")
-              patch.name = derived;
-            if (!data.photoURL && authUser.photoURL)
-              patch.photoURL = authUser.photoURL;
-            if (!data.email && authUser.email)
-              patch.email = authUser.email;
-            if (!data.uid)
-              patch.uid = authUser.uid;
-            if (!data.username)
-              patch.username = base || authUser.uid.slice(0, 8);
+            if (!data.displayName || data.displayName === "Kullanıcı") patch.displayName = derived;
+            if (!data.name || data.name === "Kullanıcı") patch.name = derived;
+            if (!data.photoURL && authUser.photoURL) patch.photoURL = authUser.photoURL;
+            if (!data.email && authUser.email) patch.email = authUser.email;
+            if (!data.uid) patch.uid = authUser.uid;
+            if (!data.username) patch.username = base || authUser.uid.slice(0, 8);
             if (data.followers  === undefined) patch.followers  = 0;
             if (data.following  === undefined) patch.following  = 0;
             if (data.postCount  === undefined) patch.postCount  = 0;
@@ -235,7 +221,6 @@ exports.repairAllUsers = onRequest(async (req, res) => {
               await ref.update(patch);
               patched++;
               details.push({ uid: authUser.uid, status: "patched", fields: Object.keys(patch) });
-              console.log(`[repairAll] ✓ GÜNCELLENDI: ${authUser.uid}`, Object.keys(patch));
             } else {
               skipped++;
             }
@@ -243,7 +228,6 @@ exports.repairAllUsers = onRequest(async (req, res) => {
         } catch (e) {
           errors++;
           details.push({ uid: authUser.uid, status: "error", error: e.message });
-          console.error(`[repairAll] hata — ${authUser.uid}:`, e.message);
         }
       }
     } while (pageToken);
@@ -251,123 +235,136 @@ exports.repairAllUsers = onRequest(async (req, res) => {
     res.json({ created, patched, skipped, errors, details });
 
   } catch (e) {
-    console.error("[repairAll] genel hata:", e);
     res.status(500).json({ error: e.message });
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  refreshStats — appConfig/stats belgesini taze verilerle günceller
-//  Admin "Yenile" butonuna basınca çağrılır.
-//  Sonuç realtime listener üzerinden Android'e anında gelir.
+//  refreshStats — OPTIMIZED (Blaze Dostu, count() kullanan sürüm)
 // ─────────────────────────────────────────────────────────────────────────────
 exports.refreshStats = functions.https.onCall(async (data, context) => {
   if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Giriş gerekli");
 
-  const db    = admin.firestore();
+  const db    = getFirestore(); // Hata düzeltildi: admin yerine v2 referansı
   const now   = Date.now();
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const todaySec  = Math.floor(today.getTime() / 1000);
   const twoMinAgo = Math.floor(now / 1000) - 120;
 
-  const [
-    usersSnap, postsSnap, serialsSnap, booksSnap,
-    presenceSnap, reportsSnap, quotesSnap, reviewsSnap,
-  ] = await Promise.all([
-    db.collection("users").get(),
-    db.collection("feed").get(),
-    db.collection("serials").get(),
-    db.collection("library_books").get(),
-    db.collection("presence").where("online", "==", true).get(),
-    db.collection("reports").where("status", "==", "pending").get(),
-    db.collectionGroup("quotes").get(),
-    db.collectionGroup("reviews").get(),
-  ]);
+  try {
+    // Tüm verileri .get() ile indirmek yerine .count() ile bulutta saydırıyoruz (Maliyet/Hafıza dostu)
+    const [
+      totalUsersCount, androidUsersCount, webUsersCount, bannedUsersCount,
+      totalPostsCount, pendingPostsCount,
+      totalQuotesCount, totalReviewsCount, totalSerialsCount, totalBooksCount,
+      pendingReportsCount, onlineNowCount
+    ] = await Promise.all([
+      db.collection("users").count().get(),
+      db.collection("users").where("platform", "==", "android").count().get(),
+      db.collection("users").where("platform", "in", ["web", ""]).count().get(),
+      db.collection("users").where("banned", "==", true).count().get(),
+      db.collection("feed").where("moderationStatus", "==", "active").count().get(),
+      db.collection("feed").where("moderationStatus", "==", "suspended").count().get(),
+      db.collectionGroup("quotes").count().get(),
+      db.collectionGroup("reviews").count().get(),
+      db.collection("serials").count().get(),
+      db.collection("library_books").count().get(),
+      db.collection("reports").where("status", "==", "pending").count().get(),
+      db.collection("presence").where("online", "==", true).where("lastSeen", ">=", new Date(twoMinAgo * 1000)).count().get()
+    ]);
 
-  const totalUsers    = usersSnap.size;
-  const androidUsers  = usersSnap.docs.filter(d => d.data().platform === "android").length;
-  const webUsers      = usersSnap.docs.filter(d => {
-    const p = d.data().platform || ""; return p === "web" || p === "";
-  }).length;
-  const newUsersToday = usersSnap.docs.filter(d => {
-    const ts = d.data().createdAt?._seconds || d.data().ts?._seconds || 0;
-    return ts >= todaySec;
-  }).length;
-  const bannedUsers = usersSnap.docs.filter(d => d.data().banned === true).length;
+    // Bugün katılanlar ve bugün atılan postlar zaman filtresi gerektirdiği için sayfa bazlı kontrol edilebilir
+    // Ancak pratiklik açısından şimdilik basit bir get yerine tarih filtreli count yapıyoruz:
+    const newUsersTodayCount = await db.collection("users").where("createdAt", ">=", new Date(todaySec * 1000)).count().get();
+    const newPostsTodayCount = await db.collection("feed").where("ts", ">=", new Date(todaySec * 1000)).where("moderationStatus", "==", "active").count().get();
 
-  const onlineNow = presenceSnap.docs.filter(d => {
-    const ls = d.data().lastSeen?._seconds || 0;
-    return ls >= twoMinAgo;
-  }).length;
+    const stats = {
+      totalUsers: totalUsersCount.data().count,
+      androidUsers: androidUsersCount.data().count,
+      webUsers: webUsersCount.data().count,
+      onlineNow: onlineNowCount.data().count,
+      newUsersToday: newUsersTodayCount.data().count,
+      totalPosts: totalPostsCount.data().count,
+      newPostsToday: newPostsTodayCount.data().count,
+      pendingPosts: pendingPostsCount.data().count,
+      totalQuotes: totalQuotesCount.data().count,
+      totalReviews: totalReviewsCount.data().count,
+      totalSerials: totalSerialsCount.data().count,
+      totalBooks: totalBooksCount.data().count,
+      pendingReports: pendingReportsCount.data().count,
+      bannedUsers: bannedUsersCount.data().count,
+      totalComments: 0,
+      lastUpdated: now,
+    };
 
-  const activePosts   = postsSnap.docs.filter(d => (d.data().moderationStatus || "active") === "active");
-  const totalPosts    = activePosts.length;
-  const newPostsToday = activePosts.filter(d => (d.data().ts?._seconds || 0) >= todaySec).length;
-  const pendingPosts  = postsSnap.docs.filter(d => d.data().moderationStatus === "suspended").length;
+    await db.collection("appConfig").doc("stats").set(stats);
+    console.log("[refreshStats] Başarıyla güncellendi");
+    return { success: true };
 
-  const stats = {
-    totalUsers, androidUsers, webUsers, onlineNow, newUsersToday,
-    totalPosts, newPostsToday, pendingPosts,
-    totalQuotes  : quotesSnap.size,
-    totalReviews : reviewsSnap.size,
-    totalSerials : serialsSnap.size,
-    totalBooks   : booksSnap.size,
-    pendingReports: reportsSnap.size,
-    bannedUsers,
-    totalComments: 0,   // collectionGroup("comments") pahalı — ayrı sayaçla eklenebilir
-    lastUpdated  : now,
-  };
-
-  await db.collection("appConfig").doc("stats").set(stats);
-  console.log("[refreshStats] güncellendi:", stats);
-  return { success: true };
+  } catch (err) {
+    console.error("[refreshStats] Hata:", err.message);
+    throw new functions.https.HttpsError("internal", err.message);
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Otomatik güncelleme — her gece 02:00'de refreshStats çalışır
-//  Böylece sabah açıldığında istatistikler zaten hazır
+//  scheduledRefreshStats — OPTIMIZED (Her gece çalışan otomatik sürüm)
 // ─────────────────────────────────────────────────────────────────────────────
 exports.scheduledRefreshStats = functions.pubsub
   .schedule("0 2 * * *")
   .timeZone("Europe/Istanbul")
   .onRun(async () => {
-    const db    = admin.firestore();
+    const db    = getFirestore();
     const now   = Date.now();
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const todaySec  = Math.floor(today.getTime() / 1000);
     const twoMinAgo = Math.floor(now / 1000) - 120;
 
-    const [usersSnap, postsSnap, serialsSnap, booksSnap,
-           presenceSnap, reportsSnap, quotesSnap, reviewsSnap] = await Promise.all([
-      db.collection("users").get(),
-      db.collection("feed").get(),
-      db.collection("serials").get(),
-      db.collection("library_books").get(),
-      db.collection("presence").where("online", "==", true).get(),
-      db.collection("reports").where("status", "==", "pending").get(),
-      db.collectionGroup("quotes").get(),
-      db.collectionGroup("reviews").get(),
-    ]);
+    try {
+      const [
+        totalUsersCount, androidUsersCount, webUsersCount, bannedUsersCount,
+        totalPostsCount, pendingPostsCount,
+        totalQuotesCount, totalReviewsCount, totalSerialsCount, totalBooksCount,
+        pendingReportsCount, onlineNowCount, newUsersTodayCount, newPostsTodayCount
+      ] = await Promise.all([
+        db.collection("users").count().get(),
+        db.collection("users").where("platform", "==", "android").count().get(),
+        db.collection("users").where("platform", "in", ["web", ""]).count().get(),
+        db.collection("users").where("banned", "==", true).count().get(),
+        db.collection("feed").where("moderationStatus", "==", "active").count().get(),
+        db.collection("feed").where("moderationStatus", "==", "suspended").count().get(),
+        db.collectionGroup("quotes").count().get(),
+        db.collectionGroup("reviews").count().get(),
+        db.collection("serials").count().get(),
+        db.collection("library_books").count().get(),
+        db.collection("reports").where("status", "==", "pending").count().get(),
+        db.collection("presence").where("online", "==", true).where("lastSeen", ">=", new Date(twoMinAgo * 1000)).count().get(),
+        db.collection("users").where("createdAt", ">=", new Date(todaySec * 1000)).count().get(),
+        db.collection("feed").where("ts", ">=", new Date(todaySec * 1000)).where("moderationStatus", "==", "active").count().get()
+      ]);
 
-    await db.collection("appConfig").doc("stats").set({
-      totalUsers   : usersSnap.size,
-      androidUsers : usersSnap.docs.filter(d => d.data().platform === "android").length,
-      webUsers     : usersSnap.docs.filter(d => { const p = d.data().platform||""; return p==="web"||p===""; }).length,
-      bannedUsers  : usersSnap.docs.filter(d => d.data().banned===true).length,
-      newUsersToday: usersSnap.docs.filter(d => (d.data().createdAt?._seconds||0) >= todaySec).length,
-      onlineNow    : presenceSnap.docs.filter(d => (d.data().lastSeen?._seconds||0) >= twoMinAgo).length,
-      totalPosts   : postsSnap.docs.filter(d => (d.data().moderationStatus||"active")==="active").length,
-      newPostsToday: postsSnap.docs.filter(d => (d.data().moderationStatus||"active")==="active" && (d.data().ts?._seconds||0)>=todaySec).length,
-      pendingPosts : postsSnap.docs.filter(d => d.data().moderationStatus==="suspended").length,
-      totalQuotes  : quotesSnap.size,
-      totalReviews : reviewsSnap.size,
-      totalSerials : serialsSnap.size,
-      totalBooks   : booksSnap.size,
-      pendingReports: reportsSnap.size,
-      totalComments: 0,
-      lastUpdated  : now,
-    });
+      await db.collection("appConfig").doc("stats").set({
+        totalUsers: totalUsersCount.data().count,
+        androidUsers: androidUsersCount.data().count,
+        webUsers: webUsersCount.data().count,
+        bannedUsers: bannedUsersCount.data().count,
+        newUsersToday: newUsersTodayCount.data().count,
+        onlineNow: onlineNowCount.data().count,
+        totalPosts: totalPostsCount.data().count,
+        newPostsToday: newPostsTodayCount.data().count,
+        pendingPosts: pendingPostsCount.data().count,
+        totalQuotes: totalQuotesCount.data().count,
+        totalReviews: totalReviewsCount.data().count,
+        totalSerials: totalSerialsCount.data().count,
+        totalBooks: totalBooksCount.data().count,
+        pendingReports: pendingReportsCount.data().count,
+        totalComments: 0,
+        lastUpdated: now,
+      });
 
-    console.log("[scheduledRefreshStats] tamamlandı");
+      console.log("[scheduledRefreshStats] Zamanlanmış görev başarıyla tamamlandı.");
+    } catch (e) {
+      console.error("[scheduledRefreshStats] Hata oluştu:", e.message);
+    }
     return null;
   });
