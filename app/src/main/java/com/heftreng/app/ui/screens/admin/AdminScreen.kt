@@ -1513,7 +1513,7 @@ private fun PlatformCard(
                 Box(Modifier.fillMaxWidth(pct / 100f).fillMaxHeight()
                     .clip(RoundedCornerShape(2.dp)).background(color))
             }
-            Text(""%.0f%%".format(pct), color = Muted, fontSize = 10.sp)
+            Text("%.0f%%".format(pct), color = Muted, fontSize = 10.sp)
         }
     }
 }
