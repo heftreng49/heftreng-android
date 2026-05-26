@@ -17,10 +17,6 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
@@ -108,9 +104,7 @@ fun FeedScreen(
         Strings.filterAll(language),
         Strings.filterFollowing(language),
     )
-    val feedPagerState  = rememberPagerState { feedTabs.size }
-    val selectedFeedTab by derivedStateOf { feedPagerState.currentPage }
-    val feedScope       = rememberCoroutineScope()
+    var selectedFeedTab by remember { mutableIntStateOf(0) }
 
     // Takip edilen kullanıcıların UID listesi
     val currentUserUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
@@ -127,21 +121,9 @@ fun FeedScreen(
         }
     }
 
-    val displayedPosts = remember(posts, selectedFeedTab, followingUids, currentUserUid) {
-        val base = if (selectedFeedTab == 1) {
-            val allowed = followingUids + setOf(currentUserUid)
-            posts.filter { it.uid in allowed }
-        } else posts
-        // suspended postlar: sadece sahibi görsün
-        // restricted postlar: giriş yapanlar görsün (currentUserUid boş değilse)
-        base.filter { post ->
-            when (post.moderationStatus) {
-                "removed"    -> false  // hiç kimse
-                "suspended"  -> post.uid == currentUserUid  // sadece sahibi
-                "restricted" -> currentUserUid.isNotBlank() // giriş yapanlar
-                else         -> true
-            }
-        }
+    val displayedPosts = remember(posts, selectedFeedTab, followingUids) {
+        if (selectedFeedTab == 1) posts.filter { it.uid in followingUids }
+        else posts
     }
 
     // ── Şikayet dialog ──────────────────────────────────────────────────────
@@ -247,7 +229,7 @@ fun FeedScreen(
                 feedTabs.forEachIndexed { i, title ->
                     Tab(
                         selected               = selectedFeedTab == i,
-                        onClick                = { feedScope.launch { feedPagerState.animateScrollToPage(i) } },
+                        onClick                = { selectedFeedTab = i },
                         text                   = { Text(title, fontSize = 13.sp, fontWeight = if (selectedFeedTab == i) FontWeight.Bold else FontWeight.Normal) },
                         selectedContentColor   = Primary,
                         unselectedContentColor = Muted,
@@ -319,30 +301,6 @@ fun FeedScreen(
                     )
                 }
                 // ── Gönderi listesi ───────────────────────────────────
-                if (displayedPosts.isEmpty() && !loading && selectedFeedTab == 1) {
-                    item {
-                        Box(
-                            Modifier.fillMaxWidth().padding(top = 80.dp),
-                            contentAlignment = androidx.compose.ui.Alignment.Center,
-                        ) {
-                            androidx.compose.foundation.layout.Column(
-                                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Icon(
-                                    Icons.Outlined.PersonAdd, null,
-                                    tint = Muted,
-                                    modifier = Modifier.size(48.dp),
-                                )
-                                Text(
-                                    Strings.followSomeone(language),
-                                    color = Muted, fontSize = 14.sp,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                )
-                            }
-                        }
-                    }
-                }
                 items(displayedPosts, key = { it.id }) { post ->
                     PostCard(
                         post      = post,
@@ -832,105 +790,6 @@ fun PostCard(
             .background(Background)
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
-        // ── Moderasyon Banner — sadece gönderi sahibine göster ────────────
-        if (isOwn && post.moderationStatus != "active") {
-            val (bannerColor, bannerIcon, bannerText) = when (post.moderationStatus) {
-                "restricted" -> Triple(
-                    androidx.compose.ui.graphics.Color(0xFFF59E0B),
-                    Icons.Outlined.VisibilityOff,
-                    "Gönderiniz kısıtlandı — yalnızca giriş yapanlar görebilir"
-                )
-                "suspended"  -> Triple(
-                    androidx.compose.ui.graphics.Color(0xFFEF4444),
-                    Icons.Outlined.PauseCircle,
-                    "Gönderiniz askıya alındı — şu an yalnızca siz görüyorsunuz"
-                )
-                else -> Triple(
-                    androidx.compose.ui.graphics.Color(0xFF6B7280),
-                    Icons.Outlined.Block,
-                    "Gönderiniz kaldırıldı"
-                )
-            }
-            Surface(
-                color  = bannerColor.copy(alpha = 0.12f),
-                shape  = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            ) {
-                androidx.compose.foundation.layout.Column(
-                    modifier = Modifier.padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(bannerIcon, null, tint = bannerColor, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(bannerText, color = bannerColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                    if (post.moderationReason.isNotBlank()) {
-                        Text("Sebep: ${post.moderationReason}", color = bannerColor.copy(alpha = 0.8f), fontSize = 11.sp)
-                    }
-                    // İtiraz butonu — removed hariç
-                    if (post.moderationStatus != "removed") {
-                        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                        val appealScope = rememberCoroutineScope()
-                        var appealSent by remember { mutableStateOf(false) }
-                        var showAppealDialog by remember { mutableStateOf(false) }
-                        var appealText by remember { mutableStateOf("") }
-
-                        if (showAppealDialog) {
-                            androidx.compose.material3.AlertDialog(
-                                onDismissRequest = { showAppealDialog = false },
-                                title = { Text("İtiraz Gönder", fontWeight = FontWeight.Bold) },
-                                text = {
-                                    androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text("Bu kararın hatalı olduğunu düşünüyorsanız itiraz edebilirsiniz.", color = Muted, fontSize = 13.sp)
-                                        androidx.compose.material3.OutlinedTextField(
-                                            value = appealText, onValueChange = { appealText = it },
-                                            label = { Text("Açıklamanız") },
-                                            modifier = Modifier.fillMaxWidth(), maxLines = 4,
-                                        )
-                                    }
-                                },
-                                confirmButton = {
-                                    Button(onClick = {
-                                        appealScope.launch {
-                                            try {
-                                                db.collection("appeals").add(mapOf(
-                                                    "postId"          to post.id,
-                                                    "postOwnerUid"    to post.uid,
-                                                    "postOwnerName"   to post.displayName,
-                                                    "moderationStatus" to post.moderationStatus,
-                                                    "text"            to appealText,
-                                                    "status"          to "pending",
-                                                    "ts"              to com.google.firebase.Timestamp.now(),
-                                                )).await()
-                                            } catch (_: Exception) {}
-                                        }
-                                        appealSent = true
-                                        showAppealDialog = false
-                                    }, enabled = appealText.isNotBlank()) { Text("Gönder") }
-                                },
-                                dismissButton = {
-                                    OutlinedButton(onClick = { showAppealDialog = false }) { Text("İptal") }
-                                },
-                            )
-                        }
-
-                        Spacer(Modifier.height(4.dp))
-                        if (appealSent) {
-                            Text("İtirazınız alındı, incelenecektir.", color = bannerColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                        } else {
-                            Text(
-                                "İtiraz et →",
-                                color = bannerColor,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.clickable { showAppealDialog = true },
-                            )
-                        }
-                    }
-                }
-            }
-        }
         // Header
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Row(
