@@ -186,6 +186,7 @@ class FeedViewModel @Inject constructor(
             libraryBookId          = d["libraryBookId"]          as? String ?: "",
             libraryAuthorId        = d["libraryAuthorId"]        as? String ?: "",
             type                   = d["type"]                   as? String ?: "",
+            visibility             = d["visibility"]             as? String ?: "public",
             moderationStatus       = d["moderationStatus"]       as? String ?: "active",
             moderationReason       = d["moderationReason"]       as? String ?: "",
         )
@@ -250,6 +251,28 @@ class FeedViewModel @Inject constructor(
     }
 
     // ── Beğeni ────────────────────────────────────────────────────────────────
+    // ── Admin: Gönderi Görünürlük Kısıtlaması ────────────────────────────────
+    // "public"  → herkese açık
+    // "friends" → sadece takipçiler
+    // "only_me" → sadece sahibi
+    fun setPostVisibility(postId: String, visibility: String) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("feed").document(postId)
+                    .update("visibility", visibility).await()
+                // Lokal state güncelle
+                _posts.value = _posts.value.map {
+                    if (it.id == postId) it.copy(visibility = visibility) else it
+                }
+                _libraryQuotes.value = _libraryQuotes.value.map {
+                    if (it.id == postId) it.copy(visibility = visibility) else it
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     fun toggleLike(post: Post) {
         if (uid.isEmpty()) return
         val nowLiked = !post.isLikedByMe
@@ -812,86 +835,75 @@ class FeedViewModel @Inject constructor(
     // Feed'den bookName dolu postları çeker; LibraryScreen PostCard ile gösterir.
     // suspend versiyonu — LibraryScreen LaunchedEffect join() ile bekleyebilir
     suspend fun loadLibraryQuotesAsync() {
+        val myUid   = auth.currentUser?.uid ?: ""
         val seenIds = mutableSetOf<String>()
         val result  = mutableListOf<Post>()
 
-            // ── 1. feed'den type=="library_quote" — whereEqualTo tek başına,
-            //       orderBy YOK → Firestore composite index gerekmez
-            try {
-                val snap = firestore.collection("feed")
-                    .whereEqualTo("type", "library_quote")
-                    .get().await()
-                snap.documents.forEach { doc ->
-                    if (seenIds.add(doc.id)) {
-                        doc.toPost()?.let { result.add(it) }
+        // ── feed.whereEqualTo("type","library_quote")
+        //    allow list: if isAuth() — rules güncellendi, query artık çalışır
+        try {
+            val snap = firestore.collection("feed")
+                .whereEqualTo("type", "library_quote")
+                .get().await()
+
+            snap.documents.forEach { doc ->
+                val d   = doc.data ?: return@forEach
+                val vis = d["visibility"] as? String ?: "public"
+
+                // visibility filtresi client-side
+                val canSee = when (vis) {
+                    "only_me"  -> d["uid"] == myUid || isAdmin
+                    "friends"  -> {
+                        val ownerUid = d["uid"] as? String ?: ""
+                        ownerUid == myUid || isAdmin ||
+                        runCatching {
+                            firestore.collection("follows")
+                                .document("${myUid}_${ownerUid}").get().await().exists()
+                        }.getOrDefault(false)
                     }
+                    else -> true  // public
                 }
-            } catch (e: Exception) {
-                android.util.Log.w("FeedVM", "feed type query: ${e.message}")
-            }
 
-            // ── 2. library_books/{id}/quotes collectionGroup — orderBy YOK
-            try {
-                val cgSnap = firestore.collectionGroup("quotes").get().await()
-                cgSnap.documents.forEach { doc ->
-                    val d    = doc.data ?: return@forEach
-                    val text = (d["text"] as? String)?.takeIf { it.isNotBlank() } ?: return@forEach
-                    // feedPostId varsa feed'deki versiyonla zaten seenIds'de
-                    val feedPostId = d["feedPostId"] as? String
-                    if (feedPostId != null && seenIds.contains(feedPostId)) return@forEach
-                    if (seenIds.add("cg_${doc.id}")) {
-                        result.add(Post(
-                            id            = doc.id,
-                            uid           = d["uid"] as? String ?: "",
-                            displayName   = d["userDisplayName"] as? String ?: "",
-                            name          = d["userDisplayName"] as? String ?: "",
-                            photoURL      = d["userPhotoURL"] as? String ?: "",
-                            quoteText     = text,
-                            bookName      = d["bookTitle"] as? String ?: d["bookName"] as? String ?: "",
-                            authorName    = d["authorName"] as? String ?: "",
-                            libraryBookId = d["bookId"] as? String ?: "",
-                            ts            = d["ts"] as? com.google.firebase.Timestamp,
-                            type          = "library_quote",
-                        ))
-                    }
+                if (canSee && seenIds.add(doc.id)) {
+                    doc.toPost()?.let { result.add(it) }
                 }
-            } catch (e: Exception) {
-                android.util.Log.w("FeedVM", "collectionGroup: ${e.message}")
             }
+        } catch (e: Exception) {
+            android.util.Log.w("FeedVM", "loadLibraryQuotes feed: ${e.message}")
+        }
 
-            _libraryQuotes.value = result.sortedByDescending { it.ts?.seconds ?: 0L }
-
-            // ── 3. Eski nested quote map'i olan kayıtlar için fallback
-            //       (type alanı YOK veya boş, ama quote:{author,book,text} map var)
-            try {
-                val legacySnap = firestore.collection("feed").get().await()
-                legacySnap.documents.forEach { doc ->
-                    if (seenIds.contains(doc.id)) return@forEach
-                    val d = doc.data ?: return@forEach
-                    val type = d["type"] as? String ?: ""
-                    if (type == "library_quote") return@forEach  // zaten 1. kolda alındı
-                    // nested quote map veya flat quoteText kontrolü
-                    val quoteObj   = d["quote"] as? Map<*, *>
-                    val text       = (quoteObj?.get("text")   as? String)?.takeIf { it.isNotBlank() }
-                        ?: (d["quoteText"] as? String)?.takeIf { it.isNotBlank() }
-                        ?: return@forEach
-                    val bookName   = (quoteObj?.get("book")   as? String)?.takeIf { it.isNotBlank() }
-                        ?: d["bookName"] as? String ?: ""
-                    val authorName = (quoteObj?.get("author") as? String)?.takeIf { it.isNotBlank() }
-                        ?: d["authorName"] as? String ?: ""
-                    if (bookName.isBlank() && authorName.isBlank()) return@forEach
-                    if (seenIds.add(doc.id)) {
-                        doc.toPost()?.let { result.add(it) }
-                    }
+        // ── library_books/quotes collectionGroup (fallback + ek kayıtlar)
+        try {
+            val cgSnap = firestore.collectionGroup("quotes").get().await()
+            cgSnap.documents.forEach { doc ->
+                val d    = doc.data ?: return@forEach
+                val text = (d["text"] as? String)?.takeIf { it.isNotBlank() } ?: return@forEach
+                val feedPostId = d["feedPostId"] as? String
+                if (feedPostId != null && seenIds.contains(feedPostId)) return@forEach
+                if (seenIds.add("cg_${doc.id}")) {
+                    result.add(Post(
+                        id            = doc.id,
+                        uid           = d["uid"] as? String ?: "",
+                        displayName   = d["userDisplayName"] as? String ?: d["displayName"] as? String ?: "",
+                        name          = d["userDisplayName"] as? String ?: "",
+                        photoURL      = d["userPhotoURL"] as? String ?: "",
+                        quoteText     = text,
+                        bookName      = d["bookTitle"] as? String ?: d["bookName"] as? String ?: "",
+                        authorName    = d["authorName"] as? String ?: "",
+                        libraryBookId = d["bookId"] as? String ?: "",
+                        ts            = d["ts"] as? com.google.firebase.Timestamp,
+                        type          = "library_quote",
+                        visibility    = d["visibility"] as? String ?: "public",
+                    ))
                 }
-            } catch (e: Exception) {
-                android.util.Log.w("FeedVM", "legacy quote fallback: ${e.message}")
             }
+        } catch (e: Exception) {
+            android.util.Log.w("FeedVM", "collectionGroup: ${e.message}")
+        }
 
-            _libraryQuotes.value = result.sortedByDescending { it.ts?.seconds ?: 0L }
-    }
+        _libraryQuotes.value = result.sortedByDescending { it.ts?.seconds ?: 0L }
 
-    // Fire-and-forget wrapper — geriye dönük uyumluluk için korunur
+
     fun loadLibraryQuotes() {
         viewModelScope.launch { loadLibraryQuotesAsync() }
     }

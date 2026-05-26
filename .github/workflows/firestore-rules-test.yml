@@ -1,0 +1,130 @@
+name: Firestore Rules Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'firestore.rules'
+      - '.github/workflows/firestore-rules-test.yml'
+  pull_request:
+    paths:
+      - 'firestore.rules'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Firebase Tools + Test SDK
+        run: |
+          npm install -g firebase-tools
+          npm install @firebase/rules-unit-testing firebase-admin
+
+      - name: Setup Java (Firestore emulator için)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Run Firestore Rules Tests
+        run: node - << 'JSEOF'
+
+const { initializeTestEnvironment, assertFails, assertSucceeds } =
+  require("@firebase/rules-unit-testing");
+const fs   = require("fs");
+const path = require("path");
+
+const PROJECT = "bloggerheftreng";
+const RULES   = fs.readFileSync(path.resolve("firestore.rules"), "utf8");
+
+async function runTests() {
+  const env = await initializeTestEnvironment({
+    projectId: firebaseJson: { firestore: { rules: RULES } },
+  });
+
+  let passed = 0, failed = 0;
+
+  async function test(name, fn) {
+    try {
+      await fn();
+      console.log(`  ✅ ${name}`);
+      passed++;
+    } catch (e) {
+      console.error(`  ❌ ${name}: ${e.message}`);
+      failed++;
+    }
+  }
+
+  // ── Kullanıcılar ────────────────────────────────────────────
+  console.log("\n📋 USERS");
+  const anon    = env.unauthenticatedContext();
+  const user1   = env.authenticatedContext("user1", { email: "user1@test.com" });
+  const admin   = env.authenticatedContext("admin", { email: "siirgibi49@gmail.com" });
+
+  await test("herkes users okuyabilir", async () =>
+    assertSucceeds(anon.firestore().collection("users").doc("user1").get())
+  );
+  await test("kullanıcı kendi profilini güncelleyebilir", async () =>
+    assertSucceeds(user1.firestore().collection("users").doc("user1").update({ bio: "test" }))
+  );
+
+  // ── Feed ────────────────────────────────────────────────────
+  console.log("\n📋 FEED");
+  await test("giriş yapmış kullanıcı feed'i listeleyebilir (whereEqualTo)", async () =>
+    assertSucceeds(
+      user1.firestore().collection("feed")
+        .where("type", "==", "library_quote").get()
+    )
+  );
+  await test("anonim kullanıcı feed'i listeleyemez", async () =>
+    assertFails(
+      anon.firestore().collection("feed").get()
+    )
+  );
+  await test("giriş yapmış kullanıcı post oluşturabilir", async () =>
+    assertSucceeds(
+      user1.firestore().collection("feed").add({
+        uid: "user1", text: "test", likes: 0, saves: 0, cmtCount: 0,
+        type: "library_quote", visibility: "public",
+      })
+    )
+  );
+  await test("admin visibility güncelleyebilir", async () =>
+    assertSucceeds(
+      admin.firestore().collection("feed").doc("testPost")
+        .update({ visibility: "friends" })
+    )
+  );
+
+  // ── Kütüphane ───────────────────────────────────────────────
+  console.log("\n📋 LIBRARY BOOKS");
+  await test("herkes library_books okuyabilir", async () =>
+    assertSucceeds(anon.firestore().collection("library_books").get())
+  );
+  await test("giriş yapmış kullanıcı alıntı ekleyebilir", async () =>
+    assertSucceeds(
+      user1.firestore().collection("library_books").doc("book1")
+        .collection("quotes").add({
+          uid: "user1", text: "test alıntı", ts: new Date(),
+        })
+    )
+  );
+
+  // ── Özet ────────────────────────────────────────────────────
+  console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+  console.log(`✅ Geçen: ${passed}  ❌ Başarısız: ${failed}`);
+  console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+
+  await env.cleanup();
+  if (failed > 0) process.exit(1);
+}
+
+runTests().catch(e => { console.error(e); process.exit(1); });
+JSEOF

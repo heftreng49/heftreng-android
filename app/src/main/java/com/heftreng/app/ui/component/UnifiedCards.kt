@@ -92,7 +92,8 @@ fun BookQuoteCard(
 
     var menuExpanded     by remember { mutableStateOf(false) }
     var showEditDialog   by remember { mutableStateOf(false) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog   by remember { mutableStateOf(false) }
+    var showRestrictDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -144,6 +145,13 @@ fun BookQuoteCard(
                             leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) },
                             onClick     = { menuExpanded = false; showDeleteDialog = true },
                         )
+                        if (isAdmin) {
+                            DropdownMenuItem(
+                                text        = { Text(if (language == "ku") "Sînordar bike" else "Kısıtla", color = Color(0xFFF59E0B)) },
+                                leadingIcon = { Icon(Icons.Default.VisibilityOff, null, tint = Color(0xFFF59E0B)) },
+                                onClick     = { menuExpanded = false; showRestrictDialog = true },
+                            )
+                        }
                     }
                 }
             }
@@ -306,6 +314,18 @@ fun BookQuoteCard(
                 TextButton(onClick = { showDeleteDialog = false }) {
                     Text(if (language == "ku") "Betal bike" else "İptal", color = Muted)
                 }
+            },
+        )
+    }
+
+    if (showRestrictDialog && isAdmin) {
+        VisibilityRestrictDialog(
+            currentVisibility = quote.visibility,
+            language          = language,
+            onDismiss         = { showRestrictDialog = false },
+            onApply           = { vis ->
+                vm?.setPostVisibility(quote.id, vis)
+                showRestrictDialog = false
             },
         )
     }

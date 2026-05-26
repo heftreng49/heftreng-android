@@ -264,6 +264,32 @@ async function fixQuoteTypes() {
 }
 
 // ────────────────────────────────────────────────────────────────
+//  ADIM 5 — feed: visibility alanı eksik alıntılara "public" ekle
+// ────────────────────────────────────────────────────────────────
+async function fixVisibility() {
+  console.log('\n── ADIM 5: visibility eksik alıntılara "public" ekle ──');
+  const snap = await db.collection("feed")
+    .where("type", "==", "library_quote")
+    .get();
+
+  let fixed = 0, skipped = 0;
+  let batch = db.batch(), count = 0;
+  const batches = [];
+
+  snap.docs.forEach((doc) => {
+    if (!doc.data().visibility) {
+      batch.update(doc.ref, { visibility: "public" });
+      fixed++; count++;
+      if (count >= 400) { batches.push(batch); batch = db.batch(); count = 0; }
+    } else { skipped++; }
+  });
+  if (count > 0) batches.push(batch);
+  for (const b of batches) await b.commit();
+
+  console.log(`\n  Güncellendi: ${fixed} | Zaten var: ${skipped}`);
+}
+
+// ────────────────────────────────────────────────────────────────
 //  Ana akış
 // ────────────────────────────────────────────────────────────────
 (async () => {
@@ -272,6 +298,7 @@ async function fixQuoteTypes() {
     await fixBooks();
     await syncFeedQuotesToLibrary();
     await fixQuoteTypes();
+    await fixVisibility();
     console.log("\n✅ Migration tamamlandı.");
   } catch (e) {
     console.error("❌ Hata:", e);

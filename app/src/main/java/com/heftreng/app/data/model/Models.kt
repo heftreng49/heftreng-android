@@ -84,6 +84,11 @@ data class Post(
     val moderationStatus : String     = "active",
     val moderationNote   : String     = "",   // admin notu (kullanıcıya gösterilmez)
     val moderationReason : String     = "",   // kullanıcıya gösterilen sebep
+    // Görünürlük kısıtlaması (admin uygular)
+    // "public"   → herkese açık (varsayılan)
+    // "friends"  → sadece takipçiler görebilir
+    // "only_me"  → sadece sahibi görebilir
+    val visibility       : String     = "public",
 )
 
 // ─── MODERASYON İTİRAZ ────────────────────────────────────────────────

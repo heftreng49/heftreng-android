@@ -1,7 +1,14 @@
-name: Migrate Library (nameLower + titleLower + feed→quotes sync + type fix)
+name: Migrate Library
 
 on:
-  workflow_dispatch:  # Manuel tetikleme — sadece sen çalıştırırsın
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run — sadece say, değişiklik yapma'
+        required: false
+        default: 'true'
+        type: choice
+        options: ['true', 'false']
 
 jobs:
   migrate:
@@ -20,5 +27,17 @@ jobs:
       - name: Create service account file
         run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > serviceAccount.json
 
-      - name: Run migration script
-        run: node migrate-library.js
+      - name: Run migration
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "⚠️  DRY RUN modu — gerçek değişiklik yapılmayacak"
+          else
+            echo "🚀 GERÇEK migration başlıyor..."
+          fi
+          node migrate-library.js
+
+      - name: Cleanup
+        if: always()
+        run: rm -f serviceAccount.json
