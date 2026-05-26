@@ -1,11 +1,13 @@
 package com.heftreng.app.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -18,6 +20,7 @@ import javax.inject.Inject
 class PresenceViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     private val _onlineUsers = MutableStateFlow<Set<String>>(emptySet())
@@ -50,13 +53,18 @@ class PresenceViewModel @Inject constructor(
     }
 
     private fun sendHeartbeat() {
+        val appVersion = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
+        } catch (_: Exception) { "" }
         viewModelScope.launch {
             try {
                 firestore.collection("presence").document(uid).set(
                     mapOf(
-                        "online"   to true,
-                        "lastSeen" to FieldValue.serverTimestamp(),
-                        "uid"      to uid
+                        "online"     to true,
+                        "lastSeen"   to FieldValue.serverTimestamp(),
+                        "uid"        to uid,
+                        "appVersion" to appVersion,
+                        "platform"   to "android",
                     )
                 ).await()
             } catch (e: Exception) { e.printStackTrace() }
