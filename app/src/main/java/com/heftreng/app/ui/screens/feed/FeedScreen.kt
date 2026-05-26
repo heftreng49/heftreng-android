@@ -56,6 +56,7 @@ import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
+import com.heftreng.app.viewmodel.SettingsViewModel
 import kotlinx.coroutines.tasks.await
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
@@ -77,6 +78,7 @@ fun FeedScreen(
     vm           : FeedViewModel  = hiltViewModel(),
     socialVm     : SocialViewModel = hiltViewModel(),
     adsVm        : AdsViewModel    = hiltViewModel(),
+    settingsVm   : SettingsViewModel = hiltViewModel(),
 ) {
     val posts       by vm.posts.collectAsState()
     val loading     by vm.loading.collectAsState()
@@ -84,6 +86,7 @@ fun FeedScreen(
     val loadingMore by vm.loadingMore.collectAsState()
     val bannerUnitId by adsVm.bannerUnitId.collectAsState()
     val bannerPos    by adsVm.bannerPosition.collectAsState()
+    val blockedUsers by settingsVm.blockedUsers.collectAsState()
 
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullRefreshState(
@@ -96,7 +99,10 @@ fun FeedScreen(
     // isRefreshing'i loading bitince kapat
     LaunchedEffect(loading) { if (!loading) isRefreshing = false }
 
-    LaunchedEffect(Unit) { adsVm.loadAdConfigs() }
+    LaunchedEffect(Unit) {
+        adsVm.loadAdConfigs()
+        settingsVm.loadBlockedUsers()
+    }
 
     // ── Feed sekme (Herkes / Takip edilenler) ────────────────────────────────
     val ku = language == "ku"
@@ -121,15 +127,23 @@ fun FeedScreen(
         }
     }
 
-    val displayedPosts = remember(posts, selectedFeedTab, followingUids) {
-        if (selectedFeedTab == 1) posts.filter { it.uid in followingUids }
-        else posts
+    val displayedPosts = remember(posts, selectedFeedTab, followingUids, blockedUsers) {
+        val blockedUids = blockedUsers.map { it.uid }.toSet()
+        val filtered = posts.filter { it.uid !in blockedUids }
+        if (selectedFeedTab == 1) filtered.filter { it.uid in followingUids }
+        else filtered
     }
 
     // ── Şikayet dialog ──────────────────────────────────────────────────────
     var reportPostId     by remember { mutableStateOf<String?>(null) }
     var reportTargetUid  by remember { mutableStateOf("") }
     var reportTargetName by remember { mutableStateOf("") }
+
+    // ── Engelleme confirm dialog ─────────────────────────────────────────────
+    var blockTargetUid   by remember { mutableStateOf("") }
+    var blockTargetName  by remember { mutableStateOf("") }
+    var blockTargetPhoto by remember { mutableStateOf("") }
+    var showBlockDialog  by remember { mutableStateOf(false) }
 
     var likersPostId     by remember { mutableStateOf<String?>(null) }
     val likers           by socialVm.likers.collectAsState()
@@ -206,6 +220,29 @@ fun FeedScreen(
                     )
                 )
                 reportPostId = null
+            },
+        )
+    }
+
+    // ── Engelleme onay dialog ────────────────────────────────────────────────
+    if (showBlockDialog) {
+        AlertDialog(
+            onDismissRequest = { showBlockDialog = false },
+            containerColor   = HeftSurface,
+            title = { Text(Strings.blockUser(language), color = OnBackground, fontWeight = FontWeight.SemiBold) },
+            text  = { Text(Strings.blockUserConfirm(language), color = Muted) },
+            confirmButton = {
+                TextButton(onClick = {
+                    settingsVm.blockUser(blockTargetUid, blockTargetName, blockTargetPhoto)
+                    showBlockDialog = false
+                }) {
+                    Text(Strings.blockUser(language), color = Color(0xFFEF4444))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBlockDialog = false }) {
+                    Text(Strings.cancel(language), color = Muted)
+                }
             },
         )
     }
@@ -360,6 +397,12 @@ fun FeedScreen(
                             reportPostId     = post.id
                             reportTargetUid  = post.uid
                             reportTargetName = post.displayName.ifBlank { post.name }
+                        },
+                        onBlock = {
+                            blockTargetUid   = post.uid
+                            blockTargetName  = post.displayName.ifBlank { post.name }
+                            blockTargetPhoto = post.photoURL
+                            showBlockDialog  = true
                         },
                         language = language,
                     )
@@ -774,6 +817,7 @@ fun PostCard(
     onTapBook    : ((String) -> Unit)? = null,
     onTapRepost  : ((postId: String, type: String) -> Unit)? = null,
     onReport     : (() -> Unit)? = null,
+    onBlock      : (() -> Unit)? = null,
     language     : String = "tr",
 ) {
     val ku = language == "ku"
@@ -895,6 +939,14 @@ fun PostCard(
                             onClick     = {
                                 menuExpanded = false
                                 onReport?.invoke()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text        = { Text(Strings.blockUser(language), color = Color(0xFFEF4444)) },
+                            leadingIcon = { Icon(Icons.Default.Block, null, tint = Color(0xFFEF4444)) },
+                            onClick     = {
+                                menuExpanded = false
+                                onBlock?.invoke()
                             },
                         )
                     }

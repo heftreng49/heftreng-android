@@ -86,6 +86,28 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    // ── Kullanıcıyı engelle ──────────────────────────────────────────────────
+    fun blockUser(targetUid: String, targetName: String, targetPhoto: String) {
+        val myUid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                firestore.collection("users").document(myUid)
+                    .collection("blocked").document(targetUid).set(
+                        mapOf(
+                            "displayName" to targetName,
+                            "photoURL"    to targetPhoto,
+                            "blockedAt"   to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                        )
+                    ).await()
+                // Local state'i anında güncelle
+                val updated = BlockedUser(uid = targetUid, displayName = targetName, photoURL = targetPhoto)
+                if (_blockedUsers.value.none { it.uid == targetUid }) {
+                    _blockedUsers.value = _blockedUsers.value + updated
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
     // ── Engeli kaldır ────────────────────────────────────────────────────────
     fun unblockUser(blockedUid: String) {
         val myUid = auth.currentUser?.uid ?: return

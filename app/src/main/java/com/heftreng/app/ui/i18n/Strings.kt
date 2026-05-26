@@ -248,6 +248,8 @@ object Strings {
     fun privateAccount(l: String)   = t(l, "Gizli Hesap",          "Hesabê Veşartî")
     fun blockedUsers(l: String)     = t(l, "Engellenen Kullanıcılar", "Bikarhênerên Astengkirî")
     fun unblock(l: String)          = t(l, "Engeli Kaldır",        "Astengiyê Berde")
+    fun blockUser(l: String)        = t(l, "Kullanıcıyı Engelle",  "Bikarhênerê Asteng bike")
+    fun blockUserConfirm(l: String) = t(l, "Bu kullanıcıyı engellemek istediğine emin misin?", "Tu dixwazî vî bikarhênerî asteng bikî?")
     fun termsOfUse(l: String)       = t(l, "Kullanım Koşulları",   "Şert û Mercên Bikarhanînê")
     fun privacyPolicy(l: String)    = t(l, "Gizlilik Politikası",  "Siyaseta Nepeniyê")
     fun passwordMismatch(l: String) = t(l, "Şifreler eşleşmiyor", "Şîre li hev nayên")
