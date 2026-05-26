@@ -294,27 +294,38 @@ class AdminViewModel @Inject constructor(
                 val users   = try { firestore.collection("users").get().await().size() } catch (_: Exception) { -1 }
                 val posts   = try { firestore.collection("feed").limit(500).get().await().size() } catch (_: Exception) { -1 }
                 val serials = try { firestore.collection("serials").get().await().size() } catch (_: Exception) { -1 }
-                val books   = try { firestore.collection("books").get().await().size() } catch (_: Exception) { -1 }
-                val pending = try { firestore.collection("pendingPosts").get().await().size() } catch (_: Exception) { -1 }
+                val books   = try { firestore.collection("library_books").get().await().size() } catch (_: Exception) { -1 }
+                // pending: feed'de moderationStatus="suspended" olan postlar
+                val pending = try {
+                    firestore.collection("feed")
+                        .whereEqualTo("moderationStatus", "suspended")
+                        .get().await().size()
+                } catch (_: Exception) { -1 }
                 val reports = try { firestore.collection("reports").whereEqualTo("status", "pending").get().await().size() } catch (_: Exception) { -1 }
                 val banned  = try { firestore.collection("users").whereEqualTo("banned", true).get().await().size() } catch (_: Exception) { -1 }
 
                 // Son 24 saatte kayıt olan kullanıcılar
+                // whereGreaterThan index gerektirebilir — client-side filtre kullan
                 val oneDayAgo = com.google.firebase.Timestamp(
                     System.currentTimeMillis() / 1000 - 86400, 0
                 )
-                // Not: whereGreaterThan tek başına index gerektirmez
                 val newUsers = try {
                     firestore.collection("users")
-                        .whereGreaterThan("createdAt", oneDayAgo)
-                        .get().await().size()
+                        .get().await().documents.count { doc ->
+                            val ts = doc.getTimestamp("createdAt")
+                                ?: doc.getTimestamp("ts")
+                            ts != null && ts.seconds > oneDayAgo.seconds
+                        }
                 } catch (_: Exception) { -1 }
 
-                // Son 24 saatte atılan gönderiler
+                // Son 24 saatte atılan gönderiler — client-side filtre
                 val newPosts = try {
                     firestore.collection("feed")
-                        .whereGreaterThan("ts", oneDayAgo)
-                        .limit(200).get().await().size()
+                        .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                        .limit(500).get().await().documents.count { doc ->
+                            val ts = doc.getTimestamp("ts")
+                            ts != null && ts.seconds > oneDayAgo.seconds
+                        }
                 } catch (_: Exception) { -1 }
 
                 // Online kullanıcılar — whereEqualTo + whereGreaterThan composite index gerektirebilir
@@ -357,9 +368,9 @@ class AdminViewModel @Inject constructor(
             val oneWeekAgo = com.google.firebase.Timestamp(
                 System.currentTimeMillis() / 1000 - 7 * 86400, 0
             )
+            // whereGreaterThan index gerektirir — tümünü çekip bellekte filtrele
             val presenceSnap = firestore.collection("presence")
-                .whereGreaterThan("lastSeen", oneWeekAgo)
-                .limit(50).get().await()
+                .limit(200).get().await()
 
             val result = mutableListOf<UserActivity>()
             val twoMinMs = 120_000L
@@ -367,6 +378,9 @@ class AdminViewModel @Inject constructor(
             presenceSnap.documents.forEach { doc ->
                 val d          = doc.data ?: return@forEach
                 val uid        = doc.id
+                // Bellekte son 7 gün filtresi
+                val lastSeenCheck = (d["lastSeen"] as? com.google.firebase.Timestamp)?.seconds ?: 0L
+                if (lastSeenCheck < oneWeekAgo.seconds) return@forEach
                 val lastSeenTs = (d["lastSeen"] as? com.google.firebase.Timestamp)
                 val lastSeenMs = lastSeenTs?.toDate()?.time ?: 0L
                 val online     = (d["online"] as? Boolean == true) &&
