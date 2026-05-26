@@ -79,6 +79,25 @@ data class Post(
     val libraryAuthorId  : String     = "",
     // Post tipi: "", "library_quote", "library_review", "book_chapter" vb.
     val type             : String     = "",
+    // Moderasyon — admin tarafından yönetilir
+    // "active" | "restricted" (sadece giriş yapanlar) | "suspended" (sadece sahip) | "removed" (silinmiş)
+    val moderationStatus : String     = "active",
+    val moderationNote   : String     = "",   // admin notu (kullanıcıya gösterilmez)
+    val moderationReason : String     = "",   // kullanıcıya gösterilen sebep
+)
+
+// ─── MODERASYON İTİRAZ ────────────────────────────────────────────────
+data class Appeal(
+    val id              : String     = "",
+    val postId          : String     = "",
+    val postOwnerUid    : String     = "",
+    val postOwnerName   : String     = "",
+    val moderationStatus: String     = "",   // hangi kısıtlamaya itiraz
+    val text            : String     = "",   // kullanıcının itiraz metni
+    val status          : String     = "pending",  // pending | approved | rejected
+    val adminNote       : String     = "",
+    val ts              : com.google.firebase.Timestamp? = null,
+    val resolvedAt      : com.google.firebase.Timestamp? = null,
 )
 
 // ─── YORUM ─────────────────────────────────────────────

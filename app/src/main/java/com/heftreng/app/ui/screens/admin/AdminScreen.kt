@@ -71,8 +71,9 @@ fun AdminScreen(
 
     // Şikayetler
     val reports     by vm.reports.collectAsState()
+    val appeals     by vm.appeals.collectAsState()
 
-    val tabs = listOf("Push", "Bildirim", "Kullanıcılar", "Bekleyenler", "Şikayetler", "İstatistik", "Düzenle", "Kütüphane")
+    val tabs = listOf("Push", "Bildirim", "Kullanıcılar", "Bekleyenler", "Şikayetler", "İtirazlar", "İstatistik", "Düzenle", "Kütüphane")
 
     LaunchedEffect(Unit) {
         vm.checkAdmin()
@@ -81,6 +82,7 @@ fun AdminScreen(
         vm.loadStats()
         vm.loadFeedPosts()
         vm.loadReports()
+        vm.loadAppeals()
     }
 
     // editResult bildirimi
@@ -374,7 +376,91 @@ fun AdminScreen(
                                 if (targetPostId.isNotBlank()) {
                                     Text("Post ID: $targetPostId", color = Muted, fontSize = 11.sp)
                                 }
-                                if (status == "pending") {
+                                // Moderasyon aksiyonları (gönderi şikayetiyse)
+                                if (targetPostId.isNotBlank()) {
+                                    var showModDialog by remember { mutableStateOf(false) }
+                                    var modReason by remember { mutableStateOf("") }
+                                    var modNote by remember { mutableStateOf("") }
+                                    var selectedModStatus by remember { mutableStateOf("restricted") }
+
+                                    if (showModDialog) {
+                                        androidx.compose.material3.AlertDialog(
+                                            onDismissRequest = { showModDialog = false },
+                                            title = { Text("Gönderiyi Kısıtla", fontWeight = FontWeight.Bold) },
+                                            text = {
+                                                androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    listOf(
+                                                        "restricted" to "Kısıtlı (sadece giriş yapanlar)",
+                                                        "suspended"  to "Askıya al (sadece sahibi görür)",
+                                                        "removed"    to "Kaldır (hiç kimse görmez)",
+                                                    ).forEach { (s, label) ->
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth().clickable { selectedModStatus = s }.padding(vertical = 4.dp),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                        ) {
+                                                            androidx.compose.material3.RadioButton(selected = selectedModStatus == s, onClick = { selectedModStatus = s })
+                                                            Spacer(Modifier.width(6.dp))
+                                                            Text(label, fontSize = 13.sp, color = OnBackground)
+                                                        }
+                                                    }
+                                                    Spacer(Modifier.height(4.dp))
+                                                    androidx.compose.material3.OutlinedTextField(
+                                                        value = modReason, onValueChange = { modReason = it },
+                                                        label = { Text("Kullanıcıya gösterilecek sebep") },
+                                                        modifier = Modifier.fillMaxWidth(), maxLines = 3,
+                                                    )
+                                                    androidx.compose.material3.OutlinedTextField(
+                                                        value = modNote, onValueChange = { modNote = it },
+                                                        label = { Text("Admin notu (gizli)") },
+                                                        modifier = Modifier.fillMaxWidth(), maxLines = 2,
+                                                    )
+                                                }
+                                            },
+                                            confirmButton = {
+                                                Button(onClick = {
+                                                    vm.moderatePost(
+                                                        postId     = targetPostId,
+                                                        targetUid  = report["targetUid"] as? String ?: "",
+                                                        targetName = targetName,
+                                                        status     = selectedModStatus,
+                                                        reason     = modReason,
+                                                        adminNote  = modNote,
+                                                    )
+                                                    vm.updateReportStatus(reportId, "reviewed")
+                                                    showModDialog = false
+                                                }) { Text("Uygula") }
+                                            },
+                                            dismissButton = {
+                                                OutlinedButton(onClick = { showModDialog = false }) { Text("İptal") }
+                                            },
+                                        )
+                                    }
+
+                                    if (status == "pending") {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Button(
+                                                onClick = { showModDialog = true },
+                                                shape  = RoundedCornerShape(8.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444), contentColor = Color.White),
+                                                modifier = Modifier.weight(1f),
+                                                contentPadding = PaddingValues(vertical = 6.dp),
+                                            ) { Text("Kısıtla", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                                            Button(
+                                                onClick = { vm.updateReportStatus(reportId, "reviewed") },
+                                                shape  = RoundedCornerShape(8.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E), contentColor = Color.White),
+                                                modifier = Modifier.weight(1f),
+                                                contentPadding = PaddingValues(vertical = 6.dp),
+                                            ) { Text("Sorunsuz", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                                            OutlinedButton(
+                                                onClick = { vm.updateReportStatus(reportId, "dismissed") },
+                                                shape   = RoundedCornerShape(8.dp),
+                                                modifier = Modifier.weight(1f),
+                                                contentPadding = PaddingValues(vertical = 6.dp),
+                                            ) { Text("Yoksay", fontSize = 12.sp, color = Muted) }
+                                        }
+                                    }
+                                } else if (status == "pending") {
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Button(
                                             onClick = { vm.updateReportStatus(reportId, "reviewed") },
@@ -382,17 +468,13 @@ fun AdminScreen(
                                             colors  = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E), contentColor = Color.White),
                                             modifier = Modifier.weight(1f),
                                             contentPadding = PaddingValues(vertical = 6.dp),
-                                        ) {
-                                            Text("İncelendi", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                        }
+                                        ) { Text("İncelendi", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                                         OutlinedButton(
                                             onClick = { vm.updateReportStatus(reportId, "dismissed") },
                                             shape   = RoundedCornerShape(8.dp),
                                             modifier = Modifier.weight(1f),
                                             contentPadding = PaddingValues(vertical = 6.dp),
-                                        ) {
-                                            Text("Reddet", fontSize = 12.sp, color = Muted)
-                                        }
+                                        ) { Text("Reddet", fontSize = 12.sp, color = Muted) }
                                     }
                                 }
                             }
@@ -400,8 +482,66 @@ fun AdminScreen(
                     }
                 }
 
-                // ── İstatistikler ──────────────────────────────────────────────
+                // ── İtirazlar ──────────────────────────────────────────────
                 5 -> LazyColumn(
+                    modifier       = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("İtirazlar (${appeals.size})", color = Amber, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Spacer(Modifier.weight(1f))
+                            if (appeals.isEmpty()) {
+                                Text("Bekleyen itiraz yok", color = Muted, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                    items(appeals, key = { it.id }) { appeal ->
+                        var adminNote by remember { mutableStateOf("") }
+                        Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface) {
+                            androidx.compose.foundation.layout.Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Outlined.Gavel, null, tint = Amber, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(appeal.postOwnerName, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                    Spacer(Modifier.weight(1f))
+                                    Surface(color = Color(0xFFF59E0B).copy(alpha = 0.15f), shape = RoundedCornerShape(4.dp)) {
+                                        Text("${appeal.moderationStatus}", color = Color(0xFFF59E0B),
+                                            fontSize = 10.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                    }
+                                }
+                                Text("Post ID: ${appeal.postId}", color = Muted, fontSize = 11.sp)
+                                if (appeal.text.isNotBlank()) {
+                                    Text("İtiraz metni: ${appeal.text}", color = OnBackground, fontSize = 12.sp)
+                                }
+                                androidx.compose.material3.OutlinedTextField(
+                                    value = adminNote, onValueChange = { adminNote = it },
+                                    label = { Text("Admin notu") },
+                                    modifier = Modifier.fillMaxWidth(), maxLines = 2,
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(
+                                        onClick = { vm.approveAppeal(appeal, adminNote) },
+                                        shape  = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E), contentColor = Color.White),
+                                        modifier = Modifier.weight(1f),
+                                        contentPadding = PaddingValues(vertical = 6.dp),
+                                    ) { Text("Onayla", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                                    OutlinedButton(
+                                        onClick = { vm.rejectAppeal(appeal, adminNote) },
+                                        shape   = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.weight(1f),
+                                        contentPadding = PaddingValues(vertical = 6.dp),
+                                    ) { Text("Reddet", fontSize = 12.sp, color = Muted) }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── İstatistikler ──────────────────────────────────────────────
+                8 -> LazyColumn(
                     modifier       = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),

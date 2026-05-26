@@ -104,7 +104,13 @@ class FeedViewModel @Inject constructor(
                     if (snap.documents.isNotEmpty()) lastDoc = snap.documents.last()
                     _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
                     val rawPosts = snap.documents.mapNotNull { doc -> doc.toPost() }
-                    _posts.value = enrichPostsWithUserData(rawPosts)
+                    // Moderasyon filtresi:
+                    // "removed"   → hiç kimse görmez
+                    // "suspended" → sadece gönderi sahibi görür (FeedScreen'de filtre)
+                    // "restricted"→ sadece giriş yapanlar görür (FeedScreen'de kontrol)
+                    // "active"    → herkes görür
+                    val filtered = rawPosts.filter { it.moderationStatus != "removed" }
+                    _posts.value = enrichPostsWithUserData(filtered)
                     _loading.value = false
                 }
             }
@@ -180,6 +186,8 @@ class FeedViewModel @Inject constructor(
             libraryBookId          = d["libraryBookId"]          as? String ?: "",
             libraryAuthorId        = d["libraryAuthorId"]        as? String ?: "",
             type                   = d["type"]                   as? String ?: "",
+            moderationStatus       = d["moderationStatus"]       as? String ?: "active",
+            moderationReason       = d["moderationReason"]       as? String ?: "",
         )
     }
 

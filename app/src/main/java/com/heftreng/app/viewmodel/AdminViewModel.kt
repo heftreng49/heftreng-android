@@ -275,6 +275,8 @@ class AdminViewModel @Inject constructor(
 
     // ── Şikayetler ────────────────────────────────────────────────────────────
     private val _reports = MutableStateFlow<List<Map<String, Any>>>(emptyList())
+    private val _appeals = MutableStateFlow<List<com.heftreng.app.data.model.Appeal>>(emptyList())
+    val appeals = _appeals.asStateFlow()
     val reports = _reports.asStateFlow()
 
     fun loadReports() {
@@ -304,6 +306,176 @@ class AdminViewModel @Inject constructor(
                 _reports.value = _reports.value.map { r ->
                     if (r["id"] == reportId) r.toMutableMap().also { it["status"] = status } else r
                 }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+    // ══════════════════════════════════════════════════════════════════════
+    //  GÖNDERI MODERASYON SİSTEMİ
+    //  3 seviye: restricted | suspended | removed
+    //  Her işlemde kullanıcıya bildirim + feed/appeals güncelleme
+    // ══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Gönderiyi kısıtla.
+     * restricted → sadece giriş yapanlar görür
+     * suspended  → sadece gönderi sahibi görür
+     * removed    → hiç kimse görmez, gönderi feed'den çıkar
+     */
+    fun moderatePost(
+        postId      : String,
+        targetUid   : String,
+        targetName  : String,
+        status      : String,   // "restricted" | "suspended" | "removed"
+        reason      : String,   // kullanıcıya gösterilecek sebep
+        adminNote   : String,   // sadece admin görür
+    ) {
+        if (!_isAdmin.value) return
+        viewModelScope.launch {
+            try {
+                val myUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""
+
+                // 1. Feed dokümanını güncelle
+                firestore.collection("feed").document(postId).update(mapOf(
+                    "moderationStatus" to status,
+                    "moderationReason" to reason,
+                    "moderationNote"   to adminNote,
+                    "moderatedBy"      to myUid,
+                    "moderatedAt"      to com.google.firebase.Timestamp.now(),
+                )).await()
+
+                // 2. Kullanıcıya bildirim gönder
+                val notifTitle = when (status) {
+                    "restricted" -> "Gönderiniz kısıtlandı"
+                    "suspended"  -> "Gönderiniz askıya alındı"
+                    "removed"    -> "Gönderiniz kaldırıldı"
+                    else -> "Gönderi durumu güncellendi"
+                }
+                val notifBody = if (reason.isNotBlank()) reason else when (status) {
+                    "restricted" -> "Gönderiniz yalnızca giriş yapmış kullanıcılara gösterilecek."
+                    "suspended"  -> "Gönderiniz inceleniyor, şimdilik yalnızca siz görebilirsiniz."
+                    "removed"    -> "Gönderiniz platform kurallarına aykırı bulundu ve kaldırıldı."
+                    else -> ""
+                }
+                if (targetUid.isNotBlank()) {
+                    firestore.collection("userNotifs").document(targetUid)
+                        .collection("notifs").add(mapOf(
+                            "type"      to "moderation",
+                            "title"     to notifTitle,
+                            "body"      to notifBody,
+                            "postId"    to postId,
+                            "status"    to status,
+                            "read"      to false,
+                            "ts"        to com.google.firebase.Timestamp.now(),
+                        )).await()
+                }
+
+                // 3. Moderasyon kaydı tut (audit log)
+                firestore.collection("moderationLogs").add(mapOf(
+                    "postId"     to postId,
+                    "targetUid"  to targetUid,
+                    "targetName" to targetName,
+                    "status"     to status,
+                    "reason"     to reason,
+                    "adminNote"  to adminNote,
+                    "adminUid"   to myUid,
+                    "ts"         to com.google.firebase.Timestamp.now(),
+                )).await()
+
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    /** Kısıtlamayı kaldır — gönderiyi aktif yap */
+    fun restorePost(postId: String, targetUid: String) {
+        if (!_isAdmin.value) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("feed").document(postId).update(mapOf(
+                    "moderationStatus" to "active",
+                    "moderationReason" to "",
+                    "moderationNote"   to "",
+                )).await()
+                if (targetUid.isNotBlank()) {
+                    firestore.collection("userNotifs").document(targetUid)
+                        .collection("notifs").add(mapOf(
+                            "type"   to "moderation",
+                            "title"  to "Gönderiniz yeniden aktif edildi",
+                            "body"   to "İnceleme sonucunda gönderiniz tekrar herkese açık hale getirildi.",
+                            "read"   to false,
+                            "ts"     to com.google.firebase.Timestamp.now(),
+                        )).await()
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── İTİRAZ YÖNETİMİ ──────────────────────────────────────────────────
+
+    fun loadAppeals() {
+        if (!_isAdmin.value) return
+        viewModelScope.launch {
+            try {
+                val snap = firestore.collection("appeals")
+                    .whereEqualTo("status", "pending")
+                    .limit(50).get().await()
+                _appeals.value = snap.documents.mapNotNull { doc ->
+                    try {
+                        doc.toObject(com.heftreng.app.data.model.Appeal::class.java)?.copy(id = doc.id)
+                    } catch (_: Exception) { null }
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    /** İtirazı onayla — gönderiyi geri yükle */
+    fun approveAppeal(appeal: com.heftreng.app.data.model.Appeal, adminNote: String = "") {
+        if (!_isAdmin.value) return
+        viewModelScope.launch {
+            try {
+                // İtirazı güncelle
+                firestore.collection("appeals").document(appeal.id).update(mapOf(
+                    "status"      to "approved",
+                    "adminNote"   to adminNote,
+                    "resolvedAt"  to com.google.firebase.Timestamp.now(),
+                )).await()
+                // Gönderiyi geri yükle
+                restorePost(appeal.postId, appeal.postOwnerUid)
+                // Kullanıcıya bildirim
+                firestore.collection("userNotifs").document(appeal.postOwnerUid)
+                    .collection("notifs").add(mapOf(
+                        "type"   to "appeal_result",
+                        "title"  to "İtirazınız kabul edildi",
+                        "body"   to "Gönderiniz yeniden aktif edildi. ${if (adminNote.isNotBlank()) adminNote else ""}",
+                        "postId" to appeal.postId,
+                        "read"   to false,
+                        "ts"     to com.google.firebase.Timestamp.now(),
+                    )).await()
+                _appeals.value = _appeals.value.filter { it.id != appeal.id }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    /** İtirazı reddet — kısıtlama devam eder */
+    fun rejectAppeal(appeal: com.heftreng.app.data.model.Appeal, adminNote: String = "") {
+        if (!_isAdmin.value) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("appeals").document(appeal.id).update(mapOf(
+                    "status"     to "rejected",
+                    "adminNote"  to adminNote,
+                    "resolvedAt" to com.google.firebase.Timestamp.now(),
+                )).await()
+                // Kullanıcıya bildirim
+                firestore.collection("userNotifs").document(appeal.postOwnerUid)
+                    .collection("notifs").add(mapOf(
+                        "type"   to "appeal_result",
+                        "title"  to "İtirazınız reddedildi",
+                        "body"   to "Gönderinizle ilgili kararımız geçerliliğini korumaktadır. ${if (adminNote.isNotBlank()) adminNote else ""}",
+                        "postId" to appeal.postId,
+                        "read"   to false,
+                        "ts"     to com.google.firebase.Timestamp.now(),
+                    )).await()
+                _appeals.value = _appeals.value.filter { it.id != appeal.id }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
