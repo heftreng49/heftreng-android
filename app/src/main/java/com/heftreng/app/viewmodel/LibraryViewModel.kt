@@ -729,19 +729,24 @@ class LibraryViewModel @Inject constructor(
     fun migrateLegacyFeedQuotes(onProgress: (Int, Int) -> Unit = { _, _ -> }) {
         viewModelScope.launch {
             try {
-                // 1. libraryBookId boş olan, quoteText dolu feed belgelerini getir
+                // Eski postlarda "libraryBookId" alanı ABSENT (yok) — whereEqualTo("","") eşleşmez.
+                // Tek güvenilir yol: feed'i toplu çekip bellekte filtrele.
+                // bookName VEYA quote.book dolu olan her postu işle.
                 val snap = firestore.collection("feed")
-                    .whereEqualTo("libraryBookId", "")
-                    .limit(200).get().await()
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(500).get().await()
 
                 val docs = snap.documents.filter { doc ->
                     val d = doc.data ?: return@filter false
-                    val qObj   = d["quote"] as? Map<*, *>
-                    val qText  = (qObj?.get("text") as? String)?.isNotBlank() == true
-                        || (d["quoteText"] as? String)?.isNotBlank() == true
-                    val bName  = (qObj?.get("book") as? String)?.isNotBlank() == true
-                        || (d["bookName"] as? String)?.isNotBlank() == true
-                    qText && bName
+                    // libraryBookId zaten dolu olanları atla
+                    val existingBookId = d["libraryBookId"] as? String ?: ""
+                    if (existingBookId.isNotBlank()) return@filter false
+                    val qObj  = d["quote"] as? Map<*, *>
+                    val bName = (qObj?.get("book") as? String)?.trim()?.isNotBlank() == true
+                        || (d["bookName"] as? String)?.trim()?.isNotBlank() == true
+                    val qText = (qObj?.get("text") as? String)?.trim()?.isNotBlank() == true
+                        || (d["quoteText"] as? String)?.trim()?.isNotBlank() == true
+                    bName && qText
                 }
 
                 val total = docs.size
@@ -762,6 +767,9 @@ class LibraryViewModel @Inject constructor(
                     val updates = mutableMapOf<String, Any>()
                     if (authorId.isNotBlank()) updates["libraryAuthorId"] = authorId
                     if (bookId.isNotBlank())   updates["libraryBookId"]   = bookId
+                    // type alanı yoksa yaz — loadLibraryQuotesAsync bu alanla filtreler
+                    val currentType = doc.data?.get("type") as? String ?: ""
+                    if (currentType.isBlank()) updates["type"] = "library_quote"
 
                     if (updates.isNotEmpty()) {
                         try { doc.reference.update(updates).await() } catch (_: Exception) {}
