@@ -12,6 +12,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.heftreng.app.R
+import com.heftreng.app.BuildConfig
 import android.content.SharedPreferences
 import javax.inject.Named
 import com.heftreng.app.utils.HeftrangMessagingService
@@ -155,7 +156,7 @@ class AuthViewModel @Inject constructor(
                     val existingName = doc.getString("displayName")?.takeIf { it.isNotBlank() && it != "Kullanıcı" }
                     val updates = mutableMapOf<String, Any>(
                         "lastSeen"   to com.google.firebase.Timestamp.now(),
-                        "appVersion" to com.heftreng.app.BuildConfig.VERSION_NAME,
+                        "appVersion" to BuildConfig.VERSION_NAME,
                         "platform"   to "android",
                     )
                     if (existingName == null) {
@@ -317,7 +318,7 @@ class AuthViewModel @Inject constructor(
             "banned"      to false,
             "createdAt"   to com.google.firebase.Timestamp.now(),
             "lastSeen"    to com.google.firebase.Timestamp.now(),
-            "appVersion"  to com.heftreng.app.BuildConfig.VERSION_NAME,
+            "appVersion"  to BuildConfig.VERSION_NAME,
             "platform"    to "android",
         ), com.google.firebase.firestore.SetOptions.merge()).await()
 
