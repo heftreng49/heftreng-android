@@ -501,6 +501,7 @@ data class BookQuote(
     val userDisplayName: String = "",
     val userPhotoURL: String    = "",
     val feedPostId  : String    = "",   // feed'deki post id (ters referans)
+    val visibility  : String    = "public",  // feed'den miras alınan görünürlük
     val likesCount  : Int       = 0,
     val likedBy     : List<String> = emptyList(),  // uid listesi
     @get:Exclude val isLikedByMe: Boolean = false, // runtime hesaplanır

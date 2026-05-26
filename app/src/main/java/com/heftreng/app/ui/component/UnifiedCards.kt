@@ -67,9 +67,10 @@ import kotlin.math.roundToInt
 // ─────────────────────────────────────────────────────────────────────────────
 
 data class BookCardActions(
-    val vm           : LibraryViewModel? = null,
-    val navController: NavController?    = null,
-    val onComment    : (() -> Unit)?      = null,
+    val vm            : LibraryViewModel? = null,
+    val feedVm        : com.heftreng.app.viewmodel.FeedViewModel? = null,
+    val navController : NavController?    = null,
+    val onComment     : (() -> Unit)?      = null,
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -324,7 +325,8 @@ fun BookQuoteCard(
             language          = language,
             onDismiss         = { showRestrictDialog = false },
             onApply           = { vis ->
-                vm?.setPostVisibility(quote.id, vis)
+                val postId = quote.feedPostId.ifBlank { quote.id }
+                actions.feedVm?.setPostVisibility(postId, vis)
                 showRestrictDialog = false
             },
         )
@@ -938,3 +940,87 @@ fun unifiedFieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedTextColor   = OnBackground,
     cursorColor          = Primary,
 )
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Admin Görünürlük Kısıtlama Dialog'u
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun VisibilityRestrictDialog(
+    currentVisibility: String = "public",
+    language         : String = "tr",
+    onDismiss        : () -> Unit,
+    onApply          : (String) -> Unit,
+) {
+    var selected by remember { mutableStateOf(currentVisibility) }
+
+    val options = listOf(
+        Triple("public",   Icons.Default.Public,        if (language == "ku") "Herkesî" else "Herkese açık"),
+        Triple("friends",  Icons.Default.Group,         if (language == "ku") "Tenê hevalên" else "Sadece takipçiler"),
+        Triple("only_me",  Icons.Default.VisibilityOff, if (language == "ku") "Tenê ez" else "Sadece sahibi"),
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(Icons.Default.AdminPanelSettings, null, tint = Color(0xFFF59E0B), modifier = Modifier.size(20.dp))
+                Text(
+                    if (language == "ku") "Sînordarkirina Nîşandanê" else "Görünürlük Kısıtla",
+                    color = OnBackground, fontWeight = FontWeight.Bold,
+                )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    if (language == "ku") "Vê postê kî bibîne?" else "Bu gönderiyi kim görebilecek?",
+                    color = Muted, fontSize = 13.sp,
+                )
+                Spacer(Modifier.height(4.dp))
+                options.forEach { (value, icon, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (selected == value) Primary.copy(alpha = 0.1f) else Color.Transparent)
+                            .clickable { selected = value }
+                            .padding(12.dp),
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(icon, null, tint = if (selected == value) Primary else Muted, modifier = Modifier.size(20.dp))
+                        Text(
+                            label,
+                            color      = OnBackground,
+                            fontWeight = if (selected == value) FontWeight.SemiBold else FontWeight.Normal,
+                            fontSize   = 14.sp,
+                            modifier   = Modifier.weight(1f),
+                        )
+                        if (selected == value) {
+                            Icon(Icons.Default.CheckCircle, null, tint = Primary, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onApply(selected) }) {
+                Text(
+                    if (language == "ku") "Bicîh bike" else "Uygula",
+                    color = Color(0xFFF59E0B), fontWeight = FontWeight.Bold,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(if (language == "ku") "Betal bike" else "İptal", color = Muted)
+            }
+        },
+    )
+}
+

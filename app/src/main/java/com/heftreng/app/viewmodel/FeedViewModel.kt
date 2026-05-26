@@ -836,6 +836,7 @@ class FeedViewModel @Inject constructor(
     // suspend versiyonu — LibraryScreen LaunchedEffect join() ile bekleyebilir
     suspend fun loadLibraryQuotesAsync() {
         val myUid   = auth.currentUser?.uid ?: ""
+        val isAdmin = auth.currentUser?.email == "siirgibi49@gmail.com"
         val seenIds = mutableSetOf<String>()
         val result  = mutableListOf<Post>()
 
