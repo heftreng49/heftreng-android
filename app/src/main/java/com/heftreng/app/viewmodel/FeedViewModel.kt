@@ -902,7 +902,7 @@ class FeedViewModel @Inject constructor(
         }
 
         _libraryQuotes.value = result.sortedByDescending { it.ts?.seconds ?: 0L }
-
+    }
 
     fun loadLibraryQuotes() {
         viewModelScope.launch { loadLibraryQuotesAsync() }
