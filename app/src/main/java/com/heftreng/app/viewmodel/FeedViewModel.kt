@@ -902,6 +902,29 @@ class FeedViewModel @Inject constructor(
             android.util.Log.w("FeedVM", "collectionGroup: ${e.message}")
         }
 
+        // ── Eski postlar fallback — type alanı yok ama bookName dolu ──
+        // Firestore'da type="library_quote" olmayan eski paylaşımları da yakala
+        try {
+            val oldSnap = firestore.collection("feed")
+                .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                .limit(300).get().await()
+            oldSnap.documents.forEach { doc ->
+                if (seenIds.contains(doc.id)) return@forEach
+                val d = doc.data ?: return@forEach
+                val bookName = (d["bookName"] as? String)?.takeIf { it.isNotBlank() }
+                    ?: ((d["quote"] as? Map<*,*>)?.get("book") as? String)?.takeIf { it.isNotBlank() }
+                    ?: return@forEach
+                val quoteText = (d["quoteText"] as? String)?.takeIf { it.isNotBlank() }
+                    ?: ((d["quote"] as? Map<*,*>)?.get("text") as? String)?.takeIf { it.isNotBlank() }
+                    ?: return@forEach
+                if (seenIds.add(doc.id)) {
+                    doc.toPost()?.let { result.add(it) }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("FeedVM", "loadLibraryQuotes oldPosts: ${e.message}")
+        }
+
         _libraryQuotes.value = result.sortedByDescending { it.ts?.seconds ?: 0L }
     }
 

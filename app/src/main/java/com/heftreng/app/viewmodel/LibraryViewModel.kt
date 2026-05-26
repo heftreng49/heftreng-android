@@ -247,12 +247,25 @@ class LibraryViewModel @Inject constructor(
     }
 
     private suspend fun loadAuthorReviews(authorId: String) {
-        val snap = firestore.collectionGroup("reviews")
-            .whereEqualTo("authorId", authorId)
-            .orderBy("ts", Query.Direction.DESCENDING)
-            .limit(50).get().await()
-        _authorReviews.value = snap.documents.mapNotNull { doc ->
-            doc.toObject(BookReview::class.java)?.copy(id = doc.id)
+        // collectionGroup + orderBy index gerektirir → kitap kitap toplayarak çöz
+        try {
+            val booksSnap = firestore.collection("library_books")
+                .whereEqualTo("authorId", authorId)
+                .limit(50).get().await()
+            val allReviews = mutableListOf<BookReview>()
+            booksSnap.documents.forEach { bookDoc ->
+                try {
+                    val rSnap = firestore.collection("library_books")
+                        .document(bookDoc.id).collection("reviews")
+                        .limit(20).get().await()
+                    rSnap.documents.mapNotNullTo(allReviews) { doc ->
+                        doc.toObject(BookReview::class.java)?.copy(id = doc.id)
+                    }
+                } catch (_: Exception) {}
+            }
+            _authorReviews.value = allReviews.sortedByDescending { it.ts?.seconds ?: 0L }
+        } catch (e: Exception) {
+            android.util.Log.w("LibraryVM", "loadAuthorReviews: ${e.message}")
         }
     }
 

@@ -76,8 +76,10 @@ import kotlin.math.roundToInt
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── BookQuote → Post dönüştürücü (PostCard kullanımı için) ────────────────
+// feedPostId varsa feed'deki orijinal post'u temsil eder → like/save o ID üzerinden çalışır
+// feedPostId yoksa quote'un kendi id'si kullanılır (alt koleksiyon kaydı)
 private fun BookQuote.toPost() = Post(
-    id            = id,
+    id            = feedPostId.takeIf { it.isNotBlank() } ?: id,
     uid           = uid,
     displayName   = userDisplayName,
     name          = userDisplayName,
@@ -89,6 +91,8 @@ private fun BookQuote.toPost() = Post(
     text          = "",
     likesCount    = likesCount,
     ts            = ts,
+    libraryBookId   = bookId,
+    libraryAuthorId = authorId,
 )
 
 
