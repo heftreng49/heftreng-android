@@ -543,7 +543,7 @@ fun AdminScreen(
                 }
 
                 // ── İstatistikler ──────────────────────────────────────────────
-                8 -> LazyColumn(
+                6 -> LazyColumn(
                     modifier       = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -572,16 +572,16 @@ fun AdminScreen(
                     // ── Özet kartlar ─────────────────────────────────────────
                     item {
                         val statCards = listOf(
-                            Triple("👤 Toplam Kullanıcı", stats["users"]?.toString() ?: "—", Color(0xFF7C3AED)),
-                            Triple("🟢 Şu An Online",    stats["online"]?.toString() ?: "—", Color(0xFF16A34A)),
-                            Triple("📝 Toplam Gönderi",  stats["posts"]?.toString() ?: "—", Color(0xFF2563EB)),
-                            Triple("🆕 Bugün Kayıt",     stats["newUsers"]?.toString() ?: "—", Color(0xFFD97706)),
-                            Triple("📬 Bugün Gönderi",   stats["newPosts"]?.toString() ?: "—", Color(0xFF0891B2)),
-                            Triple("📚 Seri",            stats["serials"]?.toString() ?: "—", Color(0xFF9333EA)),
-                            Triple("📖 Kitap",           stats["books"]?.toString() ?: "—", Color(0xFFB45309)),
-                            Triple("⏳ Bekleyen",        stats["pending"]?.toString() ?: "—", Color(0xFFEA580C)),
-                            Triple("🚩 Şikayet",         stats["reports"]?.toString() ?: "—", Color(0xFFDC2626)),
-                            Triple("🚫 Banlı",           stats["banned"]?.toString() ?: "—", Color(0xFF6B7280)),
+                            Triple("👤 Toplam Kullanıcı", stats["users"].toStatStr(), Color(0xFF7C3AED)),
+                            Triple("🟢 Şu An Online",    stats["online"].toStatStr(), Color(0xFF16A34A)),
+                            Triple("📝 Toplam Gönderi",  stats["posts"].toStatStr(), Color(0xFF2563EB)),
+                            Triple("🆕 Bugün Kayıt",     stats["newUsers"].toStatStr(), Color(0xFFD97706)),
+                            Triple("📬 Bugün Gönderi",   stats["newPosts"].toStatStr(), Color(0xFF0891B2)),
+                            Triple("📚 Seri",            stats["serials"].toStatStr(), Color(0xFF9333EA)),
+                            Triple("📖 Kitap",           stats["books"].toStatStr(), Color(0xFFB45309)),
+                            Triple("⏳ Bekleyen",        stats["pending"].toStatStr(), Color(0xFFEA580C)),
+                            Triple("🚩 Şikayet",         stats["reports"].toStatStr(), Color(0xFFDC2626)),
+                            Triple("🚫 Banlı",           stats["banned"].toStatStr(), Color(0xFF6B7280)),
                         )
                         androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
                             columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
@@ -700,7 +700,7 @@ fun AdminScreen(
 
 
                 // ── Düzenle ───────────────────────────────────────────────────
-                6 -> {
+                7 -> {
                     LazyColumn(
                         modifier       = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(16.dp),
@@ -876,9 +876,9 @@ fun AdminScreen(
                     }
                 }
                 // ─────────────────────────────────────────────────────────
-                //  TAB 7 — KÜTÜPHANE: Yazar & Kitap Yönetimi
+                //  TAB 8 — KÜTÜPHANE: Yazar & Kitap Yönetimi
                 // ─────────────────────────────────────────────────────────
-                7 -> {
+                8 -> {
                     AdminLibraryTab(libraryVm = libraryVm)
                 }
             }
@@ -1464,6 +1464,13 @@ private fun AdminEditBookDialog(
 }
 
 // ── Son görülme formatlayıcı ──────────────────────────────────────────────────
+// Stat değeri: null=yüklenmedi, -1=hata, >=0=değer
+private fun Int?.toStatStr(): String = when {
+    this == null -> "—"
+    this == -1   -> "!"
+    else         -> this.toString()
+}
+
 private fun formatLastSeen(lastSeenMs: Long): String {
     if (lastSeenMs == 0L) return "Bilinmiyor"
     val diffMs  = System.currentTimeMillis() - lastSeenMs

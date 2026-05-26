@@ -290,38 +290,47 @@ class AdminViewModel @Inject constructor(
         viewModelScope.launch {
             _statsLoading.value = true
             try {
-                // Temel sayımlar
-                val users   = firestore.collection("users").get().await().size()
-                val posts   = firestore.collection("feed").limit(500).get().await().size()
-                val serials = firestore.collection("serials").get().await().size()
-                val books   = firestore.collection("books").get().await().size()
-                val pending = firestore.collection("pendingPosts").get().await().size()
-                val reports = firestore.collection("reports").whereEqualTo("status", "pending").get().await().size()
-                val banned  = firestore.collection("users").whereEqualTo("banned", true).get().await().size()
+                // Her sorgu bağımsız — biri hata verse diğerleri çalışmaya devam eder
+                val users   = try { firestore.collection("users").get().await().size() } catch (_: Exception) { -1 }
+                val posts   = try { firestore.collection("feed").limit(500).get().await().size() } catch (_: Exception) { -1 }
+                val serials = try { firestore.collection("serials").get().await().size() } catch (_: Exception) { -1 }
+                val books   = try { firestore.collection("books").get().await().size() } catch (_: Exception) { -1 }
+                val pending = try { firestore.collection("pendingPosts").get().await().size() } catch (_: Exception) { -1 }
+                val reports = try { firestore.collection("reports").whereEqualTo("status", "pending").get().await().size() } catch (_: Exception) { -1 }
+                val banned  = try { firestore.collection("users").whereEqualTo("banned", true).get().await().size() } catch (_: Exception) { -1 }
 
                 // Son 24 saatte kayıt olan kullanıcılar
                 val oneDayAgo = com.google.firebase.Timestamp(
                     System.currentTimeMillis() / 1000 - 86400, 0
                 )
-                val newUsers = firestore.collection("users")
-                    .whereGreaterThan("createdAt", oneDayAgo)
-                    .get().await().size()
+                // Not: whereGreaterThan tek başına index gerektirmez
+                val newUsers = try {
+                    firestore.collection("users")
+                        .whereGreaterThan("createdAt", oneDayAgo)
+                        .get().await().size()
+                } catch (_: Exception) { -1 }
 
                 // Son 24 saatte atılan gönderiler
-                val newPosts = firestore.collection("feed")
-                    .whereGreaterThan("ts", oneDayAgo)
-                    .limit(200).get().await().size()
+                val newPosts = try {
+                    firestore.collection("feed")
+                        .whereGreaterThan("ts", oneDayAgo)
+                        .limit(200).get().await().size()
+                } catch (_: Exception) { -1 }
 
-                // Online kullanıcılar (presence koleksiyonu)
+                // Online kullanıcılar — whereEqualTo + whereGreaterThan composite index gerektirebilir
+                // Güvenli fallback: sadece online=true filtrele, lastSeen'i client-side filtrele
                 val twoMinAgo = com.google.firebase.Timestamp(
                     System.currentTimeMillis() / 1000 - 120, 0
                 )
                 val onlineCount = try {
                     firestore.collection("presence")
                         .whereEqualTo("online", true)
-                        .whereGreaterThan("lastSeen", twoMinAgo)
-                        .get().await().size()
-                } catch (_: Exception) { 0 }
+                        .get().await()
+                        .documents.count { doc ->
+                            val ls = doc.getTimestamp("lastSeen")?.seconds ?: 0L
+                            (System.currentTimeMillis() / 1000 - ls) < 120
+                        }
+                } catch (_: Exception) { -1 }
 
                 _stats.value = mapOf(
                     "users"    to users,
