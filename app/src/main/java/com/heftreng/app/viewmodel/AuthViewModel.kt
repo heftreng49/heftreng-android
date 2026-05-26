@@ -154,7 +154,9 @@ class AuthViewModel @Inject constructor(
                     val doc = firestore.collection("users").document(user.uid).get().await()
                     val existingName = doc.getString("displayName")?.takeIf { it.isNotBlank() && it != "Kullanıcı" }
                     val updates = mutableMapOf<String, Any>(
-                        "lastSeen" to com.google.firebase.Timestamp.now(),
+                        "lastSeen"   to com.google.firebase.Timestamp.now(),
+                        "appVersion" to com.heftreng.app.BuildConfig.VERSION_NAME,
+                        "platform"   to "android",
                     )
                     if (existingName == null) {
                         // İsim hiç yok veya "Kullanıcı" yazıyor — Google'dan doldur
@@ -315,6 +317,8 @@ class AuthViewModel @Inject constructor(
             "banned"      to false,
             "createdAt"   to com.google.firebase.Timestamp.now(),
             "lastSeen"    to com.google.firebase.Timestamp.now(),
+            "appVersion"  to com.heftreng.app.BuildConfig.VERSION_NAME,
+            "platform"    to "android",
         ), com.google.firebase.firestore.SetOptions.merge()).await()
 
         // 3. username benzersizlik kaydı

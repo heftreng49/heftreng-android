@@ -42,6 +42,24 @@ class AdminViewModel @Inject constructor(
     private val _stats        = MutableStateFlow<Map<String, Int>>(emptyMap())
     val stats = _stats.asStateFlow()
 
+    // ── Detaylı istatistikler ─────────────────────────────────────────────────
+    data class UserActivity(
+        val uid         : String = "",
+        val displayName : String = "",
+        val photoURL    : String = "",
+        val online      : Boolean = false,
+        val lastSeenMs  : Long = 0L,
+        val appVersion  : String = "",
+        val platform    : String = "",
+        val postsCount  : Int = 0,
+        val level       : Int = 1,
+    )
+    private val _activeUsers = MutableStateFlow<List<UserActivity>>(emptyList())
+    val activeUsers = _activeUsers.asStateFlow()
+
+    private val _statsLoading = MutableStateFlow(false)
+    val statsLoading = _statsLoading.asStateFlow()
+
     fun checkAdmin() {
         viewModelScope.launch {
             val currentUser = auth.currentUser ?: run { _isAdmin.value = false; return@launch }
@@ -270,23 +288,105 @@ class AdminViewModel @Inject constructor(
     // ── İstatistikler ─────────────────────────────────────────────────────────
     fun loadStats() {
         viewModelScope.launch {
+            _statsLoading.value = true
             try {
+                // Temel sayımlar
                 val users   = firestore.collection("users").get().await().size()
                 val posts   = firestore.collection("feed").limit(500).get().await().size()
                 val serials = firestore.collection("serials").get().await().size()
                 val books   = firestore.collection("books").get().await().size()
                 val pending = firestore.collection("pendingPosts").get().await().size()
                 val reports = firestore.collection("reports").whereEqualTo("status", "pending").get().await().size()
-                _stats.value = mapOf(
-                    "users"   to users,
-                    "posts"   to posts,
-                    "serials" to serials,
-                    "books"   to books,
-                    "pending" to pending,
-                    "reports" to reports,
+                val banned  = firestore.collection("users").whereEqualTo("banned", true).get().await().size()
+
+                // Son 24 saatte kayıt olan kullanıcılar
+                val oneDayAgo = com.google.firebase.Timestamp(
+                    System.currentTimeMillis() / 1000 - 86400, 0
                 )
+                val newUsers = firestore.collection("users")
+                    .whereGreaterThan("createdAt", oneDayAgo)
+                    .get().await().size()
+
+                // Son 24 saatte atılan gönderiler
+                val newPosts = firestore.collection("feed")
+                    .whereGreaterThan("ts", oneDayAgo)
+                    .limit(200).get().await().size()
+
+                // Online kullanıcılar (presence koleksiyonu)
+                val twoMinAgo = com.google.firebase.Timestamp(
+                    System.currentTimeMillis() / 1000 - 120, 0
+                )
+                val onlineCount = try {
+                    firestore.collection("presence")
+                        .whereEqualTo("online", true)
+                        .whereGreaterThan("lastSeen", twoMinAgo)
+                        .get().await().size()
+                } catch (_: Exception) { 0 }
+
+                _stats.value = mapOf(
+                    "users"    to users,
+                    "posts"    to posts,
+                    "serials"  to serials,
+                    "books"    to books,
+                    "pending"  to pending,
+                    "reports"  to reports,
+                    "banned"   to banned,
+                    "newUsers" to newUsers,
+                    "newPosts" to newPosts,
+                    "online"   to onlineCount,
+                )
+
+                // Aktif kullanıcı hareketleri — presence + users join
+                loadActiveUsers()
             } catch (e: Exception) { e.printStackTrace() }
+            finally { _statsLoading.value = false }
         }
+    }
+
+    private suspend fun loadActiveUsers() {
+        try {
+            val oneWeekAgo = com.google.firebase.Timestamp(
+                System.currentTimeMillis() / 1000 - 7 * 86400, 0
+            )
+            val presenceSnap = firestore.collection("presence")
+                .whereGreaterThan("lastSeen", oneWeekAgo)
+                .limit(50).get().await()
+
+            val result = mutableListOf<UserActivity>()
+            val twoMinMs = 120_000L
+
+            presenceSnap.documents.forEach { doc ->
+                val d          = doc.data ?: return@forEach
+                val uid        = doc.id
+                val lastSeenTs = (d["lastSeen"] as? com.google.firebase.Timestamp)
+                val lastSeenMs = lastSeenTs?.toDate()?.time ?: 0L
+                val online     = (d["online"] as? Boolean == true) &&
+                                 (System.currentTimeMillis() - lastSeenMs < twoMinMs)
+
+                // User dökümanından ek bilgi al
+                val userDoc = try {
+                    firestore.collection("users").document(uid).get().await()
+                } catch (_: Exception) { null }
+                val ud = userDoc?.data
+
+                result.add(UserActivity(
+                    uid         = uid,
+                    displayName = ud?.get("displayName") as? String
+                                  ?: ud?.get("name") as? String ?: "—",
+                    photoURL    = ud?.get("photoURL") as? String ?: "",
+                    online      = online,
+                    lastSeenMs  = lastSeenMs,
+                    appVersion  = ud?.get("appVersion") as? String ?: "—",
+                    platform    = ud?.get("platform")   as? String ?: "android",
+                    postsCount  = (ud?.get("postsCount") as? Long)?.toInt() ?: 0,
+                    level       = (ud?.get("level")      as? Long)?.toInt() ?: 1,
+                ))
+            }
+            _activeUsers.value = result.sortedWith(
+                compareByDescending<UserActivity> { it.online }
+                    .thenByDescending { it.lastSeenMs }
+            )
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     // ── Şikayetler ────────────────────────────────────────────────────────────

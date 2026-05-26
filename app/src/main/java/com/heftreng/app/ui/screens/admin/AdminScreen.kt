@@ -48,6 +48,8 @@ fun AdminScreen(
     val loading     by vm.loading.collectAsState()
     val pushResult  by vm.pushResult.collectAsState()
     val stats       by vm.stats.collectAsState()
+    val activeUsers  by vm.activeUsers.collectAsState()
+    val statsLoading by vm.statsLoading.collectAsState()
 
     var pushTitle   by remember { mutableStateOf("") }
     var pushBody    by remember { mutableStateOf("") }
@@ -544,38 +546,154 @@ fun AdminScreen(
                 8 -> LazyColumn(
                     modifier       = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    // Yenile butonu
                     item {
-                        Text("Platform İstatistikleri", color = Amber, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                        Spacer(Modifier.height(8.dp))
-                        listOf(
-                            "Toplam Kullanıcı" to (stats["users"]?.toString() ?: "—"),
-                            "Toplam Gönderi"   to (stats["posts"]?.toString() ?: "—"),
-                            "Toplam Seri"      to (stats["serials"]?.toString() ?: "—"),
-                            "Toplam Kitap"     to (stats["books"]?.toString() ?: "—"),
-                            "Bekleyen"         to (stats["pending"]?.toString() ?: "—"),
-                        ).forEach { (label, value) ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth()
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(label, color = OnBackground, modifier = Modifier.weight(1f))
-                                Text(value, color = Amber, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Platform İstatistikleri", color = Amber,
+                                fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            if (statsLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp),
+                                    color = Amber, strokeWidth = 2.dp)
+                            } else {
+                                IconButton(onClick = { vm.loadStats() }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.Refresh, null, tint = Amber,
+                                        modifier = Modifier.size(18.dp))
+                                }
                             }
-                            HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         }
-                        Spacer(Modifier.height(12.dp))
-                        Button(
-                            onClick  = { vm.loadStats() },
+                    }
+
+                    // ── Özet kartlar ─────────────────────────────────────────
+                    item {
+                        val statCards = listOf(
+                            Triple("👤 Toplam Kullanıcı", stats["users"]?.toString() ?: "—", Color(0xFF7C3AED)),
+                            Triple("🟢 Şu An Online",    stats["online"]?.toString() ?: "—", Color(0xFF16A34A)),
+                            Triple("📝 Toplam Gönderi",  stats["posts"]?.toString() ?: "—", Color(0xFF2563EB)),
+                            Triple("🆕 Bugün Kayıt",     stats["newUsers"]?.toString() ?: "—", Color(0xFFD97706)),
+                            Triple("📬 Bugün Gönderi",   stats["newPosts"]?.toString() ?: "—", Color(0xFF0891B2)),
+                            Triple("📚 Seri",            stats["serials"]?.toString() ?: "—", Color(0xFF9333EA)),
+                            Triple("📖 Kitap",           stats["books"]?.toString() ?: "—", Color(0xFFB45309)),
+                            Triple("⏳ Bekleyen",        stats["pending"]?.toString() ?: "—", Color(0xFFEA580C)),
+                            Triple("🚩 Şikayet",         stats["reports"]?.toString() ?: "—", Color(0xFFDC2626)),
+                            Triple("🚫 Banlı",           stats["banned"]?.toString() ?: "—", Color(0xFF6B7280)),
+                        )
+                        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                            columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 600.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            userScrollEnabled = false,
+                        ) {
+                            items(statCards.size) { i ->
+                                val (label, value, color) = statCards[i]
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape    = RoundedCornerShape(12.dp),
+                                    colors   = CardDefaults.cardColors(containerColor = HeftSurface),
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Text(label, color = Muted, fontSize = 11.sp)
+                                        Text(value, color = color,
+                                            fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Son Aktif Kullanıcılar ────────────────────────────────
+                    item {
+                        Spacer(Modifier.height(4.dp))
+                        Text("Son Aktif Kullanıcılar", color = Amber,
+                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Spacer(Modifier.height(4.dp))
+                        Text("Son 7 gün • presence verisi",
+                            color = Muted, fontSize = 11.sp)
+                    }
+
+                    if (activeUsers.isEmpty() && !statsLoading) {
+                        item {
+                            Text("Henüz veri yok", color = Muted, fontSize = 12.sp,
+                                modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                    }
+
+                    items(activeUsers.size) { i ->
+                        val u = activeUsers[i]
+                        Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape    = RoundedCornerShape(10.dp),
-                            colors   = ButtonDefaults.buttonColors(containerColor = SurfaceVar, contentColor = OnBackground),
+                            colors   = CardDefaults.cardColors(containerColor = HeftSurface),
                         ) {
-                            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Yenile")
+                            Row(
+                                modifier          = Modifier.fillMaxWidth().padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                // Avatar + online dot
+                                Box(contentAlignment = Alignment.BottomEnd) {
+                                    Box(
+                                        modifier = Modifier.size(38.dp)
+                                            .clip(CircleShape)
+                                            .background(SurfaceVar),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        if (u.photoURL.isNotBlank()) {
+                                            coil.compose.AsyncImage(
+                                                model = u.photoURL,
+                                                contentDescription = null,
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop,
+                                            )
+                                        } else {
+                                            Text(u.displayName.firstOrNull()?.uppercase() ?: "?",
+                                                color = OnBackground, fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp)
+                                        }
+                                    }
+                                    Box(
+                                        modifier = Modifier.size(10.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (u.online) Color(0xFF16A34A)
+                                                else Color(0xFF6B7280)
+                                            )
+                                    )
+                                }
+                                // Bilgiler
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(u.displayName, color = OnBackground,
+                                        fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                                        maxLines = 1)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(
+                                            if (u.online) "🟢 Online"
+                                            else "⏱ ${formatLastSeen(u.lastSeenMs)}",
+                                            color = if (u.online) Color(0xFF16A34A) else Muted,
+                                            fontSize = 11.sp,
+                                        )
+                                        if (u.appVersion != "—" && u.appVersion.isNotBlank()) {
+                                            Text("v${u.appVersion}", color = Muted, fontSize = 11.sp)
+                                        }
+                                    }
+                                }
+                                // Level + gönderi sayısı
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("Lv.${u.level}", color = Amber,
+                                        fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text("${u.postsCount} gönderi",
+                                        color = Muted, fontSize = 10.sp)
+                                }
+                            }
                         }
                     }
                 }
@@ -1343,4 +1461,19 @@ private fun AdminEditBookDialog(
             TextButton(onClick = onDismiss) { Text("İptal", color = Muted) }
         },
     )
+}
+
+// ── Son görülme formatlayıcı ──────────────────────────────────────────────────
+private fun formatLastSeen(lastSeenMs: Long): String {
+    if (lastSeenMs == 0L) return "Bilinmiyor"
+    val diffMs  = System.currentTimeMillis() - lastSeenMs
+    val diffMin = diffMs / 60_000
+    val diffHr  = diffMs / 3_600_000
+    val diffDay = diffMs / 86_400_000
+    return when {
+        diffMin < 2   -> "Az önce"
+        diffMin < 60  -> "${diffMin}dk önce"
+        diffHr  < 24  -> "${diffHr}sa önce"
+        else          -> "${diffDay}g önce"
+    }
 }
