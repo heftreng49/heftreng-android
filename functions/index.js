@@ -127,15 +127,68 @@ exports.sendPush = onCall(
 );
 
 // ─── fixNewUserDisplayName — Auth onCreate (v1 gen1) ────────────────────────
+// ── Bot/Spam tespitinde kullanılan yardımcılar ──────────────────────────────
+const DISPOSABLE_DOMAINS = [
+  "mailinator.com","guerrillamail.com","temp-mail.org","throwam.com",
+  "yopmail.com","sharklasers.com","guerrillamailblock.com","grr.la",
+  "guerrillamail.info","spam4.me","trashmail.com","trashmail.net",
+  "fakeinbox.com","mailnull.com","spamgourmet.com","10minutemail.com",
+  "tempmail.com","dispostable.com","mailnesia.com","maildrop.cc",
+  "getairmail.com","filzmail.com","throwam.com","discard.email",
+  "spamboy.com","spamherelots.com","tempr.email","tempm.com",
+];
+
+function isDisposableEmail(email) {
+  if (!email) return false;
+  const domain = email.split("@")[1]?.toLowerCase() || "";
+  return DISPOSABLE_DOMAINS.includes(domain);
+}
+
+function isSuspiciousDisplayName(name) {
+  if (!name) return false;
+  // Tamamen random karakter dizisi (bot pattern)
+  const hasNoVowelRatio = (name.replace(/[^a-zA-Z]/g, "").match(/[aeiouAEIOU]/g) || []).length /
+                          Math.max(name.replace(/[^a-zA-Z]/g, "").length, 1) < 0.1;
+  // Çok uzun tek kelime (>20 karakter, boşluksuz)
+  const isTooLong = name.length > 25 && !name.includes(" ");
+  return hasNoVowelRatio || isTooLong;
+}
+
 exports.fixNewUserDisplayName = functions
   .runWith({})
   .region("us-central1")
   .auth.user()
   .onCreate(async (user) => {
-    // Bot Koruması: Eğer e-posta doğrulaması açıksa ve bot sahte maillerle gelmişse Firestore kaydı yapma
-    // İhtiyacına göre aktif edebilirsin: if (!user.emailVerified) return;
+    const db  = getFirestore();
+    const adm = require("firebase-admin/auth").getAuth();
 
-    const db = getFirestore();
+    // ── KATMAN 1: Tek kullanımlık email engeli ──────────────────────────────
+    if (user.email && isDisposableEmail(user.email)) {
+      console.warn(`[botBlock] Disposable email engellendi: ${user.email} (${user.uid})`);
+      await db.collection("blockedSignups").doc(user.uid).set({
+        uid: user.uid, email: user.email, reason: "disposable_email",
+        blockedAt: new Date(),
+      });
+      try { await adm.deleteUser(user.uid); } catch (_) {}
+      return;
+    }
+
+    // ── KATMAN 2: Şüpheli display name ─────────────────────────────────────
+    const derived = deriveName(user);
+    if (!user.providerData?.some(p => p.providerId === "google.com") &&
+        isSuspiciousDisplayName(derived)) {
+      console.warn(`[botBlock] Şüpheli isim: "${derived}" (${user.uid})`);
+      // Silme değil, askıya al — bazen yanlış pozitif çıkabilir
+      await db.collection("users").doc(user.uid).set({
+        uid: user.uid, banned: true, moderationStatus: "suspended",
+        moderationNote: "Otomatik: şüpheli kayıt", createdAt: new Date(),
+      }, { merge: true });
+    }
+
+    // ── KATMAN 3: Hız sınırı — aynı IP'den 5 dk içinde 3'ten fazla kayıt ──
+    // (IP bilgisi burada yok, bu kontrol AuthScreen'de yapılıyor)
+
+    const db2 = getFirestore();
     try {
       const derived = deriveName(user);
       const base    = (user.email || "").split("@")[0]
@@ -368,3 +421,80 @@ exports.scheduledRefreshStats = functions.pubsub
     }
     return null;
   });
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  verifyRegistration — Kayıt öncesi güvenlik kontrolü
+//  Android'den çağrılır: kayıt formuna "Gönder" basılmadan önce
+//  Döndürür: { allowed: true } veya { allowed: false, reason: "..." }
+// ─────────────────────────────────────────────────────────────────────────────
+exports.verifyRegistration = functions.https.onCall(async (data, context) => {
+  const email       = (data.email || "").toLowerCase().trim();
+  const displayName = (data.displayName || "").trim();
+  const db          = getFirestore();
+
+  // 1. Tek kullanımlık email
+  if (isDisposableEmail(email)) {
+    return { allowed: false, reason: "Bu email adresi geçici/sahte email servisi. Gerçek bir email kullanın." };
+  }
+
+  // 2. Email formatı
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!emailRegex.test(email)) {
+    return { allowed: false, reason: "Geçersiz email formatı." };
+  }
+
+  // 3. İsim kontrolü
+  if (!displayName || displayName.length < 2) {
+    return { allowed: false, reason: "İsim en az 2 karakter olmalı." };
+  }
+  if (displayName.length > 40) {
+    return { allowed: false, reason: "İsim çok uzun." };
+  }
+
+  // 4. Hız sınırı — aynı email domain'inden son 10 dk içinde kaç kayıt?
+  const domain     = email.split("@")[1] || "";
+  const tenMinAgo  = new Date(Date.now() - 10 * 60 * 1000);
+  try {
+    const recentSnap = await db.collection("signupAttempts")
+      .where("domain", "==", domain)
+      .where("at", ">", tenMinAgo)
+      .get();
+    if (recentSnap.size >= 5) {
+      console.warn(`[verifyReg] Rate limit: ${domain} → ${recentSnap.size} kayıt/10dk`);
+      return { allowed: false, reason: "Çok fazla kayıt denemesi. Lütfen biraz bekleyin." };
+    }
+  } catch (_) {}
+
+  // 5. Kayıt denemesini logla
+  await db.collection("signupAttempts").add({
+    email, domain, displayName, at: new Date(),
+  });
+
+  return { allowed: true };
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  cleanBlockedSignups — Eski blockedSignups kayıtlarını temizle (haftalık)
+// ─────────────────────────────────────────────────────────────────────────────
+exports.cleanBlockedSignups = functions.pubsub
+  .schedule("0 3 * * 0")
+  .timeZone("Europe/Istanbul")
+  .onRun(async () => {
+    const db      = getFirestore();
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const snap    = await db.collection("blockedSignups").where("blockedAt", "<", weekAgo).get();
+    const batch   = db.batch();
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+
+    // signupAttempts da temizle (1 gün eski)
+    const dayAgo  = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const snap2   = await db.collection("signupAttempts").where("at", "<", dayAgo).get();
+    const batch2  = db.batch();
+    snap2.docs.forEach(d => batch2.delete(d.ref));
+    await batch2.commit();
+
+    console.log(`[cleanup] ${snap.size} blocked + ${snap2.size} attempts silindi`);
+    return null;
+  });
+

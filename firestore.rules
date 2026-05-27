@@ -58,7 +58,9 @@ service cloud.firestore {
     // ─── USERS ────────────────────────────────────────────────
     match /users/{uid} {
       allow read: if true;
-      allow create: if isOwner(uid);
+      allow create: if isOwner(uid)
+          && request.resource.data.get("banned", false) == false
+          && request.resource.data.get("moderationStatus", "active") == "active";
       allow update: if isOwner(uid) || isAdmin();
       allow delete: if isOwner(uid) || isAdmin();
 
@@ -70,6 +72,14 @@ service cloud.firestore {
         allow read:  if isOwner(uid) || isAdmin();
         allow write: if isOwner(uid);
       }
+    }
+
+    // ─── BOT KORUMA LOGLARI ───────────────────────────────────
+    match /signupAttempts/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /blockedSignups/{docId} {
+      allow read, write: if isAdmin();
     }
 
     // ─── FEED ─────────────────────────────────────────────────

@@ -239,11 +239,39 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
             try {
+                // ── KATMAN 1: Cloud Function güvenlik kontrolü ────────────────
+                // Tek kullanımlık email, hız sınırı, isim doğrulama
+                val verifyResult = com.google.firebase.functions.FirebaseFunctions
+                    .getInstance()
+                    .getHttpsCallable("verifyRegistration")
+                    .call(mapOf("email" to email, "displayName" to displayName))
+                    .await()
+                @Suppress("UNCHECKED_CAST")
+                val resultData = verifyResult.data as? Map<String, Any>
+                val allowed    = resultData?.get("allowed") as? Boolean ?: true
+                if (!allowed) {
+                    _error.value = resultData?.get("reason") as? String ?: "Kayıt engeliendi"
+                    return@launch
+                }
+
+                // ── KATMAN 2: Firebase Auth ile hesap oluştur ─────────────────
                 val result = auth.createUserWithEmailAndPassword(email, password).await()
                 val user   = result.user ?: return@launch
                 createUserDoc(user, displayName)
                 syncFcmToken(user.uid)
                 acceptTerms(method = "email_register")
+            } catch (e: com.google.firebase.functions.FirebaseFunctionsException) {
+                // Function çalışmazsa (offline, cold start) devam et — açık kalmasın
+                android.util.Log.w("AuthVM", "verifyRegistration unavailable: ${e.message}")
+                try {
+                    val result = auth.createUserWithEmailAndPassword(email, password).await()
+                    val user   = result.user ?: return@launch
+                    createUserDoc(user, displayName)
+                    syncFcmToken(user.uid)
+                    acceptTerms(method = "email_register")
+                } catch (e2: Exception) {
+                    _error.value = e2.message
+                }
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
