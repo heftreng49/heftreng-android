@@ -13,11 +13,54 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
-// Admin kontrolü artık Firestore'daki admins/{uid} koleksiyonuna dayanır.
-// Firebase Console'dan: admins/{your_uid} belgesi oluştur → { role: "super_admin" }
-// Bu sayede email değişse bile admin yetkisi korunur, hesap ele geçirilse de
-// tek başına email kontrolü yetmez.
-private const val ADMIN_EMAIL = "siirgibi49@gmail.com" // fallback
+// ══════════════════════════════════════════════════════════════════════
+//  ROL SİSTEMİ
+//  Firestore: admins/{uid} → { role: "admin" | "moderator" | "editor" | "kutuphaneci" }
+//
+//  admin        → Her şey + yardımcı yönetimi
+//  moderator    → Ban/unban, gönderi sil, yorum sil, şikayetler, itirazlar, bekleyenler
+//  editor       → Push, bildirim, CMS, bekleyenler, istatistik, düzenle
+//  kutuphaneci  → Kütüphane, yazar, kitap yönetimi
+// ══════════════════════════════════════════════════════════════════════
+private const val ADMIN_EMAIL = "siirgibi49@gmail.com"
+
+enum class AdminRole {
+    NONE, KUTUPHANECI, EDITOR, MODERATOR, ADMIN;
+
+    // Her rolün yetkilerini burada tanımla
+    fun canPush()            = this >= EDITOR
+    fun canNotif()           = this >= EDITOR
+    fun canViewUsers()       = this >= MODERATOR
+    fun canBanUsers()        = this >= MODERATOR
+    fun canDeleteUsers()     = this == ADMIN
+    fun canPending()         = this >= EDITOR || this == MODERATOR
+    fun canReports()         = this >= MODERATOR
+    fun canAppeals()         = this >= MODERATOR
+    fun canModeratePost()    = this >= MODERATOR
+    fun canStats()           = this >= EDITOR
+    fun canEdit()            = this >= EDITOR
+    fun canLibrary()         = this >= KUTUPHANECI
+    fun canManageStaff()     = this == ADMIN
+    fun isStaff()            = this != NONE
+
+    fun displayName() = when (this) {
+        ADMIN        -> "Admin"
+        MODERATOR    -> "Moderatör"
+        EDITOR       -> "Editör"
+        KUTUPHANECI  -> "Kütüphaneci"
+        NONE         -> "Yok"
+    }
+
+    companion object {
+        fun from(str: String?) = when (str?.lowercase()) {
+            "admin"       -> ADMIN
+            "moderator"   -> MODERATOR
+            "editor"      -> EDITOR
+            "kutuphaneci" -> KUTUPHANECI
+            else          -> NONE
+        }
+    }
+}
 
 @HiltViewModel
 class AdminViewModel @Inject constructor(
@@ -25,8 +68,12 @@ class AdminViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
 ) : ViewModel() {
 
-    private val _isAdmin      = MutableStateFlow(false)
-    val isAdmin = _isAdmin.asStateFlow()
+    private val _role = MutableStateFlow(AdminRole.NONE)
+    val role = _role.asStateFlow()
+
+    // Geriye dönük uyumluluk — AdminScreen'deki isAdmin kontrolleri çalışmaya devam eder
+    val isAdmin: StateFlow<Boolean> = _role.map { it.isStaff() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val _users        = MutableStateFlow<List<User>>(emptyList())
     val users = _users.asStateFlow()
@@ -66,17 +113,16 @@ class AdminViewModel @Inject constructor(
 
     private var statsListener: ListenerRegistration? = null
 
-    // ── Detaylı istatistikler ─────────────────────────────────────────────────
     data class UserActivity(
-        val uid         : String = "",
-        val displayName : String = "",
-        val photoURL    : String = "",
+        val uid         : String  = "",
+        val displayName : String  = "",
+        val photoURL    : String  = "",
         val online      : Boolean = false,
-        val lastSeenMs  : Long = 0L,
-        val appVersion  : String = "",
-        val platform    : String = "",
-        val postsCount  : Int = 0,
-        val level       : Int = 1,
+        val lastSeenMs  : Long    = 0L,
+        val appVersion  : String  = "",
+        val platform    : String  = "",
+        val postsCount  : Int     = 0,
+        val level       : Int     = 1,
     )
     private val _activeUsers = MutableStateFlow<List<UserActivity>>(emptyList())
     val activeUsers = _activeUsers.asStateFlow()
@@ -84,24 +130,104 @@ class AdminViewModel @Inject constructor(
     private val _statsLoading = MutableStateFlow(false)
     val statsLoading = _statsLoading.asStateFlow()
 
+    // ── Yardımcı listesi ─────────────────────────────────────────────────────
+    data class StaffMember(
+        val uid         : String = "",
+        val displayName : String = "",
+        val photoURL    : String = "",
+        val email       : String = "",
+        val role        : AdminRole = AdminRole.NONE,
+        val addedAt     : Long  = 0L,
+    )
+    private val _staffList = MutableStateFlow<List<StaffMember>>(emptyList())
+    val staffList = _staffList.asStateFlow()
+
+    // ── Admin kontrolü ────────────────────────────────────────────────────────
     fun checkAdmin() {
         viewModelScope.launch {
-            val currentUser = auth.currentUser ?: run { _isAdmin.value = false; return@launch }
-            // Önce Firestore admins/{uid} koleksiyonunu kontrol et
+            val currentUser = auth.currentUser ?: run { _role.value = AdminRole.NONE; return@launch }
             try {
-                val adminDoc = firestore.collection("admins").document(currentUser.uid).get().await()
-                if (adminDoc.exists()) {
-                    _isAdmin.value = true
+                val doc = firestore.collection("admins").document(currentUser.uid).get().await()
+                if (doc.exists()) {
+                    _role.value = AdminRole.from(doc.getString("role"))
                     return@launch
                 }
             } catch (_: Exception) {}
-            // Fallback: email kontrolü (admins koleksiyonu henüz kurulmamışsa)
-            _isAdmin.value = currentUser.email == ADMIN_EMAIL
+            // Email fallback
+            _role.value = if (currentUser.email == ADMIN_EMAIL) AdminRole.ADMIN else AdminRole.NONE
+        }
+    }
+
+    // ── Yardımcı yönetimi (sadece admin) ─────────────────────────────────────
+    fun loadStaff() {
+        if (!_role.value.canManageStaff()) return
+        viewModelScope.launch {
+            try {
+                val snap = firestore.collection("admins").limit(50).get().await()
+                val members = snap.documents.mapNotNull { doc ->
+                    val uid     = doc.id
+                    val roleStr = doc.getString("role") ?: return@mapNotNull null
+                    val addedAt = (doc.getLong("addedAt") ?: 0L)
+                    // Kullanıcı bilgilerini çek
+                    val userDoc = try { firestore.collection("users").document(uid).get().await() } catch (_: Exception) { null }
+                    StaffMember(
+                        uid         = uid,
+                        displayName = userDoc?.getString("displayName") ?: userDoc?.getString("name") ?: uid.take(10),
+                        photoURL    = userDoc?.getString("photoURL") ?: "",
+                        email       = userDoc?.getString("email") ?: "",
+                        role        = AdminRole.from(roleStr),
+                        addedAt     = addedAt,
+                    )
+                }
+                _staffList.value = members.sortedByDescending { it.role.ordinal }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun addStaff(uid: String, role: AdminRole, onResult: (Boolean, String) -> Unit) {
+        if (!_role.value.canManageStaff()) { onResult(false, "Yetkisiz işlem"); return }
+        if (uid.isBlank())                 { onResult(false, "UID boş olamaz"); return }
+        viewModelScope.launch {
+            try {
+                firestore.collection("admins").document(uid).set(mapOf(
+                    "role"    to role.name.lowercase(),
+                    "addedBy" to (auth.currentUser?.uid ?: ""),
+                    "addedAt" to System.currentTimeMillis(),
+                )).await()
+                onResult(true, "✓ ${role.displayName()} eklendi")
+                loadStaff()
+            } catch (e: Exception) { onResult(false, "✗ ${e.message}") }
+        }
+    }
+
+    fun updateStaffRole(uid: String, newRole: AdminRole, onResult: (Boolean, String) -> Unit) {
+        if (!_role.value.canManageStaff())         { onResult(false, "Yetkisiz işlem"); return }
+        if (uid == auth.currentUser?.uid)           { onResult(false, "Kendi rolünü değiştiremezsin"); return }
+        viewModelScope.launch {
+            try {
+                firestore.collection("admins").document(uid)
+                    .update("role", newRole.name.lowercase()).await()
+                onResult(true, "✓ Rol güncellendi: ${newRole.displayName()}")
+                loadStaff()
+            } catch (e: Exception) { onResult(false, "✗ ${e.message}") }
+        }
+    }
+
+    fun removeStaff(uid: String, onResult: (Boolean, String) -> Unit) {
+        if (!_role.value.canManageStaff()) { onResult(false, "Yetkisiz işlem"); return }
+        if (uid == auth.currentUser?.uid)  { onResult(false, "Kendinizi silemezsiniz"); return }
+        viewModelScope.launch {
+            try {
+                firestore.collection("admins").document(uid).delete().await()
+                onResult(true, "✓ Yardımcı kaldırıldı")
+                loadStaff()
+            } catch (e: Exception) { onResult(false, "✗ ${e.message}") }
         }
     }
 
     // ── Kullanıcıları listele ──────────────────────────────────────────────────
     fun loadUsers() {
+        if (!_role.value.canViewUsers()) return
         viewModelScope.launch {
             _loading.value = true
             try {
@@ -123,7 +249,7 @@ class AdminViewModel @Inject constructor(
 
     // ── Ban / Unban ────────────────────────────────────────────────────────────
     fun toggleBan(uid: String, ban: Boolean) {
-        if (uid.isBlank() || !_isAdmin.value) return
+        if (uid.isBlank() || !_role.value.canBanUsers()) return
         viewModelScope.launch {
             try {
                 firestore.collection("users").document(uid).update("banned", ban).await()
@@ -132,9 +258,9 @@ class AdminViewModel @Inject constructor(
         }
     }
 
-    // ── Push bildirimi — Cloud Function sendPush çağırır ──────────────────────
+    // ── Push bildirimi ────────────────────────────────────────────────────────
     fun sendPush(title: String, body: String, url: String = "", targetUid: String = "") {
-        if (!_isAdmin.value) return
+        if (!_role.value.canPush()) return
         viewModelScope.launch {
             try {
                 _pushResult.value = "Gönderiliyor…"
@@ -147,43 +273,35 @@ class AdminViewModel @Inject constructor(
                     "url"       to url.ifBlank { "https://heft-reng.blogspot.com/" },
                     "type"      to "default",
                 )
-                functions.getHttpsCallable("sendPush")
-                    .call(data)
-                    .await()
+                functions.getHttpsCallable("sendPush").call(data).await()
                 _pushResult.value = "✓ Push gönderildi"
-            } catch (e: Exception) {
-                _pushResult.value = "✗ Hata: ${e.message}"
-            }
+            } catch (e: Exception) { _pushResult.value = "✗ Hata: ${e.message}" }
         }
     }
 
-    // ── Sistem bildirimi — XML: sendAdminNotifFromPanel ────────────────────────
-    // notifications koleksiyonuna yazar (tüm kullanıcılara)
+    // ── Sistem bildirimi ──────────────────────────────────────────────────────
     fun sendSystemNotif(title: String, body: String, type: String = "sys") {
-        if (!_isAdmin.value) return
+        if (!_role.value.canNotif()) return
         viewModelScope.launch {
             try {
                 val icoMap = mapOf("sys" to "campaign", "cmt" to "chat_bubble", "like" to "favorite", "bm" to "bookmark")
-                firestore.collection("notifications").add(
-                    mapOf(
-                        "type"   to type,
-                        "title"  to title,
-                        "sub"    to body,
-                        "ico"    to (icoMap[type] ?: "campaign"),
-                        "read"   to false,
-                        "ts"     to FieldValue.serverTimestamp(),
-                        "sentBy" to (auth.currentUser?.email ?: "admin"),
-                    )
-                ).await()
+                firestore.collection("notifications").add(mapOf(
+                    "type"   to type,
+                    "title"  to title,
+                    "sub"    to body,
+                    "ico"    to (icoMap[type] ?: "campaign"),
+                    "read"   to false,
+                    "ts"     to FieldValue.serverTimestamp(),
+                    "sentBy" to (auth.currentUser?.email ?: "admin"),
+                )).await()
                 _pushResult.value = "✓ Bildirim gönderildi"
-            } catch (e: Exception) {
-                _pushResult.value = "✗ Hata: ${e.message}"
-            }
+            } catch (e: Exception) { _pushResult.value = "✗ Hata: ${e.message}" }
         }
     }
 
-    // ── Bekleyen gönderiler — XML: pendingPosts ────────────────────────────────
+    // ── Bekleyen gönderiler ───────────────────────────────────────────────────
     fun loadPendingPosts() {
+        if (!_role.value.canPending()) return
         viewModelScope.launch {
             try {
                 val snap = firestore.collection("pendingPosts").limit(50).get().await()
@@ -195,6 +313,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun approvePost(postId: String) {
+        if (!_role.value.canPending()) return
         viewModelScope.launch {
             try {
                 val doc = firestore.collection("pendingPosts").document(postId).get().await()
@@ -207,6 +326,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun rejectPost(postId: String) {
+        if (!_role.value.canPending()) return
         viewModelScope.launch {
             try {
                 firestore.collection("pendingPosts").document(postId).delete().await()
@@ -215,27 +335,23 @@ class AdminViewModel @Inject constructor(
         }
     }
 
-
-    // ── Kullanıcı adı / fotoğraf düzelt ──────────────────────────────────────
+    // ── Kullanıcı profil düzelt ───────────────────────────────────────────────
     private val _editResult = MutableStateFlow("")
     val editResult = _editResult.asStateFlow()
 
     fun updateUserProfile(uid: String, displayName: String, photoURL: String) {
-        if (uid.isBlank() || !_isAdmin.value) return
+        if (uid.isBlank() || !_role.value.canEdit()) return
         viewModelScope.launch {
             try {
                 val updates = mutableMapOf<String, Any>()
-                if (displayName.isNotBlank()) {
-                    updates["displayName"] = displayName
-                    updates["name"]        = displayName
-                }
+                if (displayName.isNotBlank()) { updates["displayName"] = displayName; updates["name"] = displayName }
                 if (photoURL.isNotBlank()) updates["photoURL"] = photoURL
                 if (updates.isEmpty()) { _editResult.value = "✗ Değişiklik yok"; return@launch }
                 firestore.collection("users").document(uid).update(updates).await()
                 _users.value = _users.value.map {
                     if (it.uid == uid) it.copy(
                         displayName = displayName.ifBlank { it.displayName },
-                        photoURL    = photoURL.ifBlank    { it.photoURL },
+                        photoURL    = photoURL.ifBlank { it.photoURL },
                     ) else it
                 }
                 _editResult.value = "✓ Profil güncellendi"
@@ -243,16 +359,13 @@ class AdminViewModel @Inject constructor(
         }
     }
 
-    // ── Kullanıcıyı tamamen sil ───────────────────────────────────────────────
+    // ── Kullanıcı sil ─────────────────────────────────────────────────────────
     fun deleteUser(uid: String) {
-        if (uid.isBlank() || !_isAdmin.value) return
+        if (uid.isBlank() || !_role.value.canDeleteUsers()) return
         viewModelScope.launch {
             try {
-                // Firestore dökümanını sil
                 firestore.collection("users").document(uid).delete().await()
-                // Kullanıcının gönderilerini sil
-                val posts = firestore.collection("feed")
-                    .whereEqualTo("uid", uid).get().await()
+                val posts = firestore.collection("feed").whereEqualTo("uid", uid).get().await()
                 posts.documents.forEach { it.reference.delete() }
                 _users.value = _users.value.filter { it.uid != uid }
                 _editResult.value = "✓ Kullanıcı silindi"
@@ -260,19 +373,19 @@ class AdminViewModel @Inject constructor(
         }
     }
 
-    // ── Feed gönderisi sil ────────────────────────────────────────────────────
+    // ── Feed gönderisi yönetimi ───────────────────────────────────────────────
     private val _feedPosts = MutableStateFlow<List<Map<String, Any>>>(emptyList())
     val feedPosts = _feedPosts.asStateFlow()
 
     fun loadFeedPosts(query: String = "") {
+        if (!_role.value.canEdit()) return
         viewModelScope.launch {
             try {
                 val snap = firestore.collection("feed")
                     .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
                     .limit(50).get().await()
                 _feedPosts.value = snap.documents.mapNotNull { doc ->
-                    (doc.data ?: return@mapNotNull null)
-                        .toMutableMap().also { it["id"] = doc.id }
+                    (doc.data ?: return@mapNotNull null).toMutableMap().also { it["id"] = doc.id }
                 }.filter {
                     query.isBlank() ||
                     (it["text"] as? String ?: "").contains(query, ignoreCase = true) ||
@@ -283,7 +396,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun deletePost(postId: String) {
-        if (postId.isBlank() || !_isAdmin.value) return
+        if (postId.isBlank() || !_role.value.canModeratePost()) return
         viewModelScope.launch {
             try {
                 firestore.collection("feed").document(postId).delete().await()
@@ -295,7 +408,7 @@ class AdminViewModel @Inject constructor(
 
     // ── Yorum sil ─────────────────────────────────────────────────────────────
     fun deleteComment(postId: String, commentId: String) {
-        if (!_isAdmin.value) return
+        if (!_role.value.canModeratePost()) return
         viewModelScope.launch {
             try {
                 firestore.collection("feed").document(postId)
@@ -317,30 +430,22 @@ class AdminViewModel @Inject constructor(
                 val d = snap?.data ?: return@addSnapshotListener
                 fun i(k: String) = (d[k] as? Long)?.toInt() ?: (d[k] as? Int) ?: 0
                 val ps = PlatformStats(
-                    totalUsers     = i("totalUsers"),
-                    androidUsers   = i("androidUsers"),
-                    webUsers       = i("webUsers"),
-                    onlineNow      = i("onlineNow"),
-                    newUsersToday  = i("newUsersToday"),
-                    totalPosts     = i("totalPosts"),
-                    newPostsToday  = i("newPostsToday"),
-                    totalQuotes    = i("totalQuotes"),
-                    totalReviews   = i("totalReviews"),
-                    totalComments  = i("totalComments"),
-                    totalSerials   = i("totalSerials"),
-                    totalBooks     = i("totalBooks"),
-                    pendingPosts   = i("pendingPosts"),
-                    pendingReports = i("pendingReports"),
-                    bannedUsers    = i("bannedUsers"),
-                    lastUpdated    = (d["lastUpdated"] as? Long) ?: 0L,
+                    totalUsers     = i("totalUsers"),   androidUsers   = i("androidUsers"),
+                    webUsers       = i("webUsers"),     onlineNow      = i("onlineNow"),
+                    newUsersToday  = i("newUsersToday"),totalPosts     = i("totalPosts"),
+                    newPostsToday  = i("newPostsToday"),totalQuotes    = i("totalQuotes"),
+                    totalReviews   = i("totalReviews"), totalComments  = i("totalComments"),
+                    totalSerials   = i("totalSerials"), totalBooks     = i("totalBooks"),
+                    pendingPosts   = i("pendingPosts"), pendingReports = i("pendingReports"),
+                    bannedUsers    = i("bannedUsers"),  lastUpdated    = (d["lastUpdated"] as? Long) ?: 0L,
                 )
                 _platformStats.value = ps
                 _stats.value = mapOf(
-                    "users"    to ps.totalUsers,  "online"   to ps.onlineNow,
-                    "posts"    to ps.totalPosts,  "newUsers" to ps.newUsersToday,
-                    "newPosts" to ps.newPostsToday, "serials" to ps.totalSerials,
-                    "books"    to ps.totalBooks,  "pending"  to ps.pendingPosts,
-                    "reports"  to ps.pendingReports, "banned" to ps.bannedUsers,
+                    "users"    to ps.totalUsers,   "online"   to ps.onlineNow,
+                    "posts"    to ps.totalPosts,   "newUsers" to ps.newUsersToday,
+                    "newPosts" to ps.newPostsToday,"serials"  to ps.totalSerials,
+                    "books"    to ps.totalBooks,   "pending"  to ps.pendingPosts,
+                    "reports"  to ps.pendingReports,"banned"  to ps.bannedUsers,
                 )
             }
         viewModelScope.launch { loadActiveUsers() }
@@ -349,16 +454,9 @@ class AdminViewModel @Inject constructor(
     fun loadStats() {
         viewModelScope.launch {
             _statsLoading.value = true
-            try {
-                // refreshStats Cloud Function kaldırıldı — direkt fallback ile
-                // appConfig/stats dokümanını güncelle, snapshot listener zaten dinliyor
-                loadStatsFallback()
-                loadActiveUsers()
-            } catch (_: Exception) {
-                loadStatsFallback()
-            } finally {
-                _statsLoading.value = false
-            }
+            try { loadStatsFallback(); loadActiveUsers() }
+            catch (_: Exception) { loadStatsFallback() }
+            finally { _statsLoading.value = false }
         }
     }
 
@@ -370,145 +468,60 @@ class AdminViewModel @Inject constructor(
                 c.set(java.util.Calendar.SECOND, 0); c.timeInMillis / 1000
             }
             val twoMinAgo = System.currentTimeMillis() / 1000 - 120
+            val todayTs   = com.google.firebase.Timestamp(todaySec, 0)
 
-            // ── Pahalı full koleksiyon okumalarından kaçın ─────────────────────
-            // Sadece sayaçları güncelle: users, feed, presence sorgularını
-            // limit ile kıs; genel sayılar zaten appConfig/stats'ta tutuluyor.
-
-            // Yeni kullanıcılar bugün — sadece bugünden itibaren filtrele (limit 500)
-            val todayTs = com.google.firebase.Timestamp(todaySec, 0)
-            val newUsersSnap = try {
-                firestore.collection("users")
-                    .whereGreaterThanOrEqualTo("createdAt", todayTs)
-                    .limit(500).get().await()
-            } catch (_: Exception) { null }
-            val newUsersToday = newUsersSnap?.size() ?: 0
-
-            // Banned users — sadece banned=true olanları çek
-            val bannedSnap = try {
-                firestore.collection("users")
-                    .whereEqualTo("banned", true)
-                    .limit(500).get().await()
-            } catch (_: Exception) { null }
-            val bannedUsers = bannedSnap?.size() ?: 0
-
-            // Platform dağılımı — sadece appConfig/stats'taki mevcut değeri koru
-            val existingStats = try {
-                firestore.collection("appConfig").document("stats").get().await().data
-            } catch (_: Exception) { null }
+            val existingStats = try { firestore.collection("appConfig").document("stats").get().await().data } catch (_: Exception) { null }
             fun ei(k: String) = (existingStats?.get(k) as? Long)?.toInt() ?: 0
-            val totalUsers   = ei("totalUsers")
-            val androidUsers = ei("androidUsers")
-            val webUsers     = ei("webUsers")
-            val totalPosts   = ei("totalPosts")
-            val totalQuotes  = ei("totalQuotes")
-            val totalReviews = ei("totalReviews")
-            val totalSerials = ei("totalSerials")
-            val totalBooks   = ei("totalBooks")
 
-            // Online şu an — presence koleksiyonu limit 300
-            val onlineNow = try {
-                firestore.collection("presence")
-                    .whereEqualTo("online", true)
-                    .limit(300).get().await()
-                    .documents.count { (it.getTimestamp("lastSeen")?.seconds ?: 0L) >= twoMinAgo }
-            } catch (_: Exception) { 0 }
-
-            // Bugün yeni gönderiler — sadece bugünden itibaren filtrele
-            val newPostsSnap = try {
-                firestore.collection("feed")
-                    .whereGreaterThanOrEqualTo("ts", todayTs)
-                    .whereEqualTo("moderationStatus", "active")
-                    .limit(200).get().await()
-            } catch (_: Exception) { null }
-            val newPostsToday = newPostsSnap?.size() ?: 0
-
-            // Bekleyen gönderiler
-            val pendingPosts = try {
-                firestore.collection("pendingPosts").limit(100).get().await().size()
-            } catch (_: Exception) { 0 }
-
-            // Bekleyen raporlar
-            val pendingReports = try {
-                firestore.collection("reports")
-                    .whereEqualTo("status", "pending")
-                    .limit(100).get().await().size()
-            } catch (_: Exception) { 0 }
-
-            val ps = PlatformStats(
-                totalUsers = totalUsers, androidUsers = androidUsers, webUsers = webUsers,
-                onlineNow = onlineNow, newUsersToday = newUsersToday,
-                totalPosts = totalPosts, newPostsToday = newPostsToday,
-                totalQuotes = totalQuotes, totalReviews = totalReviews,
-                totalSerials = totalSerials, totalBooks = totalBooks,
-                pendingPosts = pendingPosts, pendingReports = pendingReports,
-                bannedUsers = bannedUsers, lastUpdated = System.currentTimeMillis(),
-            )
-            _platformStats.value = ps
+            val newUsersToday = try { firestore.collection("users").whereGreaterThanOrEqualTo("createdAt", todayTs).limit(500).get().await().size() } catch (_: Exception) { 0 }
+            val bannedUsers   = try { firestore.collection("users").whereEqualTo("banned", true).limit(500).get().await().size() } catch (_: Exception) { 0 }
+            val onlineNow     = try { firestore.collection("presence").whereEqualTo("online", true).limit(300).get().await().documents.count { (it.getTimestamp("lastSeen")?.seconds ?: 0L) >= twoMinAgo } } catch (_: Exception) { 0 }
+            val newPostsToday = try { firestore.collection("feed").whereGreaterThanOrEqualTo("ts", todayTs).whereEqualTo("moderationStatus", "active").limit(200).get().await().size() } catch (_: Exception) { 0 }
+            val pendingPosts  = try { firestore.collection("pendingPosts").limit(100).get().await().size() } catch (_: Exception) { 0 }
+            val pendingReports= try { firestore.collection("reports").whereEqualTo("status", "pending").limit(100).get().await().size() } catch (_: Exception) { 0 }
 
             val map = mapOf(
-                "totalUsers" to totalUsers, "androidUsers" to androidUsers, "webUsers" to webUsers,
+                "totalUsers" to ei("totalUsers"), "androidUsers" to ei("androidUsers"), "webUsers" to ei("webUsers"),
                 "onlineNow" to onlineNow, "newUsersToday" to newUsersToday,
-                "totalPosts" to totalPosts, "newPostsToday" to newPostsToday,
-                "totalQuotes" to totalQuotes, "totalReviews" to totalReviews,
-                "totalComments" to ei("totalComments"), // mevcut değeri koru, 0'a sıfırlama
-                "totalSerials" to totalSerials, "totalBooks" to totalBooks,
+                "totalPosts" to ei("totalPosts"), "newPostsToday" to newPostsToday,
+                "totalQuotes" to ei("totalQuotes"), "totalReviews" to ei("totalReviews"),
+                "totalComments" to ei("totalComments"), "totalSerials" to ei("totalSerials"), "totalBooks" to ei("totalBooks"),
                 "pendingPosts" to pendingPosts, "pendingReports" to pendingReports,
                 "bannedUsers" to bannedUsers, "lastUpdated" to System.currentTimeMillis(),
             )
-            // set() yerine merge: diğer alanları silmez
-            try {
-                firestore.collection("appConfig").document("stats")
-                    .set(map, com.google.firebase.firestore.SetOptions.merge()).await()
-            } catch (_: Exception) {}
+            try { firestore.collection("appConfig").document("stats").set(map, com.google.firebase.firestore.SetOptions.merge()).await() } catch (_: Exception) {}
         } catch (e: Exception) { e.printStackTrace() }
     }
+
     private suspend fun loadActiveUsers() {
         try {
-            val oneWeekAgo = com.google.firebase.Timestamp(
-                System.currentTimeMillis() / 1000 - 7 * 86400, 0
-            )
-            // whereGreaterThan index gerektirir — tümünü çekip bellekte filtrele
-            val presenceSnap = firestore.collection("presence")
-                .limit(200).get().await()
-
+            val oneWeekAgo = com.google.firebase.Timestamp(System.currentTimeMillis() / 1000 - 7 * 86400, 0)
+            val presenceSnap = firestore.collection("presence").limit(200).get().await()
             val result = mutableListOf<UserActivity>()
             val twoMinMs = 120_000L
 
             presenceSnap.documents.forEach { doc ->
-                val d          = doc.data ?: return@forEach
-                val uid        = doc.id
-                // Bellekte son 7 gün filtresi
+                val d = doc.data ?: return@forEach
+                val uid = doc.id
                 val lastSeenCheck = (d["lastSeen"] as? com.google.firebase.Timestamp)?.seconds ?: 0L
                 if (lastSeenCheck < oneWeekAgo.seconds) return@forEach
                 val lastSeenTs = (d["lastSeen"] as? com.google.firebase.Timestamp)
                 val lastSeenMs = lastSeenTs?.toDate()?.time ?: 0L
-                val online     = (d["online"] as? Boolean == true) &&
-                                 (System.currentTimeMillis() - lastSeenMs < twoMinMs)
-
-                // User dökümanından ek bilgi al
-                val userDoc = try {
-                    firestore.collection("users").document(uid).get().await()
-                } catch (_: Exception) { null }
+                val online = (d["online"] as? Boolean == true) && (System.currentTimeMillis() - lastSeenMs < twoMinMs)
+                val userDoc = try { firestore.collection("users").document(uid).get().await() } catch (_: Exception) { null }
                 val ud = userDoc?.data
-
                 result.add(UserActivity(
-                    uid         = uid,
-                    displayName = ud?.get("displayName") as? String
-                                  ?: ud?.get("name") as? String ?: "—",
+                    uid = uid,
+                    displayName = ud?.get("displayName") as? String ?: ud?.get("name") as? String ?: "—",
                     photoURL    = ud?.get("photoURL") as? String ?: "",
-                    online      = online,
-                    lastSeenMs  = lastSeenMs,
+                    online      = online, lastSeenMs = lastSeenMs,
                     appVersion  = ud?.get("appVersion") as? String ?: "—",
                     platform    = ud?.get("platform")   as? String ?: "android",
                     postsCount  = (ud?.get("postsCount") as? Long)?.toInt() ?: 0,
                     level       = (ud?.get("level")      as? Long)?.toInt() ?: 1,
                 ))
             }
-            _activeUsers.value = result.sortedWith(
-                compareByDescending<UserActivity> { it.online }
-                    .thenByDescending { it.lastSeenMs }
-            )
+            _activeUsers.value = result.sortedWith(compareByDescending<UserActivity> { it.online }.thenByDescending { it.lastSeenMs })
         } catch (e: Exception) { e.printStackTrace() }
     }
 
@@ -519,7 +532,7 @@ class AdminViewModel @Inject constructor(
     val reports = _reports.asStateFlow()
 
     fun loadReports() {
-        if (!_isAdmin.value) return
+        if (!_role.value.canReports()) return
         viewModelScope.launch {
             _loading.value = true
             try {
@@ -527,9 +540,7 @@ class AdminViewModel @Inject constructor(
                     .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
                     .limit(100).get().await()
                 _reports.value = snap.documents.mapNotNull { doc ->
-                    val d = doc.data?.toMutableMap() ?: return@mapNotNull null
-                    d["id"] = doc.id
-                    d
+                    val d = doc.data?.toMutableMap() ?: return@mapNotNull null; d["id"] = doc.id; d
                 }
             } catch (e: Exception) { e.printStackTrace() }
             finally { _loading.value = false }
@@ -537,188 +548,121 @@ class AdminViewModel @Inject constructor(
     }
 
     fun updateReportStatus(reportId: String, status: String) {
-        if (!_isAdmin.value) return
+        if (!_role.value.canReports()) return
         viewModelScope.launch {
             try {
-                firestore.collection("reports").document(reportId)
-                    .update("status", status).await()
+                firestore.collection("reports").document(reportId).update("status", status).await()
                 _reports.value = _reports.value.map { r ->
                     if (r["id"] == reportId) r.toMutableMap().also { it["status"] = status } else r
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
-    // ══════════════════════════════════════════════════════════════════════
-    //  GÖNDERI MODERASYON SİSTEMİ
-    //  3 seviye: restricted | suspended | removed
-    //  Her işlemde kullanıcıya bildirim + feed/appeals güncelleme
-    // ══════════════════════════════════════════════════════════════════════
 
-    /**
-     * Gönderiyi kısıtla.
-     * restricted → sadece giriş yapanlar görür
-     * suspended  → sadece gönderi sahibi görür
-     * removed    → hiç kimse görmez, gönderi feed'den çıkar
-     */
-    fun moderatePost(
-        postId      : String,
-        targetUid   : String,
-        targetName  : String,
-        status      : String,   // "restricted" | "suspended" | "removed"
-        reason      : String,   // kullanıcıya gösterilecek sebep
-        adminNote   : String,   // sadece admin görür
-    ) {
-        if (!_isAdmin.value) return
+    // ── Gönderi moderasyonu ───────────────────────────────────────────────────
+    fun moderatePost(postId: String, targetUid: String, targetName: String, status: String, reason: String, adminNote: String) {
+        if (!_role.value.canModeratePost()) return
         viewModelScope.launch {
             try {
-                val myUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""
-
-                // 1. Feed dokümanını güncelle
+                val myUid = auth.currentUser?.uid ?: ""
                 firestore.collection("feed").document(postId).update(mapOf(
-                    "moderationStatus" to status,
-                    "moderationReason" to reason,
-                    "moderationNote"   to adminNote,
-                    "moderatedBy"      to myUid,
+                    "moderationStatus" to status, "moderationReason" to reason,
+                    "moderationNote"   to adminNote, "moderatedBy" to myUid,
                     "moderatedAt"      to com.google.firebase.Timestamp.now(),
                 )).await()
-
-                // 2. Kullanıcıya bildirim gönder
                 val notifTitle = when (status) {
                     "restricted" -> "Gönderiniz kısıtlandı"
                     "suspended"  -> "Gönderiniz askıya alındı"
                     "removed"    -> "Gönderiniz kaldırıldı"
                     else -> "Gönderi durumu güncellendi"
                 }
-                val notifBody = if (reason.isNotBlank()) reason else when (status) {
+                val notifBody = reason.ifBlank { when (status) {
                     "restricted" -> "Gönderiniz yalnızca giriş yapmış kullanıcılara gösterilecek."
                     "suspended"  -> "Gönderiniz inceleniyor, şimdilik yalnızca siz görebilirsiniz."
                     "removed"    -> "Gönderiniz platform kurallarına aykırı bulundu ve kaldırıldı."
                     else -> ""
-                }
+                } }
                 if (targetUid.isNotBlank()) {
-                    firestore.collection("userNotifs").document(targetUid)
-                        .collection("notifs").add(mapOf(
-                            "type"      to "moderation",
-                            "title"     to notifTitle,
-                            "body"      to notifBody,
-                            "postId"    to postId,
-                            "status"    to status,
-                            "read"      to false,
-                            "ts"        to com.google.firebase.Timestamp.now(),
-                        )).await()
+                    firestore.collection("userNotifs").document(targetUid).collection("notifs").add(mapOf(
+                        "type" to "moderation", "title" to notifTitle, "body" to notifBody,
+                        "postId" to postId, "status" to status, "read" to false,
+                        "ts" to com.google.firebase.Timestamp.now(),
+                    )).await()
                 }
-
-                // 3. Moderasyon kaydı tut (audit log)
                 firestore.collection("moderationLogs").add(mapOf(
-                    "postId"     to postId,
-                    "targetUid"  to targetUid,
-                    "targetName" to targetName,
-                    "status"     to status,
-                    "reason"     to reason,
-                    "adminNote"  to adminNote,
-                    "adminUid"   to myUid,
-                    "ts"         to com.google.firebase.Timestamp.now(),
+                    "postId" to postId, "targetUid" to targetUid, "targetName" to targetName,
+                    "status" to status, "reason" to reason, "adminNote" to adminNote,
+                    "adminUid" to myUid, "ts" to com.google.firebase.Timestamp.now(),
                 )).await()
-
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
-    /** Kısıtlamayı kaldır — gönderiyi aktif yap */
     fun restorePost(postId: String, targetUid: String) {
-        if (!_isAdmin.value) return
+        if (!_role.value.canModeratePost()) return
         viewModelScope.launch {
             try {
                 firestore.collection("feed").document(postId).update(mapOf(
-                    "moderationStatus" to "active",
-                    "moderationReason" to "",
-                    "moderationNote"   to "",
+                    "moderationStatus" to "active", "moderationReason" to "", "moderationNote" to "",
                 )).await()
                 if (targetUid.isNotBlank()) {
-                    firestore.collection("userNotifs").document(targetUid)
-                        .collection("notifs").add(mapOf(
-                            "type"   to "moderation",
-                            "title"  to "Gönderiniz yeniden aktif edildi",
-                            "body"   to "İnceleme sonucunda gönderiniz tekrar herkese açık hale getirildi.",
-                            "read"   to false,
-                            "ts"     to com.google.firebase.Timestamp.now(),
-                        )).await()
+                    firestore.collection("userNotifs").document(targetUid).collection("notifs").add(mapOf(
+                        "type" to "moderation", "title" to "Gönderiniz yeniden aktif edildi",
+                        "body" to "İnceleme sonucunda gönderiniz tekrar herkese açık hale getirildi.",
+                        "read" to false, "ts" to com.google.firebase.Timestamp.now(),
+                    )).await()
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
-    // ── İTİRAZ YÖNETİMİ ──────────────────────────────────────────────────
-
+    // ── İtiraz yönetimi ───────────────────────────────────────────────────────
     fun loadAppeals() {
-        if (!_isAdmin.value) return
+        if (!_role.value.canAppeals()) return
         viewModelScope.launch {
             try {
-                val snap = firestore.collection("appeals")
-                    .whereEqualTo("status", "pending")
-                    .limit(50).get().await()
+                val snap = firestore.collection("appeals").whereEqualTo("status", "pending").limit(50).get().await()
                 _appeals.value = snap.documents.mapNotNull { doc ->
-                    try {
-                        doc.toObject(com.heftreng.app.data.model.Appeal::class.java)?.copy(id = doc.id)
-                    } catch (_: Exception) { null }
+                    try { doc.toObject(com.heftreng.app.data.model.Appeal::class.java)?.copy(id = doc.id) } catch (_: Exception) { null }
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
-    /** İtirazı onayla — gönderiyi geri yükle */
     fun approveAppeal(appeal: com.heftreng.app.data.model.Appeal, adminNote: String = "") {
-        if (!_isAdmin.value) return
+        if (!_role.value.canAppeals()) return
         viewModelScope.launch {
             try {
-                // İtirazı güncelle
                 firestore.collection("appeals").document(appeal.id).update(mapOf(
-                    "status"      to "approved",
-                    "adminNote"   to adminNote,
-                    "resolvedAt"  to com.google.firebase.Timestamp.now(),
+                    "status" to "approved", "adminNote" to adminNote, "resolvedAt" to com.google.firebase.Timestamp.now(),
                 )).await()
-                // Gönderiyi geri yükle
                 restorePost(appeal.postId, appeal.postOwnerUid)
-                // Kullanıcıya bildirim
-                firestore.collection("userNotifs").document(appeal.postOwnerUid)
-                    .collection("notifs").add(mapOf(
-                        "type"   to "appeal_result",
-                        "title"  to "İtirazınız kabul edildi",
-                        "body"   to "Gönderiniz yeniden aktif edildi. ${if (adminNote.isNotBlank()) adminNote else ""}",
-                        "postId" to appeal.postId,
-                        "read"   to false,
-                        "ts"     to com.google.firebase.Timestamp.now(),
-                    )).await()
+                firestore.collection("userNotifs").document(appeal.postOwnerUid).collection("notifs").add(mapOf(
+                    "type" to "appeal_result", "title" to "İtirazınız kabul edildi",
+                    "body" to "Gönderiniz yeniden aktif edildi. ${adminNote.ifBlank { "" }}",
+                    "postId" to appeal.postId, "read" to false, "ts" to com.google.firebase.Timestamp.now(),
+                )).await()
                 _appeals.value = _appeals.value.filter { it.id != appeal.id }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
-    /** İtirazı reddet — kısıtlama devam eder */
     fun rejectAppeal(appeal: com.heftreng.app.data.model.Appeal, adminNote: String = "") {
-        if (!_isAdmin.value) return
+        if (!_role.value.canAppeals()) return
         viewModelScope.launch {
             try {
                 firestore.collection("appeals").document(appeal.id).update(mapOf(
-                    "status"     to "rejected",
-                    "adminNote"  to adminNote,
-                    "resolvedAt" to com.google.firebase.Timestamp.now(),
+                    "status" to "rejected", "adminNote" to adminNote, "resolvedAt" to com.google.firebase.Timestamp.now(),
                 )).await()
-                // Kullanıcıya bildirim
-                firestore.collection("userNotifs").document(appeal.postOwnerUid)
-                    .collection("notifs").add(mapOf(
-                        "type"   to "appeal_result",
-                        "title"  to "İtirazınız reddedildi",
-                        "body"   to "Gönderinizle ilgili kararımız geçerliliğini korumaktadır. ${if (adminNote.isNotBlank()) adminNote else ""}",
-                        "postId" to appeal.postId,
-                        "read"   to false,
-                        "ts"     to com.google.firebase.Timestamp.now(),
-                    )).await()
+                firestore.collection("userNotifs").document(appeal.postOwnerUid).collection("notifs").add(mapOf(
+                    "type" to "appeal_result", "title" to "İtirazınız reddedildi",
+                    "body" to "Gönderinizle ilgili kararımız geçerliliğini korumaktadır. ${adminNote.ifBlank { "" }}",
+                    "postId" to appeal.postId, "read" to false, "ts" to com.google.firebase.Timestamp.now(),
+                )).await()
                 _appeals.value = _appeals.value.filter { it.id != appeal.id }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
-
 
     override fun onCleared() {
         super.onCleared()

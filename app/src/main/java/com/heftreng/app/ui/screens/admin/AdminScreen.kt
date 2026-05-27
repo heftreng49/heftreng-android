@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.heftreng.app.viewmodel.AdminRole
 import com.heftreng.app.viewmodel.LibraryViewModel
 import androidx.navigation.NavController
 import com.heftreng.app.ui.theme.*
@@ -43,6 +44,8 @@ fun AdminScreen(
     libraryVm    : LibraryViewModel = hiltViewModel(),
 ) {
     val isAdmin     by vm.isAdmin.collectAsState()
+    val role        by vm.role.collectAsState()
+    val staffList   by vm.staffList.collectAsState()
     val users       by vm.users.collectAsState()
     val pendingPosts by vm.pendingPosts.collectAsState()
     val loading     by vm.loading.collectAsState()
@@ -59,7 +62,6 @@ fun AdminScreen(
     var notifBody   by remember { mutableStateOf("") }
     var notifType   by remember { mutableStateOf("sys") }
     var userSearch  by remember { mutableStateOf("") }
-    var selectedTab by remember { mutableIntStateOf(0) }
 
     // Düzenle tab state
     val feedPosts   by vm.feedPosts.collectAsState()
@@ -75,7 +77,33 @@ fun AdminScreen(
     val reports     by vm.reports.collectAsState()
     val appeals     by vm.appeals.collectAsState()
 
-    val tabs = listOf("Push", "Bildirim", "Kullanıcılar", "Bekleyenler", "Şikayetler", "İtirazlar", "İstatistik", "Düzenle", "Kütüphane")
+    data class AdminTab(val title: String, val key: Int)
+    val allTabs = listOf(
+        AdminTab("Push",        0),
+        AdminTab("Bildirim",    1),
+        AdminTab("Kullanıcılar",2),
+        AdminTab("Bekleyenler", 3),
+        AdminTab("Şikayetler",  4),
+        AdminTab("İtirazlar",   5),
+        AdminTab("İstatistik",  6),
+        AdminTab("Düzenle",     7),
+        AdminTab("Kütüphane",   8),
+        AdminTab("Yardımcılar", 9),
+    )
+    val tabs = allTabs.filter { tab -> when (tab.key) {
+        0 -> role.canPush()
+        1 -> role.canNotif()
+        2 -> role.canViewUsers()
+        3 -> role.canPending()
+        4 -> role.canReports()
+        5 -> role.canAppeals()
+        6 -> role.canStats()
+        7 -> role.canEdit()
+        8 -> role.canLibrary()
+        9 -> role.canManageStaff()
+        else -> false
+    } }
+    var selectedTabKey by remember { mutableIntStateOf(tabs.firstOrNull()?.key ?: 0) }
 
     val platformStats by vm.platformStats.collectAsState()
 
@@ -87,6 +115,7 @@ fun AdminScreen(
         vm.loadFeedPosts()
         vm.loadReports()
         vm.loadAppeals()
+        vm.loadStaff()
     }
 
     // editResult bildirimi
@@ -113,7 +142,10 @@ fun AdminScreen(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text("Admin Paneli", fontWeight = FontWeight.Bold, color = OnBackground) },
+                title = { androidx.compose.foundation.layout.Column {
+                    Text("Admin Paneli", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
+                    Text(role.displayName(), color = Amber, fontSize = 11.sp)
+                } },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
@@ -131,26 +163,27 @@ fun AdminScreen(
         Column(Modifier.fillMaxSize().padding(padding)) {
 
             ScrollableTabRow(
-                selectedTabIndex = selectedTab,
+                selectedTabIndex = tabs.indexOfFirst { it.key == selectedTabKey }.coerceAtLeast(0),
                 containerColor   = Background,
                 contentColor     = Amber,
                 edgePadding      = 0.dp,
                 indicator        = { tabPositions ->
-                    Box(Modifier.tabIndicatorOffset(tabPositions[selectedTab]).height(2.dp).background(Amber))
+                    val idx = tabs.indexOfFirst { it.key == selectedTabKey }.coerceAtLeast(0)
+                    Box(Modifier.tabIndicatorOffset(tabPositions[idx]).height(2.dp).background(Amber))
                 },
             ) {
-                tabs.forEachIndexed { i, title ->
+                tabs.forEachIndexed { _, tab ->
                     Tab(
-                        selected               = selectedTab == i,
-                        onClick                = { selectedTab = i },
-                        text                   = { Text(title, fontSize = 12.sp) },
+                        selected               = selectedTabKey == tab.key,
+                        onClick                = { selectedTabKey = tab.key },
+                        text                   = { Text(tab.title, fontSize = 12.sp) },
                         selectedContentColor   = Amber,
                         unselectedContentColor = Muted,
                     )
                 }
             }
 
-            when (selectedTab) {
+            when (selectedTabKey) {
 
                 // ── Push Bildirimi ──────────────────────────────────────────────
                 0 -> LazyColumn(
@@ -1527,6 +1560,262 @@ private fun MiniStatCard(modifier: Modifier, label: String, value: String, color
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label, color = Muted, fontSize = 11.sp)
             Text(value, color = color, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  YARDIMCILAR SEKMESİ — Sadece admin görür
+// ══════════════════════════════════════════════════════════════════════
+@Composable
+private fun StaffTab(
+    vm        : AdminViewModel,
+    role      : AdminRole,
+    staffList : List<AdminViewModel.StaffMember>,
+    users     : List<com.heftreng.app.data.model.User>,
+) {
+    var uidInput    by remember { mutableStateOf("") }
+    var pickedRole  by remember { mutableStateOf(AdminRole.MODERATOR) }
+    var msg         by remember { mutableStateOf("") }
+    var editingUid  by remember { mutableStateOf<String?>(null) }
+
+    val roleColor = mapOf(
+        AdminRole.ADMIN       to Amber,
+        AdminRole.MODERATOR   to Primary,
+        AdminRole.EDITOR      to Success,
+        AdminRole.KUTUPHANECI to Color(0xFF38BDF8),
+    )
+    val roleDesc = mapOf(
+        AdminRole.MODERATOR   to "Ban/unban, gönderi & yorum sil, şikayetler, itirazlar, bekleyenler",
+        AdminRole.EDITOR      to "Push & bildirim gönder, CMS, bekleyenler, istatistik, düzenle",
+        AdminRole.KUTUPHANECI to "Kütüphane, yazar ve kitap yönetimi",
+    )
+
+    LazyColumn(
+        modifier            = Modifier.fillMaxSize(),
+        contentPadding      = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+
+        // ── Mevcut yardımcılar ─────────────────────────────────────────────
+        item {
+            Text("Yardımcılar (${staffList.size})",
+                color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Spacer(Modifier.height(8.dp))
+        }
+
+        items(staffList, key = { it.uid }) { member ->
+            val isEditing = editingUid == member.uid
+            val mColor    = roleColor[member.role] ?: Muted
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape    = RoundedCornerShape(14.dp),
+                colors   = CardDefaults.cardColors(containerColor = Surface),
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    // Üst satır: avatar + isim + rol badge
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Avatar
+                        Box(
+                            Modifier.size(40.dp).clip(CircleShape).background(mColor.copy(alpha = .2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (member.photoURL.isNotBlank()) {
+                                coil.compose.AsyncImage(
+                                    model = member.photoURL,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                )
+                            } else {
+                                Text(
+                                    member.displayName.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                                    color = mColor, fontWeight = FontWeight.Bold, fontSize = 16.sp
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(member.displayName, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            if (member.email.isNotBlank())
+                                Text(member.email, color = Muted, fontSize = 11.sp)
+                        }
+                        // Rol badge
+                        Box(
+                            Modifier.clip(RoundedCornerShape(8.dp))
+                                .background(mColor.copy(alpha = .15f))
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(member.role.displayName(), color = mColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // Düzenle / Kaldır butonları
+                    if (member.uid != com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Rol değiştir
+                            OutlinedButton(
+                                onClick = { editingUid = if (isEditing) null else member.uid },
+                                shape  = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, if (isEditing) Amber else Muted),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(vertical = 6.dp),
+                            ) {
+                                Icon(if (isEditing) Icons.Default.ExpandLess else Icons.Default.Edit,
+                                    null, Modifier.size(14.dp), tint = if (isEditing) Amber else Muted)
+                                Spacer(Modifier.width(4.dp))
+                                Text(if (isEditing) "Kapat" else "Rolü Değiştir",
+                                    fontSize = 12.sp, color = if (isEditing) Amber else Muted)
+                            }
+                            // Kaldır
+                            OutlinedButton(
+                                onClick = {
+                                    vm.removeStaff(member.uid) { ok, m -> msg = m }
+                                },
+                                shape  = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Error),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(vertical = 6.dp),
+                            ) {
+                                Icon(Icons.Default.PersonRemove, null, Modifier.size(14.dp), tint = Error)
+                                Spacer(Modifier.width(4.dp))
+                                Text("Kaldır", fontSize = 12.sp, color = Error)
+                            }
+                        }
+
+                        // Satır içi rol seçici
+                        if (isEditing) {
+                            Spacer(Modifier.height(8.dp))
+                            Text("Yeni rol seç:", color = Muted, fontSize = 12.sp)
+                            Spacer(Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf(AdminRole.MODERATOR, AdminRole.EDITOR, AdminRole.KUTUPHANECI).forEach { r ->
+                                    val rc = roleColor[r] ?: Muted
+                                    Box(
+                                        Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (member.role == r) rc.copy(.2f) else Color(0xFF1E1B2E))
+                                            .border(1.dp, if (member.role == r) rc else Muted.copy(.3f), RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                vm.updateStaffRole(member.uid, r) { ok, m ->
+                                                    msg = m
+                                                    if (ok) editingUid = null
+                                                }
+                                            }
+                                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(r.displayName(), color = if (member.role == r) rc else Muted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Text("(Kendiniz)", color = Muted, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+
+        if (staffList.isEmpty()) {
+            item { Text("Henüz yardımcı eklenmemiş.", color = Muted, fontSize = 13.sp) }
+        }
+
+        // ── Yeni yardımcı ekle ─────────────────────────────────────────────
+        item {
+            Spacer(Modifier.height(8.dp))
+            Text("Yeni Yardımcı Ekle", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("Kullanıcının UID'ini Firebase Authentication → Users'dan kopyalayın.",
+                color = Muted, fontSize = 12.sp)
+            Spacer(Modifier.height(10.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape    = RoundedCornerShape(14.dp),
+                colors   = CardDefaults.cardColors(containerColor = Surface),
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // UID input
+                    adminTextField(uidInput, { uidInput = it }, "Kullanıcı UID *")
+
+                    // Rol seçici
+                    Text("Rol", color = Muted, fontSize = 12.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(AdminRole.MODERATOR, AdminRole.EDITOR, AdminRole.KUTUPHANECI).forEach { r ->
+                            val isSelected = pickedRole == r
+                            val rc = roleColor[r] ?: Muted
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) rc.copy(.2f) else Color(0xFF1E1B2E))
+                                    .border(1.dp, if (isSelected) rc else Muted.copy(.3f), RoundedCornerShape(8.dp))
+                                    .clickable { pickedRole = r }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Text(r.displayName(), color = if (isSelected) rc else Muted,
+                                    fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    }
+
+                    // Seçilen rolün açıklaması
+                    roleDesc[pickedRole]?.let {
+                        Text(it, color = Muted, fontSize = 11.sp)
+                    }
+
+                    // Ekle butonu
+                    Button(
+                        onClick = {
+                            vm.addStaff(uidInput.trim(), pickedRole) { ok, m ->
+                                msg = m
+                                if (ok) uidInput = ""
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape    = RoundedCornerShape(10.dp),
+                        colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                    ) {
+                        Icon(Icons.Default.PersonAdd, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Yardımcı Ekle", fontWeight = FontWeight.Bold)
+                    }
+
+                    // Sonuç mesajı
+                    if (msg.isNotBlank()) {
+                        Text(msg,
+                            color = if (msg.startsWith("✓")) Success else Error,
+                            fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+            }
+        }
+
+        // ── Rol açıklamaları ───────────────────────────────────────────────
+        item {
+            Spacer(Modifier.height(8.dp))
+            Text("Rol Yetkileri", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Spacer(Modifier.height(8.dp))
+            listOf(
+                Triple(AdminRole.MODERATOR,   roleColor[AdminRole.MODERATOR]   ?: Muted, "Ban/unban, gönderi & yorum silme, şikayetler, itirazlar, bekleyen gönderiler"),
+                Triple(AdminRole.EDITOR,      roleColor[AdminRole.EDITOR]      ?: Muted, "Push & bildirim gönder, CMS, bekleyenler onaylama, istatistik, düzenle"),
+                Triple(AdminRole.KUTUPHANECI, roleColor[AdminRole.KUTUPHANECI] ?: Muted, "Kütüphane yönetimi — yazar, kitap, alıntı, inceleme"),
+            ).forEach { (r, rc, desc) ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        .clip(RoundedCornerShape(10.dp)).background(Surface)
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Box(Modifier.padding(top = 3.dp, end = 10.dp).size(10.dp).clip(CircleShape).background(rc))
+                    Column {
+                        Text(r.displayName(), color = rc, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(desc, color = Muted, fontSize = 12.sp)
+                    }
+                }
+            }
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
