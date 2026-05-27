@@ -3,12 +3,15 @@ rules_version = '2';
 // ═══════════════════════════════════════════════════════════════
 //  HEFTRENG — Firestore Security Rules
 //  v9 — feed list izni eklendi + visibility (friends/only_me) sistemi
+//       + terms_acceptances audit trail
 //
 //  Değişiklikler (v7→v8):
 //  + authors: herkes okur, giriş yapmış oluşturur, takip alt kol.
 //  + library_books: herkes okur, giriş yapmış oluşturur
 //  + library_books/quotes: giriş yapmış ekler, sahibi siler
 //  + library_books/reviews: giriş yapmış ekler, sahibi siler
+//  Değişiklikler (v8→v9):
+//  + terms_acceptances: kullanıcı yazar, okuma/silme yasak (audit)
 // ═══════════════════════════════════════════════════════════════
 
 service cloud.firestore {
@@ -88,11 +91,9 @@ service cloud.firestore {
       // Tekil belge okuma
       allow get: if postVisible(resource.data);
 
-      // KOLEKSİYON SORGUSU (list) — whereEqualTo("type","library_quote") buradan geçer.
-      // Güvenlik: her belgenin visibility alanı client-side filtrelenir;
-      // rules sadece "giriş yapmış kullanıcı okuyabilir" şartını koyar.
-      // Gizli gönderiler query'de gelse bile client postVisible() ile filtreler.
-      allow list: if isAuth();
+      // KOLEKSİYON SORGUSU (list) — giriş yapmamış ziyaretçiler de görebilir.
+      // Gizli gönderiler (only_me/friends) client-side postVisible() ile filtrelenir.
+      allow list: if true;
 
       allow create: if isAuth() && notBanned()
           && request.resource.data.uid == request.auth.uid
@@ -396,16 +397,12 @@ service cloud.firestore {
 
     // ─── AUTHORS ──────────────────────────────────────────────
     match /authors/{authorId} {
-      // Herkes okuyabilir
       allow read: if true;
-      // Yeni yazar oluşturma: giriş yapmış herkes (ilerleyen sürümde isAdmin() yapılabilir)
       allow create: if isAuth() && notBanned();
-      // Güncelleme: sadece sayaç alanları veya admin
       allow update: if isAdmin()
           || (isAuth() && onlyChanging(['bookCount', 'quoteCount', 'reviewCount', 'followerCount']));
       allow delete: if isAdmin();
 
-      // Yazar takip koleksiyonu
       match /follows/{uid} {
         allow read:   if true;
         allow create: if isOwner(uid) && notBanned();
@@ -415,16 +412,12 @@ service cloud.firestore {
 
     // ─── LIBRARY BOOKS ────────────────────────────────────────
     match /library_books/{bookId} {
-      // Herkes okuyabilir
       allow read: if true;
-      // Oluşturma: giriş yapmış herkes (ilerleyen sürümde kısıtlanabilir)
       allow create: if isAuth() && notBanned();
-      // Güncelleme: sayaçlar ve puan alanları veya admin
       allow update: if isAdmin()
           || (isAuth() && onlyChanging(['quoteCount', 'reviewCount', 'avgRating']));
       allow delete: if isAdmin();
 
-      // ── Alıntılar ──────────────────────────────────────────
       match /quotes/{quoteId} {
         allow read: if true;
         allow create: if isAuth() && notBanned()
@@ -432,14 +425,12 @@ service cloud.firestore {
             && request.resource.data.text is string
             && request.resource.data.text.size() >= 1
             && request.resource.data.text.size() <= 2000;
-        // Sahibi feedPostId güncelleyebilir veya silebilir
         allow update: if isAuth()
             && resource.data.uid == request.auth.uid
             && onlyChanging(['feedPostId', 'likesCount']);
         allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
       }
 
-      // ── İncelemeler ────────────────────────────────────────
       match /reviews/{reviewId} {
         allow read: if true;
         allow create: if isAuth() && notBanned()
@@ -457,16 +448,16 @@ service cloud.firestore {
       }
     }
 
-  }
-}
-
-    // ── Kullanım koşulları kabul audit trail ─────────────────────────────
-    // Kullanıcı kendi kaydını yazabilir, okuyamaz, silemez, değiştiremez.
-    // Sadece admin (server-side) okuyabilir.
+    // ══════════════════════════════════════════════════════════
+    //  v9 — KULLANIM KOŞULLARI KABUL AUDIT TRAIL
+    //  Kullanıcı sadece kendi kaydını yazabilir.
+    //  Okuma / silme / güncelleme yasak — sadece Firebase Admin SDK.
+    // ══════════════════════════════════════════════════════════
     match /terms_acceptances/{docId} {
       allow create: if request.auth != null
                     && request.resource.data.uid == request.auth.uid;
-      allow read, update, delete: if false;  // sadece Firebase Admin SDK
+      allow read, update, delete: if false;
     }
 
+  }
 }
