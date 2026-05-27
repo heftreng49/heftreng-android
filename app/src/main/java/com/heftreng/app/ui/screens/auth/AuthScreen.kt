@@ -40,7 +40,6 @@ fun AuthScreen(
     val context     = LocalContext.current
     val currentUser      by vm.currentUser.collectAsState()
     val verificationSent by vm.verificationSent.collectAsState()
-    val loading          by vm.loading.collectAsState()
     val loading     by vm.loading.collectAsState()
     val error       by vm.error.collectAsState()
     val language    by settingsVm.language.collectAsState()
