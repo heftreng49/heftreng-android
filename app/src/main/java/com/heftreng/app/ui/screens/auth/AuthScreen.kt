@@ -38,7 +38,9 @@ fun AuthScreen(
     settingsVm   : SettingsViewModel = hiltViewModel(),
 ) {
     val context     = LocalContext.current
-    val currentUser by vm.currentUser.collectAsState()
+    val currentUser      by vm.currentUser.collectAsState()
+    val verificationSent by vm.verificationSent.collectAsState()
+    val loading          by vm.loading.collectAsState()
     val loading     by vm.loading.collectAsState()
     val error       by vm.error.collectAsState()
     val language    by settingsVm.language.collectAsState()
@@ -66,6 +68,58 @@ fun AuthScreen(
                 account.idToken?.let { vm.signInWithGoogle(it) }
             } catch (_: ApiException) {}
         }
+    }
+
+    // ── Email Doğrulama Bekleme Ekranı ─────────────────────────────────────
+    if (verificationSent) {
+        var notYetError by remember { mutableStateOf(false) }
+        Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
+            Column(
+                modifier            = Modifier.fillMaxWidth().padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text("📧", fontSize = 56.sp)
+                Text("Email Doğrulama", color = OnBackground,
+                    fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                Text(
+                    "Email adresinize bir doğrulama linki gönderdik. Lütfen gelen kutunuzu kontrol edin ve linke tıklayın.",
+                    color = Muted, fontSize = 14.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    lineHeight = 22.sp,
+                )
+                if (notYetError) {
+                    Text("Henüz doğrulanmamış. Lütfen email'inizdeki linke tıklayın.",
+                        color = Color(0xFFEF4444), fontSize = 13.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                }
+                Button(
+                    onClick = {
+                        notYetError = false
+                        vm.reloadAndCheckVerification(
+                            onVerified = { vm.clearVerificationSent() },
+                            onNotYet   = { notYetError = true },
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors   = ButtonDefaults.buttonColors(containerColor = Amber),
+                ) {
+                    if (loading)
+                        CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                    else
+                        Text("✅ Email'i Doğruladım", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick  = { vm.resendVerificationEmail() },
+                    modifier = Modifier.fillMaxWidth(),
+                    border   = androidx.compose.foundation.BorderStroke(1.dp, Amber.copy(alpha = 0.5f)),
+                ) { Text("Tekrar Gönder", color = Amber) }
+                TextButton(onClick = { vm.clearVerificationSent(); vm.signOut() }) {
+                    Text("Geri Dön", color = Muted)
+                }
+            }
+        }
+        return
     }
 
     Box(

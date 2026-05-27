@@ -117,6 +117,10 @@ class AuthViewModel @Inject constructor(
     val switchToGoogle = _switchToGoogle.asStateFlow()
     fun clearSwitchToGoogle() { _switchToGoogle.value = false }
 
+    private val _verificationSent = MutableStateFlow(false)
+    val verificationSent = _verificationSent.asStateFlow()
+    fun clearVerificationSent() { _verificationSent.value = false }
+
     private val _currentUser = MutableStateFlow<FirebaseUser?>(auth.currentUser)
     val currentUser = _currentUser.asStateFlow()
 
@@ -196,6 +200,13 @@ class AuthViewModel @Inject constructor(
             try {
                 val result = auth.signInWithEmailAndPassword(email, password).await()
                 val user   = result.user ?: return@launch
+                if (!user.isEmailVerified) {
+                    try { user.sendEmailVerification().await() } catch (_: Exception) {}
+                    _verificationSent.value = true
+                    _error.value = "Email adresiniz doğrulanmamış. Doğrulama linki gönderildi."
+                    auth.signOut()
+                    return@launch
+                }
                 // Kullanıcı adı boşsa Firestore'dan al ve Auth'a yaz
                 if (user.displayName.isNullOrBlank()) {
                     try {
@@ -260,6 +271,10 @@ class AuthViewModel @Inject constructor(
                 createUserDoc(user, displayName)
                 syncFcmToken(user.uid)
                 acceptTerms(method = "email_register")
+                try { user.sendEmailVerification().await() } catch (_: Exception) {}
+                _verificationSent.value = true
+                auth.signOut()
+                _currentUser.value = null
             } catch (e: com.google.firebase.functions.FirebaseFunctionsException) {
                 // Function çalışmazsa (offline, cold start) devam et — açık kalmasın
                 android.util.Log.w("AuthVM", "verifyRegistration unavailable: ${e.message}")
@@ -500,6 +515,37 @@ class AuthViewModel @Inject constructor(
                 onError("Hesabı silmek için lütfen tekrar giriş yapın.")
             } catch (e: Exception) {
                 onError(e.message ?: "Hesap silinirken hata oluştu")
+            }
+        }
+    }
+
+
+    fun reloadAndCheckVerification(onVerified: () -> Unit, onNotYet: () -> Unit) {
+        viewModelScope.launch {
+            _loading.value = true
+            try {
+                auth.currentUser?.reload()?.await()
+                if (auth.currentUser?.isEmailVerified == true) {
+                    _currentUser.value = auth.currentUser
+                    onVerified()
+                } else {
+                    onNotYet()
+                }
+            } catch (e: Exception) {
+                _error.value = e.message
+            } finally {
+                _loading.value = false
+            }
+        }
+    }
+
+    fun resendVerificationEmail() {
+        viewModelScope.launch {
+            try {
+                auth.currentUser?.sendEmailVerification()?.await()
+                _verificationSent.value = true
+            } catch (e: Exception) {
+                _error.value = e.message
             }
         }
     }
