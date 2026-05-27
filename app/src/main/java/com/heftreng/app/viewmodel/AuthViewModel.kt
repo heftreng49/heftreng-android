@@ -147,6 +147,7 @@ class AuthViewModel @Inject constructor(
                 if (result.additionalUserInfo?.isNewUser == true) {
                     // Yeni kullanıcı: Google profilini Firestore'a yaz
                     createUserDoc(user)
+                    acceptTerms(method = "google_register")
                 } else {
                     // Eski kullanıcı: sadece lastSeen güncelle
                     // displayName/photoURL'e dokunma — kullanıcı uygulama içinde değiştirmiş olabilir
@@ -169,6 +170,7 @@ class AuthViewModel @Inject constructor(
                         }
                     }
                     firestore.collection("users").document(user.uid).update(updates)
+                    acceptTerms(method = "google_login")
                 }
                 _currentUser.value = user
                 syncFcmToken(user.uid)
@@ -212,6 +214,7 @@ class AuthViewModel @Inject constructor(
                     } catch (e: Exception) { e.printStackTrace() }
                 }
                 syncFcmToken(user.uid)
+                acceptTerms(method = "email_login")
                 // Hesabı kaydet
                 val nameForSave = try {
                     firestore.collection("users").document(user.uid).get().await()
@@ -240,6 +243,7 @@ class AuthViewModel @Inject constructor(
                 val user   = result.user ?: return@launch
                 createUserDoc(user, displayName)
                 syncFcmToken(user.uid)
+                acceptTerms(method = "email_register")
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -373,19 +377,58 @@ class AuthViewModel @Inject constructor(
 
     fun clearError() { _error.value = null }
     // ══════════════════════════════════════════════════════════════════════
-    //  KULLANIM KOŞULLARI KABULU
-    //  users/{uid}.termsAcceptedAt → hukuki ispat için timestamp
+    //  KULLANIM KOŞULLARI KABULU — Yasal Audit Trail
+    //
+    //  Kaydedilen veriler:
+    //    users/{uid}            → termsAcceptedAt, termsVersion (hızlı erişim)
+    //    terms_acceptances/{id} → tam audit kaydı (denetim/mahkeme için)
+    //
+    //  Her kayıt şunları içerir:
+    //    - uid, email
+    //    - timestamp (sunucu saati)
+    //    - termsVersion, privacyVersion
+    //    - platform (android), appVersion
+    //    - method: "email_register" | "google" | "email_login"
+    //    - termsUrl, privacyUrl
     // ══════════════════════════════════════════════════════════════════════
-    fun acceptTerms() {
-        val uid = auth.currentUser?.uid ?: return
+    fun acceptTerms(method: String = "email_login", appVersion: String = "") {
+        val user = auth.currentUser ?: return
+        val uid  = user.uid
+        val now  = com.google.firebase.Timestamp.now()
+
         viewModelScope.launch {
             try {
+                val termsVersion   = "1.0"
+                val privacyVersion = "1.0"
+                val termsUrl       = "https://heft-reng.blogspot.com/p/kullanim-kosullari.html"
+                val privacyUrl     = "https://heft-reng.blogspot.com/p/gizlilik-politikasi.html"
+
+                // 1. users/{uid} — hızlı erişim için özet
                 firestore.collection("users").document(uid).update(
                     mapOf(
-                        "termsAcceptedAt"      to com.google.firebase.Timestamp.now(),
-                        "termsAcceptedVersion" to "1.0",
+                        "termsAcceptedAt"      to now,
+                        "termsVersion"         to termsVersion,
+                        "privacyVersion"       to privacyVersion,
                     )
                 ).await()
+
+                // 2. terms_acceptances — değiştirilemez audit trail
+                //    Her kabul ayrı belge olarak saklanır (üzerine yazılmaz)
+                firestore.collection("terms_acceptances").add(
+                    mapOf(
+                        "uid"            to uid,
+                        "email"          to (user.email ?: ""),
+                        "ts"             to now,
+                        "termsVersion"   to termsVersion,
+                        "privacyVersion" to privacyVersion,
+                        "termsUrl"       to termsUrl,
+                        "privacyUrl"     to privacyUrl,
+                        "platform"       to "android",
+                        "appVersion"     to appVersion,
+                        "method"         to method,  // email_register | google | email_login
+                    )
+                ).await()
+
             } catch (_: Exception) {}
         }
     }

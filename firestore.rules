@@ -459,3 +459,14 @@ service cloud.firestore {
 
   }
 }
+
+    // ── Kullanım koşulları kabul audit trail ─────────────────────────────
+    // Kullanıcı kendi kaydını yazabilir, okuyamaz, silemez, değiştiremez.
+    // Sadece admin (server-side) okuyabilir.
+    match /terms_acceptances/{docId} {
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if false;  // sadece Firebase Admin SDK
+    }
+
+}

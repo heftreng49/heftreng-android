@@ -50,6 +50,7 @@ fun AuthScreen(
     var displayName     by remember { mutableStateOf("") }
     var showPassword    by remember { mutableStateOf(false) }
     var showForgotDialog by remember { mutableStateOf(false) }
+    var termsAccepted    by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentUser) {
         if (currentUser != null) onAuthSuccess()
@@ -125,7 +126,6 @@ fun AuthScreen(
                 onClick = {
                     val client = vm.getGoogleSignInClient(context)
                     googleLauncher.launch(client.signInIntent)
-                    vm.acceptTerms()
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape    = RoundedCornerShape(12.dp),
@@ -213,16 +213,16 @@ fun AuthScreen(
 
             Button(
                 onClick = {
-                    if (isRegister) { vm.registerWithEmail(email, password, displayName); vm.acceptTerms() }
+                    if (isRegister) vm.registerWithEmail(email, password, displayName)
                     else vm.signInWithEmail(email, password)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape    = RoundedCornerShape(12.dp),
                 colors   = ButtonDefaults.buttonColors(
-                    containerColor = Amber,
+                    containerColor = if (isRegister && !termsAccepted) Muted else Amber,
                     contentColor   = Color.Black,
                 ),
-                enabled = !loading,
+                enabled = !loading && (!isRegister || termsAccepted),
             ) {
                 if (loading) {
                     CircularProgressIndicator(
@@ -239,36 +239,81 @@ fun AuthScreen(
                 }
             }
 
-            // Kullanım koşulları bildirimi
+            // ── Kullanım Koşulları & Gizlilik Politikası ─────────────────────────
             val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-            @OptIn(ExperimentalLayoutApi::class)
-            androidx.compose.foundation.layout.FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Text(
-                    if (isRegister) "Kaydolarak " else "Giriş yaparak ",
-                    color = Muted, fontSize = 11.sp,
-                )
-                Text(
-                    "Kullanım Koşullarını",
-                    color = Primary, fontSize = 11.sp,
-                    modifier = Modifier.clickable {
-                        uriHandler.openUri("https://heft-reng.blogspot.com/p/kullanim-kosullari.html")
-                    },
-                )
-                Text(" ve ", color = Muted, fontSize = 11.sp)
-                Text(
-                    "Gizlilik Politikasını",
-                    color = Primary, fontSize = 11.sp,
-                    modifier = Modifier.clickable {
-                        uriHandler.openUri("https://heft-reng.blogspot.com/p/gizlilik-politikasi.html")
-                    },
-                )
-                Text(" kabul etmiş olursunuz.", color = Muted, fontSize = 11.sp)
+            val termsUrl   = "https://heft-reng.blogspot.com/p/kullanim-kosullari.html"
+            val privacyUrl = "https://heft-reng.blogspot.com/p/gizlilik-politikasi.html"
+
+            // Kayıt modunda: onay checkbox'ı (zorunlu)
+            // Giriş modunda: bilgilendirici metin (pasif)
+            if (isRegister) {
+                Row(
+                    modifier          = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Checkbox(
+                        checked         = termsAccepted,
+                        onCheckedChange = { termsAccepted = it },
+                        colors          = CheckboxDefaults.colors(
+                            checkedColor        = Primary,
+                            uncheckedColor      = Muted,
+                            checkmarkColor      = androidx.compose.ui.graphics.Color.White,
+                        ),
+                        modifier = Modifier.size(20.dp),
+                    )
+                    @OptIn(ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow {
+                        Text(
+                            if (ku) "Ez " else "Okudum, ",
+                            color = Muted, fontSize = 11.sp,
+                        )
+                        Text(
+                            if (ku) "Mercên Bikaranînê" else "Kullanım Koşullarını",
+                            color    = Primary,
+                            fontSize = 11.sp,
+                            modifier = Modifier.clickable { uriHandler.openUri(termsUrl) },
+                        )
+                        Text(if (ku) " û " else " ve ", color = Muted, fontSize = 11.sp)
+                        Text(
+                            if (ku) "Siyaseta Nepeniyê" else "Gizlilik Politikasını",
+                            color    = Primary,
+                            fontSize = 11.sp,
+                            modifier = Modifier.clickable { uriHandler.openUri(privacyUrl) },
+                        )
+                        Text(
+                            if (ku) " xwendim û qebûl dikim." else " kabul ediyorum.",
+                            color = Muted, fontSize = 11.sp,
+                        )
+                    }
+                }
+            } else {
+                // Giriş modunda bilgilendirici metin
+                @OptIn(ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Text(if (ku) "Bi têketinê " else "Giriş yaparak ", color = Muted, fontSize = 11.sp)
+                    Text(
+                        if (ku) "Mercên Bikaranînê" else "Kullanım Koşullarını",
+                        color    = Primary, fontSize = 11.sp,
+                        modifier = Modifier.clickable { uriHandler.openUri(termsUrl) },
+                    )
+                    Text(if (ku) " û " else " ve ", color = Muted, fontSize = 11.sp)
+                    Text(
+                        if (ku) "Siyaseta Nepeniyê" else "Gizlilik Politikasını",
+                        color    = Primary, fontSize = 11.sp,
+                        modifier = Modifier.clickable { uriHandler.openUri(privacyUrl) },
+                    )
+                    Text(
+                        if (ku) " qebûl dikî." else " kabul etmiş olursunuz.",
+                        color = Muted, fontSize = 11.sp,
+                    )
+                }
             }
 
-            TextButton(onClick = { isRegister = !isRegister }) {
+            TextButton(onClick = { isRegister = !isRegister; termsAccepted = false }) {
                 Text(
                     if (isRegister)
                         Strings.hasAccount(language)

@@ -292,6 +292,62 @@ async function fixVisibility() {
 // ────────────────────────────────────────────────────────────────
 //  Ana akış
 // ────────────────────────────────────────────────────────────────
+
+// ────────────────────────────────────────────────────────────────
+//  ADIM 7 — Mevcut kullanıcılara termsAcceptedAt backfill
+//
+//  Henüz termsAcceptedAt alanı olmayan kullanıcılara
+//  "implicit_backfill" methoduyla geçmişe dönük kabul kaydı ekler.
+//  Yeni kayıtlar AuthViewModel.acceptTerms() ile otomatik eklenir.
+// ────────────────────────────────────────────────────────────────
+async function backfillTermsAcceptance() {
+  console.log("\n── ADIM 7: terms_acceptances backfill ──");
+
+  const usersSnap = await db.collection("users").get();
+  let filled = 0, skipped = 0;
+  let batch = db.batch();
+  let batchCount = 0;
+
+  for (const doc of usersSnap.docs) {
+    const d = doc.data();
+    if (d.termsAcceptedAt) { skipped++; continue; }
+
+    const uid = doc.id;
+    batch.update(doc.ref, {
+      termsAcceptedAt: admin.firestore.Timestamp.now(),
+      termsVersion:    "1.0",
+      privacyVersion:  "1.0",
+    });
+
+    const auditRef = db.collection("terms_acceptances").doc();
+    batch.set(auditRef, {
+      uid,
+      email:          doc.data().email || "",
+      ts:             admin.firestore.Timestamp.now(),
+      termsVersion:   "1.0",
+      privacyVersion: "1.0",
+      termsUrl:       "https://heft-reng.blogspot.com/p/kullanim-kosullari.html",
+      privacyUrl:     "https://heft-reng.blogspot.com/p/gizlilik-politikasi.html",
+      platform:       d.platform || "unknown",
+      appVersion:     d.appVersion || "",
+      method:         "implicit_backfill",
+    });
+
+    filled++;
+    batchCount += 2;
+    console.log(`  [BACKFILL] ${uid} — ${d.email || ""}`);
+
+    if (batchCount >= 498) {
+      await batch.commit();
+      batch = db.batch();
+      batchCount = 0;
+    }
+  }
+
+  if (batchCount > 0) await batch.commit();
+  console.log(`\n  Backfill edildi: ${filled} | Zaten vardı: ${skipped}`);
+}
+
 (async () => {
   try {
     await fixAuthors();
@@ -299,6 +355,7 @@ async function fixVisibility() {
     await syncFeedQuotesToLibrary();
     await fixQuoteTypes();
     await fixVisibility();
+    await backfillTermsAcceptance();
     console.log("\n✅ Migration tamamlandı.");
   } catch (e) {
     console.error("❌ Hata:", e);
