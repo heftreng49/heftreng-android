@@ -14,12 +14,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
-import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.launch
 import com.heftreng.app.utils.openUrl
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
@@ -48,7 +44,6 @@ import com.heftreng.app.ui.screens.books.BookCard
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.FollowListSheet
 import com.heftreng.app.viewmodel.*
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -92,9 +87,7 @@ fun ProfileScreen(
         if (ku) "Pirtûk & Rêze" else "Kitaplar & Seriler",
         Strings.readingList(language),
     )
-    val pagerState  = rememberPagerState { tabs.size }
-    val selectedTab by derivedStateOf { pagerState.currentPage }
-    val scope       = rememberCoroutineScope()
+    var selectedTab by remember { mutableIntStateOf(0) }
 
     // Mesaj navigate state — composable dışında navigate yapabilmek için
     var navigateToConv by remember { mutableStateOf<String?>(null) }
@@ -211,7 +204,7 @@ fun ProfileScreen(
                     tabs.forEachIndexed { i, title ->
                         Tab(
                             selected               = selectedTab == i,
-                            onClick                = { scope.launch { pagerState.animateScrollToPage(i) } },
+                            onClick                = { selectedTab = i },
                             text                   = { Text(title, fontSize = 12.sp) },
                             selectedContentColor   = Amber,
                             unselectedContentColor = Muted,
