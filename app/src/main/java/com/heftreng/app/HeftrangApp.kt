@@ -18,17 +18,12 @@ class HeftrangApp : Application() {
         // Firebase App Check — Play Integrity
         FirebaseApp.initializeApp(this)
         val appCheck = FirebaseAppCheck.getInstance()
-        if (BuildConfig.DEBUG) {
-            // Debug build'lerde test token kullan (enforce sonrası kırılmasın)
-            appCheck.installAppCheckProviderFactory(
-                com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory.getInstance()
-            )
-        } else {
-            // Release build'de Play Integrity — sadece gerçek APK'lar geçer
-            appCheck.installAppCheckProviderFactory(
-                PlayIntegrityAppCheckProviderFactory.getInstance()
-            )
-        }
+
+        // Release build: sadece gerçek Play Store APK'ları geçer
+        // Debug build için ayrı provider gerekmez — enforce açılmadan test edilebilir
+        appCheck.installAppCheckProviderFactory(
+            PlayIntegrityAppCheckProviderFactory.getInstance()
+        )
 
         // Test cihazı olarak ekle — reklamlar test modunda yüklenir
         MobileAds.setRequestConfiguration(
