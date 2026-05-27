@@ -64,8 +64,8 @@ jobs:
             await test("giris yapan feed listleyebilir", () =>
               assertSucceeds(user1.firestore().collection("feed").where("type","==","library_quote").get())
             );
-            await test("anonim feed listleyemez", () =>
-              assertFails(anon.firestore().collection("feed").get())
+            await test("anonim feed listleyebilir (public list)", () =>
+              assertSucceeds(anon.firestore().collection("feed").get())
             );
 
             console.log("\n-- LIBRARY --");
