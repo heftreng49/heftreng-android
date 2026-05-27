@@ -350,8 +350,9 @@ class AdminViewModel @Inject constructor(
         viewModelScope.launch {
             _statsLoading.value = true
             try {
-                com.google.firebase.functions.FirebaseFunctions
-                    .getInstance().getHttpsCallable("refreshStats").call().await()
+                // refreshStats Cloud Function kaldırıldı — direkt fallback ile
+                // appConfig/stats dokümanını güncelle, snapshot listener zaten dinliyor
+                loadStatsFallback()
                 loadActiveUsers()
             } catch (_: Exception) {
                 loadStatsFallback()
@@ -370,36 +371,68 @@ class AdminViewModel @Inject constructor(
             }
             val twoMinAgo = System.currentTimeMillis() / 1000 - 120
 
-            val usersSnap    = firestore.collection("users").get().await()
-            val totalUsers   = usersSnap.size()
-            val androidUsers = usersSnap.documents.count { it.getString("platform") == "android" }
-            val webUsers     = usersSnap.documents.count {
-                val p = it.getString("platform") ?: ""; p == "web" || p.isBlank()
-            }
-            val newUsersToday = usersSnap.documents.count {
-                (it.getTimestamp("createdAt") ?: it.getTimestamp("ts"))?.seconds?.let { s -> s >= todaySec } == true
-            }
-            val bannedUsers = usersSnap.documents.count { it.getBoolean("banned") == true }
+            // ── Pahalı full koleksiyon okumalarından kaçın ─────────────────────
+            // Sadece sayaçları güncelle: users, feed, presence sorgularını
+            // limit ile kıs; genel sayılar zaten appConfig/stats'ta tutuluyor.
 
+            // Yeni kullanıcılar bugün — sadece bugünden itibaren filtrele (limit 500)
+            val todayTs = com.google.firebase.Timestamp(todaySec, 0)
+            val newUsersSnap = try {
+                firestore.collection("users")
+                    .whereGreaterThanOrEqualTo("createdAt", todayTs)
+                    .limit(500).get().await()
+            } catch (_: Exception) { null }
+            val newUsersToday = newUsersSnap?.size() ?: 0
+
+            // Banned users — sadece banned=true olanları çek
+            val bannedSnap = try {
+                firestore.collection("users")
+                    .whereEqualTo("banned", true)
+                    .limit(500).get().await()
+            } catch (_: Exception) { null }
+            val bannedUsers = bannedSnap?.size() ?: 0
+
+            // Platform dağılımı — sadece appConfig/stats'taki mevcut değeri koru
+            val existingStats = try {
+                firestore.collection("appConfig").document("stats").get().await().data
+            } catch (_: Exception) { null }
+            fun ei(k: String) = (existingStats?.get(k) as? Long)?.toInt() ?: 0
+            val totalUsers   = ei("totalUsers")
+            val androidUsers = ei("androidUsers")
+            val webUsers     = ei("webUsers")
+            val totalPosts   = ei("totalPosts")
+            val totalQuotes  = ei("totalQuotes")
+            val totalReviews = ei("totalReviews")
+            val totalSerials = ei("totalSerials")
+            val totalBooks   = ei("totalBooks")
+
+            // Online şu an — presence koleksiyonu limit 300
             val onlineNow = try {
-                firestore.collection("presence").whereEqualTo("online", true).get().await()
+                firestore.collection("presence")
+                    .whereEqualTo("online", true)
+                    .limit(300).get().await()
                     .documents.count { (it.getTimestamp("lastSeen")?.seconds ?: 0L) >= twoMinAgo }
             } catch (_: Exception) { 0 }
 
-            val postsSnap     = firestore.collection("feed").get().await()
-            val totalPosts    = postsSnap.documents.count { (it.getString("moderationStatus") ?: "active") == "active" }
-            val newPostsToday = postsSnap.documents.count {
-                (it.getString("moderationStatus") ?: "active") == "active" &&
-                (it.getTimestamp("ts")?.seconds ?: 0L) >= todaySec
-            }
-            val pendingPosts  = postsSnap.documents.count { it.getString("moderationStatus") == "suspended" }
+            // Bugün yeni gönderiler — sadece bugünden itibaren filtrele
+            val newPostsSnap = try {
+                firestore.collection("feed")
+                    .whereGreaterThanOrEqualTo("ts", todayTs)
+                    .whereEqualTo("moderationStatus", "active")
+                    .limit(200).get().await()
+            } catch (_: Exception) { null }
+            val newPostsToday = newPostsSnap?.size() ?: 0
 
-            val totalQuotes   = try { firestore.collectionGroup("quotes").get().await().size() } catch (_: Exception) { 0 }
-            val totalReviews  = try { firestore.collectionGroup("reviews").get().await().size() } catch (_: Exception) { 0 }
-            val totalSerials  = try { firestore.collection("serials").get().await().size() } catch (_: Exception) { 0 }
-            val totalBooks    = try { firestore.collection("library_books").get().await().size() } catch (_: Exception) { 0 }
+            // Bekleyen gönderiler
+            val pendingPosts = try {
+                firestore.collection("pendingPosts").limit(100).get().await().size()
+            } catch (_: Exception) { 0 }
+
+            // Bekleyen raporlar
             val pendingReports = try {
-                firestore.collection("reports").whereEqualTo("status", "pending").get().await().size()
+                firestore.collection("reports")
+                    .whereEqualTo("status", "pending")
+                    .limit(100).get().await().size()
             } catch (_: Exception) { 0 }
 
             val ps = PlatformStats(
@@ -418,11 +451,16 @@ class AdminViewModel @Inject constructor(
                 "onlineNow" to onlineNow, "newUsersToday" to newUsersToday,
                 "totalPosts" to totalPosts, "newPostsToday" to newPostsToday,
                 "totalQuotes" to totalQuotes, "totalReviews" to totalReviews,
-                "totalComments" to 0, "totalSerials" to totalSerials, "totalBooks" to totalBooks,
+                "totalComments" to ei("totalComments"), // mevcut değeri koru, 0'a sıfırlama
+                "totalSerials" to totalSerials, "totalBooks" to totalBooks,
                 "pendingPosts" to pendingPosts, "pendingReports" to pendingReports,
                 "bannedUsers" to bannedUsers, "lastUpdated" to System.currentTimeMillis(),
             )
-            try { firestore.collection("appConfig").document("stats").set(map).await() } catch (_: Exception) {}
+            // set() yerine merge: diğer alanları silmez
+            try {
+                firestore.collection("appConfig").document("stats")
+                    .set(map, com.google.firebase.firestore.SetOptions.merge()).await()
+            } catch (_: Exception) {}
         } catch (e: Exception) { e.printStackTrace() }
     }
     private suspend fun loadActiveUsers() {
