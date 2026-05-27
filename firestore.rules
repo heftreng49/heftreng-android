@@ -22,7 +22,7 @@ service cloud.firestore {
       return isAuth() && request.auth.uid == uid;
     }
     function isAdmin() {
-      return isAuth() && request.auth.token.email == 'siirgibi49@gmail.com';
+      return isAuth() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
     function onlyChanging(fields) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
@@ -126,23 +126,12 @@ service cloud.firestore {
       allow write: if false;
       match /msgs/{msgId} {
         allow read: if true;
-        allow create: if (isAuth()
+        allow create: if isAuth() && notBanned()
             && request.resource.data.uid == request.auth.uid
             && request.resource.data.text is string
             && request.resource.data.text.size() >= 1
             && request.resource.data.text.size() <= 1000
-            && request.resource.data.likes == 0)
-            || (!isAuth()
-            && request.resource.data.uid is string
-            && request.resource.data.uid.matches('guest_[0-9]+')
-            && request.resource.data.name is string
-            && request.resource.data.name.size() >= 1
-            && request.resource.data.name.size() <= 60
-            && request.resource.data.text is string
-            && request.resource.data.text.size() >= 1
-            && request.resource.data.text.size() <= 1000
-            && request.resource.data.likes == 0
-            && request.resource.data.photoURL == '');
+            && request.resource.data.likes == 0;
         allow update: if isAuth() && onlyChanging(['likes']);
         allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isAdmin();
       }
@@ -330,7 +319,7 @@ service cloud.firestore {
       allow read:   if isAuth();
       allow create: if isOwner(uid);
       allow update: if isOwner(uid)
-          && onlyChanging(['online', 'lastSeen', 'uid']);
+          && onlyChanging(['online', 'lastSeen', 'uid', 'appVersion', 'platform']);
       allow delete: if isOwner(uid) || isAdmin();
     }
     match /typing/{docId} {
