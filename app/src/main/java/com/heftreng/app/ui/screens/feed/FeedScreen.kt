@@ -351,6 +351,7 @@ fun FeedScreen(
                         },
                         onDelete  = { vm.deletePost(post.id) },
                         onEdit    = { newText -> vm.editPost(post.id, newText) },
+                        onEditQuote = { newQ, newB, newA -> vm.editQuote(post.id, newQ, newB, newA) },
                         onTap        = { navController.navigate(Screen.PostDetail.go(post.id)) },
                         onShowLikers = {
                             socialVm.loadPostLikers(post.id)
@@ -809,6 +810,7 @@ fun PostCard(
     onShare      : () -> Unit,
     onDelete     : (() -> Unit)? = null,
     onEdit       : ((String) -> Unit)? = null,
+    onEditQuote  : ((quoteText: String, bookName: String, authorName: String) -> Unit)? = null,
     onTap        : (() -> Unit)? = null,
     onQuote      : (() -> Unit)? = null,
     onStoryShare : (() -> Unit)? = null,
@@ -824,7 +826,9 @@ fun PostCard(
     val myUid            = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     val isOwn            = post.uid == myUid
     var menuExpanded     by remember { mutableStateOf(false) }
-    var showEditDialog   by remember { mutableStateOf(false) }
+    var showEditDialog      by remember { mutableStateOf(false) }
+    var showEditQuoteDialog by remember { mutableStateOf(false) }
+    val isQuotePost = post.quoteText.isNotBlank()
     var showDeleteDialog by remember { mutableStateOf(false) }
     var shareTarget      by remember { mutableStateOf<ShareTarget?>(null) }
 
@@ -893,7 +897,11 @@ fun PostCard(
                         DropdownMenuItem(
                             text        = { Text(Strings.edit(language), color = OnBackground) },
                             leadingIcon = { Icon(Icons.Default.Create, null, tint = Muted) },
-                            onClick     = { menuExpanded = false; showEditDialog = true },
+                            onClick     = {
+                                menuExpanded = false
+                                if (isQuotePost) showEditQuoteDialog = true
+                                else showEditDialog = true
+                            },
                         )
                         DropdownMenuItem(
                             text        = { Text(Strings.delete(language), color = Color(0xFFEF4444)) },
@@ -1151,13 +1159,28 @@ fun PostCard(
         )
     }
 
-    // Düzenleme dialog
+    // Düzenleme dialog — normal post
     if (showEditDialog) {
         EditPostDialog(
             currentText = post.text,
             language    = language,
             onDismiss   = { showEditDialog = false },
             onSave      = { newText -> onEdit?.invoke(newText); showEditDialog = false },
+        )
+    }
+
+    // Düzenleme dialog — alıntı postu
+    if (showEditQuoteDialog) {
+        EditQuoteDialog(
+            currentQuoteText  = post.quoteText,
+            currentBookName   = post.bookName,
+            currentAuthorName = post.authorName,
+            language          = language,
+            onDismiss         = { showEditQuoteDialog = false },
+            onSave            = { newQuote, newBook, newAuthor ->
+                onEditQuote?.invoke(newQuote, newBook, newAuthor)
+                showEditQuoteDialog = false
+            },
         )
     }
 
@@ -1215,6 +1238,93 @@ fun EditPostDialog(currentText: String, onDismiss: () -> Unit, onSave: (String) 
                         onClick = { if (text.isNotBlank()) onSave(text) },
                         colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
                         shape   = RoundedCornerShape(10.dp),
+                    ) { Text(Strings.save(language), fontWeight = FontWeight.Bold) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EditQuoteDialog(
+    currentQuoteText  : String,
+    currentBookName   : String,
+    currentAuthorName : String,
+    onDismiss         : () -> Unit,
+    onSave            : (quoteText: String, bookName: String, authorName: String) -> Unit,
+    language          : String = "tr",
+) {
+    val ku = language == "ku"
+    var quoteText  by remember { mutableStateOf(currentQuoteText) }
+    var bookName   by remember { mutableStateOf(currentBookName) }
+    var authorName by remember { mutableStateOf(currentAuthorName) }
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape  = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = HeftSurface),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    if (ku) "Gotinê Biguherîne" else "Alıntıyı Düzenle",
+                    fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 16.sp,
+                )
+                // Alıntı metni
+                OutlinedTextField(
+                    value         = quoteText,
+                    onValueChange = { quoteText = it },
+                    modifier      = Modifier.fillMaxWidth().heightIn(min = 100.dp),
+                    label         = { Text(if (ku) "Gotin" else "Alıntı metni", color = Muted, fontSize = 12.sp) },
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor      = Primary,
+                        unfocusedBorderColor    = Divider,
+                        focusedTextColor        = OnBackground,
+                        unfocusedTextColor      = OnBackground,
+                        unfocusedContainerColor = SurfaceVar,
+                        focusedContainerColor   = SurfaceVar,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                )
+                // Kitap adı
+                OutlinedTextField(
+                    value         = bookName,
+                    onValueChange = { bookName = it },
+                    modifier      = Modifier.fillMaxWidth(),
+                    label         = { Text(if (ku) "Pirtûk" else "Kitap adı", color = Muted, fontSize = 12.sp) },
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor      = Amber,
+                        unfocusedBorderColor    = Divider,
+                        focusedTextColor        = OnBackground,
+                        unfocusedTextColor      = OnBackground,
+                        unfocusedContainerColor = SurfaceVar,
+                        focusedContainerColor   = SurfaceVar,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                )
+                // Yazar adı
+                OutlinedTextField(
+                    value         = authorName,
+                    onValueChange = { authorName = it },
+                    modifier      = Modifier.fillMaxWidth(),
+                    label         = { Text(if (ku) "Nivîskar" else "Yazar adı", color = Muted, fontSize = 12.sp) },
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor      = Amber,
+                        unfocusedBorderColor    = Divider,
+                        focusedTextColor        = OnBackground,
+                        unfocusedTextColor      = OnBackground,
+                        unfocusedContainerColor = SurfaceVar,
+                        focusedContainerColor   = SurfaceVar,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                )
+                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = onDismiss) { Text(Strings.cancel(language), color = Muted) }
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick  = { if (quoteText.isNotBlank()) onSave(quoteText, bookName, authorName) },
+                        enabled  = quoteText.isNotBlank(),
+                        colors   = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Color.White),
+                        shape    = RoundedCornerShape(10.dp),
                     ) { Text(Strings.save(language), fontWeight = FontWeight.Bold) }
                 }
             }

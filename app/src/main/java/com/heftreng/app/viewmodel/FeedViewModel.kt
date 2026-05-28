@@ -89,6 +89,32 @@ class FeedViewModel @Inject constructor(
             }
         }
         observeFeed()
+        observeLibraryQuotes()
+    }
+
+    // ── Kütüphane alıntı dinleyici — gerçek zamanlı ───────────────────────────
+    private fun observeLibraryQuotes() {
+        val myUid   = auth.currentUser?.uid ?: return
+        firestore.collection("feed")
+            .whereEqualTo("type", "library_quote")
+            .addSnapshotListener { snap, err ->
+                if (err != null || snap == null) return@addSnapshotListener
+                viewModelScope.launch {
+                    val seenIds = mutableSetOf<String>()
+                    val result  = mutableListOf<Post>()
+                    snap.documents.forEach { doc ->
+                        if (seenIds.add(doc.id)) {
+                            doc.toPost()?.let { result.add(it) }
+                        }
+                    }
+                    // Mevcut collectionGroup kayıtlarıyla birleştir (feedPostId yoksa)
+                    val existing = _libraryQuotes.value
+                        .filter { it.id.startsWith("cg_") }
+                    val existingIds = result.map { it.id }.toSet()
+                    val merged = result + existing.filter { it.id !in existingIds }
+                    _libraryQuotes.value = merged.sortedByDescending { it.ts?.seconds ?: 0L }
+                }
+            }
     }
 
     // ── Feed dinleyici ─────────────────────────────────────────────────────────
@@ -677,6 +703,52 @@ class FeedViewModel @Inject constructor(
                 if (postDoc.getString("uid") != uid) return@launch
                 firestore.collection("feed").document(postId).update("text", newText.trim()).await()
                 _posts.value = _posts.value.map { if (it.id == postId) it.copy(text = newText.trim()) else it }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // Alıntı metni düzenleme — quoteText + isteğe bağlı bookName/authorName günceller
+    fun editQuote(postId: String, newQuoteText: String, newBookName: String = "", newAuthorName: String = "") {
+        if (uid.isEmpty() || newQuoteText.isBlank()) return
+        viewModelScope.launch {
+            try {
+                val postDoc = firestore.collection("feed").document(postId).get().await()
+                if (postDoc.getString("uid") != uid) return@launch
+                val updates = mutableMapOf<String, Any>(
+                    "quoteText" to newQuoteText.trim(),
+                )
+                if (newBookName.isNotBlank())   updates["bookName"]   = newBookName.trim()
+                if (newAuthorName.isNotBlank()) updates["authorName"] = newAuthorName.trim()
+                firestore.collection("feed").document(postId).update(updates).await()
+                // Local state güncelle
+                _posts.value = _posts.value.map {
+                    if (it.id == postId) it.copy(
+                        quoteText  = newQuoteText.trim(),
+                        bookName   = newBookName.ifBlank { it.bookName },
+                        authorName = newAuthorName.ifBlank { it.authorName },
+                    ) else it
+                }
+                _libraryQuotes.value = _libraryQuotes.value.map {
+                    if (it.id == postId) it.copy(
+                        quoteText  = newQuoteText.trim(),
+                        bookName   = newBookName.ifBlank { it.bookName },
+                        authorName = newAuthorName.ifBlank { it.authorName },
+                    ) else it
+                }
+                // library_books/{id}/quotes alt koleksiyonunu da güncelle
+                val feedPostSnap = firestore.collection("feed").document(postId).get().await()
+                val libBookId = feedPostSnap.getString("libraryBookId")
+                if (!libBookId.isNullOrBlank()) {
+                    try {
+                        val quoteSnap = firestore.collection("library_books").document(libBookId)
+                            .collection("quotes")
+                            .whereEqualTo("feedPostId", postId)
+                            .get().await()
+                        quoteSnap.documents.forEach { doc ->
+                            doc.reference.update("text", newQuoteText.trim())
+                        }
+                    } catch (_: Exception) {}
+                }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }

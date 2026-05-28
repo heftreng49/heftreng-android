@@ -78,6 +78,7 @@ class LibraryViewModel @Inject constructor(
     val myUid get() = auth.currentUser?.uid ?: ""
     val myName get() = auth.currentUser?.displayName ?: ""
     val myPhoto get() = auth.currentUser?.photoUrl?.toString() ?: ""
+    val myUser get() = auth.currentUser?.email?.substringBefore("@") ?: ""
 
     // ── Yazar Listesi ─────────────────────────────────────────────────────
     fun loadAuthors() {
@@ -424,24 +425,22 @@ class LibraryViewModel @Inject constructor(
                 val quoteRef = firestore.collection("library_books").document(book.id)
                     .collection("quotes").add(quoteData).await()
 
-                // 2. feed'e yaz
+                // 2. feed'e yaz — tüm alanlar createPost ile uyumlu
                 val feedData = hashMapOf(
-                    "uid"          to myUid,
-                    "displayName"  to myName,
-                    "name"         to myName,
-                    "photoURL"     to myPhoto,
-                    "quoteText"    to quoteText,
-                    "bookName"     to book.title,
-                    "authorName"   to book.authorName,
-                    "libraryBookId" to book.id,
+                    "uid"             to myUid,
+                    "displayName"     to myName,
+                    "name"            to myName,
+                    "username"        to myUser,
+                    "photoURL"        to myPhoto,
+                    "text"            to "",
+                    "quoteText"       to quoteText,
+                    "bookName"        to book.title,
+                    "authorName"      to book.authorName,
+                    "libraryBookId"   to book.id,
                     "libraryAuthorId" to book.authorId,
-                    "quote"        to mapOf(
-                        "text"   to quoteText,
-                        "book"   to book.title,
-                        "author" to book.authorName,
-                    ),
-                    "type"         to "library_quote",
-                    "ts"           to now,
+                    "type"            to "library_quote",
+                    "likes"           to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
+                    "ts"              to now,
                 )
                 val feedRef = firestore.collection("feed").add(feedData).await()
 

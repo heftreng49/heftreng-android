@@ -369,6 +369,8 @@ private fun LibraryQuotesTab(
                 onShare      = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
                 onDelete     = if (post.uid == com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid)
                                    {{ feedVm.deletePost(post.id) }} else null,
+                onEditQuote  = if (post.uid == com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid)
+                                   {{ newQ, newB, newA -> feedVm.editQuote(post.id, newQ, newB, newA) }} else null,
                 onTapAuthor  = { _ ->
                     if (post.libraryAuthorId.isNotBlank())
                         navController.navigate("author_detail/${post.libraryAuthorId}")
