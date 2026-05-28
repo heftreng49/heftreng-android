@@ -112,19 +112,19 @@ fun FeedScreen(
     )
     var selectedFeedTab by remember { mutableIntStateOf(0) }
 
-    // Takip edilen kullanıcıların UID listesi
+    // Takip edilen kullanıcıların UID listesi — canlı dinleyici (takip/bırak anında güncellenir)
     val currentUserUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     var followingUids by remember { mutableStateOf<Set<String>>(emptySet()) }
-    LaunchedEffect(currentUserUid) {
-        if (currentUserUid.isNotEmpty()) {
-            try {
-                val snap = FirebaseFirestore.getInstance()
-                    .collection("follows")
-                    .whereEqualTo("fromUid", currentUserUid)
-                    .get().await()
-                followingUids = snap.documents.mapNotNull { it.getString("targetUid") }.toSet()
-            } catch (_: Exception) {}
-        }
+    DisposableEffect(currentUserUid) {
+        if (currentUserUid.isEmpty()) return@DisposableEffect onDispose {}
+        val registration = FirebaseFirestore.getInstance()
+            .collection("follows")
+            .whereEqualTo("fromUid", currentUserUid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null || snapshot == null) return@addSnapshotListener
+                followingUids = snapshot.documents.mapNotNull { it.getString("targetUid") }.toSet()
+            }
+        onDispose { registration.remove() }
     }
 
     val displayedPosts = remember(posts, selectedFeedTab, followingUids, blockedUsers) {

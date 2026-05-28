@@ -71,31 +71,90 @@ class FeedViewModel @Inject constructor(
     // Kullanıcı bilgilerini ViewModel ömrü boyunca cache'le — her snapshot'ta yeniden çekmeyi önler
     private val userCache = mutableMapOf<String, Pair<String, String>>()
 
+    // Canlı dinleyici referansları — onCleared'da kapatılır
+    private var feedListener    : com.google.firebase.firestore.ListenerRegistration? = null
+    private var likedListener   : com.google.firebase.firestore.ListenerRegistration? = null
+    private var savedListener   : com.google.firebase.firestore.ListenerRegistration? = null
+    private var repostListener  : com.google.firebase.firestore.ListenerRegistration? = null
+    private var libQuoteListener: com.google.firebase.firestore.ListenerRegistration? = null
+
     init {
         auth.addAuthStateListener { firebaseAuth ->
             val currentUid = firebaseAuth.currentUser?.uid ?: ""
             if (currentUid.isNotEmpty()) {
-                viewModelScope.launch {
-                    loadInteractions()
-                    _posts.value = _posts.value.map { post ->
-                        post.copy(
-                            isLikedByMe    = post.id in likedIds,
-                            isSavedByMe    = post.id in savedIds,
-                            isRepostedByMe = post.id in myRepostMap,
-                            myRepostId     = myRepostMap[post.id] ?: "",
-                        )
-                    }
-                }
+                startLiveInteractions(currentUid)
             }
         }
         observeFeed()
         observeLibraryQuotes()
     }
 
+    // ── Etkileşimleri canlı dinle (liked / saved / repost) ───────────────────
+    // .get().await() yerine addSnapshotListener — kalp kaybolma sorunu çözülür
+    private fun startLiveInteractions(currentUid: String) {
+        // Beğeniler
+        likedListener?.remove()
+        likedListener = firestore.collection("feedLikes")
+            .whereEqualTo("uid", currentUid)
+            .addSnapshotListener { snap, _ ->
+                likedIds = snap?.documents
+                    ?.mapNotNull { it.getString("feedId") ?: it.getString("postId") }
+                    ?.toSet() ?: emptySet()
+                syncInteractionsToState()
+            }
+
+        // Kaydedilenler
+        savedListener?.remove()
+        savedListener = firestore.collection("feedSaves")
+            .whereEqualTo("uid", currentUid)
+            .addSnapshotListener { snap, _ ->
+                savedIds = snap?.documents
+                    ?.mapNotNull { it.getString("feedId") ?: it.getString("postId") }
+                    ?.toSet() ?: emptySet()
+                syncInteractionsToState()
+            }
+
+        // Repostlar
+        repostListener?.remove()
+        repostListener = firestore.collection("feed")
+            .whereEqualTo("uid", currentUid)
+            .whereEqualTo("repostType", "feed")
+            .addSnapshotListener { snap, _ ->
+                myRepostMap = snap?.documents
+                    ?.mapNotNull { doc ->
+                        val orig = doc.getString("repostId") ?: return@mapNotNull null
+                        orig to doc.id
+                    }?.toMap() ?: emptyMap()
+                syncInteractionsToState()
+            }
+    }
+
+    // Tüm postların etkileşim bayraklarını güncel setlerle senkronize eder
+    private fun syncInteractionsToState() {
+        if (_posts.value.isEmpty()) return
+        _posts.value = _posts.value.map { post ->
+            post.copy(
+                isLikedByMe    = post.id in likedIds,
+                isSavedByMe    = post.id in savedIds,
+                isRepostedByMe = post.id in myRepostMap,
+                myRepostId     = myRepostMap[post.id] ?: "",
+            )
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        feedListener?.remove()
+        likedListener?.remove()
+        savedListener?.remove()
+        repostListener?.remove()
+        libQuoteListener?.remove()
+    }
+
     // ── Kütüphane alıntı dinleyici — gerçek zamanlı ───────────────────────────
     private fun observeLibraryQuotes() {
-        val myUid   = auth.currentUser?.uid ?: return
-        firestore.collection("feed")
+        libQuoteListener?.remove()
+        libQuoteListener = firestore.collection("feed")
             .whereEqualTo("type", "library_quote")
             .addSnapshotListener { snap, err ->
                 if (err != null || snap == null) return@addSnapshotListener
@@ -107,9 +166,7 @@ class FeedViewModel @Inject constructor(
                             doc.toPost()?.let { result.add(it) }
                         }
                     }
-                    // Mevcut collectionGroup kayıtlarıyla birleştir (feedPostId yoksa)
-                    val existing = _libraryQuotes.value
-                        .filter { it.id.startsWith("cg_") }
+                    val existing   = _libraryQuotes.value.filter { it.id.startsWith("cg_") }
                     val existingIds = result.map { it.id }.toSet()
                     val merged = result + existing.filter { it.id !in existingIds }
                     _libraryQuotes.value = merged.sortedByDescending { it.ts?.seconds ?: 0L }
@@ -117,28 +174,86 @@ class FeedViewModel @Inject constructor(
             }
     }
 
-    // ── Feed dinleyici ─────────────────────────────────────────────────────────
+    // ── Feed dinleyici — Anında göster, arka planda zenginleştir ─────────────
     private fun observeFeed() {
-        _loading.value = true
-        firestore.collection("feed")
+        // Zaten post varsa yükleme çarkını gösterme — sayfa önceden açılmışsa akıcılığı koru
+        _loading.value = _posts.value.isEmpty()
+        feedListener?.remove()
+        feedListener = firestore.collection("feed")
             .orderBy("ts", Query.Direction.DESCENDING)
             .limit(PAGE_SIZE)
             .addSnapshotListener { snap, err ->
                 if (err != null || snap == null) { _loading.value = false; return@addSnapshotListener }
                 viewModelScope.launch {
-                    if (snap.documents.isNotEmpty()) lastDoc = snap.documents.last()
+                    // lastDoc yalnızca liste boşken set edilir — sayfalama kaymasını önler
+                    if (lastDoc == null && snap.documents.isNotEmpty()) {
+                        lastDoc = snap.documents.last()
+                    }
                     _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
+
                     val rawPosts = snap.documents.mapNotNull { doc -> doc.toPost() }
-                    // Moderasyon filtresi:
-                    // "removed"   → hiç kimse görmez
-                    // "suspended" → sadece gönderi sahibi görür (FeedScreen'de filtre)
-                    // "restricted"→ sadece giriş yapanlar görür (FeedScreen'de kontrol)
-                    // "active"    → herkes görür
                     val filtered = rawPosts.filter { it.moderationStatus != "removed" }
-                    _posts.value = enrichPostsWithUserData(filtered)
+
+                    // ── Adım 1: Anında ekrana bas (post içindeki gömülü verilerle)
+                    // Kullanıcı yükleme çarkı görmeden postaları okumaya başlar
+                    _posts.value = mapInteractions(filtered)
                     _loading.value = false
+
+                    // ── Adım 2: Arka planda profil bilgilerini zenginleştir
+                    // await() burada ana akışı bloklamaz — ayrı launch içinde
+                    enrichPostsInBackground(filtered)
                 }
             }
+    }
+
+    // Etkileşim bayraklarını güncel setlerle uygular
+    private fun mapInteractions(posts: List<Post>): List<Post> = posts.map { post ->
+        post.copy(
+            isLikedByMe    = post.id in likedIds,
+            isSavedByMe    = post.id in savedIds,
+            isRepostedByMe = post.id in myRepostMap,
+            myRepostId     = myRepostMap[post.id] ?: "",
+        )
+    }
+
+    // Cache'de olmayan kullanıcı bilgilerini arka planda çeker, varsa state'i sessizce günceller
+    private fun enrichPostsInBackground(posts: List<Post>) {
+        if (posts.isEmpty()) return
+        val missingUids = posts.map { it.uid }
+            .filter { it.isNotBlank() && it !in userCache }
+            .distinct()
+        if (missingUids.isEmpty()) return
+
+        viewModelScope.launch {
+            var cacheUpdated = false
+            missingUids.chunked(10).forEach { chunk ->
+                try {
+                    val snap = firestore.collection("users")
+                        .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                        .get().await()
+                    snap.documents.forEach { doc ->
+                        val name  = (doc.getString("displayName") ?: doc.getString("name"))
+                            ?.takeIf { it.isNotBlank() }
+                        val photo = doc.getString("photoURL")?.takeIf { it.isNotBlank() }
+                        if (name != null || photo != null) {
+                            userCache[doc.id] = Pair(name ?: "", photo ?: "")
+                            cacheUpdated = true
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+            // Yeni veri geldiyse postları sessizce güncelle (profil resimleri/adlar)
+            if (cacheUpdated) {
+                _posts.value = _posts.value.map { post ->
+                    val (freshName, freshPhoto) = userCache[post.uid] ?: return@map post
+                    post.copy(
+                        displayName = freshName.ifBlank { post.displayName },
+                        name        = freshName.ifBlank { post.name },
+                        photoURL    = freshPhoto.ifBlank { post.photoURL },
+                    )
+                }
+            }
+        }
     }
 
     // ── Firestore doc → Post dönüştürücü ──────────────────────────────────────
@@ -215,66 +330,6 @@ class FeedViewModel @Inject constructor(
             moderationStatus       = d["moderationStatus"]       as? String ?: "active",
             moderationReason       = d["moderationReason"]       as? String ?: "",
         )
-    }
-
-    // ── Kullanıcı verileriyle zenginleştir ────────────────────────────────────
-    private suspend fun enrichPostsWithUserData(posts: List<Post>): List<Post> {
-        if (posts.isEmpty()) return posts
-        // Sadece cache'de olmayan uid'leri Firestore'dan çek
-        val uids = posts.map { it.uid }
-            .filter { it.isNotBlank() && it !in userCache }
-            .distinct()
-        uids.chunked(10).forEach { chunk ->
-            try {
-                val snap = firestore.collection("users")
-                    .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
-                    .get().await()
-                snap.documents.forEach { doc ->
-                    val name  = ((doc.getString("displayName") ?: doc.getString("name")) ?: "").takeIf { it.isNotBlank() }
-                    val photo = doc.getString("photoURL")?.takeIf { it.isNotBlank() }
-                    userCache[doc.id] = Pair(name ?: "", photo ?: "")
-                }
-            } catch (_: Exception) {}
-        }
-        return posts.map { post ->
-            val (freshName, freshPhoto) = userCache[post.uid] ?: return@map post
-            post.copy(
-                displayName = freshName.ifBlank { post.displayName },
-                name        = freshName.ifBlank { post.name },
-                photoURL    = freshPhoto.ifBlank { post.photoURL },
-            )
-        }
-    }
-
-    private suspend fun loadInteractions() {
-        if (uid.isEmpty()) return
-        try {
-            likedIds = firestore.collection("feedLikes").whereEqualTo("uid", uid)
-                .get().await().documents.mapNotNull {
-                    it.getString("feedId") ?: it.getString("postId")
-                }.toSet()
-            savedIds = firestore.collection("feedSaves").whereEqualTo("uid", uid)
-                .get().await().documents.mapNotNull {
-                    it.getString("feedId") ?: it.getString("postId")
-                }.toSet()
-            myRepostMap = firestore.collection("feed")
-                .whereEqualTo("uid", uid)
-                .whereEqualTo("repostType", "feed")
-                .get().await().documents.mapNotNull { doc ->
-                    val originalId = doc.getString("repostId") ?: return@mapNotNull null
-                    originalId to doc.id
-                }.toMap()
-            if (_posts.value.isNotEmpty()) {
-                _posts.value = _posts.value.map { post ->
-                    post.copy(
-                        isLikedByMe    = post.id in likedIds,
-                        isSavedByMe    = post.id in savedIds,
-                        isRepostedByMe = post.id in myRepostMap,
-                        myRepostId     = myRepostMap[post.id] ?: "",
-                    )
-                }
-            }
-        } catch (e: Exception) { e.printStackTrace() }
     }
 
     // ── Beğeni ────────────────────────────────────────────────────────────────
@@ -768,8 +823,9 @@ class FeedViewModel @Inject constructor(
                 if (snap.documents.isNotEmpty()) lastDoc = snap.documents.last()
                 _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
                 val rawPosts = snap.documents.mapNotNull { it.toPost() }
-                _posts.value = enrichPostsWithUserData(rawPosts)
-                loadInteractions()
+                val filtered = rawPosts.filter { it.moderationStatus != "removed" }
+                _posts.value = mapInteractions(filtered)
+                enrichPostsInBackground(filtered)
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -792,8 +848,9 @@ class FeedViewModel @Inject constructor(
                 if (snap.documents.isNotEmpty()) lastDoc = snap.documents.last()
                 _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
                 val rawMore = snap.documents.mapNotNull { it.toPost() }
-                val newPosts = enrichPostsWithUserData(rawMore)
-                _posts.value = _posts.value + newPosts
+                val filtered = rawMore.filter { it.moderationStatus != "removed" }
+                _posts.value = _posts.value + mapInteractions(filtered)
+                enrichPostsInBackground(filtered)
             } catch (e: Exception) { e.printStackTrace() }
             finally { _loadingMore.value = false }
         }
@@ -815,8 +872,9 @@ class FeedViewModel @Inject constructor(
                 if (post == null) {
                     _postNotFound.value = postId
                 } else {
-                    val enriched = enrichPostsWithUserData(listOf(post))
-                    _posts.value = _posts.value + enriched
+                    val mapped = mapInteractions(listOf(post))
+                    _posts.value = _posts.value + mapped
+                    enrichPostsInBackground(mapped)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
