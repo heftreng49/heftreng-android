@@ -241,7 +241,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 isDark       = isDark,
                 language     = language,
                 isAdmin      = isAdmin,
-                staffPerms   = staffPerms,
+                staffPerms   = staffPerms ?: StaffPermissions(),
                 totalUnread  = totalUnread,
                 unreadNotif  = unreadNotif,
                 onNavigate   = { route ->
@@ -489,7 +489,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 composable(Screen.Cms.route)      { CmsScreen(navController) }
                 composable(Screen.Yazar.route)    { YazarScreen(navController) }
                 composable(Screen.KurdiAdmin.route) {
-                    if (isAdmin || staffPerms.can("kurdi")) KurdiAdminScreen(navController)
+                    if (isAdmin || staffPerms?.can("kurdi") == true) KurdiAdminScreen(navController)
                     else { LaunchedEffect(Unit) { navController.popBackStack() } }
                 }
                 composable(Screen.Settings.route) { SettingsScreen(navController) }
