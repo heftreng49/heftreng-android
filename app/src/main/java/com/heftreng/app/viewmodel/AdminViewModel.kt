@@ -68,15 +68,15 @@ class AdminViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
 ) : ViewModel() {
 
-    private val _perms = MutableStateFlow(StaffPermissions())
+    // null = henüz yüklenmedi (loading), StaffPermissions() = yüklendi ama yetkisiz
+    private val _perms = MutableStateFlow<StaffPermissions?>(null)
     val perms = _perms.asStateFlow()
 
-    // Geriye dönük uyumluluk
-    val isAdmin: StateFlow<Boolean> = _perms.map { it.isStaff() }
+    // Geriye dönük uyumluluk — null iken false döner
+    val isAdmin: StateFlow<Boolean> = _perms.map { it?.isStaff() == true }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    // Admin mi? (staff yönetimi için)
-    val isSuperAdmin: StateFlow<Boolean> = _perms.map { it.can("staff") }
+    val isSuperAdmin: StateFlow<Boolean> = _perms.map { it?.can("staff") == true }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val _users        = MutableStateFlow<List<User>>(emptyList())
@@ -134,6 +134,7 @@ class AdminViewModel @Inject constructor(
     // ── Oturum açan kullanıcının izinlerini yükle ─────────────────────────────
     fun checkAdmin() {
         viewModelScope.launch {
+            _perms.value = null // yükleniyor
             val user = auth.currentUser ?: run { _perms.value = StaffPermissions(); return@launch }
             try {
                 val doc = firestore.collection("admins").document(user.uid).get().await()
@@ -163,7 +164,7 @@ class AdminViewModel @Inject constructor(
 
     // ── Yardımcı yönetimi ─────────────────────────────────────────────────────
     fun loadStaff() {
-        if (!_perms.value.can("staff")) return
+        if (_perms.value?.can("staff") != true) return
         viewModelScope.launch {
             try {
                 val snap = firestore.collection("admins").limit(50).get().await()
@@ -189,7 +190,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun addStaff(uid: String, title: String, permissions: Set<String>, onResult: (Boolean, String) -> Unit) {
-        if (!_perms.value.can("staff"))  { onResult(false, "Yetkisiz işlem"); return }
+        if (_perms.value?.can("staff") != true)  { onResult(false, "Yetkisiz işlem"); return }
         if (uid.isBlank())               { onResult(false, "UID boş olamaz"); return }
         if (permissions.isEmpty())       { onResult(false, "En az bir izin seçmelisin"); return }
         viewModelScope.launch {
@@ -207,7 +208,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun updateStaff(uid: String, title: String, permissions: Set<String>, onResult: (Boolean, String) -> Unit) {
-        if (!_perms.value.can("staff"))    { onResult(false, "Yetkisiz işlem"); return }
+        if (_perms.value?.can("staff") != true)    { onResult(false, "Yetkisiz işlem"); return }
         if (uid == auth.currentUser?.uid)  { onResult(false, "Kendi iznini değiştiremezsin"); return }
         viewModelScope.launch {
             try {
@@ -222,7 +223,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun removeStaff(uid: String, onResult: (Boolean, String) -> Unit) {
-        if (!_perms.value.can("staff"))   { onResult(false, "Yetkisiz işlem"); return }
+        if (_perms.value?.can("staff") != true)   { onResult(false, "Yetkisiz işlem"); return }
         if (uid == auth.currentUser?.uid) { onResult(false, "Kendinizi silemezsiniz"); return }
         viewModelScope.launch {
             try {
@@ -235,7 +236,7 @@ class AdminViewModel @Inject constructor(
 
     // ── Kullanıcıları listele ─────────────────────────────────────────────────
     fun loadUsers() {
-        if (!_perms.value.can("users")) return
+        if (_perms.value?.can("users") != true) return
         viewModelScope.launch {
             _loading.value = true
             try {
@@ -256,7 +257,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun toggleBan(uid: String, ban: Boolean) {
-        if (uid.isBlank() || !_perms.value.can("users")) return
+        if (uid.isBlank() || _perms.value?.can("users") != true) return
         viewModelScope.launch {
             try {
                 firestore.collection("users").document(uid).update("banned", ban).await()
@@ -267,7 +268,7 @@ class AdminViewModel @Inject constructor(
 
     // ── Push bildirimi ────────────────────────────────────────────────────────
     fun sendPush(title: String, body: String, url: String = "", targetUid: String = "") {
-        if (!_perms.value.can("push")) return
+        if (_perms.value?.can("push") != true) return
         viewModelScope.launch {
             try {
                 _pushResult.value = "Gönderiliyor…"
@@ -286,7 +287,7 @@ class AdminViewModel @Inject constructor(
 
     // ── Sistem bildirimi ──────────────────────────────────────────────────────
     fun sendSystemNotif(title: String, body: String, type: String = "sys") {
-        if (!_perms.value.can("notif")) return
+        if (_perms.value?.can("notif") != true) return
         viewModelScope.launch {
             try {
                 val icoMap = mapOf("sys" to "campaign", "cmt" to "chat_bubble", "like" to "favorite", "bm" to "bookmark")
@@ -303,7 +304,7 @@ class AdminViewModel @Inject constructor(
 
     // ── Bekleyen gönderiler ───────────────────────────────────────────────────
     fun loadPendingPosts() {
-        if (!_perms.value.can("pending")) return
+        if (_perms.value?.can("pending") != true) return
         viewModelScope.launch {
             try {
                 val snap = firestore.collection("pendingPosts").limit(50).get().await()
@@ -315,7 +316,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun approvePost(postId: String) {
-        if (!_perms.value.can("pending")) return
+        if (_perms.value?.can("pending") != true) return
         viewModelScope.launch {
             try {
                 val doc = firestore.collection("pendingPosts").document(postId).get().await()
@@ -328,7 +329,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun rejectPost(postId: String) {
-        if (!_perms.value.can("pending")) return
+        if (_perms.value?.can("pending") != true) return
         viewModelScope.launch {
             try {
                 firestore.collection("pendingPosts").document(postId).delete().await()
@@ -342,7 +343,7 @@ class AdminViewModel @Inject constructor(
     val editResult = _editResult.asStateFlow()
 
     fun updateUserProfile(uid: String, displayName: String, photoURL: String) {
-        if (uid.isBlank() || !_perms.value.can("edit")) return
+        if (uid.isBlank() || _perms.value?.can("edit") != true) return
         viewModelScope.launch {
             try {
                 val updates = mutableMapOf<String, Any>()
@@ -362,7 +363,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun deleteUser(uid: String) {
-        if (uid.isBlank() || !_perms.value.can("staff")) return
+        if (uid.isBlank() || _perms.value?.can("staff") != true) return
         viewModelScope.launch {
             try {
                 firestore.collection("users").document(uid).delete().await()
@@ -379,7 +380,7 @@ class AdminViewModel @Inject constructor(
     val feedPosts = _feedPosts.asStateFlow()
 
     fun loadFeedPosts(query: String = "") {
-        if (!_perms.value.can("edit")) return
+        if (_perms.value?.can("edit") != true) return
         viewModelScope.launch {
             try {
                 val snap = firestore.collection("feed")
@@ -397,7 +398,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun deletePost(postId: String) {
-        if (postId.isBlank() || !_perms.value.can("edit")) return
+        if (postId.isBlank() || _perms.value?.can("edit") != true) return
         viewModelScope.launch {
             try {
                 firestore.collection("feed").document(postId).delete().await()
@@ -408,7 +409,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun deleteComment(postId: String, commentId: String) {
-        if (!_perms.value.can("edit")) return
+        if (_perms.value?.can("edit") != true) return
         viewModelScope.launch {
             try {
                 firestore.collection("feed").document(postId)
@@ -516,7 +517,7 @@ class AdminViewModel @Inject constructor(
     val appeals = _appeals.asStateFlow()
 
     fun loadReports() {
-        if (!_perms.value.can("reports")) return
+        if (_perms.value?.can("reports") != true) return
         viewModelScope.launch {
             _loading.value = true
             try {
@@ -532,7 +533,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun updateReportStatus(reportId: String, status: String) {
-        if (!_perms.value.can("reports")) return
+        if (_perms.value?.can("reports") != true) return
         viewModelScope.launch {
             try {
                 firestore.collection("reports").document(reportId).update("status", status).await()
@@ -545,7 +546,7 @@ class AdminViewModel @Inject constructor(
 
     // ── Gönderi moderasyonu ───────────────────────────────────────────────────
     fun moderatePost(postId: String, targetUid: String, targetName: String, status: String, reason: String, adminNote: String) {
-        if (!_perms.value.can("edit")) return
+        if (_perms.value?.can("edit") != true) return
         viewModelScope.launch {
             try {
                 val myUid = auth.currentUser?.uid ?: ""
@@ -572,7 +573,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun restorePost(postId: String, targetUid: String) {
-        if (!_perms.value.can("edit")) return
+        if (_perms.value?.can("edit") != true) return
         viewModelScope.launch {
             try {
                 firestore.collection("feed").document(postId).update(mapOf(
@@ -591,7 +592,7 @@ class AdminViewModel @Inject constructor(
 
     // ── İtiraz yönetimi ───────────────────────────────────────────────────────
     fun loadAppeals() {
-        if (!_perms.value.can("appeals")) return
+        if (_perms.value?.can("appeals") != true) return
         viewModelScope.launch {
             try {
                 val snap = firestore.collection("appeals").whereEqualTo("status","pending").limit(50).get().await()
@@ -603,7 +604,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun approveAppeal(appeal: com.heftreng.app.data.model.Appeal, adminNote: String = "") {
-        if (!_perms.value.can("appeals")) return
+        if (_perms.value?.can("appeals") != true) return
         viewModelScope.launch {
             try {
                 firestore.collection("appeals").document(appeal.id).update(mapOf(
@@ -621,7 +622,7 @@ class AdminViewModel @Inject constructor(
     }
 
     fun rejectAppeal(appeal: com.heftreng.app.data.model.Appeal, adminNote: String = "") {
-        if (!_perms.value.can("appeals")) return
+        if (_perms.value?.can("appeals") != true) return
         viewModelScope.launch {
             try {
                 firestore.collection("appeals").document(appeal.id).update(mapOf(

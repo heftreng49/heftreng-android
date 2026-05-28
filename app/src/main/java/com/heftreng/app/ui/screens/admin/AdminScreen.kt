@@ -45,7 +45,7 @@ fun AdminScreen(
     libraryVm    : LibraryViewModel = hiltViewModel(),
 ) {
     val isAdmin     by vm.isAdmin.collectAsState()
-    val perms       by vm.perms.collectAsState()
+    val perms       by vm.perms.collectAsState()  // null = yükleniyor
     val staffList   by vm.staffList.collectAsState()
     val users       by vm.users.collectAsState()
     val pendingPosts by vm.pendingPosts.collectAsState()
@@ -54,8 +54,6 @@ fun AdminScreen(
     val stats       by vm.stats.collectAsState()
     val activeUsers  by vm.activeUsers.collectAsState()
     val statsLoading by vm.statsLoading.collectAsState()
-
-    var adminChecked by remember { mutableStateOf(false) }
 
     var pushTitle   by remember { mutableStateOf("") }
     var pushBody    by remember { mutableStateOf("") }
@@ -94,15 +92,13 @@ fun AdminScreen(
         AdminTab("Kürtçe Admin", "kurdi"),
         AdminTab("Yardımcılar",  "staff"),
     )
-    val tabs = allTabs.filter { tab -> perms.can(tab.key) }
+    val tabs = allTabs.filter { tab -> perms?.can(tab.key) == true }
     var selectedTabKey by remember { mutableStateOf(tabs.firstOrNull()?.key ?: "push") }
 
     val platformStats by vm.platformStats.collectAsState()
 
     LaunchedEffect(Unit) {
         vm.checkAdmin()
-        kotlinx.coroutines.delay(800)
-        adminChecked = true
         vm.loadUsers()
         vm.loadPendingPosts()
         vm.startStatsListener()   // realtime listener — loadStats'ın yerini aldı
@@ -120,7 +116,8 @@ fun AdminScreen(
         }
     }
 
-    if (!adminChecked) {
+    // perms null = Firebase henüz cevap vermedi
+    if (perms == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = Amber)
         }
@@ -145,7 +142,7 @@ fun AdminScreen(
             TopAppBar(
                 title = { androidx.compose.foundation.layout.Column {
                     Text("Admin Paneli", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
-                    if (perms.title.isNotBlank()) Text(perms.title, color = Amber, fontSize = 11.sp)
+                    if (!perms?.title.isNullOrBlank()) Text(perms?.title ?: "", color = Amber, fontSize = 11.sp)
                 } },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
@@ -920,7 +917,7 @@ fun AdminScreen(
                     val navCtrl = navController
                     LaunchedEffect(Unit) { navCtrl.navigate("kurdi_admin") }
                 }
-                "staff" -> StaffTab(vm = vm, perms = perms, staffList = staffList, users = users)
+                "staff" -> perms?.let { p -> StaffTab(vm = vm, perms = p, staffList = staffList, users = users) }
             }
         }
     }

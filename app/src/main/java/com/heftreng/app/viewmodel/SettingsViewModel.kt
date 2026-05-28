@@ -24,10 +24,10 @@ class SettingsViewModel @Inject constructor(
 
     val isAdmin: Boolean
         get() = auth.currentUser?.email == "siirgibi49@gmail.com"
-                || _staffPerms.value.isStaff()
+                || _staffPerms.value?.isStaff() == true
 
     // Yardımcı izinleri — NavHost ve BottomNav için
-    private val _staffPerms = MutableStateFlow(StaffPermissions())
+    private val _staffPerms = MutableStateFlow<StaffPermissions?>(null)
     val staffPerms = _staffPerms.asStateFlow()
 
     val currentEmail: String
@@ -62,7 +62,7 @@ class SettingsViewModel @Inject constructor(
 
     // ── Yardımcı izinleri ──────────────────────────────────────────────────────
     fun checkStaffPerms() {
-        val user = auth.currentUser ?: return
+        val user = auth.currentUser ?: run { _staffPerms.value = StaffPermissions(); return }
         viewModelScope.launch {
             try {
                 val doc = firestore.collection("admins").document(user.uid).get().await()
@@ -80,8 +80,16 @@ class SettingsViewModel @Inject constructor(
                         title       = "Admin",
                         permissions = ALL_PERMISSIONS.keys.toSet(),
                     )
+                } else {
+                    // Admin değil
+                    _staffPerms.value = StaffPermissions()
                 }
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+                // Hata durumunda email fallback
+                _staffPerms.value = if (user.email == "siirgibi49@gmail.com")
+                    StaffPermissions(uid = user.uid, title = "Admin", permissions = ALL_PERMISSIONS.keys.toSet())
+                else StaffPermissions()
+            }
         }
     }
 
