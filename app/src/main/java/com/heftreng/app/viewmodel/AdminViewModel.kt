@@ -53,6 +53,15 @@ val ALL_PERMISSIONS = linkedMapOf(
     "staff"    to "Yardımcılar",
 )
 
+// Firestore role → permissions dönüşümü (Rules v10 ile senkronize)
+fun roleToPermissions(role: String): Set<String> = when (role) {
+    "admin"       -> ALL_PERMISSIONS.keys.toSet()
+    "moderator"   -> setOf("users", "pending", "reports", "appeals", "edit")
+    "editor"      -> setOf("push", "notif", "pending", "stats", "edit")
+    "kutuphaneci" -> setOf("library", "kurdi")
+    else          -> emptySet()
+}
+
 data class StaffPermissions(
     val uid         : String       = "",
     val title       : String       = "",          // görev adı
@@ -134,36 +143,47 @@ class AdminViewModel @Inject constructor(
     // ── Oturum açan kullanıcının izinlerini yükle ─────────────────────────────
     fun checkAdmin() {
         viewModelScope.launch {
-            _perms.value = null // yukleniyor
+            _perms.value = null // yükleniyor
             val user = auth.currentUser ?: run {
                 _perms.value = StaffPermissions()
                 return@launch
             }
-            // Email fallback ONCE set et -- Firestore hata verse bile admin girebilsin
-            if (user.email == ADMIN_EMAIL) {
-                _perms.value = StaffPermissions(
-                    uid         = user.uid,
-                    title       = "Admin",
-                    permissions = ALL_PERMISSIONS.keys.toSet(),
-                )
-            }
-            // Firestore'dan rol bilgisini cek
             try {
                 val doc = firestore.collection("admins").document(user.uid).get().await()
                 if (doc.exists()) {
+                    val role  = doc.getString("role") ?: "none"
+                    val title = doc.getString("title") ?: role.replaceFirstChar { it.uppercase() }
+                    // Hem role hem eski permissions array desteklenir
                     @Suppress("UNCHECKED_CAST")
-                    val permList = doc.get("permissions") as? List<String> ?: emptyList()
-                    _perms.value = StaffPermissions(
-                        uid         = user.uid,
-                        title       = doc.getString("title") ?: "",
-                        permissions = permList.toSet(),
-                    )
-                } else if (user.email != ADMIN_EMAIL) {
-                    _perms.value = StaffPermissions()
+                    val legacy = doc.get("permissions") as? List<String>
+                    val perms  = if (!legacy.isNullOrEmpty()) legacy.toSet()
+                                 else roleToPermissions(role)
+                    _perms.value = StaffPermissions(uid = user.uid, title = title, permissions = perms)
+                } else {
+                    // Belge yok — email sahibiyse otomatik oluştur
+                    if (user.email == ADMIN_EMAIL) {
+                        try {
+                            firestore.collection("admins").document(user.uid).set(mapOf(
+                                "role"    to "admin",
+                                "title"   to "Super Admin",
+                                "addedAt" to com.google.firebase.Timestamp.now(),
+                                "addedBy" to user.uid,
+                            )).await()
+                        } catch (_: Exception) {}
+                        _perms.value = StaffPermissions(
+                            uid = user.uid, title = "Super Admin",
+                            permissions = ALL_PERMISSIONS.keys.toSet(),
+                        )
+                    } else {
+                        _perms.value = StaffPermissions()
+                    }
                 }
-                // email == ADMIN_EMAIL ve Firestore'da kayit yoksa zaten yukarida set edildi
-            } catch (_: Exception) {
-                // Firestore hatasi -- email fallback zaten set edildi, dokunma
+            } catch (e: Exception) {
+                android.util.Log.w("AdminVM", "checkAdmin: ${e.message}")
+                // Firestore hatası — email fallback
+                _perms.value = if (user.email == ADMIN_EMAIL)
+                    StaffPermissions(uid = user.uid, title = "Admin", permissions = ALL_PERMISSIONS.keys.toSet())
+                else StaffPermissions()
             }
         }
     }
@@ -201,11 +221,20 @@ class AdminViewModel @Inject constructor(
         if (permissions.isEmpty())       { onResult(false, "En az bir izin seçmelisin"); return }
         viewModelScope.launch {
             try {
+                // permissions'dan en uygun role'ü çıkar
+                val inferredRole = when {
+                    permissions.containsAll(ALL_PERMISSIONS.keys) -> "admin"
+                    permissions.any { it in setOf("users","reports","appeals") } -> "moderator"
+                    permissions.any { it in setOf("push","notif","stats") } -> "editor"
+                    permissions.any { it in setOf("library","kurdi") } -> "kutuphaneci"
+                    else -> "moderator"
+                }
                 firestore.collection("admins").document(uid.trim()).set(mapOf(
+                    "role"        to inferredRole,
                     "title"       to title.ifBlank { "Yardımcı" },
                     "permissions" to permissions.toList(),
                     "addedBy"     to (auth.currentUser?.uid ?: ""),
-                    "addedAt"     to System.currentTimeMillis(),
+                    "addedAt"     to com.google.firebase.Timestamp.now(),
                 )).await()
                 onResult(true, "✓ Yardımcı eklendi")
                 loadStaff()
