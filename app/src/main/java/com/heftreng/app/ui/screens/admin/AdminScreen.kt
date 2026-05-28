@@ -55,6 +55,8 @@ fun AdminScreen(
     val activeUsers  by vm.activeUsers.collectAsState()
     val statsLoading by vm.statsLoading.collectAsState()
 
+    var adminChecked by remember { mutableStateOf(false) }
+
     var pushTitle   by remember { mutableStateOf("") }
     var pushBody    by remember { mutableStateOf("") }
     var pushUrl     by remember { mutableStateOf("") }
@@ -99,6 +101,8 @@ fun AdminScreen(
 
     LaunchedEffect(Unit) {
         vm.checkAdmin()
+        kotlinx.coroutines.delay(800)
+        adminChecked = true
         vm.loadUsers()
         vm.loadPendingPosts()
         vm.startStatsListener()   // realtime listener — loadStats'ın yerini aldı
@@ -114,6 +118,13 @@ fun AdminScreen(
             kotlinx.coroutines.delay(3000)
             vm.clearEditResult()
         }
+    }
+
+    if (!adminChecked) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Amber)
+        }
+        return
     }
 
     if (!isAdmin) {
