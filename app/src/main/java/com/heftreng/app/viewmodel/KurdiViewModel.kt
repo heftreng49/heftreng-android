@@ -506,6 +506,32 @@ class KurdiViewModel @Inject constructor(
 
     fun clearAiLesson() { _aiLesson.value = null; _aiError.value = null }
 
+    // ── Admin: kullanıcı bağlamı olmadan tüm dersleri yükle ──────────────────
+    fun loadAdminLessons() {
+        viewModelScope.launch {
+            try {
+                val snap = firestore.collection("kf_lessons")
+                    .orderBy("order", com.google.firebase.firestore.Query.Direction.ASCENDING)
+                    .get().await()
+                val lessons = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    KfLesson(
+                        id       = doc.id,
+                        unitId   = d["unitId"] as? String ?: "",
+                        nameTr   = d["nameTr"] as? String ?: d["name"] as? String ?: "",
+                        nameKu   = d["nameKu"] as? String ?: "",
+                        emoji    = d["emoji"]  as? String ?: "📖",
+                        xp       = (d["xp"]    as? Long)?.toInt() ?: 10,
+                        order    = (d["order"] as? Long)?.toInt() ?: 1,
+                        locked   = false,
+                        completed = false,
+                    )
+                }
+                _lessons.value = lessons
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
     // ── Eski uyumluluk ────────────────────────────────────────────────────────
     fun startLesson(lesson: com.heftreng.app.data.model.KurdiLesson) = openLesson(lesson.id)
 }

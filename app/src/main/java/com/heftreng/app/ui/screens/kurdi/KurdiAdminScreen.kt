@@ -19,12 +19,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.heftreng.app.viewmodel.AdminViewModel
 import androidx.navigation.NavController
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.*
+import com.heftreng.app.viewmodel.AdminViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
@@ -37,20 +37,23 @@ import javax.inject.Inject
 @Composable
 fun KurdiAdminScreen(
     navController: NavController,
-    vm         : KurdiViewModel    = hiltViewModel(),
-    adminVm    : AdminViewModel    = hiltViewModel(),
+    vm        : KurdiViewModel = hiltViewModel(),
+    adminVm   : AdminViewModel = hiltViewModel(),
 ) {
     val perms   by adminVm.perms.collectAsState()
     val isAdmin  = perms?.isStaff() == true
 
-    // ── Güvenlik: sadece admin erişebilir ─────────────────────────
-    if (!isAdmin) {
+    // ── Güvenlik: sadece kurdi izni olanlar erişebilir ────────────
+    if (perms != null && !isAdmin) {
         LaunchedEffect(Unit) { navController.popBackStack() }
         return
     }
 
+    // Admin dersleri yükle
+    LaunchedEffect(Unit) { vm.loadAdminLessons() }
+
     val lessons by vm.lessons.collectAsState()
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab    by remember { mutableIntStateOf(0) }
     var selectedLesson by remember { mutableStateOf<KfLesson?>(null) }
 
     // Ders seçilmişse düzenleme ekranı
