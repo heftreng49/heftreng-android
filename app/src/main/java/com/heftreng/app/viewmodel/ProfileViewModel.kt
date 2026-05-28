@@ -10,6 +10,7 @@ import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.data.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -47,92 +48,101 @@ class ProfileViewModel @Inject constructor(
 
     val myUid get() = auth.currentUser?.uid ?: ""
 
-    fun load(uid: String) {
+    fun load(uid: String, preloadedUser: User? = null) {
         val targetUid = if (uid == "me") myUid else uid
+
+        // ── 1. Eğer önceki ekrandan User verisi geldiyse anında göster ──────
+        if (preloadedUser != null && _user.value == null) {
+            _user.value = preloadedUser
+        }
+
         viewModelScope.launch {
-            _loading.value = true
+            // Loading'i sadece liste boşsa göster — ikinci açılışta çark gözükmez
+            _loading.value = _posts.value.isEmpty()
             try {
-                // Kullanıcı belgesi
-                val userDoc = firestore.collection("users").document(targetUid).get().await()
-                val d = userDoc.data ?: return@launch
-                _user.value = User(
-                    uid        = d["uid"] as? String ?: targetUid,
-                    displayName= d["displayName"] as? String ?: d["name"] as? String ?: "",
-                    name       = d["name"] as? String ?: "",
-                    username   = d["username"] as? String ?: (d["email"] as? String)?.substringBefore("@") ?: "",
-                    email      = d["email"] as? String ?: "",
-                    photoURL   = d["photoURL"] as? String ?: "",
-                    coverPhoto = d["coverPhoto"] as? String ?: "",
-                    bio        = d["bio"] as? String ?: "",
-                    website    = d["website"] as? String ?: "",
-                    level      = (d["level"] as? Long)?.toInt() ?: 1,
-                    xp         = (d["xp"] as? Long)?.toInt() ?: 0,
-                    streak     = (d["streak"] as? Long)?.toInt() ?: 0,
-                    isPrivate  = d["private"] as? Boolean ?: false,
-                )
-
-                val isOwnProfile = (targetUid == myUid)
-                val isPrivate    = _user.value?.isPrivate ?: false
-
-                // Takip durumunu önceden yükle — private kontrol için gerekli
-                if (targetUid != myUid) {
-                    val followDoc = firestore.collection("follows")
-                        .document("${myUid}_$targetUid").get().await()
-                    _isFollowing.value = followDoc.exists()
+                // ── 2. Paralel fetch: user + follow durumu aynı anda ──────────
+                val userDocDeferred = viewModelScope.async {
+                    firestore.collection("users").document(targetUid).get().await()
+                }
+                val followDocDeferred = viewModelScope.async {
+                    if (targetUid != myUid && myUid.isNotEmpty())
+                        firestore.collection("follows").document("${myUid}_$targetUid").get().await()
+                    else null
+                }
+                val followersDeferred = viewModelScope.async {
+                    firestore.collection("follows").whereEqualTo("targetUid", targetUid).get().await()
+                }
+                val followingDeferred = viewModelScope.async {
+                    firestore.collection("follows").whereEqualTo("fromUid", targetUid).get().await()
                 }
 
-                val canSeeContent = isOwnProfile || !isPrivate || _isFollowing.value
+                val userDoc    = userDocDeferred.await()
+                val followDoc  = followDocDeferred.await()
+                val followersSnap = followersDeferred.await()
+                val followingSnap = followingDeferred.await()
 
-                // Takipçi sayıları — follows koleksiyonundan say
-                val followersSnap = firestore.collection("follows")
-                    .whereEqualTo("targetUid", targetUid).get().await()
-                val followingSnap = firestore.collection("follows")
-                    .whereEqualTo("fromUid", targetUid).get().await()
+                val d = userDoc.data ?: return@launch
+                _user.value = User(
+                    uid         = d["uid"] as? String ?: targetUid,
+                    displayName = d["displayName"] as? String ?: d["name"] as? String ?: "",
+                    name        = d["name"] as? String ?: "",
+                    username    = d["username"] as? String ?: (d["email"] as? String)?.substringBefore("@") ?: "",
+                    email       = d["email"] as? String ?: "",
+                    photoURL    = d["photoURL"] as? String ?: "",
+                    coverPhoto  = d["coverPhoto"] as? String ?: "",
+                    bio         = d["bio"] as? String ?: "",
+                    website     = d["website"] as? String ?: "",
+                    level       = (d["level"] as? Long)?.toInt() ?: 1,
+                    xp          = (d["xp"] as? Long)?.toInt() ?: 0,
+                    streak      = (d["streak"] as? Long)?.toInt() ?: 0,
+                    isPrivate   = d["private"] as? Boolean ?: false,
+                )
+
+                if (followDoc != null) _isFollowing.value = followDoc.exists()
                 _followersCount.value = followersSnap.size()
                 _followingCount.value = followingSnap.size()
 
-                // Gizli hesap — takipçi değilse gönderileri yükleme
-                if (!canSeeContent) {
-                    _posts.value = emptyList()
-                    return@launch
-                }
+                val isOwnProfile  = (targetUid == myUid)
+                val isPrivate     = _user.value?.isPrivate ?: false
+                val canSeeContent = isOwnProfile || !isPrivate || _isFollowing.value
 
-                // Gönderiler
+                if (!canSeeContent) { _posts.value = emptyList(); return@launch }
+
+                // ── 3. Gönderileri çek — her post için ayrı likeDoc await() YOK ──
                 val snap = firestore.collection("feed")
                     .whereEqualTo("uid", targetUid)
                     .limit(50).get().await()
-                val rawProfilePosts = snap.documents.mapNotNull { doc ->
+
+                // Beğenilen ID'leri tek toplu sorguyla al
+                val postIds = snap.documents.map { it.id }
+                val likedIds = if (myUid.isNotEmpty() && postIds.isNotEmpty()) {
+                    val likeKeys = postIds.map { "${it}_$myUid" }
+                    likeKeys.chunked(10).flatMap { chunk ->
+                        try {
+                            firestore.collection("feedLikes")
+                                .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                                .get().await().documents.map { it.id.substringBefore("_$myUid") }
+                        } catch (_: Exception) { emptyList() }
+                    }.toSet()
+                } else emptySet()
+
+                val rawPosts = snap.documents.mapNotNull { doc ->
                     val fd = doc.data ?: return@mapNotNull null
-                    val postText  = fd["text"]     as? String ?: ""
-                    val imageURL  = fd["imageURL"] as? String ?: fd["imgUrl"] as? String ?: ""
-
-                    // quote alanları — tema: d.quote objesi veya düz alanlar
-                    val quoteObj   = fd["quote"] as? Map<*, *>
-                    val quoteText  = (quoteObj?.get("text")   as? String)?.takeIf { it.isNotBlank() }
-                        ?: fd["quoteText"]  as? String ?: ""
-                    val bookName   = (quoteObj?.get("book")   as? String)?.takeIf { it.isNotBlank() }
-                        ?: fd["bookName"]   as? String ?: ""
-                    val authorName = (quoteObj?.get("author") as? String)?.takeIf { it.isNotBlank() }
-                        ?: fd["authorName"] as? String ?: ""
-
-                    // Gerçekten boş gönderiyi atla (text, resim, alıntı, repost yok)
-                    val repostOf = fd["repostOf"] as? String ?: fd["repostType"] as? String ?: ""
-                    if (postText.isBlank() && imageURL.isBlank() && quoteText.isBlank() && repostOf.isBlank())
-                        return@mapNotNull null
-
-                    val dName = (fd["displayName"] as? String)?.takeIf { it.isNotBlank() }
-                        ?: (fd["name"] as? String)?.takeIf { it.isNotBlank() } ?: ""
-
-                    val likeDoc = if (myUid.isNotEmpty())
-                        firestore.collection("feedLikes").document("${doc.id}_$myUid").get().await()
-                    else null
+                    val postText = fd["text"] as? String ?: ""
+                    val imageURL = fd["imageURL"] as? String ?: fd["imgUrl"] as? String ?: ""
+                    val quoteObj = fd["quote"] as? Map<*, *>
+                    val quoteText  = (quoteObj?.get("text")   as? String)?.takeIf { it.isNotBlank() } ?: fd["quoteText"]  as? String ?: ""
+                    val bookName   = (quoteObj?.get("book")   as? String)?.takeIf { it.isNotBlank() } ?: fd["bookName"]   as? String ?: ""
+                    val authorName = (quoteObj?.get("author") as? String)?.takeIf { it.isNotBlank() } ?: fd["authorName"] as? String ?: ""
+                    val repostOf   = fd["repostOf"] as? String ?: fd["repostType"] as? String ?: ""
+                    if (postText.isBlank() && imageURL.isBlank() && quoteText.isBlank() && repostOf.isBlank()) return@mapNotNull null
 
                     Post(
                         id            = doc.id,
-                        uid           = fd["uid"]      as? String ?: "",
-                        displayName   = dName,
-                        username      = fd["username"] as? String ?: "",
-                        photoURL      = fd["photoURL"] as? String ?: "",
+                        uid           = fd["uid"]         as? String ?: "",
+                        displayName   = (fd["displayName"] as? String)?.takeIf { it.isNotBlank() } ?: fd["name"] as? String ?: "",
+                        username      = fd["username"]    as? String ?: "",
+                        photoURL      = fd["photoURL"]    as? String ?: "",
                         text          = postText,
                         imageURL      = imageURL,
                         quoteText     = quoteText,
@@ -141,16 +151,52 @@ class ProfileViewModel @Inject constructor(
                         likesCount    = (fd["likes"]    as? Long)?.toInt() ?: 0,
                         commentsCount = (fd["cmtCount"] as? Long)?.toInt() ?: 0,
                         repostsCount  = (fd["reposts"]  as? Long)?.toInt() ?: 0,
-                        isLikedByMe   = likeDoc?.exists() ?: false,
+                        isLikedByMe   = doc.id in likedIds,
                         ts            = fd["ts"] as? Timestamp,
                     )
                 }.sortedByDescending { it.ts?.seconds ?: 0L }
-                _posts.value = enrichPostsWithUserData(rawProfilePosts)
+
+                // ── 4. Denormalize veriyle anında ekrana bas ──────────────────
+                _posts.value = rawPosts
+                _loading.value = false
+
+                // ── 5. Arka planda güncel avatar/isim ile sessizce güncelle ──
+                enrichPostsInBackground(rawPosts)
+
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
                 _loading.value = false
             }
+        }
+    }
+
+    private fun enrichPostsInBackground(posts: List<Post>) {
+        if (posts.isEmpty()) return
+        viewModelScope.launch {
+            val uids = posts.map { it.uid }.filter { it.isNotBlank() }.distinct()
+            val userMap = mutableMapOf<String, Pair<String, String>>()
+            uids.chunked(10).forEach { chunk ->
+                try {
+                    val snap = firestore.collection("users")
+                        .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                        .get().await()
+                    snap.documents.forEach { doc ->
+                        val name  = (doc.getString("displayName") ?: doc.getString("name") ?: "").takeIf { it.isNotBlank() } ?: ""
+                        val photo = doc.getString("photoURL") ?: ""
+                        userMap[doc.id] = name to photo
+                    }
+                } catch (_: Exception) {}
+            }
+            if (userMap.isEmpty()) return@launch
+            val updated = _posts.value.map { post ->
+                val (freshName, freshPhoto) = userMap[post.uid] ?: return@map post
+                post.copy(
+                    displayName = freshName.ifBlank { post.displayName },
+                    photoURL    = freshPhoto.ifBlank { post.photoURL },
+                )
+            }
+            _posts.value = updated
         }
     }
 
@@ -433,31 +479,5 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    // ── Post listesini users koleksiyonundan güncel avatar/isim ile zenginleştir ──
-    private suspend fun enrichPostsWithUserData(posts: List<Post>): List<Post> {
-        if (posts.isEmpty()) return posts
-        val uids = posts.map { it.uid }.filter { it.isNotBlank() }.distinct()
-        val userMap = mutableMapOf<String, Pair<String, String>>()
-        uids.chunked(10).forEach { chunk ->
-            try {
-                val snap = firestore.collection("users")
-                    .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
-                    .get().await()
-                snap.documents.forEach { doc ->
-                    val name = (doc.getString("displayName") ?: doc.getString("name") ?: "").takeIf { it.isNotBlank() }
-                    val photo = doc.getString("photoURL")?.takeIf { it.isNotBlank() }
-                    if (name != null || photo != null) userMap[doc.id] = Pair(name ?: "", photo ?: "")
-                }
-            } catch (_: Exception) {}
-        }
-        return posts.map { post ->
-            val (freshName, freshPhoto) = userMap[post.uid] ?: return@map post
-            post.copy(
-                displayName = freshName.ifBlank { post.displayName },
-                name        = freshName.ifBlank { post.name },
-                photoURL    = freshPhoto.ifBlank { post.photoURL },
-            )
-        }
-    }
 
 }

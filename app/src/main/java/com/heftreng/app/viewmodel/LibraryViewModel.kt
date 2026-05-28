@@ -12,6 +12,7 @@ import com.heftreng.app.data.model.BookQuote
 import com.heftreng.app.data.model.BookReview
 import com.heftreng.app.data.model.LibraryBook
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -80,32 +81,40 @@ class LibraryViewModel @Inject constructor(
     val myPhoto get() = auth.currentUser?.photoUrl?.toString() ?: ""
     val myUser get() = auth.currentUser?.email?.substringBefore("@") ?: ""
 
+    // ── In-memory cache — aynı yazar/kitap detayına tekrar girilince ağ isteği atılmaz
+    private val authorCache = mutableMapOf<String, Author>()
+    private val bookCache   = mutableMapOf<String, LibraryBook>()
+
     // ── Yazar Listesi ─────────────────────────────────────────────────────
     fun loadAuthors() {
+        // Cache doluysa ağ isteği atma — yazar listesi oturumda sabittir
+        if (_authors.value.isNotEmpty()) return
         viewModelScope.launch {
             _loading.value = true
             try {
                 val snap = firestore.collection("authors")
                     .limit(100)
                     .get().await()
-                _authors.value = snap.documents.mapNotNull { doc ->
-                    try { doc.toObject(Author::class.java)?.copy(id = doc.id) }
-                    catch (_: Exception) {
+                val list = snap.documents.mapNotNull { doc ->
+                    val author = try { doc.toObject(Author::class.java)?.copy(id = doc.id) }
+                    catch (_: Exception) { null } ?: run {
                         val d = doc.data ?: return@mapNotNull null
                         Author(
-                            id           = doc.id,
-                            name         = d["name"] as? String ?: "",
-                            bio          = d["bio"] as? String ?: "",
-                            photoURL     = d["photoURL"] as? String ?: "",
-                            birthYear    = (d["birthYear"] as? Number)?.toInt() ?: 0,
-                            nationality  = d["nationality"] as? String ?: "",
-                            bookCount    = (d["bookCount"] as? Number)?.toInt() ?: 0,
-                            quoteCount   = (d["quoteCount"] as? Number)?.toInt() ?: 0,
-                            reviewCount  = (d["reviewCount"] as? Number)?.toInt() ?: 0,
-                            followerCount= (d["followerCount"] as? Number)?.toInt() ?: 0,
+                            id            = doc.id,
+                            name          = d["name"] as? String ?: "",
+                            bio           = d["bio"] as? String ?: "",
+                            photoURL      = d["photoURL"] as? String ?: "",
+                            birthYear     = (d["birthYear"] as? Number)?.toInt() ?: 0,
+                            nationality   = d["nationality"] as? String ?: "",
+                            bookCount     = (d["bookCount"] as? Number)?.toInt() ?: 0,
+                            quoteCount    = (d["quoteCount"] as? Number)?.toInt() ?: 0,
+                            reviewCount   = (d["reviewCount"] as? Number)?.toInt() ?: 0,
+                            followerCount = (d["followerCount"] as? Number)?.toInt() ?: 0,
                         )
                     }
+                    author.also { authorCache[doc.id] = it }
                 }.sortedBy { it.name }
+                _authors.value = list
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -117,7 +126,13 @@ class LibraryViewModel @Inject constructor(
     // ── Yazar Detayı ──────────────────────────────────────────────────────
     fun loadAuthor(authorId: String) {
         viewModelScope.launch {
-            _loading.value = true
+            // Cache'te varsa anında göster, arka planda yine de güncelle
+            authorCache[authorId]?.let {
+                _selectedAuthor.value = it
+                _loading.value = false
+            }
+            val isFirstLoad = _selectedAuthor.value == null
+            _loading.value = isFirstLoad
             try {
                 val doc = firestore.collection("authors").document(authorId).get().await()
                 // toObject bazen Firestore type mismatch yüzünden null döner — manuel map ile güvenli al
@@ -139,8 +154,7 @@ class LibraryViewModel @Inject constructor(
                     ) else null
                 }
                 _selectedAuthor.value = author
-
-                // Takip durumu
+                if (author != null) authorCache[authorId] = author // cache'e yaz
                 if (myUid.isNotBlank()) {
                     val followDoc = firestore.collection("authors").document(authorId)
                         .collection("follows").document(myUid).get().await()
@@ -330,10 +344,14 @@ class LibraryViewModel @Inject constructor(
     // ── Kitap Detayı ──────────────────────────────────────────────────────
     fun loadLibraryBook(bookId: String) {
         viewModelScope.launch {
-            _loading.value = true
+            // Cache'te varsa anında göster
+            bookCache[bookId]?.let { _selectedBook.value = it }
+            _loading.value = _selectedBook.value == null
             try {
                 val doc = firestore.collection("library_books").document(bookId).get().await()
-                _selectedBook.value = doc.toObject(LibraryBook::class.java)?.copy(id = doc.id)
+                val book = doc.toObject(LibraryBook::class.java)?.copy(id = doc.id)
+                _selectedBook.value = book
+                if (book != null) bookCache[bookId] = book // cache'e yaz
                 loadBookQuotes(bookId)
                 loadBookReviews(bookId)
             } catch (e: Exception) {

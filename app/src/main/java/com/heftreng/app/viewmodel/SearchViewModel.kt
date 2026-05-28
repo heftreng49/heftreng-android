@@ -6,6 +6,9 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.data.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -49,12 +52,23 @@ class SearchViewModel @Inject constructor(
 
     fun setTab(tab: Int) { _activeTab.value = tab }
 
-    // ── Kullanıcı araması (eski uyum) ────────────────────────
+    private var searchJob: Job? = null
+
+    // ── Kullanıcı araması — 300ms debounce ile ────────────────────────────
     fun search(query: String) {
         val q = query.trim()
-        if (q.isEmpty()) { _results.value = emptyList(); _searchResults.value = emptyList(); return }
-        viewModelScope.launch {
+        if (q.isEmpty()) {
+            searchJob?.cancel()
+            _results.value = emptyList()
+            _searchResults.value = emptyList()
+            _loading.value = false
+            return
+        }
+        // Önceki job'u iptal et — kullanıcı yazmaya devam ediyorsa eski sorguyu atla
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
             _loading.value = true
+            delay(300) // 300ms bekle — harf harf Firestore'a gitme
             try {
                 searchAll(q)
             } catch (e: Exception) { e.printStackTrace() }
