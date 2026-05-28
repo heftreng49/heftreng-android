@@ -901,7 +901,7 @@ fun AdminScreen(
                 // ─────────────────────────────────────────────────────────
                 //  TAB 8 — KÜTÜPHANE: Yazar & Kitap Yönetimi
                 // ─────────────────────────────────────────────────────────
-                8 -> {
+                "library" -> {
                     AdminLibraryTab(libraryVm = libraryVm)
                 }
             }
