@@ -101,24 +101,32 @@ fun LibraryScreen(
 
     LaunchedEffect(Unit) {
         loading = true
-
-        // Alintılar paralel başlatılır; loading=false ANCAK tamamlandıktan sonra olur
-        val quotesJob = launch { feedVm.loadLibraryQuotesAsync() }
-
-        // Incelemeler: library_books/{id}/reviews alt koleksiyonundan oku
-        try {
-            val bSnap = db.collection("library_books").limit(100).get().await()
-            val allReviews = mutableListOf<BookReview>()
-            bSnap.documents.forEach { bookDoc ->
-                val rSnap = db.collection("library_books")
-                    .document(bookDoc.id).collection("reviews")
-                    .limit(20).get().await()
-                rSnap.documents.mapNotNullTo(allReviews) { doc ->
-                    val d = doc.data ?: return@mapNotNullTo null
-                    val text = d["text"] as? String ?: return@mapNotNullTo null
+        // Tüm sorgular paralel — N+1 yerine collectionGroup tek sorguda
+        val quotesJob  = launch { feedVm.loadLibraryQuotesAsync() }
+        val authorsJob = launch {
+            try { libraryVm.loadAuthors() }
+            catch (e: Exception) { android.util.Log.e("LibraryScreen", "authors: ${e.message}") }
+        }
+        val booksJob = launch {
+            try {
+                val bSnap = db.collection("library_books").limit(100).get().await()
+                books = bSnap.documents
+                    .mapNotNull { it.toObject(LibraryBook::class.java)?.copy(id = it.id) }
+                    .sortedByDescending { it.ts?.seconds ?: 0L }
+            } catch (e: Exception) {
+                android.util.Log.e("LibraryScreen", "books: ${e.message}")
+            }
+        }
+        val reviewsJob = launch {
+            // collectionGroup tek sorguda tüm reviews — N+1 yok
+            try {
+                val rSnap = db.collectionGroup("reviews").limit(200).get().await()
+                reviews = rSnap.documents.mapNotNull { doc ->
+                    val d    = doc.data ?: return@mapNotNull null
+                    val text = d["text"] as? String ?: return@mapNotNull null
                     BookReview(
                         id              = doc.id,
-                        bookId          = d["bookId"] as? String ?: bookDoc.id,
+                        bookId          = d["bookId"] as? String ?: "",
                         authorId        = d["authorId"] as? String ?: "",
                         bookTitle       = d["bookName"] as? String ?: "",
                         authorName      = (d["authorName"] as? String)?.trim() ?: "",
@@ -129,29 +137,13 @@ fun LibraryScreen(
                         userPhotoURL    = d["photoURL"] as? String ?: "",
                         ts              = d["ts"] as? com.google.firebase.Timestamp,
                     )
-                }
+                }.sortedByDescending { it.ts?.seconds ?: 0L }
+            } catch (e: Exception) {
+                android.util.Log.e("LibraryScreen", "reviews: ${e.message}")
             }
-            reviews = allReviews.sortedByDescending { it.ts?.seconds ?: 0L }
-        } catch (e: Exception) {
-            android.util.Log.e("LibraryScreen", "reviews load error: ${e.message}")
         }
-
-        // Yazarlar
-        try { libraryVm.loadAuthors() } catch (e: Exception) {
-            android.util.Log.e("LibraryScreen", "authors load error: ${e.message}")
-        }
-
-        // Kitaplar: orderBy kaldirildi (index gerektiriyordu)
-        try {
-            val bSnap = db.collection("library_books").limit(100).get().await()
-            books = bSnap.documents
-                .mapNotNull { it.toObject(LibraryBook::class.java)?.copy(id = it.id) }
-                .sortedByDescending { it.ts?.seconds ?: 0L }
-        } catch (e: Exception) {
-            android.util.Log.e("LibraryScreen", "books load error: ${e.message}")
-        }
-
-        quotesJob.join()  // quotes yüklenene kadar bekle
+        // Hepsi paralel — hepsi bitince loading=false
+        quotesJob.join(); authorsJob.join(); booksJob.join(); reviewsJob.join()
         loading = false
     }
 
@@ -369,8 +361,6 @@ private fun LibraryQuotesTab(
                 onShare      = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
                 onDelete     = if (post.uid == com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid)
                                    {{ feedVm.deletePost(post.id) }} else null,
-                onEditQuote  = if (post.uid == com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid)
-                                   {{ newQ, newB, newA -> feedVm.editQuote(post.id, newQ, newB, newA) }} else null,
                 onTapAuthor  = { _ ->
                     if (post.libraryAuthorId.isNotBlank())
                         navController.navigate("author_detail/${post.libraryAuthorId}")
