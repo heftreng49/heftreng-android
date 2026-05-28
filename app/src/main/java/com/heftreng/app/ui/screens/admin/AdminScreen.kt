@@ -104,7 +104,7 @@ fun AdminScreen(
         9 -> role.canManageStaff()
         else -> false
     } }
-    var selectedTabKey by remember { mutableIntStateOf(tabs.firstOrNull()?.key ?: 0) }
+    var selectedTabKey by remember { mutableStateOf(tabs.firstOrNull()?.key ?: "push") }
 
     val platformStats by vm.platformStats.collectAsState()
 
@@ -1619,7 +1619,7 @@ private fun StaffTab(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape    = RoundedCornerShape(14.dp),
-                colors   = CardDefaults.cardColors(containerColor = Surface),
+                colors   = CardDefaults.cardColors(containerColor = Color(0xFF1A1730)),
                 elevation = CardDefaults.cardElevation(2.dp),
             ) {
                 Column(Modifier.padding(14.dp)) {
@@ -1666,6 +1666,7 @@ private fun StaffTab(
 
                     // İzin chip'leri (sadece göster)
                     if (!isEditing) {
+                        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
                         androidx.compose.foundation.layout.FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalArrangement   = Arrangement.spacedBy(4.dp),
@@ -1834,7 +1835,7 @@ private fun StaffTab(
             Card(
                 modifier  = Modifier.fillMaxWidth(),
                 shape     = RoundedCornerShape(14.dp),
-                colors    = CardDefaults.cardColors(containerColor = Surface),
+                colors    = CardDefaults.cardColors(containerColor = Color(0xFF1A1730)),
                 elevation = CardDefaults.cardElevation(2.dp),
             ) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1909,7 +1910,8 @@ private fun StaffTab(
 
                     // Seçili izinler özeti
                     if (newPerms.isNotEmpty()) {
-                        androidx.compose.foundation.layout.FlowRow(
+                        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalArrangement   = Arrangement.spacedBy(4.dp),
                         ) {
