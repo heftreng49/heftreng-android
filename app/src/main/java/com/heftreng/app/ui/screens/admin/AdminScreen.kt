@@ -45,7 +45,7 @@ fun AdminScreen(
     libraryVm    : LibraryViewModel = hiltViewModel(),
 ) {
     val isAdmin     by vm.isAdmin.collectAsState()
-    val role        by vm.role.collectAsState()
+    val perms       by vm.perms.collectAsState()
     val staffList   by vm.staffList.collectAsState()
     val users       by vm.users.collectAsState()
     val pendingPosts by vm.pendingPosts.collectAsState()
@@ -78,32 +78,21 @@ fun AdminScreen(
     val reports     by vm.reports.collectAsState()
     val appeals     by vm.appeals.collectAsState()
 
-    data class AdminTab(val title: String, val key: Int)
+    data class AdminTab(val title: String, val key: String)
     val allTabs = listOf(
-        AdminTab("Push",        0),
-        AdminTab("Bildirim",    1),
-        AdminTab("Kullanıcılar",2),
-        AdminTab("Bekleyenler", 3),
-        AdminTab("Şikayetler",  4),
-        AdminTab("İtirazlar",   5),
-        AdminTab("İstatistik",  6),
-        AdminTab("Düzenle",     7),
-        AdminTab("Kütüphane",   8),
-        AdminTab("Yardımcılar", 9),
+        AdminTab("Push",         "push"),
+        AdminTab("Bildirim",     "notif"),
+        AdminTab("Kullanıcılar", "users"),
+        AdminTab("Bekleyenler",  "pending"),
+        AdminTab("Şikayetler",   "reports"),
+        AdminTab("İtirazlar",    "appeals"),
+        AdminTab("İstatistik",   "stats"),
+        AdminTab("Düzenle",      "edit"),
+        AdminTab("Kütüphane",    "library"),
+        AdminTab("Kürtçe Admin", "kurdi"),
+        AdminTab("Yardımcılar",  "staff"),
     )
-    val tabs = allTabs.filter { tab -> when (tab.key) {
-        0 -> role.canPush()
-        1 -> role.canNotif()
-        2 -> role.canViewUsers()
-        3 -> role.canPending()
-        4 -> role.canReports()
-        5 -> role.canAppeals()
-        6 -> role.canStats()
-        7 -> role.canEdit()
-        8 -> role.canLibrary()
-        9 -> role.canManageStaff()
-        else -> false
-    } }
+    val tabs = allTabs.filter { tab -> perms.can(tab.key) }
     var selectedTabKey by remember { mutableStateOf(tabs.firstOrNull()?.key ?: "push") }
 
     val platformStats by vm.platformStats.collectAsState()
@@ -145,7 +134,7 @@ fun AdminScreen(
             TopAppBar(
                 title = { androidx.compose.foundation.layout.Column {
                     Text("Admin Paneli", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
-                    Text(role.displayName(), color = Amber, fontSize = 11.sp)
+                    if (perms.title.isNotBlank()) Text(perms.title, color = Amber, fontSize = 11.sp)
                 } },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
