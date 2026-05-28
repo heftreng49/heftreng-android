@@ -88,6 +88,23 @@ class AdminViewModel @Inject constructor(
     val isSuperAdmin: StateFlow<Boolean> = _perms.map { it?.can("staff") == true }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    init {
+        // _perms null'dan bir değere geçince (checkAdmin tamamlandı) veriyi yükle
+        viewModelScope.launch {
+            _perms.filterNotNull().collect { p ->
+                if (p.isStaff()) {
+                    if (p.can("users"))   loadUsers()
+                    if (p.can("pending")) loadPendingPosts()
+                    if (p.can("stats"))   startStatsListener()
+                    if (p.can("edit"))    loadFeedPosts()
+                    if (p.can("reports")) loadReports()
+                    if (p.can("appeals")) loadAppeals()
+                    if (p.can("staff"))   loadStaff()
+                }
+            }
+        }
+    }
+
     private val _users        = MutableStateFlow<List<User>>(emptyList())
     val users = _users.asStateFlow()
 

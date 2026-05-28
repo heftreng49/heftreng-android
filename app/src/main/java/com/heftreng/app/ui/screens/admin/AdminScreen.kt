@@ -97,15 +97,17 @@ fun AdminScreen(
 
     val platformStats by vm.platformStats.collectAsState()
 
+    // perms yüklenince veriyi çek — checkAdmin async olduğu için bekle
     LaunchedEffect(Unit) {
         vm.checkAdmin()
-        vm.loadUsers()
-        vm.loadPendingPosts()
-        vm.startStatsListener()   // realtime listener — loadStats'ın yerini aldı
-        vm.loadFeedPosts()
-        vm.loadReports()
-        vm.loadAppeals()
-        vm.loadStaff()
+    }
+
+    // perms yüklenince UI'ı güncelle (veri AdminViewModel.init'te otomatik yüklendi)
+    LaunchedEffect(perms) {
+        if (perms == null) return@LaunchedEffect
+        // Veri zaten AdminViewModel init bloğunda yükleniyor
+        // Burada sadece stats listener'ı başlat (UI state gerektirir)
+        if (perms?.can("stats") == true) vm.startStatsListener()
     }
 
     // editResult bildirimi
