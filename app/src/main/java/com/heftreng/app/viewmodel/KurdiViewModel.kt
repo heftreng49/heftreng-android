@@ -497,7 +497,7 @@ class KurdiViewModel @Inject constructor(
                     }
                 )
             } catch (e: Exception) {
-                _aiError.value = "Hata: ${e.message}"
+                _aiError.value = "Hata: ${e.message ?: e.javaClass.simpleName} — API key geçersiz veya ağ hatası"
             } finally {
                 _aiLoading.value = false
             }

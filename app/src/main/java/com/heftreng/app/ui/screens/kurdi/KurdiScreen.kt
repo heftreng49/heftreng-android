@@ -46,6 +46,7 @@ import com.heftreng.app.viewmodel.*
 fun KurdiScreen(
     language : String = "tr",
     vm       : KurdiViewModel = hiltViewModel(),
+    adminVm  : AdminViewModel = hiltViewModel(),
 ) {
     val units       by vm.units.collectAsState()
     val lessons     by vm.lessons.collectAsState()
@@ -56,14 +57,16 @@ fun KurdiScreen(
     val loading     by vm.loading.collectAsState()
     val activeLesson by vm.activeLesson.collectAsState()
     val toast       by vm.toast.collectAsState()
+    val isAdmin     by adminVm.isAdmin.collectAsState()
 
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf(
-        Strings.kurdiUnits(language),
-        Strings.kurdiDict(language),
-        Strings.kurdiGrammar(language),
-        Strings.kurdiAi(language),
-    )
+    // YZ Ders sekmesi sadece admin'e görünür
+    val tabs = buildList {
+        add(Strings.kurdiUnits(language))
+        add(Strings.kurdiDict(language))
+        add(Strings.kurdiGrammar(language))
+        if (isAdmin) add(Strings.kurdiAi(language))
+    }
 
     // Toast
     LaunchedEffect(toast) {
@@ -140,9 +143,9 @@ fun KurdiScreen(
                 onNext   = { vm.getNextLesson()?.let { vm.openLesson(it.id) } },
                 onOpen   = { lessonId -> vm.openLesson(lessonId) },
             )
-            1 -> DictionaryTab(language)
-            2 -> GrammarTab(language)
-            3 -> AiLessonTab(language, vm)
+            1 -> DictionaryTab(language, isAdmin = isAdmin)
+            2 -> GrammarTab(language, isAdmin = isAdmin)
+            3 -> if (isAdmin) AiLessonTab(language, vm)
         }
     }
 
@@ -1234,24 +1237,48 @@ private fun BuildExercise(
 
 // ── Sözlük sekmesi ───────────────────────────────────────────────────────────
 @Composable
-private fun DictionaryTab(language: String) {
+private fun DictionaryTab(language: String, isAdmin: Boolean = false) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("📖", fontSize = 48.sp)
             Text(Strings.kurdiDict(language), fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
             Text(Strings.comingSoon(language), color = Muted, fontSize = 14.sp)
+            if (isAdmin) {
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = { /* TODO: Admin — Sözlük kelime ekleme ekranı */ },
+                    colors  = ButtonDefaults.buttonColors(containerColor = Primary),
+                    shape   = RoundedCornerShape(12.dp),
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Kelime Ekle", fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }
 
 // ── Dilbilgisi sekmesi ───────────────────────────────────────────────────────
 @Composable
-private fun GrammarTab(language: String) {
+private fun GrammarTab(language: String, isAdmin: Boolean = false) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("🎓", fontSize = 48.sp)
             Text(Strings.kurdiGrammar(language), fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
             Text(Strings.comingSoon(language), color = Muted, fontSize = 14.sp)
+            if (isAdmin) {
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = { /* TODO: Admin — Dilbilgisi içerik ekleme ekranı */ },
+                    colors  = ButtonDefaults.buttonColors(containerColor = Primary),
+                    shape   = RoundedCornerShape(12.dp),
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("İçerik Ekle", fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }
