@@ -374,8 +374,16 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                                                 .clip(CircleShape)
                                                 .background(if (selected) Amber.copy(alpha = 0.2f) else Muted.copy(alpha = 0.15f))
                                                 .combinedClickable(
-                                                    onClick      = {},   // NavigationBarItem onClick ile handle ediliyor
-                                                    onLongClick  = { if (savedAccounts.size > 1) showAccountSwitch = true },
+                                                    onClick     = {
+                                                        navController.navigate("profile/me") {
+                                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                                saveState = true
+                                                            }
+                                                            launchSingleTop = true
+                                                            restoreState    = true
+                                                        }
+                                                    },
+                                                    onLongClick = { if (savedAccounts.size > 1) showAccountSwitch = true },
                                                 ),
                                             contentAlignment = Alignment.Center,
                                         ) {
