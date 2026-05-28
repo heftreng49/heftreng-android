@@ -80,9 +80,11 @@ service cloud.firestore {
     // ─── ADMINS (yardımcı yönetimi) ───────────────────────────
     // Sadece admin ekler/siler; staff okuyabilir (kendi rolünü görmek için)
     match /admins/{uid} {
-      allow read:   if isOwner(uid) || isAdmin();
-      allow create: if isAdmin();
-      allow update: if isAdmin() && request.auth.uid != uid;
+      // Herkes kendi belgesini okuyabilir (checkAdmin için gerekli)
+      // isAdmin() kısır döngü yaratır — isOwner yeterli
+      allow read:   if isAuth();   // staff listesi için tüm auth kullanıcılar okuyabilir
+      allow create: if isAuth() && (isAdmin() || request.auth.uid == uid);
+      allow update: if isAdmin();
       allow delete: if isAdmin() && request.auth.uid != uid;
     }
 
