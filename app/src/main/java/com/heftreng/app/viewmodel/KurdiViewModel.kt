@@ -516,14 +516,14 @@ class KurdiViewModel @Inject constructor(
                 val lessons = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     KfLesson(
-                        id       = doc.id,
-                        unitId   = d["unitId"] as? String ?: "",
-                        nameTr   = d["nameTr"] as? String ?: d["name"] as? String ?: "",
-                        nameKu   = d["nameKu"] as? String ?: "",
-                        emoji    = d["emoji"]  as? String ?: "📖",
-                        xp       = (d["xp"]    as? Long)?.toInt() ?: 10,
-                        order    = (d["order"] as? Long)?.toInt() ?: 1,
-                        locked   = false,
+                        id        = doc.id,
+                        unitId    = d["unitId"] as? String ?: "",
+                        nameTr    = d["nameTr"] as? String ?: d["name"] as? String ?: "",
+                        nameKu    = d["nameKu"] as? String ?: "",
+                        emoji     = d["emoji"]  as? String ?: "📖",
+                        xp        = (d["xp"]    as? Long)?.toInt() ?: 10,
+                        order     = (d["order"] as? Long)?.toInt() ?: 1,
+                        tip       = d["tip"]    as? String ?: "",
                         completed = false,
                     )
                 }
