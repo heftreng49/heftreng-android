@@ -115,7 +115,7 @@ service cloud.firestore {
 
     match /feed/{postId} {
       allow get:  if postVisible(resource.data);
-      allow list: if isAuth();
+      allow list: if true; // Anonim kullanıcılar public feed'i listeleyebilir
 
       allow create: if isAuth() && notBanned()
           && request.resource.data.uid == request.auth.uid
