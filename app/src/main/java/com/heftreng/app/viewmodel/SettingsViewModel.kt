@@ -22,14 +22,6 @@ class SettingsViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
 ) : ViewModel() {
 
-    val isAdmin: Boolean
-        get() = auth.currentUser?.email == "siirgibi49@gmail.com"
-                || _staffPerms.value?.isStaff() == true
-
-    // Yardımcı izinleri — NavHost ve BottomNav için
-    private val _staffPerms = MutableStateFlow<StaffPermissions?>(null)
-    val staffPerms = _staffPerms.asStateFlow()
-
     val currentEmail: String
         get() = auth.currentUser?.email ?: ""
 
@@ -57,40 +49,6 @@ class SettingsViewModel @Inject constructor(
 
     init {
         loadPrivacySettings()
-        checkStaffPerms()
-    }
-
-    // ── Yardımcı izinleri ──────────────────────────────────────────────────────
-    fun checkStaffPerms() {
-        val user = auth.currentUser ?: run { _staffPerms.value = StaffPermissions(); return }
-        viewModelScope.launch {
-            try {
-                val doc = firestore.collection("admins").document(user.uid).get().await()
-                if (doc.exists()) {
-                    @Suppress("UNCHECKED_CAST")
-                    val permList = doc.get("permissions") as? List<String> ?: emptyList()
-                    _staffPerms.value = StaffPermissions(
-                        uid         = user.uid,
-                        title       = doc.getString("title") ?: "",
-                        permissions = permList.toSet(),
-                    )
-                } else if (user.email == "siirgibi49@gmail.com") {
-                    _staffPerms.value = StaffPermissions(
-                        uid         = user.uid,
-                        title       = "Admin",
-                        permissions = ALL_PERMISSIONS.keys.toSet(),
-                    )
-                } else {
-                    // Admin değil
-                    _staffPerms.value = StaffPermissions()
-                }
-            } catch (_: Exception) {
-                // Hata durumunda email fallback
-                _staffPerms.value = if (user.email == "siirgibi49@gmail.com")
-                    StaffPermissions(uid = user.uid, title = "Admin", permissions = ALL_PERMISSIONS.keys.toSet())
-                else StaffPermissions()
-            }
-        }
     }
 
     // ── Gizli profil — Firebase'den oku ─────────────────────────────────────

@@ -24,6 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.heftreng.app.viewmodel.AdminViewModel
+import com.heftreng.app.viewmodel.StaffPermissions
 import com.heftreng.app.viewmodel.StaffPermissions
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
@@ -119,6 +121,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val navController  = rememberNavController()
     val authVm         : AuthViewModel          = hiltViewModel()
     val settingsVm     : SettingsViewModel      = hiltViewModel()
+    val adminVm        : AdminViewModel          = hiltViewModel()
     val notifVm        : NotificationsViewModel = hiltViewModel()
     val msgsVm         : MessagesViewModel      = hiltViewModel()
     val blogVm         : BlogViewModel          = hiltViewModel()
@@ -230,8 +233,11 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val navBackStack  by navController.currentBackStackEntryAsState()
     val currentRoute  = navBackStack?.destination?.route
     val showBottom    = currentRoute in bottomNavRoutes
-    val isAdmin       = settingsVm.isAdmin
-    val staffPerms    by settingsVm.staffPerms.collectAsState()
+    val perms         by adminVm.perms.collectAsState()
+    val isAdmin        = perms?.isStaff() == true
+    val staffPerms     = perms ?: StaffPermissions()
+
+    LaunchedEffect(Unit) { adminVm.checkAdmin() }
 
     ModalNavigationDrawer(
         drawerState   = drawerState,
@@ -241,7 +247,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 isDark       = isDark,
                 language     = language,
                 isAdmin      = isAdmin,
-                staffPerms   = staffPerms ?: StaffPermissions(),
+                staffPerms   = staffPerms,
                 totalUnread  = totalUnread,
                 unreadNotif  = unreadNotif,
                 onNavigate   = { route ->
@@ -489,7 +495,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 composable(Screen.Cms.route)      { CmsScreen(navController) }
                 composable(Screen.Yazar.route)    { YazarScreen(navController) }
                 composable(Screen.KurdiAdmin.route) {
-                    if (isAdmin || staffPerms?.can("kurdi") == true) KurdiAdminScreen(navController)
+                    if (isAdmin) KurdiAdminScreen(navController)
                     else { LaunchedEffect(Unit) { navController.popBackStack() } }
                 }
                 composable(Screen.Settings.route) { SettingsScreen(navController) }
