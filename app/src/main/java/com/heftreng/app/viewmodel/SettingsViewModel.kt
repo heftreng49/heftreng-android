@@ -24,6 +24,11 @@ class SettingsViewModel @Inject constructor(
 
     val isAdmin: Boolean
         get() = auth.currentUser?.email == "siirgibi49@gmail.com"
+                || _staffPerms.value.isStaff()
+
+    // Yardımcı izinleri — NavHost ve BottomNav için
+    private val _staffPerms = MutableStateFlow(StaffPermissions())
+    val staffPerms = _staffPerms.asStateFlow()
 
     val currentEmail: String
         get() = auth.currentUser?.email ?: ""
@@ -52,6 +57,32 @@ class SettingsViewModel @Inject constructor(
 
     init {
         loadPrivacySettings()
+        checkStaffPerms()
+    }
+
+    // ── Yardımcı izinleri ──────────────────────────────────────────────────────
+    fun checkStaffPerms() {
+        val user = auth.currentUser ?: return
+        viewModelScope.launch {
+            try {
+                val doc = firestore.collection("admins").document(user.uid).get().await()
+                if (doc.exists()) {
+                    @Suppress("UNCHECKED_CAST")
+                    val permList = doc.get("permissions") as? List<String> ?: emptyList()
+                    _staffPerms.value = StaffPermissions(
+                        uid         = user.uid,
+                        title       = doc.getString("title") ?: "",
+                        permissions = permList.toSet(),
+                    )
+                } else if (user.email == "siirgibi49@gmail.com") {
+                    _staffPerms.value = StaffPermissions(
+                        uid         = user.uid,
+                        title       = "Admin",
+                        permissions = ALL_PERMISSIONS.keys.toSet(),
+                    )
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     // ── Gizli profil — Firebase'den oku ─────────────────────────────────────

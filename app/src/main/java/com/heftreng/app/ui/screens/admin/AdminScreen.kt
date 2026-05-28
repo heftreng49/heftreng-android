@@ -22,7 +22,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.heftreng.app.viewmodel.AdminRole
+import com.heftreng.app.viewmodel.ALL_PERMISSIONS
+import com.heftreng.app.viewmodel.StaffPermissions
 import com.heftreng.app.viewmodel.LibraryViewModel
 import androidx.navigation.NavController
 import com.heftreng.app.ui.theme.*
@@ -185,8 +186,7 @@ fun AdminScreen(
 
             when (selectedTabKey) {
 
-                // ── Push Bildirimi ──────────────────────────────────────────────
-                0 -> LazyColumn(
+                "push" -> LazyColumn(
                     modifier       = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -221,7 +221,7 @@ fun AdminScreen(
                 }
 
                 // ── Sistem Bildirimi ─────────────────────────────────────────────
-                1 -> LazyColumn(
+                "notif" -> LazyColumn(
                     modifier       = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -266,7 +266,7 @@ fun AdminScreen(
                 }
 
                 // ── Kullanıcılar ─────────────────────────────────────────────────
-                2 -> {
+                "users" -> {
                     Column(Modifier.fillMaxSize()) {
                         OutlinedTextField(
                             value         = userSearch,
@@ -317,7 +317,7 @@ fun AdminScreen(
                 }
 
                 // ── Bekleyen Gönderiler ─────────────────────────────────────────
-                3 -> {
+                "pending" -> {
                     if (loading) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(color = Amber)
@@ -366,7 +366,7 @@ fun AdminScreen(
                 }
 
                 // ── Şikayetler ─────────────────────────────────────────────────
-                4 -> LazyColumn(
+                "reports" -> LazyColumn(
                     modifier       = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -520,7 +520,7 @@ fun AdminScreen(
                 }
 
                 // ── İtirazlar ──────────────────────────────────────────────
-                5 -> LazyColumn(
+                "appeals" -> LazyColumn(
                     modifier       = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -578,7 +578,7 @@ fun AdminScreen(
                 }
 
                 // ── İstatistikler ──────────────────────────────────────────────
-                6 -> LazyColumn(
+                "stats" -> LazyColumn(
                     modifier            = Modifier.fillMaxSize(),
                     contentPadding      = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -734,7 +734,7 @@ fun AdminScreen(
                     }
                 }
                 // ── Düzenle ───────────────────────────────────────────────────
-                7 -> {
+                "edit" -> {
                     LazyColumn(
                         modifier       = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(16.dp),
@@ -1565,117 +1565,160 @@ private fun MiniStatCard(modifier: Modifier, label: String, value: String, color
 }
 
 // ══════════════════════════════════════════════════════════════════════
-//  YARDIMCILAR SEKMESİ — Sadece admin görür
+//  YARDIMCILAR SEKMESİ — Özelleştirilebilir izin sistemi
 // ══════════════════════════════════════════════════════════════════════
 @Composable
 private fun StaffTab(
     vm        : AdminViewModel,
-    role      : AdminRole,
+    perms     : StaffPermissions,
     staffList : List<AdminViewModel.StaffMember>,
     users     : List<com.heftreng.app.data.model.User>,
 ) {
-    var uidInput    by remember { mutableStateOf("") }
-    var pickedRole  by remember { mutableStateOf(AdminRole.MODERATOR) }
-    var msg         by remember { mutableStateOf("") }
-    var editingUid  by remember { mutableStateOf<String?>(null) }
+    var uidInput     by remember { mutableStateOf("") }
+    var titleInput   by remember { mutableStateOf("") }
+    var newPerms     by remember { mutableStateOf(setOf<String>()) }
+    var msg          by remember { mutableStateOf("") }
+    var editingUid   by remember { mutableStateOf<String?>(null) }
+    var editPerms    by remember { mutableStateOf(setOf<String>()) }
+    var editTitle    by remember { mutableStateOf("") }
 
-    val roleColor = mapOf(
-        AdminRole.ADMIN       to Amber,
-        AdminRole.MODERATOR   to Primary,
-        AdminRole.EDITOR      to Success,
-        AdminRole.KUTUPHANECI to Color(0xFF38BDF8),
-    )
-    val roleDesc = mapOf(
-        AdminRole.MODERATOR   to "Ban/unban, gönderi & yorum sil, şikayetler, itirazlar, bekleyenler",
-        AdminRole.EDITOR      to "Push & bildirim gönder, CMS, bekleyenler, istatistik, düzenle",
-        AdminRole.KUTUPHANECI to "Kütüphane, yazar ve kitap yönetimi",
+    // Renk paleti
+    val permColors = mapOf(
+        "push"    to Color(0xFFF59E0B),
+        "notif"   to Color(0xFF60A5FA),
+        "users"   to Color(0xFFF87171),
+        "pending" to Color(0xFF34D399),
+        "reports" to Color(0xFFFC8181),
+        "appeals" to Color(0xFFEF4444),
+        "stats"   to Color(0xFFA78BFA),
+        "edit"    to Color(0xFF38BDF8),
+        "library" to Color(0xFF4ADE80),
+        "kurdi"   to Color(0xFFFBBF24),
+        "staff"   to Color(0xFFE879F9),
     )
 
     LazyColumn(
         modifier            = Modifier.fillMaxSize(),
         contentPadding      = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
 
         // ── Mevcut yardımcılar ─────────────────────────────────────────────
         item {
-            Text("Yardımcılar (${staffList.size})",
-                color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Spacer(Modifier.height(8.dp))
+            Text(
+                "Yardımcılar (${staffList.size})",
+                color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp,
+            )
+            Spacer(Modifier.height(4.dp))
         }
 
         items(staffList, key = { it.uid }) { member ->
-            val isEditing = editingUid == member.uid
-            val mColor    = roleColor[member.role] ?: Muted
+            val isEditing  = editingUid == member.uid
+            val myUid      = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape    = RoundedCornerShape(14.dp),
                 colors   = CardDefaults.cardColors(containerColor = Surface),
+                elevation = CardDefaults.cardElevation(2.dp),
             ) {
                 Column(Modifier.padding(14.dp)) {
-                    // Üst satır: avatar + isim + rol badge
+
+                    // Üst satır: isim + görev adı
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Avatar
+                        // Avatar dairesi
                         Box(
-                            Modifier.size(40.dp).clip(CircleShape).background(mColor.copy(alpha = .2f)),
-                            contentAlignment = Alignment.Center
+                            Modifier.size(42.dp).clip(CircleShape).background(Primary.copy(.2f)),
+                            contentAlignment = Alignment.Center,
                         ) {
                             if (member.photoURL.isNotBlank()) {
                                 coil.compose.AsyncImage(
-                                    model = member.photoURL,
+                                    model              = member.photoURL,
                                     contentDescription = null,
-                                    modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                    modifier           = Modifier.fillMaxSize().clip(CircleShape),
                                 )
                             } else {
                                 Text(
                                     member.displayName.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                                    color = mColor, fontWeight = FontWeight.Bold, fontSize = 16.sp
+                                    color = Primary, fontWeight = FontWeight.Bold, fontSize = 18.sp,
                                 )
                             }
                         }
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text(member.displayName, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            if (member.title.isNotBlank())
+                                Text(member.title, color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             if (member.email.isNotBlank())
                                 Text(member.email, color = Muted, fontSize = 11.sp)
                         }
-                        // Rol badge
+                        // İzin sayısı badge
                         Box(
                             Modifier.clip(RoundedCornerShape(8.dp))
-                                .background(mColor.copy(alpha = .15f))
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                .background(Primary.copy(.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Text(member.role.displayName(), color = mColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("${member.permissions.size} izin", color = Primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(8.dp))
 
-                    // Düzenle / Kaldır butonları
-                    if (member.uid != com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid) {
+                    // İzin chip'leri (sadece göster)
+                    if (!isEditing) {
+                        androidx.compose.foundation.layout.FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement   = Arrangement.spacedBy(4.dp),
+                        ) {
+                            member.permissions.forEach { key ->
+                                val label = ALL_PERMISSIONS[key] ?: key
+                                val color = permColors[key] ?: Primary
+                                Box(
+                                    Modifier.clip(RoundedCornerShape(6.dp))
+                                        .background(color.copy(.15f))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(label, color = color, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+
+                    // Düzenle / Kaldır butonları (kendin olmadığın sürece)
+                    if (member.uid != myUid) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // Rol değiştir
                             OutlinedButton(
-                                onClick = { editingUid = if (isEditing) null else member.uid },
-                                shape  = RoundedCornerShape(8.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, if (isEditing) Amber else Muted),
+                                onClick = {
+                                    if (isEditing) {
+                                        editingUid = null
+                                    } else {
+                                        editingUid  = member.uid
+                                        editPerms   = member.permissions.toMutableSet()
+                                        editTitle   = member.title
+                                    }
+                                },
+                                shape   = RoundedCornerShape(8.dp),
+                                border  = androidx.compose.foundation.BorderStroke(1.dp, if (isEditing) Amber else Muted),
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(vertical = 6.dp),
                             ) {
-                                Icon(if (isEditing) Icons.Default.ExpandLess else Icons.Default.Edit,
-                                    null, Modifier.size(14.dp), tint = if (isEditing) Amber else Muted)
+                                Icon(
+                                    if (isEditing) Icons.Default.ExpandLess else Icons.Default.Edit,
+                                    null, Modifier.size(14.dp),
+                                    tint = if (isEditing) Amber else Muted,
+                                )
                                 Spacer(Modifier.width(4.dp))
-                                Text(if (isEditing) "Kapat" else "Rolü Değiştir",
-                                    fontSize = 12.sp, color = if (isEditing) Amber else Muted)
+                                Text(
+                                    if (isEditing) "Kapat" else "Düzenle",
+                                    fontSize = 12.sp,
+                                    color    = if (isEditing) Amber else Muted,
+                                )
                             }
-                            // Kaldır
                             OutlinedButton(
-                                onClick = {
-                                    vm.removeStaff(member.uid) { ok, m -> msg = m }
-                                },
-                                shape  = RoundedCornerShape(8.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Error),
+                                onClick = { vm.removeStaff(member.uid) { _, m -> msg = m } },
+                                shape   = RoundedCornerShape(8.dp),
+                                border  = androidx.compose.foundation.BorderStroke(1.dp, Error),
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(vertical = 6.dp),
                             ) {
@@ -1685,97 +1728,216 @@ private fun StaffTab(
                             }
                         }
 
-                        // Satır içi rol seçici
+                        // Satır içi düzenleme paneli
                         if (isEditing) {
+                            Spacer(Modifier.height(10.dp))
+                            // Görev adı
+                            OutlinedTextField(
+                                value         = editTitle,
+                                onValueChange = { editTitle = it },
+                                label         = { Text("Görev adı", color = Muted) },
+                                modifier      = Modifier.fillMaxWidth(),
+                                singleLine    = true,
+                                colors        = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor   = Primary,
+                                    unfocusedBorderColor = Muted.copy(.4f),
+                                    focusedTextColor     = OnBackground,
+                                    unfocusedTextColor   = OnBackground,
+                                ),
+                            )
                             Spacer(Modifier.height(8.dp))
-                            Text("Yeni rol seç:", color = Muted, fontSize = 12.sp)
+                            // İzin toggle listesi
+                            Text("İzinler", color = Muted, fontSize = 12.sp)
                             Spacer(Modifier.height(6.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                listOf(AdminRole.MODERATOR, AdminRole.EDITOR, AdminRole.KUTUPHANECI).forEach { r ->
-                                    val rc = roleColor[r] ?: Muted
-                                    Box(
-                                        Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(if (member.role == r) rc.copy(.2f) else Color(0xFF1E1B2E))
-                                            .border(1.dp, if (member.role == r) rc else Muted.copy(.3f), RoundedCornerShape(8.dp))
-                                            .clickable {
-                                                vm.updateStaffRole(member.uid, r) { ok, m ->
-                                                    msg = m
-                                                    if (ok) editingUid = null
-                                                }
-                                            }
-                                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                                    ) {
-                                        Text(r.displayName(), color = if (member.role == r) rc else Muted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            ALL_PERMISSIONS.forEach { (key, label) ->
+                                if (key == "staff") return@forEach // staff iznini başkasına verme
+                                val checked = key in editPerms
+                                val color   = permColors[key] ?: Primary
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (checked) color.copy(.08f) else Color.Transparent)
+                                        .clickable {
+                                            editPerms = if (checked) editPerms - key else editPerms + key
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment     = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            Modifier.size(10.dp).clip(CircleShape)
+                                                .background(if (checked) color else Muted.copy(.3f))
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(label, color = if (checked) color else Muted, fontSize = 13.sp)
                                     }
+                                    Switch(
+                                        checked         = checked,
+                                        onCheckedChange = {
+                                            editPerms = if (it) editPerms + key else editPerms - key
+                                        },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor  = color,
+                                            checkedTrackColor  = color.copy(.3f),
+                                        ),
+                                    )
                                 }
+                                Divider(color = Muted.copy(.08f), thickness = 0.5.dp)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Button(
+                                onClick = {
+                                    vm.updateStaff(member.uid, editTitle, editPerms) { ok, m ->
+                                        msg = m
+                                        if (ok) editingUid = null
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape    = RoundedCornerShape(10.dp),
+                                colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                            ) {
+                                Icon(Icons.Default.Save, null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Kaydet", fontWeight = FontWeight.Bold)
                             }
                         }
                     } else {
-                        Text("(Kendiniz)", color = Muted, fontSize = 11.sp)
+                        Text("(Siz)", color = Muted, fontSize = 11.sp)
                     }
                 }
             }
         }
 
         if (staffList.isEmpty()) {
-            item { Text("Henüz yardımcı eklenmemiş.", color = Muted, fontSize = 13.sp) }
+            item {
+                Box(
+                    Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("Henüz yardımcı eklenmemiş.", color = Muted, fontSize = 13.sp)
+                }
+            }
         }
 
         // ── Yeni yardımcı ekle ─────────────────────────────────────────────
         item {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
             Text("Yeni Yardımcı Ekle", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Spacer(Modifier.height(4.dp))
-            Text("Kullanıcının UID'ini Firebase Authentication → Users'dan kopyalayın.",
-                color = Muted, fontSize = 12.sp)
+            Text(
+                "Firebase Authentication → Users bölümünden kullanıcının UID'ini kopyalayın.",
+                color = Muted, fontSize = 12.sp,
+            )
             Spacer(Modifier.height(10.dp))
 
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape    = RoundedCornerShape(14.dp),
-                colors   = CardDefaults.cardColors(containerColor = Surface),
+                modifier  = Modifier.fillMaxWidth(),
+                shape     = RoundedCornerShape(14.dp),
+                colors    = CardDefaults.cardColors(containerColor = Surface),
+                elevation = CardDefaults.cardElevation(2.dp),
             ) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    // UID input
-                    adminTextField(uidInput, { uidInput = it }, "Kullanıcı UID *")
 
-                    // Rol seçici
-                    Text("Rol", color = Muted, fontSize = 12.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(AdminRole.MODERATOR, AdminRole.EDITOR, AdminRole.KUTUPHANECI).forEach { r ->
-                            val isSelected = pickedRole == r
-                            val rc = roleColor[r] ?: Muted
-                            Box(
-                                Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) rc.copy(.2f) else Color(0xFF1E1B2E))
-                                    .border(1.dp, if (isSelected) rc else Muted.copy(.3f), RoundedCornerShape(8.dp))
-                                    .clickable { pickedRole = r }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                Text(r.displayName(), color = if (isSelected) rc else Muted,
-                                    fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                    // UID input
+                    OutlinedTextField(
+                        value         = uidInput,
+                        onValueChange = { uidInput = it },
+                        label         = { Text("Kullanıcı UID *", color = Muted) },
+                        modifier      = Modifier.fillMaxWidth(),
+                        singleLine    = true,
+                        colors        = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor   = Primary,
+                            unfocusedBorderColor = Muted.copy(.4f),
+                            focusedTextColor     = OnBackground,
+                            unfocusedTextColor   = OnBackground,
+                        ),
+                    )
+
+                    // Görev adı
+                    OutlinedTextField(
+                        value         = titleInput,
+                        onValueChange = { titleInput = it },
+                        label         = { Text("Görev adı (örn: Kürtçe Editörü)", color = Muted) },
+                        modifier      = Modifier.fillMaxWidth(),
+                        singleLine    = true,
+                        colors        = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor   = Primary,
+                            unfocusedBorderColor = Muted.copy(.4f),
+                            focusedTextColor     = OnBackground,
+                            unfocusedTextColor   = OnBackground,
+                        ),
+                    )
+
+                    // İzin listesi
+                    Text("İzinler", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+
+                    ALL_PERMISSIONS.forEach { (key, label) ->
+                        if (key == "staff") return@forEach
+                        val checked = key in newPerms
+                        val color   = permColors[key] ?: Primary
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (checked) color.copy(.08f) else Color.Transparent)
+                                .clickable { newPerms = if (checked) newPerms - key else newPerms + key }
+                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment     = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    Modifier.size(10.dp).clip(CircleShape)
+                                        .background(if (checked) color else Muted.copy(.3f))
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(label, color = if (checked) color else Muted, fontSize = 13.sp)
                             }
+                            Switch(
+                                checked         = checked,
+                                onCheckedChange = { newPerms = if (it) newPerms + key else newPerms - key },
+                                colors          = SwitchDefaults.colors(
+                                    checkedThumbColor = color,
+                                    checkedTrackColor = color.copy(.3f),
+                                ),
+                            )
                         }
+                        Divider(color = Muted.copy(.08f), thickness = 0.5.dp)
                     }
 
-                    // Seçilen rolün açıklaması
-                    roleDesc[pickedRole]?.let {
-                        Text(it, color = Muted, fontSize = 11.sp)
+                    Spacer(Modifier.height(2.dp))
+
+                    // Seçili izinler özeti
+                    if (newPerms.isNotEmpty()) {
+                        androidx.compose.foundation.layout.FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement   = Arrangement.spacedBy(4.dp),
+                        ) {
+                            newPerms.forEach { key ->
+                                val color = permColors[key] ?: Primary
+                                Box(
+                                    Modifier.clip(RoundedCornerShape(6.dp))
+                                        .background(color.copy(.15f))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(ALL_PERMISSIONS[key] ?: key, color = color, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
                     }
 
                     // Ekle butonu
                     Button(
                         onClick = {
-                            vm.addStaff(uidInput.trim(), pickedRole) { ok, m ->
+                            vm.addStaff(uidInput.trim(), titleInput.trim(), newPerms) { ok, m ->
                                 msg = m
-                                if (ok) uidInput = ""
+                                if (ok) { uidInput = ""; titleInput = ""; newPerms = emptySet() }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape    = RoundedCornerShape(10.dp),
                         colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                        enabled  = uidInput.isNotBlank() && newPerms.isNotEmpty(),
                     ) {
                         Icon(Icons.Default.PersonAdd, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
@@ -1784,38 +1946,16 @@ private fun StaffTab(
 
                     // Sonuç mesajı
                     if (msg.isNotBlank()) {
-                        Text(msg,
-                            color = if (msg.startsWith("✓")) Success else Error,
-                            fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            msg,
+                            color          = if (msg.startsWith("✓")) Success else Error,
+                            fontSize       = 13.sp,
+                            fontWeight     = FontWeight.Medium,
+                        )
                     }
                 }
             }
-        }
-
-        // ── Rol açıklamaları ───────────────────────────────────────────────
-        item {
-            Spacer(Modifier.height(8.dp))
-            Text("Rol Yetkileri", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-            Spacer(Modifier.height(8.dp))
-            listOf(
-                Triple(AdminRole.MODERATOR,   roleColor[AdminRole.MODERATOR]   ?: Muted, "Ban/unban, gönderi & yorum silme, şikayetler, itirazlar, bekleyen gönderiler"),
-                Triple(AdminRole.EDITOR,      roleColor[AdminRole.EDITOR]      ?: Muted, "Push & bildirim gönder, CMS, bekleyenler onaylama, istatistik, düzenle"),
-                Triple(AdminRole.KUTUPHANECI, roleColor[AdminRole.KUTUPHANECI] ?: Muted, "Kütüphane yönetimi — yazar, kitap, alıntı, inceleme"),
-            ).forEach { (r, rc, desc) ->
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                        .clip(RoundedCornerShape(10.dp)).background(Surface)
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Box(Modifier.padding(top = 3.dp, end = 10.dp).size(10.dp).clip(CircleShape).background(rc))
-                    Column {
-                        Text(r.displayName(), color = rc, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Text(desc, color = Muted, fontSize = 12.sp)
-                    }
-                }
-            }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(32.dp))
         }
     }
 }

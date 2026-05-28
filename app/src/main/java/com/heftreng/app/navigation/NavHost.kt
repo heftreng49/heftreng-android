@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.heftreng.app.viewmodel.StaffPermissions
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import coil.compose.AsyncImage
@@ -230,6 +231,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val currentRoute  = navBackStack?.destination?.route
     val showBottom    = currentRoute in bottomNavRoutes
     val isAdmin       = settingsVm.isAdmin
+    val staffPerms    by settingsVm.staffPerms.collectAsState()
 
     ModalNavigationDrawer(
         drawerState   = drawerState,
@@ -239,6 +241,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 isDark       = isDark,
                 language     = language,
                 isAdmin      = isAdmin,
+                staffPerms   = staffPerms,
                 totalUnread  = totalUnread,
                 unreadNotif  = unreadNotif,
                 onNavigate   = { route ->
@@ -486,7 +489,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 composable(Screen.Cms.route)      { CmsScreen(navController) }
                 composable(Screen.Yazar.route)    { YazarScreen(navController) }
                 composable(Screen.KurdiAdmin.route) {
-                    if (isAdmin) KurdiAdminScreen(navController)
+                    if (isAdmin || staffPerms.can("kurdi")) KurdiAdminScreen(navController)
                     else { LaunchedEffect(Unit) { navController.popBackStack() } }
                 }
                 composable(Screen.Settings.route) { SettingsScreen(navController) }
@@ -604,6 +607,7 @@ fun DrawerContent(
     isDark      : Boolean,
     language    : String,
     isAdmin     : Boolean,
+    staffPerms  : StaffPermissions = StaffPermissions(),
     totalUnread : Int,
     unreadNotif : Int,
     onNavigate  : (String) -> Unit,
@@ -673,7 +677,7 @@ fun DrawerContent(
                 }
             }
 
-            if (isAdmin) {
+            if (isAdmin || staffPerms.isStaff()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
