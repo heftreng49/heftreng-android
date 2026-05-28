@@ -134,8 +134,20 @@ class AdminViewModel @Inject constructor(
     // ── Oturum açan kullanıcının izinlerini yükle ─────────────────────────────
     fun checkAdmin() {
         viewModelScope.launch {
-            _perms.value = null // yükleniyor
-            val user = auth.currentUser ?: run { _perms.value = StaffPermissions(); return@launch }
+            _perms.value = null // yukleniyor
+            val user = auth.currentUser ?: run {
+                _perms.value = StaffPermissions()
+                return@launch
+            }
+            // Email fallback ONCE set et -- Firestore hata verse bile admin girebilsin
+            if (user.email == ADMIN_EMAIL) {
+                _perms.value = StaffPermissions(
+                    uid         = user.uid,
+                    title       = "Admin",
+                    permissions = ALL_PERMISSIONS.keys.toSet(),
+                )
+            }
+            // Firestore'dan rol bilgisini cek
             try {
                 val doc = firestore.collection("admins").document(user.uid).get().await()
                 if (doc.exists()) {
@@ -146,18 +158,12 @@ class AdminViewModel @Inject constructor(
                         title       = doc.getString("title") ?: "",
                         permissions = permList.toSet(),
                     )
-                    return@launch
+                } else if (user.email != ADMIN_EMAIL) {
+                    _perms.value = StaffPermissions()
                 }
-            } catch (_: Exception) {}
-            // Email fallback — admin tüm izinlere sahip
-            if (user.email == ADMIN_EMAIL) {
-                _perms.value = StaffPermissions(
-                    uid         = user.uid,
-                    title       = "Admin",
-                    permissions = ALL_PERMISSIONS.keys.toSet(),
-                )
-            } else {
-                _perms.value = StaffPermissions()
+                // email == ADMIN_EMAIL ve Firestore'da kayit yoksa zaten yukarida set edildi
+            } catch (_: Exception) {
+                // Firestore hatasi -- email fallback zaten set edildi, dokunma
             }
         }
     }
