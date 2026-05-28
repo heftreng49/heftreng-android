@@ -904,6 +904,12 @@ fun AdminScreen(
                 "library" -> {
                     AdminLibraryTab(libraryVm = libraryVm)
                 }
+                "kurdi" -> {
+                    // KurdiAdminScreen NavHost üzerinden açılır
+                    val navCtrl = navController
+                    LaunchedEffect(Unit) { navCtrl.navigate("kurdi_admin") }
+                }
+                "staff" -> StaffTab(vm = vm, perms = perms, staffList = staffList, users = users)
             }
         }
     }
