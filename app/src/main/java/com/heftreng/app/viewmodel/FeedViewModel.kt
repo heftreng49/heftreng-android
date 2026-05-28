@@ -68,14 +68,14 @@ class FeedViewModel @Inject constructor(
     private var myRepostMap = emptyMap<String, String>()
     private var lastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
     private val PAGE_SIZE = 30L
+    // Kullanıcı bilgilerini ViewModel ömrü boyunca cache'le — her snapshot'ta yeniden çekmeyi önler
+    private val userCache = mutableMapOf<String, Pair<String, String>>()
 
     init {
-        observeFeed()
-        viewModelScope.launch {
-            var prevUid = ""
-            while (true) {
-                val currentUid = auth.currentUser?.uid ?: ""
-                if (currentUid.isNotEmpty() && currentUid != prevUid) {
+        auth.addAuthStateListener { firebaseAuth ->
+            val currentUid = firebaseAuth.currentUser?.uid ?: ""
+            if (currentUid.isNotEmpty()) {
+                viewModelScope.launch {
                     loadInteractions()
                     _posts.value = _posts.value.map { post ->
                         post.copy(
@@ -85,11 +85,10 @@ class FeedViewModel @Inject constructor(
                             myRepostId     = myRepostMap[post.id] ?: "",
                         )
                     }
-                    prevUid = currentUid
                 }
-                kotlinx.coroutines.delay(1000)
             }
         }
+        observeFeed()
     }
 
     // ── Feed dinleyici ─────────────────────────────────────────────────────────
@@ -195,8 +194,10 @@ class FeedViewModel @Inject constructor(
     // ── Kullanıcı verileriyle zenginleştir ────────────────────────────────────
     private suspend fun enrichPostsWithUserData(posts: List<Post>): List<Post> {
         if (posts.isEmpty()) return posts
-        val uids = posts.map { it.uid }.filter { it.isNotBlank() }.distinct()
-        val userMap = mutableMapOf<String, Pair<String, String>>()
+        // Sadece cache'de olmayan uid'leri Firestore'dan çek
+        val uids = posts.map { it.uid }
+            .filter { it.isNotBlank() && it !in userCache }
+            .distinct()
         uids.chunked(10).forEach { chunk ->
             try {
                 val snap = firestore.collection("users")
@@ -205,12 +206,12 @@ class FeedViewModel @Inject constructor(
                 snap.documents.forEach { doc ->
                     val name  = ((doc.getString("displayName") ?: doc.getString("name")) ?: "").takeIf { it.isNotBlank() }
                     val photo = doc.getString("photoURL")?.takeIf { it.isNotBlank() }
-                    if (name != null || photo != null) userMap[doc.id] = Pair(name ?: "", photo ?: "")
+                    userCache[doc.id] = Pair(name ?: "", photo ?: "")
                 }
             } catch (_: Exception) {}
         }
         return posts.map { post ->
-            val (freshName, freshPhoto) = userMap[post.uid] ?: return@map post
+            val (freshName, freshPhoto) = userCache[post.uid] ?: return@map post
             post.copy(
                 displayName = freshName.ifBlank { post.displayName },
                 name        = freshName.ifBlank { post.name },

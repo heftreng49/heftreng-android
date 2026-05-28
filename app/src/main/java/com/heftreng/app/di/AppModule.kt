@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreSettings
+import com.google.firebase.firestore.PersistentCacheSettings
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.storage.FirebaseStorage
 import dagger.Module
@@ -22,7 +24,16 @@ object AppModule {
     fun provideFirebaseAuth(): FirebaseAuth = FirebaseAuth.getInstance()
 
     @Provides @Singleton
-    fun provideFirestore(): FirebaseFirestore = FirebaseFirestore.getInstance()
+    fun provideFirestore(): FirebaseFirestore {
+        val settings = FirebaseFirestoreSettings.Builder()
+            .setLocalCacheSettings(
+                PersistentCacheSettings.newBuilder()
+                    .setSizeBytes(100L * 1024 * 1024) // 100 MB disk cache
+                    .build()
+            )
+            .build()
+        return FirebaseFirestore.getInstance().also { it.firestoreSettings = settings }
+    }
 
     @Provides @Singleton
     fun provideFirebaseMessaging(): FirebaseMessaging = FirebaseMessaging.getInstance()

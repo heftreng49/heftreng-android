@@ -2,6 +2,10 @@ package com.heftreng.app
 
 import android.app.Application
 import android.util.Log
+import coil.Coil
+import coil.ImageLoader
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.RequestConfiguration
 import com.google.firebase.FirebaseApp
@@ -17,6 +21,24 @@ class HeftrangApp : Application() {
 
         // Firebase App Check — Play Integrity
         FirebaseApp.initializeApp(this)
+
+        // Coil — disk + memory cache yapılandırması (68 AsyncImage için kritik)
+        Coil.setImageLoader(
+            ImageLoader.Builder(this)
+                .memoryCache {
+                    MemoryCache.Builder(this)
+                        .maxSizePercent(0.20) // RAM'in %20'si
+                        .build()
+                }
+                .diskCache {
+                    DiskCache.Builder()
+                        .directory(cacheDir.resolve("image_cache"))
+                        .maxSizeBytes(150L * 1024 * 1024) // 150 MB
+                        .build()
+                }
+                .crossfade(true)
+                .build()
+        )
         val appCheck = FirebaseAppCheck.getInstance()
 
         // Release build: sadece gerçek Play Store APK'ları geçer
