@@ -171,7 +171,10 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    private fun enrichPostsInBackground(posts: List<Post>) {
+    private fun enrichPostsInBackground(
+        posts: List<Post>,
+        target: MutableStateFlow<List<Post>> = _posts,
+    ) {
         if (posts.isEmpty()) return
         viewModelScope.launch {
             val uids = posts.map { it.uid }.filter { it.isNotBlank() }.distinct()
@@ -189,14 +192,14 @@ class ProfileViewModel @Inject constructor(
                 } catch (_: Exception) {}
             }
             if (userMap.isEmpty()) return@launch
-            val updated = _posts.value.map { post ->
+            val updated = target.value.map { post ->
                 val (freshName, freshPhoto) = userMap[post.uid] ?: return@map post
                 post.copy(
                     displayName = freshName.ifBlank { post.displayName },
                     photoURL    = freshPhoto.ifBlank { post.photoURL },
                 )
             }
-            _posts.value = updated
+            target.value = updated
         }
     }
 
@@ -383,7 +386,9 @@ class ProfileViewModel @Inject constructor(
                         ))
                     }
                 }
-                _savedPosts.value = enrichPostsWithUserData(posts.sortedByDescending { it.ts?.seconds ?: 0L })
+                val sorted = posts.sortedByDescending { it.ts?.seconds ?: 0L }
+                _savedPosts.value = sorted
+                enrichPostsInBackground(sorted, _savedPosts)
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
