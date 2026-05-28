@@ -28,6 +28,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.heftreng.app.viewmodel.AdminViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.navigation.Screen
@@ -251,7 +252,8 @@ fun SettingsScreen(
             }
 
             // ── Admin ────────────────────────────────────────────────────
-            if (vm.isAdmin) {
+            val isAdmin = adminVm.perms.collectAsState().value?.isStaff() == true
+            if (isAdmin) {
                 item {
                     SettingsSection {
                         Row(

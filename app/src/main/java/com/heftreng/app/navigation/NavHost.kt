@@ -26,7 +26,6 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.heftreng.app.viewmodel.AdminViewModel
 import com.heftreng.app.viewmodel.StaffPermissions
-import com.heftreng.app.viewmodel.StaffPermissions
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import coil.compose.AsyncImage

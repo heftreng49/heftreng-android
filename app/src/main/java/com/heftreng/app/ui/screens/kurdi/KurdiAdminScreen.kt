@@ -19,6 +19,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.heftreng.app.viewmodel.AdminViewModel
 import androidx.navigation.NavController
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
@@ -37,9 +38,10 @@ import javax.inject.Inject
 fun KurdiAdminScreen(
     navController: NavController,
     vm         : KurdiViewModel    = hiltViewModel(),
-    settingsVm : SettingsViewModel = hiltViewModel(),
+    adminVm    : AdminViewModel    = hiltViewModel(),
 ) {
-    val isAdmin = settingsVm.isAdmin
+    val perms   by adminVm.perms.collectAsState()
+    val isAdmin  = perms?.isStaff() == true
 
     // ── Güvenlik: sadece admin erişebilir ─────────────────────────
     if (!isAdmin) {
