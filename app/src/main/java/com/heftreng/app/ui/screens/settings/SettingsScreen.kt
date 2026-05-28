@@ -48,8 +48,11 @@ fun SettingsScreen(
     navController : NavController,
     vm            : SettingsViewModel = hiltViewModel(),
     authVm        : AuthViewModel     = hiltViewModel(),
+    adminVm       : AdminViewModel    = hiltViewModel(),
 ) {
     val isDark         by vm.darkMode.collectAsState()
+    val adminPerms     by adminVm.perms.collectAsState()
+    val isAdmin        = adminPerms?.isStaff() == true
     val language       by vm.language.collectAsState()
     val pushEnabled    by vm.pushEnabled.collectAsState()
     val privateAccount by vm.privateAccount.collectAsState()
@@ -252,7 +255,6 @@ fun SettingsScreen(
             }
 
             // ── Admin ────────────────────────────────────────────────────
-            val isAdmin = adminVm.perms.collectAsState().value?.isStaff() == true
             if (isAdmin) {
                 item {
                     SettingsSection {
