@@ -46,7 +46,7 @@ import com.heftreng.app.viewmodel.*
 fun KurdiScreen(
     language : String = "tr",
     vm       : KurdiViewModel = hiltViewModel(),
-    adminVm  : AdminViewModel = hiltViewModel(),
+    adminVm  : AdminViewModel,
 ) {
     val units       by vm.units.collectAsState()
     val lessons     by vm.lessons.collectAsState()

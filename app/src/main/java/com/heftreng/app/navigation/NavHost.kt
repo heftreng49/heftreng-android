@@ -471,7 +471,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 composable(Screen.Search.route) { SearchScreen(navController, language = language) }
                 composable(Screen.Serials.route) { BooksScreen(navController, language) }
                 composable(Screen.Library.route) { LibraryScreen(navController, language) }
-                composable(Screen.Kurdi.route)   { KurdiScreen(language = language) }
+                composable(Screen.Kurdi.route)   { KurdiScreen(language = language, adminVm = adminVm) }
                 composable("profile/{uid}") { back ->
                     ProfileScreen(
                         uid           = back.arguments?.getString("uid") ?: "me",
