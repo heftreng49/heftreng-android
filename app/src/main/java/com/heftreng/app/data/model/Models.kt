@@ -351,11 +351,13 @@ data class AiLesson(
 )
 
 data class AiExercise(
-    val type    : String       = "mcq",
-    val ku      : String       = "",
-    val tr      : String       = "",
-    val options : List<String> = emptyList(),
-    val answer  : String       = "",
+    val type    : String                    = "mcq",
+    val ku      : String                    = "",        // soru / Kürtçe cümle
+    val tr      : String                    = "",        // Türkçe çeviri
+    val options : List<String>              = emptyList(), // mcq seçenekleri
+    val answer  : String                    = "",        // mcq/fill doğru cevap
+    val pairs   : List<Pair<String,String>> = emptyList(), // match: [(ku, tr)]
+    val words   : List<String>              = emptyList(), // build: karışık kelimeler
 )
 
 // ─── CMS REKLAM KONFİGÜRASYONU ─────────────────────────────

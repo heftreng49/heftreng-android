@@ -78,6 +78,26 @@ data class ActiveLesson(
     val exercises : List<KfExercise>,
 )
 
+// ── Sözlük girişi ─────────────────────────────────────────────────────────────
+data class DictEntry(
+    val id       : String = "",
+    val ku       : String = "",   // Kürtçe kelime
+    val tr       : String = "",   // Türkçe karşılık
+    val kp       : String = "",   // telaffuz
+    val e        : String = "📖",  // emoji
+    val category : String = "",   // kategori (isteğe bağlı)
+)
+
+// ── Dilbilgisi kuralı ─────────────────────────────────────────────────────────
+data class GrammarRule(
+    val id        : String = "",
+    val title     : String = "",  // Kürtçe başlık
+    val titleTr   : String = "",  // Türkçe başlık
+    val content   : String = "",  // Kürtçe içerik
+    val contentTr : String = "",  // Türkçe içerik
+    val order     : Int    = 0,
+)
+
 @HiltViewModel
 class KurdiViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -131,6 +151,18 @@ class KurdiViewModel @Inject constructor(
     val aiLoading = _aiLoading.asStateFlow()
     private val _aiError   = MutableStateFlow<String?>(null)
     val aiError   = _aiError.asStateFlow()
+
+    // ── Sözlük ────────────────────────────────────────────────────────────────
+    private val _dictEntries  = MutableStateFlow<List<DictEntry>>(emptyList())
+    val dictEntries = _dictEntries.asStateFlow()
+    private val _dictLoading  = MutableStateFlow(false)
+    val dictLoading = _dictLoading.asStateFlow()
+
+    // ── Dilbilgisi ────────────────────────────────────────────────────────────
+    private val _grammarRules  = MutableStateFlow<List<GrammarRule>>(emptyList())
+    val grammarRules = _grammarRules.asStateFlow()
+    private val _grammarLoading = MutableStateFlow(false)
+    val grammarLoading = _grammarLoading.asStateFlow()
 
     val uid get() = auth.currentUser?.uid ?: ""
 
@@ -450,18 +482,21 @@ class KurdiViewModel @Inject constructor(
                         put(JSONObject().apply {
                             put("role", "system")
                             put("content",
-                                "Sen bir Kürtçe (Kurmancî) öğretmenisin. " +
-                                "JSON formatında ders üret: " +
-                                "{\"topic\":\"...\",\"exercises\":[{\"type\":\"mcq\",\"ku\":\"...\",\"tr\":\"...\",\"options\":[...],\"answer\":\"...\"}]}. " +
-                                "Sadece JSON döndür, başka şey yazma."
+                                "Sen bir Kürtçe (Kurmancî) öğretmenisin. Tam olarak şu formatta JSON döndür, başka hiçbir şey yazma:\n" +
+                                "{\"topic\":\"...\",\"exercises\":[\n" +
+                                "  // 5 adet fill: {\"type\":\"fill\",\"ku\":\"Ez ___ im.\",\"tr\":\"Ben ___ ım.\",\"answer\":\"xwendekar\"}\n" +
+                                "  // 5 adet build: {\"type\":\"build\",\"tr\":\"Ben eve gidiyorum.\",\"answer\":\"Ez diçim malê.\",\"words\":[\"Ez\",\"diçim\",\"malê\",\"rojê\"]}\n" +
+                                "  // 5 adet mcq: {\"type\":\"mcq\",\"ku\":\"«Silav» ne demek?\",\"tr\":\"\",\"options\":[\"Merhaba\",\"Günaydın\",\"İyi\",\"Hoşça kal\"],\"answer\":\"Merhaba\"}\n" +
+                                "  // 1 adet match: {\"type\":\"match\",\"pairs\":[[\"Silav\",\"Merhaba\"],[\"Spas\",\"Teşekkür\"],[\"Belê\",\"Evet\"],[\"Na\",\"Hayır\"]]}\n" +
+                                "]}"
                             )
                         })
                         put(JSONObject().apply {
                             put("role", "user")
-                            put("content", "Konu: $topic | Seviye: $level | 5 egzersiz üret")
+                            put("content", "Konu: $topic | Seviye: $level | Tam olarak: 5 fill + 5 build + 5 mcq + 1 match = 12 egzersiz üret.")
                         })
                     })
-                    put("max_tokens", 1500)
+                    put("max_tokens", 2500)
                 }
                 val url  = URL("https://openrouter.ai/api/v1/chat/completions")
                 val conn = (url.openConnection() as HttpsURLConnection).also {
@@ -472,7 +507,7 @@ class KurdiViewModel @Inject constructor(
                     it.setRequestProperty("X-Title", "Heftreng Kurdî")
                     it.doOutput = true
                     it.connectTimeout = 15000
-                    it.readTimeout    = 30000
+                    it.readTimeout    = 40000
                 }
                 conn.outputStream.use { it.write(payload.toString().toByteArray()) }
                 val raw  = conn.inputStream.bufferedReader().readText()
@@ -484,16 +519,48 @@ class KurdiViewModel @Inject constructor(
                 val ea = lj.optJSONArray("exercises") ?: JSONArray()
                 _aiLesson.value = AiLesson(
                     topic = topic, level = level,
-                    exercises = (0 until ea.length()).map { i ->
-                        val ex = ea.getJSONObject(i)
-                        val op = ex.optJSONArray("options")
-                        AiExercise(
-                            type    = ex.optString("type", "mcq"),
-                            ku      = ex.optString("ku", ""),
-                            tr      = ex.optString("tr", ""),
-                            options = if (op != null) (0 until op.length()).map { op.getString(it) } else emptyList(),
-                            answer  = ex.optString("answer", ""),
-                        )
+                    exercises = (0 until ea.length()).mapNotNull { i ->
+                        val ex  = ea.getJSONObject(i)
+                        val type = ex.optString("type", "mcq")
+                        when (type) {
+                            "fill" -> AiExercise(
+                                type   = "fill",
+                                ku     = ex.optString("ku", ""),
+                                tr     = ex.optString("tr", ""),
+                                answer = ex.optString("answer", ""),
+                            )
+                            "build" -> {
+                                val wordsArr = ex.optJSONArray("words")
+                                AiExercise(
+                                    type   = "build",
+                                    tr     = ex.optString("tr", ""),
+                                    answer = ex.optString("answer", ""),
+                                    words  = if (wordsArr != null)
+                                        (0 until wordsArr.length()).map { wordsArr.getString(it) }
+                                    else ex.optString("answer","").split(" ").shuffled(),
+                                )
+                            }
+                            "match" -> {
+                                val pairsArr = ex.optJSONArray("pairs")
+                                AiExercise(
+                                    type  = "match",
+                                    pairs = if (pairsArr != null) (0 until pairsArr.length()).mapNotNull { j ->
+                                        val p = pairsArr.optJSONArray(j)
+                                        if (p != null && p.length() >= 2) p.getString(0) to p.getString(1) else null
+                                    } else emptyList(),
+                                )
+                            }
+                            else /* mcq */ -> {
+                                val op = ex.optJSONArray("options")
+                                AiExercise(
+                                    type    = "mcq",
+                                    ku      = ex.optString("ku", ""),
+                                    tr      = ex.optString("tr", ""),
+                                    options = if (op != null) (0 until op.length()).map { op.getString(it) } else emptyList(),
+                                    answer  = ex.optString("answer", ""),
+                                )
+                            }
+                        }
                     }
                 )
             } } catch (e: Exception) {
@@ -505,6 +572,103 @@ class KurdiViewModel @Inject constructor(
     }
 
     fun clearAiLesson() { _aiLesson.value = null; _aiError.value = null }
+
+    // ── Sözlük (kf_dict) ──────────────────────────────────────────────────────
+    fun loadDict() {
+        if (_dictEntries.value.isNotEmpty()) return // zaten yüklüyse tekrar çekme
+        viewModelScope.launch {
+            _dictLoading.value = true
+            try {
+                val snap = firestore.collection("kf_dict")
+                    .orderBy("ku", Query.Direction.ASCENDING)
+                    .limit(500).get().await()
+                _dictEntries.value = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    DictEntry(
+                        id       = doc.id,
+                        ku       = d["ku"] as? String ?: "",
+                        tr       = d["tr"] as? String ?: "",
+                        kp       = d["kp"] as? String ?: "",
+                        e        = d["e"]  as? String ?: "📖",
+                        category = d["category"] as? String ?: "",
+                    )
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+            finally { _dictLoading.value = false }
+        }
+    }
+
+    fun addDictEntry(ku: String, tr: String, kp: String, e: String, category: String, onDone: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                val ref = firestore.collection("kf_dict").add(mapOf(
+                    "ku" to ku, "tr" to tr, "kp" to kp, "e" to e,
+                    "category" to category, "ts" to com.google.firebase.Timestamp.now(),
+                )).await()
+                _dictEntries.value = (_dictEntries.value + DictEntry(ref.id, ku, tr, kp, e, category))
+                    .sortedBy { it.ku }
+                onDone()
+            } catch (e: Exception) { _toast.value = "Hata: ${e.message}" }
+        }
+    }
+
+    fun deleteDictEntry(id: String) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("kf_dict").document(id).delete().await()
+                _dictEntries.value = _dictEntries.value.filter { it.id != id }
+            } catch (e: Exception) { _toast.value = "Silinemedi" }
+        }
+    }
+
+    // ── Dilbilgisi (kf_grammar) ───────────────────────────────────────────────
+    fun loadGrammar() {
+        if (_grammarRules.value.isNotEmpty()) return
+        viewModelScope.launch {
+            _grammarLoading.value = true
+            try {
+                val snap = firestore.collection("kf_grammar")
+                    .orderBy("order", Query.Direction.ASCENDING)
+                    .limit(200).get().await()
+                _grammarRules.value = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    GrammarRule(
+                        id        = doc.id,
+                        title     = d["title"]     as? String ?: "",
+                        titleTr   = d["titleTr"]   as? String ?: d["title"] as? String ?: "",
+                        content   = d["content"]   as? String ?: "",
+                        contentTr = d["contentTr"] as? String ?: d["content"] as? String ?: "",
+                        order     = (d["order"] as? Long)?.toInt() ?: 0,
+                    )
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+            finally { _grammarLoading.value = false }
+        }
+    }
+
+    fun addGrammarRule(title: String, titleTr: String, content: String, contentTr: String, onDone: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                val order = (_grammarRules.value.maxOfOrNull { it.order } ?: 0) + 1
+                val ref = firestore.collection("kf_grammar").add(mapOf(
+                    "title" to title, "titleTr" to titleTr,
+                    "content" to content, "contentTr" to contentTr,
+                    "order" to order, "ts" to com.google.firebase.Timestamp.now(),
+                )).await()
+                _grammarRules.value = _grammarRules.value + GrammarRule(ref.id, title, titleTr, content, contentTr, order)
+                onDone()
+            } catch (e: Exception) { _toast.value = "Hata: ${e.message}" }
+        }
+    }
+
+    fun deleteGrammarRule(id: String) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("kf_grammar").document(id).delete().await()
+                _grammarRules.value = _grammarRules.value.filter { it.id != id }
+            } catch (e: Exception) { _toast.value = "Silinemedi" }
+        }
+    }
 
     // ── Admin: kullanıcı bağlamı olmadan tüm dersleri yükle ──────────────────
     fun loadAdminLessons() {

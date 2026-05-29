@@ -143,8 +143,8 @@ fun KurdiScreen(
                 onNext   = { vm.getNextLesson()?.let { vm.openLesson(it.id) } },
                 onOpen   = { lessonId -> vm.openLesson(lessonId) },
             )
-            1 -> DictionaryTab(language, isAdmin = isAdmin)
-            2 -> GrammarTab(language, isAdmin = isAdmin)
+            1 -> DictionaryTab(language, isAdmin = isAdmin, vm = vm)
+            2 -> GrammarTab(language, isAdmin = isAdmin, vm = vm)
             3 -> if (isAdmin) AiLessonTab(language, vm)
         }
     }
@@ -1237,50 +1237,351 @@ private fun BuildExercise(
 
 // ── Sözlük sekmesi ───────────────────────────────────────────────────────────
 @Composable
-private fun DictionaryTab(language: String, isAdmin: Boolean = false) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("📖", fontSize = 48.sp)
-            Text(Strings.kurdiDict(language), fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
-            Text(Strings.comingSoon(language), color = Muted, fontSize = 14.sp)
+private fun DictionaryTab(language: String, isAdmin: Boolean = false, vm: KurdiViewModel) {
+    val entries  by vm.dictEntries.collectAsState()
+    val loading  by vm.dictLoading.collectAsState()
+    var query    by remember { mutableStateOf("") }
+    var showAdd  by remember { mutableStateOf(false) }
+
+    // İlk açılışta yükle
+    LaunchedEffect(Unit) { vm.loadDict() }
+
+    val filtered = remember(entries, query) {
+        if (query.isBlank()) entries
+        else entries.filter {
+            it.ku.contains(query, ignoreCase = true) || it.tr.contains(query, ignoreCase = true)
+        }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        // Arama + Admin ekle butonu
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value         = query,
+                onValueChange = { query = it },
+                modifier      = Modifier.weight(1f),
+                placeholder   = { Text(if (language == "ku") "Bigere…" else "Ara…", color = Muted, fontSize = 13.sp) },
+                leadingIcon   = { Icon(Icons.Default.Search, null, tint = Muted, modifier = Modifier.size(18.dp)) },
+                trailingIcon  = if (query.isNotEmpty()) {{ IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp)) } }} else null,
+                singleLine    = true,
+                colors        = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor   = Primary, unfocusedBorderColor = SurfaceVar,
+                    focusedTextColor     = OnBackground, unfocusedTextColor = OnBackground,
+                    unfocusedContainerColor = HeftSurface, focusedContainerColor = HeftSurface,
+                ),
+                shape = RoundedCornerShape(12.dp),
+            )
             if (isAdmin) {
-                Spacer(Modifier.height(16.dp))
-                Button(
-                    onClick = { /* TODO: Admin — Sözlük kelime ekleme ekranı */ },
-                    colors  = ButtonDefaults.buttonColors(containerColor = Primary),
-                    shape   = RoundedCornerShape(12.dp),
+                IconButton(
+                    onClick = { showAdd = true },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(Primary, RoundedCornerShape(12.dp)),
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Kelime Ekle", fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.Add, contentDescription = "Kelime Ekle", tint = Color.White)
+                }
+            }
+        }
+
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Primary)
+            }
+        } else if (filtered.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("📖", fontSize = 40.sp)
+                    Text(if (query.isNotBlank()) "Sonuç bulunamadı" else "Henüz kelime eklenmemiş",
+                        color = Muted, fontSize = 14.sp)
+                }
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                item {
+                    Text("${filtered.size} kelime", color = Muted, fontSize = 11.sp,
+                        modifier = Modifier.padding(bottom = 4.dp))
+                }
+                items(filtered, key = { it.id }) { entry ->
+                    DictEntryCard(entry = entry, isAdmin = isAdmin, onDelete = { vm.deleteDictEntry(entry.id) })
+                }
+                item { Spacer(Modifier.height(80.dp)) }
+            }
+        }
+    }
+
+    // Admin — Kelime Ekle dialog
+    if (showAdd) {
+        AddDictEntryDialog(
+            language = language,
+            onDismiss = { showAdd = false },
+            onSave = { ku, tr, kp, e, cat ->
+                vm.addDictEntry(ku, tr, kp, e, cat) { showAdd = false }
+            },
+        )
+    }
+}
+
+@Composable
+private fun DictEntryCard(entry: DictEntry, isAdmin: Boolean, onDelete: () -> Unit) {
+    var showConfirm by remember { mutableStateOf(false) }
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = HeftSurface,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(entry.e.ifBlank { "📖" }, fontSize = 26.sp)
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(entry.ku, fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 14.sp)
+                    if (entry.kp.isNotBlank())
+                        Text("/${entry.kp}/", color = Muted, fontSize = 11.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                }
+                Text(entry.tr, color = Muted, fontSize = 13.sp)
+                if (entry.category.isNotBlank())
+                    Surface(shape = RoundedCornerShape(20.dp), color = Primary.copy(alpha = 0.15f),
+                        modifier = Modifier.padding(top = 4.dp)) {
+                        Text(entry.category, color = Primary, fontSize = 10.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                    }
+            }
+            if (isAdmin) {
+                IconButton(onClick = { showConfirm = true }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(16.dp))
                 }
             }
         }
     }
+    if (showConfirm) {
+        AlertDialog(
+            onDismissRequest = { showConfirm = false },
+            title = { Text("Sil?", color = OnBackground) },
+            text  = { Text("«${entry.ku}» silinsin mi?", color = Muted) },
+            confirmButton = { TextButton(onClick = { onDelete(); showConfirm = false }) { Text("Sil", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { showConfirm = false }) { Text("İptal", color = Muted) } },
+            containerColor = HeftSurface,
+        )
+    }
+}
+
+@Composable
+private fun AddDictEntryDialog(language: String, onDismiss: () -> Unit, onSave: (String, String, String, String, String) -> Unit) {
+    var ku  by remember { mutableStateOf("") }
+    var tr  by remember { mutableStateOf("") }
+    var kp  by remember { mutableStateOf("") }
+    var e   by remember { mutableStateOf("📖") }
+    var cat by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Kelime Ekle", color = OnBackground, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    Triple(ku,  { v: String -> ku = v },  "Kürtçe (ku) *"),
+                    Triple(tr,  { v: String -> tr = v },  "Türkçe (tr) *"),
+                    Triple(kp,  { v: String -> kp = v },  "Telaffuz (kp)"),
+                    Triple(e,   { v: String -> e  = v },  "Emoji"),
+                    Triple(cat, { v: String -> cat = v }, "Kategori"),
+                ).forEach { (value, setter, label) ->
+                    OutlinedTextField(
+                        value = value, onValueChange = setter,
+                        label = { Text(label, fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar,
+                            focusedTextColor = OnBackground, unfocusedTextColor = OnBackground),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick  = { if (ku.isNotBlank() && tr.isNotBlank()) onSave(ku, tr, kp, e, cat) },
+                enabled  = ku.isNotBlank() && tr.isNotBlank(),
+                colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                shape    = RoundedCornerShape(10.dp),
+            ) { Text("Kaydet", color = Color.White) }
+        },
+        dismissButton = { TextButton(onDismiss) { Text("İptal", color = Muted) } },
+        containerColor = HeftSurface,
+    )
 }
 
 // ── Dilbilgisi sekmesi ───────────────────────────────────────────────────────
 @Composable
-private fun GrammarTab(language: String, isAdmin: Boolean = false) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("🎓", fontSize = 48.sp)
-            Text(Strings.kurdiGrammar(language), fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 18.sp)
-            Text(Strings.comingSoon(language), color = Muted, fontSize = 14.sp)
-            if (isAdmin) {
-                Spacer(Modifier.height(16.dp))
+private fun GrammarTab(language: String, isAdmin: Boolean = false, vm: KurdiViewModel) {
+    val rules   by vm.grammarRules.collectAsState()
+    val loading by vm.grammarLoading.collectAsState()
+    var showAdd by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { vm.loadGrammar() }
+
+    Column(Modifier.fillMaxSize()) {
+        if (isAdmin) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(Strings.kurdiGrammar(language), fontWeight = FontWeight.Bold,
+                    color = OnBackground, fontSize = 15.sp)
                 Button(
-                    onClick = { /* TODO: Admin — Dilbilgisi içerik ekleme ekranı */ },
+                    onClick = { showAdd = true },
                     colors  = ButtonDefaults.buttonColors(containerColor = Primary),
-                    shape   = RoundedCornerShape(12.dp),
+                    shape   = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("İçerik Ekle", fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.Add, null, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Ekle", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            }
+        }
+
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Primary)
+            }
+        } else if (rules.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("🎓", fontSize = 40.sp)
+                    Text(if (isAdmin) "Henüz kural eklenmemiş" else Strings.comingSoon(language),
+                        color = Muted, fontSize = 14.sp)
+                }
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(rules, key = { it.id }) { rule ->
+                    GrammarRuleCard(rule = rule, language = language, isAdmin = isAdmin,
+                        onDelete = { vm.deleteGrammarRule(rule.id) })
+                }
+                item { Spacer(Modifier.height(80.dp)) }
+            }
+        }
+    }
+
+    if (showAdd) {
+        AddGrammarRuleDialog(
+            onDismiss = { showAdd = false },
+            onSave = { title, titleTr, content, contentTr ->
+                vm.addGrammarRule(title, titleTr, content, contentTr) { showAdd = false }
+            },
+        )
+    }
+}
+
+@Composable
+private fun GrammarRuleCard(rule: GrammarRule, language: String, isAdmin: Boolean, onDelete: () -> Unit) {
+    var expanded    by remember { mutableStateOf(false) }
+    var showConfirm by remember { mutableStateOf(false) }
+
+    Surface(
+        shape    = RoundedCornerShape(14.dp),
+        color    = HeftSurface,
+        modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        if (language == "ku") rule.title else rule.titleTr.ifBlank { rule.title },
+                        fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 14.sp,
+                    )
+                    if (language != "ku" && rule.title.isNotBlank() && rule.title != rule.titleTr)
+                        Text(rule.title, color = Primary, fontSize = 11.sp)
+                }
+                if (isAdmin) {
+                    IconButton(onClick = { showConfirm = true }, modifier = Modifier.size(30.dp)) {
+                        Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(15.dp))
+                    }
+                }
+                Icon(
+                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    null, tint = Muted, modifier = Modifier.size(20.dp),
+                )
+            }
+            AnimatedVisibility(visible = expanded) {
+                Column(modifier = Modifier.padding(top = 10.dp)) {
+                    HorizontalDivider(color = SurfaceVar, thickness = 1.dp)
+                    Spacer(Modifier.height(8.dp))
+                    val displayContent = if (language == "ku") rule.content
+                    else rule.contentTr.ifBlank { rule.content }
+                    Text(displayContent, color = OnBackground.copy(alpha = 0.85f), fontSize = 13.sp,
+                        lineHeight = 20.sp)
                 }
             }
         }
     }
+
+    if (showConfirm) {
+        AlertDialog(
+            onDismissRequest = { showConfirm = false },
+            title = { Text("Sil?", color = OnBackground) },
+            text  = { Text("«${rule.titleTr.ifBlank { rule.title }}» silinsin mi?", color = Muted) },
+            confirmButton = { TextButton(onClick = { onDelete(); showConfirm = false }) { Text("Sil", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { showConfirm = false }) { Text("İptal", color = Muted) } },
+            containerColor = HeftSurface,
+        )
+    }
+}
+
+@Composable
+private fun AddGrammarRuleDialog(onDismiss: () -> Unit, onSave: (String, String, String, String) -> Unit) {
+    var title     by remember { mutableStateOf("") }
+    var titleTr   by remember { mutableStateOf("") }
+    var content   by remember { mutableStateOf("") }
+    var contentTr by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Kural Ekle", color = OnBackground, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(title, { title = it }, label = { Text("Başlık (Kürtçe) *", fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar,
+                        focusedTextColor = OnBackground, unfocusedTextColor = OnBackground))
+                OutlinedTextField(titleTr, { titleTr = it }, label = { Text("Başlık (Türkçe) *", fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar,
+                        focusedTextColor = OnBackground, unfocusedTextColor = OnBackground))
+                OutlinedTextField(content, { content = it }, label = { Text("İçerik (Kürtçe)", fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth().height(100.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar,
+                        focusedTextColor = OnBackground, unfocusedTextColor = OnBackground))
+                OutlinedTextField(contentTr, { contentTr = it }, label = { Text("İçerik (Türkçe)", fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth().height(100.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar,
+                        focusedTextColor = OnBackground, unfocusedTextColor = OnBackground))
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { if (title.isNotBlank() && titleTr.isNotBlank()) onSave(title, titleTr, content, contentTr) },
+                enabled = title.isNotBlank() && titleTr.isNotBlank(),
+                colors  = ButtonDefaults.buttonColors(containerColor = Primary),
+                shape   = RoundedCornerShape(10.dp),
+            ) { Text("Kaydet", color = Color.White) }
+        },
+        dismissButton = { TextButton(onDismiss) { Text("İptal", color = Muted) } },
+        containerColor = HeftSurface,
+    )
 }
 
 // ── AI Ders sekmesi ──────────────────────────────────────────────────────────
@@ -1365,23 +1666,237 @@ fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
             }
         }
         aiLesson?.let { lesson ->
-            item { Text("📚 ${lesson.topic} — ${lesson.level}", fontWeight = FontWeight.Bold, color = Primary, fontSize = 14.sp) }
-            items(lesson.exercises) { ex ->
-                Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(14.dp)) {
-                        Text(ex.ku, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
-                        Text(ex.tr, color = Muted, fontSize = 12.sp)
-                        if (ex.options.isNotEmpty()) {
-                            Spacer(Modifier.height(8.dp))
-                            ex.options.forEach { opt ->
-                                Text("• $opt", color = if (opt == ex.answer) Primary else OnBackground,
-                                    fontSize = 12.sp, fontWeight = if (opt == ex.answer) FontWeight.Bold else FontWeight.Normal)
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text("📚 ${lesson.topic} — ${lesson.level}", fontWeight = FontWeight.Bold, color = Primary, fontSize = 14.sp)
+                    TextButton(onClick = { vm.clearAiLesson() }) { Text("Temizle", color = Muted, fontSize = 12.sp) }
+                }
+            }
+            // Egzersiz tiplerini grupla ve başlıkla göster
+            val fillExs  = lesson.exercises.filter { it.type == "fill" }
+            val buildExs = lesson.exercises.filter { it.type == "build" }
+            val mcqExs   = lesson.exercises.filter { it.type == "mcq" }
+            val matchExs = lesson.exercises.filter { it.type == "match" }
+
+            if (fillExs.isNotEmpty()) {
+                item { AiExerciseSectionHeader("✏️ Boşluk Doldurma", fillExs.size) }
+                items(fillExs) { ex -> AiFillCard(ex) }
+            }
+            if (buildExs.isNotEmpty()) {
+                item { AiExerciseSectionHeader("🔨 Cümle Kurma", buildExs.size) }
+                items(buildExs) { ex -> AiBuildCard(ex) }
+            }
+            if (mcqExs.isNotEmpty()) {
+                item { AiExerciseSectionHeader("🎯 Çoktan Seçmeli", mcqExs.size) }
+                items(mcqExs) { ex -> AiMcqCard(ex) }
+            }
+            if (matchExs.isNotEmpty()) {
+                item { AiExerciseSectionHeader("🔗 Eşleştirme", matchExs.size) }
+                items(matchExs) { ex -> AiMatchCard(ex) }
+            }
+        }
+    }
+}
+
+// ── AI Egzersiz Kartları ──────────────────────────────────────────────────────
+@Composable
+private fun AiExerciseSectionHeader(title: String, count: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)) {
+        Text(title, fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 13.sp)
+        Spacer(Modifier.width(6.dp))
+        Surface(shape = RoundedCornerShape(20.dp), color = Primary.copy(alpha = 0.15f)) {
+            Text("$count", color = Primary, fontSize = 11.sp,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+        }
+    }
+}
+
+@Composable
+private fun AiFillCard(ex: com.heftreng.app.data.model.AiExercise) {
+    var revealed by remember { mutableStateOf(false) }
+    Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp)) {
+            // ___ → vurgulanmış boşluk
+            val parts = ex.ku.split("___")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                parts.forEachIndexed { i, part ->
+                    Text(part, color = OnBackground, fontSize = 14.sp)
+                    if (i < parts.size - 1) {
+                        Surface(shape = RoundedCornerShape(4.dp),
+                            color = if (revealed) Primary.copy(alpha = 0.2f) else SurfaceVar,
+                            modifier = Modifier.padding(horizontal = 2.dp)) {
+                            Text(
+                                if (revealed) ex.answer else "______",
+                                color = if (revealed) Primary else Muted,
+                                fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
+                }
+            }
+            if (ex.tr.isNotBlank()) Text(ex.tr, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+            TextButton(onClick = { revealed = !revealed }, contentPadding = PaddingValues(0.dp)) {
+                Text(if (revealed) "Gizle" else "Cevabı Göster", color = Primary, fontSize = 11.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiBuildCard(ex: com.heftreng.app.data.model.AiExercise) {
+    var revealed by remember { mutableStateOf(false) }
+    val shuffled = remember(ex) { ex.words.shuffled() }
+    Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp)) {
+            Text(ex.tr, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
+            Spacer(Modifier.height(8.dp))
+            // Kelime kutucukları — satır doluşunca alta geçer
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                shuffled.chunked(4).forEach { rowWords ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        rowWords.forEach { word ->
+                            Surface(shape = RoundedCornerShape(8.dp), color = SurfaceVar) {
+                                Text(word, color = OnBackground, fontSize = 13.sp,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
                             }
                         }
                     }
                 }
             }
-            item { TextButton(onClick = { vm.clearAiLesson() }) { Text("Temizle", color = Muted) } }
+            if (revealed) {
+                Spacer(Modifier.height(8.dp))
+                Surface(shape = RoundedCornerShape(8.dp), color = Primary.copy(alpha = 0.12f),
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text("✓ ${ex.answer}", color = Primary, fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                        modifier = Modifier.padding(10.dp))
+                }
+            }
+            TextButton(onClick = { revealed = !revealed }, contentPadding = PaddingValues(0.dp)) {
+                Text(if (revealed) "Gizle" else "Cevabı Göster", color = Primary, fontSize = 11.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiMcqCard(ex: com.heftreng.app.data.model.AiExercise) {
+    var selected by remember { mutableStateOf<String?>(null) }
+    Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp)) {
+            Text(ex.ku, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
+            if (ex.tr.isNotBlank()) Text(ex.tr, color = Muted, fontSize = 12.sp)
+            Spacer(Modifier.height(10.dp))
+            ex.options.forEach { opt ->
+                val isCorrect = opt == ex.answer
+                val isSelected = opt == selected
+                val bgColor = when {
+                    selected == null -> SurfaceVar
+                    isCorrect        -> Color(0xFF22C55E).copy(alpha = 0.18f)
+                    isSelected       -> MaterialTheme.colorScheme.errorContainer
+                    else             -> SurfaceVar
+                }
+                val textColor = when {
+                    selected == null -> OnBackground
+                    isCorrect        -> Color(0xFF22C55E)
+                    isSelected       -> MaterialTheme.colorScheme.error
+                    else             -> Muted
+                }
+                Surface(
+                    shape    = RoundedCornerShape(8.dp),
+                    color    = bgColor,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 3.dp)
+                        .clickable(enabled = selected == null) { selected = opt },
+                ) {
+                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (selected != null && isCorrect) Text("✓ ", color = textColor, fontWeight = FontWeight.Bold)
+                        else if (isSelected) Text("✗ ", color = textColor, fontWeight = FontWeight.Bold)
+                        Text(opt, color = textColor, fontSize = 13.sp,
+                            fontWeight = if (isCorrect && selected != null) FontWeight.Bold else FontWeight.Normal)
+                    }
+                }
+            }
+            if (selected != null) {
+                TextButton(onClick = { selected = null }, contentPadding = PaddingValues(0.dp)) {
+                    Text("Sıfırla", color = Muted, fontSize = 11.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiMatchCard(ex: com.heftreng.app.data.model.AiExercise) {
+    val pairs = ex.pairs
+    if (pairs.isEmpty()) return
+    var selectedKu  by remember { mutableStateOf<String?>(null) }
+    val matched     = remember { mutableStateMapOf<String, String>() }
+    val kuWords     = remember(pairs) { pairs.map { it.first }.shuffled() }
+    val trWords     = remember(pairs) { pairs.map { it.second }.shuffled() }
+    val correctMap  = remember(pairs) { pairs.toMap() }
+
+    Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp)) {
+            Text("Eşleştir", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 13.sp)
+            Spacer(Modifier.height(10.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                // Sol: Kürtçe kelimeler
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)) {
+                    kuWords.forEach { ku ->
+                        val isMatched   = matched.containsKey(ku)
+                        val isSelected  = selectedKu == ku
+                        Surface(
+                            shape    = RoundedCornerShape(8.dp),
+                            color    = when {
+                                isMatched  -> Color(0xFF22C55E).copy(alpha = 0.18f)
+                                isSelected -> Primary.copy(alpha = 0.25f)
+                                else       -> SurfaceVar
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                                .clickable(enabled = !isMatched) { selectedKu = if (isSelected) null else ku },
+                        ) {
+                            Text(ku, color = if (isMatched) Color(0xFF22C55E) else if (isSelected) Primary else OnBackground,
+                                fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                textAlign = TextAlign.Center)
+                        }
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                // Sağ: Türkçe kelimeler
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)) {
+                    trWords.forEach { tr ->
+                        val matchedKu   = matched.entries.find { it.value == tr }?.key
+                        val isMatched   = matchedKu != null
+                        Surface(
+                            shape    = RoundedCornerShape(8.dp),
+                            color    = if (isMatched) Color(0xFF22C55E).copy(alpha = 0.18f) else SurfaceVar,
+                            modifier = Modifier.fillMaxWidth().clickable(enabled = !isMatched && selectedKu != null) {
+                                val ku = selectedKu
+                                if (ku != null) {
+                                    if (correctMap[ku] == tr) matched[ku] = tr
+                                    selectedKu = null
+                                }
+                            },
+                        ) {
+                            Text(tr, color = if (isMatched) Color(0xFF22C55E) else OnBackground,
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                textAlign = TextAlign.Center)
+                        }
+                    }
+                }
+            }
+            if (matched.size == pairs.size) {
+                Spacer(Modifier.height(8.dp))
+                Text("🎉 Tümünü eşleştirdin!", color = Color(0xFF22C55E),
+                    fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
         }
     }
 }
