@@ -96,7 +96,7 @@ fun KurdiAdminScreen(
                 },
                 divider = { HorizontalDivider(color = Divider, thickness = 0.5.dp) },
             ) {
-                listOf("📚 Dersler", "➕ Yeni Ders").forEachIndexed { i, t ->
+                listOf("📚 Dersler", "➕ Yeni Ders", "🤖 Yapay Zeka").forEachIndexed { i, t ->
                     Tab(
                         selected = selectedTab == i,
                         onClick  = { selectedTab = i },
@@ -110,6 +110,7 @@ fun KurdiAdminScreen(
             when (selectedTab) {
                 0 -> LessonListTab(lessons = lessons, onSelect = { selectedLesson = it })
                 1 -> NewLessonTab(vm = vm, onCreated = { selectedTab = 0 })
+                2 -> AdminAiLessonTab(vm = vm, lessons = lessons)
             }
         }
     }
@@ -791,4 +792,242 @@ fun AdminField(
             cursorColor             = Amber,
         ),
     )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ADMİN AI DERS SEKMESİ — Yapay zeka ile egzersiz üret + Firestore'a kaydet
+// ═══════════════════════════════════════════════════════════════════════════════
+@Composable
+private fun AdminAiLessonTab(
+    vm     : KurdiViewModel,
+    lessons: List<KfLesson>,
+) {
+    val scope      = rememberCoroutineScope()
+    val aiLesson   by vm.aiLesson.collectAsState()
+    val aiLoading  by vm.aiLoading.collectAsState()
+    val aiError    by vm.aiError.collectAsState()
+    val orApiKey   by vm.orApiKey.collectAsState()
+    val snack      = remember { SnackbarHostState() }
+
+    var apiKeyInput    by remember { mutableStateOf(orApiKey) }
+    var topic          by remember { mutableStateOf("") }
+    var level          by remember { mutableStateOf("destpêk") }
+    var targetLessonId by remember { mutableStateOf("") }
+    var expanded       by remember { mutableStateOf(false) }
+    var saving         by remember { mutableStateOf(false) }
+
+    // API key değişince kaydet
+    LaunchedEffect(apiKeyInput) {
+        if (apiKeyInput.isNotBlank()) vm.saveOrKey(apiKeyInput)
+    }
+
+    Scaffold(
+        snackbarHost   = { SnackbarHost(snack) },
+        containerColor = com.heftreng.app.ui.theme.Background,
+    ) { pad ->
+        LazyColumn(
+            modifier       = Modifier.fillMaxSize().padding(pad),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // ── Başlık ────────────────────────────────────────────────────────
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("🤖 Yapay Zeka ile Ders Üret",
+                        color = com.heftreng.app.ui.theme.OnBackground,
+                        fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                    Text("OpenRouter API ile Kürtçe egzersizler üret ve doğrudan derse ekle.",
+                        color = com.heftreng.app.ui.theme.Muted, fontSize = 12.sp)
+                }
+            }
+
+            // ── API Key ───────────────────────────────────────────────────────
+            item {
+                AdminField(
+                    value    = apiKeyInput,
+                    onChange = { apiKeyInput = it },
+                    label    = "OpenRouter API Key",
+                    hint     = "sk-or-...",
+                )
+            }
+
+            // ── Konu + Seviye ─────────────────────────────────────────────────
+            item {
+                AdminField(topic, { topic = it }, "Konu *", hint = "Selamlaşma, Sayılar, Renkler...")
+            }
+            item {
+                val levels = listOf("destpêk" to "Başlangıç", "navîn" to "Orta", "pêşkeftî" to "İleri")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    levels.forEach { (key, label) ->
+                        FilterChip(
+                            selected = level == key,
+                            onClick  = { level = key },
+                            label    = { Text(label, fontSize = 12.sp) },
+                            colors   = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = com.heftreng.app.ui.theme.Amber.copy(0.2f),
+                                selectedLabelColor     = com.heftreng.app.ui.theme.Amber,
+                            ),
+                        )
+                    }
+                }
+            }
+
+            // ── Ders Seç (kaydetmek için) ─────────────────────────────────────
+            item {
+                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+                    OutlinedTextField(
+                        value         = lessons.find { it.id == targetLessonId }?.let { "${it.emoji} ${it.nameTr}" } ?: "Ders seçin (opsiyonel)",
+                        onValueChange = {},
+                        readOnly      = true,
+                        label         = { Text("Egzersizleri eklemek için ders seç") },
+                        trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                        modifier      = Modifier.fillMaxWidth().menuAnchor(),
+                        shape         = RoundedCornerShape(10.dp),
+                        colors        = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor   = com.heftreng.app.ui.theme.Amber,
+                            unfocusedBorderColor = com.heftreng.app.ui.theme.Divider,
+                            focusedLabelColor    = com.heftreng.app.ui.theme.Amber,
+                            unfocusedLabelColor  = com.heftreng.app.ui.theme.Muted,
+                            focusedTextColor     = com.heftreng.app.ui.theme.OnBackground,
+                            unfocusedTextColor   = com.heftreng.app.ui.theme.Muted,
+                        ),
+                    )
+                    ExposedDropdownMenu(
+                        expanded         = expanded,
+                        onDismissRequest = { expanded = false },
+                    ) {
+                        lessons.forEach { lesson ->
+                            DropdownMenuItem(
+                                text    = { Text("${lesson.emoji} ${lesson.nameTr}", fontSize = 13.sp) },
+                                onClick = { targetLessonId = lesson.id; expanded = false },
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ── Üret Butonu ───────────────────────────────────────────────────
+            item {
+                Button(
+                    onClick  = { vm.generateAiLesson(apiKeyInput, topic, level) },
+                    enabled  = !aiLoading && apiKeyInput.isNotBlank() && topic.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = RoundedCornerShape(12.dp),
+                    colors   = ButtonDefaults.buttonColors(
+                        containerColor = com.heftreng.app.ui.theme.Primary,
+                        contentColor   = Color.White,
+                    ),
+                ) {
+                    if (aiLoading) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(if (aiLoading) "Üretiliyor..." else "🤖 Ders Üret", fontWeight = FontWeight.Bold)
+                }
+            }
+
+            // ── Hata ─────────────────────────────────────────────────────────
+            aiError?.let { err ->
+                item {
+                    Surface(shape = RoundedCornerShape(10.dp), color = Color(0xFFEF4444).copy(0.1f)) {
+                        Text(err, color = Color(0xFFEF4444), fontSize = 12.sp, modifier = Modifier.padding(12.dp))
+                    }
+                }
+            }
+
+            // ── AI Sonuçları + Kaydet ─────────────────────────────────────────
+            aiLesson?.let { lesson ->
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "📚 ${lesson.topic} • ${lesson.exercises.size} egzersiz",
+                            fontWeight = FontWeight.Bold,
+                            color = com.heftreng.app.ui.theme.Primary, fontSize = 14.sp,
+                        )
+                        TextButton(onClick = { vm.clearAiLesson() }) {
+                            Text("Temizle", color = com.heftreng.app.ui.theme.Muted, fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                items(lesson.exercises, key = { it.ku + it.tr }) { ex ->
+                    Surface(
+                        shape  = RoundedCornerShape(12.dp),
+                        color  = com.heftreng.app.ui.theme.HeftSurface,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Surface(shape = RoundedCornerShape(4.dp), color = com.heftreng.app.ui.theme.Primary.copy(0.15f)) {
+                                    Text(ex.type.uppercase(), color = com.heftreng.app.ui.theme.Primary,
+                                        fontSize = 9.sp, fontWeight = FontWeight.ExtraBold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                }
+                                Text(ex.ku, fontWeight = FontWeight.SemiBold,
+                                    color = com.heftreng.app.ui.theme.OnBackground, fontSize = 14.sp)
+                            }
+                            if (ex.tr.isNotBlank())
+                                Text(ex.tr, color = com.heftreng.app.ui.theme.Muted, fontSize = 12.sp)
+                            if (ex.options.isNotEmpty()) {
+                                ex.options.forEach { opt ->
+                                    Text(
+                                        "• $opt",
+                                        color    = if (opt == ex.answer) com.heftreng.app.ui.theme.Primary else com.heftreng.app.ui.theme.OnBackground,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (opt == ex.answer) FontWeight.Bold else FontWeight.Normal,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Firestore'a kaydet ────────────────────────────────────────
+                item {
+                    Button(
+                        onClick = {
+                            if (targetLessonId.isBlank()) {
+                                scope.launch { snack.showSnackbar("Önce bir ders seçin!") }
+                                return@Button
+                            }
+                            saving = true
+                            vm.saveAiLessonToFirestore(
+                                targetLessonId = targetLessonId,
+                                lesson         = lesson,
+                                onDone = { count ->
+                                    saving = false
+                                    scope.launch {
+                                        snack.showSnackbar("✓ $count egzersiz '${lessons.find { it.id == targetLessonId }?.nameTr}' dersine eklendi!")
+                                        vm.clearAiLesson()
+                                    }
+                                },
+                                onError = { err ->
+                                    saving = false
+                                    scope.launch { snack.showSnackbar("Hata: $err") }
+                                },
+                            )
+                        },
+                        enabled  = !saving && targetLessonId.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape    = RoundedCornerShape(12.dp),
+                        colors   = ButtonDefaults.buttonColors(
+                            containerColor = com.heftreng.app.ui.theme.Amber,
+                            contentColor   = Color.Black,
+                        ),
+                    ) {
+                        if (saving) {
+                            CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(if (saving) "Kaydediliyor..." else "✅ Derse Kaydet (${lesson.exercises.size} egzersiz)",
+                            fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
 }

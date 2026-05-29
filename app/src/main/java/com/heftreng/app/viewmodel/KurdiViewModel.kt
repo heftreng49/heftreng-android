@@ -205,7 +205,7 @@ class KurdiViewModel @Inject constructor(
     private suspend fun loadUnitsAndLessons(doneIds: Set<String>) {
         try {
             val unitsSnap   = firestore.collection("kf_units")
-                .orderBy("order", Query.Direction.ASCENDING).get().await()
+                .limit(100).get().await()
             val lessonsSnap = firestore.collection("kf_lessons").get().await()
 
             val units = unitsSnap.documents.mapNotNull { doc ->
@@ -240,8 +240,8 @@ class KurdiViewModel @Inject constructor(
             }
 
             if (units.isNotEmpty()) {
-                _units.value   = units
-                _lessons.value = allLessons
+                _units.value   = units.sortedBy { it.order }
+                _lessons.value = allLessons.sortedWith(compareBy({ it.unitId }, { it.order }))
             } else {
                 // kf_units boşsa kf_lessons'tan varsayılan ünite oluştur
                 if (allLessons.isNotEmpty()) {
@@ -443,7 +443,7 @@ class KurdiViewModel @Inject constructor(
         if (apiKey.isBlank() || topic.isBlank()) return
         _aiLoading.value = true; _aiError.value = null
         viewModelScope.launch {
-            try {
+            try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 val payload = JSONObject().apply {
                     put("model", "google/gemini-2.0-flash-001")
                     put("messages", JSONArray().apply {
@@ -496,7 +496,7 @@ class KurdiViewModel @Inject constructor(
                         )
                     }
                 )
-            } catch (e: Exception) {
+            } } catch (e: Exception) {
                 _aiError.value = "Hata: ${e.message ?: e.javaClass.simpleName} — API key geçersiz veya ağ hatası"
             } finally {
                 _aiLoading.value = false
@@ -511,8 +511,7 @@ class KurdiViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val snap = firestore.collection("kf_lessons")
-                    .orderBy("order", com.google.firebase.firestore.Query.Direction.ASCENDING)
-                    .get().await()
+                    .limit(200).get().await()
                 val lessons = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     KfLesson(
@@ -529,6 +528,46 @@ class KurdiViewModel @Inject constructor(
                 }
                 _lessons.value = lessons
             } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── AI Ders Kaydet — üretilen egzersizleri seçili derse yaz ─────────────
+    fun saveAiLessonToFirestore(
+        targetLessonId: String,
+        lesson        : AiLesson,
+        onDone        : (Int) -> Unit,
+        onError       : (String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            try {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    var saved = 0
+                    lesson.exercises.forEach { ex ->
+                        val data = mutableMapOf<String, Any>(
+                            "lessonId" to targetLessonId,
+                            "type"     to (ex.type.takeIf { it.isNotBlank() } ?: "mcq"),
+                            "question" to ex.ku,
+                            "tr"       to ex.tr,
+                        )
+                        if (ex.options.isNotEmpty()) {
+                            data["optA"]   = ex.options.getOrElse(0) { "" }
+                            data["optB"]   = ex.options.getOrElse(1) { "" }
+                            data["optC"]   = ex.options.getOrElse(2) { "" }
+                            data["optD"]   = ex.options.getOrElse(3) { "" }
+                            data["answer"] = ex.answer.ifBlank { ex.options.getOrElse(0) { "" } }
+                        } else {
+                            data["answer"] = ex.answer
+                        }
+                        firestore.collection("kf_exercises").add(data).await()
+                        saved++
+                    }
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onDone(saved)
+                    }
+                }
+            } catch (e: Exception) {
+                onError(e.message ?: "Kaydetme hatası")
+            }
         }
     }
 
