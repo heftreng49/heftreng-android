@@ -125,7 +125,7 @@ service cloud.firestore {
 
     match /feed/{postId} {
       allow get:  if postVisible(resource.data);
-      allow list: if isAuth(); // Anonim bot kazımasını önle — giriş zorunlu
+      allow list: if true; // Web sitesi giriş yapmadan feed gösterebilir
 
       allow create: if isAuth() && notBanned()
           && request.resource.data.uid == request.auth.uid
