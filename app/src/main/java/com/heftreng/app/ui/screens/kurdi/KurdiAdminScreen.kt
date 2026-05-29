@@ -108,7 +108,7 @@ fun KurdiAdminScreen(
             }
 
             when (selectedTab) {
-                0 -> LessonListTab(lessons = lessons, onSelect = { selectedLesson = it })
+                0 -> LessonListTab(lessons = lessons, vm = vm, onSelect = { selectedLesson = it })
                 1 -> NewLessonTab(vm = vm, onCreated = { selectedTab = 0 })
                 2 -> AdminAiLessonTab(vm = vm, lessons = lessons)
             }
@@ -120,6 +120,7 @@ fun KurdiAdminScreen(
 @Composable
 private fun LessonListTab(
     lessons  : List<KfLesson>,
+    vm       : KurdiViewModel,
     onSelect : (KfLesson) -> Unit,
 ) {
     if (lessons.isEmpty()) {
@@ -128,6 +129,10 @@ private fun LessonListTab(
         }
         return
     }
+
+    var editTarget   by remember { mutableStateOf<KfLesson?>(null) }
+    var deleteTarget by remember { mutableStateOf<KfLesson?>(null) }
+
     LazyColumn(
         modifier        = Modifier.fillMaxSize(),
         contentPadding  = PaddingValues(12.dp),
@@ -135,27 +140,133 @@ private fun LessonListTab(
     ) {
         items(lessons, key = { it.id }) { lesson ->
             Surface(
-                modifier = Modifier.fillMaxWidth().clickable { onSelect(lesson) },
+                modifier = Modifier.fillMaxWidth(),
                 shape    = RoundedCornerShape(14.dp),
                 color    = HeftSurface,
             ) {
                 Row(
-                    Modifier.padding(14.dp),
+                    Modifier.padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text(lesson.emoji, fontSize = 28.sp)
-                    Column(Modifier.weight(1f)) {
+                    Text(lesson.emoji, fontSize = 26.sp)
+                    Column(Modifier.weight(1f).clickable { onSelect(lesson) }) {
                         Text(lesson.nameTr, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Text(lesson.nameKu, color = Muted, fontSize = 12.sp)
-                        Text("ID: ${lesson.id} • Birim: ${lesson.unitId} • ${lesson.xp} XP",
+                        Text("${lesson.id} • ${lesson.unitId} • ${lesson.xp} XP",
                             color = Muted, fontSize = 10.sp)
                     }
-                    Icon(Icons.Default.ChevronRight, null, tint = Muted)
+                    // Düzenle
+                    IconButton(onClick = { editTarget = lesson }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(18.dp))
+                    }
+                    // Sil
+                    IconButton(onClick = { deleteTarget = lesson }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                    }
                 }
             }
         }
     }
+
+    // ── Ders Düzenleme Dialog ─────────────────────────────────────────────────
+    editTarget?.let { lesson ->
+        LessonEditDialog(
+            lesson    = lesson,
+            onDismiss = { editTarget = null },
+            onSave    = { nameTr, nameKu, emoji, xp, order, unitId ->
+                vm.updateLesson(lesson.id, nameTr, nameKu, emoji, xp, order, unitId,
+                    onDone  = { editTarget = null },
+                    onError = { editTarget = null },
+                )
+            },
+        )
+    }
+
+    // ── Silme Onayı ───────────────────────────────────────────────────────────
+    deleteTarget?.let { lesson ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("Dersi Sil?", color = OnBackground, fontWeight = FontWeight.Bold) },
+            text  = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("«${lesson.nameTr}» silinecek.", color = OnBackground)
+                    Text("Bu derse ait tüm kelime ve egzersizler de kalıcı olarak silinir.",
+                        color = Color(0xFFEF4444), fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        vm.deleteLesson(lesson.id,
+                            onDone  = { deleteTarget = null },
+                            onError = { deleteTarget = null },
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape  = RoundedCornerShape(10.dp),
+                ) { Text("Sil", color = Color.White, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) { Text("İptal", color = Muted) }
+            },
+            containerColor = HeftSurface,
+        )
+    }
+}
+
+// ── Ders Düzenleme Dialog ─────────────────────────────────────────────────────
+@Composable
+private fun LessonEditDialog(
+    lesson    : KfLesson,
+    onDismiss : () -> Unit,
+    onSave    : (String, String, String, Int, Int, String) -> Unit,
+) {
+    var nameTr by remember { mutableStateOf(lesson.nameTr) }
+    var nameKu by remember { mutableStateOf(lesson.nameKu) }
+    var emoji  by remember { mutableStateOf(lesson.emoji) }
+    var xp     by remember { mutableStateOf(lesson.xp.toString()) }
+    var order  by remember { mutableStateOf(lesson.order.toString()) }
+    var unitId by remember { mutableStateOf(lesson.unitId) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(emoji, fontSize = 20.sp)
+                Text("Dersi Düzenle", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("ID: ${lesson.id}", color = Muted, fontSize = 11.sp)
+                AdminField(nameTr, { nameTr = it }, "Türkçe Ad *")
+                AdminField(nameKu, { nameKu = it }, "Kürtçe Ad")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AdminField(emoji,  { emoji  = it }, "Emoji", modifier = Modifier.weight(1f))
+                    AdminField(unitId, { unitId = it }, "Birim ID", modifier = Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AdminField(xp,    { xp    = it }, "XP",  keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
+                    AdminField(order, { order = it }, "Sıra", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (nameTr.isNotBlank())
+                        onSave(nameTr, nameKu, emoji, xp.toIntOrNull() ?: lesson.xp,
+                            order.toIntOrNull() ?: lesson.order, unitId)
+                },
+                enabled = nameTr.isNotBlank(),
+                colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                shape   = RoundedCornerShape(10.dp),
+            ) { Text("Kaydet", fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onDismiss) { Text("İptal", color = Muted) } },
+        containerColor = HeftSurface,
+    )
 }
 
 // ── Yeni ders oluştur ─────────────────────────────────────────────────────────

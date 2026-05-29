@@ -510,7 +510,23 @@ class KurdiViewModel @Inject constructor(
                     it.readTimeout    = 40000
                 }
                 conn.outputStream.use { it.write(payload.toString().toByteArray()) }
-                val raw  = conn.inputStream.bufferedReader().readText()
+                val code = conn.responseCode
+                val raw  = if (code in 200..299) {
+                    conn.inputStream.bufferedReader().readText()
+                } else {
+                    val errBody = conn.errorStream?.bufferedReader()?.readText() ?: ""
+                    val errMsg = try {
+                        JSONObject(errBody).optJSONObject("error")?.optString("message") ?: errBody
+                    } catch (_: Exception) { errBody }
+                    throw Exception(
+                        when (code) {
+                            401  -> "API key geçersiz (401) — openrouter.ai/keys adresinden sk-or- ile başlayan key al"
+                            402  -> "Hesap bakiyesi yetersiz (402)"
+                            429  -> "İstek limiti aşıldı (429) — biraz bekle"
+                            else -> "Sunucu hatası ($code): $errMsg"
+                        }
+                    )
+                }
                 val txt  = JSONObject(raw)
                     .getJSONArray("choices").getJSONObject(0)
                     .getJSONObject("message").getString("content")
@@ -670,7 +686,45 @@ class KurdiViewModel @Inject constructor(
         }
     }
 
-    // ── Admin: kullanıcı bağlamı olmadan tüm dersleri yükle ──────────────────
+    // ── Admin: ders sil ───────────────────────────────────────────────────────
+    fun deleteLesson(lessonId: String, onDone: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                // Derse ait vocab ve exercises'i de sil
+                val db = firestore
+                listOf("kf_vocab", "kf_exercises").forEach { col ->
+                    val snap = db.collection(col).whereEqualTo("lessonId", lessonId).get().await()
+                    snap.documents.forEach { it.reference.delete().await() }
+                }
+                db.collection("kf_lessons").document(lessonId).delete().await()
+                _lessons.value = _lessons.value.filter { it.id != lessonId }
+                onDone()
+            } catch (e: Exception) { onError(e.message ?: "Silinemedi") }
+        }
+    }
+
+    // ── Admin: ders güncelle ──────────────────────────────────────────────────
+    fun updateLesson(
+        lessonId: String,
+        nameTr: String, nameKu: String, emoji: String,
+        xp: Int, order: Int, unitId: String,
+        onDone: () -> Unit, onError: (String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("kf_lessons").document(lessonId).update(mapOf(
+                    "nameTr" to nameTr, "nameKu" to nameKu, "emoji" to emoji,
+                    "xp" to xp, "order" to order, "unitId" to unitId,
+                )).await()
+                _lessons.value = _lessons.value.map {
+                    if (it.id == lessonId) it.copy(nameTr = nameTr, nameKu = nameKu,
+                        emoji = emoji, xp = xp, order = order, unitId = unitId)
+                    else it
+                }
+                onDone()
+            } catch (e: Exception) { onError(e.message ?: "Güncellenemedi") }
+        }
+    }
     fun loadAdminLessons() {
         viewModelScope.launch {
             try {
