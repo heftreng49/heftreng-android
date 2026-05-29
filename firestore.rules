@@ -61,6 +61,14 @@ service cloud.firestore {
       return getRole() in ['admin', 'moderator', 'editor', 'kutuphaneci'];
     }
 
+    // ── İzin tabanlı kontrol ───────────────────────────────────
+    // admins/{uid}.permissions dizisinde belirtilen izni kontrol eder
+    function hasPermission(perm) {
+      return isAuth()
+          && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+          && perm in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('permissions', []);
+    }
+
     // ── Gizli hesap yardımcıları ──────────────────────────────
     function isPrivateUser(uid) {
       return exists(/databases/$(database)/documents/users/$(uid))
@@ -117,7 +125,7 @@ service cloud.firestore {
 
     match /feed/{postId} {
       allow get:  if postVisible(resource.data);
-      allow list: if true; // Anonim kullanıcılar public feed'i listeleyebilir
+      allow list: if isAuth(); // Anonim bot kazımasını önle — giriş zorunlu
 
       allow create: if isAuth() && notBanned()
           && request.resource.data.uid == request.auth.uid
@@ -424,7 +432,7 @@ service cloud.firestore {
     // Kütüphaneci yazar ve kitap bilgilerini yönetebilir
     match /authors/{authorId} {
       allow read: if true;
-      allow create: if isAuth() && notBanned();
+      allow create: if isLibrarian() || hasPermission("library");
       allow update: if isLibrarian()
           || (isAuth() && onlyChanging(['bookCount','quoteCount','reviewCount','followerCount']));
       allow delete: if isLibrarian() || hasPermission("library");
