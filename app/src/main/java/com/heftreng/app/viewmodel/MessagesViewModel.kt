@@ -79,47 +79,75 @@ class MessagesViewModel @Inject constructor(
         }
     }
 
+    // In-memory user cache — aynı kullanıcıya tekrar tekrar Firestore'a gitme
+    private val userCache = mutableMapOf<String, User>()
+
     // ── Konuşma listesi — realtime ────────────────────────────
     fun listenConversations() {
         if (uid.isEmpty()) return
-        _loading.value = true
+        _loading.value = _conversations.value.isEmpty()
         convListener?.remove()
         convListener = firestore.collection("conversations")
             .whereArrayContains("participants", uid)
-            // Not: Eğer Firestore'da "members" kullanıyorsan yukarıdaki satırı değiştir
             .orderBy("updated_at", Query.Direction.DESCENDING)
             .limit(50)
             .addSnapshotListener { snap, _ ->
                 if (snap == null) { _loading.value = false; return@addSnapshotListener }
                 viewModelScope.launch {
-                    val list = snap.documents.mapNotNull { doc ->
+                    // ── 1. Konuşmaları parse et — henüz user verisi olmadan ──
+                    data class RawConv(
+                        val id: String, val parts: List<String>, val otherUid: String,
+                        val lastMsg: String, val updatedAt: String, val unread: Int,
+                    )
+                    val rawList = snap.documents.mapNotNull { doc ->
                         val d = doc.data ?: return@mapNotNull null
                         val parts = ((d["participants"] as? List<*>)
                             ?: (d["participantIds"] as? List<*>)
                             ?: (d["members"] as? List<*>))
                             ?.filterIsInstance<String>() ?: emptyList()
                         val otherUid = parts.firstOrNull { it != uid } ?: return@mapNotNull null
-
-                        val other = try {
-                            val ud = firestore.collection("users").document(otherUid).get().await().data
-                            if (ud != null) User(
-                                uid         = otherUid,
-                                displayName = ud["displayName"] as? String ?: ud["name"] as? String ?: "",
-                                photoURL    = ud["photoURL"] as? String ?: "",
-                                email       = ud["email"]    as? String ?: "",
-                            ) else null
-                        } catch (_: Exception) { null }
-
-                        Conversation(
-                            id             = doc.id,
-                            participantIds = parts,
-                            lastMessage    = d["last_msg"]   as? String ?: "",
-                            lastMessageAt  = (d["updated_at"] as? Timestamp)?.toDate()?.time?.toString() ?: "",
-                            otherUser      = other,
-                            unreadCount    = (d["unread_$uid"] as? Long)?.toInt() ?: 0,
+                        RawConv(
+                            id        = doc.id,
+                            parts     = parts,
+                            otherUid  = otherUid,
+                            lastMsg   = d["last_msg"]   as? String ?: "",
+                            updatedAt = (d["updated_at"] as? Timestamp)?.toDate()?.time?.toString() ?: "",
+                            unread    = (d["unread_$uid"] as? Long)?.toInt() ?: 0,
                         )
                     }
-                    _conversations.value = list
+
+                    // ── 2. Cache'te olmayan uid'leri tek batch ile çek ────────
+                    val missingUids = rawList.map { it.otherUid }
+                        .filter { it !in userCache }.distinct()
+
+                    missingUids.chunked(10).forEach { chunk ->
+                        try {
+                            val usersSnap = firestore.collection("users")
+                                .whereIn(FieldPath.documentId(), chunk)
+                                .get().await()
+                            usersSnap.documents.forEach { doc ->
+                                val ud = doc.data ?: return@forEach
+                                userCache[doc.id] = User(
+                                    uid         = doc.id,
+                                    displayName = ud["displayName"] as? String ?: ud["name"] as? String ?: "",
+                                    photoURL    = ud["photoURL"]    as? String ?: "",
+                                    email       = ud["email"]       as? String ?: "",
+                                )
+                            }
+                        } catch (_: Exception) {}
+                    }
+
+                    // ── 3. Cache'ten birleştir — anında UI'a bas ─────────────
+                    _conversations.value = rawList.map { raw ->
+                        Conversation(
+                            id             = raw.id,
+                            participantIds = raw.parts,
+                            lastMessage    = raw.lastMsg,
+                            lastMessageAt  = raw.updatedAt,
+                            otherUser      = userCache[raw.otherUid],
+                            unreadCount    = raw.unread,
+                        )
+                    }
                     _loading.value = false
                 }
             }
@@ -435,13 +463,19 @@ class MessagesViewModel @Inject constructor(
                                 ?.filterIsInstance<String>() ?: emptyList()
                             parts.firstOrNull { it != uid }
                         } ?: return@launch
+
+                // Cache'te varsa anında göster, ağa gitme
+                userCache[otherUid]?.let { _otherUser.value = it; return@launch }
+
                 val ud = firestore.collection("users").document(otherUid).get().await().data ?: return@launch
-                _otherUser.value = User(
+                val user = User(
                     uid         = otherUid,
                     displayName = ud["displayName"] as? String ?: ud["name"] as? String ?: "",
                     photoURL    = ud["photoURL"]    as? String ?: "",
                     email       = ud["email"]       as? String ?: "",
                 )
+                userCache[otherUid] = user
+                _otherUser.value = user
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
