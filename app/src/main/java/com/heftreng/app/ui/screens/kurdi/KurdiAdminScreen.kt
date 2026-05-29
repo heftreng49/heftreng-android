@@ -797,6 +797,7 @@ fun AdminField(
 // ═══════════════════════════════════════════════════════════════════════════════
 // ADMİN AI DERS SEKMESİ — Yapay zeka ile egzersiz üret + Firestore'a kaydet
 // ═══════════════════════════════════════════════════════════════════════════════
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AdminAiLessonTab(
     vm     : KurdiViewModel,
