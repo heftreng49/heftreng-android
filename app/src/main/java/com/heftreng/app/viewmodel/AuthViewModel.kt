@@ -207,30 +207,23 @@ class AuthViewModel @Inject constructor(
                     auth.signOut()
                     return@launch
                 }
-                // Kullanıcı adı boşsa Firestore'dan al ve Auth'a yaz
-                if (user.displayName.isNullOrBlank()) {
-                    try {
-                        val doc  = firestore.collection("users").document(user.uid).get().await()
-                        val name = doc.getString("displayName")?.takeIf { it.isNotBlank() }
-                                   ?: doc.getString("name")?.takeIf { it.isNotBlank() }
-                                   ?: email.substringBefore("@")
-                        val profileUpdates = com.google.firebase.auth.userProfileChangeRequest {
-                            displayName = name
-                        }
-                        user.updateProfile(profileUpdates).await()
-                        // Firestore'da da name/displayName alanlarını güncelle
-                        firestore.collection("users").document(user.uid).update(
-                            mapOf("displayName" to name, "name" to name)
-                        ).await()
-                    } catch (e: Exception) { e.printStackTrace() }
-                }
+                // Kullanıcı adı boşsa aşağıdaki tek Firestore çağrısında hallederiz
                 syncFcmToken(user.uid)
                 acceptTerms(method = "email_login")
-                // Hesabı kaydet
-                val nameForSave = try {
-                    firestore.collection("users").document(user.uid).get().await()
-                        .getString("displayName")?.ifBlank { null }
-                } catch (_: Exception) { null } ?: user.displayName ?: ""
+                // ── Tek Firestore çağrısı: displayName hem Auth'a hem saveAccount'a ──
+                val userDoc  = try { firestore.collection("users").document(user.uid).get().await() } catch (_: Exception) { null }
+                val nameFromDb = userDoc?.getString("displayName")?.takeIf { it.isNotBlank() }
+                              ?: userDoc?.getString("name")?.takeIf { it.isNotBlank() }
+
+                if (user.displayName.isNullOrBlank() && nameFromDb != null) {
+                    try {
+                        val profileUpdates = com.google.firebase.auth.userProfileChangeRequest { displayName = nameFromDb }
+                        user.updateProfile(profileUpdates).await()
+                        firestore.collection("users").document(user.uid)
+                            .update(mapOf("displayName" to nameFromDb, "name" to nameFromDb))
+                    } catch (_: Exception) {}
+                }
+                val nameForSave = nameFromDb ?: user.displayName ?: email.substringBefore("@")
                 saveAccount(
                     email       = user.email ?: "",
                     displayName = nameForSave,

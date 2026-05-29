@@ -64,6 +64,8 @@ class SettingsViewModel @Inject constructor(
 
     // ── Engellenen kullanıcıları yükle ──────────────────────────────────────
     fun loadBlockedUsers() {
+        // Zaten yüklendiyse tekrar Firestore'a gitme
+        if (_blockedUsers.value.isNotEmpty()) return
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             _blockedLoading.value = true

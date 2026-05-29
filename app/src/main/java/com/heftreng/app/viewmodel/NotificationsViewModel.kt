@@ -120,14 +120,19 @@ class NotificationsViewModel @Inject constructor(
     }
 
     fun markAllRead() {
+        val unread = _notifications.value.filter { !it.read }
+        if (unread.isEmpty()) return
         _notifications.value = _notifications.value.map { it.copy(read = true) }
         _unreadCount.value = 0
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             try {
                 val col = firestore.collection("userNotifs").document(uid).collection("msgs")
-                _notifications.value.forEach { n ->
-                    col.document(n.id).update("read", true)
+                // Batch ile tek network round-trip'te hepsini güncelle
+                unread.chunked(500).forEach { chunk ->
+                    val batch = firestore.batch()
+                    chunk.forEach { n -> batch.update(col.document(n.id), "read", true) }
+                    batch.commit().await()
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
