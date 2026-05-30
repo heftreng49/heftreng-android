@@ -484,11 +484,15 @@ class KurdiViewModel @Inject constructor(
                             put("content",
                                 "Sen bir Kürtçe (Kurmancî) öğretmenisin. Tam olarak şu formatta JSON döndür, başka hiçbir şey yazma:\n" +
                                 "{\"topic\":\"...\",\"exercises\":[\n" +
-                                "  // 5 adet fill: {\"type\":\"fill\",\"ku\":\"Ez ___ im.\",\"tr\":\"Ben ___ ım.\",\"answer\":\"xwendekar\"}\n" +
-                                "  // 5 adet build: {\"type\":\"build\",\"tr\":\"Ben eve gidiyorum.\",\"answer\":\"Ez diçim malê.\",\"words\":[\"Ez\",\"diçim\",\"malê\",\"rojê\"]}\n" +
-                                "  // 5 adet mcq: {\"type\":\"mcq\",\"ku\":\"«Silav» ne demek?\",\"tr\":\"\",\"options\":[\"Merhaba\",\"Günaydın\",\"İyi\",\"Hoşça kal\"],\"answer\":\"Merhaba\"}\n" +
-                                "  // 1 adet match: {\"type\":\"match\",\"pairs\":[[\"Silav\",\"Merhaba\"],[\"Spas\",\"Teşekkür\"],[\"Belê\",\"Evet\"],[\"Na\",\"Hayır\"]]}\n" +
-                                "]}"
+                                "  {\"type\":\"fill\",\"ku\":\"Ez ___ im.\",\"tr\":\"Ben ___ ım.\",\"answer\":\"xwendekar\",\"options\":[\"xwendekar\",\"mamoste\",\"doktor\",\"kar\"]},\n" +
+                                "  {\"type\":\"build\",\"tr\":\"Ben okula gidiyorum.\",\"answer\":\"Ez diçim dibistanê.\",\"words\":[\"Ez\",\"diçim\",\"dibistanê\",\"malê\",\"têm\"]},\n" +
+                                "  {\"type\":\"mcq\",\"ku\":\"Silav ne demek?\",\"options\":[\"Merhaba\",\"Günaydın\",\"İyi\",\"Hoşça kal\"],\"answer\":\"Merhaba\"},\n" +
+                                "  {\"type\":\"match\",\"pairs\":[[\"Silav\",\"Merhaba\"],[\"Spas\",\"Teşekkür\"],[\"Belê\",\"Evet\"],[\"Na\",\"Hayır\"],[\"Baş e\",\"Tamam\"]]}\n" +
+                                "]}\n" +
+                                "KURALLAR: 1) fill.options = tam 4 eleman (1 doğru + 3 yanlış, karışık sırada). " +
+                                "2) build.words = cümledeki tüm kelimeler + 2 bozucu kelime (anlamsız ek kelimeler). " +
+                                "3) match = tam 5 çift. " +
+                                "4) Sadece JSON döndür, yorum veya açıklama ekleme."
                             )
                         })
                         put(JSONObject().apply {

@@ -1714,31 +1714,107 @@ private fun AiExerciseSectionHeader(title: String, count: Int) {
 
 @Composable
 private fun AiFillCard(ex: com.heftreng.app.data.model.AiExercise) {
-    var revealed by remember { mutableStateOf(false) }
+    // options yoksa fallback: sadece cevabı göster
+    val hasOptions = ex.options.size >= 2
+    var selected   by remember { mutableStateOf<String?>(null) }
+    val isCorrect  = selected == ex.answer
+    val isWrong    = selected != null && !isCorrect
+    val shuffled   = remember(ex) { ex.options.shuffled() }
+
     Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
-            // ___ → vurgulanmış boşluk
+            // Kürtçe cümle — ___ yerine seçilen kelimeyi göster
             val parts = ex.ku.split("___")
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 parts.forEachIndexed { i, part ->
-                    Text(part, color = OnBackground, fontSize = 14.sp)
+                    Text(part, color = OnBackground, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     if (i < parts.size - 1) {
-                        Surface(shape = RoundedCornerShape(4.dp),
-                            color = if (revealed) Primary.copy(alpha = 0.2f) else SurfaceVar,
-                            modifier = Modifier.padding(horizontal = 2.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = when {
+                                selected == null -> SurfaceVar
+                                isCorrect        -> Color(0xFF22C55E).copy(alpha = 0.2f)
+                                else             -> Color(0xFFEF4444).copy(alpha = 0.2f)
+                            },
+                            modifier = Modifier.padding(horizontal = 2.dp),
+                        ) {
                             Text(
-                                if (revealed) ex.answer else "______",
-                                color = if (revealed) Primary else Muted,
-                                fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                text   = selected ?: "___",
+                                color  = when {
+                                    selected == null -> Muted
+                                    isCorrect        -> Color(0xFF22C55E)
+                                    else             -> Color(0xFFEF4444)
+                                },
+                                fontWeight = FontWeight.Bold,
+                                fontSize   = 14.sp,
+                                modifier   = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                             )
                         }
                     }
                 }
             }
-            if (ex.tr.isNotBlank()) Text(ex.tr, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-            TextButton(onClick = { revealed = !revealed }, contentPadding = PaddingValues(0.dp)) {
-                Text(if (revealed) "Gizle" else "Cevabı Göster", color = Primary, fontSize = 11.sp)
+            if (ex.tr.isNotBlank())
+                Text(ex.tr, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
+
+            Spacer(Modifier.height(10.dp))
+
+            if (hasOptions) {
+                // Seçenek chips
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    shuffled.forEach { opt ->
+                        val isPicked = opt == selected
+                        val isRight  = isPicked && isCorrect
+                        val isBad    = isPicked && isWrong
+                        Surface(
+                            shape    = RoundedCornerShape(20.dp),
+                            color    = when {
+                                isRight  -> Color(0xFF22C55E).copy(alpha = 0.18f)
+                                isBad    -> Color(0xFFEF4444).copy(alpha = 0.18f)
+                                isPicked -> Primary.copy(alpha = 0.15f)
+                                else     -> SurfaceVar
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable(enabled = selected == null || isWrong) { selected = opt },
+                        ) {
+                            Text(
+                                opt,
+                                color = when {
+                                    isRight  -> Color(0xFF22C55E)
+                                    isBad    -> Color(0xFFEF4444)
+                                    isPicked -> Primary
+                                    else     -> OnBackground
+                                },
+                                fontSize   = 13.sp,
+                                fontWeight = if (isPicked) FontWeight.Bold else FontWeight.Normal,
+                                textAlign  = TextAlign.Center,
+                                modifier   = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
+                }
+                if (isWrong) {
+                    Text("❌ Tekrar dene", color = Color(0xFFEF4444), fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 4.dp))
+                } else if (isCorrect) {
+                    Text("✅ Doğru!", color = Color(0xFF22C55E), fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 4.dp))
+                }
+                if (isCorrect) {
+                    TextButton(onClick = { selected = null }, contentPadding = PaddingValues(0.dp)) {
+                        Text("Sıfırla", color = Muted, fontSize = 11.sp)
+                    }
+                }
+            } else {
+                // options yoksa fallback "Cevabı Göster"
+                var revealed by remember { mutableStateOf(false) }
+                if (revealed) Text("✓ ${ex.answer}", color = Primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                TextButton(onClick = { revealed = !revealed }, contentPadding = PaddingValues(0.dp)) {
+                    Text(if (revealed) "Gizle" else "Cevabı Göster", color = Primary, fontSize = 11.sp)
+                }
             }
         }
     }
@@ -1746,35 +1822,106 @@ private fun AiFillCard(ex: com.heftreng.app.data.model.AiExercise) {
 
 @Composable
 private fun AiBuildCard(ex: com.heftreng.app.data.model.AiExercise) {
-    var revealed by remember { mutableStateOf(false) }
-    val shuffled = remember(ex) { ex.words.shuffled() }
+    val shuffled    = remember(ex) { ex.words.shuffled() }
+    val built       = remember { mutableStateListOf<String>() }
+    val available   = remember(shuffled) { mutableStateListOf<String>().also { it.addAll(shuffled) } }
+    var checked     by remember { mutableStateOf(false) }
+    val answerWords = remember(ex) { ex.answer.split(" ") }
+    val isCorrect   = remember(built.toList()) {
+        built.toList() == answerWords
+    }
+
     Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
+            // Türkçe soru
             Text(ex.tr, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
-            Spacer(Modifier.height(8.dp))
-            // Kelime kutucukları — satır doluşunca alta geçer
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                shuffled.chunked(4).forEach { rowWords ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        rowWords.forEach { word ->
-                            Surface(shape = RoundedCornerShape(8.dp), color = SurfaceVar) {
-                                Text(word, color = OnBackground, fontSize = 13.sp,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+            Spacer(Modifier.height(10.dp))
+
+            // Kurulan cümle alanı
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = when {
+                    checked && isCorrect -> Color(0xFF22C55E).copy(alpha = 0.12f)
+                    checked && !isCorrect -> Color(0xFFEF4444).copy(alpha = 0.12f)
+                    else -> Background
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Box(Modifier.defaultMinSize(minHeight = 44.dp).padding(8.dp)) {
+                    if (built.isEmpty()) {
+                        Text("Kelimelere dokun…", color = Muted, fontSize = 13.sp)
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                            built.forEach { word ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (checked && isCorrect) Color(0xFF22C55E).copy(alpha = 0.2f) else Primary.copy(alpha = 0.15f),
+                                    modifier = Modifier.clickable(enabled = !checked) {
+                                        built.remove(word)
+                                        available.add(word)
+                                    },
+                                ) {
+                                    Text(word,
+                                        color = if (checked && isCorrect) Color(0xFF22C55E) else Primary,
+                                        fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+                                }
                             }
                         }
                     }
                 }
             }
-            if (revealed) {
-                Spacer(Modifier.height(8.dp))
-                Surface(shape = RoundedCornerShape(8.dp), color = Primary.copy(alpha = 0.12f),
-                    modifier = Modifier.fillMaxWidth()) {
-                    Text("✓ ${ex.answer}", color = Primary, fontWeight = FontWeight.Bold, fontSize = 13.sp,
-                        modifier = Modifier.padding(10.dp))
+
+            Spacer(Modifier.height(8.dp))
+
+            // Mevcut kelimeler
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                available.forEach { word ->
+                    Surface(
+                        shape    = RoundedCornerShape(8.dp),
+                        color    = SurfaceVar,
+                        modifier = Modifier.clickable(enabled = !checked) {
+                            available.remove(word)
+                            built.add(word)
+                        },
+                    ) {
+                        Text(word, color = OnBackground, fontSize = 13.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
+                    }
                 }
             }
-            TextButton(onClick = { revealed = !revealed }, contentPadding = PaddingValues(0.dp)) {
-                Text(if (revealed) "Gizle" else "Cevabı Göster", color = Primary, fontSize = 11.sp)
+
+            Spacer(Modifier.height(10.dp))
+
+            // Kontrol / Sıfırla
+            if (!checked) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick  = { checked = true },
+                        enabled  = built.isNotEmpty(),
+                        colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                        shape    = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    ) { Text("Kontrol Et", fontSize = 12.sp) }
+                    TextButton(onClick = {
+                        available.clear(); available.addAll(shuffled); built.clear()
+                    }) { Text("Sıfırla", color = Muted, fontSize = 12.sp) }
+                }
+            } else {
+                if (isCorrect) {
+                    Text("✅ Doğru! ${ex.answer}", color = Color(0xFF22C55E),
+                        fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                } else {
+                    Text("❌ Doğru cevap: ${ex.answer}", color = Color(0xFFEF4444), fontSize = 13.sp)
+                }
+                TextButton(onClick = {
+                    available.clear(); available.addAll(shuffled); built.clear(); checked = false
+                }, contentPadding = PaddingValues(0.dp)) {
+                    Text("Tekrar Dene", color = Muted, fontSize = 11.sp)
+                }
             }
         }
     }
@@ -1832,7 +1979,9 @@ private fun AiMcqCard(ex: com.heftreng.app.data.model.AiExercise) {
 private fun AiMatchCard(ex: com.heftreng.app.data.model.AiExercise) {
     val pairs = ex.pairs
     if (pairs.isEmpty()) return
+    val scope       = rememberCoroutineScope()
     var selectedKu  by remember { mutableStateOf<String?>(null) }
+    var wrongTr     by remember { mutableStateOf<String?>(null) } // kırmızı flash için
     val matched     = remember { mutableStateMapOf<String, String>() }
     val kuWords     = remember(pairs) { pairs.map { it.first }.shuffled() }
     val trWords     = remember(pairs) { pairs.map { it.second }.shuffled() }
@@ -1843,51 +1992,76 @@ private fun AiMatchCard(ex: com.heftreng.app.data.model.AiExercise) {
             Text("Eşleştir", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 13.sp)
             Spacer(Modifier.height(10.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                // Sol: Kürtçe kelimeler
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                // Sol: Kürtçe
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.weight(1f)) {
                     kuWords.forEach { ku ->
-                        val isMatched   = matched.containsKey(ku)
-                        val isSelected  = selectedKu == ku
+                        val isMatched  = matched.containsKey(ku)
+                        val isSelected = selectedKu == ku
                         Surface(
-                            shape    = RoundedCornerShape(8.dp),
-                            color    = when {
+                            shape = RoundedCornerShape(8.dp),
+                            color = when {
                                 isMatched  -> Color(0xFF22C55E).copy(alpha = 0.18f)
                                 isSelected -> Primary.copy(alpha = 0.25f)
                                 else       -> SurfaceVar
                             },
                             modifier = Modifier.fillMaxWidth()
-                                .clickable(enabled = !isMatched) { selectedKu = if (isSelected) null else ku },
+                                .clickable(enabled = !isMatched) {
+                                    selectedKu = if (isSelected) null else ku
+                                },
                         ) {
-                            Text(ku, color = if (isMatched) Color(0xFF22C55E) else if (isSelected) Primary else OnBackground,
+                            Text(ku,
+                                color = when {
+                                    isMatched  -> Color(0xFF22C55E)
+                                    isSelected -> Primary
+                                    else       -> OnBackground
+                                },
                                 fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                                textAlign = TextAlign.Center)
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp).fillMaxWidth())
                         }
                     }
                 }
                 Spacer(Modifier.width(8.dp))
-                // Sağ: Türkçe kelimeler
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                // Sağ: Türkçe
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.weight(1f)) {
                     trWords.forEach { tr ->
-                        val matchedKu   = matched.entries.find { it.value == tr }?.key
-                        val isMatched   = matchedKu != null
+                        val isMatched = matched.values.contains(tr)
+                        val isWrong   = wrongTr == tr
                         Surface(
-                            shape    = RoundedCornerShape(8.dp),
-                            color    = if (isMatched) Color(0xFF22C55E).copy(alpha = 0.18f) else SurfaceVar,
-                            modifier = Modifier.fillMaxWidth().clickable(enabled = !isMatched && selectedKu != null) {
-                                val ku = selectedKu
-                                if (ku != null) {
-                                    if (correctMap[ku] == tr) matched[ku] = tr
-                                    selectedKu = null
-                                }
+                            shape = RoundedCornerShape(8.dp),
+                            color = when {
+                                isMatched -> Color(0xFF22C55E).copy(alpha = 0.18f)
+                                isWrong   -> Color(0xFFEF4444).copy(alpha = 0.18f)
+                                else      -> SurfaceVar
                             },
+                            modifier = Modifier.fillMaxWidth()
+                                .clickable(enabled = !isMatched && selectedKu != null) {
+                                    val ku = selectedKu ?: return@clickable
+                                    if (correctMap[ku] == tr) {
+                                        matched[ku] = tr
+                                        selectedKu = null
+                                    } else {
+                                        // Yanlış — kırmızı flash 600ms
+                                        wrongTr = tr
+                                        scope.launch {
+                                            kotlinx.coroutines.delay(600)
+                                            wrongTr = null
+                                            selectedKu = null
+                                        }
+                                    }
+                                },
                         ) {
-                            Text(tr, color = if (isMatched) Color(0xFF22C55E) else OnBackground,
+                            Text(tr,
+                                color = when {
+                                    isMatched -> Color(0xFF22C55E)
+                                    isWrong   -> Color(0xFFEF4444)
+                                    else      -> OnBackground
+                                },
                                 fontSize = 13.sp,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                                textAlign = TextAlign.Center)
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp).fillMaxWidth())
                         }
                     }
                 }
