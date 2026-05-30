@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.launch
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.*
@@ -950,6 +951,50 @@ fun LessonScreen(
             }
         }
     }
+
+    // ── Hata Bildir Dialog ────────────────────────────────────────────────────
+    if (showReportDialog) {
+        var reportText by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showReportDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Flag, null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                    Text("Hata Bildir", color = OnBackground, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("«${lesson.nameTr}» dersinde bir hata mı buldun?", color = Muted, fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = reportText, onValueChange = { reportText = it },
+                        placeholder = { Text("Hatayı açıkla…", color = Muted, fontSize = 13.sp) },
+                        modifier = Modifier.fillMaxWidth().height(100.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Primary, unfocusedBorderColor = SurfaceVar,
+                            focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
+                        ),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (reportText.isNotBlank()) {
+                            vm.reportLessonError(lesson.id, lesson.nameTr, reportText) {
+                                reportSent = true; showReportDialog = false
+                            }
+                        }
+                    },
+                    enabled = reportText.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape  = RoundedCornerShape(10.dp),
+                ) { Text("Gönder", color = Color.White, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { showReportDialog = false }) { Text("İptal", color = Muted) } },
+            containerColor = HeftSurface,
+        )
+    }
 }
 
 // ── Eşleştirme egzersizi (match) ─────────────────────────────────────────────
@@ -1242,52 +1287,6 @@ private fun BuildExercise(
                 Text(Strings.checkAnswer(language).uppercase(), color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, letterSpacing = 0.5.sp)
             }
         }
-    }
-
-    // ── Hata Bildir Dialog ────────────────────────────────────────────────────
-    if (showReportDialog) {
-        var reportText by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showReportDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Flag, null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
-                    Text("Hata Bildir", color = OnBackground, fontWeight = FontWeight.Bold)
-                }
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("«${lesson.nameTr}» dersinde bir hata mı buldun?", color = Muted, fontSize = 13.sp)
-                    OutlinedTextField(
-                        value         = reportText,
-                        onValueChange = { reportText = it },
-                        placeholder   = { Text("Hatayı açıkla…", color = Muted, fontSize = 13.sp) },
-                        modifier      = Modifier.fillMaxWidth().height(100.dp),
-                        colors        = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor   = Primary, unfocusedBorderColor = SurfaceVar,
-                            focusedTextColor     = OnBackground, unfocusedTextColor = OnBackground,
-                        ),
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (reportText.isNotBlank()) {
-                            vm.reportLessonError(lesson.id, lesson.nameTr, reportText) {
-                                reportSent = true
-                                showReportDialog = false
-                            }
-                        }
-                    },
-                    enabled = reportText.isNotBlank(),
-                    colors  = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
-                    shape   = RoundedCornerShape(10.dp),
-                ) { Text("Gönder", color = Color.White, fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = { TextButton(onClick = { showReportDialog = false }) { Text("İptal", color = Muted) } },
-            containerColor = HeftSurface,
-        )
     }
 }
 
