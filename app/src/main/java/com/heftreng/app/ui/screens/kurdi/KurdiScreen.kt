@@ -41,7 +41,7 @@ import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.*
 
-// ── Ana ekran ────────────────────────────────────────────────────────────────
+// -- Ana ekran ----------------------------------------------------------------
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KurdiScreen(
@@ -75,7 +75,7 @@ fun KurdiScreen(
     var pendingRewardType by remember { mutableStateOf<AdsViewModel.RewardType?>(null) }
     var pendingUnlockId   by remember { mutableStateOf("") }
 
-    // ── Senaryo 3 — Streak Kurtarma Dialog ───────────────────────────────────
+    // -- Senaryo 3 — Streak Kurtarma Dialog -----------------------------------
     if (streakBroke && canWatchAd) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { vm.dismissStreakBroke() },
@@ -149,7 +149,7 @@ fun KurdiScreen(
     }
 
     // Aktif ders varsa ders ekranını göster
-    // ── Senaryo 1 — Çift XP BottomSheet (ders tamamlandıktan sonra) ──────────
+    // -- Senaryo 1 — Çift XP BottomSheet (ders tamamlandıktan sonra) ----------
     var showDoubleXpSheet by remember { mutableStateOf(false) }
     LaunchedEffect(lastLessonXp) {
         if (lastLessonXp > 0) showDoubleXpSheet = true
@@ -315,7 +315,7 @@ fun KurdiScreen(
     }
 }
 
-// ── XP / Streak kartı ────────────────────────────────────────────────────────
+// -- XP / Streak kartı --------------------------------------------------------
 @Composable
 private fun XpStreakCard(xp: Int, streak: Int, level: Int, language: String, remainingAds: Int = 3) {
     Surface(
@@ -384,7 +384,7 @@ private fun XpStreakCard(xp: Int, streak: Int, level: Int, language: String, rem
     }
 }
 
-// ── Ünite yol haritası sekmesi ───────────────────────────────────────────────
+// -- Ünite yol haritası sekmesi -----------------------------------------------
 @Composable
 private fun UnitsTab(
     units           : List<KfUnit>,
@@ -456,7 +456,7 @@ private fun UnitsTab(
     }
 }
 
-// ── Günlük hedef kartı (site: .kp-daily-nudge) ──────────────────────────────
+// -- Günlük hedef kartı (site: .kp-daily-nudge) ------------------------------
 @Composable
 private fun DailyNudgeCard(
     language : String,
@@ -512,7 +512,7 @@ private fun DailyNudgeCard(
     }
 }
 
-// ── Ünite başlık kartı ───────────────────────────────────────────────────────
+// -- Ünite başlık kartı -------------------------------------------------------
 @Composable
 private fun UnitHeader(
     unit  : KfUnit,
@@ -576,7 +576,7 @@ private fun UnitHeader(
     }
 }
 
-// ── Ders yolu (site: .kp-lesson-path — daireler yol şeklinde) ────────────────
+// -- Ders yolu (site: .kp-lesson-path — daireler yol şeklinde) ----------------
 @Composable
 private fun LessonPath(
     lessons         : List<KfLesson>,
@@ -730,7 +730,7 @@ private fun LessonPathNode(
     }
 }
 
-// ── Ders yapma ekranı ─────────────────────────────────────────────────────────
+// -- Ders yapma ekranı ---------------------------------------------------------
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LessonScreen(
@@ -745,7 +745,7 @@ fun LessonScreen(
     val exercises = activeLesson.exercises
     val totalSteps = vocab.size + exercises.size
 
-    // ── TEK state makinesi — step değişince her şey sıfırlanır ──────────────
+    // -- TEK state makinesi — step değişince her şey sıfırlanır --------------
     var step         by remember { mutableIntStateOf(0) }
     var correctCount by remember { mutableIntStateOf(0) }
 
@@ -756,7 +756,7 @@ fun LessonScreen(
     val currentEx = if (vocabDone && exStep >= 0 && !exDone) exercises.getOrNull(exStep) else null
     val allDone   = vocabDone && exDone
 
-    // ── Egzersiz başına sıfırlanan state — key(step) ile yönetilir ──────────
+    // -- Egzersiz başına sıfırlanan state — key(step) ile yönetilir ----------
     // Bu state'ler BuildExercise/MatchExercise içinde key(step) sayesinde
     // step her değiştiğinde otomatik sıfırlanır
     var showResult  by remember(step) { mutableStateOf(false) }
@@ -904,7 +904,7 @@ fun LessonScreen(
         },
     ) { padding ->
         when {
-            // ── Tamamlandı ────────────────────────────────────────────────────
+            // -- Tamamlandı ----------------------------------------------------
             allDone -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -928,7 +928,7 @@ fun LessonScreen(
                 }
             }
 
-            // ── Kelime kartı ──────────────────────────────────────────────────
+            // -- Kelime kartı --------------------------------------------------
             !vocabDone -> {
                 val voc = vocab[step]
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
@@ -968,7 +968,7 @@ fun LessonScreen(
                 }
             }
 
-            // ── Egzersiz ──────────────────────────────────────────────────────
+            // -- Egzersiz ------------------------------------------------------
             currentEx != null -> {
                 val ex = currentEx
                 // key(step) kritik — step değişince tüm egzersiz composable'ı sıfırdan oluşturulur
@@ -1001,7 +1001,7 @@ fun LessonScreen(
                         }
 
                         when (ex.type) {
-                            // ── Çoktan seçmeli ────────────────────────────────
+                            // -- Çoktan seçmeli --------------------------------
                             "mcq" -> {
                                 // remember LazyListScope dışında item{} içinde kullanılmalı
                                 item {
@@ -1057,7 +1057,7 @@ fun LessonScreen(
                                 }
                             }
 
-                            // ── Boşluk doldur ─────────────────────────────────
+                            // -- Boşluk doldur ---------------------------------
                             "fill" -> item {
                                 val isCorrectFill = fillAnswer.trim().equals(ex.answer.trim(), ignoreCase = true)
                                 OutlinedTextField(
@@ -1107,7 +1107,7 @@ fun LessonScreen(
                                 }
                             }
 
-                            // ── Eşleştir ──────────────────────────────────────
+                            // -- Eşleştir --------------------------------------
                             "match" -> item {
                                 MatchExercise(
                                     pairs     = ex.pairs,
@@ -1116,7 +1116,7 @@ fun LessonScreen(
                                 )
                             }
 
-                            // ── Cümle kur ─────────────────────────────────────
+                            // -- Cümle kur -------------------------------------
                             "build" -> item {
                                 BuildExercise(
                                     question  = ex.question,
@@ -1136,7 +1136,7 @@ fun LessonScreen(
         }
     }
 
-    // ── Hata Bildir Dialog ────────────────────────────────────────────────────
+    // -- Hata Bildir Dialog ----------------------------------------------------
     if (showReportDialog) {
         var reportText by remember { mutableStateOf("") }
         AlertDialog(
@@ -1181,7 +1181,7 @@ fun LessonScreen(
     }
 }
 
-// ── Eşleştirme egzersizi (match) ─────────────────────────────────────────────
+// -- Eşleştirme egzersizi (match) ---------------------------------------------
 @Composable
 private fun MatchExercise(
     pairs    : List<Pair<String, String>>,
@@ -1309,7 +1309,7 @@ private fun MatchExercise(
     }
 }
 
-// ── Cümle kurma egzersizi (build) — web temasıyla birebir aynı mantık ──────────
+// -- Cümle kurma egzersizi (build) — web temasıyla birebir aynı mantık ----------
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun BuildExercise(
@@ -1474,7 +1474,7 @@ private fun BuildExercise(
     }
 }
 
-// ── Sözlük sekmesi ───────────────────────────────────────────────────────────
+// -- Sözlük sekmesi -----------------------------------------------------------
 @Composable
 private fun DictionaryTab(language: String, isAdmin: Boolean = false, vm: KurdiViewModel) {
     val entries  by vm.dictEntries.collectAsState()
@@ -1658,7 +1658,7 @@ private fun AddDictEntryDialog(language: String, onDismiss: () -> Unit, onSave: 
     )
 }
 
-// ── Dilbilgisi sekmesi ───────────────────────────────────────────────────────
+// -- Dilbilgisi sekmesi -------------------------------------------------------
 @Composable
 private fun GrammarTab(language: String, isAdmin: Boolean = false, vm: KurdiViewModel) {
     val rules   by vm.grammarRules.collectAsState()
@@ -1823,7 +1823,7 @@ private fun AddGrammarRuleDialog(onDismiss: () -> Unit, onSave: (String, String,
     )
 }
 
-// ── AI Ders sekmesi ──────────────────────────────────────────────────────────
+// -- AI Ders sekmesi ----------------------------------------------------------
 @Composable
 fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
     val aiLesson  by vm.aiLesson.collectAsState()
@@ -1938,7 +1938,7 @@ fun AiLessonTab(language: String = "tr", vm: KurdiViewModel = hiltViewModel()) {
     }
 }
 
-// ── AI Egzersiz Kartları ──────────────────────────────────────────────────────
+// -- AI Egzersiz Kartları ------------------------------------------------------
 @Composable
 private fun AiExerciseSectionHeader(title: String, count: Int) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)) {
@@ -2314,7 +2314,7 @@ private fun AiMatchCard(ex: com.heftreng.app.data.model.AiExercise) {
     }
 }
 
-// ── Yardımcılar ──────────────────────────────────────────────────────────────
+// -- Yardımcılar --------------------------------------------------------------
 private fun parseColor(hex: String): Color {
     return try { Color(android.graphics.Color.parseColor(hex)) }
     catch (e: Exception) { Color(0xFF8B5CF6) }
