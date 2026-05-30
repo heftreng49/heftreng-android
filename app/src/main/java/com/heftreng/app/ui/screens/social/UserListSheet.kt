@@ -32,6 +32,13 @@ import com.heftreng.app.data.model.FollowEntry
 import com.heftreng.app.data.model.LikeEntry
 import com.heftreng.app.ui.theme.*
 
+// ── Sıralama tipi ─────────────────────────────────────────────────────────────
+enum class FollowSort(val label: String) {
+    NEW("Yeni"),
+    OLD("Eski"),
+    MIXED("Karışık"),
+}
+
 // ── Takipçi / Takip bottom sheet ────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +49,16 @@ fun FollowListSheet(
     onDismiss : () -> Unit,
     onProfile : (String) -> Unit,
 ) {
+    var sort by remember { mutableStateOf(FollowSort.NEW) }
+
+    val sortedEntries = remember(entries, sort) {
+        when (sort) {
+            FollowSort.NEW   -> entries.sortedByDescending { it.ts?.seconds ?: 0L }
+            FollowSort.OLD   -> entries.sortedBy { it.ts?.seconds ?: Long.MAX_VALUE }
+            FollowSort.MIXED -> entries.shuffled()
+        }
+    }
+
     ModalBottomSheet(
         onDismissRequest  = onDismiss,
         containerColor    = HeftSurface,
@@ -51,16 +68,47 @@ fun FollowListSheet(
             }
         },
     ) {
+        // Başlık + kapat
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(title, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Column {
+                Text(title, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                if (entries.isNotEmpty())
+                    Text("${entries.size} kişi", color = Muted, fontSize = 12.sp)
+            }
             IconButton(onClick = onDismiss) {
                 Icon(Icons.Default.Close, null, tint = Muted)
             }
         }
+
+        // Sıralama chips
+        if (entries.size > 1) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FollowSort.entries.forEach { s ->
+                    val selected = sort == s
+                    Surface(
+                        shape    = RoundedCornerShape(20.dp),
+                        color    = if (selected) Primary else SurfaceVar,
+                        modifier = Modifier.clickable { sort = s },
+                    ) {
+                        Text(
+                            s.label,
+                            color      = if (selected) Color.White else Muted,
+                            fontSize   = 12.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            modifier   = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        )
+                    }
+                }
+            }
+        }
+
         HorizontalDivider(color = Divider)
 
         when {
@@ -79,10 +127,8 @@ fun FollowListSheet(
                 }
             }
 
-            else -> LazyColumn(
-                contentPadding = PaddingValues(bottom = 32.dp),
-            ) {
-                items(entries, key = { it.uid }) { entry ->
+            else -> LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
+                items(sortedEntries, key = { it.uid }) { entry ->
                     FollowEntryRow(entry = entry, onClick = { onProfile(entry.uid) })
                     HorizontalDivider(color = Divider, thickness = 0.5.dp, modifier = Modifier.padding(start = 64.dp))
                 }
