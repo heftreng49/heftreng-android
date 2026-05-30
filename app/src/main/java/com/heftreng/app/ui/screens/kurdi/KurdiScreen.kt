@@ -2314,10 +2314,8 @@ private fun AiMatchCard(ex: com.heftreng.app.data.model.AiExercise) {
     }
 }
 
-// ── Yardımcılar ───────────────────────────────────────────────────────────────
+// ── Yardımcılar ──────────────────────────────────────────────────────────────
 private fun parseColor(hex: String): Color {
     return try { Color(android.graphics.Color.parseColor(hex)) }
-    catch (_: Exception) { Color(0xFF8B5CF6) }
+    catch (e: Exception) { Color(0xFF8B5CF6) }
 }
-
-private fun Modifier.shadow(elevation: Dp, shape: Shape): Modifier = this

@@ -220,11 +220,10 @@ class LibraryViewModel @Inject constructor(
         val allQuotes = mutableListOf<BookQuote>()
         val seenIds   = mutableSetOf<String>()
 
-        // ── 1. library_books/{id}/quotes collectionGroup
+        // ── 1. collectionGroup("quotes") — orderBy kaldırıldı, index gerekmez
         try {
             val snap = firestore.collectionGroup("quotes")
                 .whereEqualTo("authorId", authorId)
-                .orderBy("ts", Query.Direction.DESCENDING)
                 .limit(50).get().await()
             snap.documents.forEach { doc ->
                 val q = doc.toObject(BookQuote::class.java)?.copy(id = doc.id)
@@ -237,8 +236,27 @@ class LibraryViewModel @Inject constructor(
             android.util.Log.w("LibraryVM", "loadAuthorQuotes collectionGroup: ${e.message}")
         }
 
-        // ── 2. feed fallback — libraryAuthorId eşleşen postları da çek
-        //       (alt koleksiyona yazılamayan eski kayıtlar burada yakalanır)
+        // ── 2. Bu yazara ait her kitabın quotes subcollection'ını da tara
+        //    (collectionGroup index yoksa veya authorId eşleşmiyorsa yakalanır)
+        try {
+            val booksSnap = firestore.collection("library_books")
+                .whereEqualTo("authorId", authorId)
+                .limit(30).get().await()
+            booksSnap.documents.forEach { bookDoc ->
+                val quotesSnap = firestore.collection("library_books")
+                    .document(bookDoc.id).collection("quotes")
+                    .limit(30).get().await()
+                quotesSnap.documents.forEach { doc ->
+                    if (!seenIds.add(doc.id)) return@forEach
+                    val q = doc.toObject(BookQuote::class.java)?.copy(id = doc.id)
+                    if (q != null) allQuotes.add(q)
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("LibraryVM", "loadAuthorQuotes bookByBook: ${e.message}")
+        }
+
+        // ── 3. feed fallback — libraryAuthorId eşleşen postlar
         try {
             val feedSnap = firestore.collection("feed")
                 .whereEqualTo("libraryAuthorId", authorId)
@@ -246,7 +264,6 @@ class LibraryViewModel @Inject constructor(
             feedSnap.documents.forEach { doc ->
                 if (seenIds.contains(doc.id)) return@forEach
                 val d    = doc.data ?: return@forEach
-                // nested quote map veya flat quoteText
                 val quoteObj = d["quote"] as? Map<*, *>
                 val text  = (quoteObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
                     ?: (d["quoteText"] as? String)?.takeIf { it.isNotBlank() }
