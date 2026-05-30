@@ -71,7 +71,8 @@ service cloud.firestore {
 
     // ── Gizli hesap yardımcıları ──────────────────────────────
     function isPrivateUser(uid) {
-      return exists(/databases/$(database)/documents/users/$(uid))
+      return uid != null
+          && exists(/databases/$(database)/documents/users/$(uid))
           && get(/databases/$(database)/documents/users/$(uid)).data.get('private', false) == true;
     }
     function isFollowing(targetUid) {
@@ -79,7 +80,8 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + targetUid));
     }
     function canViewContent(ownerUid) {
-      return isOwner(ownerUid)
+      return ownerUid == null
+          || isOwner(ownerUid)
           || !isPrivateUser(ownerUid)
           || isFollowing(ownerUid)
           || isStaff();
@@ -124,7 +126,7 @@ service cloud.firestore {
     }
 
     match /feed/{postId} {
-      allow get:  if postVisible(resource.data);
+      allow get:  if resource == null || postVisible(resource.data);
       allow list: if true; // Web sitesi giriş yapmadan feed gösterebilir
 
       allow create: if isAuth() && notBanned()
