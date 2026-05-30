@@ -98,6 +98,17 @@ data class GrammarRule(
     val order     : Int    = 0,
 )
 
+data class LessonReport(
+    val id         : String  = "",
+    val lessonId   : String  = "",
+    val lessonName : String  = "",
+    val message    : String  = "",
+    val uid        : String  = "",
+    val userName   : String  = "",
+    val resolved   : Boolean = false,
+    val ts         : Long    = 0L,
+)
+
 @HiltViewModel
 class KurdiViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -690,7 +701,73 @@ class KurdiViewModel @Inject constructor(
         }
     }
 
-    // ── Admin: ünite ekle ─────────────────────────────────────────────────────
+    // ── Hata Raporları (kf_reports) ───────────────────────────────────────────
+    private val _reports = MutableStateFlow<List<LessonReport>>(emptyList())
+    val reports = _reports.asStateFlow()
+    private val _reportsLoading = MutableStateFlow(false)
+    val reportsLoading = _reportsLoading.asStateFlow()
+
+    fun reportLessonError(lessonId: String, lessonName: String, message: String, onDone: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                val uid = auth.currentUser?.uid ?: "anonymous"
+                val name = auth.currentUser?.displayName ?: "Anonim"
+                firestore.collection("kf_reports").add(mapOf(
+                    "lessonId"   to lessonId,
+                    "lessonName" to lessonName,
+                    "message"    to message,
+                    "uid"        to uid,
+                    "userName"   to name,
+                    "resolved"   to false,
+                    "ts"         to com.google.firebase.Timestamp.now(),
+                )).await()
+                onDone()
+            } catch (e: Exception) { _toast.value = "Gönderilemedi: ${e.message}" }
+        }
+    }
+
+    fun loadReports() {
+        viewModelScope.launch {
+            _reportsLoading.value = true
+            try {
+                val snap = firestore.collection("kf_reports")
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(100).get().await()
+                _reports.value = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    LessonReport(
+                        id         = doc.id,
+                        lessonId   = d["lessonId"]   as? String ?: "",
+                        lessonName = d["lessonName"] as? String ?: "",
+                        message    = d["message"]    as? String ?: "",
+                        uid        = d["uid"]        as? String ?: "",
+                        userName   = d["userName"]   as? String ?: "",
+                        resolved   = d["resolved"]   as? Boolean ?: false,
+                        ts         = (d["ts"] as? com.google.firebase.Timestamp)?.toDate()?.time ?: 0L,
+                    )
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+            finally { _reportsLoading.value = false }
+        }
+    }
+
+    fun resolveReport(id: String) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("kf_reports").document(id).update("resolved", true).await()
+                _reports.value = _reports.value.map { if (it.id == id) it.copy(resolved = true) else it }
+            } catch (e: Exception) { _toast.value = "Güncellenemedi" }
+        }
+    }
+
+    fun deleteReport(id: String) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("kf_reports").document(id).delete().await()
+                _reports.value = _reports.value.filter { it.id != id }
+            } catch (e: Exception) { _toast.value = "Silinemedi" }
+        }
+    }
     fun addUnit(
         id: String, ttl: String, nameKu: String,
         desc: String, icon: String, color: String,

@@ -96,7 +96,7 @@ fun KurdiAdminScreen(
                 },
                 divider = { HorizontalDivider(color = Divider, thickness = 0.5.dp) },
             ) {
-                listOf("📚 Dersler", "➕ Yeni Ders", "🏛 Üniteler", "🤖 Yapay Zeka").forEachIndexed { i, t ->
+                listOf("📚 Dersler", "➕ Yeni Ders", "🏛 Üniteler", "🤖 Yapay Zeka", "🚩 Raporlar").forEachIndexed { i, t ->
                     Tab(
                         selected = selectedTab == i,
                         onClick  = { selectedTab = i },
@@ -112,6 +112,7 @@ fun KurdiAdminScreen(
                 1 -> NewLessonTab(vm = vm, onCreated = { selectedTab = 0 })
                 2 -> UnitManagerTab(vm = vm)
                 3 -> AdminAiLessonTab(vm = vm, lessons = lessons)
+                4 -> ReportsTab(vm = vm)
             }
         }
     }
@@ -1004,6 +1005,123 @@ fun AdminField(
             cursorColor             = Amber,
         ),
     )
+}
+
+// ── Hata Raporları ────────────────────────────────────────────────────────────
+@Composable
+private fun ReportsTab(vm: KurdiViewModel) {
+    val reports by vm.reports.collectAsState()
+    val loading by vm.reportsLoading.collectAsState()
+
+    LaunchedEffect(Unit) { vm.loadReports() }
+
+    val pending  = reports.filter { !it.resolved }
+    val resolved = reports.filter {  it.resolved }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Hata Raporları", fontWeight = FontWeight.Bold, color = OnBackground)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (pending.isNotEmpty()) {
+                    Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFFEF4444).copy(alpha = 0.15f)) {
+                        Text("${pending.size} bekliyor", color = Color(0xFFEF4444), fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+                    }
+                }
+                IconButton(onClick = { vm.loadReports() }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Refresh, null, tint = Muted, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Primary)
+            }
+        } else if (reports.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("✅", fontSize = 40.sp)
+                    Text("Rapor yok", color = Muted)
+                }
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (pending.isNotEmpty()) {
+                    item { Text("Bekleyen (${pending.size})", color = Color(0xFFEF4444),
+                        fontWeight = FontWeight.Bold, fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)) }
+                    items(pending, key = { it.id }) { report ->
+                        ReportCard(report, onResolve = { vm.resolveReport(report.id) },
+                            onDelete = { vm.deleteReport(report.id) })
+                    }
+                }
+                if (resolved.isNotEmpty()) {
+                    item { Text("Çözüldü (${resolved.size})", color = Color(0xFF22C55E),
+                        fontWeight = FontWeight.Bold, fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)) }
+                    items(resolved, key = { it.id }) { report ->
+                        ReportCard(report, onResolve = {},
+                            onDelete = { vm.deleteReport(report.id) })
+                    }
+                }
+                item { Spacer(Modifier.height(80.dp)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReportCard(report: LessonReport, onResolve: () -> Unit, onDelete: () -> Unit) {
+    val dateStr = remember(report.ts) {
+        if (report.ts > 0) java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault())
+            .format(java.util.Date(report.ts)) else ""
+    }
+    Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Default.Flag, null,
+                    tint = if (report.resolved) Color(0xFF22C55E) else Color(0xFFEF4444),
+                    modifier = Modifier.size(14.dp))
+                Text(report.lessonName.ifBlank { report.lessonId }, color = Primary,
+                    fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                if (dateStr.isNotEmpty()) Text(dateStr, color = Muted, fontSize = 10.sp)
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(report.message, color = OnBackground, fontSize = 13.sp, lineHeight = 18.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("👤 ${report.userName}", color = Muted, fontSize = 11.sp)
+            if (!report.resolved) {
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onResolve,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
+                        Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Çözüldü", fontSize = 12.sp, color = Color.White)
+                    }
+                    TextButton(onClick = onDelete,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)) {
+                        Text("Sil", color = Muted, fontSize = 12.sp)
+                    }
+                }
+            } else {
+                TextButton(onClick = onDelete, contentPadding = PaddingValues(0.dp)) {
+                    Text("Sil", color = Muted, fontSize = 11.sp)
+                }
+            }
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

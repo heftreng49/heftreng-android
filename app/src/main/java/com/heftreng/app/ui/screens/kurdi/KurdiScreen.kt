@@ -551,6 +551,7 @@ private fun LessonPathNode(
 fun LessonScreen(
     activeLesson : ActiveLesson,
     language     : String = "tr",
+    vm           : KurdiViewModel = hiltViewModel(),
     onComplete   : () -> Unit,
     onClose      : () -> Unit,
 ) {
@@ -595,6 +596,9 @@ fun LessonScreen(
         else                                 -> Strings.continueLesson(language)
     }
 
+    var showReportDialog by remember { mutableStateOf(false) }
+    var reportSent       by remember { mutableStateOf(false) }
+
     Scaffold(
         containerColor = Background,
         topBar = {
@@ -618,6 +622,12 @@ fun LessonScreen(
                     }
                 },
                 actions = {
+                    // Hata Bildir butonu
+                    IconButton(onClick = { showReportDialog = true }) {
+                        Icon(Icons.Default.Flag, contentDescription = "Hata Bildir",
+                            tint = if (reportSent) Color(0xFF22C55E) else Muted,
+                            modifier = Modifier.size(20.dp))
+                    }
                     Surface(shape = RoundedCornerShape(20.dp), color = Amber.copy(alpha = 0.15f)) {
                         Text("+${lesson.xp} XP", color = Amber, fontWeight = FontWeight.Bold, fontSize = 11.sp,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
@@ -1232,6 +1242,52 @@ private fun BuildExercise(
                 Text(Strings.checkAnswer(language).uppercase(), color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, letterSpacing = 0.5.sp)
             }
         }
+    }
+
+    // ── Hata Bildir Dialog ────────────────────────────────────────────────────
+    if (showReportDialog) {
+        var reportText by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showReportDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Flag, null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                    Text("Hata Bildir", color = OnBackground, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("«${lesson.nameTr}» dersinde bir hata mı buldun?", color = Muted, fontSize = 13.sp)
+                    OutlinedTextField(
+                        value         = reportText,
+                        onValueChange = { reportText = it },
+                        placeholder   = { Text("Hatayı açıkla…", color = Muted, fontSize = 13.sp) },
+                        modifier      = Modifier.fillMaxWidth().height(100.dp),
+                        colors        = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor   = Primary, unfocusedBorderColor = SurfaceVar,
+                            focusedTextColor     = OnBackground, unfocusedTextColor = OnBackground,
+                        ),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (reportText.isNotBlank()) {
+                            vm.reportLessonError(lesson.id, lesson.nameTr, reportText) {
+                                reportSent = true
+                                showReportDialog = false
+                            }
+                        }
+                    },
+                    enabled = reportText.isNotBlank(),
+                    colors  = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape   = RoundedCornerShape(10.dp),
+                ) { Text("Gönder", color = Color.White, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { showReportDialog = false }) { Text("İptal", color = Muted) } },
+            containerColor = HeftSurface,
+        )
     }
 }
 
