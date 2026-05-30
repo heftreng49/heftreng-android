@@ -174,6 +174,7 @@ private fun LessonListTab(
     editTarget?.let { lesson ->
         LessonEditDialog(
             lesson    = lesson,
+            vm        = vm,
             onDismiss = { editTarget = null },
             onSave    = { nameTr, nameKu, emoji, xp, order, unitId ->
                 vm.updateLesson(lesson.id, nameTr, nameKu, emoji, xp, order, unitId,
@@ -217,18 +218,22 @@ private fun LessonListTab(
 }
 
 // ── Ders Düzenleme Dialog ─────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LessonEditDialog(
     lesson    : KfLesson,
+    vm        : KurdiViewModel,
     onDismiss : () -> Unit,
     onSave    : (String, String, String, Int, Int, String) -> Unit,
 ) {
+    val units  by vm.units.collectAsState()
     var nameTr by remember { mutableStateOf(lesson.nameTr) }
     var nameKu by remember { mutableStateOf(lesson.nameKu) }
     var emoji  by remember { mutableStateOf(lesson.emoji) }
     var xp     by remember { mutableStateOf(lesson.xp.toString()) }
     var order  by remember { mutableStateOf(lesson.order.toString()) }
-    var unitId by remember { mutableStateOf(lesson.unitId) }
+    var selectedUnit     by remember(units) { mutableStateOf(units.find { it.id == lesson.unitId }) }
+    var unitDropExpanded by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -243,12 +248,50 @@ private fun LessonEditDialog(
                 Text("ID: ${lesson.id}", color = Muted, fontSize = 11.sp)
                 AdminField(nameTr, { nameTr = it }, "Türkçe Ad *")
                 AdminField(nameKu, { nameKu = it }, "Kürtçe Ad")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AdminField(emoji,  { emoji  = it }, "Emoji", modifier = Modifier.weight(1f))
-                    AdminField(unitId, { unitId = it }, "Birim ID", modifier = Modifier.weight(1f))
+                AdminField(emoji,  { emoji  = it }, "Emoji")
+
+                // ── Ünite Dropdown ────────────────────────────────────────────
+                ExposedDropdownMenuBox(
+                    expanded         = unitDropExpanded,
+                    onExpandedChange = { unitDropExpanded = !unitDropExpanded },
+                ) {
+                    OutlinedTextField(
+                        value         = selectedUnit?.let { "${it.icon} ${it.ttl}" } ?: "Ünite seç…",
+                        onValueChange = {},
+                        readOnly      = true,
+                        label         = { Text("Ünite", fontSize = 12.sp) },
+                        trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = unitDropExpanded) },
+                        modifier      = Modifier.fillMaxWidth().menuAnchor(),
+                        colors        = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Amber, unfocusedBorderColor = Divider,
+                            focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
+                            unfocusedContainerColor = HeftSurface, focusedContainerColor = HeftSurface,
+                        ),
+                    )
+                    ExposedDropdownMenu(
+                        expanded         = unitDropExpanded,
+                        onDismissRequest = { unitDropExpanded = false },
+                        modifier         = Modifier.background(HeftSurface),
+                    ) {
+                        units.forEach { unit ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(unit.icon, fontSize = 16.sp)
+                                        Column {
+                                            Text(unit.ttl, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                            Text(unit.id, color = Muted, fontSize = 10.sp)
+                                        }
+                                    }
+                                },
+                                onClick = { selectedUnit = unit; unitDropExpanded = false },
+                            )
+                        }
+                    }
                 }
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AdminField(xp,    { xp    = it }, "XP",  keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
+                    AdminField(xp,    { xp    = it }, "XP",   keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
                     AdminField(order, { order = it }, "Sıra", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
                 }
             }
@@ -258,7 +301,7 @@ private fun LessonEditDialog(
                 onClick = {
                     if (nameTr.isNotBlank())
                         onSave(nameTr, nameKu, emoji, xp.toIntOrNull() ?: lesson.xp,
-                            order.toIntOrNull() ?: lesson.order, unitId)
+                            order.toIntOrNull() ?: lesson.order, selectedUnit?.id ?: lesson.unitId)
                 },
                 enabled = nameTr.isNotBlank(),
                 colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
