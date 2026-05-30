@@ -738,21 +738,24 @@ fun DrawerContent(
             Row(
                 modifier          = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Icon(Icons.Outlined.Translate, null, tint = Amber, modifier = Modifier.size(18.dp))
-                listOf("tr" to "Türkçe", "ku" to "Kurdî").forEach { (code, label) ->
-                    val selected = language == code
-                    Button(
-                        onClick  = { settingsVm.setLanguage(code) },
-                        modifier = Modifier.weight(1f),
-                        shape    = RoundedCornerShape(8.dp),
-                        colors   = ButtonDefaults.buttonColors(
-                            containerColor = if (selected) Amber else SurfaceVar,
-                            contentColor   = if (selected) Color.Black else Muted,
-                        ),
-                        contentPadding = PaddingValues(vertical = 6.dp),
-                    ) { Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) }
+                Button(
+                    onClick  = { settingsVm.setLanguage(if (language == "tr") "ku" else "tr") },
+                    modifier = Modifier.weight(1f),
+                    shape    = RoundedCornerShape(8.dp),
+                    colors   = ButtonDefaults.buttonColors(
+                        containerColor = Amber,
+                        contentColor   = Color.Black,
+                    ),
+                    contentPadding = PaddingValues(vertical = 6.dp),
+                ) {
+                    Text(
+                        if (language == "ku") "Kurdî" else "Türkçe",
+                        fontSize   = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
             }
 
