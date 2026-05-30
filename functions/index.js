@@ -127,7 +127,6 @@ exports.sendPush = onCall(
 );
 
 // ─── fixNewUserDisplayName — Auth onCreate (v1 gen1) ────────────────────────
-// ── Bot/Spam tespitinde kullanılan yardımcılar ──────────────────────────────
 const DISPOSABLE_DOMAINS = [
   "mailinator.com","guerrillamail.com","temp-mail.org","throwam.com",
   "yopmail.com","sharklasers.com","guerrillamailblock.com","grr.la",
@@ -146,10 +145,8 @@ function isDisposableEmail(email) {
 
 function isSuspiciousDisplayName(name) {
   if (!name) return false;
-  // Tamamen random karakter dizisi (bot pattern)
   const hasNoVowelRatio = (name.replace(/[^a-zA-Z]/g, "").match(/[aeiouAEIOU]/g) || []).length /
                           Math.max(name.replace(/[^a-zA-Z]/g, "").length, 1) < 0.1;
-  // Çok uzun tek kelime (>20 karakter, boşluksuz)
   const isTooLong = name.length > 25 && !name.includes(" ");
   return hasNoVowelRatio || isTooLong;
 }
@@ -162,7 +159,6 @@ exports.fixNewUserDisplayName = functions
     const db  = getFirestore();
     const adm = require("firebase-admin/auth").getAuth();
 
-    // ── KATMAN 1: Tek kullanımlık email engeli ──────────────────────────────
     if (user.email && isDisposableEmail(user.email)) {
       console.warn(`[botBlock] Disposable email engellendi: ${user.email} (${user.uid})`);
       await db.collection("blockedSignups").doc(user.uid).set({
@@ -173,22 +169,16 @@ exports.fixNewUserDisplayName = functions
       return;
     }
 
-    // ── KATMAN 2: Şüpheli display name ─────────────────────────────────────
     const derived = deriveName(user);
     if (!user.providerData?.some(p => p.providerId === "google.com") &&
         isSuspiciousDisplayName(derived)) {
       console.warn(`[botBlock] Şüpheli isim: "${derived}" (${user.uid})`);
-      // Silme değil, askıya al — bazen yanlış pozitif çıkabilir
       await db.collection("users").doc(user.uid).set({
         uid: user.uid, banned: true, moderationStatus: "suspended",
         moderationNote: "Otomatik: şüpheli kayıt", createdAt: new Date(),
       }, { merge: true });
     }
 
-    // ── KATMAN 3: Hız sınırı — aynı IP'den 5 dk içinde 3'ten fazla kayıt ──
-    // (IP bilgisi burada yok, bu kontrol AuthScreen'de yapılıyor)
-
-    const db2 = getFirestore();
     try {
       const derived = deriveName(user);
       const base    = (user.email || "").split("@")[0]
@@ -213,99 +203,99 @@ exports.fixNewUserDisplayName = functions
     }
   });
 
-// ─── repairAllUsers — HTTP endpoint ─────────────────────────────────────────
-exports.repairAllUsers = onRequest(async (req, res) => {
-  if (req.query.secret !== "hf2024") {
-    res.status(403).json({ error: "Yetkisiz" }); return;
-  }
+// ─── repairAllUsers — HTTPS v2 Endpoint (europe-west1) ──────────────────────
+exports.repairAllUsers = onRequest(
+  { region: "europe-west1", cors: true },
+  async (req, res) => {
+    if (req.query.secret !== "hf2024") {
+      res.status(403).json({ error: "Yetkisiz" }); return;
+    }
 
-  const db   = getFirestore();
-  const auth = require("firebase-admin/auth").getAuth();
+    const db   = getFirestore();
+    const auth = require("firebase-admin/auth").getAuth();
 
-  let created = 0, patched = 0, skipped = 0, errors = 0;
-  const details = [];
+    let created = 0, patched = 0, skipped = 0, errors = 0;
+    const details = [];
 
-  try {
-    let pageToken;
-    do {
-      const listResult = await auth.listUsers(1000, pageToken);
-      pageToken = listResult.pageToken;
+    try {
+      let pageToken;
+      do {
+        const listResult = await auth.listUsers(1000, pageToken);
+        pageToken = listResult.pageToken;
 
-      for (const authUser of listResult.users) {
-        try {
-          const ref  = db.collection("users").doc(authUser.uid);
-          const snap = await ref.get();
-          const derived = deriveName(authUser);
-          const base    = (authUser.email || "").split("@")[0]
-                            .toLowerCase().replace(/[^a-z0-9]/g, "");
+        for (const authUser of listResult.users) {
+          try {
+            const ref  = db.collection("users").doc(authUser.uid);
+            const snap = await ref.get();
+            const derived = deriveName(authUser);
+            const base    = (authUser.email || "").split("@")[0]
+                              .toLowerCase().replace(/[^a-z0-9]/g, "");
 
-          if (!snap.exists) {
-            await ref.set({
-              uid        : authUser.uid,
-              displayName: derived,
-              name       : derived,
-              username   : base || authUser.uid.slice(0, 8),
-              email      : authUser.email    || "",
-              photoURL   : authUser.photoURL || "",
-              createdAt  : new Date(),
-              followers  : 0,
-              following  : 0,
-              postCount  : 0,
-            });
-            created++;
-            details.push({ uid: authUser.uid, status: "created", name: derived });
+            if (!snap.exists) {
+              await ref.set({
+                uid        : authUser.uid,
+                displayName: derived,
+                name       : derived,
+                username   : base || authUser.uid.slice(0, 8),
+                email      : authUser.email    || "",
+                photoURL   : authUser.photoURL || "",
+                createdAt  : new Date(),
+                followers  : 0,
+                following  : 0,
+                postCount  : 0,
+              });
+              created++;
+              details.push({ uid: authUser.uid, status: "created", name: derived });
 
-          } else {
-            const data  = snap.data();
-            const patch = {};
-
-            if (!data.displayName || data.displayName === "Kullanıcı") patch.displayName = derived;
-            if (!data.name || data.name === "Kullanıcı") patch.name = derived;
-            if (!data.photoURL && authUser.photoURL) patch.photoURL = authUser.photoURL;
-            if (!data.email && authUser.email) patch.email = authUser.email;
-            if (!data.uid) patch.uid = authUser.uid;
-            if (!data.username) patch.username = base || authUser.uid.slice(0, 8);
-            if (data.followers  === undefined) patch.followers  = 0;
-            if (data.following  === undefined) patch.following  = 0;
-            if (data.postCount  === undefined) patch.postCount  = 0;
-            if (!data.createdAt) patch.createdAt = new Date();
-
-            if (Object.keys(patch).length > 0) {
-              await ref.update(patch);
-              patched++;
-              details.push({ uid: authUser.uid, status: "patched", fields: Object.keys(patch) });
             } else {
-              skipped++;
+              const data  = snap.data();
+              const patch = {};
+
+              if (!data.displayName || data.displayName === "Kullanıcı") patch.displayName = derived;
+              if (!data.name || data.name === "Kullanıcı") patch.name = derived;
+              if (!data.photoURL && authUser.photoURL) patch.photoURL = authUser.photoURL;
+              if (!data.email && authUser.email) patch.email = authUser.email;
+              if (!data.uid) patch.uid = authUser.uid;
+              if (!data.username) patch.username = base || authUser.uid.slice(0, 8);
+              if (data.followers  === undefined) patch.followers  = 0;
+              if (data.following  === undefined) patch.following  = 0;
+              if (data.postCount  === undefined) patch.postCount  = 0;
+              if (!data.createdAt) patch.createdAt = new Date();
+
+              if (Object.keys(patch).length > 0) {
+                await ref.update(patch);
+                patched++;
+                details.push({ uid: authUser.uid, status: "patched", fields: Object.keys(patch) });
+              } else {
+                skipped++;
+              }
             }
+          } catch (e) {
+            errors++;
+            details.push({ uid: authUser.uid, status: "error", error: e.message });
           }
-        } catch (e) {
-          errors++;
-          details.push({ uid: authUser.uid, status: "error", error: e.message });
         }
-      }
-    } while (pageToken);
+      } while (pageToken);
 
-    res.json({ created, patched, skipped, errors, details });
+      res.json({ created, patched, skipped, errors, details });
 
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
   }
-});
+);
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  refreshStats — OPTIMIZED (Blaze Dostu, count() kullanan sürüm)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── refreshStats — OPTIMIZED (Blaze Dostu, count() kullanan sürüm) ──────────
 exports.refreshStats = functions.https.onCall(async (data, context) => {
   if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Giriş gerekli");
 
-  const db    = getFirestore(); // Hata düzeltildi: admin yerine v2 referansı
+  const db    = getFirestore();
   const now   = Date.now();
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const todaySec  = Math.floor(today.getTime() / 1000);
   const twoMinAgo = Math.floor(now / 1000) - 120;
 
   try {
-    // Tüm verileri .get() ile indirmek yerine .count() ile bulutta saydırıyoruz (Maliyet/Hafıza dostu)
     const [
       totalUsersCount, androidUsersCount, webUsersCount, bannedUsersCount,
       totalPostsCount, pendingPostsCount,
@@ -326,8 +316,6 @@ exports.refreshStats = functions.https.onCall(async (data, context) => {
       db.collection("presence").where("online", "==", true).where("lastSeen", ">=", new Date(twoMinAgo * 1000)).count().get()
     ]);
 
-    // Bugün katılanlar ve bugün atılan postlar zaman filtresi gerektirdiği için sayfa bazlı kontrol edilebilir
-    // Ancak pratiklik açısından şimdilik basit bir get yerine tarih filtreli count yapıyoruz:
     const newUsersTodayCount = await db.collection("users").where("createdAt", ">=", new Date(todaySec * 1000)).count().get();
     const newPostsTodayCount = await db.collection("feed").where("ts", ">=", new Date(todaySec * 1000)).where("moderationStatus", "==", "active").count().get();
 
@@ -360,9 +348,7 @@ exports.refreshStats = functions.https.onCall(async (data, context) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  scheduledRefreshStats — OPTIMIZED (Her gece çalışan otomatik sürüm)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── scheduledRefreshStats — OPTIMIZED (Her gece otomatik sürüm) ─────────────
 exports.scheduledRefreshStats = functions.pubsub
   .schedule("0 2 * * *")
   .timeZone("Europe/Istanbul")
@@ -422,28 +408,21 @@ exports.scheduledRefreshStats = functions.pubsub
     return null;
   });
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  verifyRegistration — Kayıt öncesi güvenlik kontrolü
-//  Android'den çağrılır: kayıt formuna "Gönder" basılmadan önce
-//  Döndürür: { allowed: true } veya { allowed: false, reason: "..." }
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── verifyRegistration — Kayıt öncesi güvenlik kontrolü ────────────────────
 exports.verifyRegistration = functions.https.onCall(async (data, context) => {
   const email       = (data.email || "").toLowerCase().trim();
   const displayName = (data.displayName || "").trim();
   const db          = getFirestore();
 
-  // 1. Tek kullanımlık email
   if (isDisposableEmail(email)) {
     return { allowed: false, reason: "Bu email adresi geçici/sahte email servisi. Gerçek bir email kullanın." };
   }
 
-  // 2. Email formatı
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   if (!emailRegex.test(email)) {
     return { allowed: false, reason: "Geçersiz email formatı." };
   }
 
-  // 3. İsim kontrolü
   if (!displayName || displayName.length < 2) {
     return { allowed: false, reason: "İsim en az 2 karakter olmalı." };
   }
@@ -451,7 +430,6 @@ exports.verifyRegistration = functions.https.onCall(async (data, context) => {
     return { allowed: false, reason: "İsim çok uzun." };
   }
 
-  // 4. Hız sınırı — aynı email domain'inden son 10 dk içinde kaç kayıt?
   const domain     = email.split("@")[1] || "";
   const tenMinAgo  = new Date(Date.now() - 10 * 60 * 1000);
   try {
@@ -465,7 +443,6 @@ exports.verifyRegistration = functions.https.onCall(async (data, context) => {
     }
   } catch (_) {}
 
-  // 5. Kayıt denemesini logla
   await db.collection("signupAttempts").add({
     email, domain, displayName, at: new Date(),
   });
@@ -473,9 +450,7 @@ exports.verifyRegistration = functions.https.onCall(async (data, context) => {
   return { allowed: true };
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  cleanBlockedSignups — Eski blockedSignups kayıtlarını temizle (haftalık)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── cleanBlockedSignups — Eski kayıtları haftalık temizle ────────────────────
 exports.cleanBlockedSignups = functions.pubsub
   .schedule("0 3 * * 0")
   .timeZone("Europe/Istanbul")
@@ -487,7 +462,6 @@ exports.cleanBlockedSignups = functions.pubsub
     snap.docs.forEach(d => batch.delete(d.ref));
     await batch.commit();
 
-    // signupAttempts da temizle (1 gün eski)
     const dayAgo  = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const snap2   = await db.collection("signupAttempts").where("at", "<", dayAgo).get();
     const batch2  = db.batch();
@@ -498,183 +472,169 @@ exports.cleanBlockedSignups = functions.pubsub
     return null;
   });
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  repairAuthorQuotes — Eski yazar alıntılarını düzelt (bir kerelik çalıştır)
-//  Kullanım: GET /repairAuthorQuotes?secret=hf2024
-//
-//  Yaptığı işler:
-//  1. feed'de type=="library_quote" olan tüm postları tarar
-//  2. libraryAuthorId boş olanları library_books'tan bulup günceller
-//  3. library_books/{bookId}/quotes subcollection'ında authorId boş olanları günceller
-// ─────────────────────────────────────────────────────────────────────────────
-exports.repairAuthorQuotes = onRequest(async (req, res) => {
-  if (req.query.secret !== "hf2024") return res.status(403).send("Forbidden");
+// ─── repairAuthorQuotes — Eski yazar alıntılarını düzelt (v2 ONREQUEST) ──────
+// Kullanım: GET https://europe-west1-bloggerheftreng.cloudfunctions.net/repairAuthorQuotes?secret=hf2024
+exports.repairAuthorQuotes = onRequest(
+  { region: "europe-west1", cors: true }, 
+  async (req, res) => {
+    if (req.query.secret !== "hf2024") {
+      return res.status(403).send("Forbidden: Yetkisiz Erişim");
+    }
 
-  const db = getFirestore();
-  let feedFixed = 0, subFixed = 0, errors = 0;
+    const db = getFirestore();
+    let feedFixed = 0, subFixed = 0, booksFixed = 0, errors = 0;
 
-  // ── 1. Feed postlarını düzelt ─────────────────────────────────────────────
-  try {
-    const feedSnap = await db.collection("feed")
-      .where("type", "==", "library_quote")
-      .limit(500).get();
+    // ── 1. Feed postlarını düzelt ─────────────────────────────────────────────
+    try {
+      const feedSnap = await db.collection("feed")
+        .where("type", "==", "library_quote")
+        .limit(500).get();
 
-    // Kitap cache — her kitabı bir kere çek
-    const bookCache = {};
-    const getBook = async (bookId) => {
-      if (!bookId) return null;
-      if (bookCache[bookId]) return bookCache[bookId];
-      const doc = await db.collection("library_books").doc(bookId).get();
-      bookCache[bookId] = doc.exists ? doc.data() : null;
-      return bookCache[bookId];
-    };
+      const bookCache = {};
+      const getBook = async (bookId) => {
+        if (!bookId) return null;
+        if (bookCache[bookId]) return bookCache[bookId];
+        const doc = await db.collection("library_books").doc(bookId).get();
+        bookCache[bookId] = doc.exists ? doc.data() : null;
+        return bookCache[bookId];
+      };
 
-    // authorName → authorId cache
-    const authorCache = {};
-    const getAuthorId = async (authorName) => {
-      if (!authorName) return "";
-      if (authorCache[authorName]) return authorCache[authorName];
-      const snap = await db.collection("library_authors")
-        .where("name", "==", authorName).limit(1).get();
-      const id = snap.empty ? "" : snap.docs[0].id;
-      authorCache[authorName] = id;
-      return id;
-    };
+      const authorCache = {};
+      const getAuthorId = async (authorName) => {
+        if (!authorName) return "";
+        if (authorCache[authorName]) return authorCache[authorName];
+        const snap = await db.collection("library_authors")
+          .where("name", "==", authorName).limit(1).get();
+        const id = snap.empty ? "" : snap.docs[0].id;
+        authorCache[authorName] = id;
+        return id;
+      };
 
-    const batch = db.batch();
-    let batchCount = 0;
+      const batch = db.batch();
+      let batchCount = 0;
 
-    for (const doc of feedSnap.docs) {
-      const d = doc.data();
-      const updates = {};
+      for (const doc of feedSnap.docs) {
+        const d = doc.data();
+        const updates = {};
 
-      // libraryAuthorId boş veya eksikse düzelt
-      if (!d.libraryAuthorId || d.libraryAuthorId === "") {
-        let authorId = "";
-
-        // Önce kitaptan al
-        if (d.libraryBookId) {
-          const book = await getBook(d.libraryBookId);
-          if (book?.authorId) authorId = book.authorId;
+        if (!d.libraryAuthorId || d.libraryAuthorId === "") {
+          let authorId = "";
+          if (d.libraryBookId) {
+            const book = await getBook(d.libraryBookId);
+            if (book?.authorId) authorId = book.authorId;
+          }
+          if (!authorId && d.authorName) {
+            authorId = await getAuthorId(d.authorName);
+          }
+          if (authorId) {
+            updates["libraryAuthorId"] = authorId;
+          }
         }
 
-        // Kitap yoksa authorName ile ara
-        if (!authorId && d.authorName) {
-          authorId = await getAuthorId(d.authorName);
+        if (!d.libraryBookId && d.bookName) {
+          const bookSnap = await db.collection("library_books")
+            .where("title", "==", d.bookName).limit(1).get();
+          if (!bookSnap.empty) {
+            const book = bookSnap.docs[0];
+            updates["libraryBookId"] = book.id;
+            if (!updates["libraryAuthorId"] && book.data().authorId) {
+              updates["libraryAuthorId"] = book.data().authorId;
+            }
+          }
         }
 
-        if (authorId) {
-          updates["libraryAuthorId"] = authorId;
-        }
-      }
+        if (Object.keys(updates).length > 0) {
+          batch.update(doc.ref, updates);
+          feedFixed++;
+          batchCount++;
 
-      // libraryBookId boş ama bookName varsa kitabı bul
-      if (!d.libraryBookId && d.bookName) {
-        const bookSnap = await db.collection("library_books")
-          .where("title", "==", d.bookName).limit(1).get();
-        if (!bookSnap.empty) {
-          const book = bookSnap.docs[0];
-          updates["libraryBookId"] = book.id;
-          if (!updates["libraryAuthorId"] && book.data().authorId) {
-            updates["libraryAuthorId"] = book.data().authorId;
+          if (batchCount >= 490) {
+            await batch.commit();
+            batchCount = 0;
           }
         }
       }
 
-      if (Object.keys(updates).length > 0) {
-        batch.update(doc.ref, updates);
-        feedFixed++;
-        batchCount++;
-
-        // Firestore batch limiti 500
-        if (batchCount >= 490) {
-          await batch.commit();
-          batchCount = 0;
-        }
-      }
+      if (batchCount > 0) await batch.commit();
+    } catch (e) {
+      console.error("feed repair error:", e.message);
+      errors++;
     }
 
-    if (batchCount > 0) await batch.commit();
-  } catch (e) {
-    console.error("feed repair error:", e.message);
-    errors++;
-  }
+    // ── 2. Subcollection quotes'ları düzelt ───────────────────────────────────
+    try {
+      const booksSnap = await db.collection("library_books").limit(200).get();
 
-  // ── 2. Subcollection quotes'ları düzelt ───────────────────────────────────
-  try {
-    const booksSnap = await db.collection("library_books").limit(200).get();
+      for (const bookDoc of booksSnap.docs) {
+        const book = bookDoc.data();
+        if (!book.authorId) continue;
 
-    for (const bookDoc of booksSnap.docs) {
-      const book = bookDoc.data();
-      if (!book.authorId) continue;
+        const quotesSnap = await db.collection("library_books")
+          .doc(bookDoc.id).collection("quotes")
+          .where("authorId", "==", "").limit(50).get();
 
-      const quotesSnap = await db.collection("library_books")
-        .doc(bookDoc.id).collection("quotes")
-        .where("authorId", "==", "").limit(50).get();
+        if (quotesSnap.empty) continue;
 
-      if (quotesSnap.empty) continue;
-
-      const batch = db.batch();
-      quotesSnap.docs.forEach(qDoc => {
-        batch.update(qDoc.ref, {
-          "authorId"   : book.authorId,
-          "authorName" : book.authorName || book.author || "",
+        const batch = db.batch();
+        quotesSnap.docs.forEach(qDoc => {
+          batch.update(qDoc.ref, {
+            "authorId"   : book.authorId,
+            "authorName" : book.authorName || book.author || "",
+          });
+          subFixed++;
         });
-        subFixed++;
-      });
-      await batch.commit();
+        await batch.commit();
+      }
+    } catch (e) {
+      console.error("subcollection repair error:", e.message);
+      errors++;
     }
-  } catch (e) {
-    console.error("subcollection repair error:", e.message);
-    errors++;
-  }
 
-  // ── 3. library_books — authorId boş olanları authorName ile düzelt ─────────
-  let booksFixed = 0;
-  try {
-    const booksSnap = await db.collection("library_books").limit(500).get();
+    // ── 3. library_books — authorId'leri düzelt ───────────────────────────────
+    try {
+      const booksSnap = await db.collection("library_books").limit(500).get();
 
-    // authorName → authorId cache
-    const authorNameCache = {};
-    const findAuthorId = async (authorName) => {
-      if (!authorName) return "";
-      if (authorNameCache[authorName]) return authorNameCache[authorName];
-      const snap = await db.collection("authors")
-        .where("name", "==", authorName).limit(1).get();
-      const id = snap.empty ? "" : snap.docs[0].id;
-      authorNameCache[authorName] = id;
-      return id;
-    };
+      const authorNameCache = {};
+      const findAuthorId = async (authorName) => {
+        if (!authorName) return "";
+        if (authorNameCache[authorName]) return authorNameCache[authorName];
+        const snap = await db.collection("library_authors")
+          .where("name", "==", authorName).limit(1).get();
+        const id = snap.empty ? "" : snap.docs[0].id;
+        authorNameCache[authorName] = id;
+        return id;
+      };
 
-    const batch3 = db.batch();
-    let b3count = 0;
+      const batch3 = db.batch();
+      let b3count = 0;
 
-    for (const bookDoc of booksSnap.docs) {
-      const d = bookDoc.data();
-      if (d.authorId && d.authorId !== "") continue; // zaten var, atla
+      for (const bookDoc of booksSnap.docs) {
+        const d = bookDoc.data();
+        if (d.authorId && d.authorId !== "") continue;
 
-      const authorName = d.authorName || d.author || "";
-      const authorId   = await findAuthorId(authorName);
-      if (!authorId) continue;
+        const authorName = d.authorName || d.author || "";
+        const authorId   = await findAuthorId(authorName);
+        if (!authorId) continue;
 
-      batch3.update(bookDoc.ref, { "authorId": authorId });
-      booksFixed++;
-      b3count++;
+        batch3.update(bookDoc.ref, { "authorId": authorId });
+        booksFixed++;
+        b3count++;
 
-      if (b3count >= 490) { await batch3.commit(); b3count = 0; }
+        if (b3count >= 490) { await batch3.commit(); b3count = 0; }
+      }
+      if (b3count > 0) await batch3.commit();
+    } catch (e) {
+      console.error("library_books repair error:", e.message);
+      errors++;
     }
-    if (b3count > 0) await batch3.commit();
-  } catch (e) {
-    console.error("library_books repair error:", e.message);
-    errors++;
-  }
 
-  res.json({
-    ok: true,
-    feedFixed,
-    subFixed,
-    booksFixed,
-    errors,
-    message: `${feedFixed} feed + ${subFixed} alıntı + ${booksFixed} kitap düzeltildi`,
-  });
-});
+    return res.json({
+      ok: true,
+      feedFixed,
+      subFixed,
+      booksFixed,
+      errors,
+      message: `${feedFixed} feed + ${subFixed} alıntı + ${booksFixed} kitap başarıyla düzeltildi.`,
+    });
+  }
+);
