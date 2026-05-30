@@ -629,11 +629,52 @@ exports.repairAuthorQuotes = onRequest(async (req, res) => {
     errors++;
   }
 
+  // ── 3. library_books — authorId boş olanları authorName ile düzelt ─────────
+  let booksFixed = 0;
+  try {
+    const booksSnap = await db.collection("library_books").limit(500).get();
+
+    // authorName → authorId cache
+    const authorNameCache = {};
+    const findAuthorId = async (authorName) => {
+      if (!authorName) return "";
+      if (authorNameCache[authorName]) return authorNameCache[authorName];
+      const snap = await db.collection("authors")
+        .where("name", "==", authorName).limit(1).get();
+      const id = snap.empty ? "" : snap.docs[0].id;
+      authorNameCache[authorName] = id;
+      return id;
+    };
+
+    const batch3 = db.batch();
+    let b3count = 0;
+
+    for (const bookDoc of booksSnap.docs) {
+      const d = bookDoc.data();
+      if (d.authorId && d.authorId !== "") continue; // zaten var, atla
+
+      const authorName = d.authorName || d.author || "";
+      const authorId   = await findAuthorId(authorName);
+      if (!authorId) continue;
+
+      batch3.update(bookDoc.ref, { "authorId": authorId });
+      booksFixed++;
+      b3count++;
+
+      if (b3count >= 490) { await batch3.commit(); b3count = 0; }
+    }
+    if (b3count > 0) await batch3.commit();
+  } catch (e) {
+    console.error("library_books repair error:", e.message);
+    errors++;
+  }
+
   res.json({
     ok: true,
     feedFixed,
     subFixed,
+    booksFixed,
     errors,
-    message: `${feedFixed} feed postu + ${subFixed} alıntı düzeltildi`,
+    message: `${feedFixed} feed + ${subFixed} alıntı + ${booksFixed} kitap düzeltildi`,
   });
 });
