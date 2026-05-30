@@ -498,3 +498,142 @@ exports.cleanBlockedSignups = functions.pubsub
     return null;
   });
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  repairAuthorQuotes — Eski yazar alıntılarını düzelt (bir kerelik çalıştır)
+//  Kullanım: GET /repairAuthorQuotes?secret=hf2024
+//
+//  Yaptığı işler:
+//  1. feed'de type=="library_quote" olan tüm postları tarar
+//  2. libraryAuthorId boş olanları library_books'tan bulup günceller
+//  3. library_books/{bookId}/quotes subcollection'ında authorId boş olanları günceller
+// ─────────────────────────────────────────────────────────────────────────────
+exports.repairAuthorQuotes = onRequest(async (req, res) => {
+  if (req.query.secret !== "hf2024") return res.status(403).send("Forbidden");
+
+  const db = getFirestore();
+  let feedFixed = 0, subFixed = 0, errors = 0;
+
+  // ── 1. Feed postlarını düzelt ─────────────────────────────────────────────
+  try {
+    const feedSnap = await db.collection("feed")
+      .where("type", "==", "library_quote")
+      .limit(500).get();
+
+    // Kitap cache — her kitabı bir kere çek
+    const bookCache = {};
+    const getBook = async (bookId) => {
+      if (!bookId) return null;
+      if (bookCache[bookId]) return bookCache[bookId];
+      const doc = await db.collection("library_books").doc(bookId).get();
+      bookCache[bookId] = doc.exists ? doc.data() : null;
+      return bookCache[bookId];
+    };
+
+    // authorName → authorId cache
+    const authorCache = {};
+    const getAuthorId = async (authorName) => {
+      if (!authorName) return "";
+      if (authorCache[authorName]) return authorCache[authorName];
+      const snap = await db.collection("library_authors")
+        .where("name", "==", authorName).limit(1).get();
+      const id = snap.empty ? "" : snap.docs[0].id;
+      authorCache[authorName] = id;
+      return id;
+    };
+
+    const batch = db.batch();
+    let batchCount = 0;
+
+    for (const doc of feedSnap.docs) {
+      const d = doc.data();
+      const updates = {};
+
+      // libraryAuthorId boş veya eksikse düzelt
+      if (!d.libraryAuthorId || d.libraryAuthorId === "") {
+        let authorId = "";
+
+        // Önce kitaptan al
+        if (d.libraryBookId) {
+          const book = await getBook(d.libraryBookId);
+          if (book?.authorId) authorId = book.authorId;
+        }
+
+        // Kitap yoksa authorName ile ara
+        if (!authorId && d.authorName) {
+          authorId = await getAuthorId(d.authorName);
+        }
+
+        if (authorId) {
+          updates["libraryAuthorId"] = authorId;
+        }
+      }
+
+      // libraryBookId boş ama bookName varsa kitabı bul
+      if (!d.libraryBookId && d.bookName) {
+        const bookSnap = await db.collection("library_books")
+          .where("title", "==", d.bookName).limit(1).get();
+        if (!bookSnap.empty) {
+          const book = bookSnap.docs[0];
+          updates["libraryBookId"] = book.id;
+          if (!updates["libraryAuthorId"] && book.data().authorId) {
+            updates["libraryAuthorId"] = book.data().authorId;
+          }
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        batch.update(doc.ref, updates);
+        feedFixed++;
+        batchCount++;
+
+        // Firestore batch limiti 500
+        if (batchCount >= 490) {
+          await batch.commit();
+          batchCount = 0;
+        }
+      }
+    }
+
+    if (batchCount > 0) await batch.commit();
+  } catch (e) {
+    console.error("feed repair error:", e.message);
+    errors++;
+  }
+
+  // ── 2. Subcollection quotes'ları düzelt ───────────────────────────────────
+  try {
+    const booksSnap = await db.collection("library_books").limit(200).get();
+
+    for (const bookDoc of booksSnap.docs) {
+      const book = bookDoc.data();
+      if (!book.authorId) continue;
+
+      const quotesSnap = await db.collection("library_books")
+        .doc(bookDoc.id).collection("quotes")
+        .where("authorId", "==", "").limit(50).get();
+
+      if (quotesSnap.empty) continue;
+
+      const batch = db.batch();
+      quotesSnap.docs.forEach(qDoc => {
+        batch.update(qDoc.ref, {
+          "authorId"   : book.authorId,
+          "authorName" : book.authorName || book.author || "",
+        });
+        subFixed++;
+      });
+      await batch.commit();
+    }
+  } catch (e) {
+    console.error("subcollection repair error:", e.message);
+    errors++;
+  }
+
+  res.json({
+    ok: true,
+    feedFixed,
+    subFixed,
+    errors,
+    message: `${feedFixed} feed postu + ${subFixed} alıntı düzeltildi`,
+  });
+});
