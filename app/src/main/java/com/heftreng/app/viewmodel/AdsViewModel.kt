@@ -130,6 +130,40 @@ class AdsViewModel @Inject constructor(
         }
     }
 
+    // ── Günlük ödüllü reklam sayacı (SharedPreferences) ─────────────────────
+    // Her gece 00:00'da sıfırlanır — AdMob frequency cap'in kod tarafı kalkanı
+    private var prefs: android.content.SharedPreferences? = null
+
+    fun initPrefs(context: android.content.Context) {
+        prefs = context.getSharedPreferences("heft_ads", android.content.Context.MODE_PRIVATE)
+        resetDailyCounterIfNeeded()
+    }
+
+    private fun resetDailyCounterIfNeeded() {
+        val p = prefs ?: return
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            .format(java.util.Date())
+        if (p.getString("reward_date", "") != today) {
+            p.edit().putString("reward_date", today).putInt("reward_count", 0).apply()
+        }
+    }
+
+    // Kaç ödüllü reklam hakkı kaldı (günlük max 3)
+    private val DAILY_LIMIT = 3
+    val dailyRewardCount: Int get() {
+        resetDailyCounterIfNeeded()
+        return prefs?.getInt("reward_count", 0) ?: 0
+    }
+    val canWatchRewardedAd: Boolean get() = dailyRewardCount < DAILY_LIMIT
+
+    private fun incrementDailyCount() {
+        val p = prefs ?: return
+        p.edit().putInt("reward_count", dailyRewardCount + 1).apply()
+    }
+
+    // ── Senaryo türleri ───────────────────────────────────────────────────────
+    enum class RewardType { DOUBLE_XP, UNLOCK_LESSON, SAVE_STREAK }
+
     // ── Rewarded yükle ────────────────────────────────────────────────────────
     fun loadRewarded(context: Context) {
         val config = _rewardedConfig.value ?: return
@@ -147,7 +181,14 @@ class AdsViewModel @Inject constructor(
         )
     }
 
-    fun showRewarded(activity: Activity, onRewarded: (Int) -> Unit, onDismiss: () -> Unit = {}) {
+    fun showRewarded(
+        activity   : Activity,
+        rewardType : RewardType = RewardType.DOUBLE_XP,
+        onRewarded : (type: RewardType, xp: Int) -> Unit,
+        onDismiss  : () -> Unit = {},
+        onLimitReached: () -> Unit = {},
+    ) {
+        if (!canWatchRewardedAd) { onLimitReached(); return }
         val ad     = rewardedAd ?: run { onDismiss(); return }
         val config = _rewardedConfig.value
 
@@ -162,7 +203,20 @@ class AdsViewModel @Inject constructor(
                 onDismiss()
             }
         }
-        ad.show(activity) { onRewarded(config?.xpReward ?: 50) }
+        ad.show(activity) {
+            incrementDailyCount()
+            onRewarded(rewardType, config?.xpReward ?: 50)
+        }
+    }
+
+    // Eski imza — geriye uyumluluk için (FeedScreen vs. çağırıyorsa çalışmaya devam eder)
+    fun showRewarded(activity: Activity, onRewarded: (Int) -> Unit, onDismiss: () -> Unit = {}) {
+        showRewarded(
+            activity    = activity,
+            rewardType  = RewardType.DOUBLE_XP,
+            onRewarded  = { _, xp -> onRewarded(xp) },
+            onDismiss   = onDismiss,
+        )
     }
 
     override fun onCleared() {

@@ -146,6 +146,22 @@ class KurdiViewModel @Inject constructor(
     private val _level        = MutableStateFlow(1)
     val level = _level.asStateFlow()
 
+    // ── Ödüllü reklam senaryoları için state ─────────────────────────────────
+    // Son tamamlanan dersin XP'si (Çift XP senaryosu)
+    private val _lastLessonXp = MutableStateFlow(0)
+    val lastLessonXp = _lastLessonXp.asStateFlow()
+
+    // Geçici olarak kilidi açılan ders ID'leri (Kilit Açma senaryosu)
+    private val _tempUnlockedIds = MutableStateFlow<Set<String>>(emptySet())
+    val tempUnlockedIds = _tempUnlockedIds.asStateFlow()
+
+    // Streak bozuk mu? (Streak Kurtarma senaryosu)
+    private val _streakBroke   = MutableStateFlow(false)
+    val streakBroke = _streakBroke.asStateFlow()
+
+    // Önceki streak (kurtarma için saklıyoruz)
+    private var savedStreakBeforeBroke = 0
+
     private val _activeLesson = MutableStateFlow<ActiveLesson?>(null)
     val activeLesson = _activeLesson.asStateFlow()
 
@@ -402,8 +418,9 @@ class KurdiViewModel @Inject constructor(
         val newLevel = maxOf(_level.value, newXp / 100 + 1)
 
         // Anında UI güncelle
-        _xp.value     = newXp
-        _level.value  = newLevel
+        _xp.value          = newXp
+        _level.value       = newLevel
+        _lastLessonXp.value = gained  // Çift XP senaryosu için sakla
         _doneIds.value = _doneIds.value + lessonId
         _lessons.value = _lessons.value.map {
             if (it.id == lessonId) it.copy(completed = true) else it
@@ -449,7 +466,6 @@ class KurdiViewModel @Inject constructor(
         try {
             val u        = firestore.collection("users").document(uid).get().await()
             val lastDate = u.getString("kf_lastDate") ?: ""
-            val cal      = Calendar.getInstance()
             val todayCal = SimpleDateFormat("EEE MMM dd yyyy", Locale.US).parse(today)
             val lastCal  = if (lastDate.isNotBlank()) {
                 try { SimpleDateFormat("EEE MMM dd yyyy", Locale.US).parse(lastDate) }
@@ -460,11 +476,19 @@ class KurdiViewModel @Inject constructor(
                 ((todayCal.time - lastCal.time) / 86400000L)
             } else -1L
 
+            val prevStreak = _streak.value
             val newStreak = when {
                 lastCal == null || diffDays > 1 -> 1
                 diffDays == 1L                  -> _streak.value + 1
                 else                            -> _streak.value
             }
+
+            // Streak bozuldu mu? → Kurtarma senaryosunu tetikle
+            if (prevStreak > 1 && newStreak == 1 && diffDays > 1) {
+                savedStreakBeforeBroke = prevStreak
+                _streakBroke.value    = true
+            }
+
             _streak.value = newStreak
 
             firestore.collection("users").document(uid).set(
@@ -476,6 +500,52 @@ class KurdiViewModel @Inject constructor(
     }
 
     fun clearToast() { _toast.value = null }
+
+    // ── Senaryo 1: Çift XP — ders tamamlandıktan sonra XP'yi 2 katla ─────────
+    fun doubleLastLessonXp() {
+        if (_lastLessonXp.value <= 0) return
+        val bonus = _lastLessonXp.value  // zaten bir kez verildi, bir tane daha ekle
+        val newXp = _xp.value + bonus
+        _xp.value    = newXp
+        _level.value = maxOf(1, newXp / 100 + 1)
+        if (uid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("users").document(uid)
+                    .update("kf_xp", newXp, "xp", newXp)
+                    .await()
+            } catch (_: Exception) {}
+        }
+        _lastLessonXp.value = 0  // Kullanıldı, sıfırla
+    }
+
+    // ── Senaryo 2: Kilitli dersi geçici aç (sadece o oturum) ─────────────────
+    fun tempUnlockLesson(lessonId: String) {
+        _tempUnlockedIds.value = _tempUnlockedIds.value + lessonId
+    }
+
+    // ── Senaryo 3: Streak kurtarma — eski streak'i geri yükle ────────────────
+    fun saveStreak() {
+        if (savedStreakBeforeBroke <= 0) return
+        val restored = savedStreakBeforeBroke
+        _streak.value      = restored
+        _streakBroke.value = false
+        savedStreakBeforeBroke = 0
+        if (uid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val today = SimpleDateFormat("EEE MMM dd yyyy", Locale.US).format(java.util.Date())
+                firestore.collection("users").document(uid)
+                    .set(mapOf("kf_streak" to restored, "streak" to restored, "kf_lastDate" to today),
+                        SetOptions.merge()).await()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun dismissStreakBroke() {
+        _streakBroke.value    = false
+        savedStreakBeforeBroke = 0
+    }
 
     fun getNextLesson(): KfLesson? =
         _lessons.value.sortedWith(compareBy({ it.unitId }, { it.order }))

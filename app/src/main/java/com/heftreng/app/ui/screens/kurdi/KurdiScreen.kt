@@ -48,6 +48,7 @@ fun KurdiScreen(
     language : String = "tr",
     vm       : KurdiViewModel = hiltViewModel(),
     adminVm  : AdminViewModel,
+    adsVm    : AdsViewModel = hiltViewModel(),
 ) {
     val units       by vm.units.collectAsState()
     val lessons     by vm.lessons.collectAsState()
@@ -59,6 +60,78 @@ fun KurdiScreen(
     val activeLesson by vm.activeLesson.collectAsState()
     val toast       by vm.toast.collectAsState()
     val isAdmin     by adminVm.isAdmin.collectAsState()
+    val lastLessonXp    by vm.lastLessonXp.collectAsState()
+    val tempUnlockedIds by vm.tempUnlockedIds.collectAsState()
+    val streakBroke     by vm.streakBroke.collectAsState()
+    val canWatchAd      = adsVm.canWatchRewardedAd
+
+    val context  = androidx.compose.ui.platform.LocalContext.current
+    val activity = context as? android.app.Activity
+
+    // prefs init
+    LaunchedEffect(Unit) { adsVm.initPrefs(context); adsVm.loadRewarded(context) }
+
+    // Ödüllü reklam sonrası uygulanan senaryo
+    var pendingRewardType by remember { mutableStateOf<AdsViewModel.RewardType?>(null) }
+    var pendingUnlockId   by remember { mutableStateOf("") }
+
+    // ── Senaryo 3 — Streak Kurtarma Dialog ───────────────────────────────────
+    if (streakBroke && canWatchAd) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { vm.dismissStreakBroke() },
+            containerColor   = com.heftreng.app.ui.theme.HeftSurface,
+            title = {
+                androidx.compose.foundation.layout.Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("🔥", fontSize = 28.sp)
+                    Text(
+                        if (language == "ku") "Zincîra te qut bû!" else "Seriniz bozuldu!",
+                        color = com.heftreng.app.ui.theme.OnBackground,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            },
+            text = {
+                Text(
+                    if (language == "ku") "Duh ders nexwendî û zincîra te sifir bû. Vîdyoyek kurt temaşe bike û zincîra xwe xilas bike!"
+                    else "Dün ders çalışmayı unuttun. Kısa bir video izleyerek serinizi kurtarabilirsin!",
+                    color = com.heftreng.app.ui.theme.Muted,
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.Button(
+                    onClick = {
+                        activity?.let {
+                            adsVm.showRewarded(
+                                activity    = it,
+                                rewardType  = AdsViewModel.RewardType.SAVE_STREAK,
+                                onRewarded  = { _, _ -> vm.saveStreak() },
+                                onDismiss   = { vm.dismissStreakBroke() },
+                                onLimitReached = { vm.dismissStreakBroke() },
+                            )
+                        }
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFEF4444),
+                        contentColor   = Color.White,
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Text(
+                        if (language == "ku") "🔥 Zincîrê Xilas Bike" else "🔥 Seriyi Kurtar",
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.dismissStreakBroke() }) {
+                    Text(if (language == "ku") "Berde" else "Vazgeç", color = com.heftreng.app.ui.theme.Muted)
+                }
+            },
+        )
+    }
 
     var selectedTab by remember { mutableStateOf(0) }
     // YZ Ders sekmesi sadece admin'e görünür
@@ -76,6 +149,63 @@ fun KurdiScreen(
     }
 
     // Aktif ders varsa ders ekranını göster
+    // ── Senaryo 1 — Çift XP BottomSheet (ders tamamlandıktan sonra) ──────────
+    var showDoubleXpSheet by remember { mutableStateOf(false) }
+    LaunchedEffect(lastLessonXp) {
+        if (lastLessonXp > 0) showDoubleXpSheet = true
+    }
+    if (showDoubleXpSheet && canWatchAd) {
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { showDoubleXpSheet = false },
+            containerColor   = com.heftreng.app.ui.theme.HeftSurface,
+        ) {
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+            ) {
+                Text("🎉", fontSize = 48.sp)
+                Text(
+                    if (language == "ku") "Xwezî! +$lastLessonXp XP Qezenç Kir!"
+                    else "Tebrikler! +$lastLessonXp XP Kazandın!",
+                    color = com.heftreng.app.ui.theme.OnBackground,
+                    fontWeight = FontWeight.Bold, fontSize = 18.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                Surface(shape = RoundedCornerShape(12.dp), color = com.heftreng.app.ui.theme.Amber.copy(0.15f)) {
+                    Text(
+                        if (language == "ku") "Vîdyoyek kurt temaşe bike, ${lastLessonXp * 2} XP qezenç bike!"
+                        else "Kısa bir video izle, ${lastLessonXp * 2} XP kazan!",
+                        color = com.heftreng.app.ui.theme.Amber, fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    )
+                }
+                androidx.compose.material3.Button(
+                    onClick = {
+                        showDoubleXpSheet = false
+                        activity?.let {
+                            adsVm.showRewarded(
+                                activity   = it,
+                                rewardType = AdsViewModel.RewardType.DOUBLE_XP,
+                                onRewarded = { _, _ -> vm.doubleLastLessonXp() },
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = RoundedCornerShape(12.dp),
+                    colors   = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = com.heftreng.app.ui.theme.Amber, contentColor = Color.Black,
+                    ),
+                ) { Text(if (language == "ku") "⚡ 2x XP Bistîne" else "⚡ 2x XP Kazan", fontWeight = FontWeight.Bold) }
+                TextButton(onClick = { showDoubleXpSheet = false; vm.doubleLastLessonXp() .let {} }) {
+                    Text(if (language == "ku") "Na spas" else "Hayır teşekkürler", color = com.heftreng.app.ui.theme.Muted)
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+    }
+
     if (activeLesson != null) {
         LessonScreen(
             activeLesson = activeLesson!!,
@@ -102,7 +232,8 @@ fun KurdiScreen(
         )
 
         // XP & Streak kartı
-        XpStreakCard(xp = xp, streak = streak, level = level, language = language)
+        XpStreakCard(xp = xp, streak = streak, level = level, language = language,
+            remainingAds = AdsViewModel.let { 3 - adsVm.dailyRewardCount }.coerceAtLeast(0))
 
         Spacer(Modifier.height(8.dp))
 
@@ -136,13 +267,27 @@ fun KurdiScreen(
         // İçerik
         when (selectedTab) {
             0 -> UnitsTab(
-                units    = units,
-                lessons  = lessons,
-                doneIds  = doneIds,
-                loading  = loading,
-                language = language,
+                units           = units,
+                lessons         = lessons,
+                doneIds         = doneIds,
+                loading         = loading,
+                language        = language,
+                tempUnlockedIds = tempUnlockedIds,
+                canWatchAd      = canWatchAd,
                 onNext   = { vm.getNextLesson()?.let { vm.openLesson(it.id) } },
                 onOpen   = { lessonId -> vm.openLesson(lessonId) },
+                onLockedClick = { lessonId ->
+                    activity?.let {
+                        adsVm.showRewarded(
+                            activity   = it,
+                            rewardType = AdsViewModel.RewardType.UNLOCK_LESSON,
+                            onRewarded = { _, _ ->
+                                vm.tempUnlockLesson(lessonId)
+                                vm.openLesson(lessonId)
+                            },
+                        )
+                    }
+                },
             )
             1 -> DictionaryTab(language, isAdmin = isAdmin, vm = vm)
             2 -> GrammarTab(language, isAdmin = isAdmin, vm = vm)
@@ -172,7 +317,7 @@ fun KurdiScreen(
 
 // ── XP / Streak kartı ────────────────────────────────────────────────────────
 @Composable
-private fun XpStreakCard(xp: Int, streak: Int, level: Int, language: String) {
+private fun XpStreakCard(xp: Int, streak: Int, level: Int, language: String, remainingAds: Int = 3) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -180,13 +325,14 @@ private fun XpStreakCard(xp: Int, streak: Int, level: Int, language: String) {
         shape = RoundedCornerShape(16.dp),
         color = HeftSurface,
     ) {
-        Row(
-            modifier          = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    Strings.levelLabel(language, level),
+        Column {
+            Row(
+                modifier          = Modifier.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        Strings.levelLabel(language, level),
                     fontWeight = FontWeight.Bold,
                     color      = Primary,
                     fontSize   = 13.sp,
@@ -214,19 +360,43 @@ private fun XpStreakCard(xp: Int, streak: Int, level: Int, language: String) {
                 Text("Streak", color = Muted, fontSize = 10.sp)
             }
         }
+        // Günlük ödüllü reklam hakkı göstergesi
+        if (remainingAds < 3) {
+            androidx.compose.material3.HorizontalDivider(color = com.heftreng.app.ui.theme.Divider, thickness = 0.5.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+            ) {
+                repeat(3) { i ->
+                    Box(
+                        modifier = Modifier.size(8.dp).clip(CircleShape)
+                            .background(if (i < remainingAds) Amber else com.heftreng.app.ui.theme.Divider)
+                    )
+                }
+                Text(
+                    if (language == "ku") "$remainingAds mafê vîdyoyê mayî"
+                    else "$remainingAds ödüllü reklam hakkı kaldı",
+                    color = Muted, fontSize = 10.sp,
+                )
+            }
+        }
     }
 }
 
 // ── Ünite yol haritası sekmesi ───────────────────────────────────────────────
 @Composable
 private fun UnitsTab(
-    units    : List<KfUnit>,
-    lessons  : List<KfLesson>,
-    doneIds  : Set<String>,
-    loading  : Boolean,
-    language : String,
-    onNext   : () -> Unit,
-    onOpen   : (String) -> Unit,
+    units           : List<KfUnit>,
+    lessons         : List<KfLesson>,
+    doneIds         : Set<String>,
+    loading         : Boolean,
+    language        : String,
+    tempUnlockedIds : Set<String> = emptySet(),
+    canWatchAd      : Boolean = false,
+    onNext          : () -> Unit,
+    onOpen          : (String) -> Unit,
+    onLockedClick   : (String) -> Unit = {},
 ) {
     when {
         loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -270,11 +440,14 @@ private fun UnitsTab(
                 if (unitLessons.isNotEmpty()) {
                     item(key = "path_${unit.id}") {
                         LessonPath(
-                            lessons  = unitLessons,
-                            doneIds  = doneIds,
-                            color    = color,
-                            language = language,
-                            onOpen   = onOpen,
+                            lessons         = unitLessons,
+                            doneIds         = doneIds,
+                            color           = color,
+                            language        = language,
+                            tempUnlockedIds = tempUnlockedIds,
+                            canWatchAd      = canWatchAd,
+                            onOpen          = onOpen,
+                            onLockedClick   = onLockedClick,
                         )
                     }
                 }
@@ -406,11 +579,14 @@ private fun UnitHeader(
 // ── Ders yolu (site: .kp-lesson-path — daireler yol şeklinde) ────────────────
 @Composable
 private fun LessonPath(
-    lessons  : List<KfLesson>,
-    doneIds  : Set<String>,
-    color    : Color,
-    language : String = "tr",
-    onOpen   : (String) -> Unit,
+    lessons         : List<KfLesson>,
+    doneIds         : Set<String>,
+    color           : Color,
+    language        : String = "tr",
+    tempUnlockedIds : Set<String> = emptySet(),
+    canWatchAd      : Boolean = false,
+    onOpen          : (String) -> Unit,
+    onLockedClick   : (String) -> Unit = {},
 ) {
     val firstNotDone = lessons.indexOfFirst { it.id !in doneIds }
         .let { if (it == -1) lessons.size else it }
@@ -421,9 +597,10 @@ private fun LessonPath(
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         lessons.forEachIndexed { index, lesson ->
-            val isDone   = lesson.id in doneIds
-            val isActive = index == firstNotDone
-            val isLocked = index > firstNotDone
+            val isDone         = lesson.id in doneIds
+            val isTempUnlocked = lesson.id in tempUnlockedIds
+            val isActive       = index == firstNotDone || isTempUnlocked
+            val isLocked       = index > firstNotDone && !isTempUnlocked
 
             LessonPathNode(
                 lesson   = lesson,
@@ -436,6 +613,7 @@ private fun LessonPath(
                 language = language,
                 onClick  = {
                     if (!isLocked) onOpen(lesson.id)
+                    else if (canWatchAd) onLockedClick(lesson.id)
                 },
             )
         }
@@ -497,7 +675,13 @@ private fun LessonPathNode(
             ) {
                 when {
                     isDone   -> Text("⭐", fontSize = 26.sp)
-                    isLocked -> Icon(Icons.Default.Lock, null, tint = Muted, modifier = Modifier.size(22.dp))
+                    isLocked -> androidx.compose.foundation.layout.Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
+                    ) {
+                        Icon(Icons.Default.Lock, null, tint = Muted, modifier = Modifier.size(18.dp))
+                        Text("▶️", fontSize = 10.sp)
+                    }
                     isActive -> Text(lesson.emoji, fontSize = 26.sp)
                     else     -> Text(lesson.emoji, fontSize = 26.sp)
                 }
