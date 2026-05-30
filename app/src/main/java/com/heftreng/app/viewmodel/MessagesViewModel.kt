@@ -65,6 +65,9 @@ class MessagesViewModel @Inject constructor(
     private val _uid = MutableStateFlow(auth.currentUser?.uid ?: "")
     val uid get() = _uid.value
 
+    // Firestore'dan çekilen kullanıcı adı — bildirim title'ında kullanılır
+    private var _myFirestoreName: String = auth.currentUser?.displayName ?: "Biri"
+
     private var convListener: ListenerRegistration? = null
     private var msgListener : ListenerRegistration? = null
 
@@ -74,7 +77,29 @@ class MessagesViewModel @Inject constructor(
             val newUid = firebaseAuth.currentUser?.uid ?: ""
             if (newUid != _uid.value) {
                 _uid.value = newUid
-                if (newUid.isNotEmpty()) listenConversations()
+                if (newUid.isNotEmpty()) {
+                    listenConversations()
+                    viewModelScope.launch {
+                        try {
+                            val doc = firestore.collection("users").document(newUid).get().await()
+                            val name = (doc.getString("displayName") ?: doc.getString("name"))
+                                ?.takeIf { it.isNotBlank() }
+                            if (name != null) _myFirestoreName = name
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+        }
+        // İlk açılışta da çek
+        val curUid = auth.currentUser?.uid
+        if (!curUid.isNullOrBlank()) {
+            viewModelScope.launch {
+                try {
+                    val doc = firestore.collection("users").document(curUid).get().await()
+                    val name = (doc.getString("displayName") ?: doc.getString("name"))
+                        ?.takeIf { it.isNotBlank() }
+                    if (name != null) _myFirestoreName = name
+                } catch (_: Exception) {}
             }
         }
     }
@@ -229,7 +254,7 @@ class MessagesViewModel @Inject constructor(
                     .set(convUpd, SetOptions.merge()).await()
                 // sendPush — karşı tarafa bildirim gönder
                 try {
-                    val myName = auth.currentUser?.displayName ?: "Biri"
+                    val myName = _myFirestoreName
                     com.google.firebase.functions.FirebaseFunctions
                         .getInstance("europe-west1")
                         .getHttpsCallable("sendPush")
@@ -324,7 +349,7 @@ class MessagesViewModel @Inject constructor(
                     .set(convUpd, com.google.firebase.firestore.SetOptions.merge()).await()
                 // push
                 try {
-                    val myName = auth.currentUser?.displayName ?: "Biri"
+                    val myName = _myFirestoreName
                     com.google.firebase.functions.FirebaseFunctions
                         .getInstance("europe-west1")
                         .getHttpsCallable("sendPush")

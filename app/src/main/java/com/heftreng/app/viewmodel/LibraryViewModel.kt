@@ -77,7 +77,22 @@ class LibraryViewModel @Inject constructor(
     val isFollowingAuthor = _isFollowingAuthor.asStateFlow()
 
     val myUid get() = auth.currentUser?.uid ?: ""
-    val myName get() = auth.currentUser?.displayName ?: ""
+    private var _cachedDisplayName: String = auth.currentUser?.displayName ?: ""
+    val myName get() = _cachedDisplayName.ifBlank { auth.currentUser?.displayName ?: "" }
+
+    init {
+        val curUid = auth.currentUser?.uid
+        if (!curUid.isNullOrBlank()) {
+            viewModelScope.launch {
+                try {
+                    val doc = firestore.collection("users").document(curUid).get().await()
+                    val name = (doc.getString("displayName") ?: doc.getString("name"))
+                        ?.takeIf { it.isNotBlank() }
+                    if (name != null) _cachedDisplayName = name
+                } catch (_: Exception) {}
+            }
+        }
+    }
     val myPhoto get() = auth.currentUser?.photoUrl?.toString() ?: ""
     val myUser get() = auth.currentUser?.email?.substringBefore("@") ?: ""
 

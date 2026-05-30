@@ -370,8 +370,10 @@ class FeedViewModel @Inject constructor(
                 val likeRef = firestore.collection("feedLikes").document("${post.id}_$uid")
                 val postRef = firestore.collection("feed").document(post.id)
                 if (nowLiked) {
-                    val myName  = auth.currentUser?.displayName ?: ""
-                    val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
+                    val uDoc    = try { firestore.collection("users").document(uid).get().await() } catch (_: Exception) { null }
+                    val myName  = (uDoc?.getString("displayName") ?: uDoc?.getString("name"))
+                        ?.takeIf { it.isNotBlank() } ?: auth.currentUser?.displayName ?: ""
+                    val myPhoto = uDoc?.getString("photoURL") ?: auth.currentUser?.photoUrl?.toString() ?: ""
                     likeRef.set(mapOf(
                         "uid"      to uid,
                         "feedId"   to post.id,
