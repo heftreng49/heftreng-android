@@ -397,10 +397,13 @@ service cloud.firestore {
     match /kf_verbs/{id}      { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
     match /kf_grammar/{id}    { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
     match /kf_cats/{id}       { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
+    match /kf_dict/{id}       { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
     match /kf_reports/{reportId} {
-      allow read, update: if isModerator();
-      allow delete:       if isAdmin();
-      allow create:       if isAuth() && maxLen('reason', 500);
+      // Admin ve kurdi yetkilileri okuyup güncelleyebilir (çözüldü işareti)
+      allow read, update: if isAdmin() || hasPermission("kurdi") || isModerator();
+      allow delete:       if isAdmin() || hasPermission("kurdi");
+      // Giriş yapmış herhangi biri rapor oluşturabilir
+      allow create:       if isAuth() && maxLen('message', 1000);
     }
 
     // ─── USERNAMES ────────────────────────────────────────────
