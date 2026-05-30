@@ -326,39 +326,20 @@ class SearchViewModel @Inject constructor(
             try {
                 val followSnap = firestore.collection("follows")
                     .whereEqualTo("fromUid", uid)
-                    .limit(500).get().await()
+                    .limit(200).get().await()
                 val followedUids = followSnap.documents
                     .mapNotNull { it.getString("targetUid") }.toSet() + uid
 
-                // İki tur çek: önce son katılanlar, sonra eski — böylece incomplete hesaplar da dahil
-                val recentSnap = firestore.collection("users")
-                    .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(200).get().await()
-                val oldSnap = firestore.collection("users")
-                    .limit(200).get().await()
+                // Tüm kullanıcıları çek (limit 100 — Firestore ücretsiz plan için yeterli)
+                val usersSnap = firestore.collection("users")
+                    .limit(100).get().await()
 
-                val allDocs = (recentSnap.documents + oldSnap.documents)
-                    .distinctBy { it.id }
-
-                _suggestions.value = allDocs
+                _suggestions.value = usersSnap.documents
                     .mapNotNull { it.toUser() }
                     .filter { it.uid !in followedUids }
                     .shuffled()
-                    .take(30)
-            } catch (e: Exception) {
-                // createdAt alanı yoksa (eski hesaplar) fallback: sıralamasız çek
-                try {
-                    val usersSnap = firestore.collection("users").limit(300).get().await()
-                    val followSnap = firestore.collection("follows")
-                        .whereEqualTo("fromUid", uid).limit(500).get().await()
-                    val followedUids = followSnap.documents
-                        .mapNotNull { it.getString("targetUid") }.toSet() + uid
-                    _suggestions.value = usersSnap.documents
-                        .mapNotNull { it.toUser() }
-                        .filter { it.uid !in followedUids }
-                        .shuffled().take(30)
-                } catch (e2: Exception) { e2.printStackTrace() }
-            }
+                    .take(20)
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
@@ -378,14 +359,13 @@ class SearchViewModel @Inject constructor(
     }
 
     private fun com.google.firebase.firestore.DocumentSnapshot.toUser(): User? {
-        val d = data ?: return null  // Firestore dokümanı yoksa null döner
-        // displayName → name → email prefix → username → UID prefix sıralamasıyla al
-        // Hiç alan yoksa bile doküman var demektir — UID prefix ile göster
+        val d = data ?: return null
+        // displayName → name → email prefix → username → "Kullanıcı" sıralamasıyla al
         val rawName = (d["displayName"] as? String)?.ifBlank { null }
                       ?: (d["name"]        as? String)?.ifBlank { null }
                       ?: (d["email"]       as? String)?.substringBefore("@")?.ifBlank { null }
                       ?: (d["username"]    as? String)?.ifBlank { null }
-                      ?: id.take(8) // son çare: UID'nin ilk 8 karakteri
+                      ?: id.take(8) // Firestore dokümanı var ama tüm alanlar boş
         return User(
             uid            = id,
             displayName    = rawName,
