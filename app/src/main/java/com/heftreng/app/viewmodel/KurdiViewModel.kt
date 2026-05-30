@@ -686,7 +686,60 @@ class KurdiViewModel @Inject constructor(
         }
     }
 
-    // ── Admin: ders sil ───────────────────────────────────────────────────────
+    // ── Admin: ünite ekle ─────────────────────────────────────────────────────
+    fun addUnit(
+        id: String, ttl: String, nameKu: String,
+        desc: String, icon: String, color: String,
+        onDone: () -> Unit, onError: (String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            try {
+                val order = (_units.value.maxOfOrNull { it.order } ?: 0) + 1
+                firestore.collection("kf_units").document(id).set(mapOf(
+                    "id" to id, "ttl" to ttl, "nameKu" to nameKu,
+                    "desc" to desc, "icon" to icon, "color" to color, "order" to order,
+                )).await()
+                _units.value = (_units.value + KfUnit(id, ttl, nameKu, desc, "", icon, color, order))
+                    .sortedBy { it.order }
+                onDone()
+            } catch (e: Exception) { onError(e.message ?: "Eklenemedi") }
+        }
+    }
+
+    // ── Admin: ünite güncelle ─────────────────────────────────────────────────
+    fun updateUnit(
+        id: String, ttl: String, nameKu: String,
+        desc: String, icon: String, color: String,
+        onDone: () -> Unit, onError: (String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("kf_units").document(id).update(mapOf(
+                    "ttl" to ttl, "nameKu" to nameKu,
+                    "desc" to desc, "icon" to icon, "color" to color,
+                )).await()
+                _units.value = _units.value.map {
+                    if (it.id == id) it.copy(ttl = ttl, nameKu = nameKu, desc = desc, icon = icon, color = color)
+                    else it
+                }
+                onDone()
+            } catch (e: Exception) { onError(e.message ?: "Güncellenemedi") }
+        }
+    }
+
+    // ── Admin: ünite sil ──────────────────────────────────────────────────────
+    fun deleteUnit(id: String, onDone: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                // Bu üniteye bağlı ders var mı kontrol et
+                val bound = _lessons.value.count { it.unitId == id }
+                if (bound > 0) { onError("Bu üniteye bağlı $bound ders var. Önce dersleri silin."); return@launch }
+                firestore.collection("kf_units").document(id).delete().await()
+                _units.value = _units.value.filter { it.id != id }
+                onDone()
+            } catch (e: Exception) { onError(e.message ?: "Silinemedi") }
+        }
+    }
     fun deleteLesson(lessonId: String, onDone: () -> Unit, onError: (String) -> Unit) {
         viewModelScope.launch {
             try {

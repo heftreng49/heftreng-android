@@ -96,11 +96,11 @@ fun KurdiAdminScreen(
                 },
                 divider = { HorizontalDivider(color = Divider, thickness = 0.5.dp) },
             ) {
-                listOf("📚 Dersler", "➕ Yeni Ders", "🤖 Yapay Zeka").forEachIndexed { i, t ->
+                listOf("📚 Dersler", "➕ Yeni Ders", "🏛 Üniteler", "🤖 Yapay Zeka").forEachIndexed { i, t ->
                     Tab(
                         selected = selectedTab == i,
                         onClick  = { selectedTab = i },
-                        text     = { Text(t, fontSize = 13.sp) },
+                        text     = { Text(t, fontSize = 11.sp) },
                         selectedContentColor   = Amber,
                         unselectedContentColor = Muted,
                     )
@@ -110,7 +110,8 @@ fun KurdiAdminScreen(
             when (selectedTab) {
                 0 -> LessonListTab(lessons = lessons, vm = vm, onSelect = { selectedLesson = it })
                 1 -> NewLessonTab(vm = vm, onCreated = { selectedTab = 0 })
-                2 -> AdminAiLessonTab(vm = vm, lessons = lessons)
+                2 -> UnitManagerTab(vm = vm)
+                3 -> AdminAiLessonTab(vm = vm, lessons = lessons)
             }
         }
     }
@@ -270,12 +271,13 @@ private fun LessonEditDialog(
 }
 
 // ── Yeni ders oluştur ─────────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewLessonTab(vm: KurdiViewModel, onCreated: () -> Unit) {
     val scope   = rememberCoroutineScope()
     val db      = remember { FirebaseFirestore.getInstance() }
+    val units   by vm.units.collectAsState()
     var id      by remember { mutableStateOf("") }
-    var unitId  by remember { mutableStateOf("u1") }
     var nameTr  by remember { mutableStateOf("") }
     var nameKu  by remember { mutableStateOf("") }
     var emoji   by remember { mutableStateOf("📖") }
@@ -284,6 +286,12 @@ private fun NewLessonTab(vm: KurdiViewModel, onCreated: () -> Unit) {
     var saving  by remember { mutableStateOf(false) }
     var error   by remember { mutableStateOf("") }
     val snack   = remember { SnackbarHostState() }
+
+    // Ünite dropdown state
+    var unitDropExpanded by remember { mutableStateOf(false) }
+    var selectedUnit     by remember(units) { mutableStateOf(units.firstOrNull()) }
+    // units yüklenince ilk üniteyi otomatik seç
+    LaunchedEffect(units) { if (selectedUnit == null && units.isNotEmpty()) selectedUnit = units.first() }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snack) },
@@ -296,7 +304,55 @@ private fun NewLessonTab(vm: KurdiViewModel, onCreated: () -> Unit) {
         ) {
             item { Text("Yeni Ders Oluştur", color = OnBackground, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp) }
             item { AdminField(id, { id = it }, "Ders ID (örn: l7)", hint = "l7") }
-            item { AdminField(unitId, { unitId = it }, "Birim ID (örn: u1)", hint = "u1") }
+
+            // ── Ünite Seçici ──────────────────────────────────────────────────
+            item {
+                ExposedDropdownMenuBox(
+                    expanded         = unitDropExpanded,
+                    onExpandedChange = { unitDropExpanded = !unitDropExpanded },
+                ) {
+                    OutlinedTextField(
+                        value = selectedUnit?.let { "${it.icon} ${it.ttl} (${it.id})" } ?: "Ünite seç…",
+                        onValueChange = {},
+                        readOnly  = true,
+                        label     = { Text("Ünite *", fontSize = 12.sp) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = unitDropExpanded) },
+                        modifier  = Modifier.fillMaxWidth().menuAnchor(),
+                        colors    = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor   = Amber, unfocusedBorderColor = Divider,
+                            focusedTextColor     = OnBackground, unfocusedTextColor = OnBackground,
+                            unfocusedContainerColor = HeftSurface, focusedContainerColor = HeftSurface,
+                        ),
+                    )
+                    ExposedDropdownMenu(
+                        expanded         = unitDropExpanded,
+                        onDismissRequest = { unitDropExpanded = false },
+                        modifier         = Modifier.background(HeftSurface),
+                    ) {
+                        if (units.isEmpty()) {
+                            DropdownMenuItem(
+                                text    = { Text("Henüz ünite yok — önce ünite ekle", color = Muted, fontSize = 12.sp) },
+                                onClick = { unitDropExpanded = false },
+                            )
+                        }
+                        units.forEach { unit ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(unit.icon, fontSize = 18.sp)
+                                        Column {
+                                            Text(unit.ttl, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                            Text(unit.id, color = Muted, fontSize = 10.sp)
+                                        }
+                                    }
+                                },
+                                onClick = { selectedUnit = unit; unitDropExpanded = false },
+                            )
+                        }
+                    }
+                }
+            }
+
             item { AdminField(nameTr, { nameTr = it }, "Türkçe Ad") }
             item { AdminField(nameKu, { nameKu = it }, "Kürtçe Ad") }
             item { AdminField(emoji, { emoji = it }, "Emoji", hint = "📖") }
@@ -312,14 +368,16 @@ private fun NewLessonTab(vm: KurdiViewModel, onCreated: () -> Unit) {
             item {
                 Button(
                     onClick = {
-                        if (id.isBlank() || nameTr.isBlank()) { error = "ID ve Türkçe ad zorunlu"; return@Button }
+                        if (id.isBlank() || nameTr.isBlank() || selectedUnit == null) {
+                            error = "ID, Türkçe ad ve ünite zorunlu"; return@Button
+                        }
                         scope.launch {
                             saving = true
                             try {
                                 db.collection("kf_lessons").document(id).set(
                                     mapOf(
                                         "id"     to id,
-                                        "unitId" to unitId,
+                                        "unitId" to selectedUnit!!.id,
                                         "nameTr" to nameTr,
                                         "nameKu" to nameKu,
                                         "emoji"  to emoji,
@@ -907,6 +965,178 @@ fun AdminField(
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ADMİN AI DERS SEKMESİ — Yapay zeka ile egzersiz üret + Firestore'a kaydet
+// ── Ünite Yönetimi ────────────────────────────────────────────────────────────
+@Composable
+private fun UnitManagerTab(vm: KurdiViewModel) {
+    val units   by vm.units.collectAsState()
+    val lessons by vm.lessons.collectAsState()
+    var showAdd by remember { mutableStateOf(false) }
+    var editTarget   by remember { mutableStateOf<KfUnit?>(null) }
+    var deleteTarget by remember { mutableStateOf<KfUnit?>(null) }
+    var errorMsg     by remember { mutableStateOf("") }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Üniteler (${units.size})", fontWeight = FontWeight.Bold, color = OnBackground)
+            Button(
+                onClick = { showAdd = true },
+                colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                shape   = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+            ) {
+                Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Ünite Ekle", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        }
+
+        if (errorMsg.isNotBlank()) {
+            Surface(color = Color(0xFFEF4444).copy(alpha = 0.15f), shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()) {
+                Text(errorMsg, color = Color(0xFFEF4444), fontSize = 12.sp, modifier = Modifier.padding(10.dp))
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        if (units.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("🏛", fontSize = 40.sp)
+                    Text("Henüz ünite yok", color = Muted)
+                    Text("Ünite eklemeden ders oluşturamazsın", color = Muted, fontSize = 12.sp)
+                }
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(units, key = { it.id }) { unit ->
+                    val lessonCount = lessons.count { it.unitId == unit.id }
+                    Surface(shape = RoundedCornerShape(14.dp), color = HeftSurface, modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Box(modifier = Modifier.size(40.dp).background(
+                                try { Color(android.graphics.Color.parseColor(unit.color)) }
+                                catch (_: Exception) { Amber },
+                                RoundedCornerShape(10.dp),
+                            ), contentAlignment = Alignment.Center) {
+                                Text(unit.icon, fontSize = 20.sp)
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text(unit.ttl, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(unit.nameKu, color = Muted, fontSize = 12.sp)
+                                Text("${unit.id} • $lessonCount ders • sıra: ${unit.order}", color = Muted, fontSize = 10.sp)
+                            }
+                            IconButton(onClick = { editTarget = unit }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(17.dp))
+                            }
+                            IconButton(onClick = { deleteTarget = unit }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444), modifier = Modifier.size(17.dp))
+                            }
+                        }
+                    }
+                }
+                item { Spacer(Modifier.height(80.dp)) }
+            }
+        }
+    }
+
+    if (showAdd) {
+        UnitFormDialog(unit = null, onDismiss = { showAdd = false },
+            onSave = { id, ttl, nameKu, desc, icon, color ->
+                vm.addUnit(id, ttl, nameKu, desc, icon, color,
+                    onDone = { showAdd = false; errorMsg = "" }, onError = { errorMsg = it })
+            })
+    }
+    editTarget?.let { unit ->
+        UnitFormDialog(unit = unit, onDismiss = { editTarget = null },
+            onSave = { _, ttl, nameKu, desc, icon, color ->
+                vm.updateUnit(unit.id, ttl, nameKu, desc, icon, color,
+                    onDone = { editTarget = null; errorMsg = "" }, onError = { errorMsg = it })
+            })
+    }
+    deleteTarget?.let { unit ->
+        val lessonCount = lessons.count { it.unitId == unit.id }
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("Üniteyi Sil?", color = OnBackground, fontWeight = FontWeight.Bold) },
+            text  = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("«${unit.ttl}» silinecek.", color = OnBackground)
+                    if (lessonCount > 0)
+                        Text("⚠️ Bu üniteye bağlı $lessonCount ders var. Önce dersleri sil.",
+                            color = Color(0xFFEF4444), fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    vm.deleteUnit(unit.id,
+                        onDone = { deleteTarget = null; errorMsg = "" },
+                        onError = { errorMsg = it; deleteTarget = null })
+                }, enabled = lessonCount == 0,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape  = RoundedCornerShape(10.dp),
+                ) { Text("Sil", color = Color.White, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("İptal", color = Muted) } },
+            containerColor = HeftSurface,
+        )
+    }
+}
+
+@Composable
+private fun UnitFormDialog(
+    unit: KfUnit?, onDismiss: () -> Unit,
+    onSave: (String, String, String, String, String, String) -> Unit,
+) {
+    val isEdit = unit != null
+    var id     by remember { mutableStateOf(unit?.id ?: "") }
+    var ttl    by remember { mutableStateOf(unit?.ttl ?: "") }
+    var nameKu by remember { mutableStateOf(unit?.nameKu ?: "") }
+    var desc   by remember { mutableStateOf(unit?.desc ?: "") }
+    var icon   by remember { mutableStateOf(unit?.icon ?: "📖") }
+    var color  by remember { mutableStateOf(unit?.color ?: "#8B5CF6") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (isEdit) "Üniteyi Düzenle" else "Yeni Ünite", color = OnBackground, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!isEdit) AdminField(id, { id = it }, "Ünite ID (örn: u6)", hint = "u6")
+                else Text("ID: ${unit!!.id}", color = Muted, fontSize = 11.sp)
+                AdminField(ttl,    { ttl    = it }, "Türkçe Ad *")
+                AdminField(nameKu, { nameKu = it }, "Kürtçe Ad")
+                AdminField(desc,   { desc   = it }, "Açıklama")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AdminField(icon,  { icon  = it }, "Emoji", modifier = Modifier.weight(1f))
+                    AdminField(color, { color = it }, "Renk (#hex)", modifier = Modifier.weight(1f))
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val finalId = if (isEdit) unit!!.id else id
+                    if (finalId.isNotBlank() && ttl.isNotBlank()) onSave(finalId, ttl, nameKu, desc, icon, color)
+                },
+                enabled = (if (isEdit) true else id.isNotBlank()) && ttl.isNotBlank(),
+                colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                shape   = RoundedCornerShape(10.dp),
+            ) { Text("Kaydet", fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onDismiss) { Text("İptal", color = Muted) } },
+        containerColor = HeftSurface,
+    )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
