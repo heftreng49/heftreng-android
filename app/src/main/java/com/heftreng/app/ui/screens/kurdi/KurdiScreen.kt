@@ -40,6 +40,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
+import com.heftreng.app.ui.component.AdBannerView
 import com.heftreng.app.viewmodel.*
 
 // -- Ana ekran ----------------------------------------------------------------
@@ -65,12 +66,16 @@ fun KurdiScreen(
     val tempUnlockedIds by vm.tempUnlockedIds.collectAsState()
     val streakBroke     by vm.streakBroke.collectAsState()
     val canWatchAd      = adsVm.canWatchRewardedAd
+    val bannerUnitId    by adsVm.bannerKurdiUnitId.collectAsState()
 
     val context  = androidx.compose.ui.platform.LocalContext.current
     val activity = context as? android.app.Activity
 
-    // prefs init
-    LaunchedEffect(Unit) { adsVm.initPrefs(context); adsVm.loadRewarded(context) }
+    LaunchedEffect(Unit) {
+        adsVm.initPrefs(context)
+        adsVm.loadRewarded(context)
+        adsVm.loadAdConfigs()
+    }
 
     // Ödüllü reklam sonrası uygulanan senaryo
     var pendingRewardType by remember { mutableStateOf<AdsViewModel.RewardType?>(null) }
@@ -275,6 +280,7 @@ fun KurdiScreen(
                 language        = language,
                 tempUnlockedIds = tempUnlockedIds,
                 canWatchAd      = canWatchAd,
+                bannerUnitId    = bannerUnitId,
                 onNext   = { vm.getNextLesson()?.let { vm.openLesson(it.id) } },
                 onOpen   = { lessonId -> vm.openLesson(lessonId) },
                 onLockedClick = { lessonId ->
@@ -396,6 +402,7 @@ private fun UnitsTab(
     language        : String,
     tempUnlockedIds : Set<String> = emptySet(),
     canWatchAd      : Boolean = false,
+    bannerUnitId    : String? = null,
     onNext          : () -> Unit,
     onOpen          : (String) -> Unit,
     onLockedClick   : (String) -> Unit = {},
@@ -426,7 +433,7 @@ private fun UnitsTab(
             }
 
             // Her ünite
-            units.forEach { unit ->
+            units.forEachIndexed { unitIndex, unit ->
                 val unitLessons = lessons
                     .filter { it.unitId == unit.id }
                     .sortedBy { it.order }
@@ -434,6 +441,16 @@ private fun UnitsTab(
                 val total = unitLessons.size
                 val pct   = if (total > 0) done * 100 / total else 0
                 val color = parseColor(unit.color)
+
+                // Her 2 üniteden sonra banner (1. ünite bitmeden gösterme)
+                if (bannerUnitId != null && unitIndex > 0 && unitIndex % 2 == 0) {
+                    item(key = "banner_${unit.id}") {
+                        AdBannerView(
+                            unitId   = bannerUnitId,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    }
+                }
 
                 item(key = "unit_${unit.id}") {
                     UnitHeader(unit = unit, done = done, total = total, pct = pct, color = color)

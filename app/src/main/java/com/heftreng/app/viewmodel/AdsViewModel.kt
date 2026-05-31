@@ -28,6 +28,12 @@ class AdsViewModel @Inject constructor(
     private val _bannerConfig       = MutableStateFlow<CmsAdConfig?>(null)
     val bannerConfig = _bannerConfig.asStateFlow()
 
+    private val _bannerLibraryConfig = MutableStateFlow<CmsAdConfig?>(null)
+    val bannerLibraryConfig = _bannerLibraryConfig.asStateFlow()
+
+    private val _bannerKurdiConfig  = MutableStateFlow<CmsAdConfig?>(null)
+    val bannerKurdiConfig = _bannerKurdiConfig.asStateFlow()
+
     private val _interstitialConfig = MutableStateFlow<CmsAdConfig?>(null)
     val interstitialConfig = _interstitialConfig.asStateFlow()
 
@@ -38,8 +44,18 @@ class AdsViewModel @Inject constructor(
     private val _adsEnabled         = MutableStateFlow(true)
     val adsEnabled = _adsEnabled.asStateFlow()
 
-    // ── Banner unit ID — StateFlow olarak (recompose tetikler) ───────────────
+    // ── Banner unit ID'leri ───────────────────────────────────────────────────
     val bannerUnitId: StateFlow<String?> = combine(_bannerConfig, _adsEnabled) { config, enabled ->
+        if (config == null || !config.enabled || !enabled) null
+        else if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val bannerLibraryUnitId: StateFlow<String?> = combine(_bannerLibraryConfig, _adsEnabled) { config, enabled ->
+        if (config == null || !config.enabled || !enabled) null
+        else if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val bannerKurdiUnitId: StateFlow<String?> = combine(_bannerKurdiConfig, _adsEnabled) { config, enabled ->
         if (config == null || !config.enabled || !enabled) null
         else if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -74,9 +90,11 @@ class AdsViewModel @Inject constructor(
                         xpReward  = (d["xpReward"]  as? Long)?.toInt() ?: 50,
                     )
                     when (doc.id) {
-                        "banner_feed"         -> _bannerConfig.value       = config
-                        "interstitial_serial" -> _interstitialConfig.value = config
-                        "rewarded_xp"         -> _rewardedConfig.value     = config
+                        "banner_feed"         -> _bannerConfig.value         = config
+                        "banner_library"      -> _bannerLibraryConfig.value  = config
+                        "banner_kurdi"        -> _bannerKurdiConfig.value    = config
+                        "interstitial_serial" -> _interstitialConfig.value   = config
+                        "rewarded_xp"         -> _rewardedConfig.value       = config
                     }
                 }
             } catch (e: Exception) {

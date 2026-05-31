@@ -57,13 +57,16 @@ import com.heftreng.app.ui.component.EmptyState
 import com.heftreng.app.ui.component.LibraryBookCard
 import com.heftreng.app.ui.component.AddReviewDialog
 import com.heftreng.app.ui.component.BookPickerDialog
+import com.heftreng.app.ui.component.AdBannerView
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
+import com.heftreng.app.viewmodel.AdsViewModel
 import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.viewmodel.LibraryViewModel
 import kotlinx.coroutines.tasks.await
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import kotlin.math.roundToInt
@@ -80,6 +83,7 @@ fun LibraryScreen(
     language     : String,
     libraryVm    : LibraryViewModel = hiltViewModel(),
     feedVm       : FeedViewModel    = hiltViewModel(),
+    adsVm        : AdsViewModel     = hiltViewModel(),
 ) {
     val tabs = listOf(
         Strings.libraryTabQuotes(language),
@@ -98,9 +102,11 @@ fun LibraryScreen(
     val authors by libraryVm.authors.collectAsState()
     var books   by remember { mutableStateOf<List<LibraryBook>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
+    val bannerUnitId by adsVm.bannerLibraryUnitId.collectAsState()
 
     LaunchedEffect(Unit) {
         loading = true
+        adsVm.loadAdConfigs()
         // Tüm sorgular paralel — N+1 yerine collectionGroup tek sorguda
         val quotesJob  = launch { feedVm.loadLibraryQuotesAsync() }
         val authorsJob = launch {
@@ -252,10 +258,10 @@ fun LibraryScreen(
                     modifier                = Modifier.fillMaxSize(),
                 ) { page ->
                     when (page) {
-                        0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm)
-                        1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm)
-                        2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language)
-                        3 -> LibraryBooksTab(books = books, navController = navController, language = language)
+                        0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, bannerUnitId = bannerUnitId)
+                        1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm, bannerUnitId = bannerUnitId)
+                        2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language, bannerUnitId = bannerUnitId)
+                        3 -> LibraryBooksTab(books = books, navController = navController, language = language, bannerUnitId = bannerUnitId)
                         else -> {}
                     }
                 }
@@ -344,13 +350,14 @@ private fun LibraryQuotesTab(
     language     : String,
     navController: NavController,
     feedVm       : FeedViewModel,
+    bannerUnitId : String? = null,
 ) {
     if (quotes.isEmpty()) {
         EmptyState(Icons.Outlined.FormatQuote, Strings.libraryNoQuotes(language))
         return
     }
     LazyColumn(contentPadding = PaddingValues(vertical = 0.dp)) {
-        items(quotes, key = { it.id }) { post ->
+        itemsIndexed(quotes, key = { _, p -> p.id }) { index, post ->
             PostCard(
                 post         = post,
                 language     = language,
@@ -374,6 +381,9 @@ private fun LibraryQuotesTab(
                         navController.navigate("book_quotes/${URLEncoder.encode(post.bookName, "UTF-8")}")
                 },
             )
+            if (bannerUnitId != null && (index + 1) % 5 == 0) {
+                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp))
+            }
         }
     }
 }
@@ -384,6 +394,7 @@ private fun LibraryReviewsTab(
     language     : String,
     navController: NavController,
     vm           : LibraryViewModel? = null,
+    bannerUnitId : String? = null,
 ) {
     if (reviews.isEmpty()) {
         EmptyState(Icons.Outlined.RateReview, Strings.libraryNoReviews(language))
@@ -391,8 +402,11 @@ private fun LibraryReviewsTab(
     }
     val actions = BookCardActions(vm = vm, navController = navController)
     LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
-        items(reviews, key = { it.id }) { review ->
+        itemsIndexed(reviews, key = { _, r -> r.id }) { index, review ->
             BookReviewCard(review = review, actions = actions, language = language)
+            if (bannerUnitId != null && (index + 1) % 5 == 0) {
+                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp))
+            }
         }
     }
 }
@@ -402,6 +416,7 @@ private fun LibraryAuthorsTab(
     authors      : List<Author>,
     language     : String,
     navController: NavController,
+    bannerUnitId : String? = null,
 ) {
     if (authors.isEmpty()) {
         EmptyState(Icons.Outlined.Person, Strings.libraryNoAuthors(language))
@@ -411,8 +426,11 @@ private fun LibraryAuthorsTab(
         contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        items(authors, key = { it.id }) { author ->
+        itemsIndexed(authors, key = { _, a -> a.id }) { index, author ->
             LibraryAuthorRow(author = author, navController = navController)
+            if (bannerUnitId != null && (index + 1) % 6 == 0) {
+                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp))
+            }
         }
     }
 }
@@ -422,6 +440,7 @@ private fun LibraryBooksTab(
     books        : List<LibraryBook>,
     language     : String,
     navController: NavController,
+    bannerUnitId : String? = null,
 ) {
     if (books.isEmpty()) {
         EmptyState(Icons.Outlined.AutoStories, Strings.libraryNoBooks(language))
@@ -431,11 +450,14 @@ private fun LibraryBooksTab(
         contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        items(books, key = { it.id }) { book ->
+        itemsIndexed(books, key = { _, b -> b.id }) { index, book ->
             LibraryBookCard(
                 book    = book,
                 onClick = { navController.navigate("library_book_detail/${book.id}") },
             )
+            if (bannerUnitId != null && (index + 1) % 6 == 0) {
+                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp))
+            }
         }
     }
 }

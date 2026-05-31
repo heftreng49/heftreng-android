@@ -984,6 +984,30 @@ private fun AdsTab(adsVm: AdsViewModel) {
             )
         }
 
+        // ── Banner Kütüphane ───────────────────────────────────────────────
+        item {
+            AdConfigCard(
+                title      = "Banner — Kütüphane",
+                docId      = "banner_library",
+                config     = adsVm.bannerLibraryConfig.collectAsState().value,
+                extraLabel = "Pozisyon (kaçıncı öğede)",
+                extraKey   = "position",
+                onSaved    = { adsVm.loadAdConfigs() },
+            )
+        }
+
+        // ── Banner Kürtçe ──────────────────────────────────────────────────
+        item {
+            AdConfigCard(
+                title      = "Banner — Kürtçe Dersler",
+                docId      = "banner_kurdi",
+                config     = adsVm.bannerKurdiConfig.collectAsState().value,
+                extraLabel = "Kaç ünitede bir",
+                extraKey   = "position",
+                onSaved    = { adsVm.loadAdConfigs() },
+            )
+        }
+
         // ── Interstitial Serial ────────────────────────────────────────────
         item {
             AdConfigCard(
