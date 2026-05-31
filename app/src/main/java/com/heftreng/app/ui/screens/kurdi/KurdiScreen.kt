@@ -382,7 +382,8 @@ private fun XpStreakCard(xp: Int, streak: Int, level: Int, language: String, rem
             }
         }
     }
-}
+} // Surface
+} // XpStreakCard
 
 // -- Ünite yol haritası sekmesi -----------------------------------------------
 @Composable
