@@ -403,6 +403,15 @@ class AdminViewModel @Inject constructor(
                 if (photoURL.isNotBlank()) updates["photoURL"] = photoURL
                 if (updates.isEmpty()) { _editResult.value = "✗ Değişiklik yok"; return@launch }
                 firestore.collection("users").document(uid).update(updates).await()
+                // Feed'deki displayName'i de güncelle (son 50 gönderi)
+                if (displayName.isNotBlank()) {
+                    try {
+                        firestore.collection("feed").whereEqualTo("uid", uid)
+                            .limit(50).get().await().documents.forEach {
+                                it.reference.update("displayName", displayName, "name", displayName)
+                            }
+                    } catch (_: Exception) {}
+                }
                 _users.value = _users.value.map {
                     if (it.uid == uid) it.copy(
                         displayName = displayName.ifBlank { it.displayName },
@@ -418,9 +427,34 @@ class AdminViewModel @Inject constructor(
         if (uid.isBlank() || _perms.value?.can("staff") != true) return
         viewModelScope.launch {
             try {
+                // 1. Firestore kullanıcı belgesi
                 firestore.collection("users").document(uid).delete().await()
-                firestore.collection("feed").whereEqualTo("uid", uid).get().await()
-                    .documents.forEach { it.reference.delete() }
+                // 2. Feed postları
+                try {
+                    firestore.collection("feed").whereEqualTo("uid", uid)
+                        .limit(100).get().await().documents.forEach { it.reference.delete() }
+                } catch (_: Exception) {}
+                // 3. userNotifs
+                try { firestore.collection("userNotifs").document(uid).delete().await() }
+                catch (_: Exception) {}
+                // 4. follows (fromUid)
+                try {
+                    firestore.collection("follows").whereEqualTo("fromUid", uid)
+                        .limit(200).get().await().documents.forEach { it.reference.delete() }
+                } catch (_: Exception) {}
+                // 5. follows (targetUid)
+                try {
+                    firestore.collection("follows").whereEqualTo("targetUid", uid)
+                        .limit(200).get().await().documents.forEach { it.reference.delete() }
+                } catch (_: Exception) {}
+                // 6. Firebase Auth kullanıcısını sil (Cloud Function üzerinden)
+                try {
+                    com.google.firebase.functions.FirebaseFunctions
+                        .getInstance("europe-west1")
+                        .getHttpsCallable("deleteAuthUser")
+                        .call(mapOf("uid" to uid))
+                        .await()
+                } catch (_: Exception) {}  // Function yoksa geç
                 _users.value = _users.value.filter { it.uid != uid }
                 _editResult.value = "✓ Kullanıcı silindi"
             } catch (e: Exception) { _editResult.value = "✗ ${e.message}" }

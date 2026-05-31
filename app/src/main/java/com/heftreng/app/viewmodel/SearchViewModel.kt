@@ -134,39 +134,41 @@ class SearchViewModel @Inject constructor(
             }
         } catch (e: Exception) { e.printStackTrace() }
 
-        // Feed gönderi — text prefix
+        // Feed gönderi — orderBy index gerektirdiği için son 300 postu çekip client-side filtrele
         try {
             val pSnap = firestore.collection("feed")
-                .orderBy("text")
-                .startAt(q).endAt(q + "\uF8FF")
-                .limit(10).get().await()
+                .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                .limit(300).get().await()
             results += pSnap.documents.mapNotNull { doc ->
                 val d = doc.data ?: return@mapNotNull null
-                val text = d["text"] as? String ?: return@mapNotNull null
-                if (text.isBlank()) return@mapNotNull null
+                val text = d["text"] as? String ?: ""
+                val qText = d["quoteText"] as? String ?: ""
+                val combined = "$text $qText".lowercase()
+                if (!combined.contains(qLower)) return@mapNotNull null
+                val display = text.ifBlank { qText }
+                if (display.isBlank()) return@mapNotNull null
                 val name = (d["displayName"] as? String)?.ifBlank { null }
                            ?: (d["name"] as? String)?.ifBlank { null }
                            ?: (d["email"] as? String)?.substringBefore("@") ?: ""
                 SearchResult(
                     id       = doc.id,
                     type     = "post",
-                    title    = text.take(80),
+                    title    = display.take(80),
                     subtitle = name,
                     imageUrl = d["photoURL"] as? String ?: "",
                 )
             }
         } catch (e: Exception) { e.printStackTrace() }
 
-        // Serials — title prefix
+        // Serials — tümünü çekip client-side filtrele (index gerektirmez)
         try {
             val sSnap = firestore.collection("serials")
-                .orderBy("title")
-                .startAt(q).endAt(q + "\uF8FF")
-                .limit(10).get().await()
+                .limit(100).get().await()
             results += sSnap.documents.mapNotNull { doc ->
                 val d = doc.data ?: return@mapNotNull null
                 val title = d["title"] as? String ?: return@mapNotNull null
                 if (title.isBlank()) return@mapNotNull null
+                if (!title.lowercase().contains(qLower)) return@mapNotNull null
                 SearchResult(
                     id       = doc.id,
                     type     = "serial",
@@ -226,13 +228,13 @@ class SearchViewModel @Inject constructor(
             }
         } catch (_: Exception) {}
 
-        // Alıntı (feed quoteText prefix)
+        // Alıntı — zaten feed taramasında yakalanıyor (quoteText client-side filtrelendi)
+        // Burada sadece library_books subcollection quotes'dan gelen ek alıntıları ekle
         try {
-            val qSnap = firestore.collection("feed")
-                .orderBy("quoteText")
-                .startAt(q).endAt(q + "\uF8FF")
-                .limit(8).get().await()
             val existingPostIds = results.filter { it.type == "post" }.map { it.id }.toSet()
+            val qSnap = firestore.collection("feed")
+                .whereEqualTo("type", "library_quote")
+                .limit(50).get().await()
             results += qSnap.documents.mapNotNull { doc ->
                 if (doc.id in existingPostIds) return@mapNotNull null
                 val d = doc.data ?: return@mapNotNull null
@@ -249,8 +251,6 @@ class SearchViewModel @Inject constructor(
                 )
             }
         } catch (e: Exception) { e.printStackTrace() }
-
-        _searchResults.value = results
 
         // ── Kütüphane Yazarları — authors koleksiyonu ───────────────────
         try {
@@ -319,27 +319,53 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    // ── Takip önerileri — TÜM kullanıcılar (takip edilmeyenler) ──
+    // ── Takip önerileri — son aktif kullanıcılar (takip edilmeyenler) ──
     fun loadSuggestions() {
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
+                // Kimin takip edildiğini al
                 val followSnap = firestore.collection("follows")
                     .whereEqualTo("fromUid", uid)
-                    .limit(200).get().await()
+                    .limit(500).get().await()
                 val followedUids = followSnap.documents
                     .mapNotNull { it.getString("targetUid") }.toSet() + uid
 
-                // Tüm kullanıcıları çek (limit 100 — Firestore ücretsiz plan için yeterli)
+                // Önce kendi Firestore kaydından takipçi listesi oluştur
+                // Sonra en çok takipçisi olanları öner
                 val usersSnap = firestore.collection("users")
-                    .limit(100).get().await()
+                    .orderBy("followersCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(50).get().await()
 
-                _suggestions.value = usersSnap.documents
+                val primary = usersSnap.documents
                     .mapNotNull { it.toUser() }
                     .filter { it.uid !in followedUids }
-                    .shuffled()
-                    .take(20)
-            } catch (e: Exception) { e.printStackTrace() }
+                    .take(10)
+
+                // Yetmezse sıradan kullanıcılar ekle
+                val suggestions = if (primary.size >= 10) primary else {
+                    val extraSnap = firestore.collection("users").limit(100).get().await()
+                    val extra = extraSnap.documents
+                        .mapNotNull { it.toUser() }
+                        .filter { u -> u.uid !in followedUids && primary.none { it.uid == u.uid } }
+                        .shuffled().take(20 - primary.size)
+                    primary + extra
+                }
+                _suggestions.value = suggestions
+            } catch (e: Exception) {
+                // orderBy followersCount index yoksa fallback
+                try {
+                    val usersSnap = firestore.collection("users").limit(100).get().await()
+                    val followSnap2 = firestore.collection("follows")
+                        .whereEqualTo("fromUid", uid).limit(500).get().await()
+                    val followedUids2 = followSnap2.documents
+                        .mapNotNull { it.getString("targetUid") }.toSet() + uid
+                    _suggestions.value = usersSnap.documents
+                        .mapNotNull { it.toUser() }
+                        .filter { it.uid !in followedUids2 }
+                        .shuffled().take(20)
+                } catch (e2: Exception) { e2.printStackTrace() }
+            }
         }
     }
 
