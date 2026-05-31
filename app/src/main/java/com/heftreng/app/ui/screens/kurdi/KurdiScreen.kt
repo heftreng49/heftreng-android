@@ -31,6 +31,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.*
@@ -233,7 +234,7 @@ fun KurdiScreen(
 
         // XP & Streak kartı
         XpStreakCard(xp = xp, streak = streak, level = level, language = language,
-            remainingAds = AdsViewModel.let { 3 - adsVm.dailyRewardCount }.coerceAtLeast(0))
+            remainingAds = (3 - adsVm.dailyRewardCount).coerceAtLeast(0))
 
         Spacer(Modifier.height(8.dp))
 
