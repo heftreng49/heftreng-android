@@ -21,7 +21,7 @@ data class User(
     val xp             : Int    = 0,
     val streak         : Int    = 0,
     val banned         : Boolean= false,
-    val isPrivate      : Boolean= false,   // Gizli hesap
+    val isPrivate      : Boolean= false
 )
 
 // ─── FEED GÖNDERISI ────────────────────────────────────
@@ -32,8 +32,8 @@ data class Post(
     val username      : String     = "",
     val photoURL      : String     = "",
     val text          : String     = "",
-    val imgUrl        : String     = "",   // tema: imgUrl
-    val ytVid         : String     = "",   // tema: ytVid
+    val imgUrl        : String     = "",
+    val ytVid         : String     = "",
     val badges        : List<String> = emptyList(),
     val repostTitle   : String     = "",
     val repostUrl     : String     = "",
@@ -48,18 +48,17 @@ data class Post(
     val authorName    : String     = "",
     val repostOf      : String     = "",
     val repostUid     : String     = "",
-    val name          : String     = "",   // tema: name (displayName alternatifi)
-    val repostType    : String     = "",   // tema: repostType
-    val repostId      : String     = "",   // tema: repostId
-    val repostText       : String     = "",   // tema: orijinal post metni
-    val repostAuthor     : String     = "",   // tema: orijinal yazar adı
-    val repostAuthorPhoto: String     = "",   // tema: orijinal yazar fotoğrafı
-    val repostAuthorUid  : String     = "",   // tema: orijinal yazar uid
-    val serialTitle      : String     = "",   // tema: serial başlığı
-    val serialCover      : String     = "",   // tema: serial kapak
-    val chapterTitle     : String     = "",   // tema: bölüm başlığı
-    val chapterOrder     : Int        = 0,    // tema: bölüm sırası
-    // tema: repostSerial alanları
+    val name          : String     = "",
+    val repostType    : String     = "",
+    val repostId      : String     = "",
+    val repostText       : String     = "",
+    val repostAuthor     : String     = "",
+    val repostAuthorPhoto: String     = "",
+    val repostAuthorUid  : String     = "",
+    val serialTitle      : String     = "",
+    val serialCover      : String     = "",
+    val chapterTitle     : String     = "",
+    val chapterOrder     : Int        = 0,
     val repostSerialId        : String  = "",
     val repostSerialTitle     : String  = "",
     val repostSerialDesc      : String  = "",
@@ -68,27 +67,19 @@ data class Post(
     val repostSerialAuthorUid : String  = "",
     val repostSerialBg        : String  = "",
     val repostSerialChCount   : Int     = 0,
-    val serialId         : String     = "",   // chapter repost için
-    val chapterId        : String     = "",   // chapter repost için
+    val serialId         : String     = "",
+    val chapterId        : String     = "",
     val isLikedByMe      : Boolean    = false,
     val isSavedByMe      : Boolean    = false,
     val isRepostedByMe   : Boolean    = false,
     val myRepostId       : String     = "",
-    // Kütüphane alıntı/inceleme için Firestore ID'leri
     val libraryBookId    : String     = "",
     val libraryAuthorId  : String     = "",
-    // Post tipi: "", "library_quote", "library_review", "book_chapter" vb.
     val type             : String     = "",
-    // Moderasyon — admin tarafından yönetilir
-    // "active" | "restricted" (sadece giriş yapanlar) | "suspended" (sadece sahip) | "removed" (silinmiş)
     val moderationStatus : String     = "active",
-    val moderationNote   : String     = "",   // admin notu (kullanıcıya gösterilmez)
-    val moderationReason : String     = "",   // kullanıcıya gösterilen sebep
-    // Görünürlük kısıtlaması (admin uygular)
-    // "public"   → herkese açık (varsayılan)
-    // "friends"  → sadece takipçiler görebilir
-    // "only_me"  → sadece sahibi görebilir
-    val visibility       : String     = "public",
+    val moderationNote   : String     = "",
+    val moderationReason : String     = "",
+    val visibility       : String     = "public"
 )
 
 // ─── MODERASYON İTİRAZ ────────────────────────────────────────────────
@@ -97,12 +88,12 @@ data class Appeal(
     val postId          : String     = "",
     val postOwnerUid    : String     = "",
     val postOwnerName   : String     = "",
-    val moderationStatus: String     = "",   // hangi kısıtlamaya itiraz
-    val text            : String     = "",   // kullanıcının itiraz metni
-    val status          : String     = "pending",  // pending | approved | rejected
+    val moderationStatus: String     = "",
+    val text            : String     = "",
+    val status          : String     = "pending",
     val adminNote       : String     = "",
-    val ts              : com.google.firebase.Timestamp? = null,
-    val resolvedAt      : com.google.firebase.Timestamp? = null,
+    val ts              : Timestamp? = null,
+    val resolvedAt      : Timestamp? = null
 )
 
 // ─── YORUM ─────────────────────────────────────────────
@@ -116,12 +107,12 @@ data class Comment(
     val likesCount  : Int        = 0,
     val isLikedByMe : Boolean    = false,
     val replyTo     : ReplyTo?   = null,
-    val ts          : Timestamp? = null,
+    val ts          : Timestamp? = null
 )
 
 data class ReplyTo(
     val uid         : String = "",
-    val displayName : String = "",
+    val displayName : String = ""
 )
 
 // ─── BEĞENİ GİRİŞİ ─────────────────────────────────────
@@ -129,7 +120,7 @@ data class LikeEntry(
     val uid      : String     = "",
     val name     : String     = "",
     val photoURL : String     = "",
-    val ts       : Timestamp? = null,
+    val ts       : Timestamp? = null
 )
 
 // ─── TAKİP GİRİŞİ ──────────────────────────────────────
@@ -137,7 +128,7 @@ data class FollowEntry(
     val uid      : String     = "",
     val name     : String     = "",
     val photoURL : String     = "",
-    val ts       : Timestamp? = null,
+    val ts       : Timestamp? = null
 )
 
 // ─── BİLDİRİM ──────────────────────────────────────────
@@ -152,7 +143,7 @@ data class Notification(
     val postId    : String?    = null,
     val url       : String     = "",
     val read      : Boolean    = false,
-    val ts        : Timestamp? = null,
+    val ts        : Timestamp? = null
 )
 
 // ─── TAKİP ─────────────────────────────────────────────
@@ -164,7 +155,7 @@ data class FollowRelation(
     val targetUid   : String     = "",
     val targetName  : String     = "",
     val targetPhoto : String     = "",
-    val ts          : Timestamp? = null,
+    val ts          : Timestamp? = null
 )
 
 // ─── MESAJ / KONUŞMA ───────────────────────────────────
@@ -182,7 +173,7 @@ data class Message(
     val likedBy        : List<String> = emptyList(),
     val replyToId      : String       = "",
     val replyToText    : String       = "",
-    val replyToName    : String       = "",
+    val replyToName    : String       = ""
 )
 
 data class Conversation(
@@ -191,7 +182,7 @@ data class Conversation(
     val lastMessage   : String       = "",
     val lastMessageAt : String       = "",
     val otherUser     : User?        = null,
-    val unreadCount   : Int          = 0,
+    val unreadCount   : Int          = 0
 )
 
 // ─── SERİ (KİTAP/ROMAN) ────────────────────────────────
@@ -208,7 +199,7 @@ data class Serial(
     val likes        : Int        = 0,
     val ts           : Timestamp? = null,
     val updatedAt    : Timestamp? = null,
-    val isLikedByMe  : Boolean    = false,
+    val isLikedByMe  : Boolean    = false
 )
 
 // ─── BÖLÜM ─────────────────────────────────────────────
@@ -223,7 +214,7 @@ data class Chapter(
     val likes       : Int        = 0,
     val cmtCount    : Int        = 0,
     val isLikedByMe : Boolean    = false,
-    val ts          : Timestamp? = null,
+    val ts          : Timestamp? = null
 )
 
 // ─── KİTAP ─────────────────────────────────────────────
@@ -242,8 +233,7 @@ data class Book(
     val ts           : Timestamp? = null,
     val updatedAt    : Timestamp? = null,
     val isLikedByMe  : Boolean    = false,
-    // "book" veya "serial" — Firestore'da hangi koleksiyondan geldiğini belirtir
-    val type         : String     = "book",
+    val type         : String     = "book"
 )
 
 // ─── BÖLÜM YORUMU ──────────────────────────────────────
@@ -257,14 +247,14 @@ data class ChapterComment(
     val replyToCmtId : String     = "",
     val likes        : Int        = 0,
     val edited       : Boolean    = false,
-    val ts           : com.google.firebase.Timestamp? = null,
+    val ts           : Timestamp? = null
 )
 
 // ─── KİTAP BÖLÜMÜ ──────────────────────────────────────
 data class BookChapter(
     val id        : String     = "",
-    val bookId    : String     = "",   // books koleksiyonu için
-    val serialId  : String     = "",   // serials koleksiyonu için (type=="serial")
+    val bookId    : String     = "",
+    val serialId  : String     = "",
     val title     : String     = "",
     val body      : String     = "",
     val order     : Int        = 0,
@@ -273,9 +263,9 @@ data class BookChapter(
     val likes     : Int        = 0,
     val cmtCount  : Int        = 0,
     val isLikedByMe: Boolean   = false,
-    val ts        : Timestamp? = null,
+    val ts        : Timestamp? = null
 ) {
-    // Hangi koleksiyonda olursa olsun parent ID'yi döner
+    @get:Exclude
     val parentId get() = serialId.ifBlank { bookId }
 }
 
@@ -287,8 +277,8 @@ data class ReadingListEntry(
     val bg         : String     = "",
     val status     : String     = "",
     val updatedAt  : Timestamp? = null,
-    val source     : String     = "serial",   // "serial" | "library"
-    val authorName : String     = "",
+    val source     : String     = "serial",
+    val authorName : String     = ""
 )
 
 // ─── KURDİ DERS ────────────────────────────────────────
@@ -299,40 +289,40 @@ data class KurdiLesson(
     val type      : String  = "",
     val xpReward  : Int     = 10,
     val completed : Boolean = false,
-    val order     : Int     = 0,
+    val order     : Int     = 0
 )
 
 // ─── CMS ─────────────────────────────────────────────────
 data class CmsPage(
-    val id        : String                         = "",
-    val slug      : String                         = "",
-    val title     : String                         = "",
-    val body      : String                         = "",
-    val lang      : String                         = "tr",
-    val published : Boolean                        = true,
-    val order     : Int                            = 0,
-    val updatedAt : com.google.firebase.Timestamp? = null,
-    val updatedBy : String                         = "",
+    val id        : String     = "",
+    val slug      : String     = "",
+    val title     : String     = "",
+    val body      : String     = "",
+    val lang      : String     = "tr",
+    val published : Boolean    = true,
+    val order     : Int        = 0,
+    val updatedAt : Timestamp? = null,
+    val updatedBy : String     = ""
 )
 
 data class CmsBanner(
-    val id        : String                         = "",
-    val title     : String                         = "",
-    val subtitle  : String                         = "",
-    val imageUrl  : String                         = "",
-    val linkUrl   : String                         = "",
-    val active    : Boolean                        = true,
-    val order     : Int                            = 0,
-    val updatedAt : com.google.firebase.Timestamp? = null,
+    val id        : String     = "",
+    val title     : String     = "",
+    val subtitle  : String     = "",
+    val imageUrl  : String     = "",
+    val linkUrl   : String     = "",
+    val active    : Boolean    = true,
+    val order     : Int        = 0,
+    val updatedAt : Timestamp? = null
 )
 
 data class CmsAnnouncement(
-    val id     : String                         = "",
-    val title  : String                         = "",
-    val body   : String                         = "",
-    val type   : String                         = "info",
-    val active : Boolean                        = true,
-    val ts     : com.google.firebase.Timestamp? = null,
+    val id     : String     = "",
+    val title  : String     = "",
+    val body   : String     = "",
+    val type   : String     = "info",
+    val active : Boolean    = true,
+    val ts     : Timestamp? = null
 )
 
 data class CmsCategory(
@@ -340,38 +330,39 @@ data class CmsCategory(
     val name   : String = "",
     val nameKu : String = "",
     val slug   : String = "",
-    val order  : Int    = 0,
+    val order  : Int    = 0
 )
 
 // ─── KURDİ AI DERS ──────────────────────────────────────
 data class AiLesson(
     val topic    : String           = "",
     val level    : String           = "destpêk",
-    val exercises: List<AiExercise> = emptyList(),
+    val exercises: List<AiExercise> = emptyList()
 )
 
 data class AiExercise(
     val type    : String                    = "mcq",
-    val ku      : String                    = "",        // soru / Kürtçe cümle
-    val tr      : String                    = "",        // Türkçe çeviri
-    val options : List<String>              = emptyList(), // mcq seçenekleri
-    val answer  : String                    = "",        // mcq/fill doğru cevap
-    val pairs   : List<Pair<String,String>> = emptyList(), // match: [(ku, tr)]
-    val words   : List<String>              = emptyList(), // build: karışık kelimeler
+    val ku      : String                    = "",
+    val tr      : String                    = "",
+    val options : List<String>              = emptyList(),
+    val answer  : String                    = "",
+    val pairs   : List<Pair<String,String>> = emptyList(),
+    val words   : List<String>              = emptyList()
 )
 
 // ─── CMS REKLAM KONFİGÜRASYONU ─────────────────────────────
 data class CmsAdConfig(
-    val id          : String  = "",   // Firestore doc ID (ör. "banner_feed")
-    val unitId      : String  = "",   // AdMob unit ID
+    val id          : String  = "",
+    val unitId      : String  = "",
     val enabled     : Boolean = false,
     val testMode    : Boolean = true,
-    // Banner özel
-    val position    : Int     = 5,    // Feed'de kaçıncı kart sonrası
-    // Interstitial özel
-    val frequency   : Int     = 3,    // Kaç chapter'da bir
-    // Rewarded özel
+    val position    : Int     = 5,
+    val frequency   : Int     = 3,
     val xpReward    : Int     = 50,
+    val dailyLimit  : Int     = 3,
+    val scenarioDoubleXp     : Boolean = true,
+    val scenarioUnlockLesson : Boolean = true,
+    val scenarioSaveStreak   : Boolean = true
 )
 
 // ─── ŞİKAYET ────────────────────────────────────────────────────────
@@ -381,10 +372,10 @@ data class Report(
     val reporterName: String     = "",
     val targetUid   : String     = "",
     val targetName  : String     = "",
-    val targetPostId: String     = "",   // boşsa kullanıcı şikayeti
+    val targetPostId: String     = "",
     val reason      : String     = "",
-    val status      : String     = "pending",  // pending | reviewed | dismissed
-    val ts          : Timestamp? = null,
+    val status      : String     = "pending",
+    val ts          : Timestamp? = null
 )
 
 // ─── ENGELLİ KULLANICI ───────────────────────────────────────────────
@@ -392,12 +383,11 @@ data class BlockedUser(
     val uid         : String     = "",
     val displayName : String     = "",
     val photoURL    : String     = "",
-    val blockedAt   : Timestamp? = null,
+    val blockedAt   : Timestamp? = null
 )
 
 // ─── APP CONFIG (CMS Özellik Yönetimi) ─────────────────────────────
 data class AppConfig(
-    // Ekran aktiflik
     val feedEnabled         : Boolean = true,
     val messagesEnabled     : Boolean = true,
     val serialsEnabled      : Boolean = true,
@@ -406,61 +396,39 @@ data class AppConfig(
     val notificationsEnabled: Boolean = true,
     val searchEnabled       : Boolean = true,
     val storiesEnabled      : Boolean = true,
-
-    // Feed özellikleri
     val feedShowImages      : Boolean = true,
     val feedShowReposts     : Boolean = true,
     val feedAllowQuotes     : Boolean = true,
     val feedMaxTextLength   : Int     = 1000,
-
-    // Mesaj özellikleri
     val messagesAllowImages : Boolean = true,
     val messagesAllowVoice  : Boolean = true,
-
-    // Profil özellikleri
     val profileShowXp       : Boolean = true,
     val profileShowStreak   : Boolean = true,
     val profileShowBadges   : Boolean = true,
     val profileShowReadList : Boolean = true,
-
-    // Kurdî Fêrbibe
     val kurdiShowAiLesson   : Boolean = true,
     val kurdiShowWordOfDay  : Boolean = true,
-
-    // Bakım modu
     val maintenanceMode     : Boolean = false,
     val maintenanceMessage  : String  = "Uygulama güncelleniyor, lütfen bekleyin.",
     val minVersion          : Int     = 1,
-
-    // Özel başlıklar
     val feedTitle           : String  = "",
     val messagesTitle       : String  = "",
-    val kurdiTitle          : String  = "",
+    val kurdiTitle          : String  = ""
 )
 
-// Test Unit ID'leri — testMode = true olduğunda bunlar kullanılır
 object AdMobTestIds {
     const val BANNER        = "ca-app-pub-3940256099942544/6300978111"
     const val INTERSTITIAL  = "ca-app-pub-3940256099942544/1033173712"
     const val REWARDED      = "ca-app-pub-3940256099942544/5224354917"
 }
 
-// Gerçek Unit ID'ler — testMode = false olduğunda bunlar kullanılır
 object AdMobProdIds {
     const val BANNER        = "ca-app-pub-6463746824939277/7866834575"
     const val INTERSTITIAL  = "ca-app-pub-6463746824939277/4989839500"
     const val REWARDED      = "ca-app-pub-6463746824939277/9693325673"
 }
-// ─────────────────────────────────────────────────────────
-//  KÜTÜPHANE — Yazar / LibraryBook / BookQuote / BookReview
-//  Firestore yapısı:
-//    authors/{authorId}
-//      books/ (sub) → {bookId} referansları
-//    library_books/{bookId}
-//      quotes/ (sub)
-//      reviews/ (sub)
-// ─────────────────────────────────────────────────────────
 
+// ─── KÜTÜPHANE YAPISI ──────────────────────────────────────────────────
 data class Author(
     val id          : String    = "",
     val name        : String    = "",
@@ -472,7 +440,8 @@ data class Author(
     val quoteCount  : Int       = 0,
     val reviewCount : Int       = 0,
     val followerCount: Int      = 0,
-    val isFollowedByMe: Boolean = false,
+    @get:Exclude @set:Exclude
+    var isFollowedByMe: Boolean = false
 )
 
 data class LibraryBook(
@@ -488,7 +457,7 @@ data class LibraryBook(
     val quoteCount  : Int       = 0,
     val reviewCount : Int       = 0,
     val avgRating   : Float     = 0f,
-    val ts          : com.google.firebase.Timestamp? = null,
+    val ts          : Timestamp? = null
 )
 
 data class BookQuote(
@@ -498,16 +467,16 @@ data class BookQuote(
     val bookTitle   : String    = "",
     val authorName  : String    = "",
     val text        : String    = "",
-    // Paylaşan kullanıcı
     val uid         : String    = "",
     val userDisplayName: String = "",
     val userPhotoURL: String    = "",
-    val feedPostId  : String    = "",   // feed'deki post id (ters referans)
-    val visibility  : String    = "public",  // feed'den miras alınan görünürlük
+    val feedPostId  : String    = "",
+    val visibility  : String    = "public",
     val likesCount  : Int       = 0,
-    val likedBy     : List<String> = emptyList(),  // uid listesi
-    @get:Exclude val isLikedByMe: Boolean = false, // runtime hesaplanır
-    val ts          : com.google.firebase.Timestamp? = null,
+    val likedBy     : List<String> = emptyList(),
+    val ts          : Timestamp? = null,
+    @get:Exclude @set:Exclude
+    var isLikedByMe: Boolean = false
 )
 
 data class BookReview(
@@ -517,14 +486,14 @@ data class BookReview(
     val bookTitle   : String    = "",
     val authorName  : String    = "",
     val text        : String    = "",
-    val rating      : Float     = 0f,  // 1..5
-    // Paylaşan kullanıcı
+    val rating      : Float     = 0f,
     val uid         : String    = "",
     val userDisplayName: String = "",
     val userPhotoURL: String    = "",
     val feedPostId  : String    = "",
     val likesCount  : Int       = 0,
-    val likedBy     : List<String> = emptyList(),  // uid listesi
-    @get:Exclude val isLikedByMe: Boolean = false, // runtime hesaplanır
-    val ts          : com.google.firebase.Timestamp? = null,
+    val likedBy     : List<String> = emptyList(),
+    val ts          : Timestamp? = null,
+    @get:Exclude @set:Exclude
+    var isLikedByMe: Boolean = false
 )

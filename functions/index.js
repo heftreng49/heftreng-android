@@ -638,3 +638,83 @@ exports.repairAuthorQuotes = onRequest(
     });
   }
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  mergeLibraryBooks — Aynı başlık+yazar kombinasyonundaki duplicate kitapları birleştir
+//  Kullanım: GET /mergeLibraryBooks?secret=hf2024
+// ─────────────────────────────────────────────────────────────────────────────
+exports.mergeLibraryBooks = onRequest({ region: "europe-west1" }, async (req, res) => {
+  if (req.query.secret !== "hf2024") return res.status(403).send("Forbidden");
+
+  const db = getFirestore();
+  let merged = 0, errors = 0;
+
+  try {
+    const snap = await db.collection("library_books").limit(500).get();
+
+    // titleLower + authorId kombinasyonuna göre grupla
+    const groups = {};
+    snap.docs.forEach(doc => {
+      const d = doc.data();
+      const key = `${(d.titleLower || d.title || "").toLowerCase().trim()}__${d.authorId || ""}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push({ id: doc.id, data: d, ref: doc.ref });
+    });
+
+    // Birden fazla kitap olan grupları işle
+    for (const [key, books] of Object.entries(groups)) {
+      if (books.length < 2) continue;
+
+      // En fazla alıntı/inceleme olan kitabı "hayatta kalan" olarak seç
+      books.sort((a, b) =>
+        ((b.data.quoteCount || 0) + (b.data.reviewCount || 0)) -
+        ((a.data.quoteCount || 0) + (a.data.reviewCount || 0))
+      );
+      const survivor  = books[0];
+      const duplicates = books.slice(1);
+
+      for (const dup of duplicates) {
+        try {
+          // 1. Feed postlarını güncelle — duplicate bookId → survivor bookId
+          const feedSnap = await db.collection("feed")
+            .where("libraryBookId", "==", dup.id).limit(100).get();
+          const batch1 = db.batch();
+          feedSnap.docs.forEach(doc => {
+            batch1.update(doc.ref, { "libraryBookId": survivor.id });
+          });
+          if (!feedSnap.empty) await batch1.commit();
+
+          // 2. Subcollection quotes'ları taşı
+          const quotesSnap = await db.collection("library_books")
+            .doc(dup.id).collection("quotes").limit(100).get();
+          for (const qDoc of quotesSnap.docs) {
+            await db.collection("library_books").doc(survivor.id)
+              .collection("quotes").add({ ...qDoc.data(), bookId: survivor.id });
+            await qDoc.ref.delete();
+          }
+
+          // 3. Survivor sayaçlarını güncelle
+          const totalQuotes  = (survivor.data.quoteCount  || 0) + (dup.data.quoteCount  || 0);
+          const totalReviews = (survivor.data.reviewCount || 0) + (dup.data.reviewCount || 0);
+          await survivor.ref.update({
+            "quoteCount"  : totalQuotes,
+            "reviewCount" : totalReviews,
+            "titleLower"  : (survivor.data.title || "").toLowerCase().trim(),
+          });
+
+          // 4. Duplicate'i sil
+          await dup.ref.delete();
+          merged++;
+        } catch (e) {
+          console.error(`merge error ${dup.id}:`, e.message);
+          errors++;
+        }
+      }
+    }
+  } catch (e) {
+    console.error("mergeLibraryBooks error:", e.message);
+    errors++;
+  }
+
+  res.json({ ok: true, merged, errors, message: `${merged} duplicate kitap birleştirildi` });
+});

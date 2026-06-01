@@ -4,6 +4,7 @@ import androidx.compose.material3.AlertDialog
 import com.heftreng.app.utils.HeftrangMessagingService
 
 import androidx.compose.foundation.layout.imeNestedScroll
+import androidx.compose.foundation.layout.WindowInsets
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -423,7 +424,8 @@ fun MessageDetailScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
-        modifier       = Modifier.imePadding(),
+        modifier       = Modifier,
+        contentWindowInsets = WindowInsets(0),
         containerColor = Background,
         snackbarHost   = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -759,7 +761,7 @@ fun MessageDetailScreen(
                             }
                         }
                         Row(
-                        modifier = Modifier.fillMaxWidth().navigationBarsPadding()
+                        modifier = Modifier.fillMaxWidth().imePadding().navigationBarsPadding()
                             .padding(horizontal = 9.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.Bottom,
                         horizontalArrangement = Arrangement.spacedBy(7.dp),

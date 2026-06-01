@@ -254,8 +254,9 @@ fun PostDetailScreen(
     val loadFailed = postNotFound == postId
 
     // ── Scaffold: imePadding Scaffold dışında — en dış Box'ta ─────────────────
-    Box(modifier = Modifier.fillMaxSize().imePadding()) {
+    Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
+            contentWindowInsets = WindowInsets(0),
             containerColor = Background,
             topBar = {
                 TopAppBar(
@@ -436,6 +437,7 @@ fun PostDetailScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Background)
+                        .imePadding()
                         .navigationBarsPadding()
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,

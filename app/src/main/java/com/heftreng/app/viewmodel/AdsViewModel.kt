@@ -81,13 +81,17 @@ class AdsViewModel @Inject constructor(
                     if (doc.id == "global") return@forEach
                     val d = doc.data ?: return@forEach
                     val config = CmsAdConfig(
-                        id        = doc.id,
-                        unitId    = d["unitId"]    as? String  ?: "",
-                        enabled   = d["enabled"]   as? Boolean ?: false,
-                        testMode  = d["testMode"]  as? Boolean ?: true,
-                        position  = (d["position"]  as? Long)?.toInt() ?: 5,
-                        frequency = (d["frequency"] as? Long)?.toInt() ?: 3,
-                        xpReward  = (d["xpReward"]  as? Long)?.toInt() ?: 50,
+                        id                   = doc.id,
+                        unitId               = d["unitId"]    as? String  ?: "",
+                        enabled              = d["enabled"]   as? Boolean ?: false,
+                        testMode             = d["testMode"]  as? Boolean ?: true,
+                        position             = (d["position"]  as? Long)?.toInt() ?: 5,
+                        frequency            = (d["frequency"] as? Long)?.toInt() ?: 3,
+                        xpReward             = (d["xpReward"]  as? Long)?.toInt() ?: 50,
+                        dailyLimit           = (d["dailyLimit"] as? Long)?.toInt() ?: 3,
+                        scenarioDoubleXp     = d["scenarioDoubleXp"]     as? Boolean ?: true,
+                        scenarioUnlockLesson = d["scenarioUnlockLesson"] as? Boolean ?: true,
+                        scenarioSaveStreak   = d["scenarioSaveStreak"]   as? Boolean ?: true,
                     )
                     when (doc.id) {
                         "banner_feed"         -> _bannerConfig.value         = config
@@ -166,13 +170,32 @@ class AdsViewModel @Inject constructor(
         }
     }
 
-    // Kaç ödüllü reklam hakkı kaldı (günlük max 3)
-    private val DAILY_LIMIT = 3
+    // Günlük limit — CMS'den gelir, yoksa varsayılan 3
+    private val DAILY_LIMIT get() = _rewardedConfig.value?.dailyLimit ?: 3
+
     val dailyRewardCount: Int get() {
         resetDailyCounterIfNeeded()
         return prefs?.getInt("reward_count", 0) ?: 0
     }
     val canWatchRewardedAd: Boolean get() = dailyRewardCount < DAILY_LIMIT
+
+    // Kaç hak kaldı (UI badge için)
+    val remainingRewardedAds: Int get() = (DAILY_LIMIT - dailyRewardCount).coerceAtLeast(0)
+
+    // Senaryo aktif mi? (CMS'den kontrol)
+    val isDoubleXpEnabled     : Boolean get() = _rewardedConfig.value?.scenarioDoubleXp     ?: true
+    val isUnlockLessonEnabled : Boolean get() = _rewardedConfig.value?.scenarioUnlockLesson ?: true
+    val isSaveStreakEnabled    : Boolean get() = _rewardedConfig.value?.scenarioSaveStreak   ?: true
+
+    // Belirli bir senaryo için reklam izlenebilir mi?
+    fun canShowScenario(type: RewardType): Boolean {
+        if (!canWatchRewardedAd) return false
+        return when (type) {
+            RewardType.DOUBLE_XP      -> isDoubleXpEnabled
+            RewardType.UNLOCK_LESSON  -> isUnlockLessonEnabled
+            RewardType.SAVE_STREAK    -> isSaveStreakEnabled
+        }
+    }
 
     private fun incrementDailyCount() {
         val p = prefs ?: return
@@ -206,7 +229,7 @@ class AdsViewModel @Inject constructor(
         onDismiss  : () -> Unit = {},
         onLimitReached: () -> Unit = {},
     ) {
-        if (!canWatchRewardedAd) { onLimitReached(); return }
+        if (!canShowScenario(rewardType)) { onLimitReached(); return }
         val ad     = rewardedAd ?: run { onDismiss(); return }
         val config = _rewardedConfig.value
 

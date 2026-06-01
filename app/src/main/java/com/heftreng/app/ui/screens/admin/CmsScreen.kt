@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.text.KeyboardOptions
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -33,6 +34,9 @@ import com.heftreng.app.viewmodel.AppConfigViewModel
 import com.heftreng.app.viewmodel.CmsViewModel
 import com.heftreng.app.viewmodel.YazarViewModel
 import com.heftreng.app.viewmodel.PendingPost
+import com.heftreng.app.data.model.Author
+import com.heftreng.app.data.model.LibraryBook
+import com.heftreng.app.data.model.BookQuote
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CMS Ana Ekranı
@@ -60,7 +64,7 @@ fun CmsScreen(
     val pendingStats  by yazarVm.pendingStats.collectAsState()
     val pendingLoad   by yazarVm.pendingLoading.collectAsState()
     val appConfig by configVm.config.collectAsState()
-    val tabs = listOf("Sayfalar", "Bannerlar", "Duyurular", "Kategoriler", "Reklamlar", "Özellikler", "Yazılar", "Admin", "Kurdî Admin")
+    val tabs = listOf("Sayfalar", "Bannerlar", "Duyurular", "Kategoriler", "Reklamlar", "Özellikler", "Yazılar", "Kütüphane", "Admin", "Kurdî Admin")
 
     LaunchedEffect(Unit) {
         vm.loadPages()
@@ -164,8 +168,9 @@ fun CmsScreen(
                 4 -> AdsTab(adsVm)
                 5 -> FeaturesTab(appConfig, configVm)
                 6 -> PendingPostsTab(pendingPosts, pendingStats, pendingLoad, yazarVm)
-                7 -> { LaunchedEffect(Unit) { navController.navigate("admin") } }
-                8 -> { LaunchedEffect(Unit) { navController.navigate("kurdi_admin") } }
+                7 -> LibraryTab()
+                8 -> { LaunchedEffect(Unit) { navController.navigate("admin") } }
+                9 -> { LaunchedEffect(Unit) { navController.navigate("kurdi_admin") } }
             }
         }
     }
@@ -1020,16 +1025,213 @@ private fun AdsTab(adsVm: AdsViewModel) {
             )
         }
 
-        // ── Rewarded XP ────────────────────────────────────────────────────
+        // ── Rewarded — Ödüllü Reklam Kontrol Merkezi ─────────────────────
         item {
-            AdConfigCard(
-                title      = "Rewarded — XP Ödülü",
-                docId      = "rewarded_xp",
-                config     = rewardedConfig,
-                extraLabel = "XP ödülü",
-                extraKey   = "xpReward",
-                onSaved    = { adsVm.loadAdConfigs() },
-            )
+            val cfg = rewardedConfig
+            val firestore2 = firestore
+            val scope2     = scope
+
+            // Local state — config'den beslenir
+            var unitId        by remember(cfg) { mutableStateOf(cfg?.unitId   ?: "") }
+            var enabled       by remember(cfg) { mutableStateOf(cfg?.enabled  ?: false) }
+            var testMode      by remember(cfg) { mutableStateOf(cfg?.testMode ?: true) }
+            var xpReward      by remember(cfg) { mutableStateOf((cfg?.xpReward ?: 50).toString()) }
+            var dailyLimit    by remember(cfg) { mutableStateOf((cfg?.dailyLimit ?: 3).toString()) }
+            var scnDoubleXp   by remember(cfg) { mutableStateOf(cfg?.scenarioDoubleXp     ?: true) }
+            var scnUnlock     by remember(cfg) { mutableStateOf(cfg?.scenarioUnlockLesson ?: true) }
+            var scnStreak     by remember(cfg) { mutableStateOf(cfg?.scenarioSaveStreak   ?: true) }
+            var saving        by remember { mutableStateOf(false) }
+
+            CmsCard {
+                // Başlık
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Rewarded — Ödüllü Reklam", color = Amber,
+                            fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(
+                            if (enabled) "Aktif" else "Kapalı",
+                            color    = if (enabled) Success else Muted,
+                            fontSize = 11.sp,
+                        )
+                    }
+                    Switch(
+                        checked = enabled, onCheckedChange = { enabled = it },
+                        colors  = SwitchDefaults.colors(
+                            checkedThumbColor  = Success,
+                            checkedTrackColor  = Success.copy(alpha = 0.3f),
+                            uncheckedThumbColor = Muted,
+                            uncheckedTrackColor = Muted.copy(alpha = 0.2f),
+                        ),
+                    )
+                }
+
+                Spacer(Modifier.height(10.dp))
+                cmsField(unitId, { unitId = it }, "Unit ID")
+                Spacer(Modifier.height(6.dp))
+
+                // Test modu
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Test Modu", color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = testMode, onCheckedChange = { testMode = it },
+                        colors  = SwitchDefaults.colors(
+                            checkedThumbColor = Amber, checkedTrackColor = Amber.copy(alpha = 0.3f),
+                        ),
+                    )
+                }
+                if (testMode) {
+                    Text("Test ID kullanılıyor — gerçek gelir sayılmaz",
+                        color = Amber, fontSize = 11.sp)
+                }
+
+                Spacer(Modifier.height(10.dp))
+                androidx.compose.material3.HorizontalDivider(
+                    color = com.heftreng.app.ui.theme.Divider, thickness = 0.5.dp)
+                Spacer(Modifier.height(10.dp))
+
+                // XP ve günlük limit
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        cmsField(xpReward, { xpReward = it.filter(Char::isDigit) },
+                            "Ders XP Ödülü",
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        cmsField(dailyLimit, { dailyLimit = it.filter(Char::isDigit) },
+                            "Günlük Limit",
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                        Text("Kullanıcı başına/gün max reklam",
+                            color = Muted, fontSize = 10.sp)
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+                androidx.compose.material3.HorizontalDivider(
+                    color = com.heftreng.app.ui.theme.Divider, thickness = 0.5.dp)
+                Spacer(Modifier.height(10.dp))
+
+                // Senaryo açma/kapama
+                Text("Senaryolar", color = OnBackground,
+                    fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Spacer(Modifier.height(6.dp))
+
+                // Senaryo 1 — Çift XP
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (scnDoubleXp) Success.copy(0.08f)
+                                    else com.heftreng.app.ui.theme.SurfaceVar)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("⚡ Çift XP", color = OnBackground,
+                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Text("Ders bittikten sonra XP'yi 2 katla",
+                            color = Muted, fontSize = 11.sp)
+                    }
+                    Switch(
+                        checked = scnDoubleXp, onCheckedChange = { scnDoubleXp = it },
+                        colors  = SwitchDefaults.colors(
+                            checkedThumbColor = Success, checkedTrackColor = Success.copy(0.3f),
+                        ),
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                // Senaryo 2 — Kilitli Ders Açma
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (scnUnlock) com.heftreng.app.ui.theme.Primary.copy(0.08f)
+                                    else com.heftreng.app.ui.theme.SurfaceVar)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("🔓 Kilitli Ders Aç", color = OnBackground,
+                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Text("Kilitli derse tıklanınca reklam izleyerek aç",
+                            color = Muted, fontSize = 11.sp)
+                    }
+                    Switch(
+                        checked = scnUnlock, onCheckedChange = { scnUnlock = it },
+                        colors  = SwitchDefaults.colors(
+                            checkedThumbColor = com.heftreng.app.ui.theme.Primary,
+                            checkedTrackColor = com.heftreng.app.ui.theme.Primary.copy(0.3f),
+                        ),
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                // Senaryo 3 — Streak Kurtarma
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (scnStreak) Color(0x14EF4444)
+                                    else com.heftreng.app.ui.theme.SurfaceVar)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("🔥 Streak Kurtarma", color = OnBackground,
+                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Text("Seri bozulunca reklam izleyerek kurtar",
+                            color = Muted, fontSize = 11.sp)
+                    }
+                    Switch(
+                        checked = scnStreak, onCheckedChange = { scnStreak = it },
+                        colors  = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFFEF4444),
+                            checkedTrackColor = Color(0x33EF4444),
+                        ),
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Kaydet
+                Button(
+                    onClick = {
+                        saving = true
+                        scope2.launch {
+                            try {
+                                firestore2.collection("cms_ads").document("rewarded_xp").set(
+                                    mapOf(
+                                        "unitId"               to unitId.trim(),
+                                        "enabled"              to enabled,
+                                        "testMode"             to testMode,
+                                        "xpReward"             to (xpReward.toIntOrNull() ?: 50),
+                                        "dailyLimit"           to (dailyLimit.toIntOrNull() ?: 3),
+                                        "scenarioDoubleXp"     to scnDoubleXp,
+                                        "scenarioUnlockLesson" to scnUnlock,
+                                        "scenarioSaveStreak"   to scnStreak,
+                                    )
+                                ).await()
+                                adsVm.loadAdConfigs()
+                            } catch (e: Exception) { e.printStackTrace() }
+                            finally { saving = false }
+                        }
+                    },
+                    enabled  = !saving,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = RoundedCornerShape(10.dp),
+                    colors   = ButtonDefaults.buttonColors(
+                        containerColor = Amber, contentColor = Color.Black),
+                ) {
+                    if (saving) {
+                        CircularProgressIndicator(color = Color.Black,
+                            modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text("Kaydet", fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }
@@ -1358,6 +1560,935 @@ private fun StatChip(
         ) {
             Text(label, color = color, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             Text(sub,   color = Muted, fontSize   = 10.sp)
+        }
+    }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KÜTÜPHANE SEKMESİ — Yazar ↔ Kitap bağlama + Alıntı yönetimi
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun LibraryTab() {
+    val db = remember { com.google.firebase.firestore.FirebaseFirestore.getInstance() }
+    val scope = rememberCoroutineScope()
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    var authors      by remember { mutableStateOf<List<Author>>(emptyList()) }
+    var books        by remember { mutableStateOf<List<LibraryBook>>(emptyList()) }
+    var quotes       by remember { mutableStateOf<List<BookQuote>>(emptyList()) }
+    var loading      by remember { mutableStateOf(true) }
+    var snackMsg     by remember { mutableStateOf("") }
+    val snackState   = remember { SnackbarHostState() }
+
+    // seçili yazar (kitap bağlama için)
+    var selectedAuthorId   by remember { mutableStateOf("") }
+    var selectedAuthorName by remember { mutableStateOf("") }
+    // seçili kitap (alıntı bağlama için)
+    var selectedBookId     by remember { mutableStateOf("") }
+    var selectedBookTitle  by remember { mutableStateOf("") }
+
+    // Arama filtreleri
+    var authorSearch by remember { mutableStateOf("") }
+    var bookSearch   by remember { mutableStateOf("") }
+    var quoteSearch  by remember { mutableStateOf("") }
+
+    // İç tab: 0=Yazarlar, 1=Kitaplar, 2=Alıntılar
+    var innerTab by remember { mutableIntStateOf(0) }
+
+    // Yeni kitap formu
+    var showAddBook     by remember { mutableStateOf(false) }
+    var newBookTitle    by remember { mutableStateOf("") }
+    var newBookGenre    by remember { mutableStateOf("") }
+    var newBookYear     by remember { mutableStateOf("") }
+
+    // Alıntı kitap bağlama
+    var linkQuoteId    by remember { mutableStateOf("") }
+    var linkBookExpand by remember { mutableStateOf(false) }
+
+    LaunchedEffect(snackMsg) {
+        if (snackMsg.isNotBlank()) {
+            snackState.showSnackbar(snackMsg)
+            snackMsg = ""
+        }
+    }
+
+    // Veri yükleme
+    fun reload() {
+        scope.launch {
+            loading = true
+            try {
+                authors = db.collection("authors").get().await()
+                    .documents.mapNotNull { d ->
+                        d.toObject(Author::class.java)?.copy(id = d.id)
+                    }.sortedBy { it.name }
+
+                books = db.collection("library_books").get().await()
+                    .documents.mapNotNull { d ->
+                        d.toObject(LibraryBook::class.java)?.copy(id = d.id)
+                    }.sortedBy { it.title }
+            } catch (e: Exception) {
+                snackMsg = "❌ ${e.message}"
+            } finally {
+                loading = false
+            }
+        }
+    }
+
+    fun loadQuotesForBook(bookId: String) {
+        scope.launch {
+            try {
+                quotes = db.collection("library_books").document(bookId)
+                    .collection("quotes").get().await()
+                    .documents.mapNotNull { d ->
+                        d.toObject(BookQuote::class.java)?.copy(id = d.id)
+                    }
+            } catch (e: Exception) {
+                snackMsg = "❌ ${e.message}"
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) { reload() }
+
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+
+            // ── İç sekmeler ───────────────────────────────────────────────────
+            TabRow(
+                selectedTabIndex = innerTab,
+                containerColor   = Background,
+                contentColor     = Primary,
+            ) {
+                listOf("Yazarlar", "Kitaplar", "Alıntılar").forEachIndexed { i, title ->
+                    Tab(
+                        selected = innerTab == i,
+                        onClick  = { innerTab = i },
+                        text     = { Text(title, fontSize = 12.sp) },
+                        selectedContentColor   = Primary,
+                        unselectedContentColor = Muted,
+                    )
+                }
+            }
+
+            if (loading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Primary)
+                }
+                return@Column
+            }
+
+            when (innerTab) {
+
+                // ══════════════════════════════════════════════════════════════
+                // 0 — YAZARLAR
+                // ══════════════════════════════════════════════════════════════
+                0 -> {
+                    val filtered = authors.filter {
+                        authorSearch.isBlank() || it.name.contains(authorSearch, ignoreCase = true)
+                    }
+
+                    Column(Modifier.fillMaxSize()) {
+                        OutlinedTextField(
+                            value         = authorSearch,
+                            onValueChange = { authorSearch = it },
+                            placeholder   = { Text("Yazar ara…", color = Muted, fontSize = 13.sp) },
+                            modifier      = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                            singleLine    = true,
+                            leadingIcon   = { Icon(Icons.Default.Search, null, tint = Muted) },
+                            colors        = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor   = Primary,
+                                unfocusedBorderColor = Divider,
+                                focusedTextColor     = OnBackground,
+                                unfocusedTextColor   = OnBackground,
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                        )
+
+                        Text(
+                            "${filtered.size} yazar",
+                            color    = Muted,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                        )
+
+                        LazyColumn(
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            items(filtered, key = { it.id }) { author ->
+                                val authorBooks = books.filter { it.authorId == author.id }
+                                AuthorAdminCard(
+                                    author      = author,
+                                    books       = authorBooks,
+                                    allBooks    = books,
+                                    onLinkBook  = { bookId, bookTitle ->
+                                        scope.launch {
+                                            try {
+                                                db.collection("library_books").document(bookId)
+                                                    .update(mapOf(
+                                                        "authorId"   to author.id,
+                                                        "authorName" to author.name,
+                                                    )).await()
+                                                db.collection("authors").document(author.id)
+                                                    .update("bookCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                                                snackMsg = "✓ '$bookTitle' → '${author.name}' bağlandı"
+                                                reload()
+                                            } catch (e: Exception) { snackMsg = "❌ ${e.message}" }
+                                        }
+                                    },
+                                    onUnlinkBook = { bookId, bookTitle ->
+                                        scope.launch {
+                                            try {
+                                                db.collection("library_books").document(bookId)
+                                                    .update(mapOf("authorId" to "", "authorName" to "")).await()
+                                                db.collection("authors").document(author.id)
+                                                    .update("bookCount", com.google.firebase.firestore.FieldValue.increment(-1)).await()
+                                                snackMsg = "✓ '$bookTitle' bağlantısı kaldırıldı"
+                                                reload()
+                                            } catch (e: Exception) { snackMsg = "❌ ${e.message}" }
+                                        }
+                                    },
+                                    onAddBook = { title, genre, year ->
+                                        scope.launch {
+                                            try {
+                                                db.collection("library_books").add(mapOf(
+                                                    "title"      to title,
+                                                    "authorId"   to author.id,
+                                                    "authorName" to author.name,
+                                                    "genre"      to genre,
+                                                    "publishYear" to (year.toIntOrNull() ?: 0),
+                                                    "quoteCount" to 0,
+                                                    "reviewCount" to 0,
+                                                    "avgRating"  to 0f,
+                                                )).await()
+                                                db.collection("authors").document(author.id)
+                                                    .update("bookCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                                                snackMsg = "✓ '$title' kitabı eklendi"
+                                                reload()
+                                            } catch (e: Exception) { snackMsg = "❌ ${e.message}" }
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // ══════════════════════════════════════════════════════════════
+                // 1 — KİTAPLAR
+                // ══════════════════════════════════════════════════════════════
+                1 -> {
+                    val filtered = books.filter {
+                        bookSearch.isBlank() ||
+                        it.title.contains(bookSearch, ignoreCase = true) ||
+                        it.authorName.contains(bookSearch, ignoreCase = true)
+                    }
+
+                    Column(Modifier.fillMaxSize()) {
+                        OutlinedTextField(
+                            value         = bookSearch,
+                            onValueChange = { bookSearch = it },
+                            placeholder   = { Text("Kitap veya yazar ara…", color = Muted, fontSize = 13.sp) },
+                            modifier      = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                            singleLine    = true,
+                            leadingIcon   = { Icon(Icons.Default.Search, null, tint = Muted) },
+                            colors        = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor   = Primary,
+                                unfocusedBorderColor = Divider,
+                                focusedTextColor     = OnBackground,
+                                unfocusedTextColor   = OnBackground,
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                        )
+                        Text(
+                            "${filtered.size} kitap",
+                            color    = Muted,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                        )
+                        LazyColumn(
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            items(filtered, key = { it.id }) { book ->
+                                BookAdminCard(
+                                    book    = book,
+                                    authors = authors,
+                                    onChangeAuthor = { newAuthorId, newAuthorName ->
+                                        scope.launch {
+                                            try {
+                                                // eski yazarın bookCount'unu düşür
+                                                if (book.authorId.isNotBlank()) {
+                                                    db.collection("authors").document(book.authorId)
+                                                        .update("bookCount", com.google.firebase.firestore.FieldValue.increment(-1)).await()
+                                                }
+                                                db.collection("library_books").document(book.id)
+                                                    .update(mapOf("authorId" to newAuthorId, "authorName" to newAuthorName)).await()
+                                                db.collection("authors").document(newAuthorId)
+                                                    .update("bookCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                                                snackMsg = "✓ '${book.title}' → '$newAuthorName' bağlandı"
+                                                reload()
+                                            } catch (e: Exception) { snackMsg = "❌ ${e.message}" }
+                                        }
+                                    },
+                                    onViewQuotes = { bookId, bookTitle ->
+                                        selectedBookId    = bookId
+                                        selectedBookTitle = bookTitle
+                                        loadQuotesForBook(bookId)
+                                        innerTab = 2
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // ══════════════════════════════════════════════════════════════
+                // 2 — ALINTILAR
+                // ══════════════════════════════════════════════════════════════
+                2 -> {
+                    Column(Modifier.fillMaxSize()) {
+
+                        // Hangi kitabın alıntıları gösteriliyor
+                        if (selectedBookId.isNotBlank()) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(SurfaceVar)
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Default.MenuBook, null, tint = Primary, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    selectedBookTitle,
+                                    color      = Primary,
+                                    fontSize   = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier   = Modifier.weight(1f),
+                                )
+                                TextButton(onClick = {
+                                    selectedBookId = ""
+                                    selectedBookTitle = ""
+                                    quotes = emptyList()
+                                }) {
+                                    Text("Tümü", color = Muted, fontSize = 11.sp)
+                                }
+                            }
+                        } else {
+                            // Tüm alıntıları yükle
+                            LaunchedEffect(Unit) {
+                                scope.launch {
+                                    try {
+                                        val result = mutableListOf<BookQuote>()
+                                        books.take(30).forEach { book ->
+                                            db.collection("library_books").document(book.id)
+                                                .collection("quotes").limit(20).get().await()
+                                                .documents.mapNotNull { d ->
+                                                    d.toObject(BookQuote::class.java)?.copy(id = d.id)
+                                                }.let { result.addAll(it) }
+                                        }
+                                        quotes = result.sortedByDescending { it.ts }
+                                    } catch (_: Exception) {}
+                                }
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value         = quoteSearch,
+                            onValueChange = { quoteSearch = it },
+                            placeholder   = { Text("Alıntı ara…", color = Muted, fontSize = 13.sp) },
+                            modifier      = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                            singleLine    = true,
+                            leadingIcon   = { Icon(Icons.Default.Search, null, tint = Muted) },
+                            colors        = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor   = Primary,
+                                unfocusedBorderColor = Divider,
+                                focusedTextColor     = OnBackground,
+                                unfocusedTextColor   = OnBackground,
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                        )
+
+                        val filteredQ = quotes.filter {
+                            quoteSearch.isBlank() ||
+                            it.text.contains(quoteSearch, ignoreCase = true) ||
+                            it.bookTitle.contains(quoteSearch, ignoreCase = true) ||
+                            it.authorName.contains(quoteSearch, ignoreCase = true)
+                        }
+
+                        Text(
+                            "${filteredQ.size} alıntı",
+                            color    = Muted,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                        )
+
+                        LazyColumn(
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            items(filteredQ, key = { it.id }) { quote ->
+                                QuoteAdminCard(
+                                    quote   = quote,
+                                    books   = books,
+                                    authors = authors,
+                                    onDelete = {
+                                        scope.launch {
+                                            try {
+                                                if (quote.bookId.isNotBlank()) {
+                                                    db.collection("library_books").document(quote.bookId)
+                                                        .collection("quotes").document(quote.id).delete().await()
+                                                    db.collection("library_books").document(quote.bookId)
+                                                        .update("quoteCount", com.google.firebase.firestore.FieldValue.increment(-1)).await()
+                                                }
+                                                if (quote.authorId.isNotBlank()) {
+                                                    db.collection("authors").document(quote.authorId)
+                                                        .update("quoteCount", com.google.firebase.firestore.FieldValue.increment(-1)).await()
+                                                }
+                                                snackMsg = "✓ Alıntı silindi"
+                                                if (selectedBookId.isNotBlank()) loadQuotesForBook(selectedBookId)
+                                                else quotes = quotes.filter { it.id != quote.id }
+                                            } catch (e: Exception) { snackMsg = "❌ ${e.message}" }
+                                        }
+                                    },
+                                    onRelink = { newBookId, newBookTitle, newAuthorId, newAuthorName ->
+                                        scope.launch {
+                                            try {
+                                                // Eski kitaptan sil
+                                                if (quote.bookId.isNotBlank()) {
+                                                    db.collection("library_books").document(quote.bookId)
+                                                        .collection("quotes").document(quote.id).delete().await()
+                                                    db.collection("library_books").document(quote.bookId)
+                                                        .update("quoteCount", com.google.firebase.firestore.FieldValue.increment(-1)).await()
+                                                }
+                                                // Yeni kitaba ekle
+                                                db.collection("library_books").document(newBookId)
+                                                    .collection("quotes").document(quote.id).set(
+                                                        mapOf(
+                                                            "bookId"      to newBookId,
+                                                            "authorId"    to newAuthorId,
+                                                            "bookTitle"   to newBookTitle,
+                                                            "authorName"  to newAuthorName,
+                                                            "text"        to quote.text,
+                                                            "uid"         to quote.uid,
+                                                            "userDisplayName" to quote.userDisplayName,
+                                                            "userPhotoURL"    to quote.userPhotoURL,
+                                                            "feedPostId"  to quote.feedPostId,
+                                                            "ts"          to quote.ts,
+                                                        )
+                                                    ).await()
+                                                db.collection("library_books").document(newBookId)
+                                                    .update("quoteCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                                                // feed postunu da güncelle
+                                                if (quote.feedPostId.isNotBlank()) {
+                                                    db.collection("posts").document(quote.feedPostId)
+                                                        .update(mapOf(
+                                                            "libraryBookId"   to newBookId,
+                                                            "libraryAuthorId" to newAuthorId,
+                                                        )).await()
+                                                }
+                                                snackMsg = "✓ Alıntı '$newBookTitle' kitabına bağlandı"
+                                                if (selectedBookId.isNotBlank()) loadQuotesForBook(selectedBookId)
+                                                else quotes = quotes.filter { it.id != quote.id }
+                                            } catch (e: Exception) { snackMsg = "❌ ${e.message}" }
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        SnackbarHost(
+            hostState = snackState,
+            modifier  = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+        ) { data ->
+            Snackbar(
+                snackbarData   = data,
+                containerColor = if (data.visuals.message.startsWith("✓")) Success else Error,
+                contentColor   = Color.Black,
+                shape          = RoundedCornerShape(12.dp),
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AuthorAdminCard — yazarı genişletilebilir kart
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun AuthorAdminCard(
+    author       : Author,
+    books        : List<LibraryBook>,         // bu yazarın mevcut kitapları
+    allBooks     : List<LibraryBook>,         // bağlanabilecek tüm kitaplar
+    onLinkBook   : (bookId: String, bookTitle: String) -> Unit,
+    onUnlinkBook : (bookId: String, bookTitle: String) -> Unit,
+    onAddBook    : (title: String, genre: String, year: String) -> Unit,
+) {
+    var expanded     by remember { mutableStateOf(false) }
+    var showLinkDrop by remember { mutableStateOf(false) }
+    var showAddForm  by remember { mutableStateOf(false) }
+    var newTitle     by remember { mutableStateOf("") }
+    var newGenre     by remember { mutableStateOf("") }
+    var newYear      by remember { mutableStateOf("") }
+
+    // Bağlanabilecek kitaplar (henüz bu yazara ait olmayan)
+    val linkable = allBooks.filter { it.authorId != author.id }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape    = RoundedCornerShape(12.dp),
+        colors   = CardDefaults.cardColors(containerColor = HeftSurface),
+        elevation = CardDefaults.cardElevation(1.dp),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            // ── Başlık satırı ─────────────────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Default.Person,
+                    null,
+                    tint     = Primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(author.name, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(
+                        "${books.size} kitap · ${author.quoteCount} alıntı",
+                        color    = Muted,
+                        fontSize = 11.sp,
+                    )
+                }
+                Icon(
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    null,
+                    tint     = Muted,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+
+            if (expanded) {
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider(color = Divider)
+                Spacer(Modifier.height(8.dp))
+
+                // ── Mevcut kitaplar ───────────────────────────────────────
+                if (books.isEmpty()) {
+                    Text("Bağlı kitap yok", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
+                } else {
+                    books.forEach { book ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.MenuBook, null, tint = Muted, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(book.title, color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            IconButton(
+                                onClick  = { onUnlinkBook(book.id, book.title) },
+                                modifier = Modifier.size(28.dp),
+                            ) {
+                                Icon(Icons.Default.LinkOff, null, tint = Error, modifier = Modifier.size(14.dp))
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                // ── Mevcut kitabı bağla ───────────────────────────────────
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { showLinkDrop = !showLinkDrop; showAddForm = false },
+                        shape   = RoundedCornerShape(8.dp),
+                        border  = androidx.compose.foundation.BorderStroke(1.dp, Primary),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(vertical = 6.dp),
+                    ) {
+                        Icon(Icons.Default.Link, null, tint = Primary, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Kitap Bağla", color = Primary, fontSize = 12.sp)
+                    }
+                    OutlinedButton(
+                        onClick = { showAddForm = !showAddForm; showLinkDrop = false },
+                        shape   = RoundedCornerShape(8.dp),
+                        border  = androidx.compose.foundation.BorderStroke(1.dp, Success),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(vertical = 6.dp),
+                    ) {
+                        Icon(Icons.Default.Add, null, tint = Success, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Yeni Kitap", color = Success, fontSize = 12.sp)
+                    }
+                }
+
+                // Dropdown — mevcut kitap seç
+                if (showLinkDrop) {
+                    Spacer(Modifier.height(6.dp))
+                    if (linkable.isEmpty()) {
+                        Text("Bağlanabilecek kitap yok", color = Muted, fontSize = 12.sp)
+                    } else {
+                        Card(
+                            shape  = RoundedCornerShape(8.dp),
+                            colors = CardDefaults.cardColors(containerColor = SurfaceVar),
+                        ) {
+                            LazyColumn(Modifier.heightIn(max = 200.dp)) {
+                                items(linkable) { book ->
+                                    Row(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                onLinkBook(book.id, book.title)
+                                                showLinkDrop = false
+                                            }
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Icon(Icons.Default.MenuBook, null, tint = Muted, modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Column {
+                                            Text(book.title, color = OnBackground, fontSize = 13.sp)
+                                            if (book.authorName.isNotBlank())
+                                                Text(book.authorName, color = Muted, fontSize = 11.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Form — yeni kitap ekle
+                if (showAddForm) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value         = newTitle,
+                        onValueChange = { newTitle = it },
+                        label         = { Text("Kitap Adı *", fontSize = 12.sp) },
+                        modifier      = Modifier.fillMaxWidth(),
+                        singleLine    = true,
+                        colors        = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor   = Primary,
+                            unfocusedBorderColor = Divider,
+                            focusedTextColor     = OnBackground,
+                            unfocusedTextColor   = OnBackground,
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value         = newGenre,
+                            onValueChange = { newGenre = it },
+                            label         = { Text("Tür", fontSize = 12.sp) },
+                            modifier      = Modifier.weight(1f),
+                            singleLine    = true,
+                            colors        = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor   = Primary,
+                                unfocusedBorderColor = Divider,
+                                focusedTextColor     = OnBackground,
+                                unfocusedTextColor   = OnBackground,
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                        )
+                        OutlinedTextField(
+                            value         = newYear,
+                            onValueChange = { newYear = it },
+                            label         = { Text("Yıl", fontSize = 12.sp) },
+                            modifier      = Modifier.weight(1f),
+                            singleLine    = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors        = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor   = Primary,
+                                unfocusedBorderColor = Divider,
+                                focusedTextColor     = OnBackground,
+                                unfocusedTextColor   = OnBackground,
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Button(
+                        onClick  = {
+                            if (newTitle.isNotBlank()) {
+                                onAddBook(newTitle, newGenre, newYear)
+                                newTitle = ""; newGenre = ""; newYear = ""
+                                showAddForm = false
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape    = RoundedCornerShape(8.dp),
+                        colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                    ) {
+                        Text("Ekle", color = Color.White, fontSize = 13.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BookAdminCard — kitabı yazar değiştir / alıntıları gör
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun BookAdminCard(
+    book          : LibraryBook,
+    authors       : List<Author>,
+    onChangeAuthor: (authorId: String, authorName: String) -> Unit,
+    onViewQuotes  : (bookId: String, bookTitle: String) -> Unit,
+) {
+    var showAuthorDrop by remember { mutableStateOf(false) }
+    var authorSearch   by remember { mutableStateOf("") }
+
+    Card(
+        modifier  = Modifier.fillMaxWidth(),
+        shape     = RoundedCornerShape(12.dp),
+        colors    = CardDefaults.cardColors(containerColor = HeftSurface),
+        elevation = CardDefaults.cardElevation(1.dp),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.MenuBook, null, tint = Primary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(book.title, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(
+                        (book.authorName.ifBlank { "Yazar yok" }) + " · ${book.quoteCount} alıntı",
+                        color    = Muted,
+                        fontSize = 11.sp,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick        = { showAuthorDrop = !showAuthorDrop },
+                    shape          = RoundedCornerShape(8.dp),
+                    border         = androidx.compose.foundation.BorderStroke(1.dp, Amber),
+                    modifier       = Modifier.weight(1f),
+                    contentPadding = PaddingValues(vertical = 6.dp),
+                ) {
+                    Icon(Icons.Default.Person, null, tint = Amber, modifier = Modifier.size(13.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Yazarı Değiştir", color = Amber, fontSize = 12.sp)
+                }
+                OutlinedButton(
+                    onClick        = { onViewQuotes(book.id, book.title) },
+                    shape          = RoundedCornerShape(8.dp),
+                    border         = androidx.compose.foundation.BorderStroke(1.dp, Primary),
+                    modifier       = Modifier.weight(1f),
+                    contentPadding = PaddingValues(vertical = 6.dp),
+                ) {
+                    Icon(Icons.Default.FormatQuote, null, tint = Primary, modifier = Modifier.size(13.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Alıntılar (${book.quoteCount})", color = Primary, fontSize = 12.sp)
+                }
+            }
+
+            if (showAuthorDrop) {
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value         = authorSearch,
+                    onValueChange = { authorSearch = it },
+                    placeholder   = { Text("Yazar ara…", color = Muted, fontSize = 12.sp) },
+                    modifier      = Modifier.fillMaxWidth(),
+                    singleLine    = true,
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor   = Primary,
+                        unfocusedBorderColor = Divider,
+                        focusedTextColor     = OnBackground,
+                        unfocusedTextColor   = OnBackground,
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                )
+                Spacer(Modifier.height(4.dp))
+                val filtered = authors.filter {
+                    authorSearch.isBlank() || it.name.contains(authorSearch, ignoreCase = true)
+                }
+                Card(
+                    shape  = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceVar),
+                ) {
+                    LazyColumn(Modifier.heightIn(max = 180.dp)) {
+                        items(filtered) { a ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onChangeAuthor(a.id, a.name)
+                                        showAuthorDrop = false
+                                        authorSearch   = ""
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Default.Person, null, tint = Muted, modifier = Modifier.size(13.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(a.name, color = OnBackground, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// QuoteAdminCard — alıntıyı sil / kitaba yeniden bağla
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun QuoteAdminCard(
+    quote    : BookQuote,
+    books    : List<LibraryBook>,
+    authors  : List<Author>,
+    onDelete : () -> Unit,
+    onRelink : (bookId: String, bookTitle: String, authorId: String, authorName: String) -> Unit,
+) {
+    var showRelinkDrop by remember { mutableStateOf(false) }
+    var showDeleteConf by remember { mutableStateOf(false) }
+    var bookSearch     by remember { mutableStateOf("") }
+
+    Card(
+        modifier  = Modifier.fillMaxWidth(),
+        shape     = RoundedCornerShape(12.dp),
+        colors    = CardDefaults.cardColors(containerColor = HeftSurface),
+        elevation = CardDefaults.cardElevation(1.dp),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            // Kitap / yazar bilgisi
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.FormatQuote, null, tint = Amber, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Column(Modifier.weight(1f)) {
+                    if (quote.bookTitle.isNotBlank())
+                        Text(quote.bookTitle, color = Primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    if (quote.authorName.isNotBlank())
+                        Text(quote.authorName, color = Muted, fontSize = 11.sp)
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                quote.text,
+                color    = OnBackground,
+                fontSize = 13.sp,
+                maxLines = 4,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            if (quote.userDisplayName.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text("@${quote.userDisplayName}", color = Muted, fontSize = 11.sp)
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick        = { showRelinkDrop = !showRelinkDrop; showDeleteConf = false },
+                    shape          = RoundedCornerShape(8.dp),
+                    border         = androidx.compose.foundation.BorderStroke(1.dp, Primary),
+                    modifier       = Modifier.weight(1f),
+                    contentPadding = PaddingValues(vertical = 6.dp),
+                ) {
+                    Icon(Icons.Default.Link, null, tint = Primary, modifier = Modifier.size(13.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Kitap Bağla", color = Primary, fontSize = 12.sp)
+                }
+                OutlinedButton(
+                    onClick        = { showDeleteConf = !showDeleteConf; showRelinkDrop = false },
+                    shape          = RoundedCornerShape(8.dp),
+                    border         = androidx.compose.foundation.BorderStroke(1.dp, Error),
+                    modifier       = Modifier.weight(1f),
+                    contentPadding = PaddingValues(vertical = 6.dp),
+                ) {
+                    Icon(Icons.Default.Delete, null, tint = Error, modifier = Modifier.size(13.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Sil", color = Error, fontSize = 12.sp)
+                }
+            }
+
+            // Silme onayı
+            if (showDeleteConf) {
+                Spacer(Modifier.height(6.dp))
+                Card(
+                    shape  = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Error.copy(alpha = 0.1f)),
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Silinsin mi?", color = Error, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { showDeleteConf = false }) {
+                            Text("Hayır", color = Muted, fontSize = 12.sp)
+                        }
+                        TextButton(onClick = { onDelete(); showDeleteConf = false }) {
+                            Text("Evet, Sil", color = Error, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            // Kitap bağlama dropdown
+            if (showRelinkDrop) {
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value         = bookSearch,
+                    onValueChange = { bookSearch = it },
+                    placeholder   = { Text("Kitap ara…", color = Muted, fontSize = 12.sp) },
+                    modifier      = Modifier.fillMaxWidth(),
+                    singleLine    = true,
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor   = Primary,
+                        unfocusedBorderColor = Divider,
+                        focusedTextColor     = OnBackground,
+                        unfocusedTextColor   = OnBackground,
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                )
+                Spacer(Modifier.height(4.dp))
+                val filteredB = books.filter {
+                    bookSearch.isBlank() || it.title.contains(bookSearch, ignoreCase = true)
+                }
+                Card(
+                    shape  = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceVar),
+                ) {
+                    LazyColumn(Modifier.heightIn(max = 200.dp)) {
+                        items(filteredB) { b ->
+                            val bAuthor = authors.find { it.id == b.authorId }
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onRelink(b.id, b.title, b.authorId, b.authorName)
+                                        showRelinkDrop = false
+                                        bookSearch     = ""
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Default.MenuBook, null, tint = Muted, modifier = Modifier.size(13.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(b.title, color = OnBackground, fontSize = 13.sp)
+                                    if (b.authorName.isNotBlank())
+                                        Text(b.authorName, color = Muted, fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

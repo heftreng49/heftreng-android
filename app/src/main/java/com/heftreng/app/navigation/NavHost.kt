@@ -663,16 +663,18 @@ fun DrawerContent(
             Spacer(Modifier.height(8.dp))
 
             // ── Navigasyon ─────────────────────────────────────────────
+            val notifLabel = Strings.navNotifs(language) + if (unreadNotif > 0) " ($unreadNotif)" else ""
+            val msgLabel   = Strings.navMessages(language) + if (totalUnread > 0) " ($totalUnread)" else ""
             val items = listOf(
-                Triple(Icons.Outlined.DynamicFeed,    "Nivîs / Feed",           Screen.Feed.route),
-                Triple(Icons.Outlined.Search,         "Bigere / Ara",           Screen.Search.route),
-                Triple(Icons.Outlined.AutoStories,    "Kitaplar / Pirtûk",      Screen.Serials.route),
-                Triple(Icons.Outlined.Translate,      "Kurdî Fêrbibe",          Screen.Kurdi.route),
-                Triple(Icons.Outlined.NotificationsNone, "Agahdarî / Bildirimler (${if (unreadNotif>0) unreadNotif else ""})", Screen.Notifications.route),
-                Triple(Icons.Outlined.ChatBubbleOutline, "Peyam / Mesajlar (${if (totalUnread>0) totalUnread else ""})", Screen.Messages.route),
-                Triple(Icons.Outlined.Settings,       "Mîheng / Ayarlar",       Screen.Settings.route),
-                Triple(Icons.Outlined.Edit,           "Nivîskar / Yazar Paneli", Screen.Yazar.route),
-                Triple(Icons.Outlined.Bookmarks,      "Tomarkirin / Kaydedilenler", Screen.SavedPosts.route),
+                Triple(Icons.Outlined.DynamicFeed,       Strings.navFeed(language),     Screen.Feed.route),
+                Triple(Icons.Outlined.Search,            Strings.navSearch(language),   Screen.Search.route),
+                Triple(Icons.Outlined.AutoStories,       Strings.navBooks(language),    Screen.Serials.route),
+                Triple(Icons.Outlined.Translate,         Strings.navKurdi(language),    Screen.Kurdi.route),
+                Triple(Icons.Outlined.NotificationsNone, notifLabel,                    Screen.Notifications.route),
+                Triple(Icons.Outlined.ChatBubbleOutline, msgLabel,                      Screen.Messages.route),
+                Triple(Icons.Outlined.Settings,          Strings.navSettings(language), Screen.Settings.route),
+                Triple(Icons.Outlined.Edit,              Strings.yazarTitle(language),  Screen.Yazar.route),
+                Triple(Icons.Outlined.Bookmarks,         Strings.savedPosts(language),  Screen.SavedPosts.route),
             )
 
             items.forEach { (icon, label, route) ->
@@ -701,7 +703,7 @@ fun DrawerContent(
                 ) {
                     Icon(Icons.Default.Dashboard, null, tint = Amber, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(12.dp))
-                    Text("CMS Yönetimi", color = Amber, fontSize = 14.sp)
+                    Text(if (language == "ku") "CMS Birêvebirî" else "CMS Yönetimi", color = Amber, fontSize = 14.sp)
                 }
             }
 
@@ -765,7 +767,7 @@ fun DrawerContent(
             TextButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Outlined.Logout, null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Derketin / Çıkış", color = Color(0xFFEF4444), fontSize = 13.sp)
+                Text(Strings.logout(language) + if (language == "ku") "" else " / Derketin", color = Color(0xFFEF4444), fontSize = 13.sp)
             }
         }
     }

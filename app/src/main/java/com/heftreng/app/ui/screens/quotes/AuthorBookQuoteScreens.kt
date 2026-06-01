@@ -69,6 +69,7 @@ import com.heftreng.app.viewmodel.RlStatus
 import kotlinx.coroutines.tasks.await
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.window.Dialog
 import kotlin.math.roundToInt
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -297,17 +298,27 @@ fun AuthorDetailScreen(
 
     // ── Alıntı FAB Dialog (yazar adı pre-filled) ──────────────────────
     if (showAddQuoteFab) {
-        QuoteDialog(
-            initialAuthor = author?.name ?: "",
+        AuthorQuoteDialog(
+            authorName    = author?.name ?: "",
+            authorId      = authorId,
+            authorBooks   = books,
             onDismiss     = { showAddQuoteFab = false },
-            onConfirm     = { payload ->
-                feedVm.createPost(
-                    text       = "",
-                    quoteText  = payload.text,
-                    authorName = payload.authorName,
-                    bookName   = payload.bookName,
-                    type       = "library_quote",
-                )
+            onConfirm     = { quoteText, bookName, bookId ->
+                // Kitap seçildiyse kütüphane alıntısı olarak ekle
+                val selectedBook = books.find { it.id == bookId }
+                if (selectedBook != null) {
+                    vm.addBookQuote(selectedBook, quoteText)
+                } else {
+                    // Kitap seçilmediyse sadece feed'e yazar alıntısı olarak düş
+                    feedVm.createPost(
+                        text            = "",
+                        quoteText       = quoteText,
+                        authorName      = author?.name ?: "",
+                        bookName        = bookName,
+                        libraryAuthorId = authorId,
+                        type            = "library_quote",
+                    )
+                }
                 showAddQuoteFab = false
             },
         )
@@ -1456,4 +1467,184 @@ private fun AdminTextField(
             focusedLabelColor    = Amber,
         ),
     )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  AuthorQuoteDialog — Yazara/Kitaba bağlı alıntı ekleme
+//  • Yazarın kütüphanedeki kitapları açılır listede gösterilir
+//  • Kitap seçilirse addBookQuote ile kütüphane koleksiyonuna yazılır
+//  • Seçilmezse sadece yazar adıyla feed'e düşer
+// ═══════════════════════════════════════════════════════════════════════════
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AuthorQuoteDialog(
+    authorName  : String,
+    authorId    : String = "",
+    authorBooks : List<com.heftreng.app.data.model.LibraryBook> = emptyList(),
+    onDismiss   : () -> Unit,
+    onConfirm   : (quoteText: String, bookName: String, bookId: String) -> Unit,
+) {
+    var quoteText     by remember { mutableStateOf("") }
+    var selectedBook  by remember { mutableStateOf<com.heftreng.app.data.model.LibraryBook?>(null) }
+    var manualBook    by remember { mutableStateOf("") }
+    var dropExpanded  by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape  = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = HeftSurface),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                // Başlık
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.FormatQuote, null, tint = Primary,
+                        modifier = Modifier.size(22.dp))
+                    Text("Alıntı Ekle", color = OnBackground,
+                        fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+                Text(authorName, color = Primary,
+                    fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+
+                // Alıntı metni
+                OutlinedTextField(
+                    value         = quoteText,
+                    onValueChange = { quoteText = it },
+                    modifier      = Modifier.fillMaxWidth().heightIn(min = 100.dp),
+                    placeholder   = { Text("Alıntı metni…", color = Muted) },
+                    minLines      = 4,
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor      = Primary,
+                        unfocusedBorderColor    = Divider,
+                        focusedTextColor        = OnBackground,
+                        unfocusedTextColor      = OnBackground,
+                        unfocusedContainerColor = SurfaceVar,
+                        focusedContainerColor   = SurfaceVar,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                )
+
+                // Kitap seçimi
+                if (authorBooks.isNotEmpty()) {
+                    // Kütüphanedeki kitaplar — dropdown
+                    ExposedDropdownMenuBox(
+                        expanded        = dropExpanded,
+                        onExpandedChange = { dropExpanded = it },
+                    ) {
+                        OutlinedTextField(
+                            value         = selectedBook?.title ?: "Kitap seç (isteğe bağlı)",
+                            onValueChange = {},
+                            readOnly      = true,
+                            modifier      = Modifier.fillMaxWidth().menuAnchor(),
+                            trailingIcon  = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropExpanded)
+                            },
+                            label  = { Text("Kitap", color = Muted, fontSize = 12.sp) },
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(
+                                focusedBorderColor      = Amber,
+                                unfocusedBorderColor    = Divider,
+                                focusedTextColor        = OnBackground,
+                                unfocusedTextColor      = if (selectedBook != null) OnBackground else Muted,
+                                unfocusedContainerColor = SurfaceVar,
+                                focusedContainerColor   = SurfaceVar,
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                        ExposedDropdownMenu(
+                            expanded        = dropExpanded,
+                            onDismissRequest = { dropExpanded = false },
+                            modifier = Modifier.background(HeftSurface),
+                        ) {
+                            DropdownMenuItem(
+                                text    = { Text("— Kitap seçme", color = Muted, fontSize = 13.sp) },
+                                onClick = { selectedBook = null; dropExpanded = false },
+                            )
+                            authorBooks.forEach { book ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(book.title, color = OnBackground,
+                                                fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                            if (book.publishYear > 0)
+                                                Text("${book.publishYear}", color = Muted, fontSize = 11.sp)
+                                        }
+                                    },
+                                    onClick = { selectedBook = book; dropExpanded = false },
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    // Kütüphanede kitap yoksa manuel giriş
+                    OutlinedTextField(
+                        value         = manualBook,
+                        onValueChange = { manualBook = it },
+                        modifier      = Modifier.fillMaxWidth(),
+                        label         = { Text("Kitap adı (isteğe bağlı)", color = Muted, fontSize = 12.sp) },
+                        colors        = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor      = Amber,
+                            unfocusedBorderColor    = Divider,
+                            focusedTextColor        = OnBackground,
+                            unfocusedTextColor      = OnBackground,
+                            unfocusedContainerColor = SurfaceVar,
+                            focusedContainerColor   = SurfaceVar,
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                }
+
+                // Seçili kitap göstergesi
+                if (selectedBook != null) {
+                    Surface(
+                        shape  = RoundedCornerShape(8.dp),
+                        color  = Primary.copy(alpha = 0.12f),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(Icons.Outlined.AutoStories, null, tint = Primary,
+                                modifier = Modifier.size(16.dp))
+                            Text(selectedBook!!.title, color = Primary,
+                                fontWeight = FontWeight.SemiBold, fontSize = 12.sp,
+                                modifier = Modifier.weight(1f))
+                            Text("✓ Kütüphane bağlandı", color = Primary,
+                                fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                // Butonlar
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("İptal", color = Muted)
+                    }
+                    Button(
+                        onClick = {
+                            if (quoteText.isNotBlank()) {
+                                val bookName = selectedBook?.title ?: manualBook
+                                val bookId   = selectedBook?.id ?: ""
+                                onConfirm(quoteText.trim(), bookName.trim(), bookId)
+                            }
+                        },
+                        enabled = quoteText.isNotBlank(),
+                        colors  = ButtonDefaults.buttonColors(
+                            containerColor = Primary, contentColor = Color.White),
+                        shape   = RoundedCornerShape(10.dp),
+                    ) {
+                        Text("Ekle", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
 }

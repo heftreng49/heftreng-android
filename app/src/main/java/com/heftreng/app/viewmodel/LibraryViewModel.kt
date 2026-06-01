@@ -427,8 +427,23 @@ class LibraryViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             try {
+                // Önce aynı kitap var mı kontrol et
+                val titleLower = title.trim().lowercase()
+                val existing = if (authorId.isNotBlank()) {
+                    firestore.collection("library_books")
+                        .whereEqualTo("titleLower", titleLower)
+                        .whereEqualTo("authorId", authorId)
+                        .limit(1).get().await()
+                } else {
+                    firestore.collection("library_books")
+                        .whereEqualTo("titleLower", titleLower)
+                        .limit(1).get().await()
+                }
+                if (!existing.isEmpty) return@launch // zaten var, oluşturma
+
                 val data = hashMapOf(
-                    "title"       to title,
+                    "title"       to title.trim(),
+                    "titleLower"  to titleLower,
                     "authorId"    to authorId,
                     "authorName"  to authorName,
                     "coverImg"    to coverImg,
@@ -442,9 +457,10 @@ class LibraryViewModel @Inject constructor(
                     "ts"          to Timestamp.now(),
                 )
                 firestore.collection("library_books").add(data).await()
-                // Yazar kitap sayacını artır
-                firestore.collection("authors").document(authorId)
-                    .update("bookCount", FieldValue.increment(1)).await()
+                if (authorId.isNotBlank()) {
+                    firestore.collection("authors").document(authorId)
+                        .update("bookCount", FieldValue.increment(1)).await()
+                }
             } catch (e: Exception) {
                 _error.value = e.message
             }
@@ -707,16 +723,30 @@ class LibraryViewModel @Inject constructor(
         authorId  : String,
         authorName: String,
     ): String {
+        val titleLower = title.trim().lowercase()
         return try {
-            val snap = firestore.collection("library_books")
-                .whereEqualTo("titleLower", title.trim().lowercase())
-                .limit(1).get().await()
+            // title + authorId birlikte kontrol et — farklı yazarların aynı isimli kitabı ayrı olmalı
+            val snap = if (authorId.isNotBlank()) {
+                firestore.collection("library_books")
+                    .whereEqualTo("titleLower", titleLower)
+                    .whereEqualTo("authorId", authorId)
+                    .limit(1).get().await()
+            } else {
+                firestore.collection("library_books")
+                    .whereEqualTo("titleLower", titleLower)
+                    .limit(1).get().await()
+            }
             if (!snap.isEmpty) {
-                snap.documents[0].id
+                val doc = snap.documents[0]
+                // authorId boşsa güncelle
+                if (doc.getString("authorId").isNullOrBlank() && authorId.isNotBlank()) {
+                    doc.reference.update("authorId", authorId, "authorName", authorName)
+                }
+                doc.id
             } else {
                 val data = hashMapOf(
                     "title"       to title.trim(),
-                    "titleLower"  to title.trim().lowercase(),
+                    "titleLower"  to titleLower,
                     "authorId"    to authorId,
                     "authorName"  to authorName,
                     "coverImg"    to "",
@@ -731,7 +761,6 @@ class LibraryViewModel @Inject constructor(
                     "ts"          to com.google.firebase.Timestamp.now(),
                 )
                 val bookId = firestore.collection("library_books").add(data).await().id
-                // Yazar kitap sayacını artır
                 if (authorId.isNotBlank()) {
                     try {
                         firestore.collection("authors").document(authorId)
@@ -741,15 +770,23 @@ class LibraryViewModel @Inject constructor(
                 bookId
             }
         } catch (e: Exception) {
+            // Index yoksa fallback — sadece title ile ara
             try {
-                val fallback = firestore.collection("library_books")
-                    .whereEqualTo("title", title.trim())
-                    .limit(1).get().await()
+                val fallback = if (authorId.isNotBlank()) {
+                    firestore.collection("library_books")
+                        .whereEqualTo("title", title.trim())
+                        .whereEqualTo("authorId", authorId)
+                        .limit(1).get().await()
+                } else {
+                    firestore.collection("library_books")
+                        .whereEqualTo("title", title.trim())
+                        .limit(1).get().await()
+                }
                 if (!fallback.isEmpty) fallback.documents[0].id
                 else {
                     val data = hashMapOf(
                         "title"       to title.trim(),
-                        "titleLower"  to title.trim().lowercase(),
+                        "titleLower"  to titleLower,
                         "authorId"    to authorId,
                         "authorName"  to authorName,
                         "coverImg"    to "",

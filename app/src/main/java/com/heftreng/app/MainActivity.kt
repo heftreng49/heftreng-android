@@ -16,6 +16,7 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import com.google.android.play.core.appupdate.AppUpdateManagerFactory
 import com.google.android.play.core.appupdate.AppUpdateOptions
 import com.google.android.play.core.install.InstallStateUpdatedListener
@@ -73,8 +74,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // EdgeToEdge modunu aktifleştiriyoruz
         enableEdgeToEdge()
-        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        
+        // KLAVYE BOŞLUĞUNU SIFIRLAYAN KRİTİK AYAR:
+        // Sistem insets yapısının Compose bileşenleriyle çakışmasını engeller ve 
+        // klavye açıldığında yorum/mesaj kutularının tam tepesine sıfır yapışmasını sağlar.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
 
         // Bildirimden gelen intent'i al
         pendingNavTarget = intent?.getStringExtra("navigate_to")

@@ -65,7 +65,11 @@ fun KurdiScreen(
     val lastLessonXp    by vm.lastLessonXp.collectAsState()
     val tempUnlockedIds by vm.tempUnlockedIds.collectAsState()
     val streakBroke     by vm.streakBroke.collectAsState()
-    val canWatchAd      = adsVm.canWatchRewardedAd
+    val canWatchAd              = adsVm.canWatchRewardedAd
+    val canDoubleXp             = adsVm.canShowScenario(AdsViewModel.RewardType.DOUBLE_XP)
+    val canUnlockLesson         = adsVm.canShowScenario(AdsViewModel.RewardType.UNLOCK_LESSON)
+    val canSaveStreak           = adsVm.canShowScenario(AdsViewModel.RewardType.SAVE_STREAK)
+    val remainingAds            = adsVm.remainingRewardedAds
     val bannerUnitId    by adsVm.bannerKurdiUnitId.collectAsState()
 
     val context  = androidx.compose.ui.platform.LocalContext.current
@@ -82,7 +86,7 @@ fun KurdiScreen(
     var pendingUnlockId   by remember { mutableStateOf("") }
 
     // -- Senaryo 3 — Streak Kurtarma Dialog -----------------------------------
-    if (streakBroke && canWatchAd) {
+    if (streakBroke && canSaveStreak) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { vm.dismissStreakBroke() },
             containerColor   = com.heftreng.app.ui.theme.HeftSurface,
@@ -160,7 +164,7 @@ fun KurdiScreen(
     LaunchedEffect(lastLessonXp) {
         if (lastLessonXp > 0) showDoubleXpSheet = true
     }
-    if (showDoubleXpSheet && canWatchAd) {
+    if (showDoubleXpSheet && canDoubleXp) {
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { showDoubleXpSheet = false },
             containerColor   = com.heftreng.app.ui.theme.HeftSurface,
@@ -239,7 +243,7 @@ fun KurdiScreen(
 
         // XP & Streak kartı
         XpStreakCard(xp = xp, streak = streak, level = level, language = language,
-            remainingAds = (3 - adsVm.dailyRewardCount).coerceAtLeast(0))
+            remainingAds = remainingAds)
 
         Spacer(Modifier.height(8.dp))
 
@@ -279,7 +283,7 @@ fun KurdiScreen(
                 loading         = loading,
                 language        = language,
                 tempUnlockedIds = tempUnlockedIds,
-                canWatchAd      = canWatchAd,
+                canWatchAd      = canUnlockLesson,
                 bannerUnitId    = bannerUnitId,
                 onNext   = { vm.getNextLesson()?.let { vm.openLesson(it.id) } },
                 onOpen   = { lessonId -> vm.openLesson(lessonId) },

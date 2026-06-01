@@ -326,28 +326,57 @@
       "collectionGroup": "library_books",
       "queryScope": "COLLECTION",
       "fields": [
-        {
-          "fieldPath": "titleLower",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "ts",
-          "order": "DESCENDING"
-        }
+        {"fieldPath": "titleLower", "order": "ASCENDING"},
+        {"fieldPath": "authorId",   "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "library_books",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "titleLower", "order": "ASCENDING"},
+        {"fieldPath": "ts",         "order": "DESCENDING"}
       ]
     },
     {
       "collectionGroup": "feed",
       "queryScope": "COLLECTION",
       "fields": [
-        {
-          "fieldPath": "uid",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "repostType",
-          "order": "ASCENDING"
-        }
+        {"fieldPath": "uid",        "order": "ASCENDING"},
+        {"fieldPath": "repostType", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "follows",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "targetUid", "order": "ASCENDING"},
+        {"fieldPath": "ts",        "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "follows",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "fromUid", "order": "ASCENDING"},
+        {"fieldPath": "ts",      "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "kf_reports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "resolved", "order": "ASCENDING"},
+        {"fieldPath": "ts",       "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "feed",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "type",            "order": "ASCENDING"},
+        {"fieldPath": "libraryAuthorId", "order": "ASCENDING"},
+        {"fieldPath": "ts",              "order": "DESCENDING"}
       ]
     }
   ],

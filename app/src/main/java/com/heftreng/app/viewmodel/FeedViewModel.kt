@@ -656,7 +656,7 @@ class FeedViewModel @Inject constructor(
     // Adım 4.3 — ensureAuthorAndBook başarısız olursa post YINE oluşturulur (libraryBookId boş kalır)
     //            ama kullanıcıya bilgi verilir. addQuoteToLibrary başarısız olursa feedPostId
     //            üzerinden sonradan migrateLegacyFeedQuotes() ile kurtarılabilir.
-    fun createPost(text: String, imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "", type: String = "") {
+    fun createPost(text: String, imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "", type: String = "", libraryAuthorId: String = "", libraryBookId: String = "") {
         if (uid.isEmpty()) return
         viewModelScope.launch {
             _createPostLoading.value = true
@@ -669,14 +669,16 @@ class FeedViewModel @Inject constructor(
 
                 // Adım 4.3 — ensureAuthorAndBook hatası post oluşturmayı engellemez;
                 // libraryBookId boş kalır, post feed'e yazar ama kütüphane bağlantısı kurulmaz.
-                var libraryAuthorId = ""
-                var libraryBookId   = ""
+                var resolvedAuthorId = libraryAuthorId
+                var resolvedBookId   = libraryBookId
                 var libraryLinkFailed = false
-                if (quoteText.isNotBlank() && (authorName.isNotBlank() || bookName.isNotBlank())) {
+                // Dışarıdan geçirilmemişse otomatik eşleştir
+                if (resolvedAuthorId.isBlank() && resolvedBookId.isBlank() &&
+                    quoteText.isNotBlank() && (authorName.isNotBlank() || bookName.isNotBlank())) {
                     try {
                         val (aid, bid) = library.ensureAuthorAndBook(authorName, bookName)
-                        libraryAuthorId = aid
-                        libraryBookId   = bid
+                        resolvedAuthorId = aid
+                        resolvedBookId   = bid
                     } catch (e: Exception) {
                         libraryLinkFailed = true
                         e.printStackTrace()
@@ -696,8 +698,8 @@ class FeedViewModel @Inject constructor(
                     "quoteText"       to quoteText,
                     "authorName"      to authorName,
                     "bookName"        to bookName,
-                    "libraryAuthorId" to libraryAuthorId,
-                    "libraryBookId"   to libraryBookId,
+                    "libraryAuthorId" to resolvedAuthorId,
+                    "libraryBookId"   to resolvedBookId,
                     // type: alıntılı post ise "library_quote", değilse boş string
                     "type"            to if (quoteText.isNotBlank() && type.isBlank()) "library_quote" else type,
                     "likes"           to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
@@ -706,11 +708,11 @@ class FeedViewModel @Inject constructor(
 
                 // Adım 4.3 — Kütüphane yazma hatası feed yazmasını geri almaz;
                 // migrateLegacyFeedQuotes() ile sonradan kurtarılabilir.
-                if (quoteText.isNotBlank() && libraryBookId.isNotBlank()) {
+                if (quoteText.isNotBlank() && resolvedBookId.isNotBlank()) {
                     try {
                         library.addQuoteToLibrary(
-                            libraryBookId   = libraryBookId,
-                            libraryAuthorId = libraryAuthorId,
+                            libraryBookId   = resolvedBookId,
+                            libraryAuthorId = resolvedAuthorId,
                             bookName        = bookName,
                             authorName      = authorName,
                             quoteText       = quoteText,
