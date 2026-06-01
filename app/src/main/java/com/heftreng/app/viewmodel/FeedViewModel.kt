@@ -830,17 +830,17 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 // Takip ettiklerimi al
+                // fromUid/targetUid — web teması ve diğer tüm ViewModel'larla tutarlı
                 val followingSnap = firestore.collection("follows")
-                    .whereEqualTo("followerUid", myUid)
-                    .get().await()
+                    .whereEqualTo("fromUid", myUid)
+                    .limit(500).get().await()
                 val followingUids = followingSnap.documents
-                    .mapNotNull { it.getString("followingUid") }
+                    .mapNotNull { it.getString("targetUid") }
                     .toSet()
 
-                // Aktif kullanıcıları al - takip etmediklerimi filtrele
+                // orderBy("postsCount") index gerektirir — limitsiz çekip client-side filtrele
                 val usersSnap = firestore.collection("users")
-                    .orderBy("postsCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(30)
+                    .limit(50)
                     .get().await()
 
                 val suggestions = usersSnap.documents
@@ -870,10 +870,21 @@ class FeedViewModel @Inject constructor(
                 val myDoc = firestore.collection("users").document(myUid).get().await()
                 val myName  = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
                 val myPhoto = myDoc.getString("photoURL") ?: ""
+                // Web teması şeması: fromUid / targetUid / fromName / fromPhoto / targetUid / ts
+                val myDoc   = firestore.collection("users").document(myUid).get().await()
+                val myName2 = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
+                val myPhoto2= myDoc.getString("photoURL") ?: ""
+                val tDoc    = firestore.collection("users").document(targetUid).get().await()
+                val tName   = tDoc.getString("displayName") ?: tDoc.getString("name") ?: ""
+                val tPhoto  = tDoc.getString("photoURL") ?: ""
                 firestore.collection("follows").document("${myUid}_${targetUid}").set(mapOf(
-                    "followerUid"  to myUid,
-                    "followingUid" to targetUid,
-                    "ts"           to Timestamp.now(),
+                    "fromUid"     to myUid,
+                    "fromName"    to myName2,
+                    "fromPhoto"   to myPhoto2,
+                    "targetUid"   to targetUid,
+                    "targetName"  to tName,
+                    "targetPhoto" to tPhoto,
+                    "ts"          to Timestamp.now(),
                 )).await()
                 firestore.collection("users").document(myUid)
                     .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))

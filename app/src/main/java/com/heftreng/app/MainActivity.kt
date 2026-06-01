@@ -104,25 +104,32 @@ class MainActivity : ComponentActivity() {
 
     // ── Güncelleme kontrolü ────────────────────────────────────────────────────
     private fun checkForUpdate() {
-        appUpdateManager.registerListener(installStateListener)
-        appUpdateManager.appUpdateInfo.addOnSuccessListener { info ->
-            when {
-                // Güncelleme mevcut ve indirilebilir
-                info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
-                && info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) -> {
-                    appUpdateManager.startUpdateFlowForResult(
-                        info,
-                        updateResultLauncher,
-                        AppUpdateOptions.newBuilder(AppUpdateType.FLEXIBLE).build(),
-                    )
+        try {
+            appUpdateManager.registerListener(installStateListener)
+            appUpdateManager.appUpdateInfo.addOnSuccessListener { info ->
+                try {
+                    when {
+                        info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
+                        && info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) -> {
+                            appUpdateManager.startUpdateFlowForResult(
+                                info,
+                                updateResultLauncher,
+                                AppUpdateOptions.newBuilder(AppUpdateType.FLEXIBLE).build(),
+                            )
+                        }
+                        info.installStatus() == InstallStatus.DOWNLOADED -> {
+                            appUpdateManager.completeUpdate()
+                        }
+                    }
+                } catch (e: Exception) {
+                    // FLEXIBLE update bazı cihaz/emülatörlerde desteklenmiyor
+                    Log.w("InAppUpdate", "Update başlatılamadı: ${e.message}")
                 }
-                // Güncelleme indirildi ama henüz uygulanmadı (uygulama yeniden açıldıysa)
-                info.installStatus() == InstallStatus.DOWNLOADED -> {
-                    appUpdateManager.completeUpdate()
-                }
+            }.addOnFailureListener {
+                Log.d("InAppUpdate", "Güncelleme kontrolü başarısız: ${it.message}")
             }
-        }.addOnFailureListener {
-            Log.d("InAppUpdate", "Güncelleme kontrolü başarısız: ${it.message}")
+        } catch (e: Exception) {
+            Log.w("InAppUpdate", "checkForUpdate hata: ${e.message}")
         }
     }
 

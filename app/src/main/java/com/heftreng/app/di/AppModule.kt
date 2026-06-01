@@ -25,14 +25,23 @@ object AppModule {
 
     @Provides @Singleton
     fun provideFirestore(): FirebaseFirestore {
-        val settings = FirebaseFirestoreSettings.Builder()
-            .setLocalCacheSettings(
-                PersistentCacheSettings.newBuilder()
-                    .setSizeBytes(100L * 1024 * 1024) // 100 MB disk cache
-                    .build()
-            )
-            .build()
-        return FirebaseFirestore.getInstance().also { it.firestoreSettings = settings }
+        val db = FirebaseFirestore.getInstance()
+        // firestoreSettings sadece ilk kullanımdan önce set edilebilir.
+        // FirebaseAppCheck veya başka bir bileşen Firestore'u daha önce başlattıysa
+        // IllegalStateException fırlatılır — try/catch ile güvenli hale getiriyoruz.
+        try {
+            val settings = FirebaseFirestoreSettings.Builder()
+                .setLocalCacheSettings(
+                    PersistentCacheSettings.newBuilder()
+                        .setSizeBytes(100L * 1024 * 1024) // 100 MB disk cache
+                        .build()
+                )
+                .build()
+            db.firestoreSettings = settings
+        } catch (_: Exception) {
+            // Zaten başlatılmış — mevcut ayarlarla devam et
+        }
+        return db
     }
 
     @Provides @Singleton

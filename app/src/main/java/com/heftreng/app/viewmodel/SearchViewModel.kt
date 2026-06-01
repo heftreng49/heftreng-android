@@ -377,7 +377,19 @@ class SearchViewModel @Inject constructor(
                 if (ref.get().await().exists()) {
                     ref.delete().await()
                 } else {
-                    ref.set(mapOf("fromUid" to uid, "targetUid" to targetUid)).await()
+                    val myDoc = try { firestore.collection("users").document(uid).get().await() } catch (_: Exception) { null }
+                    ref.set(mapOf(
+                        "fromUid"   to uid,
+                        "fromName"  to (myDoc?.getString("displayName") ?: myDoc?.getString("name") ?: ""),
+                        "fromPhoto" to (myDoc?.getString("photoURL") ?: ""),
+                        "targetUid" to targetUid,
+                        "ts"        to com.google.firebase.Timestamp.now(),
+                    )).await()
+                    // Sayaç güncelle
+                    firestore.collection("users").document(uid)
+                        .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
+                    firestore.collection("users").document(targetUid)
+                        .update("followerCount", com.google.firebase.firestore.FieldValue.increment(1))
                 }
                 loadSuggestions()
             } catch (e: Exception) { e.printStackTrace() }
