@@ -203,7 +203,7 @@ class AuthViewModel @Inject constructor(
                 if (!user.isEmailVerified) {
                     try { user.sendEmailVerification().await() } catch (_: Exception) {}
                     _verificationSent.value = true
-                    _error.value = "Email adresiniz doğrulanmamış. Doğrulama linki gönderildi."
+                    _error.value = null   // verificationSent ekranı göster, error gösterme
                     auth.signOut()
                     return@launch
                 }
@@ -277,6 +277,10 @@ class AuthViewModel @Inject constructor(
                     createUserDoc(user, displayName)
                     syncFcmToken(user.uid)
                     acceptTerms(method = "email_register")
+                    try { user.sendEmailVerification().await() } catch (_: Exception) {}
+                    _verificationSent.value = true
+                    auth.signOut()
+                    _currentUser.value = null
                 } catch (e2: Exception) {
                     _error.value = e2.message
                 }
@@ -369,10 +373,10 @@ class AuthViewModel @Inject constructor(
 
     private suspend fun generateUniqueUsername(displayName: String): String {
         val existing = try {
-            firestore.collection("users")
-                .whereEqualTo("email", auth.currentUser?.email ?: "")
-                .limit(1).get().await()
-                .documents.firstOrNull()?.getString("username")
+            val uid = auth.currentUser?.uid ?: ""
+            if (uid.isNotBlank())
+                firestore.collection("users").document(uid).get().await().getString("username")
+            else null
         } catch (e: Exception) { null }
         if (!existing.isNullOrBlank()) return existing
 

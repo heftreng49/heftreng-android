@@ -87,6 +87,29 @@ fun AuthScreen(
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     lineHeight = 22.sp,
                 )
+                // Spam uyarısı
+                Surface(
+                    shape  = RoundedCornerShape(10.dp),
+                    color  = Amber.copy(alpha = 0.12f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text("📁", fontSize = 20.sp)
+                        Text(
+                            if (ku)
+                                "Ger name hat, qutiya spamê jî kontrol bike."
+                            else
+                                "E-posta gelmedi mi? Spam / Önemsiz klasörünüzü de kontrol edin.",
+                            color    = Amber,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                        )
+                    }
+                }
                 if (notYetError) {
                     Text("Henüz doğrulanmamış. Lütfen email'inizdeki linke tıklayın.",
                         color = Color(0xFFEF4444), fontSize = 13.sp,

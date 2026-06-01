@@ -37,6 +37,18 @@ class FeedViewModel @Inject constructor(
     private val _posts    = MutableStateFlow<List<Post>>(emptyList())
     val posts = _posts.asStateFlow()
 
+    // ── Takip Önerileri ──────────────────────────────────────────────────────
+    private val _suggestedUsers = MutableStateFlow<List<SuggestedUser>>(emptyList())
+    val suggestedUsers = _suggestedUsers.asStateFlow()
+
+    data class SuggestedUser(
+        val uid        : String,
+        val name       : String,
+        val photoURL   : String,
+        val bio        : String = "",
+        val isFollowing: Boolean = false,
+    )
+
     // Kütüphane — alıntı postları (bookName dolu feed postları)
     private val _libraryQuotes = MutableStateFlow<List<Post>>(emptyList())
     val libraryQuotes = _libraryQuotes.asStateFlow()
@@ -813,6 +825,70 @@ class FeedViewModel @Inject constructor(
     }
 
     // ── Pagination ────────────────────────────────────────────────────────────
+    fun loadSuggestedUsers() {
+        val myUid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                // Takip ettiklerimi al
+                val followingSnap = firestore.collection("follows")
+                    .whereEqualTo("followerUid", myUid)
+                    .get().await()
+                val followingUids = followingSnap.documents
+                    .mapNotNull { it.getString("followingUid") }
+                    .toSet()
+
+                // Aktif kullanıcıları al - takip etmediklerimi filtrele
+                val usersSnap = firestore.collection("users")
+                    .orderBy("postsCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(30)
+                    .get().await()
+
+                val suggestions = usersSnap.documents
+                    .mapNotNull { doc ->
+                        val sUid = doc.getString("uid") ?: doc.id
+                        if (sUid == myUid || sUid in followingUids) return@mapNotNull null
+                        SuggestedUser(
+                            uid      = sUid,
+                            name     = doc.getString("displayName") ?: doc.getString("name") ?: "",
+                            photoURL = doc.getString("photoURL") ?: "",
+                            bio      = doc.getString("bio") ?: "",
+                        )
+                    }
+                    .filter { it.name.isNotBlank() }
+                    .shuffled()
+                    .take(20)
+
+                _suggestedUsers.value = suggestions
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun followSuggestedUser(targetUid: String) {
+        val myUid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                val myDoc = firestore.collection("users").document(myUid).get().await()
+                val myName  = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
+                val myPhoto = myDoc.getString("photoURL") ?: ""
+                firestore.collection("follows").document("${myUid}_${targetUid}").set(mapOf(
+                    "followerUid"  to myUid,
+                    "followingUid" to targetUid,
+                    "ts"           to Timestamp.now(),
+                )).await()
+                firestore.collection("users").document(myUid)
+                    .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
+                firestore.collection("users").document(targetUid)
+                    .update("followerCount", com.google.firebase.firestore.FieldValue.increment(1))
+                // Bildirim gönder
+                sendNotif(targetUid, "follow", "$myName sizi takip etmeye başladı", "", "")
+                // State güncelle
+                _suggestedUsers.value = _suggestedUsers.value.map {
+                    if (it.uid == targetUid) it.copy(isFollowing = true) else it
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
     fun refresh() {
         lastDoc = null
         _hasMore.value = true
@@ -948,6 +1024,7 @@ class FeedViewModel @Inject constructor(
             val fromName  = userDoc.getString("displayName") ?: userDoc.getString("name") ?: auth.currentUser?.displayName ?: "Kullanıcı"
             val fromPhoto = userDoc.getString("photoURL") ?: ""
             val ico = when (type) { "like" -> "favorite"; "cmt" -> "chat_bubble"; "follow" -> "person_add"; "repost" -> "repeat"; else -> "notifications" }
+            // 1. Firestore bildirim kaydı
             firestore.collection("userNotifs").document(toUid).collection("msgs").add(mapOf(
                 "fromUid"   to uid,
                 "fromName"  to fromName,
@@ -963,6 +1040,22 @@ class FeedViewModel @Inject constructor(
                 "read"      to false,
                 "ts"        to Timestamp.now(),
             )).await()
+            // 2. FCM push bildirimi — alıcının fcmToken'ını al ve push gönder
+            try {
+                val toUserDoc = firestore.collection("users").document(toUid).get().await()
+                val fcmToken  = toUserDoc.getString("fcmToken") ?: ""
+                if (fcmToken.isNotBlank()) {
+                    com.google.firebase.functions.FirebaseFunctions.getInstance()
+                        .getHttpsCallable("sendPush")
+                        .call(mapOf(
+                            "token"  to fcmToken,
+                            "title"  to fromName,
+                            "body"   to title,
+                            "url"    to if (feedId.isNotBlank()) "post/$feedId" else "",
+                            "toUid"  to toUid,
+                        )).await()
+                }
+            } catch (_: Exception) {} // push başarısız olsa da Firestore kaydı yapıldı
         } catch (e: Exception) { e.printStackTrace() }
     }
 

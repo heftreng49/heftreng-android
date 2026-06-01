@@ -81,6 +81,8 @@ fun FeedScreen(
     settingsVm   : SettingsViewModel = hiltViewModel(),
 ) {
     val posts       by vm.posts.collectAsState()
+    val suggestedUsers by vm.suggestedUsers.collectAsState()
+    var showAllSuggestions by remember { mutableStateOf(false) }
     val loading     by vm.loading.collectAsState()
     val hasMore     by vm.hasMore.collectAsState()
     val loadingMore by vm.loadingMore.collectAsState()
@@ -102,6 +104,7 @@ fun FeedScreen(
     LaunchedEffect(Unit) {
         adsVm.loadAdConfigs()
         settingsVm.loadBlockedUsers()
+        vm.loadSuggestedUsers()
     }
 
     // ── Feed sekme (Herkes / Takip edilenler) ────────────────────────────────
@@ -338,6 +341,20 @@ fun FeedScreen(
                     )
                 }
                 // ── Gönderi listesi ───────────────────────────────────
+                // Önce takip önerilerini göster (eğer varsa ve başlangıç tabındaysa)
+                if (selectedFeedTab == 0 && suggestedUsers.isNotEmpty()) {
+                    item(key = "suggestions") {
+                        SuggestedUsersCard(
+                            users            = if (showAllSuggestions) suggestedUsers else suggestedUsers.take(3),
+                            showAll          = showAllSuggestions,
+                            onShowAll        = { showAllSuggestions = true },
+                            onFollow         = { uid -> vm.followSuggestedUser(uid) },
+                            onNavigate       = { uid -> navController.navigate(Screen.Profile.go(uid)) },
+                            language         = language,
+                        )
+                    }
+                }
+
                 items(displayedPosts, key = { it.id }) { post ->
                     PostCard(
                         post      = post,
@@ -1441,5 +1458,175 @@ fun postTimeAgo(seconds: Long, ku: Boolean = false): String {
         diff < 86400 * 30  -> if (ku) "${diff / 86400 / 7}hf" else "${diff / 86400 / 7}hf"
         diff < 86400 * 365 -> if (ku) "${diff / 86400 / 30}m" else "${diff / 86400 / 30}ay"
         else               -> if (ku) "${diff / 86400 / 365}s" else "${diff / 86400 / 365}y"
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Takip Önerileri Kartı — Twitter/X tarzı feed arası öneri bloğu
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun SuggestedUsersCard(
+    users     : List<FeedViewModel.SuggestedUser>,
+    showAll   : Boolean,
+    onShowAll : () -> Unit,
+    onFollow  : (uid: String) -> Unit,
+    onNavigate: (uid: String) -> Unit,
+    language  : String = "tr",
+) {
+    val ku = language == "ku"
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color    = HeftSurface,
+    ) {
+        Column {
+            // Başlık
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Default.PersonAdd,
+                    null,
+                    tint     = Primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    Strings.suggestedPeople(language),
+                    color      = OnBackground,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize   = 15.sp,
+                    modifier   = Modifier.weight(1f),
+                )
+            }
+            HorizontalDivider(color = Divider, thickness = 0.5.dp)
+
+            // Kullanıcı listesi
+            users.forEach { user ->
+                SuggestedUserRow(
+                    user       = user,
+                    onFollow   = { onFollow(user.uid) },
+                    onNavigate = { onNavigate(user.uid) },
+                    language   = language,
+                )
+                HorizontalDivider(color = Divider, thickness = 0.5.dp)
+            }
+
+            // Daha fazla göster (ilk 3 gösteriliyorsa)
+            if (!showAll) {
+                TextButton(
+                    onClick  = onShowAll,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                ) {
+                    Text(
+                        if (ku) "Zêdetir nîşan bide" else "Daha fazla göster",
+                        color    = Primary,
+                        fontSize = 13.sp,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.Default.ExpandMore, null, tint = Primary, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuggestedUserRow(
+    user      : FeedViewModel.SuggestedUser,
+    onFollow  : () -> Unit,
+    onNavigate: () -> Unit,
+    language  : String = "tr",
+) {
+    val ku = language == "ku"
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onNavigate() }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Avatar
+        if (user.photoURL.isNotBlank()) {
+            AsyncImage(
+                model            = user.photoURL,
+                contentDescription = null,
+                contentScale     = ContentScale.Crop,
+                modifier         = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape),
+            )
+        } else {
+            Box(
+                Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(SurfaceVar),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.Person, null, tint = Muted, modifier = Modifier.size(22.dp))
+            }
+        }
+
+        Spacer(Modifier.width(12.dp))
+
+        // İsim + biyografi
+        Column(Modifier.weight(1f)) {
+            Text(
+                user.name,
+                color      = OnBackground,
+                fontWeight = FontWeight.SemiBold,
+                fontSize   = 14.sp,
+                maxLines   = 1,
+                overflow   = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            if (user.bio.isNotBlank()) {
+                Text(
+                    user.bio,
+                    color    = Muted,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+        }
+
+        Spacer(Modifier.width(8.dp))
+
+        // Takip Et / Takip Ediliyor butonu
+        if (user.isFollowing) {
+            OutlinedButton(
+                onClick        = {},
+                shape          = RoundedCornerShape(20.dp),
+                border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                modifier       = Modifier.height(34.dp),
+            ) {
+                Text(
+                    if (ku) "Tê şopandin" else "Takip Ediliyor",
+                    color    = Muted,
+                    fontSize = 12.sp,
+                )
+            }
+        } else {
+            Button(
+                onClick        = onFollow,
+                shape          = RoundedCornerShape(20.dp),
+                colors         = ButtonDefaults.buttonColors(containerColor = Primary),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                modifier       = Modifier.height(34.dp),
+            ) {
+                Text(
+                    if (ku) "Bişopîne" else "Takip Et",
+                    color    = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
     }
 }
