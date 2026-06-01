@@ -867,20 +867,17 @@ class FeedViewModel @Inject constructor(
         val myUid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             try {
-                val myDoc = firestore.collection("users").document(myUid).get().await()
+                val myDoc   = firestore.collection("users").document(myUid).get().await()
                 val myName  = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
                 val myPhoto = myDoc.getString("photoURL") ?: ""
                 // Web teması şeması: fromUid / targetUid / fromName / fromPhoto / targetUid / ts
-                val myDoc   = firestore.collection("users").document(myUid).get().await()
-                val myName2 = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
-                val myPhoto2= myDoc.getString("photoURL") ?: ""
                 val tDoc    = firestore.collection("users").document(targetUid).get().await()
                 val tName   = tDoc.getString("displayName") ?: tDoc.getString("name") ?: ""
                 val tPhoto  = tDoc.getString("photoURL") ?: ""
                 firestore.collection("follows").document("${myUid}_${targetUid}").set(mapOf(
                     "fromUid"     to myUid,
-                    "fromName"    to myName2,
-                    "fromPhoto"   to myPhoto2,
+                    "fromName"    to myName,
+                    "fromPhoto"   to myPhoto,
                     "targetUid"   to targetUid,
                     "targetName"  to tName,
                     "targetPhoto" to tPhoto,
