@@ -285,6 +285,7 @@ fun KurdiScreen(
                 tempUnlockedIds = tempUnlockedIds,
                 canWatchAd      = canUnlockLesson,
                 bannerUnitId    = bannerUnitId,
+                adsVm           = adsVm,
                 onNext   = { vm.getNextLesson()?.let { vm.openLesson(it.id) } },
                 onOpen   = { lessonId -> vm.openLesson(lessonId) },
                 onLockedClick = { lessonId ->
@@ -407,6 +408,7 @@ private fun UnitsTab(
     tempUnlockedIds : Set<String> = emptySet(),
     canWatchAd      : Boolean = false,
     bannerUnitId    : String? = null,
+    adsVm           : AdsViewModel? = null,
     onNext          : () -> Unit,
     onOpen          : (String) -> Unit,
     onLockedClick   : (String) -> Unit = {},
