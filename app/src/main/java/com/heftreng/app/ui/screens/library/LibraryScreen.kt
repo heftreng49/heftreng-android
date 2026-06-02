@@ -259,9 +259,9 @@ fun LibraryScreen(
                 ) { page ->
                     when (page) {
                         0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, bannerUnitId = bannerUnitId)
-                        1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm, bannerUnitId = bannerUnitId)
-                        2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language, bannerUnitId = bannerUnitId)
-                        3 -> LibraryBooksTab(books = books, navController = navController, language = language, bannerUnitId = bannerUnitId)
+                        1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm, bannerUnitId = bannerUnitId, adsVm = adsVm)
+                        2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language, bannerUnitId = bannerUnitId, adsVm = adsVm)
+                        3 -> LibraryBooksTab(books = books, navController = navController, language = language, bannerUnitId = bannerUnitId, adsVm = adsVm)
                         else -> {}
                     }
                 }
@@ -395,6 +395,7 @@ private fun LibraryReviewsTab(
     navController: NavController,
     vm           : LibraryViewModel? = null,
     bannerUnitId : String? = null,
+    adsVm        : com.heftreng.app.viewmodel.AdsViewModel? = null,
 ) {
     if (reviews.isEmpty()) {
         EmptyState(Icons.Outlined.RateReview, Strings.libraryNoReviews(language))
@@ -417,6 +418,7 @@ private fun LibraryAuthorsTab(
     language     : String,
     navController: NavController,
     bannerUnitId : String? = null,
+    adsVm        : com.heftreng.app.viewmodel.AdsViewModel? = null,
 ) {
     if (authors.isEmpty()) {
         EmptyState(Icons.Outlined.Person, Strings.libraryNoAuthors(language))
@@ -441,6 +443,7 @@ private fun LibraryBooksTab(
     language     : String,
     navController: NavController,
     bannerUnitId : String? = null,
+    adsVm        : com.heftreng.app.viewmodel.AdsViewModel? = null,
 ) {
     if (books.isEmpty()) {
         EmptyState(Icons.Outlined.AutoStories, Strings.libraryNoBooks(language))

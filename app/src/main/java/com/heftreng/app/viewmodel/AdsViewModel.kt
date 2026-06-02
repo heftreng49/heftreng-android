@@ -79,11 +79,6 @@ class AdsViewModel @Inject constructor(
         cachedKurdiBanner?.destroy()
         interstitialAd = null
         rewardedAd     = null
-        feedListener?.remove()
-        likedListener?.remove()
-        savedListener?.remove()
-        repostListener?.remove()
-        libQuoteListener?.remove()
     }
 
     // ── Konfigürasyonlar ──────────────────────────────────────────────────────
