@@ -153,49 +153,71 @@ fun QuoteDialog(
     var showBookDrop        by remember { mutableStateOf(false) }
     var showAuthorDrop      by remember { mutableStateOf(false) }
 
-    // Tüm feed'deki kitap+yazar verilerini yükle (tüm kullanıcıların alıntıları)
+    // Feed'deki tüm alıntıları çek — eski nested ve yeni flat format her ikisi desteklenir
     LaunchedEffect(Unit) {
         try {
-            val snap = db.collection("feed")
-                .whereEqualTo("type", "quote")
+            // 1. Yeni format: type == "library_quote", quoteText dolu, bookName/authorName flat
+            val newSnap = db.collection("feed")
+                .whereEqualTo("type", "library_quote")
                 .limit(300).get().await()
 
-            // type alanı yoksa quote objesi olan tüm postları çek
-            val allDocs = if (snap.isEmpty) {
-                db.collection("feed").limit(300).get().await().documents
-                    .filter { it.get("quote") != null }
-            } else snap.documents
+            // 2. Eski format: type == "quote" veya nested quote map var
+            val oldSnap = db.collection("feed")
+                .whereEqualTo("type", "quote")
+                .limit(200).get().await()
 
-            // Kitap bazlı gruplama: kitapAdı → QuoteSuggestion
-            val bookMap    = mutableMapOf<String, QuoteSuggestion>()
-            // Yazar bazlı gruplama: yazarAdı → QuoteSuggestion
-            val authorMap  = mutableMapOf<String, QuoteSuggestion>()
+            // 3. library_books/{id}/quotes collectionGroup — en zengin kaynak
+            val cgSnap = try {
+                db.collectionGroup("quotes").limit(300).get().await()
+            } catch (_: Exception) { null }
 
-            allDocs.forEach { doc ->
-                val qObj   = doc.get("quote") as? Map<*, *> ?: return@forEach
-                val bName  = (qObj["book"]   as? String)?.trim()?.takeIf { it.isNotBlank() } ?: return@forEach
-                val aName  = (qObj["author"] as? String)?.trim() ?: ""
-                val bKey   = bName.lowercase()
-                val aKey   = aName.lowercase()
+            val bookMap   = mutableMapOf<String, QuoteSuggestion>()
+            val authorMap = mutableMapOf<String, QuoteSuggestion>()
 
-                // Kitap haritası
-                val cur    = bookMap[bKey]
+            fun processEntry(bName: String, aName: String) {
+                if (bName.isBlank()) return
+                val bKey = bName.lowercase().trim()
+                val aKey = aName.lowercase().trim()
+                val cur  = bookMap[bKey]
                 bookMap[bKey] = QuoteSuggestion(
-                    bookName   = bName,
-                    authorName = cur?.authorName?.ifBlank { aName } ?: aName,
+                    bookName   = bName.trim(),
+                    authorName = cur?.authorName?.ifBlank { aName.trim() } ?: aName.trim(),
                     count      = (cur?.count ?: 0) + 1,
                 )
-
-                // Yazar haritası
                 if (aName.isNotBlank()) {
                     val curA = authorMap[aKey]
                     authorMap[aKey] = QuoteSuggestion(
-                        bookName   = curA?.bookName?.ifBlank { bName } ?: bName,
-                        authorName = aName,
+                        bookName   = curA?.bookName?.ifBlank { bName.trim() } ?: bName.trim(),
+                        authorName = aName.trim(),
                         count      = (curA?.count ?: 0) + 1,
                     )
                 }
             }
+
+            // Yeni flat format
+            newSnap.documents.forEach { doc ->
+                val bName = doc.getString("bookName")?.trim() ?: ""
+                val aName = doc.getString("authorName")?.trim() ?: ""
+                processEntry(bName, aName)
+            }
+
+            // Eski nested format
+            oldSnap.documents.forEach { doc ->
+                val qObj  = doc.get("quote") as? Map<*, *>
+                val bName = (qObj?.get("book")   as? String)?.trim()
+                    ?: doc.getString("bookName")?.trim() ?: ""
+                val aName = (qObj?.get("author") as? String)?.trim()
+                    ?: doc.getString("authorName")?.trim() ?: ""
+                processEntry(bName, aName)
+            }
+
+            // CollectionGroup (library_books alıntıları)
+            cgSnap?.documents?.forEach { doc ->
+                val bName = (doc.getString("bookTitle") ?: doc.getString("bookName") ?: "").trim()
+                val aName = (doc.getString("authorName") ?: "").trim()
+                processEntry(bName, aName)
+            }
+
             bookSuggestions   = bookMap.values.sortedByDescending { it.count }
             authorSuggestions = authorMap.values.sortedByDescending { it.count }
         } catch (_: Exception) {}

@@ -324,38 +324,34 @@ class SearchViewModel @Inject constructor(
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
-                // Kimin takip edildiğini al
+                // Takip edilenleri al
                 val followSnap = firestore.collection("follows")
                     .whereEqualTo("fromUid", uid)
                     .limit(500).get().await()
                 val followedUids = followSnap.documents
                     .mapNotNull { it.getString("targetUid") }.toSet() + uid
 
-                // Önce kendi Firestore kaydından takipçi listesi oluştur
-                // Sonra en çok takipçisi olanları öner
+                // Tüm kullanıcıları çek (followersCount olmayan dahil) — limit yeterli
                 val usersSnap = firestore.collection("users")
-                    .orderBy("followersCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(50).get().await()
+                    .limit(200).get().await()
 
-                val primary = usersSnap.documents
+                val allUsers = usersSnap.documents
                     .mapNotNull { it.toUser() }
                     .filter { it.uid !in followedUids }
-                    .take(10)
 
-                // Yetmezse sıradan kullanıcılar ekle
-                val suggestions = if (primary.size >= 10) primary else {
-                    val extraSnap = firestore.collection("users").limit(100).get().await()
-                    val extra = extraSnap.documents
-                        .mapNotNull { it.toUser() }
-                        .filter { u -> u.uid !in followedUids && primary.none { it.uid == u.uid } }
-                        .shuffled().take(20 - primary.size)
-                    primary + extra
-                }
-                _suggestions.value = suggestions
+                // Client-side sırala: followersCount yüksek olanlar önce,
+                // followersCount alanı olmayanlar sonra (shuffle ile karışık)
+                val withCount    = allUsers.filter { it.followersCount > 0 }
+                    .sortedByDescending { it.followersCount }
+                val withoutCount = allUsers.filter { it.followersCount == 0 }
+                    .shuffled()
+
+                _suggestions.value = (withCount + withoutCount).take(30)
+
             } catch (e: Exception) {
-                // orderBy followersCount index yoksa fallback
+                // Herhangi bir hata varsa sade fallback
                 try {
-                    val usersSnap = firestore.collection("users").limit(100).get().await()
+                    val usersSnap = firestore.collection("users").limit(200).get().await()
                     val followSnap2 = firestore.collection("follows")
                         .whereEqualTo("fromUid", uid).limit(500).get().await()
                     val followedUids2 = followSnap2.documents
@@ -363,7 +359,7 @@ class SearchViewModel @Inject constructor(
                     _suggestions.value = usersSnap.documents
                         .mapNotNull { it.toUser() }
                         .filter { it.uid !in followedUids2 }
-                        .shuffled().take(20)
+                        .shuffled().take(30)
                 } catch (e2: Exception) { e2.printStackTrace() }
             }
         }
