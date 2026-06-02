@@ -292,7 +292,9 @@ class AdminViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
             try {
-                val snap = firestore.collection("users").limit(100).get().await()
+                val snap = firestore.collection("users")
+                    .orderBy("displayName")
+                    .limit(200).get().await()
                 _users.value = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     User(
@@ -303,8 +305,93 @@ class AdminViewModel @Inject constructor(
                         banned      = d["banned"]   as? Boolean ?: false,
                     )
                 }
+            } catch (e: Exception) {
+                // orderBy index yoksa sıralamasız çek
+                try {
+                    val snap = firestore.collection("users").limit(200).get().await()
+                    _users.value = snap.documents.mapNotNull { doc ->
+                        val d = doc.data ?: return@mapNotNull null
+                        User(
+                            uid         = doc.id,
+                            displayName = d["displayName"] as? String ?: d["name"] as? String ?: "",
+                            email       = d["email"]    as? String ?: "",
+                            photoURL    = d["photoURL"] as? String ?: "",
+                            banned      = d["banned"]   as? Boolean ?: false,
+                        )
+                    }
+                } catch (e2: Exception) { e2.printStackTrace() }
+            } finally { _loading.value = false }
+        }
+    }
+
+    // ── Admin kullanıcı araması — Firestore prefix query ──────────────────────
+    private val _userSearchResults = MutableStateFlow<List<User>>(emptyList())
+    val userSearchResults = _userSearchResults.asStateFlow()
+    private val _userSearchLoading = MutableStateFlow(false)
+    val userSearchLoading = _userSearchLoading.asStateFlow()
+
+    fun searchUsersAdmin(query: String) {
+        if (query.isBlank()) { _userSearchResults.value = emptyList(); return }
+        viewModelScope.launch {
+            _userSearchLoading.value = true
+            try {
+                val q = query.trim()
+                val seenIds = mutableSetOf<String>()
+                val results = mutableListOf<User>()
+
+                fun mapUser(doc: com.google.firebase.firestore.DocumentSnapshot): User? {
+                    val d = doc.data ?: return null
+                    return User(
+                        uid         = doc.id,
+                        displayName = d["displayName"] as? String ?: d["name"] as? String ?: "",
+                        email       = d["email"]    as? String ?: "",
+                        photoURL    = d["photoURL"] as? String ?: "",
+                        banned      = d["banned"]   as? Boolean ?: false,
+                    )
+                }
+
+                // displayName prefix
+                for (prefix in listOf(q, q.lowercase(), q.replaceFirstChar { it.uppercaseChar() }).distinct()) {
+                    try {
+                        val snap = firestore.collection("users")
+                            .orderBy("displayName")
+                            .startAt(prefix).endAt(prefix + "\uF8FF")
+                            .limit(20).get().await()
+                        snap.documents.forEach { if (seenIds.add(it.id)) mapUser(it)?.let { u -> results.add(u) } }
+                    } catch (_: Exception) {}
+                }
+
+                // email prefix (tam eşleşme dene)
+                if (q.contains("@")) {
+                    try {
+                        val snap = firestore.collection("users")
+                            .whereEqualTo("email", q.lowercase()).limit(5).get().await()
+                        snap.documents.forEach { if (seenIds.add(it.id)) mapUser(it)?.let { u -> results.add(u) } }
+                    } catch (_: Exception) {}
+                }
+
+                // UID tam eşleşme
+                if (q.length > 10) {
+                    try {
+                        val doc = firestore.collection("users").document(q).get().await()
+                        if (doc.exists() && seenIds.add(doc.id)) mapUser(doc)?.let { results.add(it) }
+                    } catch (_: Exception) {}
+                }
+
+                // name prefix
+                for (prefix in listOf(q, q.lowercase(), q.replaceFirstChar { it.uppercaseChar() }).distinct()) {
+                    try {
+                        val snap = firestore.collection("users")
+                            .orderBy("name")
+                            .startAt(prefix).endAt(prefix + "\uF8FF")
+                            .limit(10).get().await()
+                        snap.documents.forEach { if (seenIds.add(it.id)) mapUser(it)?.let { u -> results.add(u) } }
+                    } catch (_: Exception) {}
+                }
+
+                _userSearchResults.value = results
             } catch (e: Exception) { e.printStackTrace() }
-            finally { _loading.value = false }
+            finally { _userSearchLoading.value = false }
         }
     }
 

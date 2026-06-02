@@ -758,19 +758,18 @@ fun AdminScreen(
 
                         // ── Kullanıcı Düzenle / Sil ──────────────────────────
                         item {
+                            val searchResults  by vm.userSearchResults.collectAsState()
+                            val searchLoading  by vm.userSearchLoading.collectAsState()
+
                             Text("Kullanıcı Düzenle / Sil", color = Amber, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             Spacer(Modifier.height(8.dp))
 
-                            val filteredUsers = users.filter {
-                                userSearch.isBlank() ||
-                                it.displayName.contains(userSearch, ignoreCase = true) ||
-                                it.email.contains(userSearch, ignoreCase = true) ||
-                                it.uid.contains(userSearch, ignoreCase = true)
-                            }
-
                             OutlinedTextField(
                                 value         = userSearch,
-                                onValueChange = { userSearch = it },
+                                onValueChange = {
+                                    userSearch = it
+                                    vm.searchUsersAdmin(it)
+                                },
                                 placeholder   = { Text("İsim, email veya UID ara…", color = Muted, fontSize = 13.sp) },
                                 singleLine    = true,
                                 modifier      = Modifier.fillMaxWidth(),
@@ -781,10 +780,23 @@ fun AdminScreen(
                                     unfocusedContainerColor = SurfaceVar, focusedContainerColor = SurfaceVar,
                                 ),
                                 leadingIcon = { Icon(Icons.Default.Search, null, tint = Muted) },
+                                trailingIcon = if (searchLoading) {{ CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Amber, strokeWidth = 2.dp) }} else null,
                             )
                             Spacer(Modifier.height(8.dp))
 
-                            filteredUsers.take(20).forEach { user ->
+                            // Arama varsa Firestore sonuçları, yoksa yerel ilk 200
+                            val displayUsers = if (userSearch.isBlank()) {
+                                users.sortedBy { it.displayName }
+                            } else {
+                                searchResults
+                            }
+
+                            if (displayUsers.isEmpty() && userSearch.isNotBlank() && !searchLoading) {
+                                Text("Sonuç bulunamadı", color = Muted, fontSize = 12.sp,
+                                    modifier = Modifier.padding(vertical = 8.dp))
+                            }
+
+                            displayUsers.forEach { user ->
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
                                     color = HeftSurface,
