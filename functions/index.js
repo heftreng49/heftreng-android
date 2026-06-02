@@ -718,3 +718,70 @@ exports.mergeLibraryBooks = onRequest({ region: "europe-west1" }, async (req, re
 
   res.json({ ok: true, merged, errors, message: `${merged} duplicate kitap birleştirildi` });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  onUserDeleted — Auth kullanıcısı silinince Firestore'daki users dokümanını da sil
+// ─────────────────────────────────────────────────────────────────────────────
+exports.onUserDeleted = functions
+  .runWith({})
+  .region("europe-west1")
+  .auth.user()
+  .onDelete(async (user) => {
+    const db = getFirestore();
+    try {
+      await db.collection("users").doc(user.uid).delete();
+      console.log(`[onUserDeleted] users/${user.uid} silindi`);
+    } catch (e) {
+      console.error(`[onUserDeleted] Hata: ${e.message}`);
+    }
+  });
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  cleanOrphanUsers — Auth'ta olmayan Firestore users dokümanlarını temizle (bir kerelik)
+//  Kullanım: GET /cleanOrphanUsers?secret=hf2024
+// ─────────────────────────────────────────────────────────────────────────────
+exports.cleanOrphanUsers = onRequest({ region: "europe-west1" }, async (req, res) => {
+  if (req.query.secret !== "hf2024") return res.status(403).send("Forbidden");
+
+  const db   = getFirestore();
+  const auth = require("firebase-admin/auth").getAuth();
+  let deleted = 0, errors = 0, checked = 0;
+
+  try {
+    // Firestore'daki tüm user dokümanlarını çek (sayfalayarak)
+    let lastDoc = null;
+    while (true) {
+      let query = db.collection("users").limit(100);
+      if (lastDoc) query = query.startAfter(lastDoc);
+      const snap = await query.get();
+      if (snap.empty) break;
+
+      for (const doc of snap.docs) {
+        checked++;
+        try {
+          await auth.getUser(doc.id); // Auth'ta var mı?
+        } catch (e) {
+          if (e.code === "auth/user-not-found") {
+            // Auth'ta yok — Firestore'dan sil
+            await doc.ref.delete();
+            deleted++;
+            console.log(`[cleanOrphan] Silindi: ${doc.id}`);
+          } else {
+            errors++;
+          }
+        }
+      }
+
+      lastDoc = snap.docs[snap.docs.length - 1];
+      if (snap.size < 100) break;
+    }
+  } catch (e) {
+    console.error("cleanOrphanUsers error:", e.message);
+    errors++;
+  }
+
+  res.json({
+    ok: true, checked, deleted, errors,
+    message: `${checked} kontrol edildi, ${deleted} sahipsiz doküman silindi`,
+  });
+});
