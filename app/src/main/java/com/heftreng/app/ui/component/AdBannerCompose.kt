@@ -1,6 +1,8 @@
 package com.heftreng.app.ui.component
 
 import android.util.Log
+import android.view.ViewGroup
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -14,137 +16,140 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.google.android.gms.ads.AdListener
-import com.google.android.gms.ads.AdRequest
-import com.google.android.gms.ads.AdSize
-import com.google.android.gms.ads.AdView
-import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.*
+import com.heftreng.app.ui.theme.*
+import com.heftreng.app.viewmodel.AdsViewModel
 
+// ── Preloaded banner'ı kullanan ana bileşen ───────────────────────────────────
+// adsVm null ise factory'den yeni AdView üretir (fallback)
 @Composable
 fun AdBannerView(
-    unitId: String?,
-    modifier: Modifier = Modifier,
-    isMediumRectangle: Boolean = true // Varsayılan olarak true yaparak tam görseldeki boyutu hedefliyoruz
+    unitId   : String?,
+    modifier : Modifier = Modifier,
+    adsVm    : AdsViewModel? = null,
+    slot     : AdsViewModel.BannerSlot = AdsViewModel.BannerSlot.FEED,
 ) {
     if (unitId.isNullOrBlank()) return
 
-    val context = LocalContext.current
-    // 1000Kitap'taki büyük görselli reklam için AdSize.MEDIUM_RECTANGLE şarttır.
-    val selectedAdSize = AdSize.MEDIUM_RECTANGLE
-    val requiredHeight = 250.dp // Reklamın kendi resmi ve butonu için gereken net yükseklik
+    val isLoaded = when (slot) {
+        AdsViewModel.BannerSlot.FEED  -> adsVm?.bannerFeedLoaded?.collectAsState()?.value  ?: false
+        AdsViewModel.BannerSlot.LIB   -> adsVm?.bannerLibLoaded?.collectAsState()?.value   ?: false
+        AdsViewModel.BannerSlot.KURDI -> adsVm?.bannerKurdiLoaded?.collectAsState()?.value ?: false
+    }
+
+    val cachedView = when (slot) {
+        AdsViewModel.BannerSlot.FEED  -> adsVm?.cachedFeedBanner
+        AdsViewModel.BannerSlot.LIB   -> adsVm?.cachedLibBanner
+        AdsViewModel.BannerSlot.KURDI -> adsVm?.cachedKurdiBanner
+    }
 
     var menuExpanded by remember { mutableStateOf(false) }
-    var showDialog by remember { mutableStateOf(false) }
+    var showDialog   by remember { mutableStateOf(false) }
 
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 8.dp), // Akıştaki diğer postlarla tam aynı hizada dış boşluk
-        shape = RoundedCornerShape(12.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        shape  = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f) // Hafif mat, şık arka plan
-        )
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        ),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 10.dp, bottom = 12.dp), // Üst bilgi satırı ve alt kısım için kompakt iç boşluk
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier            = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // 1. Üst Bilgi Satırı (Reklam İkonu, Yazısı ve Üç Nokta Menüsü)
+            // Üst bilgi satırı
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier              = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Announcement,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Reklam",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    Icon(Icons.Default.Announcement, null,
+                        tint     = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Reklam",
+                        color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         fontSize = 12.sp,
-                        style = androidx.compose.ui.text.TextStyle(letterSpacing = 0.4.sp)
-                    )
+                        style    = androidx.compose.ui.text.TextStyle(letterSpacing = 0.4.sp))
                 }
-
                 Box {
-                    IconButton(
-                        onClick = { menuExpanded = true },
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Menü",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.size(16.dp)
-                        )
+                    IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.MoreVert, "Menü",
+                            tint     = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.size(16.dp))
                     }
-
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false }
-                    ) {
+                    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                         DropdownMenuItem(
-                            text = { Text("Bu reklam neden görünüyor?") },
-                            onClick = {
-                                menuExpanded = false
-                                showDialog = true
-                            }
+                            text    = { Text("Bu reklam neden görünüyor?") },
+                            onClick = { menuExpanded = false; showDialog = true },
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(Modifier.height(10.dp))
 
-            // 2. Reklam Alanı (Görseldeki gibi kenarları yumuşatılmış ve tam oturan kalıp)
+            // ── Sabit rezervasyon kutusu — No Layout Shift ────────────────────
+            // Reklam yüklenene kadar bu alan iskelet animasyonuyla bekler,
+            // reklam gelince sadece içi dolar, dışarıdaki kartlar hiç oynamaz.
             Box(
                 modifier = Modifier
-                    .width(300.dp) // Medium Rectangle reklamların standart genişliği 300dp'dir
-                    .height(requiredHeight)
-                    .clip(RoundedCornerShape(8.dp)) 
-                    .border(
-                        BorderStroke(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
-                        RoundedCornerShape(8.dp)
-                    )
-                    .background(Color.Transparent),
-                contentAlignment = Alignment.Center
+                    .width(300.dp)
+                    .height(250.dp)   // MEDIUM_RECTANGLE sabit yükseklik — kilitli
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(BorderStroke(0.5.dp,
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
+                        RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center,
             ) {
-                AndroidView(
-                    modifier = Modifier.wrapContentSize(),
-                    factory = { ctx ->
-                        AdView(ctx).apply {
-                            setAdSize(selectedAdSize)
-                            adUnitId = unitId
-                            setBackgroundColor(android.graphics.Color.TRANSPARENT) 
-                            adListener = object : AdListener() {
-                                override fun onAdLoaded() { Log.d("AdBanner", "Medium Rectangle Yüklendi") }
-                                override fun onAdFailedToLoad(error: LoadAdError) { Log.e("AdBanner", error.message) }
+                if (!isLoaded) {
+                    // Shimmer skeleton — reklam yüklenene kadar gösterilir
+                    AdShimmer()
+                }
+
+                // Preloaded view varsa kullan, yoksa factory'den yeni üret
+                if (cachedView != null) {
+                    AndroidView(
+                        factory = {
+                            (cachedView.parent as? ViewGroup)?.removeView(cachedView)
+                            cachedView
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    // Fallback — preload olmadıysa normal yükle
+                    AndroidView(
+                        factory = { ctx ->
+                            AdView(ctx).apply {
+                                setAdSize(AdSize.MEDIUM_RECTANGLE)
+                                adUnitId = unitId
+                                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                                adListener = object : AdListener() {
+                                    override fun onAdLoaded() { Log.d("AdBanner", "Yüklendi") }
+                                    override fun onAdFailedToLoad(e: LoadAdError) { Log.e("AdBanner", e.message) }
+                                }
+                                loadAd(AdRequest.Builder().build())
                             }
-                            loadAd(AdRequest.Builder().build())
-                        }
-                    },
-                    update = { adView ->
-                        if (adView.adUnitId != unitId || adView.adSize != selectedAdSize) {
-                            adView.adUnitId = unitId
-                            adView.setAdSize(selectedAdSize)
-                            adView.loadAd(AdRequest.Builder().build())
-                        }
-                    }
-                )
+                        },
+                        update = { adView ->
+                            if (adView.adUnitId != unitId) {
+                                adView.adUnitId = unitId
+                                adView.loadAd(AdRequest.Builder().build())
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
         }
     }
@@ -152,13 +157,39 @@ fun AdBannerView(
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
-            title = { Text(text = "Reklamlar Hakkında") },
-            text = { Text(text = "Heftreng uygulamasını sizlere tamamen ücretsiz sunabilmek ve sunucu giderlerini karşılayabilmek için Google AdMob reklamlarını kullanıyoruz. Anlayışınız ve desteğiniz için teşekkür ederiz.") },
-            confirmButton = {
-                TextButton(onClick = { showDialog = false }) {
-                    Text(text = "Anladım")
-                }
-            }
+            title            = { Text("Reklamlar Hakkında") },
+            text             = { Text("Heftreng uygulamasını sizlere tamamen ücretsiz sunabilmek ve sunucu giderlerini karşılayabilmek için Google AdMob reklamlarını kullanıyoruz. Anlayışınız ve desteğiniz için teşekkür ederiz.") },
+            confirmButton    = { TextButton(onClick = { showDialog = false }) { Text("Anladım") } },
         )
     }
+}
+
+// ── Shimmer animasyonu ────────────────────────────────────────────────────────
+@Composable
+private fun AdShimmer() {
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val translateX by transition.animateFloat(
+        initialValue   = -300f,
+        targetValue    = 600f,
+        animationSpec  = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "shimmerX",
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(
+                        SurfaceVar,
+                        SurfaceVar.copy(alpha = 0.4f),
+                        SurfaceVar,
+                    ),
+                    start = Offset(translateX, 0f),
+                    end   = Offset(translateX + 300f, 300f),
+                )
+            ),
+    )
 }

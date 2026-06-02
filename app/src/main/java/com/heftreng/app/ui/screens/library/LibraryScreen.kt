@@ -382,7 +382,7 @@ private fun LibraryQuotesTab(
                 },
             )
             if (bannerUnitId != null && (index + 1) % 5 == 0) {
-                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp))
+                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB)
             }
         }
     }
@@ -405,7 +405,7 @@ private fun LibraryReviewsTab(
         itemsIndexed(reviews, key = { _, r -> r.id }) { index, review ->
             BookReviewCard(review = review, actions = actions, language = language)
             if (bannerUnitId != null && (index + 1) % 5 == 0) {
-                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp))
+                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB)
             }
         }
     }
@@ -429,7 +429,7 @@ private fun LibraryAuthorsTab(
         itemsIndexed(authors, key = { _, a -> a.id }) { index, author ->
             LibraryAuthorRow(author = author, navController = navController)
             if (bannerUnitId != null && (index + 1) % 6 == 0) {
-                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp))
+                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB)
             }
         }
     }
@@ -456,7 +456,7 @@ private fun LibraryBooksTab(
                 onClick = { navController.navigate("library_book_detail/${book.id}") },
             )
             if (bannerUnitId != null && (index + 1) % 6 == 0) {
-                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp))
+                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB)
             }
         }
     }

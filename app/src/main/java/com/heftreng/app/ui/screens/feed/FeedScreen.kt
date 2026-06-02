@@ -430,7 +430,7 @@ fun FeedScreen(
                     if (bannerUnitId != null &&
                         postIndex >= 0 &&
                         (postIndex + 1) % bannerPos == 0) {
-                        AdBannerView(unitId = bannerUnitId)
+                        AdBannerView(unitId = bannerUnitId, adsVm = adsVm, slot = AdsViewModel.BannerSlot.FEED)
                     }
                 }
                 // ── Daha Fazla Göster ─────────────────────────────────────

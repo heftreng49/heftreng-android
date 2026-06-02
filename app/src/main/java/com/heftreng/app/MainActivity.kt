@@ -79,9 +79,13 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         
         // KLAVYE BOŞLUĞUNU SIFIRLAYAN KRİTİK AYAR:
-        // Sistem insets yapısının Compose bileşenleriyle çakışmasını engeller ve 
-        // klavye açıldığında yorum/mesaj kutularının tam tepesine sıfır yapışmasını sağlar.
         WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // AdMob SDK başlatma — reklam yüklenmeden önce mutlaka çağrılmalı
+        // Bu satır yoksa banner/interstitial/rewarded hiç yüklenmez
+        com.google.android.gms.ads.MobileAds.initialize(this) { initStatus ->
+            android.util.Log.d("AdMob", "SDK hazır: ${initStatus.adapterStatusMap}")
+        }
 
         // Bildirimden gelen intent'i al
         pendingNavTarget = intent?.getStringExtra("navigate_to")

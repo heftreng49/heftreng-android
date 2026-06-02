@@ -452,6 +452,8 @@ private fun UnitsTab(
                         AdBannerView(
                             unitId   = bannerUnitId,
                             modifier = Modifier.padding(vertical = 8.dp),
+                            adsVm    = adsVm,
+                            slot     = AdsViewModel.BannerSlot.KURDI,
                         )
                     }
                 }

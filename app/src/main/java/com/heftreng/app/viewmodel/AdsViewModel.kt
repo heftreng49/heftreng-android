@@ -22,7 +22,69 @@ import javax.inject.Inject
 @HiltViewModel
 class AdsViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
 ) : ViewModel() {
+
+    // ── Preloaded banner cache ─────────────────────────────────────────────────
+    // Her Banner AdView için ayrı cache — Compose reuse hatasını önler
+    private val _bannerFeedLoaded    = MutableStateFlow(false)
+    val bannerFeedLoaded    = _bannerFeedLoaded.asStateFlow()
+
+    private val _bannerLibLoaded     = MutableStateFlow(false)
+    val bannerLibLoaded     = _bannerLibLoaded.asStateFlow()
+
+    private val _bannerKurdiLoaded   = MutableStateFlow(false)
+    val bannerKurdiLoaded   = _bannerKurdiLoaded.asStateFlow()
+
+    // Preloaded AdView örnekleri — ViewModel ömrünce yaşar, Compose her yeniden
+    // çizildiğinde yeni reklam istemek yerine bu hazır nesneyi kullanır
+    var cachedFeedBanner   : AdView? = null; private set
+    var cachedLibBanner    : AdView? = null; private set
+    var cachedKurdiBanner  : AdView? = null; private set
+
+    fun preloadBanner(unitId: String, slot: BannerSlot) {
+        if (unitId.isBlank()) return
+        val adView = AdView(appContext).apply {
+            setAdSize(AdSize.MEDIUM_RECTANGLE)
+            adUnitId = unitId
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            adListener = object : AdListener() {
+                override fun onAdLoaded() {
+                    when (slot) {
+                        BannerSlot.FEED  -> { cachedFeedBanner  = this@apply; _bannerFeedLoaded.value  = true }
+                        BannerSlot.LIB   -> { cachedLibBanner   = this@apply; _bannerLibLoaded.value   = true }
+                        BannerSlot.KURDI -> { cachedKurdiBanner = this@apply; _bannerKurdiLoaded.value = true }
+                    }
+                }
+                override fun onAdFailedToLoad(e: com.google.android.gms.ads.LoadAdError) {
+                    android.util.Log.w("AdsVM", "Preload failed [${slot}]: ${e.message}")
+                }
+            }
+            loadAd(AdRequest.Builder().build())
+        }
+        // Önceki cache'i temizle
+        when (slot) {
+            BannerSlot.FEED  -> { cachedFeedBanner?.destroy(); cachedFeedBanner = adView }
+            BannerSlot.LIB   -> { cachedLibBanner?.destroy(); cachedLibBanner = adView }
+            BannerSlot.KURDI -> { cachedKurdiBanner?.destroy(); cachedKurdiBanner = adView }
+        }
+    }
+
+    enum class BannerSlot { FEED, LIB, KURDI }
+
+    override fun onCleared() {
+        super.onCleared()
+        cachedFeedBanner?.destroy()
+        cachedLibBanner?.destroy()
+        cachedKurdiBanner?.destroy()
+        interstitialAd = null
+        rewardedAd     = null
+        feedListener?.remove()
+        likedListener?.remove()
+        savedListener?.remove()
+        repostListener?.remove()
+        libQuoteListener?.remove()
+    }
 
     // ── Konfigürasyonlar ──────────────────────────────────────────────────────
     private val _bannerConfig       = MutableStateFlow<CmsAdConfig?>(null)
@@ -94,11 +156,29 @@ class AdsViewModel @Inject constructor(
                         scenarioSaveStreak   = d["scenarioSaveStreak"]   as? Boolean ?: true,
                     )
                     when (doc.id) {
-                        "banner_feed"         -> _bannerConfig.value         = config
-                        "banner_library"      -> _bannerLibraryConfig.value  = config
-                        "banner_kurdi"        -> _bannerKurdiConfig.value    = config
-                        "interstitial_serial" -> _interstitialConfig.value   = config
-                        "rewarded_xp"         -> _rewardedConfig.value       = config
+                        "banner_feed" -> {
+                            _bannerConfig.value = config
+                            if (config.enabled) {
+                                val uid = if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
+                                preloadBanner(uid, BannerSlot.FEED)
+                            }
+                        }
+                        "banner_library" -> {
+                            _bannerLibraryConfig.value = config
+                            if (config.enabled) {
+                                val uid = if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
+                                preloadBanner(uid, BannerSlot.LIB)
+                            }
+                        }
+                        "banner_kurdi" -> {
+                            _bannerKurdiConfig.value = config
+                            if (config.enabled) {
+                                val uid = if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
+                                preloadBanner(uid, BannerSlot.KURDI)
+                            }
+                        }
+                        "interstitial_serial" -> _interstitialConfig.value = config
+                        "rewarded_xp"         -> _rewardedConfig.value     = config
                     }
                 }
             } catch (e: Exception) {
@@ -258,11 +338,5 @@ class AdsViewModel @Inject constructor(
             onRewarded  = { _, xp -> onRewarded(xp) },
             onDismiss   = onDismiss,
         )
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        interstitialAd = null
-        rewardedAd     = null
     }
 }
