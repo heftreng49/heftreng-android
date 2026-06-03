@@ -10,13 +10,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResult
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
-import androidx.core.view.WindowCompat
 import com.google.android.play.core.appupdate.AppUpdateManagerFactory
 import com.google.android.play.core.appupdate.AppUpdateOptions
 import com.google.android.play.core.install.InstallStateUpdatedListener
@@ -75,11 +73,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // EdgeToEdge modunu aktifleştiriyoruz
+        // EdgeToEdge modunu aktifleştiriyoruz — sistem çubuklarını şeffaf yapar
         enableEdgeToEdge()
-        
-        // KLAVYE BOŞLUĞUNU SIFIRLAYAN KRİTİK AYAR:
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+        // NOT: WindowCompat.setDecorFitsSystemWindows kaldırıldı,
+        // enableEdgeToEdge() zaten bunu yapıyor (Android 15 uyumlu)
 
         // AdMob SDK başlatma — reklam yüklenmeden önce mutlaka çağrılmalı
         // Bu satır yoksa banner/interstitial/rewarded hiç yüklenmez

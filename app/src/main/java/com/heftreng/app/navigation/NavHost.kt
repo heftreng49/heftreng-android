@@ -6,6 +6,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -280,6 +282,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     ) {
         Scaffold(
             containerColor = Background,
+            contentWindowInsets = WindowInsets.safeDrawing,
             // ── ÜST BAR — sadece Feed ekranında NavHost yönetir ──
             topBar = {
                 if (currentRoute == Screen.Feed.route) {
