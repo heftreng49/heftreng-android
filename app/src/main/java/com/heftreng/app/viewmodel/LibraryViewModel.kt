@@ -679,7 +679,7 @@ class LibraryViewModel @Inject constructor(
 
                     if (bookName.isBlank() && authorName.isBlank()) { done++; return@forEach }
 
-                    val (authorId, bookId) = ensureAuthorAndBook(authorName, bookName)
+                    val (authorId, bookId) = library.ensureAuthorAndBook(authorName, bookName)
 
                     val updates = mutableMapOf<String, Any>()
                     if (authorId.isNotBlank()) updates["libraryAuthorId"] = authorId
