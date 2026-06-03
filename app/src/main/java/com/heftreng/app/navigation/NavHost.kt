@@ -12,6 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -130,8 +132,18 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val isDark         by settingsVm.darkMode.collectAsState()
     val savedAccounts  by authVm.savedAccounts.collectAsState()
     val switchToGoogle by authVm.switchToGoogle.collectAsState()
+    val verificationPending by authVm.verificationPending.collectAsState()
+    var showVerifyBanner by remember { mutableStateOf(false) }
     var showAccountSwitch by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    // Email doğrulama soft banner — login sonrası bir kez göster
+    LaunchedEffect(verificationPending) {
+        if (verificationPending) {
+            showVerifyBanner = true
+            authVm.clearVerificationPending()
+        }
+    }
 
     // Google ile hesap geçişi launcher
     val switchGoogleLauncher = rememberLauncherForActivityResult(
@@ -450,6 +462,38 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     onDismiss    = { showAccountSwitch = false },
                 )
             }
+
+            // ── Email doğrulama soft banner ───────────────────────────────
+            if (showVerifyBanner) {
+                Box(
+                    modifier = Modifier
+                        .padding(innerPadding)
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Amber.copy(alpha = 0.15f))
+                        .border(1.dp, Amber.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(Icons.Default.MarkEmailUnread, null, tint = Amber, modifier = Modifier.size(20.dp))
+                        Text(
+                            if (language == "ku") "Ji kerema xwe emaila xwe piştrast bike. Lînk hat şandin."
+                            else "Lütfen e-posta adresini doğrula. Doğrulama bağlantısı gönderildi.",
+                            color    = Amber,
+                            fontSize = 12.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = { showVerifyBanner = false }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Close, null, tint = Amber, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+
             NavHost(
                 navController    = navController,
                 startDestination = Screen.Feed.route,
