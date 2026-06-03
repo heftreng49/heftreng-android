@@ -71,8 +71,7 @@ service cloud.firestore {
 
     // ── Gizli hesap yardımcıları ──────────────────────────────
     function isPrivateUser(uid) {
-      return uid != null
-          && exists(/databases/$(database)/documents/users/$(uid))
+      return exists(/databases/$(database)/documents/users/$(uid))
           && get(/databases/$(database)/documents/users/$(uid)).data.get('private', false) == true;
     }
     function isFollowing(targetUid) {
@@ -80,8 +79,7 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + targetUid));
     }
     function canViewContent(ownerUid) {
-      return ownerUid == null
-          || isOwner(ownerUid)
+      return isOwner(ownerUid)
           || !isPrivateUser(ownerUid)
           || isFollowing(ownerUid)
           || isStaff();
@@ -126,7 +124,7 @@ service cloud.firestore {
     }
 
     match /feed/{postId} {
-      allow get:  if resource == null || postVisible(resource.data);
+      allow get:  if postVisible(resource.data);
       allow list: if true; // Web sitesi giriş yapmadan feed gösterebilir
 
       allow create: if isAuth() && notBanned()
@@ -399,13 +397,10 @@ service cloud.firestore {
     match /kf_verbs/{id}      { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
     match /kf_grammar/{id}    { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
     match /kf_cats/{id}       { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
-    match /kf_dict/{id}       { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
     match /kf_reports/{reportId} {
-      // Admin ve kurdi yetkilileri okuyup güncelleyebilir (çözüldü işareti)
-      allow read, update: if isAdmin() || hasPermission("kurdi") || isModerator();
-      allow delete:       if isAdmin() || hasPermission("kurdi");
-      // Giriş yapmış herhangi biri rapor oluşturabilir
-      allow create:       if isAuth() && maxLen('message', 1000);
+      allow read, update: if isModerator();
+      allow delete:       if isAdmin();
+      allow create:       if isAuth() && maxLen('reason', 500);
     }
 
     // ─── USERNAMES ────────────────────────────────────────────

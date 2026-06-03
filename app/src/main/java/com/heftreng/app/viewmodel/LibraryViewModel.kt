@@ -11,6 +11,7 @@ import com.heftreng.app.data.model.Author
 import com.heftreng.app.data.model.BookQuote
 import com.heftreng.app.data.model.BookReview
 import com.heftreng.app.data.model.LibraryBook
+import com.heftreng.app.data.repository.LibraryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
@@ -40,6 +41,7 @@ import javax.inject.Inject
 class LibraryViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val library  : LibraryRepository,
 ) : ViewModel() {
 
     // ── State ─────────────────────────────────────────────────────────────
@@ -474,54 +476,61 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val now = Timestamp.now()
-                val quoteData = hashMapOf(
-                    "bookId"          to book.id,
-                    "authorId"        to book.authorId,
-                    "bookTitle"       to book.title,
-                    "authorName"      to book.authorName,
-                    "text"            to quoteText,
-                    "uid"             to myUid,
-                    "userDisplayName" to myName,
-                    "userPhotoURL"    to myPhoto,
-                    "likesCount"      to 0,
-                    "ts"              to now,
+
+                // ── 1. Yazar ve kitap ID'lerini tek kaynaktan doğrula ────────
+                // Direkt book.id / book.authorId kullanmak yerine LibraryRepository
+                // üzerinden geçiyoruz — FeedViewModel.createPost ile aynı yol,
+                // böylece ID uyuşmazlığı olmaz.
+                val resolvedBookId   = book.id.ifBlank {
+                    library.ensureAuthorAndBook(book.authorName, book.title).second
+                }
+                val resolvedAuthorId = book.authorId.ifBlank {
+                    library.ensureAuthorAndBook(book.authorName, book.title).first
+                }
+
+                // ── 2. Feed'e yaz (tek kayıt) ────────────────────────────────
+                val feedRef = firestore.collection("feed").add(
+                    hashMapOf(
+                        "uid"             to myUid,
+                        "displayName"     to myName,
+                        "name"            to myName,
+                        "username"        to myUser,
+                        "photoURL"        to myPhoto,
+                        "text"            to "",
+                        "imgUrl"          to "",
+                        "imageURL"        to "",
+                        "quoteText"       to quoteText,
+                        "bookName"        to book.title,
+                        "authorName"      to book.authorName,
+                        "libraryBookId"   to resolvedBookId,
+                        "libraryAuthorId" to resolvedAuthorId,
+                        "type"            to "library_quote",
+                        "likes"           to 0,
+                        "saves"           to 0,
+                        "cmtCount"        to 0,
+                        "reposts"         to 0,
+                        "ts"              to now,
+                    )
+                ).await()
+
+                // ── 3. library_books alt koleksiyonuna tek kayıt yaz ─────────
+                // addQuoteToLibrary: hem quotes alt kol hem sayaçları günceller
+                library.addQuoteToLibrary(
+                    libraryBookId   = resolvedBookId,
+                    libraryAuthorId = resolvedAuthorId,
+                    bookName        = book.title,
+                    authorName      = book.authorName,
+                    quoteText       = quoteText,
+                    uid             = myUid,
+                    userDisplayName = myName,
+                    userPhotoURL    = myPhoto,
+                    feedPostId      = feedRef.id,
                 )
 
-                // 1. library_books/{id}/quotes
-                val quoteRef = firestore.collection("library_books").document(book.id)
-                    .collection("quotes").add(quoteData).await()
+                // ── 4. Yerel state güncelle ───────────────────────────────────
+                loadBookQuotes(resolvedBookId)
+                if (resolvedAuthorId.isNotBlank()) loadAuthorQuotes(resolvedAuthorId)
 
-                // 2. feed'e yaz — tüm alanlar createPost ile uyumlu
-                val feedData = hashMapOf(
-                    "uid"             to myUid,
-                    "displayName"     to myName,
-                    "name"            to myName,
-                    "username"        to myUser,
-                    "photoURL"        to myPhoto,
-                    "text"            to "",
-                    "quoteText"       to quoteText,
-                    "bookName"        to book.title,
-                    "authorName"      to book.authorName,
-                    "libraryBookId"   to book.id,
-                    "libraryAuthorId" to book.authorId,
-                    "type"            to "library_quote",
-                    "likes"           to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
-                    "ts"              to now,
-                )
-                val feedRef = firestore.collection("feed").add(feedData).await()
-
-                // 3. quoteRef'e feedPostId geri yaz
-                quoteRef.update("feedPostId", feedRef.id)
-
-                // 4. Sayaçları güncelle
-                firestore.collection("library_books").document(book.id)
-                    .update("quoteCount", FieldValue.increment(1))
-                firestore.collection("authors").document(book.authorId)
-                    .update("quoteCount", FieldValue.increment(1))
-
-                // 5. Yerel state güncelle
-                loadBookQuotes(book.id)
-                loadAuthorQuotes(book.authorId)
             } catch (e: Exception) {
                 _error.value = e.message
             }
@@ -634,184 +643,6 @@ class LibraryViewModel @Inject constructor(
 
     fun clearError() { _error.value = null }
 
-    // ══════════════════════════════════════════════════════════════════════
-    //  OTOMATİK YAZAR / KİTAP OLUŞTURMA
-    //  Feed'de alıntı paylaşıldığında bookName + authorName alanlarından
-    //  Firestore'da eşleşen kayıt aranır; bulunamazsa otomatik oluşturulur.
-    //  Dönen değer: Pair(authorId, bookId) — her ikisi de boş olabilir.
-    // ══════════════════════════════════════════════════════════════════════
-
-    /**
-     * Kullanılacak yer: FeedScreen / PostComposer — alıntılı post paylaşılmadan önce çağrılır.
-     * Hem yazar hem kitap mevcutsa sadece ID'lerini döner, yoksa oluşturur.
-     * Geri dönen Pair: (authorId, bookId)
-     */
-    suspend fun ensureAuthorAndBook(
-        authorName: String,
-        bookName  : String,
-    ): Pair<String, String> {
-        if (authorName.isBlank() && bookName.isBlank()) return Pair("", "")
-
-        val authorId = if (authorName.isNotBlank()) {
-            findOrCreateAuthor(authorName)
-        } else ""
-
-        val bookId = if (bookName.isNotBlank() && authorId.isNotBlank()) {
-            findOrCreateLibraryBook(bookName, authorId, authorName)
-        } else if (bookName.isNotBlank()) {
-            findOrCreateLibraryBook(bookName, "", authorName)
-        } else ""
-
-        return Pair(authorId, bookId)
-    }
-
-    private suspend fun findOrCreateAuthor(name: String): String {
-        return try {
-            // Ad üzerinden ara (case-insensitive Firestore desteklemediği için lowercase slug ile)
-            val snap = firestore.collection("authors")
-                .whereEqualTo("nameLower", name.trim().lowercase())
-                .limit(1).get().await()
-            if (!snap.isEmpty) {
-                snap.documents[0].id
-            } else {
-                val data = hashMapOf(
-                    "name"          to name.trim(),
-                    "nameLower"     to name.trim().lowercase(),
-                    "bio"           to "",
-                    "photoURL"      to "",
-                    "birthYear"     to 0,
-                    "nationality"   to "",
-                    "bookCount"     to 0,
-                    "quoteCount"    to 0,
-                    "reviewCount"   to 0,
-                    "followerCount" to 0,
-                    "autoCreated"   to true,
-                    "ts"            to com.google.firebase.Timestamp.now(),
-                )
-                firestore.collection("authors").add(data).await().id
-            }
-        } catch (e: Exception) {
-            // nameLower indeksi henüz yoksa ada göre ara
-            try {
-                val fallback = firestore.collection("authors")
-                    .whereEqualTo("name", name.trim())
-                    .limit(1).get().await()
-                if (!fallback.isEmpty) fallback.documents[0].id
-                else {
-                    val data = hashMapOf(
-                        "name"          to name.trim(),
-                        "nameLower"     to name.trim().lowercase(),
-                        "bio"           to "",
-                        "photoURL"      to "",
-                        "birthYear"     to 0,
-                        "nationality"   to "",
-                        "bookCount"     to 0,
-                        "quoteCount"    to 0,
-                        "reviewCount"   to 0,
-                        "followerCount" to 0,
-                        "autoCreated"   to true,
-                        "ts"            to com.google.firebase.Timestamp.now(),
-                    )
-                    firestore.collection("authors").add(data).await().id
-                }
-            } catch (_: Exception) { "" }
-        }
-    }
-
-    private suspend fun findOrCreateLibraryBook(
-        title     : String,
-        authorId  : String,
-        authorName: String,
-    ): String {
-        val titleLower = title.trim().lowercase()
-        return try {
-            // title + authorId birlikte kontrol et — farklı yazarların aynı isimli kitabı ayrı olmalı
-            val snap = if (authorId.isNotBlank()) {
-                firestore.collection("library_books")
-                    .whereEqualTo("titleLower", titleLower)
-                    .whereEqualTo("authorId", authorId)
-                    .limit(1).get().await()
-            } else {
-                firestore.collection("library_books")
-                    .whereEqualTo("titleLower", titleLower)
-                    .limit(1).get().await()
-            }
-            if (!snap.isEmpty) {
-                val doc = snap.documents[0]
-                // authorId boşsa güncelle
-                if (doc.getString("authorId").isNullOrBlank() && authorId.isNotBlank()) {
-                    doc.reference.update("authorId", authorId, "authorName", authorName)
-                }
-                doc.id
-            } else {
-                val data = hashMapOf(
-                    "title"       to title.trim(),
-                    "titleLower"  to titleLower,
-                    "authorId"    to authorId,
-                    "authorName"  to authorName,
-                    "coverImg"    to "",
-                    "genre"       to "",
-                    "publishYear" to 0,
-                    "synopsis"    to "",
-                    "pageCount"   to 0,
-                    "quoteCount"  to 0,
-                    "reviewCount" to 0,
-                    "avgRating"   to 0f,
-                    "autoCreated" to true,
-                    "ts"          to com.google.firebase.Timestamp.now(),
-                )
-                val bookId = firestore.collection("library_books").add(data).await().id
-                if (authorId.isNotBlank()) {
-                    try {
-                        firestore.collection("authors").document(authorId)
-                            .update("bookCount", com.google.firebase.firestore.FieldValue.increment(1))
-                    } catch (_: Exception) {}
-                }
-                bookId
-            }
-        } catch (e: Exception) {
-            // Index yoksa fallback — sadece title ile ara
-            try {
-                val fallback = if (authorId.isNotBlank()) {
-                    firestore.collection("library_books")
-                        .whereEqualTo("title", title.trim())
-                        .whereEqualTo("authorId", authorId)
-                        .limit(1).get().await()
-                } else {
-                    firestore.collection("library_books")
-                        .whereEqualTo("title", title.trim())
-                        .limit(1).get().await()
-                }
-                if (!fallback.isEmpty) fallback.documents[0].id
-                else {
-                    val data = hashMapOf(
-                        "title"       to title.trim(),
-                        "titleLower"  to titleLower,
-                        "authorId"    to authorId,
-                        "authorName"  to authorName,
-                        "coverImg"    to "",
-                        "genre"       to "",
-                        "publishYear" to 0,
-                        "synopsis"    to "",
-                        "pageCount"   to 0,
-                        "quoteCount"  to 0,
-                        "reviewCount" to 0,
-                        "avgRating"   to 0f,
-                        "autoCreated" to true,
-                        "ts"          to com.google.firebase.Timestamp.now(),
-                    )
-                    firestore.collection("library_books").add(data).await().id
-                }
-            } catch (_: Exception) { "" }
-        }
-    }
-
-    // ══════════════════════════════════════════════════════════════════════
-    //  ESKİ FEED ALINTILARI → KİTAP / YAZAR SAYFASINA ENTEGRASYON
-    //  Mevcut feed belgelerinde libraryBookId/libraryAuthorId boş olanları
-    //  tarayıp bookName/authorName üzerinden eşleştirerek doldurur.
-    //  Admin veya background job olarak tek seferlik çalıştırılır.
-    // ══════════════════════════════════════════════════════════════════════
     fun migrateLegacyFeedQuotes(onProgress: (Int, Int) -> Unit = { _, _ -> }) {
         viewModelScope.launch {
             try {
