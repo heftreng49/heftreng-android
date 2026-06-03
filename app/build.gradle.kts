@@ -44,6 +44,19 @@ android {
         }
     }
 
+    // Native .so sembol dosyalarını AAB'a göm — Play Console uyarısını giderir
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+
+    bundle {
+        language { enableSplit = true }
+        density { enableSplit = true }
+        abi { enableSplit = true }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
