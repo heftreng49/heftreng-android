@@ -1191,9 +1191,8 @@ private fun JsonImportTab(vm: KurdiViewModel) {
                         onClick = { jsonText = ""; vm.clearImportResult() },
                         shape   = RoundedCornerShape(12.dp),
                         modifier = Modifier.height(48.dp),
-                        colors  = OutlinedButtonDefaults.colors(contentColor = Muted),
                         border  = BorderStroke(1.dp, Divider),
-                    ) { Text("Temizle") }
+                    ) { Text("Temizle", color = Muted) }
                 }
             }
         }
