@@ -978,13 +978,260 @@ class KurdiViewModel @Inject constructor(
         val lessonsAdded  : Int          = 0,
         val vocabAdded    : Int          = 0,
         val exercisesAdded: Int          = 0,
+        val skipped       : Int          = 0,
         val errors        : List<String> = emptyList(),
     )
+    // Çakışma modu: "overwrite" | "skip"
     private val _importResult = MutableStateFlow<ImportResult?>(null)
     val importResult = _importResult.asStateFlow()
     private val _importing    = MutableStateFlow(false)
     val importing = _importing.asStateFlow()
+    private val _exportJson   = MutableStateFlow<String?>(null)
+    val exportJson = _exportJson.asStateFlow()
     fun clearImportResult() { _importResult.value = null }
+    fun clearExportJson()   { _exportJson.value   = null }
+
+    // JSON doğrulama — import öncesi yapıyı kontrol et
+    data class JsonPreview(
+        val unitCount    : Int,
+        val lessonCount  : Int,
+        val vocabTotal   : Int,
+        val exerciseTotal: Int,
+        val warnings     : List<String>,
+        val isValid      : Boolean,
+    )
+
+    fun validateJson(jsonString: String): JsonPreview {
+        return try {
+            val root     = org.json.JSONObject(jsonString)
+            val warnings = mutableListOf<String>()
+            var unitCount = 0; var lessonCount = 0; var vocabTotal = 0; var exTotal = 0
+
+            // Tekil unit veya units array
+            when {
+                root.has("units") -> unitCount = root.getJSONArray("units").length()
+                root.has("unit")  -> unitCount = 1
+                else              -> warnings.add("⚠️ 'unit' veya 'units' alanı bulunamadı")
+            }
+
+            // Dersler
+            val la = root.optJSONArray("lessons") ?: org.json.JSONArray()
+            lessonCount = la.length()
+            if (lessonCount == 0) warnings.add("⚠️ 'lessons' boş veya yok")
+
+            for (li in 0 until la.length()) {
+                val l = la.getJSONObject(li)
+                if (l.optString("id").isBlank())    warnings.add("Ders $li: 'id' boş")
+                if (l.optString("nameTr").isBlank()) warnings.add("Ders $li: 'nameTr' boş")
+                vocabTotal += l.optJSONArray("vocab")?.length() ?: 0
+                val exArr   = l.optJSONArray("exercises") ?: org.json.JSONArray()
+                exTotal    += exArr.length()
+                if (exArr.length() == 0) warnings.add("Ders ${l.optString("id","$li")}: egzersiz yok")
+            }
+
+            JsonPreview(unitCount, lessonCount, vocabTotal, exTotal, warnings, isValid = warnings.none { it.startsWith("⚠️") })
+        } catch (e: Exception) {
+            JsonPreview(0, 0, 0, 0, listOf("❌ JSON parse hatası: ${e.message}"), isValid = false)
+        }
+    }
+
+    fun importFromJson(jsonString: String, overwriteExisting: Boolean = true) {
+        if (jsonString.isBlank()) return
+        _importing.value = true
+        viewModelScope.launch {
+            val errors = mutableListOf<String>()
+            var unitsAdded = 0; var lessonsAdded = 0; var vocabAdded = 0; var exAdded = 0; var skipped = 0
+
+            suspend fun importUnit(u: org.json.JSONObject) {
+                val uid  = u.optString("id").ifBlank { "u_${System.currentTimeMillis()}" }
+                val uRef = firestore.collection("kf_units").document(uid)
+                val ord  = (_units.value.maxOfOrNull { it.order } ?: 0) + 1
+                if (!uRef.get().await().exists()) {
+                    uRef.set(mapOf("id" to uid, "ttl" to u.optString("ttl"),
+                        "nameKu" to u.optString("nameKu"), "desc" to u.optString("desc"),
+                        "icon" to u.optString("icon","📖"), "color" to u.optString("color","#8B5CF6"),
+                        "order" to u.optInt("order", ord))).await()
+                    _units.value = (_units.value + KfUnit(id=uid, ttl=u.optString("ttl"),
+                        nameKu=u.optString("nameKu"), icon=u.optString("icon","📖"),
+                        color=u.optString("color","#8B5CF6"), order=u.optInt("order",ord)))
+                        .sortedBy { it.order }
+                    unitsAdded++
+                }
+            }
+
+            try {
+                val root = org.json.JSONObject(jsonString)
+
+                // Tekil unit veya units array
+                if (root.has("units")) {
+                    val ua = root.getJSONArray("units")
+                    for (i in 0 until ua.length()) {
+                        try { importUnit(ua.getJSONObject(i)) }
+                        catch (e: Exception) { errors.add("Ünite $i: ${e.message}") }
+                    }
+                } else if (root.has("unit")) {
+                    try { importUnit(root.getJSONObject("unit")) }
+                    catch (e: Exception) { errors.add("Ünite: ${e.message}") }
+                }
+
+                val la = root.optJSONArray("lessons") ?: org.json.JSONArray()
+                for (li in 0 until la.length()) {
+                    val l    = la.getJSONObject(li)
+                    val lid  = l.optString("id").ifBlank { "l_${System.currentTimeMillis()}_$li" }
+                    val lUnit = l.optString("unitId").ifBlank {
+                        root.optJSONObject("unit")?.optString("id")
+                            ?: (if (root.has("units")) root.getJSONArray("units").optJSONObject(0)?.optString("id") else null)
+                            ?: ""
+                    }
+                    try {
+                        val lessonRef = firestore.collection("kf_lessons").document(lid)
+                        val exists    = lessonRef.get().await().exists()
+
+                        if (exists && !overwriteExisting) { skipped++; continue }
+
+                        lessonRef.set(mapOf("id" to lid, "unitId" to lUnit,
+                            "nameTr" to l.optString("nameTr"), "nameKu" to l.optString("nameKu"),
+                            "emoji" to l.optString("emoji","📖"), "xp" to l.optInt("xp",10),
+                            "order" to l.optInt("order", li+1), "tip" to l.optString("tip"))).await()
+
+                        val nl = KfLesson(id=lid, unitId=lUnit, nameTr=l.optString("nameTr"),
+                            nameKu=l.optString("nameKu"), emoji=l.optString("emoji","📖"),
+                            xp=l.optInt("xp",10), order=l.optInt("order",li+1))
+                        _lessons.value = if (_lessons.value.any { it.id == lid })
+                            _lessons.value.map { if (it.id == lid) nl else it }
+                        else (_lessons.value + nl).sortedBy { it.order }
+                        lessonsAdded++
+
+                        // Eski vocab/exercise temizle (overwrite modunda)
+                        if (exists) {
+                            firestore.collection("kf_vocab").whereEqualTo("lessonId",lid).get().await()
+                                .documents.forEach { it.reference.delete() }
+                            firestore.collection("kf_exercises").whereEqualTo("lessonId",lid).get().await()
+                                .documents.forEach { it.reference.delete() }
+                        }
+
+                        val va = l.optJSONArray("vocab") ?: org.json.JSONArray()
+                        for (vi in 0 until va.length()) {
+                            val v = va.getJSONObject(vi)
+                            firestore.collection("kf_vocab").add(mapOf("lessonId" to lid,
+                                "ku" to v.optString("ku"), "kp" to v.optString("kp"),
+                                "tr" to v.optString("tr"), "e" to v.optString("e"), "order" to vi)).await()
+                            vocabAdded++
+                        }
+
+                        val ea = l.optJSONArray("exercises") ?: org.json.JSONArray()
+                        for (ei in 0 until ea.length()) {
+                            val ex   = ea.getJSONObject(ei)
+                            val type = ex.optString("type","mcq")
+                            val data = mutableMapOf<String,Any>("lessonId" to lid, "type" to type, "order" to ei)
+                            when (type) {
+                                "mcq"   -> { data["question"]=ex.optString("question"); data["questionTr"]=ex.optString("questionTr")
+                                             data["optA"]=ex.optString("optA"); data["optB"]=ex.optString("optB")
+                                             data["optC"]=ex.optString("optC"); data["optD"]=ex.optString("optD")
+                                             data["answer"]=ex.optString("answer") }
+                                "fill"  -> { data["question"]=ex.optString("question"); data["answer"]=ex.optString("answer")
+                                             val opts=ex.optJSONArray("options")
+                                             if (opts!=null) data["wrong"]=(0 until opts.length())
+                                                 .map{opts.getString(it)}.filter{it!=ex.optString("answer")} }
+                                "match" -> { val pairs=ex.optJSONArray("pairs")
+                                             if (pairs!=null) data["pairs"]=(0 until pairs.length())
+                                                 .map{ pi -> val p=pairs.getJSONArray(pi); listOf(p.getString(0),p.getString(1)) } }
+                                "build" -> { data["tr"]=ex.optString("tr"); data["answer"]=ex.optString("answer")
+                                             val words=ex.optJSONArray("words")
+                                             if (words!=null) data["words"]=(0 until words.length()).map{words.getString(it)} }
+                            }
+                            firestore.collection("kf_exercises").add(data).await()
+                            exAdded++
+                        }
+                    } catch (e: Exception) { errors.add("Ders $lid: ${e.message}") }
+                }
+            } catch (e: Exception) { errors.add("JSON parse: ${e.message}") }
+            _importResult.value = ImportResult(unitsAdded, lessonsAdded, vocabAdded, exAdded, skipped, errors)
+            _importing.value    = false
+        }
+    }
+
+    // ── Dersleri JSON olarak Dışa Aktar ──────────────────────────────────────
+    fun exportLessonsAsJson(unitId: String? = null) {
+        viewModelScope.launch {
+            try {
+                val units   = if (unitId != null) _units.value.filter { it.id == unitId } else _units.value
+                val lessons = if (unitId != null) _lessons.value.filter { it.unitId == unitId } else _lessons.value
+
+                val root = org.json.JSONObject()
+
+                // units array
+                val unitsArr = org.json.JSONArray()
+                units.forEach { u ->
+                    unitsArr.put(org.json.JSONObject().apply {
+                        put("id", u.id); put("ttl", u.ttl); put("nameKu", u.nameKu)
+                        put("icon", u.icon); put("color", u.color); put("order", u.order)
+                    })
+                }
+                root.put("units", unitsArr)
+
+                val lessonsArr = org.json.JSONArray()
+                for (lesson in lessons.sortedBy { it.order }) {
+                    val lObj = org.json.JSONObject().apply {
+                        put("id", lesson.id); put("unitId", lesson.unitId)
+                        put("nameTr", lesson.nameTr); put("nameKu", lesson.nameKu)
+                        put("emoji", lesson.emoji); put("xp", lesson.xp)
+                        put("order", lesson.order); put("tip", lesson.tip)
+                    }
+                    // Vocab
+                    try {
+                        val vs = firestore.collection("kf_vocab").whereEqualTo("lessonId", lesson.id).get().await()
+                        val va = org.json.JSONArray()
+                        vs.documents.sortedBy { (it.getLong("order") ?: 0) }.forEach { doc ->
+                            va.put(org.json.JSONObject().apply {
+                                put("ku", doc.getString("ku") ?: ""); put("kp", doc.getString("kp") ?: "")
+                                put("tr", doc.getString("tr") ?: ""); put("e",  doc.getString("e")  ?: "")
+                            })
+                        }
+                        lObj.put("vocab", va)
+                    } catch (_: Exception) {}
+                    // Exercises
+                    try {
+                        val es = firestore.collection("kf_exercises").whereEqualTo("lessonId", lesson.id).get().await()
+                        val ea = org.json.JSONArray()
+                        es.documents.sortedBy { (it.getLong("order") ?: 0) }.forEach { doc ->
+                            val d    = doc.data ?: return@forEach
+                            val type = d["type"] as? String ?: "mcq"
+                            val eObj = org.json.JSONObject().apply {
+                                put("type", type)
+                                when (type) {
+                                    "mcq"   -> { put("question", d["question"]); put("questionTr", d["questionTr"])
+                                                 put("optA", d["optA"]); put("optB", d["optB"])
+                                                 put("optC", d["optC"]); put("optD", d["optD"]); put("answer", d["answer"]) }
+                                    "fill"  -> { put("question", d["question"]); put("answer", d["answer"])
+                                                 val wrong = (d["wrong"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+                                                 val opts = org.json.JSONArray()
+                                                 opts.put(d["answer"]); wrong.forEach { opts.put(it) }
+                                                 put("options", opts) }
+                                    "match" -> { val pairsRaw = d["pairs"] as? List<*>
+                                                 val pa = org.json.JSONArray()
+                                                 pairsRaw?.forEach { p ->
+                                                     val pair = p as? List<*>
+                                                     if (pair != null) pa.put(org.json.JSONArray().apply { put(pair[0]); put(pair[1]) })
+                                                 }; put("pairs", pa) }
+                                    "build" -> { put("tr", d["tr"]); put("answer", d["answer"])
+                                                 val wa = org.json.JSONArray()
+                                                 (d["words"] as? List<*>)?.forEach { wa.put(it) }; put("words", wa) }
+                                }
+                            }
+                            ea.put(eObj)
+                        }
+                        lObj.put("exercises", ea)
+                    } catch (_: Exception) {}
+                    lessonsArr.put(lObj)
+                }
+                root.put("lessons", lessonsArr)
+                _exportJson.value = root.toString(2) // pretty print
+            } catch (e: Exception) {
+                _exportJson.value = """{"error":"${e.message}"}"""
+            }
+        }
+    }
 
     fun importFromJson(jsonString: String) {
         if (jsonString.isBlank()) return
@@ -1056,47 +1303,20 @@ class KurdiViewModel @Inject constructor(
                             val type = ex.optString("type","mcq")
                             val data = mutableMapOf<String,Any>("lessonId" to lid, "type" to type, "order" to ei)
                             when (type) {
-                                "mcq"   -> {
-                                    // question/questionTr — hem eski ku/tr hem yeni question/questionTr destekle
-                                    data["question"]   = ex.optString("question").ifBlank { ex.optString("ku") }
-                                    data["questionTr"] = ex.optString("questionTr").ifBlank { ex.optString("tr") }
-                                    data["optA"]       = ex.optString("optA")
-                                    data["optB"]       = ex.optString("optB")
-                                    data["optC"]       = ex.optString("optC")
-                                    data["optD"]       = ex.optString("optD")
-                                    // optA-D boşsa options dizisinden doldur
-                                    val opts = ex.optJSONArray("options")
-                                    if (opts != null && data["optA"].toString().isBlank()) {
-                                        data["optA"] = opts.optString(0)
-                                        data["optB"] = opts.optString(1)
-                                        data["optC"] = opts.optString(2)
-                                        data["optD"] = opts.optString(3)
-                                    }
-                                    data["answer"] = ex.optString("answer")
-                                }
-                                "fill"  -> {
-                                    data["question"]   = ex.optString("question").ifBlank { ex.optString("ku") }
-                                    data["questionTr"] = ex.optString("questionTr").ifBlank { ex.optString("tr") }
-                                    data["answer"]     = ex.optString("answer")
-                                    val opts = ex.optJSONArray("options")
-                                    if (opts != null) data["wrong"] = (0 until opts.length())
-                                        .map { opts.getString(it) }.filter { it != ex.optString("answer") }
-                                }
-                                "match" -> {
-                                    val pairs = ex.optJSONArray("pairs")
-                                    if (pairs != null) data["pairs"] = (0 until pairs.length())
-                                        .mapNotNull { pi ->
-                                            val p = pairs.optJSONArray(pi) ?: return@mapNotNull null
-                                            // Firestore nested array desteklemez — map olarak kaydet
-                                            mapOf("ku" to p.optString(0), "tr" to p.optString(1))
-                                        }
-                                }
-                                "build" -> {
-                                    data["tr"]     = ex.optString("tr")
-                                    data["answer"] = ex.optString("answer")
-                                    val words = ex.optJSONArray("words")
-                                    if (words != null) data["words"] = (0 until words.length()).map { words.getString(it) }
-                                }
+                                "mcq"   -> { data["question"]=ex.optString("question"); data["questionTr"]=ex.optString("questionTr")
+                                    data["optA"]=ex.optString("optA"); data["optB"]=ex.optString("optB")
+                                    data["optC"]=ex.optString("optC"); data["optD"]=ex.optString("optD")
+                                    data["answer"]=ex.optString("answer") }
+                                "fill"  -> { data["question"]=ex.optString("question"); data["answer"]=ex.optString("answer")
+                                    val opts=ex.optJSONArray("options")
+                                    if (opts!=null) data["wrong"]=(0 until opts.length())
+                                        .map{opts.getString(it)}.filter{it!=ex.optString("answer")} }
+                                "match" -> { val pairs=ex.optJSONArray("pairs")
+                                    if (pairs!=null) data["pairs"]=(0 until pairs.length())
+                                        .map{ pi -> val p=pairs.getJSONArray(pi); listOf(p.getString(0),p.getString(1)) } }
+                                "build" -> { data["tr"]=ex.optString("tr"); data["answer"]=ex.optString("answer")
+                                    val words=ex.optJSONArray("words")
+                                    if (words!=null) data["words"]=(0 until words.length()).map{words.getString(it)} }
                             }
                             firestore.collection("kf_exercises").add(data).await()
                             exAdded++

@@ -1,4 +1,6 @@
 package com.heftreng.app.ui.screens.kurdi
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.ui.text.style.TextAlign
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
@@ -1011,169 +1013,228 @@ fun AdminField(
 
 // ── JSON İçe Aktar ────────────────────────────────────────────────────────────
 @Composable
+// ── JSON İçe / Dışa Aktar ────────────────────────────────────────────────────
+@Composable
 private fun JsonImportTab(vm: KurdiViewModel) {
-    val importing     by vm.importing.collectAsState()
-    val importResult  by vm.importResult.collectAsState()
-    var jsonText      by remember { mutableStateOf("") }
-    var showSchema    by remember { mutableStateOf(false) }
+    val importing    by vm.importing.collectAsState()
+    val importResult by vm.importResult.collectAsState()
+    val exportJson   by vm.exportJson.collectAsState()
+    val units        by vm.units.collectAsState()
 
-    val schemaExample = """
-{
-  "unit": {
-    "id": "u3",
-    "ttl": "Renkler",
-    "nameKu": "Reng",
-    "icon": "🎨",
-    "color": "#F59E0B",
-    "order": 3
-  },
-  "lessons": [
-    {
-      "id": "l10",
-      "unitId": "u3",
-      "nameTr": "Renkler",
-      "nameKu": "Reng",
-      "emoji": "🎨",
-      "xp": 15,
-      "order": 1,
-      "vocab": [
-        { "ku": "sor", "kp": "sor", "tr": "kırmızı", "e": "🔴" },
-        { "ku": "şîn", "kp": "şin", "tr": "mavi",    "e": "🔵" }
-      ],
-      "exercises": [
-        {
-          "type": "mcq",
-          "question": "«Sor» ne demek?",
-          "optA": "Kırmızı", "optB": "Mavi",
-          "optC": "Yeşil",   "optD": "Sarı",
-          "answer": "A"
-        },
-        {
-          "type": "fill",
-          "question": "Elma ___ e.",
-          "answer": "sor",
-          "options": ["sor", "şîn", "kesk", "zer"]
-        },
-        {
-          "type": "match",
-          "pairs": [["sor","kırmızı"],["şîn","mavi"],["kesk","yeşil"]]
-        },
-        {
-          "type": "build",
-          "tr": "Gökyüzü mavidir.",
-          "answer": "Ezman şîn e.",
-          "words": ["Ezman","şîn","e","sor","kesk"]
+    var jsonText        by remember { mutableStateOf("") }
+    var showSchema      by remember { mutableStateOf(false) }
+    var overwrite       by remember { mutableStateOf(true) }
+    var preview         by remember { mutableStateOf<KurdiViewModel.JsonPreview?>(null) }
+    var activeTab       by remember { mutableStateOf(0) } // 0=Import, 1=Export
+    var exportUnitId    by remember { mutableStateOf<String?>(null) }
+    var exportExpanded  by remember { mutableStateOf(false) }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // Dosya seçici
+    val filePicker = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            try {
+                val stream = context.contentResolver.openInputStream(it)
+                val text   = stream?.bufferedReader()?.readText() ?: ""
+                stream?.close()
+                jsonText = text
+                preview  = if (text.isNotBlank()) vm.validateJson(text) else null
+                vm.clearImportResult()
+            } catch (e: Exception) { /* ignore */ }
         }
-      ]
     }
-  ]
-}""".trimIndent()
 
-    LazyColumn(
-        modifier        = Modifier.fillMaxSize(),
-        contentPadding  = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    // Export clipboard
+    val clipboard = remember {
+        context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+    }
+
+    // Import/Export tab row
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // ── Başlık ve şema açıklaması ─────────────────────────────────────
-        item {
-            Text("📥 JSON ile Ders İçe Aktar", color = OnBackground,
-                fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
-            Spacer(Modifier.height(4.dp))
-            Text("Bir veya birden fazla ders içeren JSON yapıştır, Firestore'a otomatik yükler.",
-                color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
-        }
-
-        // ── Şema göster/gizle ────────────────────────────────────────────
-        item {
+        listOf("📥 İçe Aktar", "📤 Dışa Aktar").forEachIndexed { i, t ->
             Surface(
-                shape    = RoundedCornerShape(12.dp),
-                color    = HeftSurface,
-                modifier = Modifier.fillMaxWidth().clickable { showSchema = !showSchema },
+                shape    = RoundedCornerShape(20.dp),
+                color    = if (activeTab == i) Amber else SurfaceVar,
+                modifier = Modifier.weight(1f).clickable { activeTab = i },
             ) {
-                Row(
-                    modifier = Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Default.Code, null, tint = Primary, modifier = Modifier.size(18.dp))
-                        Text("JSON Şema Örneği", color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                    }
-                    Icon(
-                        if (showSchema) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        null, tint = Muted
-                    )
-                }
-            }
-            AnimatedVisibility(visible = showSchema) {
-                Surface(
-                    shape  = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),
-                    color  = HeftSurface.copy(alpha = 0.5f),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        text     = schemaExample,
-                        color    = OnBackground.copy(alpha = 0.8f),
-                        fontSize = 10.sp,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                        modifier = Modifier.padding(12.dp),
-                    )
-                }
+                Text(t, color = if (activeTab == i) Color.Black else Muted,
+                    fontWeight = if (activeTab == i) FontWeight.Bold else FontWeight.Normal,
+                    fontSize = 13.sp, textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 10.dp))
             }
         }
+    }
 
-        // ── Egzersiz tipleri açıklaması ───────────────────────────────────
-        item {
-            Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Egzersiz Tipleri", color = Primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    listOf(
-                        "mcq"   to "Çoktan seçmeli — question, optA-D, answer (A/B/C/D)",
-                        "fill"  to "Boşluk doldurma — question, answer, options[]",
-                        "match" to "Eşleştirme — pairs[[kürtçe,türkçe]]",
-                        "build" to "Cümle kurma — tr (Türkçe), answer (Kürtçe), words[]",
-                    ).forEach { (tip, desc) ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Surface(shape = RoundedCornerShape(4.dp), color = Primary.copy(alpha = 0.15f)) {
-                                Text(tip, color = Primary, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+    if (activeTab == 0) {
+        // ── IMPORT SEKMESİ ────────────────────────────────────────────────────
+        LazyColumn(
+            modifier        = Modifier.fillMaxSize(),
+            contentPadding  = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            // Şema ve açıklama
+            item {
+                Surface(
+                    shape    = RoundedCornerShape(12.dp),
+                    color    = HeftSurface,
+                    modifier = Modifier.fillMaxWidth().clickable { showSchema = !showSchema },
+                ) {
+                    Column {
+                        Row(modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween) {
+                            Row(verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.Code, null, tint = Primary, modifier = Modifier.size(18.dp))
+                                Text("JSON Şema ve Egzersiz Tipleri", color = OnBackground,
+                                    fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             }
-                            Text(desc, color = Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                            Icon(if (showSchema) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                null, tint = Muted)
+                        }
+                        AnimatedVisibility(visible = showSchema) {
+                            Column(modifier = Modifier.padding(horizontal = 14.dp).padding(bottom = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                // Egzersiz tipleri
+                                listOf(
+                                    "mcq"   to "question, questionTr, optA-D, answer (A/B/C/D)",
+                                    "fill"  to "question, answer, options[doğru+yanlışlar]",
+                                    "match" to "pairs[[kürtçe,türkçe], ...]",
+                                    "build" to "tr (Türkçe cümle), answer (Kürtçe), words[kelimeler+bozucular]",
+                                ).forEach { (tip, desc) ->
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.Top) {
+                                        Surface(shape = RoundedCornerShape(4.dp),
+                                            color = Primary.copy(alpha = 0.15f)) {
+                                            Text(tip, color = Primary, fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                        }
+                                        Text(desc, color = Muted, fontSize = 11.sp,
+                                            modifier = Modifier.weight(1f), lineHeight = 15.sp)
+                                    }
+                                }
+                                HorizontalDivider(color = Divider)
+                                Text("💡 units[] veya unit{} desteklenir. unitId belirtilmezse otomatik bağlanır.",
+                                    color = Muted, fontSize = 11.sp, lineHeight = 15.sp)
+                            }
                         }
                     }
                 }
             }
-        }
 
-        // ── JSON metin alanı ──────────────────────────────────────────────
-        item {
-            OutlinedTextField(
-                value         = jsonText,
-                onValueChange = { jsonText = it; vm.clearImportResult() },
-                placeholder   = { Text("JSON yapıştır…", color = Muted, fontSize = 13.sp) },
-                modifier      = Modifier.fillMaxWidth().height(220.dp),
-                colors        = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor   = Amber, unfocusedBorderColor = Divider,
-                    focusedTextColor     = OnBackground, unfocusedTextColor = OnBackground,
-                    unfocusedContainerColor = HeftSurface, focusedContainerColor = HeftSurface,
-                ),
-                shape     = RoundedCornerShape(12.dp),
-                textStyle = androidx.compose.ui.text.TextStyle(
-                    fontSize   = 11.sp,
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                ),
-            )
-        }
+            // Dosya seç + JSON alanı
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { filePicker.launch("application/json") },
+                        colors  = ButtonDefaults.buttonColors(containerColor = SurfaceVar, contentColor = OnBackground),
+                        shape   = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                    ) {
+                        Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Dosyadan Seç", fontSize = 12.sp)
+                    }
+                    if (jsonText.isNotBlank()) {
+                        IconButton(onClick = {
+                            jsonText = ""; preview = null; vm.clearImportResult()
+                        }, modifier = Modifier
+                            .size(40.dp)
+                            .background(SurfaceVar, RoundedCornerShape(10.dp))) {
+                            Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+            item {
+                OutlinedTextField(
+                    value         = jsonText,
+                    onValueChange = {
+                        jsonText = it
+                        preview  = if (it.isNotBlank()) vm.validateJson(it) else null
+                        vm.clearImportResult()
+                    },
+                    placeholder   = { Text("JSON yapıştır veya dosyadan seç…", color = Muted, fontSize = 12.sp) },
+                    modifier      = Modifier.fillMaxWidth().height(160.dp),
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Amber, unfocusedBorderColor = Divider,
+                        focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
+                        unfocusedContainerColor = HeftSurface, focusedContainerColor = HeftSurface,
+                    ),
+                    shape     = RoundedCornerShape(12.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 10.sp,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                )
+            }
 
-        // ── Import butonu ─────────────────────────────────────────────────
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Preview
+            preview?.let { pv ->
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (pv.isValid) Primary.copy(alpha = 0.08f) else Color(0xFFEF4444).copy(alpha = 0.08f),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Önizleme", color = if (pv.isValid) Primary else Color(0xFFEF4444),
+                                fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                listOf("🏛 ${pv.unitCount} ünite","📚 ${pv.lessonCount} ders",
+                                    "📝 ${pv.vocabTotal} kelime","🎯 ${pv.exerciseTotal} egzersiz")
+                                    .forEach { Text(it, color = OnBackground, fontSize = 11.sp) }
+                            }
+                            pv.warnings.forEach { w ->
+                                Text(w, color = if (w.startsWith("❌")) Color(0xFFEF4444) else Color(0xFFD97706),
+                                    fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Çakışma modu
+            if (jsonText.isNotBlank()) {
+                item {
+                    Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface,
+                        modifier = Modifier.fillMaxWidth()) {
+                        Row(modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column {
+                                Text("Var olan dersler", color = OnBackground,
+                                    fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                Text(if (overwrite) "Üzerine yazılacak" else "Atlanacak",
+                                    color = Muted, fontSize = 11.sp)
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Atla", color = if (!overwrite) Amber else Muted, fontSize = 12.sp)
+                                Switch(checked = overwrite, onCheckedChange = { overwrite = it },
+                                    colors = SwitchDefaults.colors(checkedThumbColor = Color.White,
+                                        checkedTrackColor = Amber))
+                                Text("Üzerine Yaz", color = if (overwrite) Amber else Muted, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Import butonu
+            item {
                 Button(
-                    onClick  = { if (jsonText.isNotBlank()) vm.importFromJson(jsonText) },
-                    enabled  = jsonText.isNotBlank() && !importing,
+                    onClick  = { if (jsonText.isNotBlank()) vm.importFromJson(jsonText, overwrite) },
+                    enabled  = jsonText.isNotBlank() && !importing && (preview?.isValid != false),
                     colors   = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
                     shape    = RoundedCornerShape(12.dp),
-                    modifier = Modifier.weight(1f).height(48.dp),
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
                 ) {
                     if (importing) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp),
@@ -1183,69 +1244,143 @@ private fun JsonImportTab(vm: KurdiViewModel) {
                     } else {
                         Icon(Icons.Default.Upload, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Firestore'a Aktar", fontWeight = FontWeight.Bold)
+                        Text("Firestore'a Aktar", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 }
-                if (jsonText.isNotBlank()) {
-                    OutlinedButton(
-                        onClick = { jsonText = ""; vm.clearImportResult() },
-                        shape   = RoundedCornerShape(12.dp),
-                        modifier = Modifier.height(48.dp),
-                        border  = BorderStroke(1.dp, Divider),
-                    ) { Text("Temizle", color = Muted) }
+            }
+
+            // Sonuç
+            importResult?.let { r ->
+                item {
+                    val ok = r.errors.isEmpty()
+                    Surface(shape = RoundedCornerShape(12.dp),
+                        color = if (ok) Color(0xFF22C55E).copy(alpha=0.1f) else Color(0xFFEF4444).copy(alpha=0.1f),
+                        modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(if (ok) "✅ Import tamamlandı" else "⚠️ Kısmen tamamlandı",
+                                color = if (ok) Color(0xFF22C55E) else Color(0xFFEF4444),
+                                fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                listOf("🏛 ${r.unitsAdded}","📚 ${r.lessonsAdded}",
+                                    "📝 ${r.vocabAdded}","🎯 ${r.exercisesAdded}",
+                                    if (r.skipped > 0) "⏭ ${r.skipped} atlandı" else null)
+                                    .filterNotNull()
+                                    .forEach { Text(it, color = OnBackground, fontSize = 12.sp) }
+                            }
+                            r.errors.forEach { Text("• $it", color = Color(0xFFEF4444), fontSize = 11.sp) }
+                        }
+                    }
                 }
             }
+            item { Spacer(Modifier.height(60.dp)) }
         }
-
-        // ── Sonuç ─────────────────────────────────────────────────────────
-        importResult?.let { result ->
+    } else {
+        // ── EXPORT SEKMESİ ────────────────────────────────────────────────────
+        LazyColumn(modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
-                val hasErrors = result.errors.isNotEmpty()
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (hasErrors) Color(0xFFEF4444).copy(alpha = 0.1f)
-                            else Color(0xFF22C55E).copy(alpha = 0.1f),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(
-                                if (hasErrors) Icons.Default.Warning else Icons.Default.CheckCircle,
-                                null,
-                                tint = if (hasErrors) Color(0xFFEF4444) else Color(0xFF22C55E),
-                                modifier = Modifier.size(20.dp),
-                            )
-                            Text(
-                                if (hasErrors) "Kısmen tamamlandı" else "✅ Import başarılı!",
-                                color = if (hasErrors) Color(0xFFEF4444) else Color(0xFF22C55E),
-                                fontWeight = FontWeight.Bold, fontSize = 14.sp,
-                            )
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            listOf(
-                                "🏛" to "${result.unitsAdded} ünite",
-                                "📚" to "${result.lessonsAdded} ders",
-                                "📝" to "${result.vocabAdded} kelime",
-                                "🎯" to "${result.exercisesAdded} egzersiz",
-                            ).forEach { (emoji, label) ->
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(emoji, fontSize = 18.sp)
-                                    Text(label, color = OnBackground, fontSize = 11.sp)
+                Text("📤 Mevcut Dersleri Dışa Aktar", color = OnBackground,
+                    fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                Spacer(Modifier.height(2.dp))
+                Text("Seçili üniteyi veya tüm dersleri JSON formatında indir.",
+                    color = Muted, fontSize = 12.sp)
+            }
+            // Ünite seçici
+            item {
+                ExposedDropdownMenuBox(expanded = exportExpanded,
+                    onExpandedChange = { exportExpanded = !exportExpanded }) {
+                    OutlinedTextField(
+                        value = exportUnitId?.let { id -> units.find { it.id==id }?.let{"${it.icon} ${it.ttl}"} } ?: "Tüm üniteler",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Ünite", fontSize = 12.sp) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = exportExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Amber, unfocusedBorderColor = Divider,
+                            focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
+                            unfocusedContainerColor = HeftSurface, focusedContainerColor = HeftSurface),
+                    )
+                    ExposedDropdownMenu(expanded = exportExpanded,
+                        onDismissRequest = { exportExpanded = false },
+                        modifier = Modifier.background(HeftSurface)) {
+                        DropdownMenuItem(text = { Text("Tüm üniteler", color = OnBackground) },
+                            onClick = { exportUnitId = null; exportExpanded = false })
+                        units.forEach { u ->
+                            DropdownMenuItem(text = {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    Text(u.icon, fontSize = 18.sp)
+                                    Text(u.ttl, color = OnBackground, fontSize = 13.sp)
                                 }
-                            }
-                        }
-                        if (hasErrors) {
-                            HorizontalDivider(color = Color(0xFFEF4444).copy(alpha = 0.3f))
-                            result.errors.forEach { err ->
-                                Text("• $err", color = Color(0xFFEF4444), fontSize = 11.sp)
-                            }
+                            }, onClick = { exportUnitId = u.id; exportExpanded = false })
                         }
                     }
                 }
             }
+            item {
+                Button(
+                    onClick  = { vm.exportLessonsAsJson(exportUnitId) },
+                    colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                    shape    = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                ) {
+                    Icon(Icons.Default.Download, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("JSON Oluştur", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            }
+            exportJson?.let { json ->
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                val clip = android.content.ClipData.newPlainText("json", json)
+                                clipboard.setPrimaryClip(clip)
+                            },
+                            colors  = ButtonDefaults.buttonColors(containerColor = SurfaceVar, contentColor = OnBackground),
+                            shape   = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Kopyala", fontSize = 12.sp)
+                        }
+                        Button(
+                            onClick = {
+                                try {
+                                    val fname = "heftreng_export_${System.currentTimeMillis()}.json"
+                                    val file  = java.io.File(context.getExternalFilesDir(null), fname)
+                                    file.writeText(json)
+                                    android.widget.Toast.makeText(context, "Kaydedildi: ${file.absolutePath}", android.widget.Toast.LENGTH_LONG).show()
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(context, "Kayıt hatası: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors  = ButtonDefaults.buttonColors(containerColor = SurfaceVar, contentColor = OnBackground),
+                            shape   = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(Icons.Default.SaveAlt, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Kaydet", fontSize = 12.sp)
+                        }
+                    }
+                }
+                item {
+                    Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface,
+                        modifier = Modifier.fillMaxWidth()) {
+                        Text(json.take(2000) + if (json.length > 2000) "\n…(${json.length} karakter)" else "",
+                            color = OnBackground.copy(alpha = 0.8f), fontSize = 10.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            modifier = Modifier.padding(12.dp))
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(60.dp)) }
         }
-
-        item { Spacer(Modifier.height(60.dp)) }
     }
 }
 
