@@ -350,17 +350,15 @@ class KurdiViewModel @Inject constructor(
                         .whereEqualTo("lessonId", lessonId).get().await()
                     snap.documents.mapNotNull { doc ->
                         val d = doc.data ?: return@mapNotNull null
-                        // match tipi — pairs: [{ku, tr}, ...] (yeni) veya [[ku, tr], ...] (eski)
+                        // match tipi — yeni: [{ku,tr},...] eski: [[ku,tr],...] her ikisini destekle
                         val pairsRaw = d["pairs"] as? List<*>
                         val pairs = pairsRaw?.mapNotNull { item ->
                             when (item) {
-                                // Yeni format: {"ku": "kiras", "tr": "gömlek"}
                                 is Map<*, *> -> {
                                     val a = item["ku"] as? String ?: return@mapNotNull null
                                     val b = item["tr"] as? String ?: return@mapNotNull null
                                     a to b
                                 }
-                                // Eski format: ["kiras", "gömlek"] — geriye dönük uyum
                                 is List<*> -> {
                                     val a = item.getOrNull(0) as? String ?: return@mapNotNull null
                                     val b = item.getOrNull(1) as? String ?: return@mapNotNull null
@@ -374,15 +372,17 @@ class KurdiViewModel @Inject constructor(
                         KfExercise(
                             id         = doc.id,
                             type       = d["type"]       as? String ?: "mcq",
-                            question   = d["question"]   as? String ?: "",
-                            questionTr = d["questionTr"] as? String ?: d["tr"] as? String ?: "",
+                            question   = (d["question"]   as? String)?.takeIf { it.isNotBlank() }
+                                         ?: d["ku"]       as? String ?: "",
+                            questionTr = (d["questionTr"] as? String)?.takeIf { it.isNotBlank() }
+                                         ?: d["tr"]       as? String ?: "",
                             optA       = d["optA"]       as? String ?: "",
                             optB       = d["optB"]       as? String ?: "",
                             optC       = d["optC"]       as? String ?: "",
                             optD       = d["optD"]       as? String ?: "",
-                            answer     = (d["answer"] as? String)?.takeIf { it.isNotBlank() }
+                            answer     = (d["answer"]  as? String)?.takeIf { it.isNotBlank() }
                                          ?: (d["correct"] as? String)?.takeIf { it.isNotBlank() }
-                                         ?: d["optA"] as? String ?: "", // web temasında optA her zaman doğru
+                                         ?: d["optA"] as? String ?: "",
                             wrong      = (d["wrong"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
                             pairs      = pairs,
                             words      = words,
@@ -574,17 +574,22 @@ class KurdiViewModel @Inject constructor(
                         put(JSONObject().apply {
                             put("role", "system")
                             put("content",
-                                "Sen bir Kürtçe (Kurmancî) öğretmenisin. Tam olarak şu formatta JSON döndür, başka hiçbir şey yazma:\n" +
-                                "{\"topic\":\"...\",\"exercises\":[\n" +
-                                "  {\"type\":\"fill\",\"ku\":\"Ez ___ im.\",\"tr\":\"Ben ___ ım.\",\"answer\":\"xwendekar\",\"options\":[\"xwendekar\",\"mamoste\",\"doktor\",\"kar\"]},\n" +
-                                "  {\"type\":\"build\",\"tr\":\"Ben okula gidiyorum.\",\"answer\":\"Ez diçim dibistanê.\",\"words\":[\"Ez\",\"diçim\",\"dibistanê\",\"malê\",\"têm\"]},\n" +
-                                "  {\"type\":\"mcq\",\"ku\":\"Silav ne demek?\",\"options\":[\"Merhaba\",\"Günaydın\",\"İyi\",\"Hoşça kal\"],\"answer\":\"Merhaba\"},\n" +
-                                "  {\"type\":\"match\",\"pairs\":[[\"Silav\",\"Merhaba\"],[\"Spas\",\"Teşekkür\"],[\"Belê\",\"Evet\"],[\"Na\",\"Hayır\"],[\"Baş e\",\"Tamam\"]]}\n" +
-                                "]}\n" +
-                                "KURALLAR: 1) fill.options = tam 4 eleman (1 doğru + 3 yanlış, karışık sırada). " +
-                                "2) build.words = cümledeki tüm kelimeler + 2 bozucu kelime (anlamsız ek kelimeler). " +
-                                "3) match = tam 5 çift. " +
-                                "4) Sadece JSON döndür, yorum veya açıklama ekleme."
+                                "Sen bir Kürtçe (Kurmancî) öğretmenisin. Tam olarak şu JSON formatında döndür, başka hiçbir şey yazma:\n" +
+                                "{\n" +
+                                "  \"topic\": \"...\",\n" +
+                                "  \"exercises\": [\n" +
+                                "    {\"type\":\"mcq\",\"question\":\"Silav ne demek?\",\"questionTr\":\"Merhaba ne demek?\",\"optA\":\"Merhaba\",\"optB\":\"Günaydın\",\"optC\":\"İyi\",\"optD\":\"Hoşça kal\",\"answer\":\"Merhaba\"},\n" +
+                                "    {\"type\":\"fill\",\"question\":\"Ez ___ im.\",\"questionTr\":\"Ben ___ ım.\",\"answer\":\"xwendekar\",\"options\":[\"xwendekar\",\"mamoste\",\"doktor\",\"kar\"]},\n" +
+                                "    {\"type\":\"build\",\"tr\":\"Ben okula gidiyorum.\",\"answer\":\"Ez diçim dibistanê.\",\"words\":[\"Ez\",\"diçim\",\"dibistanê\",\"malê\",\"têm\"]},\n" +
+                                "    {\"type\":\"match\",\"pairs\":[[\"Silav\",\"Merhaba\"],[\"Spas\",\"Teşekkür\"],[\"Belê\",\"Evet\"],[\"Na\",\"Hayır\"],[\"Baş e\",\"Tamam\"]]}\n" +
+                                "  ]\n" +
+                                "}\n" +
+                                "KURALLAR:\n" +
+                                "1) mcq: question=Kürtçe soru, questionTr=Türkçe çeviri, optA-D=4 seçenek, answer=doğru seçenek metni\n" +
+                                "2) fill: question=boşluklu Kürtçe cümle (___ ile), questionTr=Türkçesi, answer=doğru kelime, options=4 kelime (doğru dahil)\n" +
+                                "3) build: tr=Türkçe cümle, answer=Kürtçe cümle, words=tüm kelimeler + 2 bozucu\n" +
+                                "4) match: pairs=tam 5 çift [[Kürtçe,Türkçe],...]\n" +
+                                "5) Sadece JSON döndür, markdown veya açıklama ekleme."
                             )
                         })
                         put(JSONObject().apply {
@@ -636,10 +641,13 @@ class KurdiViewModel @Inject constructor(
                         val type = ex.optString("type", "mcq")
                         when (type) {
                             "fill" -> AiExercise(
-                                type   = "fill",
-                                ku     = ex.optString("ku", ""),
-                                tr     = ex.optString("tr", ""),
-                                answer = ex.optString("answer", ""),
+                                type       = "fill",
+                                ku         = ex.optString("question", ""),
+                                tr         = ex.optString("questionTr", ""),
+                                answer     = ex.optString("answer", ""),
+                                options    = ex.optJSONArray("options")?.let { arr ->
+                                    (0 until arr.length()).map { arr.getString(it) }
+                                } ?: emptyList(),
                             )
                             "build" -> {
                                 val wordsArr = ex.optJSONArray("words")
@@ -666,8 +674,8 @@ class KurdiViewModel @Inject constructor(
                                 val op = ex.optJSONArray("options")
                                 AiExercise(
                                     type    = "mcq",
-                                    ku      = ex.optString("ku", ""),
-                                    tr      = ex.optString("tr", ""),
+                                    ku      = ex.optString("question", ""),
+                                    tr      = ex.optString("questionTr", ""),
                                     options = if (op != null) (0 until op.length()).map { op.getString(it) } else emptyList(),
                                     answer  = ex.optString("answer", ""),
                                 )
@@ -1048,25 +1056,47 @@ class KurdiViewModel @Inject constructor(
                             val type = ex.optString("type","mcq")
                             val data = mutableMapOf<String,Any>("lessonId" to lid, "type" to type, "order" to ei)
                             when (type) {
-                                "mcq"   -> { data["question"]=ex.optString("question"); data["questionTr"]=ex.optString("questionTr")
-                                    data["optA"]=ex.optString("optA"); data["optB"]=ex.optString("optB")
-                                    data["optC"]=ex.optString("optC"); data["optD"]=ex.optString("optD")
-                                    data["answer"]=ex.optString("answer") }
-                                "fill"  -> { data["question"]=ex.optString("question"); data["answer"]=ex.optString("answer")
-                                    val opts=ex.optJSONArray("options")
-                                    if (opts!=null) data["wrong"]=(0 until opts.length())
-                                        .map{opts.getString(it)}.filter{it!=ex.optString("answer")} }
-                                "match" -> { val pairs=ex.optJSONArray("pairs")
-                                    if (pairs!=null) data["pairs"]=(0 until pairs.length())
+                                "mcq"   -> {
+                                    // question/questionTr — hem eski ku/tr hem yeni question/questionTr destekle
+                                    data["question"]   = ex.optString("question").ifBlank { ex.optString("ku") }
+                                    data["questionTr"] = ex.optString("questionTr").ifBlank { ex.optString("tr") }
+                                    data["optA"]       = ex.optString("optA")
+                                    data["optB"]       = ex.optString("optB")
+                                    data["optC"]       = ex.optString("optC")
+                                    data["optD"]       = ex.optString("optD")
+                                    // optA-D boşsa options dizisinden doldur
+                                    val opts = ex.optJSONArray("options")
+                                    if (opts != null && data["optA"].toString().isBlank()) {
+                                        data["optA"] = opts.optString(0)
+                                        data["optB"] = opts.optString(1)
+                                        data["optC"] = opts.optString(2)
+                                        data["optD"] = opts.optString(3)
+                                    }
+                                    data["answer"] = ex.optString("answer")
+                                }
+                                "fill"  -> {
+                                    data["question"]   = ex.optString("question").ifBlank { ex.optString("ku") }
+                                    data["questionTr"] = ex.optString("questionTr").ifBlank { ex.optString("tr") }
+                                    data["answer"]     = ex.optString("answer")
+                                    val opts = ex.optJSONArray("options")
+                                    if (opts != null) data["wrong"] = (0 until opts.length())
+                                        .map { opts.getString(it) }.filter { it != ex.optString("answer") }
+                                }
+                                "match" -> {
+                                    val pairs = ex.optJSONArray("pairs")
+                                    if (pairs != null) data["pairs"] = (0 until pairs.length())
                                         .mapNotNull { pi ->
-                                            val p=pairs.optJSONArray(pi) ?: return@mapNotNull null
-                                            // Firestore iç içe array desteklemez — map olarak kaydet
+                                            val p = pairs.optJSONArray(pi) ?: return@mapNotNull null
+                                            // Firestore nested array desteklemez — map olarak kaydet
                                             mapOf("ku" to p.optString(0), "tr" to p.optString(1))
                                         }
                                 }
-                                "build" -> { data["tr"]=ex.optString("tr"); data["answer"]=ex.optString("answer")
-                                    val words=ex.optJSONArray("words")
-                                    if (words!=null) data["words"]=(0 until words.length()).map{words.getString(it)} }
+                                "build" -> {
+                                    data["tr"]     = ex.optString("tr")
+                                    data["answer"] = ex.optString("answer")
+                                    val words = ex.optJSONArray("words")
+                                    if (words != null) data["words"] = (0 until words.length()).map { words.getString(it) }
+                                }
                             }
                             firestore.collection("kf_exercises").add(data).await()
                             exAdded++
