@@ -102,7 +102,6 @@ class FeedViewModel @Inject constructor(
     }
 
     // ── Etkileşimleri canlı dinle (liked / saved / repost) ───────────────────
-    // .get().await() yerine addSnapshotListener — kalp kaybolma sorunu çözülür
     private fun startLiveInteractions(currentUid: String) {
         // Beğeniler
         likedListener?.remove()
@@ -141,7 +140,6 @@ class FeedViewModel @Inject constructor(
             }
     }
 
-    // Tüm postların etkileşim bayraklarını güncel setlerle senkronize eder
     private fun syncInteractionsToState() {
         if (_posts.value.isEmpty()) return
         _posts.value = _posts.value.map { post ->
@@ -188,7 +186,6 @@ class FeedViewModel @Inject constructor(
 
     // ── Feed dinleyici — Anında göster, arka planda zenginleştir ─────────────
     private fun observeFeed() {
-        // Zaten post varsa yükleme çarkını gösterme — sayfa önceden açılmışsa akıcılığı koru
         _loading.value = _posts.value.isEmpty()
         feedListener?.remove()
         feedListener = firestore.collection("feed")
@@ -197,7 +194,6 @@ class FeedViewModel @Inject constructor(
             .addSnapshotListener { snap, err ->
                 if (err != null || snap == null) { _loading.value = false; return@addSnapshotListener }
                 viewModelScope.launch {
-                    // lastDoc yalnızca liste boşken set edilir — sayfalama kaymasını önler
                     if (lastDoc == null && snap.documents.isNotEmpty()) {
                         lastDoc = snap.documents.last()
                     }
@@ -206,19 +202,14 @@ class FeedViewModel @Inject constructor(
                     val rawPosts = snap.documents.mapNotNull { doc -> doc.toPost() }
                     val filtered = rawPosts.filter { it.moderationStatus != "removed" }
 
-                    // ── Adım 1: Anında ekrana bas (post içindeki gömülü verilerle)
-                    // Kullanıcı yükleme çarkı görmeden postaları okumaya başlar
                     _posts.value = mapInteractions(filtered)
                     _loading.value = false
 
-                    // ── Adım 2: Arka planda profil bilgilerini zenginleştir
-                    // await() burada ana akışı bloklamaz — ayrı launch içinde
                     enrichPostsInBackground(filtered)
                 }
             }
     }
 
-    // Etkileşim bayraklarını güncel setlerle uygular
     private fun mapInteractions(posts: List<Post>): List<Post> = posts.map { post ->
         post.copy(
             isLikedByMe    = post.id in likedIds,
@@ -228,7 +219,6 @@ class FeedViewModel @Inject constructor(
         )
     }
 
-    // Cache'de olmayan kullanıcı bilgilerini arka planda çeker, varsa state'i sessizce günceller
     private fun enrichPostsInBackground(posts: List<Post>) {
         if (posts.isEmpty()) return
         val missingUids = posts.map { it.uid }
@@ -254,7 +244,6 @@ class FeedViewModel @Inject constructor(
                     }
                 } catch (_: Exception) {}
             }
-            // Yeni veri geldiyse postları sessizce güncelle (profil resimleri/adlar)
             if (cacheUpdated) {
                 _posts.value = _posts.value.map { post ->
                     val (freshName, freshPhoto) = userCache[post.uid] ?: return@map post
@@ -269,14 +258,10 @@ class FeedViewModel @Inject constructor(
     }
 
     // ── Firestore doc → Post dönüştürücü ──────────────────────────────────────
-    // Adım 1.2 / 2.2 — name→displayName, imgUrl→imageURL normalize edilir.
-    // Eski nested "quote" objesi okunur ama artık yazılmaz.
     internal fun com.google.firebase.firestore.DocumentSnapshot.toPost(): Post? {
         val d = data ?: return null
-        // Adım 1.2 — displayName/name normalizasyonu
         val displayName = (d["displayName"] as? String)?.takeIf { it.isNotBlank() }
             ?: d["name"] as? String ?: ""
-        // Adım 2.2 — Eski nested quote objesi + flat alanlar okunur
         val quoteObj    = d["quote"] as? Map<*, *>
         val quoteText   = (quoteObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
             ?: d["quoteText"] as? String ?: ""
@@ -284,7 +269,6 @@ class FeedViewModel @Inject constructor(
             ?: d["bookName"] as? String ?: ""
         val authorName  = (quoteObj?.get("author") as? String)?.takeIf { it.isNotBlank() }
             ?: d["authorName"] as? String ?: ""
-        // Adım 1.2 — imageURL/imgUrl normalizasyonu
         val imageURL    = (d["imageURL"] as? String)?.takeIf { it.isNotBlank() }
             ?: d["imgUrl"] as? String ?: ""
         @Suppress("UNCHECKED_CAST")
@@ -293,12 +277,12 @@ class FeedViewModel @Inject constructor(
             id            = id,
             uid           = d["uid"]      as? String ?: "",
             displayName   = displayName,
-            name          = displayName,   // legacy uyumu
+            name          = displayName,
             username      = d["username"] as? String ?: "",
             photoURL      = d["photoURL"] as? String ?: "",
             text          = d["text"]     as? String ?: "",
             imageURL      = imageURL,
-            imgUrl        = imageURL,      // legacy uyumu
+            imgUrl        = imageURL,
             ytVid         = d["ytVid"]       as? String ?: "",
             badges        = badges,
             repostTitle   = d["repostTitle"] as? String ?: "",
@@ -344,33 +328,28 @@ class FeedViewModel @Inject constructor(
         )
     }
 
-    // ── Beğeni ────────────────────────────────────────────────────────────────
-    // ── Admin: Gönderi Görünürlük Kısıtlaması ────────────────────────────────
-    // "public"  → herkese açık
-    // "friends" → sadece takipçiler
-    // "only_me" → sadece sahibi
     fun setPostVisibility(postId: String, visibility: String) {
         viewModelScope.launch {
             try {
                 firestore.collection("feed").document(postId)
                     .update("visibility", visibility).await()
-                // Lokal state güncelle
                 _posts.value = _posts.value.map {
                     if (it.id == postId) it.copy(visibility = visibility) else it
                 }
                 _libraryQuotes.value = _libraryQuotes.value.map {
                     if (it.id == postId) it.copy(visibility = visibility) else it
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
+    // ── OPTİMİZE EDİLDİ: Atomik Beğeni Sayaç Yönetimi ────────────────────────
     fun toggleLike(post: Post) {
         if (uid.isEmpty()) return
         val nowLiked = !post.isLikedByMe
         likedIds = if (nowLiked) likedIds + post.id else likedIds - post.id
+        
+        // UI'yı anında lokal olarak kilitle (Gecikmesiz akıcı tepki)
         _posts.value = _posts.value.map {
             if (it.id == post.id) it.copy(
                 isLikedByMe = nowLiked,
@@ -386,6 +365,7 @@ class FeedViewModel @Inject constructor(
                     val myName  = (uDoc?.getString("displayName") ?: uDoc?.getString("name"))
                         ?.takeIf { it.isNotBlank() } ?: auth.currentUser?.displayName ?: ""
                     val myPhoto = uDoc?.getString("photoURL") ?: auth.currentUser?.photoUrl?.toString() ?: ""
+                    
                     likeRef.set(mapOf(
                         "uid"      to uid,
                         "feedId"   to post.id,
@@ -393,16 +373,20 @@ class FeedViewModel @Inject constructor(
                         "photoURL" to myPhoto,
                         "ts"       to Timestamp.now(),
                     )).await()
+                    
+                    // Ana dökümandaki "likes" alanını atomik olarak 1 artırıyoruz (Okuma harcamaz)
                     postRef.update("likes", FieldValue.increment(1)).await()
                     if (post.uid != uid) sendNotif(post.uid, "like", "$myName gönderini beğendi", post.text.take(60), post.id)
                 } else {
                     likeRef.delete().await()
+                    // Ana dökümandaki "likes" alanını atomik olarak 1 eksiltiyoruz
                     postRef.update("likes", FieldValue.increment(-1)).await()
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
+    // ── OPTİMİZE EDİLDİ: Yorum Beğeni Sayaç Yönetimi ────────────────────────
     fun toggleCommentLike(postId: String, comment: Comment) {
         if (uid.isEmpty()) return
         val nowLiked = !comment.isLikedByMe
@@ -429,7 +413,7 @@ class FeedViewModel @Inject constructor(
         }
     }
 
-    // ── Kaydet ────────────────────────────────────────────────────────────────
+    // ── OPTİMİZE EDİLDİ: Kaydetme Sayaç Yönetimi ─────────────────────────────
     fun toggleSave(post: Post) {
         if (uid.isEmpty()) return
         val nowSaved = !post.isSavedByMe
@@ -440,12 +424,13 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val saveRef = firestore.collection("feedSaves").document("${post.id}_$uid")
+                val postRef = firestore.collection("feed").document(post.id)
                 if (nowSaved) {
                     saveRef.set(mapOf("uid" to uid, "feedId" to post.id, "ts" to Timestamp.now())).await()
-                    firestore.collection("feed").document(post.id).update("saves", FieldValue.increment(1)).await()
+                    postRef.update("saves", FieldValue.increment(1)).await()
                 } else {
                     saveRef.delete().await()
-                    firestore.collection("feed").document(post.id).update("saves", FieldValue.increment(-1)).await()
+                    postRef.update("saves", FieldValue.increment(-1)).await()
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -558,7 +543,7 @@ class FeedViewModel @Inject constructor(
 
     fun clearCommentError() { _commentError.value = null }
 
-    // ── Repost ────────────────────────────────────────────────────────────────
+    // ── OPTİMİZE EDİLDİ: Repost Sayaç Yönetimi ───────────────────────────────
     fun repost(post: Post) {
         if (uid.isEmpty()) return
         if (post.isRepostedByMe || post.id in myRepostMap) return
@@ -587,8 +572,11 @@ class FeedViewModel @Inject constructor(
                     "likes" to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
                     "ts"    to Timestamp.now(),
                 )).await()
+                
+                // Orijinal gönderinin "reposts" sayacını atomik güncelliyoruz
                 firestore.collection("feed").document(post.id)
                     .update("reposts", FieldValue.increment(1)).await()
+                    
                 myRepostMap = myRepostMap + (post.id to newRef.id)
                 _posts.value = _posts.value.map {
                     if (it.id == post.id) it.copy(
@@ -655,7 +643,6 @@ class FeedViewModel @Inject constructor(
     }
 
     // ── Post oluştur ─────────────────────────────────────────────────────────
-    // Adım 4.3 — Post oluşturma hatası UI'ya iletilir
     private val _createPostError = MutableStateFlow<String?>(null)
     val createPostError = _createPostError.asStateFlow()
     fun clearCreatePostError() { _createPostError.value = null }
@@ -663,11 +650,6 @@ class FeedViewModel @Inject constructor(
     private val _createPostLoading = MutableStateFlow(false)
     val createPostLoading = _createPostLoading.asStateFlow()
 
-    // Adım 2.1 — ensureAuthorAndBook → library.ensureAuthorAndBook
-    // Adım 2.2 — nested "quote" objesi artık YAZILMAZ; yalnızca flat alanlar yazılır.
-    // Adım 4.3 — ensureAuthorAndBook başarısız olursa post YINE oluşturulur (libraryBookId boş kalır)
-    //            ama kullanıcıya bilgi verilir. addQuoteToLibrary başarısız olursa feedPostId
-    //            üzerinden sonradan migrateLegacyFeedQuotes() ile kurtarılabilir.
     fun createPost(text: String, imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "", type: String = "", libraryAuthorId: String = "", libraryBookId: String = "") {
         if (uid.isEmpty()) return
         viewModelScope.launch {
@@ -679,12 +661,9 @@ class FeedViewModel @Inject constructor(
                 val myUser  = userDoc.getString("username") ?: ""
                 val myEmail = userDoc.getString("email") ?: auth.currentUser?.email ?: ""
 
-                // Adım 4.3 — ensureAuthorAndBook hatası post oluşturmayı engellemez;
-                // libraryBookId boş kalır, post feed'e yazar ama kütüphane bağlantısı kurulmaz.
                 var resolvedAuthorId = libraryAuthorId
                 var resolvedBookId   = libraryBookId
                 var libraryLinkFailed = false
-                // Dışarıdan geçirilmemişse otomatik eşleştir
                 if (resolvedAuthorId.isBlank() && resolvedBookId.isBlank() &&
                     quoteText.isNotBlank() && (authorName.isNotBlank() || bookName.isNotBlank())) {
                     try {
@@ -712,14 +691,11 @@ class FeedViewModel @Inject constructor(
                     "bookName"        to bookName,
                     "libraryAuthorId" to resolvedAuthorId,
                     "libraryBookId"   to resolvedBookId,
-                    // type: alıntılı post ise "library_quote", değilse boş string
                     "type"            to if (quoteText.isNotBlank() && type.isBlank()) "library_quote" else type,
                     "likes"           to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
                     "ts"              to Timestamp.now(),
                 )).await()
 
-                // Adım 4.3 — Kütüphane yazma hatası feed yazmasını geri almaz;
-                // migrateLegacyFeedQuotes() ile sonradan kurtarılabilir.
                 if (quoteText.isNotBlank() && resolvedBookId.isNotBlank()) {
                     try {
                         library.addQuoteToLibrary(
@@ -739,7 +715,6 @@ class FeedViewModel @Inject constructor(
                     }
                 }
 
-                // Adım 4.3 — Kütüphane bağlantısı kurulamazsa UI'ya soft uyarı ver
                 if (libraryLinkFailed) {
                     _createPostError.value = "Gönderi paylaşıldı, ancak kütüphane bağlantısı kurulamadı."
                 }
@@ -778,7 +753,6 @@ class FeedViewModel @Inject constructor(
         }
     }
 
-    // Alıntı metni düzenleme — quoteText + isteğe bağlı bookName/authorName günceller
     fun editQuote(postId: String, newQuoteText: String, newBookName: String = "", newAuthorName: String = "") {
         if (uid.isEmpty() || newQuoteText.isBlank()) return
         viewModelScope.launch {
@@ -791,7 +765,6 @@ class FeedViewModel @Inject constructor(
                 if (newBookName.isNotBlank())   updates["bookName"]   = newBookName.trim()
                 if (newAuthorName.isNotBlank()) updates["authorName"] = newAuthorName.trim()
                 firestore.collection("feed").document(postId).update(updates).await()
-                // Local state güncelle
                 _posts.value = _posts.value.map {
                     if (it.id == postId) it.copy(
                         quoteText  = newQuoteText.trim(),
@@ -806,7 +779,6 @@ class FeedViewModel @Inject constructor(
                         authorName = newAuthorName.ifBlank { it.authorName },
                     ) else it
                 }
-                // library_books/{id}/quotes alt koleksiyonunu da güncelle
                 val feedPostSnap = firestore.collection("feed").document(postId).get().await()
                 val libBookId = feedPostSnap.getString("libraryBookId")
                 if (!libBookId.isNullOrBlank()) {
@@ -824,13 +796,11 @@ class FeedViewModel @Inject constructor(
         }
     }
 
-    // ── Pagination ────────────────────────────────────────────────────────────
+    // ── Pagination & Suggestions ──────────────────────────────────────────────
     fun loadSuggestedUsers() {
         val myUid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             try {
-                // Takip ettiklerimi al
-                // fromUid/targetUid — web teması ve diğer tüm ViewModel'larla tutarlı
                 val followingSnap = firestore.collection("follows")
                     .whereEqualTo("fromUid", myUid)
                     .limit(500).get().await()
@@ -838,7 +808,6 @@ class FeedViewModel @Inject constructor(
                     .mapNotNull { it.getString("targetUid") }
                     .toSet()
 
-                // orderBy("postsCount") index gerektirir — limitsiz çekip client-side filtrele
                 val usersSnap = firestore.collection("users")
                     .limit(50)
                     .get().await()
@@ -870,7 +839,6 @@ class FeedViewModel @Inject constructor(
                 val myDoc   = firestore.collection("users").document(myUid).get().await()
                 val myName  = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
                 val myPhoto = myDoc.getString("photoURL") ?: ""
-                // Web teması şeması: fromUid / targetUid / fromName / fromPhoto / targetUid / ts
                 val tDoc    = firestore.collection("users").document(targetUid).get().await()
                 val tName   = tDoc.getString("displayName") ?: tDoc.getString("name") ?: ""
                 val tPhoto  = tDoc.getString("photoURL") ?: ""
@@ -887,9 +855,7 @@ class FeedViewModel @Inject constructor(
                     .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
                 firestore.collection("users").document(targetUid)
                     .update("followerCount", com.google.firebase.firestore.FieldValue.increment(1))
-                // Bildirim gönder
                 sendNotif(targetUid, "follow", "$myName sizi takip etmeye başladı", "", "")
-                // State güncelle
                 _suggestedUsers.value = _suggestedUsers.value.map {
                     if (it.uid == targetUid) it.copy(isFollowing = true) else it
                 }
@@ -1032,7 +998,6 @@ class FeedViewModel @Inject constructor(
             val fromName  = userDoc.getString("displayName") ?: userDoc.getString("name") ?: auth.currentUser?.displayName ?: "Kullanıcı"
             val fromPhoto = userDoc.getString("photoURL") ?: ""
             val ico = when (type) { "like" -> "favorite"; "cmt" -> "chat_bubble"; "follow" -> "person_add"; "repost" -> "repeat"; else -> "notifications" }
-            // 1. Firestore bildirim kaydı
             firestore.collection("userNotifs").document(toUid).collection("msgs").add(mapOf(
                 "fromUid"   to uid,
                 "fromName"  to fromName,
@@ -1048,7 +1013,6 @@ class FeedViewModel @Inject constructor(
                 "read"      to false,
                 "ts"        to Timestamp.now(),
             )).await()
-            // 2. FCM push bildirimi — alıcının fcmToken'ını al ve push gönder
             try {
                 val toUserDoc = firestore.collection("users").document(toUid).get().await()
                 val fcmToken  = toUserDoc.getString("fcmToken") ?: ""
@@ -1063,21 +1027,17 @@ class FeedViewModel @Inject constructor(
                             "toUid"  to toUid,
                         )).await()
                 }
-            } catch (_: Exception) {} // push başarısız olsa da Firestore kaydı yapıldı
+            } catch (_: Exception) {}
         } catch (e: Exception) { e.printStackTrace() }
     }
 
     // ── Kütüphane alıntı postları ─────────────────────────────────────────
-    // Feed'den bookName dolu postları çeker; LibraryScreen PostCard ile gösterir.
-    // suspend versiyonu — LibraryScreen LaunchedEffect join() ile bekleyebilir
     suspend fun loadLibraryQuotesAsync() {
         val myUid   = auth.currentUser?.uid ?: ""
         val isAdmin = auth.currentUser?.email == "siirgibi49@gmail.com"
         val seenIds = mutableSetOf<String>()
         val result  = mutableListOf<Post>()
 
-        // ── feed.whereEqualTo("type","library_quote")
-        //    allow list: if isAuth() — rules güncellendi, query artık çalışır
         try {
             val snap = firestore.collection("feed")
                 .whereEqualTo("type", "library_quote")
@@ -1087,7 +1047,6 @@ class FeedViewModel @Inject constructor(
                 val d   = doc.data ?: return@forEach
                 val vis = d["visibility"] as? String ?: "public"
 
-                // visibility filtresi client-side
                 val canSee = when (vis) {
                     "only_me"  -> d["uid"] == myUid || isAdmin
                     "friends"  -> {
@@ -1098,7 +1057,7 @@ class FeedViewModel @Inject constructor(
                                 .document("${myUid}_${ownerUid}").get().await().exists()
                         }.getOrDefault(false)
                     }
-                    else -> true  // public
+                    else -> true
                 }
 
                 if (canSee && seenIds.add(doc.id)) {
@@ -1109,7 +1068,6 @@ class FeedViewModel @Inject constructor(
             android.util.Log.w("FeedVM", "loadLibraryQuotes feed: ${e.message}")
         }
 
-        // ── library_books/quotes collectionGroup (fallback + ek kayıtlar)
         try {
             val cgSnap = firestore.collectionGroup("quotes").get().await()
             cgSnap.documents.forEach { doc ->
@@ -1138,8 +1096,6 @@ class FeedViewModel @Inject constructor(
             android.util.Log.w("FeedVM", "collectionGroup: ${e.message}")
         }
 
-        // ── Eski postlar fallback — type alanı yok ama bookName dolu ──
-        // Firestore'da type="library_quote" olmayan eski paylaşımları da yakala
         try {
             val oldSnap = firestore.collection("feed")
                 .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
