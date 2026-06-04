@@ -34,7 +34,7 @@ class PresenceViewModel @Inject constructor(
     // Kaç saniyedir heartbeat gelmemişse offline say (120 sn = 2 dk)
     private val ONLINE_TIMEOUT_MS = 120_000L
     // Heartbeat aralığı
-    private val HEARTBEAT_INTERVAL_MS = 30_000L
+    private val HEARTBEAT_INTERVAL_MS = 90_000L   // 30s→90s: 3x daha az yazma
 
     private var heartbeatJob: kotlinx.coroutines.Job? = null
 

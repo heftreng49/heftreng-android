@@ -330,7 +330,7 @@ class KurdiViewModel @Inject constructor(
                 // kf_vocab yükle
                 val vocabList: List<KfVocab> = try {
                     val snap = firestore.collection("kf_vocab")
-                        .whereEqualTo("lessonId", lessonId).get().await()
+                        .whereEqualTo("lessonId", lessonId).limit(200).get().await()
                     snap.documents.mapNotNull { doc ->
                         val d = doc.data ?: return@mapNotNull null
                         KfVocab(
@@ -347,7 +347,7 @@ class KurdiViewModel @Inject constructor(
                 // kf_exercises yükle
                 val exerciseList: List<KfExercise> = try {
                     val snap = firestore.collection("kf_exercises")
-                        .whereEqualTo("lessonId", lessonId).get().await()
+                        .whereEqualTo("lessonId", lessonId).limit(200).get().await()
                     snap.documents.mapNotNull { doc ->
                         val d = doc.data ?: return@mapNotNull null
                         // match tipi — yeni: [{ku,tr},...] eski: [[ku,tr],...] her ikisini destekle
@@ -916,7 +916,7 @@ class KurdiViewModel @Inject constructor(
                 // Derse ait vocab ve exercises'i de sil
                 val db = firestore
                 listOf("kf_vocab", "kf_exercises").forEach { col ->
-                    val snap = db.collection(col).whereEqualTo("lessonId", lessonId).get().await()
+                    val snap = db.collection(col).whereEqualTo("lessonId", lessonId).limit(200).get().await()
                     snap.documents.forEach { it.reference.delete().await() }
                 }
                 db.collection("kf_lessons").document(lessonId).delete().await()
@@ -1109,9 +1109,9 @@ class KurdiViewModel @Inject constructor(
 
                         // Eski vocab/exercise temizle (overwrite modunda)
                         if (exists) {
-                            firestore.collection("kf_vocab").whereEqualTo("lessonId",lid).get().await()
+                            firestore.collection("kf_vocab").whereEqualTo("lessonId",lid).limit(200).get().await()
                                 .documents.forEach { it.reference.delete() }
-                            firestore.collection("kf_exercises").whereEqualTo("lessonId",lid).get().await()
+                            firestore.collection("kf_exercises").whereEqualTo("lessonId",lid).limit(200).get().await()
                                 .documents.forEach { it.reference.delete() }
                         }
 
@@ -1185,7 +1185,7 @@ class KurdiViewModel @Inject constructor(
                     }
                     // Vocab
                     try {
-                        val vs = firestore.collection("kf_vocab").whereEqualTo("lessonId", lesson.id).get().await()
+                        val vs = firestore.collection("kf_vocab").whereEqualTo("lessonId", lesson.id).limit(200).get().await()
                         val va = org.json.JSONArray()
                         vs.documents.sortedBy { (it.getLong("order") ?: 0) }.forEach { doc ->
                             va.put(org.json.JSONObject().apply {
@@ -1197,7 +1197,7 @@ class KurdiViewModel @Inject constructor(
                     } catch (_: Exception) {}
                     // Exercises
                     try {
-                        val es = firestore.collection("kf_exercises").whereEqualTo("lessonId", lesson.id).get().await()
+                        val es = firestore.collection("kf_exercises").whereEqualTo("lessonId", lesson.id).limit(200).get().await()
                         val ea = org.json.JSONArray()
                         es.documents.sortedBy { (it.getLong("order") ?: 0) }.forEach { doc ->
                             val d    = doc.data ?: return@forEach

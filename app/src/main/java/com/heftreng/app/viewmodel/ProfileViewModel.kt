@@ -69,12 +69,10 @@ class ProfileViewModel @Inject constructor(
                         firestore.collection("follows").document("${myUid}_$targetUid").get().await()
                     else null
                 }
-                val followersDeferred = viewModelScope.async {
-                    firestore.collection("follows").whereEqualTo("targetUid", targetUid).get().await()
-                }
-                val followingDeferred = viewModelScope.async {
-                    firestore.collection("follows").whereEqualTo("fromUid", targetUid).get().await()
-                }
+                // follows koleksiyonunu okumak yerine users doc'taki sayaçları kullan
+                // Bu 2 büyük sorgu yerine 0 ekstra okuma demek
+                val followersDeferred = viewModelScope.async { null as com.google.firebase.firestore.QuerySnapshot? }
+                val followingDeferred = viewModelScope.async { null as com.google.firebase.firestore.QuerySnapshot? }
 
                 val userDoc    = userDocDeferred.await()
                 val followDoc  = followDocDeferred.await()
@@ -100,8 +98,9 @@ class ProfileViewModel @Inject constructor(
                 )
 
                 if (followDoc != null) _isFollowing.value = followDoc.exists()
-                _followersCount.value = followersSnap.size()
-                _followingCount.value = followingSnap.size()
+                // users doc sayaçlarını kullan (follows sorgusu kaldırıldı)
+                _followersCount.value = (d["followerCount"] as? Long)?.toInt() ?: followersSnap?.size() ?: 0
+                _followingCount.value = (d["followingCount"] as? Long)?.toInt() ?: followingSnap?.size() ?: 0
 
                 val isOwnProfile  = (targetUid == myUid)
                 val isPrivate     = _user.value?.isPrivate ?: false

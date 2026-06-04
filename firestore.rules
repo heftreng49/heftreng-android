@@ -78,19 +78,26 @@ service cloud.firestore {
       return isAuth() &&
           exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + targetUid));
     }
+    // ── canViewContent optimizasyonu ──────────────────────────────
+    // isPrivateUser() → 1 get() çağrısı, isFollowing() → 1 exists() çağrısı
+    // Sadece okuma gerçekten gerektiğinde private kontrolü yap
     function canViewContent(ownerUid) {
       return isOwner(ownerUid)
+          || isStaff()
           || !isPrivateUser(ownerUid)
-          || isFollowing(ownerUid)
-          || isStaff();
+          || isFollowing(ownerUid);
+    }
+    // Hızlı kontrol — private olmayan içerik için (1 get() tasarruf)
+    function canViewPublicOrOwn(ownerUid) {
+      return isOwner(ownerUid) || isStaff();
     }
 
     // ─── ADMINS (yardımcı yönetimi) ───────────────────────────
     // Sadece admin ekler/siler; staff okuyabilir (kendi rolünü görmek için)
     match /admins/{uid} {
-      // Herkes kendi belgesini okuyabilir (checkAdmin için gerekli)
-      // isAdmin() kısır döngü yaratır — isOwner yeterli
-      allow read:   if isAuth();   // staff listesi için tüm auth kullanıcılar okuyabilir
+      // Sadece kendi dokümanını okuyabilir — tüm admins listesi okumaya kapatıldı
+      allow get:    if isAuth() && request.auth.uid == uid;
+      allow list:   if isAdmin();   // sadece admin tüm listeyi görebilir
       allow create: if isAuth() && (isAdmin() || request.auth.uid == uid);
       allow update: if isAdmin();
       allow delete: if isAdmin() && request.auth.uid != uid;
@@ -125,7 +132,7 @@ service cloud.firestore {
 
     match /feed/{postId} {
       allow get:  if postVisible(resource.data);
-      allow list: if true; // Web sitesi giriş yapmadan feed gösterebilir
+      allow list: if true; // Web sitesi giriş yapmadan feed gösterebilir — notBanned kontrolü YOK (okuma maliyeti sıfır)
 
       allow create: if isAuth() && notBanned()
           && request.resource.data.uid == request.auth.uid
@@ -209,9 +216,14 @@ service cloud.firestore {
     match /follows/{followId} {
       allow read: if true;
       allow create: if isAuth() && notBanned()
-          && request.resource.data.fromUid == request.auth.uid
-          && request.resource.data.fromUid != request.resource.data.targetUid;
-      allow delete: if isAuth() && resource.data.fromUid == request.auth.uid;
+          // followerUid veya fromUid ile oluşturulabilir (iki format destekleniyor)
+          && (request.resource.data.get("followerUid", "") == request.auth.uid
+              || request.resource.data.get("fromUid", "") == request.auth.uid)
+          && request.resource.data.get("followerUid", request.resource.data.get("fromUid",""))
+             != request.resource.data.get("followingUid", request.resource.data.get("targetUid",""));
+      allow delete: if isAuth()
+          && (resource.data.get("followerUid","") == request.auth.uid
+              || resource.data.get("fromUid","") == request.auth.uid);
     }
 
     // ─── POSTS ────────────────────────────────────────────────
@@ -287,7 +299,7 @@ service cloud.firestore {
       allow write: if isStaff();
       match /msgs/{notifId} {
         allow read:   if isOwner(uid) || isStaff();
-        allow create: if isAuth() && notBanned();
+        allow create: if isAuth(); // notBanned kaldırıldı — bildirim yazmak düşük riskli, 1 get() tasarruf
         allow update: if isOwner(uid) && onlyChanging(['read']);
         allow delete: if isOwner(uid) || isAdmin();
       }
@@ -296,7 +308,7 @@ service cloud.firestore {
     // ─── SESSIONS ─────────────────────────────────────────────
     match /sessions/{sessionId} {
       allow read, delete: if isAdmin();
-      allow create: if isAuth();
+      allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
       allow update: if isAuth() && resource.data.uid == request.auth.uid;
     }
 
@@ -481,3 +493,4 @@ service cloud.firestore {
 
   }
 }
+ 
