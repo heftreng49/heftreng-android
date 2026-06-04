@@ -12,20 +12,12 @@ import com.heftreng.app.data.model.Book
 import com.heftreng.app.data.model.BookChapter
 import com.heftreng.app.data.model.ChapterComment
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  BookViewModel — "books" ve "serials" koleksiyonlarını birleşik yönetir.
-//
-//  UI katmanı sadece Book / BookChapter modellerini görür.
-//  type=="book"   → Firestore: books/{id}/chapters/{id}
-//  type=="serial" → Firestore: serials/{id}/chapters/{id}
-//
-//  Firestore koleksiyonlarına dokunulmaz — veri kaybı yok.
-// ═══════════════════════════════════════════════════════════════════════════
 
 @HiltViewModel
 class BookViewModel @Inject constructor(
@@ -57,8 +49,35 @@ class BookViewModel @Inject constructor(
 
     val uid get() = auth.currentUser?.uid ?: ""
 
+    // Beğeni hafızası (Sadece ilk açılışta veya ihtiyaç halinde güncellenir)
     private var likedBookIds   = emptySet<String>()
     private var likedSerialIds = emptySet<String>()
+    private var likedChapterIds = emptySet<String>() // Bölüm beğenileri için eklendi
+    
+    private var isLikesLoaded = false
+
+    init {
+        // ViewModel ilk yaratıldığında kullanıcının beğeni geçmişini bir kez önbelleğe alalım
+        preloadUserLikes()
+    }
+
+    private fun preloadUserLikes() {
+        if (uid.isEmpty() || isLikesLoaded) return
+        viewModelScope.launch {
+            try {
+                coroutineScope {
+                    val booksJob = async { loadLikedBooks() }
+                    val serialsJob = async { loadLikedSerials() }
+                    val chaptersJob = async { loadLikedChapters() }
+                    
+                    booksJob.await()
+                    serialsJob.await()
+                    chaptersJob.await()
+                }
+                isLikesLoaded = true
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
 
     // ════════════════════════════════════════════════════════════════════════
     //  LİSTE — books + serials birleşik
@@ -68,22 +87,26 @@ class BookViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
             try {
-                if (uid.isNotEmpty()) {
-                    loadLikedBooks()
-                    loadLikedSerials()
+                // Eğer daha önce yüklenmediyse beğenileri yükle (Güvenlik kalkanı)
+                if (uid.isNotEmpty() && !isLikesLoaded) {
+                    coroutineScope {
+                        async { loadLikedBooks() }.await()
+                        async { loadLikedSerials() }.await()
+                        async { loadLikedChapters() }.await()
+                    }
+                    isLikesLoaded = true
                 }
-                // Her iki koleksiyonu paralel çek
-                val booksSnap = firestore.collection("books")
-                    .orderBy("updatedAt", Query.Direction.DESCENDING)
-                    .limit(30).get().await()
-                val serialsSnap = firestore.collection("serials")
-                    .orderBy("updatedAt", Query.Direction.DESCENDING)
-                    .limit(30).get().await()
+
+                // Paralel veri çekimi (Maksimum performans için async-await)
+                val (booksSnap, serialsSnap) = coroutineScope {
+                    val bDeferred = async { firestore.collection("books").orderBy("updatedAt", Query.Direction.DESCENDING).limit(30).get().await() }
+                    val sDeferred = async { firestore.collection("serials").orderBy("updatedAt", Query.Direction.DESCENDING).limit(30).get().await() }
+                    Pair(bDeferred.await(), sDeferred.await())
+                }
 
                 val bookList   = booksSnap.documents.mapNotNull { it.toBook("book", likedBookIds) }
                 val serialList = serialsSnap.documents.mapNotNull { it.toBook("serial", likedSerialIds) }
 
-                // İkisini birleştir, updatedAt'a göre sırala
                 _books.value = (bookList + serialList)
                     .sortedByDescending { it.updatedAt?.seconds ?: it.ts?.seconds ?: 0L }
             } catch (e: Exception) { e.printStackTrace() }
@@ -92,16 +115,14 @@ class BookViewModel @Inject constructor(
     }
 
     fun loadMyBooks(targetUid: String = uid) {
+        if (targetUid.isEmpty()) return
         viewModelScope.launch {
             try {
-                val booksSnap = firestore.collection("books")
-                    .whereEqualTo("uid", targetUid)
-                    .orderBy("updatedAt", Query.Direction.DESCENDING)
-                    .limit(30).get().await()
-                val serialsSnap = firestore.collection("serials")
-                    .whereEqualTo("uid", targetUid)
-                    .orderBy("updatedAt", Query.Direction.DESCENDING)
-                    .limit(30).get().await()
+                val (booksSnap, serialsSnap) = coroutineScope {
+                    val bDeferred = async { firestore.collection("books").whereEqualTo("uid", targetUid).orderBy("updatedAt", Query.Direction.DESCENDING).limit(30).get().await() }
+                    val sDeferred = async { firestore.collection("serials").whereEqualTo("uid", targetUid).orderBy("updatedAt", Query.Direction.DESCENDING).limit(30).get().await() }
+                    Pair(bDeferred.await(), sDeferred.await())
+                }
 
                 val bookList   = booksSnap.documents.mapNotNull { it.toBook("book", likedBookIds) }
                 val serialList = serialsSnap.documents.mapNotNull { it.toBook("serial", likedSerialIds) }
@@ -121,17 +142,22 @@ class BookViewModel @Inject constructor(
             _loading.value = true
             try {
                 val col = if (type == "serial") "serials" else "books"
-                val doc = firestore.collection(col).document(bookId).get().await()
+                
+                val (doc, chapSnap) = coroutineScope {
+                    val dJob = async { firestore.collection(col).document(bookId).get().await() }
+                    val cJob = async { firestore.collection(col).document(bookId).collection("chapters").orderBy("order", Query.Direction.ASCENDING).get().await() }
+                    Pair(dJob.await(), cJob.await())
+                }
+
                 val likedIds = if (type == "serial") likedSerialIds else likedBookIds
                 _selectedBook.value = doc.toBook(type, likedIds)
 
-                val chapSnap = firestore.collection(col).document(bookId)
-                    .collection("chapters")
-                    .orderBy("order", Query.Direction.ASCENDING).get().await()
-
                 _chapters.value = chapSnap.documents.mapNotNull { ch ->
-                    ch.toBookChapter(bookId = if (type == "book") bookId else "",
-                                     serialId = if (type == "serial") bookId else "")
+                    ch.toBookChapter(
+                        bookId = if (type == "book") bookId else "",
+                        serialId = if (type == "serial") bookId else "",
+                        likedChapterIds = likedChapterIds // Beğeni kontrolü eklendi
+                    )
                 }
             } catch (e: Exception) { e.printStackTrace() }
             finally { _loading.value = false }
@@ -147,6 +173,7 @@ class BookViewModel @Inject constructor(
                 _selectedChapter.value = doc.toBookChapter(
                     bookId   = if (type == "book") parentId else "",
                     serialId = if (type == "serial") parentId else "",
+                    likedChapterIds = likedChapterIds
                 )
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -165,6 +192,7 @@ class BookViewModel @Inject constructor(
                 val myPhoto = userDoc.getString("photoURL") ?: ""
                 val now     = Timestamp.now()
                 val col     = if (type == "serial") "serials" else "books"
+                
                 firestore.collection(col).add(mapOf(
                     "uid"          to uid,
                     "name"         to myName,
@@ -194,14 +222,16 @@ class BookViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val col = if (type == "serial") "serials" else "books"
+                
                 // Güvenlik: sahibi mi kontrol et
                 val parentDoc = firestore.collection(col).document(parentId).get().await()
                 if (parentDoc.getString("uid") != uid) return@launch
 
                 val order     = (_chapters.value.maxOfOrNull { it.order } ?: 0) + 1
-                val wordCount = body.trim().split("\\s+".toRegex()).size
+                val wordCount = body.trim().split("\\s+".toRegex()).count { it.isNotBlank() }
 
-                firestore.collection(col).document(parentId)
+                // OPTİMİZASYON: add() metodundan dönen döküman referansı doğrudan ID'yi verir.
+                val newChapterRef = firestore.collection(col).document(parentId)
                     .collection("chapters").add(mapOf(
                         "uid"       to uid,
                         "title"     to title,
@@ -211,20 +241,19 @@ class BookViewModel @Inject constructor(
                         "ts"        to Timestamp.now(),
                         if (type == "serial") "serialId" to parentId else "bookId" to parentId,
                     )).await()
+                
+                val newChId = newChapterRef.id // Ekstra get().await() çağrısı elendi!
+
                 firestore.collection(col).document(parentId).update(
                     "chapterCount", FieldValue.increment(1),
                     "updatedAt",    Timestamp.now(),
                 ).await()
 
-                // Hem serial hem book için feed'e paylaş
+                // Kullanıcı bilgileri ve feed güncellemesi
                 val userDoc   = firestore.collection("users").document(uid).get().await()
                 val myName    = userDoc.getString("displayName") ?: userDoc.getString("name") ?: ""
                 val parent    = _selectedBook.value
-                val chapSnap  = firestore.collection(col).document(parentId)
-                    .collection("chapters")
-                    .orderBy("order", Query.Direction.DESCENDING)
-                    .limit(1).get().await()
-                val newChId = chapSnap.documents.firstOrNull()?.id ?: ""
+                
                 firestore.collection("feed").add(mapOf(
                     "uid"          to uid,
                     "name"         to myName,
@@ -247,6 +276,7 @@ class BookViewModel @Inject constructor(
                     "likes"        to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
                     "ts"           to FieldValue.serverTimestamp(),
                 )).await()
+                
                 loadBook(parentId, type)
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -306,6 +336,7 @@ class BookViewModel @Inject constructor(
         val col      = if (book.type == "serial") "serials" else "books"
         val likeCol  = if (book.type == "serial") "serialLikes" else "chapterLikes"
 
+        // Lokal cache'i anında senkronize et (Maksimum UI akıcılığı)
         if (book.type == "serial") {
             likedSerialIds = if (nowLiked) likedSerialIds + book.id else likedSerialIds - book.id
         } else {
@@ -348,6 +379,10 @@ class BookViewModel @Inject constructor(
     fun toggleLikeChapter(parentId: String, chapterId: String, currentlyLiked: Boolean, type: String = "serial"): Boolean {
         if (uid.isEmpty()) return currentlyLiked
         val nowLiked = !currentlyLiked
+        
+        // Lokal cache güncellemesi
+        likedChapterIds = if (nowLiked) likedChapterIds + chapterId else likedChapterIds - chapterId
+
         _selectedChapter.value?.let { ch ->
             if (ch.id == chapterId) _selectedChapter.value = ch.copy(
                 isLikedByMe = nowLiked, likes = ch.likes + if (nowLiked) 1 else -1,
@@ -357,6 +392,7 @@ class BookViewModel @Inject constructor(
             if (ch.id == chapterId) ch.copy(isLikedByMe = nowLiked, likes = ch.likes + if (nowLiked) 1 else -1)
             else ch
         }
+        
         viewModelScope.launch {
             try {
                 val col   = if (type == "serial") "serials" else "books"
@@ -376,7 +412,7 @@ class BookViewModel @Inject constructor(
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  YORUMLAR (serial chapters için)
+    //  YORUMLAR
     // ════════════════════════════════════════════════════════════════════════
 
     fun addChapterComment(parentId: String, chapterId: String, text: String, replyTo: String = "", replyToCmtId: String = "", type: String = "serial") {
@@ -461,13 +497,10 @@ class BookViewModel @Inject constructor(
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  OKUMA İLERLEMESİ — Firestore: users/{uid}/readProgress/{parentId_chapterId}
-    //  SharedPreferences yerine Firestore — farklı kullanıcılar aynı cihazı paylaşsa bile
-    //  doğru ilerleme gösterilir.
+    //  OKUMA İLERLEMESİ
     // ════════════════════════════════════════════════════════════════════════
 
-    // initReadPrefs artık gerekmiyor; geriye dönük uyumluluk için boş bırakıldı
-    fun initReadPrefs(context: Context) { /* no-op: Firestore kullanılıyor */ }
+    fun initReadPrefs(context: Context) {}
 
     fun saveReadProgress(parentId: String, chapterId: String, scrollPct: Float) {
         if (uid.isEmpty()) return
@@ -481,7 +514,7 @@ class BookViewModel @Inject constructor(
                         "parentId"  to parentId,
                         "chapterId" to chapterId,
                         "pct"       to pct,
-                        "updatedAt" to com.google.firebase.Timestamp.now(),
+                        "updatedAt" to Timestamp.now(),
                     )).await()
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -501,7 +534,6 @@ class BookViewModel @Inject constructor(
         }
     }
 
-    // Senkron versiyon (ilk yükleme için State flow ile çalışır)
     private val _readProgressCache = mutableMapOf<String, Float>()
 
     fun loadReadProgress(parentId: String, chapterId: String): Float =
@@ -517,7 +549,7 @@ class BookViewModel @Inject constructor(
                     .get().await()
                 val pct = (doc.getLong("pct") ?: 0L).toInt()
                 _readProgressCache["${parentId}_$chapterId"] = pct / 1000f
-            } catch (e: Exception) { /* önbellek boş kalır */ }
+            } catch (e: Exception) { }
         }
     }
 
@@ -535,7 +567,7 @@ class BookViewModel @Inject constructor(
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  PRIVATE HELPERS
+    //  PRIVATE HELPERS (Performans Odaklı Cache Yapısı)
     // ════════════════════════════════════════════════════════════════════════
 
     private suspend fun loadLikedBooks() {
@@ -551,6 +583,14 @@ class BookViewModel @Inject constructor(
         try {
             likedSerialIds = firestore.collection("serialLikes").whereEqualTo("uid", uid)
                 .get().await().documents.mapNotNull { it.getString("serialId") }.toSet()
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    // Bölüm beğenileri için döküman ID'lerini önbelleğe alan yeni helper metot
+    private suspend fun loadLikedChapters() {
+        try {
+            likedChapterIds = firestore.collection("chapterLikes").whereEqualTo("uid", uid)
+                .get().await().documents.mapNotNull { it.getString("chapterId") }.toSet()
         } catch (e: Exception) { e.printStackTrace() }
     }
 
@@ -577,8 +617,9 @@ class BookViewModel @Inject constructor(
         )
     }
 
+    // OPTİMİZASYON: Artık gelen listeden bölümlerin beğenilip beğenilmediğini kontrol ediyor
     private fun com.google.firebase.firestore.DocumentSnapshot.toBookChapter(
-        bookId: String = "", serialId: String = "",
+        bookId: String = "", serialId: String = "", likedChapterIds: Set<String> = emptySet()
     ): BookChapter? {
         val d = data ?: return null
         return BookChapter(
@@ -592,14 +633,12 @@ class BookViewModel @Inject constructor(
             uid         = d["uid"]        as? String ?: "",
             likes       = (d["likes"]     as? Long)?.toInt() ?: 0,
             cmtCount    = (d["cmtCount"]  as? Long)?.toInt() ?: 0,
-            isLikedByMe = false,
+            isLikedByMe = id in likedChapterIds, // Dinamik hale getirildi!
             ts          = d["ts"]         as? Timestamp,
         )
     }
 
-    // ── Geriye dönük uyumluluk — eski SerialsViewModel çağrıları için ────────
-    // Bu fonksiyonlar kaldırılabilir ama SerialsViewModel'den geçiş sırasında kolaylık sağlar
-
+    // ── Geriye dönük uyumluluk köprüleri ──────────────────────────────────────────
     @Deprecated("loadBook(id, \"serial\") kullan")
     fun loadSerial(serialId: String) = loadBook(serialId, "serial")
 
@@ -616,7 +655,7 @@ class BookViewModel @Inject constructor(
     @Deprecated("deleteChapter(parentId, chapterId, \"serial\") kullan")
     fun deleteSerialChapter(serialId: String, chapterId: String) = deleteChapter(serialId, chapterId, "serial")
 
-    val serials get() = books  // eski SerialsScreen için
+    val serials get() = books  
     val selectedSerial get() = selectedBook
     val serialChapters get() = chapters
     val selectedSerialChapter get() = selectedChapter
