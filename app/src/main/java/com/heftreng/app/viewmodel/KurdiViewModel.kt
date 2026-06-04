@@ -350,13 +350,24 @@ class KurdiViewModel @Inject constructor(
                         .whereEqualTo("lessonId", lessonId).get().await()
                     snap.documents.mapNotNull { doc ->
                         val d = doc.data ?: return@mapNotNull null
-                        // match tipi — pairs: [[ku, tr], ...]
+                        // match tipi — pairs: [{ku, tr}, ...] (yeni) veya [[ku, tr], ...] (eski)
                         val pairsRaw = d["pairs"] as? List<*>
                         val pairs = pairsRaw?.mapNotNull { item ->
-                            val pair = item as? List<*>
-                            val a = pair?.getOrNull(0) as? String ?: return@mapNotNull null
-                            val b = pair.getOrNull(1) as? String ?: return@mapNotNull null
-                            a to b
+                            when (item) {
+                                // Yeni format: {"ku": "kiras", "tr": "gömlek"}
+                                is Map<*, *> -> {
+                                    val a = item["ku"] as? String ?: return@mapNotNull null
+                                    val b = item["tr"] as? String ?: return@mapNotNull null
+                                    a to b
+                                }
+                                // Eski format: ["kiras", "gömlek"] — geriye dönük uyum
+                                is List<*> -> {
+                                    val a = item.getOrNull(0) as? String ?: return@mapNotNull null
+                                    val b = item.getOrNull(1) as? String ?: return@mapNotNull null
+                                    a to b
+                                }
+                                else -> null
+                            }
                         } ?: emptyList()
                         // build tipi — words: [String]
                         val words = (d["words"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
@@ -1047,7 +1058,12 @@ class KurdiViewModel @Inject constructor(
                                         .map{opts.getString(it)}.filter{it!=ex.optString("answer")} }
                                 "match" -> { val pairs=ex.optJSONArray("pairs")
                                     if (pairs!=null) data["pairs"]=(0 until pairs.length())
-                                        .map{ pi -> val p=pairs.getJSONArray(pi); listOf(p.getString(0),p.getString(1)) } }
+                                        .mapNotNull { pi ->
+                                            val p=pairs.optJSONArray(pi) ?: return@mapNotNull null
+                                            // Firestore iç içe array desteklemez — map olarak kaydet
+                                            mapOf("ku" to p.optString(0), "tr" to p.optString(1))
+                                        }
+                                }
                                 "build" -> { data["tr"]=ex.optString("tr"); data["answer"]=ex.optString("answer")
                                     val words=ex.optJSONArray("words")
                                     if (words!=null) data["words"]=(0 until words.length()).map{words.getString(it)} }
