@@ -1035,7 +1035,12 @@ class KurdiViewModel @Inject constructor(
         }
     }
 
-    fun importFromJson(jsonString: String, overwriteExisting: Boolean = true) {
+    fun importFromJson(
+        jsonString       : String,
+        overwriteExisting: Boolean = true,
+        targetUnitId     : String = "",   // Boşsa JSON'daki unitId kullanılır
+        targetLessonId   : String = "",   // Boşsa JSON'daki id kullanılır
+    ) {
         if (jsonString.isBlank()) return
         _importing.value = true
         viewModelScope.launch {
@@ -1077,12 +1082,12 @@ class KurdiViewModel @Inject constructor(
                 val la = root.optJSONArray("lessons") ?: org.json.JSONArray()
                 for (li in 0 until la.length()) {
                     val l    = la.getJSONObject(li)
-                    val lid  = l.optString("id").ifBlank { "l_${System.currentTimeMillis()}_$li" }
-                    val lUnit = l.optString("unitId").ifBlank {
+                    val lid  = targetLessonId.ifBlank { l.optString("id").ifBlank { "l_${System.currentTimeMillis()}_$li" } }
+                    val lUnit = targetUnitId.ifBlank { l.optString("unitId").ifBlank {
                         root.optJSONObject("unit")?.optString("id")
                             ?: (if (root.has("units")) root.getJSONArray("units").optJSONObject(0)?.optString("id") else null)
                             ?: ""
-                    }
+                    } }
                     try {
                         val lessonRef = firestore.collection("kf_lessons").document(lid)
                         val exists    = lessonRef.get().await().exists()
@@ -1229,142 +1234,6 @@ class KurdiViewModel @Inject constructor(
                 _exportJson.value = root.toString(2) // pretty print
             } catch (e: Exception) {
                 _exportJson.value = """{"error":"${e.message}"}"""
-            }
-        }
-    }
-
-    fun importFromJson(jsonString: String) {
-        if (jsonString.isBlank()) return
-        _importing.value = true
-        viewModelScope.launch {
-            val errors = mutableListOf<String>()
-            var unitsAdded = 0; var lessonsAdded = 0; var vocabAdded = 0; var exAdded = 0
-            try {
-                val root = org.json.JSONObject(jsonString)
-                // ── Ünite ─────────────────────────────────────────────────
-                if (root.has("unit")) {
-                    try {
-                        val u      = root.getJSONObject("unit")
-                        val uid    = u.optString("id").ifBlank { "u_${System.currentTimeMillis()}" }
-                        val uRef   = firestore.collection("kf_units").document(uid)
-                        if (!uRef.get().await().exists()) {
-                            val ord = (_units.value.maxOfOrNull { it.order } ?: 0) + 1
-                            uRef.set(mapOf("id" to uid, "ttl" to u.optString("ttl"),
-                                "nameKu" to u.optString("nameKu"), "desc" to u.optString("desc"),
-                                "icon" to u.optString("icon","📖"), "color" to u.optString("color","#8B5CF6"),
-                                "order" to u.optInt("order", ord))).await()
-                            _units.value = (_units.value + KfUnit(id=uid, ttl=u.optString("ttl"),
-                                nameKu=u.optString("nameKu"), icon=u.optString("icon","📖"),
-                                color=u.optString("color","#8B5CF6"), order=u.optInt("order",ord)))
-                                .sortedBy { it.order }
-                            unitsAdded++
-                        }
-                    } catch (e: Exception) { errors.add("Ünite: ${e.message}") }
-                }
-                // ── Dersler ───────────────────────────────────────────────
-                val la = root.optJSONArray("lessons") ?: org.json.JSONArray()
-                for (li in 0 until la.length()) {
-                    val l  = la.getJSONObject(li)
-                    val lid = l.optString("id").ifBlank { "l_${System.currentTimeMillis()}_$li" }
-                    val lUnit = l.optString("unitId").ifBlank {
-                        root.optJSONObject("unit")?.optString("id") ?: ""
-                    }
-                    try {
-                        firestore.collection("kf_lessons").document(lid).set(mapOf(
-                            "id" to lid, "unitId" to lUnit,
-                            "nameTr" to l.optString("nameTr"), "nameKu" to l.optString("nameKu"),
-                            "emoji" to l.optString("emoji","📖"), "xp" to l.optInt("xp",10),
-                            "order" to l.optInt("order", li+1), "tip" to l.optString("tip"))).await()
-                        val nl = KfLesson(id=lid, unitId=lUnit, nameTr=l.optString("nameTr"),
-                            nameKu=l.optString("nameKu"), emoji=l.optString("emoji","📖"),
-                            xp=l.optInt("xp",10), order=l.optInt("order",li+1))
-                        _lessons.value = if (_lessons.value.any { it.id == lid })
-                            _lessons.value.map { if (it.id == lid) nl else it }
-                        else (_lessons.value + nl).sortedBy { it.order }
-                        lessonsAdded++
-                        // Eski vocab/exercise temizle
-                        firestore.collection("kf_vocab").whereEqualTo("lessonId",lid).get().await()
-                            .documents.forEach { it.reference.delete() }
-                        firestore.collection("kf_exercises").whereEqualTo("lessonId",lid).get().await()
-                            .documents.forEach { it.reference.delete() }
-                        // Vocab
-                        val va = l.optJSONArray("vocab") ?: org.json.JSONArray()
-                        for (vi in 0 until va.length()) {
-                            val v = va.getJSONObject(vi)
-                            firestore.collection("kf_vocab").add(mapOf("lessonId" to lid,
-                                "ku" to v.optString("ku"), "kp" to v.optString("kp"),
-                                "tr" to v.optString("tr"), "e" to v.optString("e"), "order" to vi)).await()
-                            vocabAdded++
-                        }
-                        // Exercises
-                        val ea = l.optJSONArray("exercises") ?: org.json.JSONArray()
-                        for (ei in 0 until ea.length()) {
-                            val ex   = ea.getJSONObject(ei)
-                            val type = ex.optString("type","mcq")
-                            val data = mutableMapOf<String,Any>("lessonId" to lid, "type" to type, "order" to ei)
-                            when (type) {
-                                "mcq"   -> { data["question"]=ex.optString("question"); data["questionTr"]=ex.optString("questionTr")
-                                    data["optA"]=ex.optString("optA"); data["optB"]=ex.optString("optB")
-                                    data["optC"]=ex.optString("optC"); data["optD"]=ex.optString("optD")
-                                    data["answer"]=ex.optString("answer") }
-                                "fill"  -> { data["question"]=ex.optString("question"); data["answer"]=ex.optString("answer")
-                                    val opts=ex.optJSONArray("options")
-                                    if (opts!=null) data["wrong"]=(0 until opts.length())
-                                        .map{opts.getString(it)}.filter{it!=ex.optString("answer")} }
-                                "match" -> { val pairs=ex.optJSONArray("pairs")
-                                    if (pairs!=null) data["pairs"]=(0 until pairs.length())
-                                        .map{ pi -> val p=pairs.getJSONArray(pi); listOf(p.getString(0),p.getString(1)) } }
-                                "build" -> { data["tr"]=ex.optString("tr"); data["answer"]=ex.optString("answer")
-                                    val words=ex.optJSONArray("words")
-                                    if (words!=null) data["words"]=(0 until words.length()).map{words.getString(it)} }
-                            }
-                            firestore.collection("kf_exercises").add(data).await()
-                            exAdded++
-                        }
-                    } catch (e: Exception) { errors.add("Ders $lid: ${e.message}") }
-                }
-            } catch (e: Exception) { errors.add("JSON parse: ${e.message}") }
-            _importResult.value = ImportResult(unitsAdded, lessonsAdded, vocabAdded, exAdded, skipped = 0, errors = errors)
-            _importing.value    = false
-        }
-    }
-
-    // ── AI Ders Kaydet — üretilen egzersizleri seçili derse yaz ─────────────
-    fun saveAiLessonToFirestore(
-        targetLessonId: String,
-        lesson        : AiLesson,
-        onDone        : (Int) -> Unit,
-        onError       : (String) -> Unit,
-    ) {
-        viewModelScope.launch {
-            try {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    var saved = 0
-                    lesson.exercises.forEach { ex ->
-                        val data = mutableMapOf<String, Any>(
-                            "lessonId" to targetLessonId,
-                            "type"     to (ex.type.takeIf { it.isNotBlank() } ?: "mcq"),
-                            "question" to ex.ku,
-                            "tr"       to ex.tr,
-                        )
-                        if (ex.options.isNotEmpty()) {
-                            data["optA"]   = ex.options.getOrElse(0) { "" }
-                            data["optB"]   = ex.options.getOrElse(1) { "" }
-                            data["optC"]   = ex.options.getOrElse(2) { "" }
-                            data["optD"]   = ex.options.getOrElse(3) { "" }
-                            data["answer"] = ex.answer.ifBlank { ex.options.getOrElse(0) { "" } }
-                        } else {
-                            data["answer"] = ex.answer
-                        }
-                        firestore.collection("kf_exercises").add(data).await()
-                        saved++
-                    }
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        onDone(saved)
-                    }
-                }
-            } catch (e: Exception) {
-                onError(e.message ?: "Kaydetme hatası")
             }
         }
     }

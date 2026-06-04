@@ -1021,6 +1021,8 @@ private fun JsonImportTab(vm: KurdiViewModel) {
     val exportJson   by vm.exportJson.collectAsState()
     val units        by vm.units.collectAsState()
 
+    val lessons         by vm.lessons.collectAsState()
+
     var jsonText        by remember { mutableStateOf("") }
     var showSchema      by remember { mutableStateOf(false) }
     var overwrite       by remember { mutableStateOf(true) }
@@ -1028,6 +1030,15 @@ private fun JsonImportTab(vm: KurdiViewModel) {
     var activeTab       by remember { mutableStateOf(0) } // 0=Import, 1=Export
     var exportUnitId    by remember { mutableStateOf<String?>(null) }
     var exportExpanded  by remember { mutableStateOf(false) }
+
+    // Manuel ünite + ders seçimi (import için)
+    var targetUnitId      by remember { mutableStateOf("") }
+    var targetUnitName    by remember { mutableStateOf("") }
+    var targetLessonId    by remember { mutableStateOf("") }
+    var targetLessonName  by remember { mutableStateOf("") }
+    var unitDropExpanded  by remember { mutableStateOf(false) }
+    var lessonDropExpanded by remember { mutableStateOf(false) }
+    val filteredLessons   = lessons.filter { targetUnitId.isBlank() || it.unitId == targetUnitId }
 
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -1200,6 +1211,121 @@ private fun JsonImportTab(vm: KurdiViewModel) {
                 }
             }
 
+            // Ünite ve Ders Seçimi (Manuel override)
+            if (jsonText.isNotBlank()) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Başlık
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.FolderSpecial, null, tint = Amber,
+                                modifier = Modifier.size(15.dp))
+                            Text("Ünite / Ders Seçimi", color = OnBackground,
+                                fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("(opsiyonel — JSON'daki değerleri geçersiz kılar)",
+                                color = Muted, fontSize = 10.sp)
+                        }
+
+                        // Ünite seçici
+                        ExposedDropdownMenuBox(
+                            expanded        = unitDropExpanded,
+                            onExpandedChange = { unitDropExpanded = it },
+                        ) {
+                            OutlinedTextField(
+                                value         = if (targetUnitId.isBlank()) "JSON'daki ünite kullanılır" else targetUnitName,
+                                onValueChange = {},
+                                readOnly      = true,
+                                label         = { Text("Hedef Ünite", fontSize = 12.sp) },
+                                trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = unitDropExpanded) },
+                                modifier      = Modifier.fillMaxWidth().menuAnchor(),
+                                shape         = RoundedCornerShape(10.dp),
+                                colors        = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor   = Amber,
+                                    unfocusedBorderColor = Divider,
+                                    focusedTextColor     = OnBackground,
+                                    unfocusedTextColor   = if (targetUnitId.isBlank()) Muted else OnBackground,
+                                    focusedContainerColor   = HeftSurface,
+                                    unfocusedContainerColor = HeftSurface,
+                                ),
+                            )
+                            ExposedDropdownMenu(
+                                expanded         = unitDropExpanded,
+                                onDismissRequest = { unitDropExpanded = false },
+                                modifier         = Modifier.background(HeftSurface),
+                            ) {
+                                DropdownMenuItem(
+                                    text    = { Text("— JSON'daki ünite kullanılır —", color = Muted, fontSize = 12.sp) },
+                                    onClick = {
+                                        targetUnitId = ""; targetUnitName = ""
+                                        targetLessonId = ""; targetLessonName = ""
+                                        unitDropExpanded = false
+                                    }
+                                )
+                                units.forEach { u ->
+                                    DropdownMenuItem(
+                                        text    = { Text("${u.icon} ${u.ttl}", color = OnBackground, fontSize = 13.sp) },
+                                        onClick = {
+                                            targetUnitId   = u.id
+                                            targetUnitName = "${u.icon} ${u.ttl}"
+                                            targetLessonId = ""; targetLessonName = ""
+                                            unitDropExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Ders seçici (ünite seçildiyse aktif)
+                        ExposedDropdownMenuBox(
+                            expanded         = lessonDropExpanded,
+                            onExpandedChange = { if (filteredLessons.isNotEmpty() || targetUnitId.isBlank()) lessonDropExpanded = it },
+                        ) {
+                            OutlinedTextField(
+                                value         = when {
+                                    targetLessonId.isNotBlank() -> targetLessonName
+                                    targetUnitId.isNotBlank()   -> "Yeni ders oluşturulacak"
+                                    else                        -> "JSON'daki ders kullanılır"
+                                },
+                                onValueChange = {},
+                                readOnly      = true,
+                                label         = { Text("Hedef Ders", fontSize = 12.sp) },
+                                trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = lessonDropExpanded) },
+                                modifier      = Modifier.fillMaxWidth().menuAnchor(),
+                                shape         = RoundedCornerShape(10.dp),
+                                colors        = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor   = Amber,
+                                    unfocusedBorderColor = Divider,
+                                    focusedTextColor     = OnBackground,
+                                    unfocusedTextColor   = Muted,
+                                    focusedContainerColor   = HeftSurface,
+                                    unfocusedContainerColor = HeftSurface,
+                                ),
+                            )
+                            ExposedDropdownMenu(
+                                expanded         = lessonDropExpanded,
+                                onDismissRequest = { lessonDropExpanded = false },
+                                modifier         = Modifier.background(HeftSurface),
+                            ) {
+                                DropdownMenuItem(
+                                    text    = { Text("— Yeni ders oluştur —", color = Muted, fontSize = 12.sp) },
+                                    onClick = { targetLessonId = ""; targetLessonName = ""; lessonDropExpanded = false }
+                                )
+                                filteredLessons.forEach { l ->
+                                    DropdownMenuItem(
+                                        text    = { Text("${l.emoji} ${l.nameTr}", color = OnBackground, fontSize = 13.sp) },
+                                        onClick = {
+                                            targetLessonId   = l.id
+                                            targetLessonName = "${l.emoji} ${l.nameTr}"
+                                            lessonDropExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Çakışma modu
             if (jsonText.isNotBlank()) {
                 item {
@@ -1230,7 +1356,7 @@ private fun JsonImportTab(vm: KurdiViewModel) {
             // Import butonu
             item {
                 Button(
-                    onClick  = { if (jsonText.isNotBlank()) vm.importFromJson(jsonText, overwrite) },
+                    onClick  = { if (jsonText.isNotBlank()) vm.importFromJson(jsonText, overwrite, targetUnitId, targetLessonId) },
                     enabled  = jsonText.isNotBlank() && !importing && (preview?.isValid != false),
                     colors   = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
                     shape    = RoundedCornerShape(12.dp),
