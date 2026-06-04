@@ -1,7 +1,14 @@
 rules_version = '2';
 
 // ═══════════════════════════════════════════════════════════════
-//  HEFTRENG — Firestore Security Rules  v11 (Güvenli Sürüm)
+//  HEFTRENG — Firestore Security Rules  v10
+//
+//  Rol sistemi (admins/{uid} → { role: "admin|moderator|editor|kutuphaneci" }):
+//
+//  admin        → Her şey
+//  moderator    → Kullanıcı ban, gönderi/yorum sil, bekleyenler, şikayetler, itirazlar
+//  editor       → CMS, düzenle, push bildirimi, bekleyenler, istatistik
+//  kutuphaneci  → Kütüphane, yazar, kitap yönetimi
 // ═══════════════════════════════════════════════════════════════
 
 service cloud.firestore {
@@ -27,28 +34,35 @@ service cloud.firestore {
     }
 
     // ── Rol fonksiyonları ──────────────────────────────────────
+    // admins/{uid} dökümanı yoksa role = 'none'
     function getRole() {
       return isAuth() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
         ? get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('role', 'none')
         : 'none';
     }
+    // Admin — her şeye yetkili
     function isAdmin() {
       return getRole() == 'admin';
     }
+    // Moderatör veya üstü (admin dahil)
     function isModerator() {
       return getRole() in ['admin', 'moderator'];
     }
+    // Editör veya üstü (admin dahil)
     function isEditor() {
       return getRole() in ['admin', 'editor'];
     }
+    // Kütüphaneci veya üstü (admin dahil)
     function isLibrarian() {
       return getRole() in ['admin', 'kutuphaneci'];
     }
+    // Herhangi bir yetkili (admin + 3 rol)
     function isStaff() {
       return getRole() in ['admin', 'moderator', 'editor', 'kutuphaneci'];
     }
 
     // ── İzin tabanlı kontrol ───────────────────────────────────
+    // admins/{uid}.permissions dizisinde belirtilen izni kontrol eder
     function hasPermission(perm) {
       return isAuth()
           && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
@@ -72,8 +86,11 @@ service cloud.firestore {
     }
 
     // ─── ADMINS (yardımcı yönetimi) ───────────────────────────
+    // Sadece admin ekler/siler; staff okuyabilir (kendi rolünü görmek için)
     match /admins/{uid} {
-      allow read:   if isAuth();
+      // Herkes kendi belgesini okuyabilir (checkAdmin için gerekli)
+      // isAdmin() kısır döngü yaratır — isOwner yeterli
+      allow read:   if isAuth();   // staff listesi için tüm auth kullanıcılar okuyabilir
       allow create: if isAuth() && (isAdmin() || request.auth.uid == uid);
       allow update: if isAdmin();
       allow delete: if isAdmin() && request.auth.uid != uid;
@@ -83,6 +100,7 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if true;
       allow create: if isOwner(uid);
+      // Moderatör ve admin kullanıcıları güncelleyebilir (ban, not vb.)
       allow update: if isOwner(uid) || isModerator();
       allow delete: if isOwner(uid) || isAdmin();
 
@@ -107,8 +125,7 @@ service cloud.firestore {
 
     match /feed/{postId} {
       allow get:  if postVisible(resource.data);
-      // GÜVENLİK GÜNCELLEMESİ: Botların giriş yapmadan tüm veri tabanını listelemesini engellemek için limit zorunluluğu
-      allow list: if true && request.query.limit <= 25; 
+      allow list: if true; // Web sitesi giriş yapmadan feed gösterebilir
 
       allow create: if isAuth() && notBanned()
           && request.resource.data.uid == request.auth.uid
@@ -117,15 +134,19 @@ service cloud.firestore {
           && request.resource.data.cmtCount == 0;
 
       allow update:
+          // Admin her şeyi değiştirebilir
           if isAdmin()
+          // Gönderi sahibi sadece metni değiştirebilir
           || (isAuth() && notBanned() && resource.data.uid == request.auth.uid && onlyChanging(['text']))
-          // GÜVENLİK GÜNCELLEMESİ: Sayaçların botlar tarafından tek istekte manipüle edilmesini (+1/-1 harici değer yazılmasını) engelleme
-          || (isAuth() && onlyChanging(['likes']) && (request.resource.data.likes == resource.data.likes + 1 || request.resource.data.likes == resource.data.likes - 1))
-          || (isAuth() && onlyChanging(['saves']) && (request.resource.data.saves == resource.data.saves + 1 || request.resource.data.saves == resource.data.saves - 1))
-          || (isAuth() && onlyChanging(['cmtCount']) && (request.resource.data.cmtCount == resource.data.cmtCount + 1 || request.resource.data.cmtCount == resource.data.cmtCount - 1))
-          || (isAuth() && onlyChanging(['repostsCount']) && (request.resource.data.repostsCount == resource.data.repostsCount + 1 || request.resource.data.repostsCount == resource.data.repostsCount - 1))
+          // Kullanıcılar sayaç alanlarını güncelleyebilir
+          || (isAuth() && onlyChanging(['likes']))
+          || (isAuth() && onlyChanging(['saves']))
+          || (isAuth() && onlyChanging(['cmtCount']))
+          || (isAuth() && onlyChanging(['repostsCount']))
+          // Moderatör gönderileri moderasyona alabilir
           || ((isModerator() || hasPermission("edit")) && onlyChanging(['moderationStatus','moderationReason','moderationNote','moderatedBy','moderatedAt']));
 
+      // Moderatör ve admin silebilir
       allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
 
       match /comments/{cmtId} {
@@ -135,14 +156,14 @@ service cloud.firestore {
             && request.resource.data.text is string
             && request.resource.data.text.size() >= 1
             && request.resource.data.text.size() <= 500;
-        allow update: if isAuth() && onlyChanging(['likes']) && (request.resource.data.likes == resource.data.likes + 1 || request.resource.data.likes == resource.data.likes - 1);
+        allow update: if isAuth() && onlyChanging(['likes']);
         allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
       }
     }
 
     // ─── BLOG YORUMLARI ───────────────────────────────────────
     match /comments/{postId} {
-      allow read:  if true && request.query.limit <= 30;
+      allow read:  if true;
       allow write: if false;
       match /msgs/{msgId} {
         allow read: if true;
@@ -152,7 +173,7 @@ service cloud.firestore {
             && request.resource.data.text.size() >= 1
             && request.resource.data.text.size() <= 1000
             && request.resource.data.likes == 0;
-        allow update: if isAuth() && onlyChanging(['likes']) && (request.resource.data.likes == resource.data.likes + 1 || request.resource.data.likes == resource.data.likes - 1);
+        allow update: if isAuth() && onlyChanging(['likes']);
         allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
       }
     }
@@ -186,7 +207,7 @@ service cloud.firestore {
 
     // ─── FOLLOWS ──────────────────────────────────────────────
     match /follows/{followId} {
-      allow read: if true && request.query.limit <= 50;
+      allow read: if true;
       allow create: if isAuth() && notBanned()
           && request.resource.data.fromUid == request.auth.uid
           && request.resource.data.fromUid != request.resource.data.targetUid;
@@ -199,7 +220,7 @@ service cloud.firestore {
       allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid;
       allow update: if isAdmin()
           || (isAuth() && notBanned() && resource.data.uid == request.auth.uid)
-          || (isAuth() && onlyChanging(['likes']) && (request.resource.data.likes == resource.data.likes + 1 || request.resource.data.likes == resource.data.likes - 1));
+          || (isAuth() && onlyChanging(['likes']));
       allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
     }
 
@@ -213,8 +234,8 @@ service cloud.firestore {
         allow read: if canViewContent(get(/databases/$(database)/documents/serials/$(serialId)).data.uid);
         allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid;
         allow update: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator()
-            || (isAuth() && onlyChanging(['likes']) && (request.resource.data.likes == resource.data.likes + 1 || request.resource.data.likes == resource.data.likes - 1))
-            || (isAuth() && onlyChanging(['cmtCount']) && (request.resource.data.cmtCount == resource.data.cmtCount + 1 || request.resource.data.cmtCount == resource.data.cmtCount - 1));
+            || (isAuth() && onlyChanging(['likes']))
+            || (isAuth() && onlyChanging(['cmtCount']));
         allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
 
         match /comments/{cmtId} {
@@ -226,7 +247,7 @@ service cloud.firestore {
               && request.resource.data.text.size() <= 1000;
           allow update:
               if (isAuth() && resource.data.uid == request.auth.uid && onlyChanging(['text','edited']))
-              || (isAuth() && onlyChanging(['likes']) && (request.resource.data.likes == resource.data.likes + 1 || request.resource.data.likes == resource.data.likes - 1));
+              || (isAuth() && onlyChanging(['likes']));
           allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
         }
       }
@@ -280,6 +301,7 @@ service cloud.firestore {
     }
 
     // ─── BEKLEYEN GÖNDERİLER ──────────────────────────────────
+    // Moderatör ve editör onaylayabilir/reddedebilir
     match /pendingPosts/{postId} {
       allow read:   if isModerator() || isEditor() || hasPermission("pending") || (isAuth() && resource.data.authorId == request.auth.uid);
       allow create: if isAuth() && request.resource.data.authorId == request.auth.uid;
@@ -301,7 +323,7 @@ service cloud.firestore {
       allow create:       if isAuth();
     }
 
-    // ─── CONVERSATIONS (SOHBETLER) ────────────────────────────
+    // ─── CONVERSATIONS ────────────────────────────────────────
     match /conversations/{convId} {
       allow read:   if isAuth() && request.auth.uid in resource.data.participants;
       allow create: if isAuth() && request.auth.uid in request.resource.data.participants;
@@ -309,11 +331,8 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /msgs/{msgId} {
-        // GÜVENLİK GÜNCELLEMESİ: read ve list ayrıldı, döküman manipülasyonu ve yetkisiz text değişimi engellendi.
-        allow read: if isAuth() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants;
-        allow create: if isAuth() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants && request.resource.data.uid == request.auth.uid;
-        allow update: if isAuth() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants && onlyChanging(['likes']);
-        allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
+        allow read, write: if isAuth()
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants;
       }
       match /typing/{uid} {
         allow read:  if isAuth();
@@ -324,10 +343,16 @@ service cloud.firestore {
     match /convMessages/{convId} {
       allow read, write: if false;
       match /msgs/{msgId} {
-        allow read: if isAuth() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants;
-        allow create: if isAuth() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants && request.resource.data.senderUid == request.auth.uid;
-        allow update: if isAuth() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants
-            && onlyChanging(['seen','seenAt','seenByPhoto','seenByName','read_at','readAt','deleted','deletedAt','read','liked_by','edited','text']);
+        allow read: if isAuth()
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants;
+        allow create: if isAuth()
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants
+            && request.resource.data.senderUid == request.auth.uid;
+        allow update: if isAuth()
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants
+            && onlyChanging(['seen','seenAt','seenByPhoto','seenByName',
+                             'read_at','readAt','deleted','deletedAt',
+                             'read','liked_by','edited','text']);
         allow delete: if isAdmin();
       }
     }
@@ -336,7 +361,8 @@ service cloud.firestore {
     match /presence/{uid} {
       allow read:   if isAuth();
       allow create: if isOwner(uid);
-      allow update: if isOwner(uid) && onlyChanging(['online','lastSeen','uid','appVersion','platform']);
+      allow update: if isOwner(uid)
+          && onlyChanging(['online','lastSeen','uid','appVersion','platform']);
       allow delete: if isOwner(uid) || isAdmin();
     }
     match /typing/{docId} {
@@ -352,8 +378,11 @@ service cloud.firestore {
       allow write: if false;
       match /books/{sid} {
         allow read: if isOwner(uid) || isAdmin();
-        allow create: if isOwner(uid) && request.resource.data.sid is string && request.resource.data.status in ['okuyorum','okumak_istiyorum','okudum','biraktim'];
-        allow update: if isOwner(uid) && onlyChanging(['status','updatedAt','title','coverImg','bg']);
+        allow create: if isOwner(uid)
+            && request.resource.data.sid is string
+            && request.resource.data.status in ['okuyorum','okumak_istiyorum','okudum','biraktim'];
+        allow update: if isOwner(uid)
+            && onlyChanging(['status','updatedAt','title','coverImg','bg']);
         allow delete: if isOwner(uid) || isAdmin();
       }
     }
@@ -378,11 +407,14 @@ service cloud.firestore {
     match /usernames/{handle} {
       allow read: if true;
       allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
-      allow update: if isAuth() && resource.data.uid == request.auth.uid && request.resource.data.uid == request.auth.uid;
+      allow update: if isAuth()
+          && resource.data.uid == request.auth.uid
+          && request.resource.data.uid == request.auth.uid;
       allow delete: if isAuth() && resource.data.uid == request.auth.uid;
     }
 
     // ─── CMS ──────────────────────────────────────────────────
+    // Editör CMS içeriklerini yönetebilir
     match /cms/{docId}               { allow read: if isAuth();  allow write: if isEditor() || hasPermission("edit"); }
     match /cms_pages/{docId}         { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
     match /cms_banners/{docId}       { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
@@ -397,10 +429,12 @@ service cloud.firestore {
     }
 
     // ─── YAZAR / KİTAP KÜTÜPHANESİ ──────────────────────────
+    // Kütüphaneci yazar ve kitap bilgilerini yönetebilir
     match /authors/{authorId} {
       allow read: if true;
       allow create: if isLibrarian() || hasPermission("library");
-      allow update: if isLibrarian() || (isAuth() && onlyChanging(['bookCount','quoteCount','reviewCount','followerCount']));
+      allow update: if isLibrarian()
+          || (isAuth() && onlyChanging(['bookCount','quoteCount','reviewCount','followerCount']));
       allow delete: if isLibrarian() || hasPermission("library");
 
       match /follows/{uid} {
@@ -413,23 +447,38 @@ service cloud.firestore {
     match /library_books/{bookId} {
       allow read: if true;
       allow create: if isLibrarian() || hasPermission("library") || (isAuth() && notBanned());
-      allow update: if isLibrarian() || hasPermission("library") || (isAuth() && onlyChanging(['quoteCount','reviewCount','avgRating']));
+      allow update: if isLibrarian() || hasPermission("library")
+          || (isAuth() && onlyChanging(['quoteCount','reviewCount','avgRating']));
       allow delete: if isLibrarian() || hasPermission("library");
 
       match /quotes/{quoteId} {
         allow read: if true;
-        allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid && request.resource.data.text is string && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 2000;
-        allow update: if isAuth() && resource.data.uid == request.auth.uid && onlyChanging(['feedPostId','likesCount']);
+        allow create: if isAuth() && notBanned()
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.text is string
+            && request.resource.data.text.size() >= 1
+            && request.resource.data.text.size() <= 2000;
+        allow update: if isAuth() && resource.data.uid == request.auth.uid
+            && onlyChanging(['feedPostId','likesCount']);
         allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isLibrarian();
       }
 
       match /reviews/{reviewId} {
         allow read: if true;
-        allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid && request.resource.data.text is string && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 3000 && request.resource.data.rating is number && request.resource.data.rating >= 1 && request.resource.data.rating <= 5;
-        allow update: if isAuth() && resource.data.uid == request.auth.uid && onlyChanging(['feedPostId','text','rating']);
+        allow create: if isAuth() && notBanned()
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.text is string
+            && request.resource.data.text.size() >= 1
+            && request.resource.data.text.size() <= 3000
+            && request.resource.data.rating is number
+            && request.resource.data.rating >= 1
+            && request.resource.data.rating <= 5;
+        allow update: if isAuth() && resource.data.uid == request.auth.uid
+            && onlyChanging(['feedPostId','text','rating']);
         allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isLibrarian();
       }
     }
 
   }
 }
+ 
