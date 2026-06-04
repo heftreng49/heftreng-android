@@ -3,10 +3,13 @@ package com.heftreng.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -41,6 +44,7 @@ class YazarViewModel @Inject constructor(
 
     val isLoggedIn get() = auth.currentUser != null
     val currentUser get() = auth.currentUser
+    val uid get() = auth.currentUser?.uid ?: ""
 
     private val _myPosts  = MutableStateFlow<List<PendingPost>>(emptyList())
     val myPosts = _myPosts.asStateFlow()
@@ -56,7 +60,6 @@ class YazarViewModel @Inject constructor(
         data class Error(val message: String) : SubmitResult()
     }
 
-    // Kategoriler — web temasındaki datalist ile aynı
     val categories = listOf(
         "Yaşam", "Unutulmayanlar", "Tourette Sendromu", "Şiir",
         "Suzan Suzi", "Sizden Gelenler", "Şairden Şiirler", "Sevgi",
@@ -69,7 +72,7 @@ class YazarViewModel @Inject constructor(
 
     // ── Kendi yazılarımı yükle ────────────────────────────────────────────────
     fun loadMyPosts() {
-        val uid = auth.currentUser?.uid ?: return
+        if (uid.isEmpty()) return
         viewModelScope.launch {
             _loading.value = true
             try {
@@ -78,27 +81,8 @@ class YazarViewModel @Inject constructor(
                     .orderBy("createdAt", Query.Direction.DESCENDING)
                     .limit(50)
                     .get().await()
-                _myPosts.value = snap.documents.mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    @Suppress("UNCHECKED_CAST")
-                    PendingPost(
-                        id             = doc.id,
-                        title          = d["title"]          as? String ?: "",
-                        content        = d["content"]        as? String ?: "",
-                        summary        = d["summary"]        as? String ?: "",
-                        cover          = d["cover"]          as? String ?: "",
-                        category       = d["category"]       as? String ?: "",
-                        lang           = d["lang"]           as? String ?: "tr",
-                        tags           = (d["tags"]          as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
-                        authorId       = d["authorId"]       as? String ?: "",
-                        authorName     = d["authorName"]     as? String ?: "",
-                        authorEmail    = d["authorEmail"]    as? String ?: "",
-                        status         = d["status"]         as? String ?: "pending",
-                        adminNote      = d["adminNote"]      as? String ?: "",
-                        bloggerPostId  = d["bloggerPostId"]  as? String ?: "",
-                        bloggerPostUrl = d["bloggerPostUrl"] as? String ?: "",
-                    )
-                }
+                
+                _myPosts.value = snap.documents.mapNotNull { it.toPendingPost() }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -170,9 +154,15 @@ class YazarViewModel @Inject constructor(
 
     // ── Yazıyı geri çek (pending iken) ───────────────────────────────────────
     fun withdrawPost(postId: String) {
+        if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
-                firestore.collection("pendingPosts").document(postId).delete().await()
+                // GÜVENLİK KALKANI: Önce dökümanın sahibini doğrula
+                val docRef = firestore.collection("pendingPosts").document(postId)
+                val docSnap = docRef.get().await()
+                if (docSnap.getString("authorId") != uid) return@launch // Yetkisiz silme engellendi
+
+                docRef.delete().await()
                 _myPosts.value = _myPosts.value.filter { it.id != postId }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -206,39 +196,18 @@ class YazarViewModel @Inject constructor(
         viewModelScope.launch {
             _pendingLoading.value = true
             try {
-                var q = firestore.collection("pendingPosts")
-                    .orderBy("createdAt", Query.Direction.DESCENDING)
-                    .limit(100)
-                val snap = q.get().await()
-                val all = snap.documents.mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    @Suppress("UNCHECKED_CAST")
-                    PendingPost(
-                        id             = doc.id,
-                        title          = d["title"]          as? String ?: "",
-                        content        = d["content"]        as? String ?: "",
-                        summary        = d["summary"]        as? String ?: "",
-                        cover          = d["cover"]          as? String ?: "",
-                        category       = d["category"]       as? String ?: "",
-                        lang           = d["lang"]           as? String ?: "tr",
-                        tags           = (d["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
-                        authorId       = d["authorId"]       as? String ?: "",
-                        authorName     = d["authorName"]     as? String ?: "",
-                        authorEmail    = d["authorEmail"]    as? String ?: "",
-                        status         = d["status"]         as? String ?: "pending",
-                        adminNote      = d["adminNote"]      as? String ?: "",
-                        bloggerPostId  = d["bloggerPostId"]  as? String ?: "",
-                        bloggerPostUrl = d["bloggerPostUrl"] as? String ?: "",
-                    )
+                // OPTİMİZASYON 1: Sorguyu Firestore tarafında filtrele (Maliyet ve veri tasarrufu)
+                var baseQuery: Query = firestore.collection("pendingPosts")
+                if (filter != "all") {
+                    baseQuery = baseQuery.whereEqualTo("status", filter)
                 }
-                // İstatistik
-                _pendingStats.value = PendingStats(
-                    pending  = all.count { it.status == "pending" },
-                    approved = all.count { it.status == "approved" },
-                    rejected = all.count { it.status == "rejected" },
-                )
-                // Filtre
-                _pendingPosts.value = if (filter == "all") all else all.filter { it.status == filter }
+                
+                val snap = baseQuery.orderBy("createdAt", Query.Direction.DESCENDING).limit(100).get().await()
+                _pendingPosts.value = snap.documents.mapNotNull { it.toPendingPost() }
+
+                // OPTİMİZASYON 2: Doğru istatistikleri döküman indirmeden, yüksek performanslı sayım sorgusuyla çek
+                updateRealtimeStats()
+
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -247,77 +216,89 @@ class YazarViewModel @Inject constructor(
         }
     }
 
-    // Onayla — status → approved, adminNote güncelle
+    // Gerçek toplam sayıları döküman indirmeden çeken optimize metot
+    private suspend fun updateRealtimeStats() = coroutineScope {
+        try {
+            val coll = firestore.collection("pendingPosts")
+            
+            // 3 sayım sorgusunu paralel fırlatıyoruz
+            val pendingCountJob  = async { coll.whereEqualTo("status", "pending").count().get(com.google.firebase.firestore.AggregateSource.SERVER).await() }
+            val approvedCountJob = async { coll.whereEqualTo("status", "approved").count().get(com.google.firebase.firestore.AggregateSource.SERVER).await() }
+            val rejectedCountJob = async { coll.whereEqualTo("status", "rejected").count().get(com.google.firebase.firestore.AggregateSource.SERVER).await() }
+
+            _pendingStats.value = PendingStats(
+                pending  = pendingCountJob.await().count.toInt(),
+                approved = approvedCountJob.await().count.toInt(),
+                rejected = rejectedCountJob.await().count.toInt()
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    // Onayla
     fun approvePost(postId: String, note: String = "") {
-        viewModelScope.launch {
-            try {
-                firestore.collection("pendingPosts").document(postId).update(
-                    mapOf(
-                        "status"    to "approved",
-                        "adminNote" to note,
-                        "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                    )
-                ).await()
-                // Local güncelle
-                _pendingPosts.value = _pendingPosts.value.map {
-                    if (it.id == postId) it.copy(status = "approved", adminNote = note) else it
-                }
-                recalcStats()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+        updatePostStatusInternal(postId, "approved", note)
     }
 
-    // Reddet — status → rejected, adminNote güncelle
+    // Reddet
     fun rejectPost(postId: String, note: String = "") {
-        viewModelScope.launch {
-            try {
-                firestore.collection("pendingPosts").document(postId).update(
-                    mapOf(
-                        "status"    to "rejected",
-                        "adminNote" to note,
-                        "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                    )
-                ).await()
-                _pendingPosts.value = _pendingPosts.value.map {
-                    if (it.id == postId) it.copy(status = "rejected", adminNote = note) else it
-                }
-                recalcStats()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+        updatePostStatusInternal(postId, "rejected", note)
     }
 
-    // Status'u herhangi bir değere güncelle
+    // Genel status güncelleme köprüsü
     fun updatePostStatus(postId: String, status: String, note: String = "") {
+        updatePostStatusInternal(postId, status, note)
+    }
+
+    // Ortak yönetim fonksiyonu (Kod tekrarını engellemek için)
+    private fun updatePostStatusInternal(postId: String, status: String, note: String) {
         viewModelScope.launch {
             try {
                 firestore.collection("pendingPosts").document(postId).update(
                     mapOf(
                         "status"    to status,
                         "adminNote" to note,
-                        "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                        "updatedAt" to FieldValue.serverTimestamp(),
                     )
                 ).await()
+                
+                // Lokal listeyi güncelle
                 _pendingPosts.value = _pendingPosts.value.map {
                     if (it.id == postId) it.copy(status = status, adminNote = note) else it
                 }
-                recalcStats()
+                
+                // İstatistikleri sunucudan güvenli güncelle
+                updateRealtimeStats()
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
     }
 
-    private fun recalcStats() {
-        val all = _pendingPosts.value
-        _pendingStats.value = PendingStats(
-            pending  = all.count { it.status == "pending" },
-            approved = all.count { it.status == "approved" },
-            rejected = all.count { it.status == "rejected" },
+    // ════════════════════════════════════════════════════════════
+    // PRIVATE EXTENSION HELPERS
+    // ════════════════════════════════════════════════════════════
+
+    // Dönüştürme işlemini tek bir merkezde topladık
+    private fun DocumentSnapshot.toPendingPost(): PendingPost? {
+        val d = data ?: return null
+        return PendingPost(
+            id             = id,
+            title          = d["title"]          as? String ?: "",
+            content        = d["content"]        as? String ?: "",
+            summary        = d["summary"]        as? String ?: "",
+            cover          = d["cover"]          as? String ?: "",
+            category       = d["category"]       as? String ?: "",
+            lang           = d["lang"]           as? String ?: "tr",
+            tags           = (d["tags"]          as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            authorId       = d["authorId"]       as? String ?: "",
+            authorName     = d["authorName"]     as? String ?: "",
+            authorEmail    = d["authorEmail"]    as? String ?: "",
+            status         = d["status"]         as? String ?: "pending",
+            adminNote      = d["adminNote"]      as? String ?: "",
+            bloggerPostId  = d["bloggerPostId"]  as? String ?: "",
+            bloggerPostUrl = d["bloggerPostUrl"] as? String ?: "",
         )
     }
-
 }
