@@ -1240,6 +1240,65 @@ class KurdiViewModel @Inject constructor(
 
     // ── Eski uyumluluk ────────────────────────────────────────────────────────
     fun startLesson(lesson: com.heftreng.app.data.model.KurdiLesson) = openLesson(lesson.id)
+
+    // ── AI Ders → kf_exercises'e kaydet ────────────────────────────────────
+    fun saveAiLessonToFirestore(
+        targetLessonId: String,
+        lesson        : com.heftreng.app.data.model.AiLesson,
+        onDone        : (Int) -> Unit,
+        onError       : (String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            try {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    var saved = 0
+                    lesson.exercises.forEach { ex ->
+                        val data = mutableMapOf<String, Any>(
+                            "lessonId" to targetLessonId,
+                            "type"     to (ex.type.takeIf { it.isNotBlank() } ?: "mcq"),
+                        )
+                        when (ex.type) {
+                            "mcq" -> {
+                                data["question"]   = ex.ku
+                                data["questionTr"] = ex.tr
+                                data["optA"] = ex.options.getOrElse(0) { "" }
+                                data["optB"] = ex.options.getOrElse(1) { "" }
+                                data["optC"] = ex.options.getOrElse(2) { "" }
+                                data["optD"] = ex.options.getOrElse(3) { "" }
+                                data["answer"]     = ex.answer.ifBlank { ex.options.getOrElse(0) { "" } }
+                            }
+                            "fill" -> {
+                                data["question"] = ex.ku
+                                data["answer"]   = ex.answer
+                            }
+                            "build" -> {
+                                data["tr"]     = ex.tr
+                                data["answer"] = ex.ku
+                                data["words"]  = ex.words.ifEmpty { ex.tr.split(" ").filter { it.isNotBlank() } }
+                            }
+                            "match" -> {
+                                data["pairs"] = ex.pairs.map { (a, b) ->
+                                    mapOf("ku" to a, "tr" to b)
+                                }
+                            }
+                            else -> {
+                                data["question"] = ex.ku
+                                data["answer"]   = ex.answer
+                            }
+                        }
+                        firestore.collection("kf_exercises").add(data).await()
+                        saved++
+                    }
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onDone(saved)
+                    }
+                }
+            } catch (e: Exception) {
+                onError(e.message ?: "Kaydetme hatası")
+            }
+        }
+    }
+
 }
 
 // ── Mock verisi (site ile aynı ID'ler) ────────────────────────────────────────

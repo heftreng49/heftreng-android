@@ -2004,14 +2004,14 @@ private fun AdminAiLessonTab(
                             vm.saveAiLessonToFirestore(
                                 targetLessonId = targetLessonId,
                                 lesson         = lesson,
-                                onDone = { count ->
+                                onDone = { count: Int ->
                                     saving = false
                                     scope.launch {
                                         snack.showSnackbar("✓ $count egzersiz '${lessons.find { it.id == targetLessonId }?.nameTr}' dersine eklendi!")
                                         vm.clearAiLesson()
                                     }
                                 },
-                                onError = { err ->
+                                onError = { err: String ->
                                     saving = false
                                     scope.launch { snack.showSnackbar("Hata: $err") }
                                 },
