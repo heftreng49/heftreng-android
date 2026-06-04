@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.google.firebase.auth.FirebaseAuth
 
-private const val ADMIN_EMAIL = "siirgibi49@gmail.com"
+// Admin email kaldırıldı — Firestore admins/{uid} kontrolü kullanılıyor
 
 /**
  * Global admin debug paneli.
@@ -71,11 +71,11 @@ fun AdminDebugOverlay() {
     var isAdmin by remember { mutableStateOf(false) }
     DisposableEffect(Unit) {
         val listener = com.google.firebase.auth.FirebaseAuth.AuthStateListener { auth ->
-            isAdmin = auth.currentUser?.email == ADMIN_EMAIL
+            isAdmin = false // Firestore kontrolü LaunchedEffect'te yapılıyor
         }
         com.google.firebase.auth.FirebaseAuth.getInstance().addAuthStateListener(listener)
         // İlk değeri hemen set et
-        isAdmin = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email == ADMIN_EMAIL
+        isAdmin = false // Firestore kontrolü LaunchedEffect'te yapılıyor
         onDispose { com.google.firebase.auth.FirebaseAuth.getInstance().removeAuthStateListener(listener) }
     }
     if (!isAdmin) return
