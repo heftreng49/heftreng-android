@@ -803,10 +803,10 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val followingSnap = firestore.collection("follows")
-                    .whereEqualTo("followerUid", myUid)
+                    .whereEqualTo("fromUid", myUid)
                     .limit(200).get().await()
                 val followingUids = followingSnap.documents
-                    .mapNotNull { it.getString("targetUid") }
+                    .mapNotNull { it.getString("targetUid") ?: it.getString("followingUid") }
                     .toSet()
 
                 val usersSnap = firestore.collection("users")
