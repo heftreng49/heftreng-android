@@ -21,23 +21,17 @@ import javax.inject.Inject
 // feedSaves  → feedId alan adı  (postId değil)
 // feed/comments → name alan adı (displayName ek olarak yazılır)
 // userNotifs → feedId alan adı  (postId değil)
-//
-// Adım 1.2 — Post.name ve Post.imgUrl kaldırıldı; displayName ve imageURL kullanılır.
-// Adım 2.1 — ensureAuthorAndBook LibraryRepository'ye taşındı.
-// Adım 2.2 — Yeni postlara artık nested "quote" objesi YAZILMAZ; yalnızca flat alanlar.
-//            Okuma sırasında eski nested formatı hâlâ desteklenir (legacy veri uyumu).
 
 @HiltViewModel
 class FeedViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
-    private val library  : LibraryRepository,       // Adım 2.1
+    private val library  : LibraryRepository,
 ) : ViewModel() {
 
     private val _posts    = MutableStateFlow<List<Post>>(emptyList())
     val posts = _posts.asStateFlow()
 
-    // ── Takip Önerileri ──────────────────────────────────────────────────────
     private val _suggestedUsers = MutableStateFlow<List<SuggestedUser>>(emptyList())
     val suggestedUsers = _suggestedUsers.asStateFlow()
 
@@ -49,7 +43,6 @@ class FeedViewModel @Inject constructor(
         val isFollowing: Boolean = false,
     )
 
-    // Kütüphane — alıntı postları (bookName dolu feed postları)
     private val _libraryQuotes = MutableStateFlow<List<Post>>(emptyList())
     val libraryQuotes = _libraryQuotes.asStateFlow()
 
@@ -63,9 +56,10 @@ class FeedViewModel @Inject constructor(
     val hasMore = _hasMore.asStateFlow()
 
     private val _loadingMore   = MutableStateFlow(false)
+    val loadingMore = _loadingMore.asStateFlow()
+
     private val _postNotFound  = MutableStateFlow<String?>(null)
     val postNotFound = _postNotFound.asStateFlow()
-    val loadingMore = _loadingMore.asStateFlow()
 
     private val _uploading = MutableStateFlow(false)
     val uploading = _uploading.asStateFlow()
@@ -80,15 +74,14 @@ class FeedViewModel @Inject constructor(
     private var myRepostMap = emptyMap<String, String>()
     private var lastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
     private val PAGE_SIZE = 30L
-    // Kullanıcı bilgilerini ViewModel ömrü boyunca cache'le — her snapshot'ta yeniden çekmeyi önler
+    
+    // Kullanıcı bilgilerini ViewModel ömrü boyunca cache'ler
     private val userCache = mutableMapOf<String, Pair<String, String>>()
 
-    // Canlı dinleyici referansları — onCleared'da kapatılır
-    private var feedListener    : com.google.firebase.firestore.ListenerRegistration? = null
+    // Etkileşimler için gerekli canlı dinleyiciler (Hafif sorgulardır, kalabilir)
     private var likedListener   : com.google.firebase.firestore.ListenerRegistration? = null
     private var savedListener   : com.google.firebase.firestore.ListenerRegistration? = null
     private var repostListener  : com.google.firebase.firestore.ListenerRegistration? = null
-    private var libQuoteListener: com.google.firebase.firestore.ListenerRegistration? = null
 
     init {
         auth.addAuthStateListener { firebaseAuth ->
@@ -97,13 +90,13 @@ class FeedViewModel @Inject constructor(
                 startLiveInteractions(currentUid)
             }
         }
-        observeFeed()
-        observeLibraryQuotes()
+        // DÜZENLEME: Ağır canlı dinleyiciler yerine ilk veriyi tek seferlik (Asenkron) çekiyoruz
+        refresh()
+        loadLibraryQuotes()
     }
 
     // ── Etkileşimleri canlı dinle (liked / saved / repost) ───────────────────
     private fun startLiveInteractions(currentUid: String) {
-        // Beğeniler
         likedListener?.remove()
         likedListener = firestore.collection("feedLikes")
             .whereEqualTo("uid", currentUid)
@@ -114,7 +107,6 @@ class FeedViewModel @Inject constructor(
                 syncInteractionsToState()
             }
 
-        // Kaydedilenler
         savedListener?.remove()
         savedListener = firestore.collection("feedSaves")
             .whereEqualTo("uid", currentUid)
@@ -125,7 +117,6 @@ class FeedViewModel @Inject constructor(
                 syncInteractionsToState()
             }
 
-        // Repostlar
         repostListener?.remove()
         repostListener = firestore.collection("feed")
             .whereEqualTo("uid", currentUid)
@@ -154,60 +145,66 @@ class FeedViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        feedListener?.remove()
         likedListener?.remove()
         savedListener?.remove()
         repostListener?.remove()
-        libQuoteListener?.remove()
     }
 
-    // ── Kütüphane alıntı dinleyici — gerçek zamanlı ───────────────────────────
-    private fun observeLibraryQuotes() {
-        libQuoteListener?.remove()
-        libQuoteListener = firestore.collection("feed")
-            .whereEqualTo("type", "library_quote")
-            .addSnapshotListener { snap, err ->
-                if (err != null || snap == null) return@addSnapshotListener
-                viewModelScope.launch {
-                    val seenIds = mutableSetOf<String>()
-                    val result  = mutableListOf<Post>()
-                    snap.documents.forEach { doc ->
-                        if (seenIds.add(doc.id)) {
-                            doc.toPost()?.let { result.add(it) }
-                        }
-                    }
-                    val existing   = _libraryQuotes.value.filter { it.id.startsWith("cg_") }
-                    val existingIds = result.map { it.id }.toSet()
-                    val merged = result + existing.filter { it.id !in existingIds }
-                    _libraryQuotes.value = merged.sortedByDescending { it.ts?.seconds ?: 0L }
-                }
+    // ── Tek Seferlik Feed Akışı (Pull-to-Refresh & Pagination uyumlu) ────────
+    fun refresh() {
+        lastDoc = null
+        _hasMore.value = true
+        _postNotFound.value = null
+        _loading.value = true
+        viewModelScope.launch {
+            try {
+                val snap = firestore.collection("feed")
+                    .orderBy("ts", Query.Direction.DESCENDING)
+                    .limit(PAGE_SIZE)
+                    .get().await()
+                
+                if (snap.documents.isNotEmpty()) lastDoc = snap.documents.last()
+                _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
+                
+                val rawPosts = snap.documents.mapNotNull { it.toPost() }
+                val filtered = rawPosts.filter { it.moderationStatus != "removed" }
+                
+                _posts.value = mapInteractions(filtered)
+                enrichPostsInBackground(filtered)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _loading.value = false
             }
+        }
     }
 
-    // ── Feed dinleyici — Anında göster, arka planda zenginleştir ─────────────
-    private fun observeFeed() {
-        _loading.value = _posts.value.isEmpty()
-        feedListener?.remove()
-        feedListener = firestore.collection("feed")
-            .orderBy("ts", Query.Direction.DESCENDING)
-            .limit(PAGE_SIZE)
-            .addSnapshotListener { snap, err ->
-                if (err != null || snap == null) { _loading.value = false; return@addSnapshotListener }
-                viewModelScope.launch {
-                    if (lastDoc == null && snap.documents.isNotEmpty()) {
-                        lastDoc = snap.documents.last()
-                    }
-                    _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
-
-                    val rawPosts = snap.documents.mapNotNull { doc -> doc.toPost() }
-                    val filtered = rawPosts.filter { it.moderationStatus != "removed" }
-
-                    _posts.value = mapInteractions(filtered)
-                    _loading.value = false
-
-                    enrichPostsInBackground(filtered)
-                }
+    fun loadMore() {
+        val last = lastDoc ?: return
+        if (_loadingMore.value || !_hasMore.value) return
+        viewModelScope.launch {
+            _loadingMore.value = true
+            try {
+                val snap = firestore.collection("feed")
+                    .orderBy("ts", Query.Direction.DESCENDING)
+                    .startAfter(last)
+                    .limit(PAGE_SIZE)
+                    .get().await()
+                
+                if (snap.documents.isNotEmpty()) lastDoc = snap.documents.last()
+                _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
+                
+                val rawMore = snap.documents.mapNotNull { it.toPost() }
+                val filtered = rawMore.filter { it.moderationStatus != "removed" }
+                
+                _posts.value = _posts.value + mapInteractions(filtered)
+                enrichPostsInBackground(filtered)
+            } catch (e: Exception) { 
+                e.printStackTrace() 
+            } finally { 
+                _loadingMore.value = false 
             }
+        }
     }
 
     private fun mapInteractions(posts: List<Post>): List<Post> = posts.map { post ->
@@ -343,13 +340,12 @@ class FeedViewModel @Inject constructor(
         }
     }
 
-    // ── OPTİMİZE EDİLDİ: Atomik Beğeni Sayaç Yönetimi ────────────────────────
+    // ── Atomik Beğeni Sayaç Yönetimi ─────────────────────────────────────────
     fun toggleLike(post: Post) {
         if (uid.isEmpty()) return
         val nowLiked = !post.isLikedByMe
         likedIds = if (nowLiked) likedIds + post.id else likedIds - post.id
         
-        // UI'yı anında lokal olarak kilitle (Gecikmesiz akıcı tepki)
         _posts.value = _posts.value.map {
             if (it.id == post.id) it.copy(
                 isLikedByMe = nowLiked,
@@ -374,19 +370,17 @@ class FeedViewModel @Inject constructor(
                         "ts"       to Timestamp.now(),
                     )).await()
                     
-                    // Ana dökümandaki "likes" alanını atomik olarak 1 artırıyoruz (Okuma harcamaz)
                     postRef.update("likes", FieldValue.increment(1)).await()
                     if (post.uid != uid) sendNotif(post.uid, "like", "$myName gönderini beğendi", post.text.take(60), post.id)
                 } else {
                     likeRef.delete().await()
-                    // Ana dökümandaki "likes" alanını atomik olarak 1 eksiltiyoruz
                     postRef.update("likes", FieldValue.increment(-1)).await()
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
-    // ── OPTİMİZE EDİLDİ: Yorum Beğeni Sayaç Yönetimi ────────────────────────
+    // ── Yorum Beğeni Sayaç Yönetimi ────────────────────────────────────────
     fun toggleCommentLike(postId: String, comment: Comment) {
         if (uid.isEmpty()) return
         val nowLiked = !comment.isLikedByMe
@@ -413,7 +407,7 @@ class FeedViewModel @Inject constructor(
         }
     }
 
-    // ── OPTİMİZE EDİLDİ: Kaydetme Sayaç Yönetimi ─────────────────────────────
+    // ── Kaydetme Sayaç Yönetimi ─────────────────────────────────────────────
     fun toggleSave(post: Post) {
         if (uid.isEmpty()) return
         val nowSaved = !post.isSavedByMe
@@ -454,11 +448,13 @@ class FeedViewModel @Inject constructor(
                         ?: (d["userId"] as? String)?.takeIf { it.isNotBlank() }
                         ?: (d["authorId"] as? String)?.takeIf { it.isNotBlank() }
                         ?: ""
+                    // DÜZENLEME: Tema kuralı gereği name alanına öncelikli veya yedekli bakıyoruz
+                    val commentName = (d["name"] as? String ?: d["displayName"] as? String) ?: ""
                     Comment(
                         id          = doc.id,
                         postId      = postId,
                         uid         = commentUid,
-                        displayName = (d["displayName"] as? String)?.takeIf { it.isNotBlank() } ?: d["name"] as? String ?: "",
+                        displayName = commentName,
                         photoURL    = d["photoURL"] as? String ?: "",
                         text        = d["text"]     as? String ?: "",
                         likesCount  = (d["likes"]   as? Long)?.toInt() ?: 0,
@@ -543,7 +539,7 @@ class FeedViewModel @Inject constructor(
 
     fun clearCommentError() { _commentError.value = null }
 
-    // ── OPTİMİZE EDİLDİ: Repost Sayaç Yönetimi ───────────────────────────────
+    // ── Repost Sayaç Yönetimi ───────────────────────────────────────────────
     fun repost(post: Post) {
         if (uid.isEmpty()) return
         if (post.isRepostedByMe || post.id in myRepostMap) return
@@ -573,7 +569,6 @@ class FeedViewModel @Inject constructor(
                     "ts"    to Timestamp.now(),
                 )).await()
                 
-                // Orijinal gönderinin "reposts" sayacını atomik güncelliyoruz
                 firestore.collection("feed").document(post.id)
                     .update("reposts", FieldValue.increment(1)).await()
                     
@@ -863,53 +858,6 @@ class FeedViewModel @Inject constructor(
         }
     }
 
-    fun refresh() {
-        lastDoc = null
-        _hasMore.value = true
-        _postNotFound.value = null
-        _loading.value = true
-        viewModelScope.launch {
-            try {
-                val snap = firestore.collection("feed")
-                    .orderBy("ts", Query.Direction.DESCENDING)
-                    .limit(PAGE_SIZE)
-                    .get().await()
-                if (snap.documents.isNotEmpty()) lastDoc = snap.documents.last()
-                _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
-                val rawPosts = snap.documents.mapNotNull { it.toPost() }
-                val filtered = rawPosts.filter { it.moderationStatus != "removed" }
-                _posts.value = mapInteractions(filtered)
-                enrichPostsInBackground(filtered)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                _loading.value = false
-            }
-        }
-    }
-
-    fun loadMore() {
-        val last = lastDoc ?: return
-        if (_loadingMore.value || !_hasMore.value) return
-        viewModelScope.launch {
-            _loadingMore.value = true
-            try {
-                val snap = firestore.collection("feed")
-                    .orderBy("ts", Query.Direction.DESCENDING)
-                    .startAfter(last)
-                    .limit(PAGE_SIZE)
-                    .get().await()
-                if (snap.documents.isNotEmpty()) lastDoc = snap.documents.last()
-                _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
-                val rawMore = snap.documents.mapNotNull { it.toPost() }
-                val filtered = rawMore.filter { it.moderationStatus != "removed" }
-                _posts.value = _posts.value + mapInteractions(filtered)
-                enrichPostsInBackground(filtered)
-            } catch (e: Exception) { e.printStackTrace() }
-            finally { _loadingMore.value = false }
-        }
-    }
-
     fun getPostById(postId: String): Post? = _posts.value.find { it.id == postId }
 
     private val _fetchingPostIds = mutableSetOf<String>()
@@ -1031,14 +979,27 @@ class FeedViewModel @Inject constructor(
         } catch (e: Exception) { e.printStackTrace() }
     }
 
-    // ── Kütüphane alıntı postları ─────────────────────────────────────────
+    // ── OPTİMİZE EDİLDİ: Tek Seferlik Kütüphane Alıntı Fonksiyonu ──────────────
     suspend fun loadLibraryQuotesAsync() {
         val myUid   = auth.currentUser?.uid ?: ""
         val isAdmin = auth.currentUser?.email == "siirgibi49@gmail.com"
         val seenIds = mutableSetOf<String>()
         val result  = mutableListOf<Post>()
 
+        // OPTİMİZE EDİLDİ: Döngü içinde sürekli asenkron istek atmak yerine takip edilenleri tek seferde çekiyoruz.
+        val followingUids = mutableSetOf<String>()
+        if (myUid.isNotEmpty()) {
+            try {
+                val followSnap = firestore.collection("follows")
+                    .whereEqualTo("fromUid", myUid).get().await()
+                followSnap.documents.forEach { doc ->
+                    doc.getString("targetUid")?.let { followingUids.add(it) }
+                }
+            } catch (_: Exception) {}
+        }
+
         try {
+            // Canlı dinleyici yerine tek seferlik asenkron sorgu
             val snap = firestore.collection("feed")
                 .whereEqualTo("type", "library_quote")
                 .get().await()
@@ -1046,17 +1007,12 @@ class FeedViewModel @Inject constructor(
             snap.documents.forEach { doc ->
                 val d   = doc.data ?: return@forEach
                 val vis = d["visibility"] as? String ?: "public"
+                val ownerUid = d["uid"] as? String ?: ""
 
+                // OPTİMİZE EDİLDİ: Artık hafızadaki Set üzerinden kontrol yapılıyor (Firestore faturası üretmez)
                 val canSee = when (vis) {
-                    "only_me"  -> d["uid"] == myUid || isAdmin
-                    "friends"  -> {
-                        val ownerUid = d["uid"] as? String ?: ""
-                        ownerUid == myUid || isAdmin ||
-                        runCatching {
-                            firestore.collection("follows")
-                                .document("${myUid}_${ownerUid}").get().await().exists()
-                        }.getOrDefault(false)
-                    }
+                    "only_me" -> ownerUid == myUid || isAdmin
+                    "friends" -> ownerUid == myUid || isAdmin || ownerUid in followingUids
                     else -> true
                 }
 
