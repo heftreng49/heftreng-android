@@ -1324,7 +1324,7 @@ class KurdiViewModel @Inject constructor(
                     } catch (e: Exception) { errors.add("Ders $lid: ${e.message}") }
                 }
             } catch (e: Exception) { errors.add("JSON parse: ${e.message}") }
-            _importResult.value = ImportResult(unitsAdded, lessonsAdded, vocabAdded, exAdded, errors)
+            _importResult.value = ImportResult(unitsAdded, lessonsAdded, vocabAdded, exAdded, skipped = 0, errors = errors)
             _importing.value    = false
         }
     }

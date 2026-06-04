@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -1011,9 +1012,8 @@ fun AdminField(
     )
 }
 
-// ── JSON İçe Aktar ────────────────────────────────────────────────────────────
-@Composable
 // ── JSON İçe / Dışa Aktar ────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun JsonImportTab(vm: KurdiViewModel) {
     val importing    by vm.importing.collectAsState()
