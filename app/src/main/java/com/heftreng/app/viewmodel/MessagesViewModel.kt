@@ -516,20 +516,33 @@ class MessagesViewModel @Inject constructor(
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
-                // Sadece kendi gönderdiği mesajları sil (soft delete)
+                val convRef = firestore.collection("conversations").document(convId)
+                val batch   = firestore.batch()
+
+                // 1. Kendi UID'ini participants'tan çıkar
+                //    → snapshotListener bu konuşmayı bir daha görmez (geri gelme sorunu çözülür)
+                batch.update(convRef, mapOf(
+                    "participants"  to com.google.firebase.firestore.FieldValue.arrayRemove(uid),
+                    "participantIds" to com.google.firebase.firestore.FieldValue.arrayRemove(uid),
+                    "deletedBy_$uid" to true,
+                    "deletedAt_$uid" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                ))
+
+                // 2. Kendi gönderdiği mesajları soft-delete
                 val msgs = firestore.collection("convMessages")
                     .document(convId).collection("msgs")
                     .whereEqualTo("senderUid", uid)
                     .get().await()
-                val batch = firestore.batch()
                 msgs.documents.forEach { doc ->
                     batch.update(doc.reference, mapOf(
                         "deleted"   to true,
                         "deletedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                     ))
                 }
+
                 batch.commit().await()
-                // Lokal listeden kaldır
+
+                // 3. Lokal listeden kaldır (listener zaten tetiklenmeyecek ama anlık kaldır)
                 _conversations.value = _conversations.value.filter { it.id != convId }
                 onDone()
             } catch (e: Exception) { e.printStackTrace() }

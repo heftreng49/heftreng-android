@@ -335,7 +335,13 @@ service cloud.firestore {
     match /conversations/{convId} {
       allow read:   if isAuth() && request.auth.uid in resource.data.participants;
       allow create: if isAuth() && request.auth.uid in request.resource.data.participants;
-      allow update: if isAuth() && request.auth.uid in resource.data.participants;
+      allow update: if isAuth() && (
+          // Normal güncelleme: katılımcı olarak
+          request.auth.uid in resource.data.participants
+          // VEYA: kendi UID'ini silerek konuşmayı terk etme (deleteConversation)
+          || (request.auth.uid in resource.data.participants
+              && !(request.auth.uid in request.resource.data.participants))
+      );
       allow delete: if isAdmin();
 
       match /msgs/{msgId} {
