@@ -282,7 +282,8 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     ) {
         Scaffold(
             containerColor = Background,
-            contentWindowInsets = WindowInsets.safeDrawing,
+            // ime insets iç ekranlar tarafından yönetiliyor — burada sadece sistem barları
+            contentWindowInsets = WindowInsets(0,0,0,0),
             // ── ÜST BAR — sadece Feed ekranında NavHost yönetir ──
             topBar = {
                 if (currentRoute == Screen.Feed.route) {
