@@ -73,6 +73,8 @@ fun ProfileScreen(
 
     val followers     by socialVm.followers.collectAsState()
     val following     by socialVm.following.collectAsState()
+    val followersLoading by socialVm.followersLoading.collectAsState()
+    val followingLoading by socialVm.followingLoading.collectAsState()
     val socialLoading by socialVm.loading.collectAsState()
     var showFollowers  by remember { mutableStateOf(false) }
     var showFollowing  by remember { mutableStateOf(false) }
@@ -531,7 +533,7 @@ fun ProfileScreen(
         FollowListSheet(
             title     = Strings.followersTitle(language, followersCount),
             entries   = followers,
-            loading   = socialLoading,
+            loading   = followersLoading,
             onDismiss = { showFollowers = false; socialVm.clearFollowers() },
             onProfile = { u ->
                 showFollowers = false
@@ -543,7 +545,7 @@ fun ProfileScreen(
         FollowListSheet(
             title     = Strings.followingTitle(language, followingCount),
             entries   = following,
-            loading   = socialLoading,
+            loading   = followingLoading,
             onDismiss = { showFollowing = false; socialVm.clearFollowing() },
             onProfile = { u ->
                 showFollowing = false

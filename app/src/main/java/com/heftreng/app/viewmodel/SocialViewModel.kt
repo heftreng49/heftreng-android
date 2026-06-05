@@ -39,8 +39,15 @@ class SocialViewModel @Inject constructor(
     private val _likers    = MutableStateFlow<List<LikeEntry>>(emptyList())
     val likers = _likers.asStateFlow()
 
-    private val _loading   = MutableStateFlow(false)
+    private val _loading        = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
+
+    // Takipçi/takip için ayrı loading — ortak flag'in üst üste yazılmasını engeller
+    private val _followersLoading = MutableStateFlow(false)
+    val followersLoading = _followersLoading.asStateFlow()
+
+    private val _followingLoading = MutableStateFlow(false)
+    val followingLoading = _followingLoading.asStateFlow()
 
     val uid get() = auth.currentUser?.uid ?: ""
 
@@ -170,7 +177,7 @@ class SocialViewModel @Inject constructor(
     // Site: follows/{fromUid_targetUid} → { fromUid, fromName, fromPhoto, targetUid, … }
     fun loadFollowers(targetUid: String) {
         viewModelScope.launch {
-            _loading.value  = true
+            _followersLoading.value = true
             _followers.value = emptyList()
             try {
                 val snap = firestore.collection("follows")
@@ -188,12 +195,15 @@ class SocialViewModel @Inject constructor(
                         ts       = d["ts"] as? com.google.firebase.Timestamp,
                     )
                 }.filter { it.uid.isNotBlank() }
-                // Her zaman users koleksiyonundan güncel isim/fotoğraf çek
-                _followers.value = enrichFollowFromUsers(rawFollowers)
+                // follows belgesinden gelen isim/foto önce göster (anında)
+                _followers.value = rawFollowers
+                // Arka planda güncel profil bilgileri ile zenginleştir
+                val enriched = enrichFollowFromUsers(rawFollowers)
+                if (enriched.isNotEmpty()) _followers.value = enriched
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.e("SocialVM", "loadFollowers hata: ${e.message}")
             } finally {
-                _loading.value = false
+                _followersLoading.value = false
             }
         }
     }
@@ -201,7 +211,7 @@ class SocialViewModel @Inject constructor(
     // ── Takip edilenler ──────────────────────────────────────────────────────
     fun loadFollowing(targetUid: String) {
         viewModelScope.launch {
-            _loading.value  = true
+            _followingLoading.value = true
             _following.value = emptyList()
             try {
                 val snap = firestore.collection("follows")
@@ -219,12 +229,15 @@ class SocialViewModel @Inject constructor(
                         ts       = d["ts"] as? com.google.firebase.Timestamp,
                     )
                 }.filter { it.uid.isNotBlank() }
-                // Her zaman users koleksiyonundan güncel isim/fotoğraf çek
-                _following.value = enrichFollowFromUsers(rawFollowing)
+                // follows belgesinden gelen isim/foto önce göster (anında)
+                _following.value = rawFollowing
+                // Arka planda güncel profil bilgileri ile zenginleştir
+                val enriched = enrichFollowFromUsers(rawFollowing)
+                if (enriched.isNotEmpty()) _following.value = enriched
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.e("SocialVM", "loadFollowing hata: ${e.message}")
             } finally {
-                _loading.value = false
+                _followingLoading.value = false
             }
         }
     }
