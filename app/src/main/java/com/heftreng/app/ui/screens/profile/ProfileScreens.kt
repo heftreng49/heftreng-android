@@ -63,8 +63,8 @@ fun ProfileScreen(
     val user           by vm.user.collectAsState()
     val posts          by vm.posts.collectAsState()
     val isFollowing    by vm.isFollowing.collectAsState()
-    val followersCount by vm.followersCount.collectAsState()
-    val followingCount by vm.followingCount.collectAsState()
+    val followersCountRaw by vm.followersCount.collectAsState()
+    val followingCountRaw by vm.followingCount.collectAsState()
     val loading        by vm.loading.collectAsState()
     val allMyBooks     by bookVm.myBooks.collectAsState()
     val mySerials      = allMyBooks.filter { it.type == "serial" }
@@ -75,6 +75,10 @@ fun ProfileScreen(
     val following     by socialVm.following.collectAsState()
     val followersLoading by socialVm.followersLoading.collectAsState()
     val followingLoading by socialVm.followingLoading.collectAsState()
+
+    // Gerçek liste yüklendikten sonra sayacı güncelle; yoksa Firestore users dokümanındaki değeri kullan
+    val followersCount = if (!followersLoading && followers.isNotEmpty()) followers.size else followersCountRaw
+    val followingCount = if (!followingLoading && following.isNotEmpty()) following.size else followingCountRaw
     val socialLoading by socialVm.loading.collectAsState()
     var showFollowers  by remember { mutableStateOf(false) }
     var showFollowing  by remember { mutableStateOf(false) }
