@@ -43,11 +43,13 @@ enum class FollowSort(val label: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FollowListSheet(
-    title     : String,
-    entries   : List<FollowEntry>,
-    loading   : Boolean,
-    onDismiss : () -> Unit,
-    onProfile : (String) -> Unit,
+    title       : String,
+    entries     : List<FollowEntry>,
+    loading     : Boolean,
+    hasMore     : Boolean = false,
+    onLoadMore  : (() -> Unit)? = null,
+    onDismiss   : () -> Unit,
+    onProfile   : (String) -> Unit,
 ) {
     var sort by remember { mutableStateOf(FollowSort.NEW) }
 
@@ -131,6 +133,18 @@ fun FollowListSheet(
                 items(sortedEntries, key = { it.uid }) { entry ->
                     FollowEntryRow(entry = entry, onClick = { onProfile(entry.uid) })
                     HorizontalDivider(color = Divider, thickness = 0.5.dp, modifier = Modifier.padding(start = 64.dp))
+                }
+                if (hasMore && onLoadMore != null) {
+                    item(key = "load_more") {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            TextButton(onClick = onLoadMore) {
+                                Text("Daha Fazla Yükle", color = Primary, fontSize = 13.sp)
+                            }
+                        }
+                    }
                 }
             }
         }

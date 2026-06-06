@@ -63,6 +63,10 @@ fun ProfileScreen(
     val user           by vm.user.collectAsState()
     val posts          by vm.posts.collectAsState()
     val isFollowing    by vm.isFollowing.collectAsState()
+    val hasMorePosts   by vm.hasMorePosts.collectAsState()
+    val loadingMore    by vm.loadingMorePosts.collectAsState()
+    val hasMoreFollowers by socialVm.hasMoreFollowers.collectAsState()
+    val hasMoreFollowing by socialVm.hasMoreFollowing.collectAsState()
     val followersCountRaw by vm.followersCount.collectAsState()
     val followingCountRaw by vm.followingCount.collectAsState()
     val loading        by vm.loading.collectAsState()
@@ -357,6 +361,30 @@ fun ProfileScreen(
                             )
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         }
+                        // ── Daha Fazla Yükle ──────────────────────────────
+                        if (hasMorePosts) {
+                            item(key = "load_more_posts") {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (loadingMore) {
+                                        CircularProgressIndicator(
+                                            color = Primary,
+                                            modifier = Modifier.size(24.dp),
+                                            strokeWidth = 2.dp,
+                                        )
+                                    } else {
+                                        OutlinedButton(
+                                            onClick = { vm.loadMorePosts(targetUid) },
+                                            shape = RoundedCornerShape(20.dp),
+                                        ) {
+                                            Text(if (language == "ku") "Zêdetir bar bike" else "Daha Fazla Yükle")
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -535,11 +563,13 @@ fun ProfileScreen(
     // ── Takipçi/Takip sheet'leri ─────────────────────────────────────────────
     if (showFollowers) {
         FollowListSheet(
-            title     = Strings.followersTitle(language, followersCount),
-            entries   = followers,
-            loading   = followersLoading,
-            onDismiss = { showFollowers = false; socialVm.clearFollowers() },
-            onProfile = { u ->
+            title      = Strings.followersTitle(language, followersCount),
+            entries    = followers,
+            loading    = followersLoading,
+            hasMore    = hasMoreFollowers,
+            onLoadMore = { socialVm.loadMoreFollowers() },
+            onDismiss  = { showFollowers = false; socialVm.clearFollowers() },
+            onProfile  = { u ->
                 showFollowers = false
                 navController.navigate("profile/$u")
             },
@@ -547,11 +577,13 @@ fun ProfileScreen(
     }
     if (showFollowing) {
         FollowListSheet(
-            title     = Strings.followingTitle(language, followingCount),
-            entries   = following,
-            loading   = followingLoading,
-            onDismiss = { showFollowing = false; socialVm.clearFollowing() },
-            onProfile = { u ->
+            title      = Strings.followingTitle(language, followingCount),
+            entries    = following,
+            loading    = followingLoading,
+            hasMore    = hasMoreFollowing,
+            onLoadMore = { socialVm.loadMoreFollowing() },
+            onDismiss  = { showFollowing = false; socialVm.clearFollowing() },
+            onProfile  = { u ->
                 showFollowing = false
                 navController.navigate("profile/$u")
             },

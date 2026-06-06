@@ -102,8 +102,7 @@ class FeedViewModel @Inject constructor(
                 startLiveInteractions(currentUid)
             }
         }
-        refresh()
-        loadLibraryQuotes()
+        // refresh() ve loadLibraryQuotes() UI tarafından çağrılır — otomatik yükleme yok
     }
 
     private fun startLiveInteractions(currentUid: String) {
@@ -591,7 +590,7 @@ class FeedViewModel @Inject constructor(
                     "uid"               to uid,
                     "name"              to myName,
                     "displayName"       to myName,
-                    "username"          to (d["username"] as? String ?: ""),
+                    "username"          to (userDoc.getString("username") ?: ""),
                     "photoURL"          to myPhoto,
                     "text"              to "",
                     "imageURL"          to "",

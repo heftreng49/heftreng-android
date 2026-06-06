@@ -40,6 +40,16 @@ class ProfileViewModel @Inject constructor(
     private val _loading = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
+    private val _hasMorePosts = MutableStateFlow(false)
+    val hasMorePosts = _hasMorePosts.asStateFlow()
+
+    private val _loadingMore = MutableStateFlow(false)
+    val loadingMorePosts = _loadingMore.asStateFlow()
+
+    private var lastPostDoc  : com.google.firebase.firestore.DocumentSnapshot? = null
+    private var lastLoadedUid: String = ""
+    private val POST_PAGE    = 20L
+
     private val _savedPosts = MutableStateFlow<List<Post>>(emptyList())
     val savedPosts = _savedPosts.asStateFlow()
 
@@ -102,9 +112,17 @@ class ProfileViewModel @Inject constructor(
                 if (!canSeeContent) { _posts.value = emptyList(); return@launch }
 
                 // ── 3. Gönderileri çek — her post için ayrı likeDoc await() YOK ──
+                if (lastLoadedUid != targetUid) {
+                    lastPostDoc   = null
+                    lastLoadedUid = targetUid
+                    _posts.value  = emptyList()
+                }
                 val snap = firestore.collection("feed")
                     .whereEqualTo("uid", targetUid)
-                    .limit(50).get().await()
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(POST_PAGE).get().await()
+                if (snap.documents.isNotEmpty()) lastPostDoc = snap.documents.last()
+                _hasMorePosts.value = snap.documents.size >= POST_PAGE.toInt()
 
                 // Beğenilen ID'leri tek toplu sorguyla al
                 val postIds = snap.documents.map { it.id }
@@ -204,6 +222,10 @@ class ProfileViewModel @Inject constructor(
                     followDoc.delete().await()
                     _isFollowing.value = false
                     _followersCount.value = (_followersCount.value - 1).coerceAtLeast(0)
+                    firestore.collection("users").document(targetUid)
+                        .update("followerCount", com.google.firebase.firestore.FieldValue.increment(-1))
+                    firestore.collection("users").document(myUid)
+                        .update("followingCount", com.google.firebase.firestore.FieldValue.increment(-1))
                 } else {
                     // XML: follows/{fromUid_targetUid} şeması —
                     // fromUid, fromName, fromPhoto, targetUid, targetName, targetPhoto, ts
@@ -224,6 +246,10 @@ class ProfileViewModel @Inject constructor(
                     )).await()
                     _isFollowing.value = true
                     _followersCount.value += 1
+                    firestore.collection("users").document(targetUid)
+                        .update("followerCount", com.google.firebase.firestore.FieldValue.increment(1))
+                    firestore.collection("users").document(myUid)
+                        .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
                     // Bildirim
                     firestore.collection("userNotifs").document(targetUid).collection("msgs").add(mapOf(
                         "fromUid"   to myUid,
@@ -242,6 +268,46 @@ class ProfileViewModel @Inject constructor(
                     )).await()
                 }
             } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun loadMorePosts(targetUid: String) {
+        val last = lastPostDoc ?: return
+        if (_loadingMore.value || !_hasMorePosts.value) return
+        viewModelScope.launch {
+            _loadingMore.value = true
+            try {
+                val snap = firestore.collection("feed")
+                    .whereEqualTo("uid", targetUid)
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .startAfter(last)
+                    .limit(POST_PAGE).get().await()
+                if (snap.documents.isNotEmpty()) lastPostDoc = snap.documents.last()
+                _hasMorePosts.value = snap.documents.size >= POST_PAGE.toInt()
+                // Yeni postları mevcut listeye ekle (tam parse için mevcut rawPost mantığını tekrar ederiz)
+                val newPosts = snap.documents.mapNotNull { doc ->
+                    val fd = doc.data ?: return@mapNotNull null
+                    val quoteObj   = fd["quote"] as? Map<*, *>
+                    val quoteText  = (quoteObj?.get("text")   as? String)?.takeIf { it.isNotBlank() } ?: fd["quoteText"]  as? String ?: ""
+                    val bookName   = (quoteObj?.get("book")   as? String)?.takeIf { it.isNotBlank() } ?: fd["bookName"]   as? String ?: ""
+                    val authorName = (quoteObj?.get("author") as? String)?.takeIf { it.isNotBlank() } ?: fd["authorName"] as? String ?: ""
+                    com.heftreng.app.data.model.Post(
+                        id          = doc.id,
+                        uid         = fd["uid"]         as? String ?: "",
+                        displayName = fd["displayName"] as? String ?: fd["name"] as? String ?: "",
+                        name        = fd["name"]        as? String ?: "",
+                        photoURL    = fd["photoURL"]    as? String ?: "",
+                        text        = fd["text"]        as? String ?: "",
+                        imageURL    = fd["imageURL"]    as? String ?: fd["imgUrl"] as? String ?: "",
+                        quoteText   = quoteText,
+                        bookName    = bookName,
+                        authorName  = authorName,
+                        ts          = fd["ts"]          as? com.google.firebase.Timestamp,
+                    )
+                }
+                _posts.value = _posts.value + newPosts
+            } catch (e: Exception) { e.printStackTrace() }
+            finally { _loadingMore.value = false }
         }
     }
 

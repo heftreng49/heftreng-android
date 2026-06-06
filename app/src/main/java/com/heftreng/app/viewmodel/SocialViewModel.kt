@@ -49,6 +49,18 @@ class SocialViewModel @Inject constructor(
     private val _followingLoading = MutableStateFlow(false)
     val followingLoading = _followingLoading.asStateFlow()
 
+    private val _hasMoreFollowers = MutableStateFlow(false)
+    val hasMoreFollowers = _hasMoreFollowers.asStateFlow()
+
+    private val _hasMoreFollowing = MutableStateFlow(false)
+    val hasMoreFollowing = _hasMoreFollowing.asStateFlow()
+
+    private var lastFollowerDoc : com.google.firebase.firestore.DocumentSnapshot? = null
+    private var lastFollowingDoc: com.google.firebase.firestore.DocumentSnapshot? = null
+    private var followersTargetUid: String = ""
+    private var followingTargetUid: String = ""
+    private val FOLLOW_PAGE = 30
+
     val uid get() = auth.currentUser?.uid ?: ""
 
     // ── Gönderi beğenenleri ──────────────────────────────────────────────────
@@ -62,7 +74,7 @@ class SocialViewModel @Inject constructor(
                 // Birincil sorgu: feedId alanı (site yazım formatı)
                 val snap = firestore.collection("feedLikes")
                     .whereEqualTo("feedId", postId)
-                    .limit(200)
+                    .limit(30)
                     .get().await()
 
                 val results = snap.documents.mapNotNull { doc ->
@@ -80,7 +92,7 @@ class SocialViewModel @Inject constructor(
                     .orderBy(com.google.firebase.firestore.FieldPath.documentId())
                     .startAt("${postId}_")
                     .endAt("${postId}_\uF8FF")
-                    .limit(200)
+                    .limit(30)
                     .get().await()
 
                 if (prefixSnap.isEmpty) {
@@ -122,7 +134,7 @@ class SocialViewModel @Inject constructor(
             try {
                 val snap = firestore.collection("commentLikes")
                     .whereEqualTo("cmtId", commentId)
-                    .limit(200)
+                    .limit(30)
                     .get().await()
 
                 val results = snap.documents.mapNotNull { doc ->
@@ -135,7 +147,7 @@ class SocialViewModel @Inject constructor(
                         .orderBy(com.google.firebase.firestore.FieldPath.documentId())
                         .startAt("${commentId}_")
                         .endAt("${commentId}_\uF8FF")
-                        .limit(200).get().await()
+                        .limit(30).get().await()
                         .documents.mapNotNull { doc ->
                             mapToLikeEntry(doc.data ?: return@mapNotNull null)
                         }.filter { it.uid.isNotBlank() }
@@ -157,7 +169,7 @@ class SocialViewModel @Inject constructor(
             try {
                 val snap = firestore.collection("serialLikes")
                     .whereEqualTo("serialId", serialId)
-                    .limit(200)
+                    .limit(30)
                     .get().await()
 
                 val serialResults = snap.documents.mapNotNull { doc ->
@@ -176,14 +188,19 @@ class SocialViewModel @Inject constructor(
     // ── Takipçiler ───────────────────────────────────────────────────────────
     // Site: follows/{fromUid_targetUid} → { fromUid, fromName, fromPhoto, targetUid, … }
     fun loadFollowers(targetUid: String) {
+        followersTargetUid = targetUid
+        lastFollowerDoc    = null
         viewModelScope.launch {
             _followersLoading.value = true
             _followers.value = emptyList()
             try {
                 val snap = firestore.collection("follows")
                     .whereEqualTo("targetUid", targetUid)
-                    .limit(200)
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(FOLLOW_PAGE.toLong())
                     .get().await()
+                if (snap.documents.isNotEmpty()) lastFollowerDoc = snap.documents.last()
+                _hasMoreFollowers.value = snap.documents.size >= FOLLOW_PAGE
                 val rawFollowers = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     FollowEntry(
@@ -195,9 +212,7 @@ class SocialViewModel @Inject constructor(
                         ts       = d["ts"] as? com.google.firebase.Timestamp,
                     )
                 }.filter { it.uid.isNotBlank() }
-                // follows belgesinden gelen isim/foto önce göster (anında)
                 _followers.value = rawFollowers
-                // Sadece isim/foto eksik olanlar için enrich yap
                 val needsEnrich = rawFollowers.any { it.name.isBlank() || it.photoURL.isBlank() }
                 if (needsEnrich) {
                     val enriched = enrichFollowFromUsers(rawFollowers)
@@ -211,16 +226,50 @@ class SocialViewModel @Inject constructor(
         }
     }
 
+    fun loadMoreFollowers() {
+        val last = lastFollowerDoc ?: return
+        if (_followersLoading.value || !_hasMoreFollowers.value) return
+        viewModelScope.launch {
+            _followersLoading.value = true
+            try {
+                val snap = firestore.collection("follows")
+                    .whereEqualTo("targetUid", followersTargetUid)
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .startAfter(last)
+                    .limit(FOLLOW_PAGE.toLong())
+                    .get().await()
+                if (snap.documents.isNotEmpty()) lastFollowerDoc = snap.documents.last()
+                _hasMoreFollowers.value = snap.documents.size >= FOLLOW_PAGE
+                val more = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    FollowEntry(
+                        uid      = d["fromUid"]  as? String ?: "",
+                        name     = (d["fromName"] as? String)?.takeIf { it.isNotBlank() } ?: "",
+                        photoURL = d["fromPhoto"] as? String ?: "",
+                        ts       = d["ts"] as? com.google.firebase.Timestamp,
+                    )
+                }.filter { it.uid.isNotBlank() }
+                _followers.value = _followers.value + more
+            } catch (e: Exception) { e.printStackTrace() }
+            finally { _followersLoading.value = false }
+        }
+    }
+
     // ── Takip edilenler ──────────────────────────────────────────────────────
     fun loadFollowing(targetUid: String) {
+        followingTargetUid = targetUid
+        lastFollowingDoc   = null
         viewModelScope.launch {
             _followingLoading.value = true
             _following.value = emptyList()
             try {
                 val snap = firestore.collection("follows")
                     .whereEqualTo("fromUid", targetUid)
-                    .limit(200)
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(FOLLOW_PAGE.toLong())
                     .get().await()
+                if (snap.documents.isNotEmpty()) lastFollowingDoc = snap.documents.last()
+                _hasMoreFollowing.value = snap.documents.size >= FOLLOW_PAGE
                 val rawFollowing = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     FollowEntry(
@@ -232,9 +281,7 @@ class SocialViewModel @Inject constructor(
                         ts       = d["ts"] as? com.google.firebase.Timestamp,
                     )
                 }.filter { it.uid.isNotBlank() }
-                // follows belgesinden gelen isim/foto önce göster (anında)
                 _following.value = rawFollowing
-                // Sadece isim/foto eksik olanlar için enrich yap
                 val needsEnrich = rawFollowing.any { it.name.isBlank() || it.photoURL.isBlank() }
                 if (needsEnrich) {
                     val enriched = enrichFollowFromUsers(rawFollowing)
@@ -245,6 +292,35 @@ class SocialViewModel @Inject constructor(
             } finally {
                 _followingLoading.value = false
             }
+        }
+    }
+
+    fun loadMoreFollowing() {
+        val last = lastFollowingDoc ?: return
+        if (_followingLoading.value || !_hasMoreFollowing.value) return
+        viewModelScope.launch {
+            _followingLoading.value = true
+            try {
+                val snap = firestore.collection("follows")
+                    .whereEqualTo("fromUid", followingTargetUid)
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .startAfter(last)
+                    .limit(FOLLOW_PAGE.toLong())
+                    .get().await()
+                if (snap.documents.isNotEmpty()) lastFollowingDoc = snap.documents.last()
+                _hasMoreFollowing.value = snap.documents.size >= FOLLOW_PAGE
+                val more = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    FollowEntry(
+                        uid      = d["targetUid"]  as? String ?: "",
+                        name     = (d["targetName"] as? String)?.takeIf { it.isNotBlank() } ?: "",
+                        photoURL = d["targetPhoto"] as? String ?: "",
+                        ts       = d["ts"] as? com.google.firebase.Timestamp,
+                    )
+                }.filter { it.uid.isNotBlank() }
+                _following.value = _following.value + more
+            } catch (e: Exception) { e.printStackTrace() }
+            finally { _followingLoading.value = false }
         }
     }
 

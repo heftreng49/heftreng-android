@@ -104,6 +104,8 @@ fun FeedScreen(
     LaunchedEffect(Unit) {
         adsVm.loadAdConfigs()
         settingsVm.loadBlockedUsers()
+        vm.refresh()           // İlk açılışta yükle
+        vm.loadLibraryQuotes()
         vm.loadSuggestedUsers()
     }
 
