@@ -57,8 +57,15 @@ class AdsViewModel @Inject constructor(
         }
         if (isAlreadyLoaded) return
 
+        // Adaptive banner: ekran genişliğine göre boyutlanır → en yüksek fill rate
+        val displayMetrics = appContext.resources.displayMetrics
+        val adWidthPixels  = displayMetrics.widthPixels.toFloat()
+        val density        = displayMetrics.density
+        val adWidth        = (adWidthPixels / density).toInt()
+        val adaptiveSize   = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(appContext, adWidth)
+
         val adView = AdView(appContext).apply {
-            setAdSize(AdSize.MEDIUM_RECTANGLE)
+            setAdSize(adaptiveSize)
             adUnitId = unitId
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
             adListener = object : AdListener() {
@@ -101,7 +108,11 @@ class AdsViewModel @Inject constructor(
                     }
                 }
             }
-            loadAd(AdRequest.Builder().build())
+            loadAd(
+                AdRequest.Builder()
+                    .setContentUrl("https://heftreng.app")   // Contextual hedefleme
+                    .build()
+            )
         }
 
         // Eski cache'i güvenli bir şekilde temizle

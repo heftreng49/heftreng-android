@@ -104,8 +104,8 @@ fun AdBannerView(
             // reklam gelince sadece içi dolar, dışarıdaki kartlar hiç oynamaz.
             Box(
                 modifier = Modifier
-                    .width(300.dp)
-                    .height(250.dp)   // MEDIUM_RECTANGLE sabit yükseklik — kilitli
+                    .fillMaxWidth()
+                    .wrapContentHeight()    // Adaptive banner yüksekliğe göre açılır
                     .clip(RoundedCornerShape(8.dp))
                     .border(BorderStroke(0.5.dp,
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
@@ -114,7 +114,9 @@ fun AdBannerView(
             ) {
                 if (!isLoaded) {
                     // Shimmer skeleton — reklam yüklenene kadar gösterilir
-                    AdShimmer()
+                    Box(modifier = Modifier.fillMaxWidth().height(60.dp)) {
+                        AdShimmer()
+                    }
                 }
 
                 // Preloaded view varsa kullan, yoksa factory'den yeni üret
@@ -130,21 +132,29 @@ fun AdBannerView(
                     // Fallback — preload olmadıysa normal yükle
                     AndroidView(
                         factory = { ctx ->
+                            val dm    = ctx.resources.displayMetrics
+                            val width = ((dm.widthPixels / dm.density).toInt() - 28) // padding çıkar
+                            val size  = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(ctx, width)
                             AdView(ctx).apply {
-                                setAdSize(AdSize.MEDIUM_RECTANGLE)
+                                setAdSize(size)
                                 adUnitId = unitId
                                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                                 adListener = object : AdListener() {
                                     override fun onAdLoaded() { Log.d("AdBanner", "Yüklendi") }
                                     override fun onAdFailedToLoad(e: LoadAdError) { Log.e("AdBanner", e.message) }
                                 }
-                                loadAd(AdRequest.Builder().build())
+                                loadAd(
+                                    AdRequest.Builder()
+                                        .setContentUrl("https://heftreng.app")
+                                        .build()
+                                )
                             }
                         },
                         update = { adView ->
                             if (adView.adUnitId != unitId) {
                                 adView.adUnitId = unitId
-                                adView.loadAd(AdRequest.Builder().build())
+                                adView.loadAd(AdRequest.Builder()
+                                    .setContentUrl("https://heftreng.app").build())
                             }
                         },
                         modifier = Modifier.fillMaxSize(),
