@@ -102,7 +102,8 @@ class FeedViewModel @Inject constructor(
                 startLiveInteractions(currentUid)
             }
         }
-        // refresh() ve loadLibraryQuotes() UI tarafından çağrılır — otomatik yükleme yok
+        refresh()
+        loadLibraryQuotes()
     }
 
     private fun startLiveInteractions(currentUid: String) {
@@ -590,7 +591,7 @@ class FeedViewModel @Inject constructor(
                     "uid"               to uid,
                     "name"              to myName,
                     "displayName"       to myName,
-                    "username"          to (userDoc.getString("username") ?: ""),
+                    "username"          to (d["username"] as? String ?: ""),
                     "photoURL"          to myPhoto,
                     "text"              to "",
                     "imageURL"          to "",
@@ -935,14 +936,14 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val userDoc = firestore.collection("users").document(uid).get().await()
-                val myName  = userDoc.getString("displayName") ?: userDoc.getString("name") ?: ""
-                val myPhoto = userDoc.getString("photoURL") ?: ""
+                val myName  = d["displayName"] as? String ?: "" ?: d["name"] as? String ?: "" ?: ""
+                val myPhoto = d["photoURL"] as? String ?: "" ?: ""
                 val preview = chapterBody.replace(Regex("<[^>]+>"), "").trim().take(200)
                 firestore.collection("feed").add(mapOf(
                     "uid"          to uid,
                     "name"         to myName,
                     "displayName"  to myName,
-                    "username"     to (userDoc.getString("username") ?: ""),
+                    "username"     to (d["username"] as? String ?: "" ?: ""),
                     "photoURL"     to myPhoto,
                     "text"         to "",
                     "imageURL"     to "",
@@ -980,8 +981,8 @@ class FeedViewModel @Inject constructor(
         val currentUid = auth.currentUser?.uid ?: return
         if (_cachedMyUid == currentUid && _cachedMyName.isNotBlank()) return
         val userDoc = firestore.collection("users").document(currentUid).get().await()
-        _cachedMyName  = userDoc.getString("displayName") ?: userDoc.getString("name") ?: auth.currentUser?.displayName ?: "Kullanıcı"
-        _cachedMyPhoto = userDoc.getString("photoURL") ?: ""
+        _cachedMyName  = d["displayName"] as? String ?: "" ?: d["name"] as? String ?: "" ?: auth.currentUser?.displayName ?: "Kullanıcı"
+        _cachedMyPhoto = d["photoURL"] as? String ?: "" ?: ""
         _cachedMyUid   = currentUid
     }
 
