@@ -301,7 +301,9 @@ fun MessageDetailScreen(
     presenceVm   : PresenceViewModel  = hiltViewModel(),
 ) {
     val ku = language == "ku"
-    val messages      by vm.messages.collectAsState()
+    val messages         by vm.messages.collectAsState()
+    val hasOlderMessages by vm.hasOlderMessages.collectAsState()
+    val loadingOlder     by vm.loadingOlder.collectAsState()
     val otherUser     by vm.otherUser.collectAsState()
     val conversations by vm.conversations.collectAsState()
     val listState     = rememberLazyListState()
@@ -936,6 +938,39 @@ fun MessageDetailScreen(
                 verticalArrangement = Arrangement.spacedBy(3.dp),
                 reverseLayout       = false,
             ) {
+                // ── Eski mesajları yükle butonu ──────────────────────────
+                if (hasOlderMessages) {
+                    item(key = "load_older") {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (loadingOlder) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    color    = Primary,
+                                    strokeWidth = 2.dp,
+                                )
+                            } else {
+                                TextButton(onClick = { vm.loadOlderMessages() }) {
+                                    Icon(
+                                        androidx.compose.material.icons.Icons.Default.KeyboardArrowUp,
+                                        contentDescription = null,
+                                        tint     = Muted,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        "Eski mesajları gör",
+                                        color    = Muted,
+                                        fontSize = 12.sp,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 items(messages, key = { it.id }) { msg ->
                     val isMine = msg.senderId == vm.uid
                     MsgRow(

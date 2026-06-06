@@ -407,6 +407,16 @@ class KurdiViewModel @Inject constructor(
                     exercises = finalExercises,
                 )
 
+                // ── Ders görüntülenme sayacı — arka planda, non-blocking ──
+                if (uid.isNotEmpty()) {
+                    viewModelScope.launch {
+                        try {
+                            firestore.collection("kf_lessons").document(lessonId)
+                                .update("viewCount", FieldValue.increment(1))
+                        } catch (_: Exception) {}
+                    }
+                }
+
             } catch (e: Exception) {
                 _toast.value = "Ders yüklenemedi"
                 e.printStackTrace()

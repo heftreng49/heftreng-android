@@ -177,7 +177,7 @@ class FeedViewModel @Inject constructor(
                 // Önbellek boşsa veya ilk yüklemeyse burası sessizce pas geçilir
             }
 
-            // 2. AŞAMA: Sunucu sorgusu — 5 dakikada bir ya da liste boşsa
+            // 2. AŞAMA: Sunucu — 5 dakikada bir veya liste boşsa
             val now = System.currentTimeMillis()
             val shouldFetchServer = _posts.value.isEmpty() ||
                     (now - lastServerRefreshMs) > SERVER_REFRESH_INTERVAL_MS
