@@ -1,6 +1,7 @@
 package com.heftreng.app.navigation
 
 import com.heftreng.app.ui.i18n.Strings
+import com.heftreng.app.BuildConfig
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
