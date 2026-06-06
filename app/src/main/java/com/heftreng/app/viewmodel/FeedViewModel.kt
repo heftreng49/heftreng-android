@@ -69,6 +69,8 @@ class FeedViewModel @Inject constructor(
     private var myRepostMap = emptyMap<String, String>()
     private var lastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
     private val PAGE_SIZE = 30L
+    private var lastServerRefreshMs: Long = 0L
+    private val SERVER_REFRESH_INTERVAL_MS: Long = 5L * 60L * 1000L // 5 dakika
     
     private val userCache = mutableMapOf<String, Pair<String, String>>()
 
@@ -178,7 +180,7 @@ class FeedViewModel @Inject constructor(
             // 2. AŞAMA: Sunucu sorgusu — 5 dakikada bir ya da liste boşsa
             val now = System.currentTimeMillis()
             val shouldFetchServer = _posts.value.isEmpty() ||
-                (now - lastServerRefreshMs) > SERVER_REFRESH_INTERVAL_MS
+                    (now - lastServerRefreshMs) > SERVER_REFRESH_INTERVAL_MS
             if (shouldFetchServer) {
                 try {
                     val serverSnap = query.get(Source.SERVER).await()
