@@ -74,6 +74,23 @@ class FeedViewModel @Inject constructor(
     
     private val userCache = mutableMapOf<String, Pair<String, String>>()
 
+    // user dökümanı bellek cache — aynı uid'yi tekrar Firestore'dan çekmez
+    private val _userDocCache = mutableMapOf<String, Map<String, Any>>()
+    private suspend fun cachedUserDoc(targetUid: String): Map<String, Any>? {
+        _userDocCache[targetUid]?.let { return it }
+        return try {
+            val d = firestore.collection("users").document(targetUid).get().await().data
+            if (d != null) _userDocCache[targetUid] = d
+            d
+        } catch (_: Exception) { null }
+    }
+    // Kendi profilimiz için auth'tan oku — Firestore okuması yapmaz
+    private fun myUserData(): Map<String, Any> = mapOf(
+        "displayName" to (auth.currentUser?.displayName ?: ""),
+        "photoURL"    to (auth.currentUser?.photoUrl?.toString() ?: ""),
+        "uid"         to uid,
+    )
+
     private var likedListener   : com.google.firebase.firestore.ListenerRegistration? = null
     private var savedListener   : com.google.firebase.firestore.ListenerRegistration? = null
     private var repostListener  : com.google.firebase.firestore.ListenerRegistration? = null
@@ -490,10 +507,12 @@ class FeedViewModel @Inject constructor(
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
-                val userDoc = firestore.collection("users").document(uid).get().await()
-                val myName  = userDoc.getString("displayName") ?: userDoc.getString("name")
+                val d       = cachedUserDoc(uid) ?: myUserData()
+                val myName  = d["displayName"] as? String
+                    ?: d["name"] as? String
                     ?: auth.currentUser?.displayName ?: "Bikarhêner"
-                val myPhoto = userDoc.getString("photoURL") ?: ""
+                val myPhoto = d["photoURL"] as? String
+                    ?: auth.currentUser?.photoUrl?.toString() ?: ""
                 firestore.collection("feed").document(post.id).collection("comments").add(mapOf(
                     "uid"          to uid,
                     "name"         to myName,
@@ -565,9 +584,9 @@ class FeedViewModel @Inject constructor(
         if (post.isRepostedByMe || post.id in myRepostMap) return
         viewModelScope.launch {
             try {
-                val userDoc = firestore.collection("users").document(uid).get().await()
-                val myName  = userDoc.getString("displayName") ?: userDoc.getString("name") ?: ""
-                val myPhoto = userDoc.getString("photoURL") ?: ""
+                val d       = cachedUserDoc(uid) ?: myUserData()
+                val myName  = d["displayName"] as? String ?: d["name"] as? String ?: ""
+                val myPhoto = d["photoURL"] as? String ?: ""
                 val newRef = firestore.collection("feed").add(mapOf(
                     "uid"               to uid,
                     "name"              to myName,
@@ -667,11 +686,11 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             _createPostLoading.value = true
             try {
-                val userDoc = firestore.collection("users").document(uid).get().await()
-                val myName  = userDoc.getString("displayName") ?: userDoc.getString("name") ?: auth.currentUser?.displayName ?: ""
-                val myPhoto = userDoc.getString("photoURL") ?: auth.currentUser?.photoUrl?.toString() ?: ""
-                val myUser  = userDoc.getString("username") ?: ""
-                val myEmail = userDoc.getString("email") ?: auth.currentUser?.email ?: ""
+                val d       = cachedUserDoc(uid) ?: myUserData()
+                val myName  = d["displayName"] as? String ?: d["name"] as? String ?: auth.currentUser?.displayName ?: ""
+                val myPhoto = d["photoURL"] as? String ?: auth.currentUser?.photoUrl?.toString() ?: ""
+                val myUser  = d["username"] as? String ?: ""
+                val myEmail = d["email"] as? String ?: auth.currentUser?.email ?: ""
 
                 var resolvedAuthorId = libraryAuthorId
                 var resolvedBookId   = libraryBookId
@@ -1047,33 +1066,8 @@ class FeedViewModel @Inject constructor(
             android.util.Log.w("FeedVM", "loadLibraryQuotes feed: ${e.message}")
         }
 
-        try {
-            val cgSnap = firestore.collectionGroup("quotes").get().await()
-            cgSnap.documents.forEach { doc ->
-                val d    = doc.data ?: return@forEach
-                val text = (d["text"] as? String)?.takeIf { it.isNotBlank() } ?: return@forEach
-                val feedPostId = d["feedPostId"] as? String
-                if (feedPostId != null && seenIds.contains(feedPostId)) return@forEach
-                if (seenIds.add("cg_${doc.id}")) {
-                    result.add(Post(
-                        id            = doc.id,
-                        uid           = d["uid"] as? String ?: "",
-                        displayName   = d["userDisplayName"] as? String ?: d["displayName"] as? String ?: "",
-                        name          = d["userDisplayName"] as? String ?: "",
-                        photoURL      = d["userPhotoURL"] as? String ?: "",
-                        quoteText     = text,
-                        bookName      = d["bookTitle"] as? String ?: d["bookName"] as? String ?: "",
-                        authorName    = d["authorName"] as? String ?: "",
-                        libraryBookId = d["bookId"] as? String ?: "",
-                        ts            = d["ts"] as? com.google.firebase.Timestamp,
-                        type          = "library_quote",
-                        visibility    = d["visibility"] as? String ?: "public",
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("FeedVM", "collectionGroup: ${e.message}")
-        }
+        // collectionGroup("quotes") tüm alt koleksiyonu tarardı — her alıntı zaten
+        // addBookQuote() ile feed'e de yazıldığından bu sorgu gereksiz okuma yapıyordu.
 
         try {
             val oldSnap = firestore.collection("feed")

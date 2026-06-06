@@ -118,6 +118,14 @@ class KurdiViewModel @Inject constructor(
 
     private val prefs by lazy { context.getSharedPreferences("hf_kurdi", Context.MODE_PRIVATE) }
 
+    // Ders içeriği cache — aynı dersi tekrar Firestore'dan çekmez
+    // Oturum boyunca geçerli, uygulama kapanınca temizlenir
+    private data class LessonContent(
+        val vocab     : List<KfVocab>,
+        val exercises : List<KfExercise>,
+    )
+    private val lessonContentCache = mutableMapOf<String, LessonContent>()
+
     // OR API key — localStorage('kf_or_key') ile eşdeğer
     private val _orApiKey = MutableStateFlow(prefs.getString("kf_or_key", "") ?: "")
     val orApiKey = _orApiKey.asStateFlow()
@@ -327,8 +335,16 @@ class KurdiViewModel @Inject constructor(
                 val lesson = _lessons.value.find { it.id == lessonId }
                     ?: run { _loading.value = false; return@launch }
 
+                // Cache'de varsa Firestore'a gitme — 400 okuma tasarrufu
+                val cached = lessonContentCache[lessonId]
+                val vocabList: List<KfVocab>
+                val exerciseList: List<KfExercise>
+                if (cached != null) {
+                    vocabList    = cached.vocab
+                    exerciseList = cached.exercises
+                } else {
                 // kf_vocab yükle
-                val vocabList: List<KfVocab> = try {
+                vocabList = try {
                     val snap = firestore.collection("kf_vocab")
                         .whereEqualTo("lessonId", lessonId).limit(200).get().await()
                     snap.documents.mapNotNull { doc ->
@@ -345,7 +361,7 @@ class KurdiViewModel @Inject constructor(
                 } catch (_: Exception) { emptyList() }
 
                 // kf_exercises yükle
-                val exerciseList: List<KfExercise> = try {
+                exerciseList = try {
                     val snap = firestore.collection("kf_exercises")
                         .whereEqualTo("lessonId", lessonId).limit(200).get().await()
                     snap.documents.mapNotNull { doc ->
@@ -390,8 +406,9 @@ class KurdiViewModel @Inject constructor(
                         )
                     }
                 } catch (_: Exception) { emptyList() }
-
-                val finalVocab: List<KfVocab> = vocabList
+                // Yüklenen içeriği cache'e kaydet
+                lessonContentCache[lessonId] = LessonContent(vocabList, exerciseList)
+                } // end else (cache miss)
                     .distinctBy { it.ku.trim().lowercase() }
                     .ifEmpty { MOCK_VOCAB[lessonId] ?: emptyList() }
 
