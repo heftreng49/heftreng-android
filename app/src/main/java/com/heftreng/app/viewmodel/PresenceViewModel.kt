@@ -36,7 +36,9 @@ class PresenceViewModel @Inject constructor(
     // Heartbeat aralığı
     private val HEARTBEAT_INTERVAL_MS = 90_000L   // 30s→90s: 3x daha az yazma
 
-    private var heartbeatJob: kotlinx.coroutines.Job? = null
+    private var heartbeatJob     : kotlinx.coroutines.Job? = null
+    private var presenceListener : com.google.firebase.firestore.ListenerRegistration? = null
+    private var typingListener   : com.google.firebase.firestore.ListenerRegistration? = null
 
     // ── Online durumunu yaz + heartbeat başlat ────────────────────────────────
     fun goOnline() {
@@ -86,7 +88,8 @@ class PresenceViewModel @Inject constructor(
 
     // ── Kullanıcı online mı? — lastSeen 2 dk'dan eskiyse offline say ──────────
     fun listenPresence(targetUid: String) {
-        firestore.collection("presence").document(targetUid)
+        presenceListener?.remove()
+        presenceListener = firestore.collection("presence").document(targetUid)
             .addSnapshotListener { snap, _ ->
                 if (snap == null || !snap.exists()) {
                     _onlineUsers.value = _onlineUsers.value - targetUid
@@ -140,7 +143,8 @@ class PresenceViewModel @Inject constructor(
     }
 
     fun listenTyping(convId: String, otherUid: String) {
-        firestore.collection("typing").document("${convId}_$otherUid")
+        typingListener?.remove()
+        typingListener = firestore.collection("typing").document("${convId}_$otherUid")
             .addSnapshotListener { snap, _ ->
                 val exists = snap?.exists() == true
                 if (!exists) {
@@ -170,8 +174,20 @@ class PresenceViewModel @Inject constructor(
     fun isOnline(targetUid: String) = targetUid in _onlineUsers.value
     fun isTyping(targetUid: String) = targetUid in _typingUsers.value
 
+    // ── Chat ekranından çıkınca çağır ────────────────────────────────────────
+    fun stopListening() {
+        presenceListener?.remove()
+        presenceListener = null
+        typingListener?.remove()
+        typingListener = null
+        _onlineUsers.value = emptySet()
+        _typingUsers.value = emptySet()
+    }
+
     override fun onCleared() {
         super.onCleared()
         heartbeatJob?.cancel()
+        presenceListener?.remove()
+        typingListener?.remove()
     }
 }
