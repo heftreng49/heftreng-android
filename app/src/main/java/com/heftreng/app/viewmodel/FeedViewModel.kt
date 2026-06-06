@@ -591,7 +591,7 @@ class FeedViewModel @Inject constructor(
                     "uid"               to uid,
                     "name"              to myName,
                     "displayName"       to myName,
-                    "username"          to (userDoc.getString("username") ?: ""),
+                    "username"          to (d["username"] as? String ?: ""),
                     "photoURL"          to myPhoto,
                     "text"              to "",
                     "imageURL"          to "",

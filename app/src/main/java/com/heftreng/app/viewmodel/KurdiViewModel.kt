@@ -409,11 +409,12 @@ class KurdiViewModel @Inject constructor(
                 // Yüklenen içeriği cache'e kaydet
                 lessonContentCache[lessonId] = LessonContent(vocabList, exerciseList)
                 } // end else (cache miss)
+
+                // Mükerrer kelimeler ve egzersizler temizle
+                val finalVocab: List<KfVocab> = vocabList
                     .distinctBy { it.ku.trim().lowercase() }
                     .ifEmpty { MOCK_VOCAB[lessonId] ?: emptyList() }
 
-                // Firestore'da mükerrer doküman varsa temizle
-                // Aynı tip+soru kombinasyonu sadece bir kez gösterilir
                 val finalExercises: List<KfExercise> = exerciseList
                     .distinctBy { "${it.type}|${it.question.trim().lowercase()}" }
                     .ifEmpty { MOCK_EXERCISES[lessonId] ?: emptyList() }
