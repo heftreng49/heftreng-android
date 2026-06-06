@@ -407,12 +407,12 @@ class KurdiViewModel @Inject constructor(
                     exercises = finalExercises,
                 )
 
-                // ── Ders görüntülenme sayacı — arka planda, non-blocking ──
-                if (uid.isNotEmpty()) {
+                // ── Görüntülenme sayacı — sadece ilk kez (henüz tamamlanmamışsa) ──
+                if (!lesson.completed && uid.isNotEmpty()) {
                     viewModelScope.launch {
                         try {
                             firestore.collection("kf_lessons").document(lessonId)
-                                .update("viewCount", FieldValue.increment(1))
+                                .update("viewCount", com.google.firebase.firestore.FieldValue.increment(1))
                         } catch (_: Exception) {}
                     }
                 }

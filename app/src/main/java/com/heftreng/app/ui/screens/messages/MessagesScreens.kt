@@ -938,23 +938,23 @@ fun MessageDetailScreen(
                 verticalArrangement = Arrangement.spacedBy(3.dp),
                 reverseLayout       = false,
             ) {
-                // ── Eski mesajları yükle butonu ──────────────────────────
-                if (hasOlderMessages) {
-                    item(key = "load_older") {
+                // ── Eski mesajları yükle ────────────────────────────
+                item(key = "older_btn") {
+                    if (hasOlderMessages) {
                         Box(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                            contentAlignment = Alignment.Center,
+                            modifier            = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            contentAlignment    = Alignment.Center,
                         ) {
                             if (loadingOlder) {
                                 CircularProgressIndicator(
-                                    modifier = Modifier.size(22.dp),
-                                    color    = Primary,
+                                    modifier    = Modifier.size(20.dp),
+                                    color       = Primary,
                                     strokeWidth = 2.dp,
                                 )
                             } else {
                                 TextButton(onClick = { vm.loadOlderMessages() }) {
                                     Icon(
-                                        androidx.compose.material.icons.Icons.Default.KeyboardArrowUp,
+                                        Icons.Default.KeyboardArrowUp,
                                         contentDescription = null,
                                         tint     = Muted,
                                         modifier = Modifier.size(16.dp),

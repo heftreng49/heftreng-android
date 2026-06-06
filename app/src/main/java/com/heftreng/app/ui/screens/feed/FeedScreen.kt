@@ -95,7 +95,7 @@ fun FeedScreen(
         refreshing = isRefreshing,
         onRefresh  = {
             isRefreshing = true
-            vm.refresh()
+            vm.refresh(forceRefresh = true)
         }
     )
     // isRefreshing'i loading bitince kapat

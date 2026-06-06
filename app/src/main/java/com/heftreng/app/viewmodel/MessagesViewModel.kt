@@ -51,16 +51,6 @@ class MessagesViewModel @Inject constructor(
     private val _messages  = MutableStateFlow<List<Message>>(emptyList())
     val messages = _messages.asStateFlow()
 
-    private val _hasOlderMessages = MutableStateFlow(false)
-    val hasOlderMessages = _hasOlderMessages.asStateFlow()
-
-    private val _loadingOlder = MutableStateFlow(false)
-    val loadingOlder = _loadingOlder.asStateFlow()
-
-    private var oldestMsgDoc: com.google.firebase.firestore.DocumentSnapshot? = null
-    private var currentConvId: String = ""
-    private val MSG_PAGE = 50
-
     private val _otherUser = MutableStateFlow<User?>(null)
     val otherUser = _otherUser.asStateFlow()
 
@@ -80,6 +70,18 @@ class MessagesViewModel @Inject constructor(
 
     private var convListener: ListenerRegistration? = null
     private var msgListener : ListenerRegistration? = null
+
+    // Mesaj sayfalama
+    private val _hasOlderMessages = MutableStateFlow(false)
+    val hasOlderMessages = _hasOlderMessages.asStateFlow()
+
+    private val _loadingOlder = MutableStateFlow(false)
+    val loadingOlder = _loadingOlder.asStateFlow()
+
+    private var oldestMsgDoc : com.google.firebase.firestore.DocumentSnapshot? = null
+    private var newestMsgTs  : com.google.firebase.Timestamp? = null
+    private var currentConvId: String = ""
+    private val MSG_PAGE     = 50
 
     init {
         // Auth state değişince uid güncelle ve conversations'ı yeniden dinle
@@ -188,55 +190,120 @@ class MessagesViewModel @Inject constructor(
             }
     }
 
-    // ── Mesaj listesi — son 50 mesaj + sayfalama ─────────────
+    // ── Mesaj listesi — hibrit sistem ────────────────────────
+    //  1. get() ile son MSG_PAGE mesaj çek (tek seferlik, ucuz)
+    //  2. Sadece YENİ mesajlar için realtime listener (newestMsgTs'den sonrası)
+    //  3. loadOlderMessages() ile geçmişe sayfalama
     fun listenMessages(convId: String) {
-        currentConvId = convId
-        oldestMsgDoc  = null
-        _messages.value = emptyList()
-        _hasOlderMessages.value = false
         msgListener?.remove()
-        _loading.value = true
+        currentConvId    = convId
+        oldestMsgDoc     = null
+        newestMsgTs      = null
+        _messages.value  = emptyList()
+        _hasOlderMessages.value = false
+        _loading.value   = true
 
-        // Yeni mesajlar için realtime listener — sadece son MSG_PAGE kadar
-        msgListener = firestore.collection("convMessages").document(convId)
-            .collection("msgs")
-            .orderBy("createdAt", Query.Direction.DESCENDING)
-            .limit(MSG_PAGE.toLong())
-            .addSnapshotListener { snap, _ ->
-                if (snap == null) { _loading.value = false; return@addSnapshotListener }
+        viewModelScope.launch {
+            try {
+                // ── ADIM 1: Son MSG_PAGE mesajı tek seferlik çek (DESC → ters çevir) ──
+                val snap = firestore.collection("convMessages").document(convId)
+                    .collection("msgs")
+                    .orderBy("createdAt", Query.Direction.DESCENDING)
+                    .limit(MSG_PAGE.toLong())
+                    .get().await()
+
                 val docs = snap.documents
-                // En eski doc'u kaydet (sayfalama için)
-                if (docs.isNotEmpty() && oldestMsgDoc == null) {
-                    oldestMsgDoc = docs.last() // DESC order'da last = en eski
+                if (docs.isNotEmpty()) {
+                    oldestMsgDoc = docs.last()          // DESC'te last = en eski
+                    newestMsgTs  = docs.first()         // DESC'te first = en yeni
+                        .getTimestamp("createdAt")
                 }
-                // DESC geldi, ASC göster için ters çevir
-                val msgs = docs.reversed().mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    if (d["deleted"] as? Boolean == true) return@mapNotNull null
-                    Message(
-                        id             = doc.id,
-                        conversationId = convId,
-                        senderId       = d["senderUid"]     as? String ?: "",
-                        text           = d["text"]          as? String ?: "",
-                        imageUrl       = d["image_url"]     as? String ?: "",
-                        audioUrl       = d["audio_url"]     as? String ?: "",
-                        createdAt      = (d["createdAt"] as? Timestamp)?.toDate()?.time?.toString() ?: "",
-                        read           = d["read"]          as? Boolean ?: false,
-                        deleted        = d["deleted"]       as? Boolean ?: false,
-                        edited         = d["edited"]        as? Boolean ?: false,
-                        likedBy        = (d["liked_by"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
-                        replyToId      = d["reply_to_id"]   as? String ?: "",
-                        replyToText    = d["reply_to_text"] as? String ?: "",
-                        replyToName    = d["reply_to_name"] as? String ?: "",
-                    )
-                }
-                // Daha eski mesaj var mı? (tam sayfa geldiyse evet)
+
+                val initial = docs.reversed()
+                    .mapNotNull { it.toMessage(convId) }
+                _messages.value = initial
                 _hasOlderMessages.value = docs.size >= MSG_PAGE
-                _messages.value = msgs
                 _loading.value = false
                 markRead(convId)
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _loading.value = false
             }
+
+            // ── ADIM 2: Listener — sadece newestMsgTs'den SONRA gelen mesajlar ──
+            val afterTs = newestMsgTs ?: Timestamp.now()
+            msgListener = firestore.collection("convMessages").document(convId)
+                .collection("msgs")
+                .orderBy("createdAt", Query.Direction.ASCENDING)
+                .whereGreaterThan("createdAt", afterTs)
+                .addSnapshotListener { snap, _ ->
+                    if (snap == null || snap.isEmpty) return@addSnapshotListener
+                    val newMsgs = snap.documents.mapNotNull { it.toMessage(convId) }
+                    if (newMsgs.isEmpty()) return@addSnapshotListener
+                    // Gelen yeni mesajları mevcut listeye ekle (duplicate olmasın)
+                    val existing = _messages.value
+                    val existingIds = existing.map { it.id }.toSet()
+                    val toAdd = newMsgs.filter { it.id !in existingIds }
+                    if (toAdd.isNotEmpty()) {
+                        _messages.value = existing + toAdd
+                        newestMsgTs = snap.documents.last().getTimestamp("createdAt") ?: newestMsgTs
+                        markRead(convId)
+                    }
+                }
+        }
     }
+
+    // ── Daha eski mesajları yükle ─────────────────────────────
+    fun loadOlderMessages() {
+        val convId = currentConvId.takeIf { it.isNotBlank() } ?: return
+        val oldest = oldestMsgDoc ?: return
+        if (_loadingOlder.value) return
+        viewModelScope.launch {
+            _loadingOlder.value = true
+            try {
+                val snap = firestore.collection("convMessages").document(convId)
+                    .collection("msgs")
+                    .orderBy("createdAt", Query.Direction.DESCENDING)
+                    .startAfter(oldest)
+                    .limit(MSG_PAGE.toLong())
+                    .get().await()
+                if (snap.documents.isNotEmpty()) {
+                    oldestMsgDoc = snap.documents.last()
+                    val older = snap.documents.reversed()
+                        .mapNotNull { it.toMessage(convId) }
+                    _messages.value = older + _messages.value
+                    _hasOlderMessages.value = snap.documents.size >= MSG_PAGE
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _loadingOlder.value = false
+            }
+        }
+    }
+
+    private fun com.google.firebase.firestore.DocumentSnapshot.toMessage(convId: String): Message? {
+        val d = data ?: return null
+        if (d["deleted"] as? Boolean == true) return null
+        return Message(
+            id             = id,
+            conversationId = convId,
+            senderId       = d["senderUid"]     as? String ?: "",
+            text           = d["text"]          as? String ?: "",
+            imageUrl       = d["image_url"]     as? String ?: "",
+            audioUrl       = d["audio_url"]     as? String ?: "",
+            createdAt      = (d["createdAt"] as? Timestamp)?.toDate()?.time?.toString() ?: "",
+            read           = d["read"]          as? Boolean ?: false,
+            deleted        = d["deleted"]       as? Boolean ?: false,
+            edited         = d["edited"]        as? Boolean ?: false,
+            likedBy        = (d["liked_by"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            replyToId      = d["reply_to_id"]   as? String ?: "",
+            replyToText    = d["reply_to_text"] as? String ?: "",
+            replyToName    = d["reply_to_name"] as? String ?: "",
+        )
+    }
+
 
     // ── Mesaj gönder ──────────────────────────────────────────
     fun sendMessage(
@@ -533,54 +600,6 @@ class MessagesViewModel @Inject constructor(
 
     // Alias'lar
     fun loadConversations()             = listenConversations()
-    // ── Daha eski mesajları yükle ─────────────────────────────
-    fun loadOlderMessages() {
-        val convId  = currentConvId.takeIf { it.isNotBlank() } ?: return
-        val oldest  = oldestMsgDoc ?: return
-        if (_loadingOlder.value) return
-        viewModelScope.launch {
-            _loadingOlder.value = true
-            try {
-                val snap = firestore.collection("convMessages").document(convId)
-                    .collection("msgs")
-                    .orderBy("createdAt", Query.Direction.DESCENDING)
-                    .startAfter(oldest)
-                    .limit(MSG_PAGE.toLong())
-                    .get().await()
-                if (snap.documents.isNotEmpty()) {
-                    oldestMsgDoc = snap.documents.last()
-                    val older = snap.documents.reversed().mapNotNull { doc ->
-                        val d = doc.data ?: return@mapNotNull null
-                        if (d["deleted"] as? Boolean == true) return@mapNotNull null
-                        Message(
-                            id             = doc.id,
-                            conversationId = convId,
-                            senderId       = d["senderUid"]     as? String ?: "",
-                            text           = d["text"]          as? String ?: "",
-                            imageUrl       = d["image_url"]     as? String ?: "",
-                            audioUrl       = d["audio_url"]     as? String ?: "",
-                            createdAt      = (d["createdAt"] as? Timestamp)?.toDate()?.time?.toString() ?: "",
-                            read           = d["read"]          as? Boolean ?: false,
-                            deleted        = d["deleted"]       as? Boolean ?: false,
-                            edited         = d["edited"]        as? Boolean ?: false,
-                            likedBy        = (d["liked_by"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
-                            replyToId      = d["reply_to_id"]   as? String ?: "",
-                            replyToText    = d["reply_to_text"] as? String ?: "",
-                            replyToName    = d["reply_to_name"] as? String ?: "",
-                        )
-                    }
-                    // Eski mesajları başa ekle
-                    _messages.value = older + _messages.value
-                    _hasOlderMessages.value = snap.documents.size >= MSG_PAGE
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                _loadingOlder.value = false
-            }
-        }
-    }
-
     fun loadMessages(convId: String)    = listenMessages(convId)
     fun subscribeToMessages(convId: String) = listenMessages(convId)
 

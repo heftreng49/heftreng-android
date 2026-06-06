@@ -69,8 +69,8 @@ class FeedViewModel @Inject constructor(
     private var myRepostMap = emptyMap<String, String>()
     private var lastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
     private val PAGE_SIZE = 30L
-    private var lastServerRefreshMs: Long = 0L
-    private val SERVER_REFRESH_INTERVAL_MS: Long = 5L * 60L * 1000L // 5 dakika
+    private var lastServerFetchMs: Long = 0L
+    private val AUTO_REFRESH_INTERVAL_MS: Long = 5L * 60L * 1000L // 5 dk — otomatik yenileme aralığı
     
     private val userCache = mutableMapOf<String, Pair<String, String>>()
 
@@ -144,7 +144,7 @@ class FeedViewModel @Inject constructor(
     }
 
     // ── OPTİMİZE EDİLDİ: İki Aşamalı Hibrit Hızlı Akış (Cache -> Server) ──────
-    fun refresh() {
+    fun refresh(forceRefresh: Boolean = false) {
         lastDoc = null
         _hasMore.value = true
         _postNotFound.value = null
@@ -177,15 +177,16 @@ class FeedViewModel @Inject constructor(
                 // Önbellek boşsa veya ilk yüklemeyse burası sessizce pas geçilir
             }
 
-            // 2. AŞAMA: Sunucu — 5 dakikada bir veya liste boşsa
+            // 2. AŞAMA: Server — kullanıcı swipe yaptıysa HER ZAMAN, yoksa 5 dk geçmişse
             val now = System.currentTimeMillis()
-            val shouldFetchServer = _posts.value.isEmpty() ||
-                    (now - lastServerRefreshMs) > SERVER_REFRESH_INTERVAL_MS
-            if (shouldFetchServer) {
+            val shouldHitServer = forceRefresh
+                || _posts.value.isEmpty()
+                || (now - lastServerFetchMs) > AUTO_REFRESH_INTERVAL_MS
+            if (shouldHitServer) {
                 try {
                     val serverSnap = query.get(Source.SERVER).await()
                     if (!serverSnap.isEmpty) {
-                        lastServerRefreshMs = now
+                        lastServerFetchMs = now
                         if (serverSnap.documents.isNotEmpty()) lastDoc = serverSnap.documents.last()
                         _hasMore.value = serverSnap.documents.size >= PAGE_SIZE.toInt()
                         val rawPosts = serverSnap.documents.mapNotNull { it.toPost() }
