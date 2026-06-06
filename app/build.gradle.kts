@@ -69,7 +69,7 @@ android {
             "-opt-in=androidx.compose.foundation.layout.ExperimentalLayoutApi",
         )
     }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
 }
 
 dependencies {
