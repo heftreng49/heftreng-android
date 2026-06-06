@@ -101,9 +101,20 @@ class ProfileViewModel @Inject constructor(
                 )
 
                 if (followDoc != null) _isFollowing.value = followDoc.exists()
-                // users doc sayaçlarını kullan — ekstra sorgu yok
-                _followersCount.value = (d["followerCount"] as? Long)?.toInt() ?: 0
-                _followingCount.value = (d["followingCount"] as? Long)?.toInt() ?: 0
+
+                // follows koleksiyonundan gerçek sayıları paralel çek
+                val followersDeferred = viewModelScope.async {
+                    firestore.collection("follows")
+                        .whereEqualTo("targetUid", targetUid)
+                        .limit(1000).get().await()
+                }
+                val followingDeferred = viewModelScope.async {
+                    firestore.collection("follows")
+                        .whereEqualTo("fromUid", targetUid)
+                        .limit(1000).get().await()
+                }
+                _followersCount.value = followersDeferred.await().size()
+                _followingCount.value = followingDeferred.await().size()
 
                 val isOwnProfile  = (targetUid == myUid)
                 val isPrivate     = _user.value?.isPrivate ?: false
