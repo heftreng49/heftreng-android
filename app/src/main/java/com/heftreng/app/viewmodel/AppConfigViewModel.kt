@@ -3,6 +3,7 @@ package com.heftreng.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
 import com.heftreng.app.data.model.AppConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,7 +29,7 @@ class AppConfigViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val doc = firestore.collection("appConfig")
-                    .document("features").get().await()
+                    .document("features").get(Source.SERVER).await()
                 if (doc.exists()) {
                     val d = doc.data ?: return@launch
                     _config.value = AppConfig(
