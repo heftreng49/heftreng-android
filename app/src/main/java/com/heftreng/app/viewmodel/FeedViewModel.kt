@@ -830,29 +830,37 @@ class FeedViewModel @Inject constructor(
         val myUid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             try {
+                // 1. Takip ettiğim tüm UID'leri çek (limit yüksek tutuldu)
                 val followingSnap = firestore.collection("follows")
                     .whereEqualTo("fromUid", myUid)
-                    .limit(200).get().await()
+                    .limit(500).get().await()
                 val followingUids = followingSnap.documents
-                    .mapNotNull { it.getString("targetUid") ?: it.getString("followingUid") }
-                    .toSet()
+                    .mapNotNull { doc ->
+                        // Her iki format da destekleniyor
+                        doc.getString("targetUid") ?: doc.getString("followingUid")
+                    }
+                    .toMutableSet()
+                followingUids.add(myUid) // kendimi de ekle
 
+                // 2. Aktif kullanıcıları postsCount'a göre çek
                 val usersSnap = firestore.collection("users")
-                    .limit(50)
+                    .orderBy("postsCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(100)
                     .get().await()
 
                 val suggestions = usersSnap.documents
                     .mapNotNull { doc ->
-                        val sUid = doc.getString("uid") ?: doc.id
-                        if (sUid == myUid || sUid in followingUids) return@mapNotNull null
+                        val sUid = doc.id  // document ID her zaman doğru UID
+                        if (sUid in followingUids) return@mapNotNull null
+                        val name = doc.getString("displayName") ?: doc.getString("name") ?: ""
+                        if (name.isBlank()) return@mapNotNull null
                         SuggestedUser(
                             uid      = sUid,
-                            name     = doc.getString("displayName") ?: doc.getString("name") ?: "",
+                            name     = name,
                             photoURL = doc.getString("photoURL") ?: "",
                             bio      = doc.getString("bio") ?: "",
                         )
                     }
-                    .filter { it.name.isNotBlank() }
                     .shuffled()
                     .take(20)
 
