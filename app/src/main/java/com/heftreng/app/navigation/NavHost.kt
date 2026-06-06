@@ -220,6 +220,65 @@ fun HeftrangNavHost(initialRoute: String? = null) {
         return
     }
 
+    // ── Zorunlu güncelleme kontrolü ─────────────────────────────────────────
+    if (configLoaded && appConfig.minVersion > com.heftreng.app.BuildConfig.VERSION_CODE) {
+        Box(
+            modifier         = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF0A0A14)),
+            contentAlignment = androidx.compose.ui.Alignment.Center,
+        ) {
+            androidx.compose.material3.Surface(
+                shape   = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                color   = androidx.compose.ui.graphics.Color(0xFF1A1A2E),
+                modifier = Modifier.padding(32.dp),
+            ) {
+                Column(
+                    modifier            = Modifier.padding(28.dp),
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
+                ) {
+                    Text("🚀", fontSize = 48.sp)
+                    Text(
+                        "Güncelleme Gerekli",
+                        color      = androidx.compose.ui.graphics.Color(0xFFFFB300),
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        fontSize   = 20.sp,
+                    )
+                    Text(
+                        "Bu sürüm artık desteklenmiyor. Uygulamayı kullanmaya devam etmek için lütfen güncelleyin.",
+                        color     = androidx.compose.ui.graphics.Color(0xFF888899),
+                        fontSize  = 14.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        lineHeight = 20.sp,
+                    )
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            val intent = android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse(
+                                    "https://play.google.com/store/apps/details?id=${ctx.packageName}"
+                                )
+                            )
+                            ctx.startActivity(intent)
+                        },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = androidx.compose.ui.graphics.Color(0xFF7C4DFF),
+                        ),
+                        shape  = androidx.compose.foundation.shape.RoundedCornerShape(50),
+                    ) {
+                        Text(
+                            "Şimdi Güncelle",
+                            color      = androidx.compose.ui.graphics.Color.White,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            modifier   = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+            }
+        }
+        return
+    }
+
     if (currentUser == null) {
         // Tema MainActivity'de zaten uygulanıyor
         AuthScreen(onAuthSuccess = {
