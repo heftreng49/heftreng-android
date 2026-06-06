@@ -159,16 +159,16 @@ fun QuoteDialog(
             // 1. Yeni format: type == "library_quote", quoteText dolu, bookName/authorName flat
             val newSnap = db.collection("feed")
                 .whereEqualTo("type", "library_quote")
-                .limit(300).get().await()
+                .limit(50).get().await()
 
             // 2. Eski format: type == "quote" veya nested quote map var
             val oldSnap = db.collection("feed")
                 .whereEqualTo("type", "quote")
-                .limit(200).get().await()
+                .limit(50).get().await()
 
             // 3. library_books/{id}/quotes collectionGroup — en zengin kaynak
             val cgSnap = try {
-                db.collectionGroup("quotes").limit(300).get().await()
+                db.collectionGroup("quotes").limit(50).get().await()
             } catch (_: Exception) { null }
 
             val bookMap   = mutableMapOf<String, QuoteSuggestion>()
