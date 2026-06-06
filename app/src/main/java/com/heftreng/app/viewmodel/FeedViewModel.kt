@@ -175,23 +175,29 @@ class FeedViewModel @Inject constructor(
                 // Önbellek boşsa veya ilk yüklemeyse burası sessizce pas geçilir
             }
 
-            // 2. AŞAMA: Arka planda sunucuya (Server) git ve güncel verileri çekerek listeyi tazele
-            try {
-                val serverSnap = query.get(Source.SERVER).await()
-                if (!serverSnap.isEmpty) {
-                    if (serverSnap.documents.isNotEmpty()) lastDoc = serverSnap.documents.last()
-                    _hasMore.value = serverSnap.documents.size >= PAGE_SIZE.toInt()
-                    
-                    val rawPosts = serverSnap.documents.mapNotNull { it.toPost() }
-                    val filtered = rawPosts.filter { it.moderationStatus != "removed" }
-                    
-                    _posts.value = mapInteractions(filtered)
-                    enrichPostsInBackground(filtered)
+            // 2. AŞAMA: Sunucu sorgusu — 5 dakikada bir ya da liste boşsa
+            val now = System.currentTimeMillis()
+            val shouldFetchServer = _posts.value.isEmpty() ||
+                (now - lastServerRefreshMs) > SERVER_REFRESH_INTERVAL_MS
+            if (shouldFetchServer) {
+                try {
+                    val serverSnap = query.get(Source.SERVER).await()
+                    if (!serverSnap.isEmpty) {
+                        lastServerRefreshMs = now
+                        if (serverSnap.documents.isNotEmpty()) lastDoc = serverSnap.documents.last()
+                        _hasMore.value = serverSnap.documents.size >= PAGE_SIZE.toInt()
+                        val rawPosts = serverSnap.documents.mapNotNull { it.toPost() }
+                        val filtered = rawPosts.filter { it.moderationStatus != "removed" }
+                        _posts.value = mapInteractions(filtered)
+                        enrichPostsInBackground(filtered)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                } finally {
+                    _loading.value = false
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                _loading.value = false // Sunucu isteği bittiğinde her halükarda yüklemeyi kapatıyoruz
+            } else {
+                _loading.value = false
             }
         }
     }

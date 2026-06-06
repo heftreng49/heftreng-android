@@ -69,22 +69,8 @@ class ProfileViewModel @Inject constructor(
                         firestore.collection("follows").document("${myUid}_$targetUid").get().await()
                     else null
                 }
-                // Sayaç doğruluğu için follows koleksiyonunu direkt say (count query - tek okuma)
-                val followersDeferred = viewModelScope.async {
-                    firestore.collection("follows")
-                        .whereEqualTo("targetUid", targetUid)
-                        .count().get(com.google.firebase.firestore.AggregateSource.SERVER).await()
-                }
-                val followingDeferred = viewModelScope.async {
-                    firestore.collection("follows")
-                        .whereEqualTo("fromUid", targetUid)
-                        .count().get(com.google.firebase.firestore.AggregateSource.SERVER).await()
-                }
-
-                val userDoc      = userDocDeferred.await()
-                val followDoc    = followDocDeferred.await()
-                val followersCount = try { followersDeferred.await().count.toInt() } catch (_: Exception) { -1 }
-                val followingCount = try { followingDeferred.await().count.toInt() } catch (_: Exception) { -1 }
+                val userDoc   = userDocDeferred.await()
+                val followDoc = followDocDeferred.await()
 
                 val d = userDoc.data ?: return@launch
                 _user.value = User(
@@ -105,11 +91,9 @@ class ProfileViewModel @Inject constructor(
                 )
 
                 if (followDoc != null) _isFollowing.value = followDoc.exists()
-                // count() sorgusu başarılıysa gerçek sayıyı kullan; hata olursa users doc'a geri dön
-                _followersCount.value = if (followersCount >= 0) followersCount
-                    else (d["followerCount"] as? Long)?.toInt() ?: 0
-                _followingCount.value = if (followingCount >= 0) followingCount
-                    else (d["followingCount"] as? Long)?.toInt() ?: 0
+                // users doc sayaçlarını kullan — ekstra sorgu yok
+                _followersCount.value = (d["followerCount"] as? Long)?.toInt() ?: 0
+                _followingCount.value = (d["followingCount"] as? Long)?.toInt() ?: 0
 
                 val isOwnProfile  = (targetUid == myUid)
                 val isPrivate     = _user.value?.isPrivate ?: false

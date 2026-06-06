@@ -197,9 +197,12 @@ class SocialViewModel @Inject constructor(
                 }.filter { it.uid.isNotBlank() }
                 // follows belgesinden gelen isim/foto önce göster (anında)
                 _followers.value = rawFollowers
-                // Arka planda güncel profil bilgileri ile zenginleştir
-                val enriched = enrichFollowFromUsers(rawFollowers)
-                if (enriched.isNotEmpty()) _followers.value = enriched
+                // Sadece isim/foto eksik olanlar için enrich yap
+                val needsEnrich = rawFollowers.any { it.name.isBlank() || it.photoURL.isBlank() }
+                if (needsEnrich) {
+                    val enriched = enrichFollowFromUsers(rawFollowers)
+                    if (enriched.isNotEmpty()) _followers.value = enriched
+                }
             } catch (e: Exception) {
                 android.util.Log.e("SocialVM", "loadFollowers hata: ${e.message}")
             } finally {
@@ -231,9 +234,12 @@ class SocialViewModel @Inject constructor(
                 }.filter { it.uid.isNotBlank() }
                 // follows belgesinden gelen isim/foto önce göster (anında)
                 _following.value = rawFollowing
-                // Arka planda güncel profil bilgileri ile zenginleştir
-                val enriched = enrichFollowFromUsers(rawFollowing)
-                if (enriched.isNotEmpty()) _following.value = enriched
+                // Sadece isim/foto eksik olanlar için enrich yap
+                val needsEnrich = rawFollowing.any { it.name.isBlank() || it.photoURL.isBlank() }
+                if (needsEnrich) {
+                    val enriched = enrichFollowFromUsers(rawFollowing)
+                    if (enriched.isNotEmpty()) _following.value = enriched
+                }
             } catch (e: Exception) {
                 android.util.Log.e("SocialVM", "loadFollowing hata: ${e.message}")
             } finally {

@@ -578,27 +578,29 @@ class LibraryViewModel @Inject constructor(
                 val feedRef = firestore.collection("feed").add(feedData).await()
                 reviewRef.update("feedPostId", feedRef.id)
 
-                // 3. Sayaçlar + ortalama puan
-                val snap = firestore.collection("library_books").document(book.id)
-                    .collection("reviews").get().await()
-                val ratings = snap.documents.mapNotNull { it.getDouble("rating")?.toFloat() }
-                val avg = if (ratings.isNotEmpty()) ratings.average().toFloat() else rating
+                // 3. Sayaçlar — tüm koleksiyonu çekmek yerine increment + yerel hesap
+                val currentBook = _selectedBook.value
+                val newReviewCount = (currentBook?.reviewCount ?: 0) + 1
+                val currentAvg = currentBook?.avgRating ?: 0f
+                val newAvg = if (currentAvg == 0f) rating
+                    else ((currentAvg * (newReviewCount - 1)) + rating) / newReviewCount
 
                 firestore.collection("library_books").document(book.id).update(
                     mapOf(
-                        "reviewCount" to ratings.size,
-                        "avgRating"   to avg,
+                        "reviewCount" to FieldValue.increment(1),
+                        "avgRating"   to newAvg,
                     )
                 )
                 firestore.collection("authors").document(book.authorId)
                     .update("reviewCount", FieldValue.increment(1))
 
-                // 4. Yerel state güncelle
+                // 4. Yerel state güncelle — ekstra Firestore okuması yok
+                _selectedBook.value = currentBook?.copy(
+                    reviewCount = newReviewCount,
+                    avgRating   = newAvg,
+                )
                 loadBookReviews(book.id)
                 loadAuthorReviews(book.authorId)
-                // Kitabı yenile
-                val updatedDoc = firestore.collection("library_books").document(book.id).get().await()
-                _selectedBook.value = updatedDoc.toObject(LibraryBook::class.java)?.copy(id = book.id)
             } catch (e: Exception) {
                 _error.value = e.message
             }
