@@ -90,16 +90,17 @@ fun FeedScreen(
     val bannerPos    by adsVm.bannerPosition.collectAsState()
     val blockedUsers by settingsVm.blockedUsers.collectAsState()
 
+    val serverRefreshing by vm.serverRefreshing.collectAsState()
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullRefreshState(
-        refreshing = isRefreshing,
+        refreshing = isRefreshing || serverRefreshing,
         onRefresh  = {
             isRefreshing = true
             vm.refresh(forceRefresh = true)
         }
     )
-    // isRefreshing'i loading bitince kapat
-    LaunchedEffect(loading) { if (!loading) isRefreshing = false }
+    // isRefreshing'i server refresh bitince kapat
+    LaunchedEffect(serverRefreshing) { if (!serverRefreshing) isRefreshing = false }
 
     LaunchedEffect(Unit) {
         adsVm.loadAdConfigs()

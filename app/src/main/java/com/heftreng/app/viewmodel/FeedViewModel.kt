@@ -47,6 +47,10 @@ class FeedViewModel @Inject constructor(
     private val _loading  = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
+    // Swipe-to-refresh için ayrı state — server fetch bitince false olur
+    private val _serverRefreshing = MutableStateFlow(false)
+    val serverRefreshing = _serverRefreshing.asStateFlow()
+
     private val _hasMore  = MutableStateFlow(true)
     val hasMore = _hasMore.asStateFlow()
 
@@ -91,7 +95,9 @@ class FeedViewModel @Inject constructor(
         "uid"         to uid,
     )
 
-    // likedListener/savedListener/repostListener kaldırıldı → get() kullanılıyor
+    private var likedListener   : com.google.firebase.firestore.ListenerRegistration? = null
+    private var savedListener   : com.google.firebase.firestore.ListenerRegistration? = null
+    private var repostListener  : com.google.firebase.firestore.ListenerRegistration? = null
 
     init {
         auth.addAuthStateListener { firebaseAuth ->
@@ -104,42 +110,39 @@ class FeedViewModel @Inject constructor(
         loadLibraryQuotes()
     }
 
-    // ── get() ile tek seferlik yükle — listener yok, kayıt yok ────────────────
     private fun startLiveInteractions(currentUid: String) {
-        viewModelScope.launch {
-            try {
-                val likedSnap = firestore.collection("feedLikes")
-                    .whereEqualTo("uid", currentUid)
-                    .limit(500).get().await()
-                likedIds = likedSnap.documents
-                    .mapNotNull { it.getString("feedId") ?: it.getString("postId") }
-                    .toSet()
+        likedListener?.remove()
+        likedListener = firestore.collection("feedLikes")
+            .whereEqualTo("uid", currentUid)
+            .addSnapshotListener { snap, _ ->
+                likedIds = snap?.documents
+                    ?.mapNotNull { it.getString("feedId") ?: it.getString("postId") }
+                    ?.toSet() ?: emptySet()
+                syncInteractionsToState()
+            }
 
-                val savedSnap = firestore.collection("feedSaves")
-                    .whereEqualTo("uid", currentUid)
-                    .limit(500).get().await()
-                savedIds = savedSnap.documents
-                    .mapNotNull { it.getString("feedId") ?: it.getString("postId") }
-                    .toSet()
+        savedListener?.remove()
+        savedListener = firestore.collection("feedSaves")
+            .whereEqualTo("uid", currentUid)
+            .addSnapshotListener { snap, _ ->
+                savedIds = snap?.documents
+                    ?.mapNotNull { it.getString("feedId") ?: it.getString("postId") }
+                    ?.toSet() ?: emptySet()
+                syncInteractionsToState()
+            }
 
-                val repostSnap = firestore.collection("feed")
-                    .whereEqualTo("uid", currentUid)
-                    .whereEqualTo("repostType", "feed")
-                    .limit(200).get().await()
-                myRepostMap = repostSnap.documents
-                    .mapNotNull { doc ->
+        repostListener?.remove()
+        repostListener = firestore.collection("feed")
+            .whereEqualTo("uid", currentUid)
+            .whereEqualTo("repostType", "feed")
+            .addSnapshotListener { snap, _ ->
+                myRepostMap = snap?.documents
+                    ?.mapNotNull { doc ->
                         val orig = doc.getString("repostId") ?: return@mapNotNull null
                         orig to doc.id
-                    }.toMap()
-
+                    }?.toMap() ?: emptyMap()
                 syncInteractionsToState()
-            } catch (e: Exception) { e.printStackTrace() }
-        }
-    }
-
-    // Beğeni/kaydetme işleminden sonra local state güncelle (listener yok)
-    fun refreshInteractionsLocal(currentUid: String = uid) {
-        startLiveInteractions(currentUid)
+            }
     }
 
     private fun syncInteractionsToState() {
@@ -156,7 +159,9 @@ class FeedViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        // Listener yok — get() kullanılıyor, temizleme gerekmez
+        likedListener?.remove()
+        savedListener?.remove()
+        repostListener?.remove()
     }
 
     // ── OPTİMİZE EDİLDİ: İki Aşamalı Hibrit Hızlı Akış (Cache -> Server) ──────
@@ -164,10 +169,11 @@ class FeedViewModel @Inject constructor(
         lastDoc = null
         _hasMore.value = true
         _postNotFound.value = null
-        
-        // Eğer ekranda zaten veri varsa kullanıcıya tekrar çember göstermiyoruz
-        if (_posts.value.isEmpty()) {
-            _loading.value = true
+
+        if (forceRefresh) {
+            _serverRefreshing.value = true // Swipe spinner — server bitince kapanır
+        } else if (_posts.value.isEmpty()) {
+            _loading.value = true          // İlk yüklemede normal spinner
         }
 
         viewModelScope.launch {
@@ -214,9 +220,11 @@ class FeedViewModel @Inject constructor(
                     e.printStackTrace()
                 } finally {
                     _loading.value = false
+                    _serverRefreshing.value = false // Server bitti → swipe spinner kapat
                 }
             } else {
                 _loading.value = false
+                _serverRefreshing.value = false
             }
         }
     }
