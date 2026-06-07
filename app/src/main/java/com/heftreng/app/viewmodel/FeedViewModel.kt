@@ -15,6 +15,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import com.heftreng.app.util.CacheEntry
 import javax.inject.Inject
 
 @HiltViewModel
@@ -74,6 +75,7 @@ class FeedViewModel @Inject constructor(
     private var likedIds    = emptySet<String>()
     private var savedIds    = emptySet<String>()
     private var myRepostMap = emptyMap<String, String>()
+    private val interactionCache = CacheEntry<Unit>(ttlMs = 3 * 60_000L)
     private var lastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
     private val PAGE_SIZE = 30L
     private var lastServerFetchMs: Long = 0L
@@ -133,26 +135,29 @@ class FeedViewModel @Inject constructor(
     }
 
     private fun startLiveInteractions(currentUid: String) {
+        // Cache geçerliyse ağ isteği yok
+        if (interactionCache.isValid()) { syncInteractionsToState(); return }
         viewModelScope.launch {
             try {
                 val likedSnap = firestore.collection("feedLikes")
-                    .whereEqualTo("uid", currentUid).limit(500).get().await()
+                    .whereEqualTo("uid", currentUid).limit(300).get().await()
                 likedIds = likedSnap.documents
                     .mapNotNull { it.getString("feedId") ?: it.getString("postId") }.toSet()
 
                 val savedSnap = firestore.collection("feedSaves")
-                    .whereEqualTo("uid", currentUid).limit(500).get().await()
+                    .whereEqualTo("uid", currentUid).limit(300).get().await()
                 savedIds = savedSnap.documents
                     .mapNotNull { it.getString("feedId") ?: it.getString("postId") }.toSet()
 
                 val repostSnap = firestore.collection("feed")
                     .whereEqualTo("uid", currentUid)
-                    .whereEqualTo("repostType", "feed").limit(200).get().await()
+                    .whereEqualTo("repostType", "feed").limit(100).get().await()
                 myRepostMap = repostSnap.documents.mapNotNull { doc ->
                     val orig = doc.getString("repostId") ?: return@mapNotNull null
                     orig to doc.id
                 }.toMap()
 
+                interactionCache.set(Unit)  // Cache'i doldur
                 syncInteractionsToState()
             } catch (e: Exception) { e.printStackTrace() }
         }

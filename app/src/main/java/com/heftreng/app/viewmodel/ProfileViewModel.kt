@@ -14,6 +14,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import com.heftreng.app.util.CacheEntry
 import javax.inject.Inject
 
 @HiltViewModel
@@ -39,6 +40,8 @@ class ProfileViewModel @Inject constructor(
 
     private val _loading = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
+    // Profil cache: 3 dk TTL (aynı profili tekrar açınca beklemeden göster)
+    private val profileCache = mutableMapOf<String, CacheEntry<Unit>>()
 
     private val _hasMorePosts = MutableStateFlow(false)
     val hasMorePosts = _hasMorePosts.asStateFlow()
@@ -58,12 +61,20 @@ class ProfileViewModel @Inject constructor(
 
     val myUid get() = auth.currentUser?.uid ?: ""
 
-    fun load(uid: String, preloadedUser: User? = null) {
+    fun load(uid: String, preloadedUser: User? = null, forceRefresh: Boolean = false) {
         val targetUid = if (uid == "me") myUid else uid
 
         // ── 1. Eğer önceki ekrandan User verisi geldiyse anında göster ──────
         if (preloadedUser != null && _user.value == null) {
             _user.value = preloadedUser
+        }
+
+        // ── TTL Cache: 3 dk içinde aynı profili tekrar yükleme ──────────────
+        if (!forceRefresh) {
+            val entry = profileCache[targetUid]
+            if (entry?.isValid() == true && _user.value != null) return
+        } else {
+            profileCache[targetUid]?.invalidate()
         }
 
         viewModelScope.launch {
@@ -199,6 +210,11 @@ class ProfileViewModel @Inject constructor(
 
                 // ── 5. Arka planda güncel avatar/isim ile sessizce güncelle ──
                 enrichPostsInBackground(rawPosts)
+
+                // Cache'e yaz
+                profileCache.getOrPut(targetUid) {
+                    CacheEntry(ttlMs = 3 * 60_000L)
+                }.set(Unit)
 
             } catch (e: Exception) {
                 e.printStackTrace()

@@ -17,6 +17,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import com.heftreng.app.util.CacheEntry
 import javax.inject.Inject
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -98,19 +99,30 @@ class LibraryViewModel @Inject constructor(
     val myPhoto get() = auth.currentUser?.photoUrl?.toString() ?: ""
     val myUser get() = auth.currentUser?.email?.substringBefore("@") ?: ""
 
-    // ── In-memory cache — aynı yazar/kitap detayına tekrar girilince ağ isteği atılmaz
-    private val authorCache = mutableMapOf<String, Author>()
-    private val bookCache   = mutableMapOf<String, LibraryBook>()
+    // ── In-memory cache — TTL tabanlı ───────────────────────────────────────
+    private val authorCache     = mutableMapOf<String, Author>()
+    private val bookCache       = mutableMapOf<String, LibraryBook>()
+    // Yazar listesi 5 dk TTL (pull-to-refresh yapılmadıkça tekrar yüklemez)
+    private val authorsListCache = CacheEntry<List<Author>>(ttlMs = 5 * 60_000L)
+    // Kitap listesi 5 dk TTL
+    private val booksListCache   = CacheEntry<List<LibraryBook>>(ttlMs = 5 * 60_000L)
 
     // ── Yazar Listesi ─────────────────────────────────────────────────────
-    fun loadAuthors() {
-        // Cache doluysa ağ isteği atma — yazar listesi oturumda sabittir
-        if (_authors.value.isNotEmpty()) return
+    fun loadAuthors(forceRefresh: Boolean = false) {
+        // TTL cache kontrolü — 5 dk içinde tekrar çekme
+        if (!forceRefresh) {
+            authorsListCache.get()?.let { cached ->
+                _authors.value = cached; return
+            }
+            if (_authors.value.isNotEmpty()) return
+        } else {
+            authorsListCache.invalidate()
+        }
         viewModelScope.launch {
             _loading.value = true
             try {
                 val snap = firestore.collection("authors")
-                    .limit(50)  // 100→50: ilk yükleme daha hızlı, scroll'da daha fazlası yüklenebilir
+                    .limit(50)
                     .get(com.google.firebase.firestore.Source.DEFAULT).await()
                 val list = snap.documents.mapNotNull { doc ->
                     val author = try { doc.toObject(Author::class.java)?.copy(id = doc.id) }
@@ -132,6 +144,7 @@ class LibraryViewModel @Inject constructor(
                     author.also { authorCache[doc.id] = it }
                 }.sortedBy { it.name }
                 _authors.value = list
+                authorsListCache.set(list)  // TTL cache'e yaz
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
