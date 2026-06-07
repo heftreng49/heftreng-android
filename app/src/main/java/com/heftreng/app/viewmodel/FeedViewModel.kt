@@ -47,6 +47,9 @@ class FeedViewModel @Inject constructor(
     private val _loading  = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
+    private val _followingUids = MutableStateFlow<Set<String>>(emptySet())
+    val followingUids = _followingUids.asStateFlow()
+
     // Swipe-to-refresh için ayrı state — server fetch bitince false olur
     private val _serverRefreshing = MutableStateFlow(false)
     val serverRefreshing = _serverRefreshing.asStateFlow()
@@ -95,9 +98,7 @@ class FeedViewModel @Inject constructor(
         "uid"         to uid,
     )
 
-    private var likedListener   : com.google.firebase.firestore.ListenerRegistration? = null
-    private var savedListener   : com.google.firebase.firestore.ListenerRegistration? = null
-    private var repostListener  : com.google.firebase.firestore.ListenerRegistration? = null
+    // liked/saved/repost → get() ile yükleniyor, listener yok
 
     init {
         auth.addAuthStateListener { firebaseAuth ->
@@ -110,39 +111,51 @@ class FeedViewModel @Inject constructor(
         loadLibraryQuotes()
     }
 
+    fun loadFollowingUids(uid: String) {
+        if (uid.isBlank()) return
+        viewModelScope.launch {
+            try {
+                val snap = firestore.collection("follows")
+                    .whereEqualTo("fromUid", uid)
+                    .limit(1000).get().await()
+                _followingUids.value = snap.documents
+                    .mapNotNull { it.getString("targetUid") }.toSet()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // Takip/bırak işleminden sonra yerel güncelleme — ekstra Firestore okuması yok
+    fun onFollowChanged(targetUid: String, isFollowing: Boolean) {
+        _followingUids.value = if (isFollowing)
+            _followingUids.value + targetUid
+        else
+            _followingUids.value - targetUid
+    }
+
     private fun startLiveInteractions(currentUid: String) {
-        likedListener?.remove()
-        likedListener = firestore.collection("feedLikes")
-            .whereEqualTo("uid", currentUid)
-            .addSnapshotListener { snap, _ ->
-                likedIds = snap?.documents
-                    ?.mapNotNull { it.getString("feedId") ?: it.getString("postId") }
-                    ?.toSet() ?: emptySet()
-                syncInteractionsToState()
-            }
+        viewModelScope.launch {
+            try {
+                val likedSnap = firestore.collection("feedLikes")
+                    .whereEqualTo("uid", currentUid).limit(500).get().await()
+                likedIds = likedSnap.documents
+                    .mapNotNull { it.getString("feedId") ?: it.getString("postId") }.toSet()
 
-        savedListener?.remove()
-        savedListener = firestore.collection("feedSaves")
-            .whereEqualTo("uid", currentUid)
-            .addSnapshotListener { snap, _ ->
-                savedIds = snap?.documents
-                    ?.mapNotNull { it.getString("feedId") ?: it.getString("postId") }
-                    ?.toSet() ?: emptySet()
-                syncInteractionsToState()
-            }
+                val savedSnap = firestore.collection("feedSaves")
+                    .whereEqualTo("uid", currentUid).limit(500).get().await()
+                savedIds = savedSnap.documents
+                    .mapNotNull { it.getString("feedId") ?: it.getString("postId") }.toSet()
 
-        repostListener?.remove()
-        repostListener = firestore.collection("feed")
-            .whereEqualTo("uid", currentUid)
-            .whereEqualTo("repostType", "feed")
-            .addSnapshotListener { snap, _ ->
-                myRepostMap = snap?.documents
-                    ?.mapNotNull { doc ->
-                        val orig = doc.getString("repostId") ?: return@mapNotNull null
-                        orig to doc.id
-                    }?.toMap() ?: emptyMap()
+                val repostSnap = firestore.collection("feed")
+                    .whereEqualTo("uid", currentUid)
+                    .whereEqualTo("repostType", "feed").limit(200).get().await()
+                myRepostMap = repostSnap.documents.mapNotNull { doc ->
+                    val orig = doc.getString("repostId") ?: return@mapNotNull null
+                    orig to doc.id
+                }.toMap()
+
                 syncInteractionsToState()
-            }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
     }
 
     private fun syncInteractionsToState() {
@@ -159,9 +172,7 @@ class FeedViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        likedListener?.remove()
-        savedListener?.remove()
-        repostListener?.remove()
+        // Listener yok — get() kullanılıyor
     }
 
     // ── OPTİMİZE EDİLDİ: İki Aşamalı Hibrit Hızlı Akış (Cache -> Server) ──────

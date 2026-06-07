@@ -102,12 +102,14 @@ fun FeedScreen(
     // isRefreshing'i server refresh bitince kapat
     LaunchedEffect(serverRefreshing) { if (!serverRefreshing) isRefreshing = false }
 
+    val currentUserUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     LaunchedEffect(Unit) {
         adsVm.loadAdConfigs()
         settingsVm.loadBlockedUsers()
-        vm.refresh()           // İlk açılışta yükle
+        vm.refresh()
         vm.loadLibraryQuotes()
         vm.loadSuggestedUsers()
+        vm.loadFollowingUids(currentUserUid)
     }
 
     // ── Feed sekme (Herkes / Takip edilenler) ────────────────────────────────
@@ -118,20 +120,8 @@ fun FeedScreen(
     )
     var selectedFeedTab by remember { mutableIntStateOf(0) }
 
-    // Takip edilen kullanıcıların UID listesi — canlı dinleyici (takip/bırak anında güncellenir)
-    val currentUserUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
-    var followingUids by remember { mutableStateOf<Set<String>>(emptySet()) }
-    DisposableEffect(currentUserUid) {
-        if (currentUserUid.isEmpty()) return@DisposableEffect onDispose {}
-        val registration = FirebaseFirestore.getInstance()
-            .collection("follows")
-            .whereEqualTo("fromUid", currentUserUid)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null || snapshot == null) return@addSnapshotListener
-                followingUids = snapshot.documents.mapNotNull { it.getString("targetUid") }.toSet()
-            }
-        onDispose { registration.remove() }
-    }
+    // Takip edilen UIDs — ViewModel'den (get() ile, listener yok)
+    val followingUids by vm.followingUids.collectAsState()
 
     val displayedPosts = remember(posts, selectedFeedTab, followingUids, blockedUsers) {
         val blockedUids = blockedUsers.map { it.uid }.toSet()

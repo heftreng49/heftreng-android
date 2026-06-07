@@ -45,8 +45,12 @@ class AuthViewModel @Inject constructor(
         val uid        : String,
     )
 
+    private val authStateListener = FirebaseAuth.AuthStateListener {
+        _currentUser.value = it.currentUser
+    }
+
     init {
-        auth.addAuthStateListener { _currentUser.value = it.currentUser }
+        auth.addAuthStateListener(authStateListener)
         loadSavedAccounts()
     }
 
@@ -547,5 +551,10 @@ class AuthViewModel @Inject constructor(
                 _error.value = e.message
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        auth.removeAuthStateListener(authStateListener)
     }
 }
