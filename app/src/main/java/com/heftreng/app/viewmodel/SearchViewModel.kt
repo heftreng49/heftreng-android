@@ -160,24 +160,49 @@ class SearchViewModel @Inject constructor(
             }
         } catch (e: Exception) { e.printStackTrace() }
 
-        // Serials — tümünü çekip client-side filtrele (index gerektirmez)
+        // Serials — titleLower prefix araması (client-side tüm liste okuma yerine)
+        // Not: serials koleksiyonunda titleLower alanı yoksa bu sorgu boş döner;
+        //      o durumda fallback limit(30) devreye girer.
         try {
-            val sSnap = firestore.collection("serials")
-                .limit(100).get().await()
-            results += sSnap.documents.mapNotNull { doc ->
-                val d = doc.data ?: return@mapNotNull null
-                val title = d["title"] as? String ?: return@mapNotNull null
-                if (title.isBlank()) return@mapNotNull null
-                if (!title.lowercase().contains(qLower)) return@mapNotNull null
-                SearchResult(
-                    id       = doc.id,
-                    type     = "serial",
-                    title    = title,
-                    // Tema: serials dokümanında yazar adı "name" alanında
-                    subtitle = d["name"] as? String ?: d["authorName"] as? String ?: "",
-                    // Tema: serials dokümanında kapak "coverImg" alanında (coverURL değil)
-                    imageUrl = d["coverImg"] as? String ?: "",
-                )
+            val seenSerialIds = mutableSetOf<String>()
+            var found = false
+            for (prefix in listOf(qLower, q, qCap).distinct()) {
+                val sSnap = firestore.collection("serials")
+                    .orderBy("titleLower")
+                    .startAt(prefix.lowercase()).endAt(prefix.lowercase() + "\uF8FF")
+                    .limit(10).get().await()
+                for (doc in sSnap.documents) {
+                    if (!seenSerialIds.add(doc.id)) continue
+                    val d = doc.data ?: continue
+                    val title = d["title"] as? String ?: continue
+                    if (title.isBlank()) continue
+                    found = true
+                    results += SearchResult(
+                        id       = doc.id,
+                        type     = "serial",
+                        title    = title,
+                        subtitle = d["name"] as? String ?: d["authorName"] as? String ?: "",
+                        imageUrl = d["coverImg"] as? String ?: "",
+                    )
+                }
+            }
+            // titleLower henüz yoksa fallback: küçük limit ile al, client-side filtrele
+            if (!found && qLower.length >= 2) {
+                val sSnap = firestore.collection("serials")
+                    .limit(30).get().await()
+                results += sSnap.documents.mapNotNull { doc ->
+                    if (doc.id in seenSerialIds) return@mapNotNull null
+                    val d = doc.data ?: return@mapNotNull null
+                    val title = d["title"] as? String ?: return@mapNotNull null
+                    if (title.isBlank() || !title.lowercase().contains(qLower)) return@mapNotNull null
+                    SearchResult(
+                        id       = doc.id,
+                        type     = "serial",
+                        title    = title,
+                        subtitle = d["name"] as? String ?: d["authorName"] as? String ?: "",
+                        imageUrl = d["coverImg"] as? String ?: "",
+                    )
+                }
             }
         } catch (e: Exception) { e.printStackTrace() }
 

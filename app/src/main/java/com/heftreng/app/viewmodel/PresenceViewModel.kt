@@ -31,10 +31,10 @@ class PresenceViewModel @Inject constructor(
 
     val uid get() = auth.currentUser?.uid ?: ""
 
-    // Kaç saniyedir heartbeat gelmemişse offline say (120 sn = 2 dk)
-    private val ONLINE_TIMEOUT_MS = 120_000L
-    // Heartbeat aralığı
-    private val HEARTBEAT_INTERVAL_MS = 90_000L   // 30s→90s: 3x daha az yazma
+    // Kaç saniyedir heartbeat gelmemişse offline say (12 dk)
+    private val ONLINE_TIMEOUT_MS = 720_000L
+    // Heartbeat aralığı — 5 dakikada bir yaz (90s→300s: 3x daha az yazma)
+    private val HEARTBEAT_INTERVAL_MS = 300_000L
 
     private var heartbeatJob     : kotlinx.coroutines.Job? = null
     private var presenceListener : com.google.firebase.firestore.ListenerRegistration? = null
@@ -106,24 +106,8 @@ class PresenceViewModel @Inject constructor(
                     _onlineUsers.value + targetUid
                 else
                     _onlineUsers.value - targetUid
-
-                // Eğer lastSeen yeni ama online=true ve timeout dolmuşsa
-                // 2 dk sonra tekrar kontrol et
-                if (isReallyOnline) {
-                    val remaining = ONLINE_TIMEOUT_MS - ageMs
-                    viewModelScope.launch {
-                        kotlinx.coroutines.delay(remaining + 1000)
-                        val current = try {
-                            firestore.collection("presence").document(targetUid).get().await()
-                        } catch (e: Exception) { null }
-                        val currentLastSeen = current?.getTimestamp("lastSeen")?.toDate()?.time ?: 0L
-                        val currentAge      = System.currentTimeMillis() - currentLastSeen
-                        val currentOnline   = current?.getBoolean("online") ?: false
-                        if (!currentOnline || currentAge >= ONLINE_TIMEOUT_MS) {
-                            _onlineUsers.value = _onlineUsers.value - targetUid
-                        }
-                    }
-                }
+                // Not: addSnapshotListener zaten sunucudan her değişimde tetiklenir;
+                // ayrıca delayed .get() ile ekstra okuma yapmaya gerek yok.
             }
     }
 
@@ -155,16 +139,8 @@ class PresenceViewModel @Inject constructor(
                 val ageSec = (System.currentTimeMillis() - ts) / 1000
                 if (ageSec < 8) {
                     _typingUsers.value = _typingUsers.value + otherUid
-                    viewModelScope.launch {
-                        kotlinx.coroutines.delay((8 - ageSec) * 1000)
-                        val current = try {
-                            firestore.collection("typing").document("${convId}_$otherUid").get().await()
-                        } catch (e: Exception) { null }
-                        val currentTs = current?.getTimestamp("ts")?.toDate()?.time ?: 0L
-                        if (currentTs == ts) {
-                            _typingUsers.value = _typingUsers.value - otherUid
-                        }
-                    }
+                    // Listener, typing dokümanı silinince/güncellenince zaten tetiklenir;
+                    // ekstra delayed .get() gereksiz okuma yaratırdı.
                 } else {
                     _typingUsers.value = _typingUsers.value - otherUid
                 }

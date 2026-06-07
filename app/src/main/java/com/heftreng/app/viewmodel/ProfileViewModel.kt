@@ -102,19 +102,34 @@ class ProfileViewModel @Inject constructor(
 
                 if (followDoc != null) _isFollowing.value = followDoc.exists()
 
-                // follows koleksiyonundan gerçek sayıları paralel çek
+                // follows koleksiyonu — count() aggregate (tüm dokümanları çekmez, sadece sayar)
                 val followersDeferred = viewModelScope.async {
-                    firestore.collection("follows")
-                        .whereEqualTo("targetUid", targetUid)
-                        .limit(1000).get().await()
+                    try {
+                        firestore.collection("follows")
+                            .whereEqualTo("targetUid", targetUid)
+                            .count().get(com.google.firebase.firestore.AggregateSource.SERVER).await()
+                            .count.toInt()
+                    } catch (_: Exception) {
+                        // count() desteklenmiyorsa küçük limit fallback
+                        firestore.collection("follows")
+                            .whereEqualTo("targetUid", targetUid)
+                            .limit(500).get().await().size()
+                    }
                 }
                 val followingDeferred = viewModelScope.async {
-                    firestore.collection("follows")
-                        .whereEqualTo("fromUid", targetUid)
-                        .limit(1000).get().await()
+                    try {
+                        firestore.collection("follows")
+                            .whereEqualTo("fromUid", targetUid)
+                            .count().get(com.google.firebase.firestore.AggregateSource.SERVER).await()
+                            .count.toInt()
+                    } catch (_: Exception) {
+                        firestore.collection("follows")
+                            .whereEqualTo("fromUid", targetUid)
+                            .limit(500).get().await().size()
+                    }
                 }
-                _followersCount.value = followersDeferred.await().size()
-                _followingCount.value = followingDeferred.await().size()
+                _followersCount.value = followersDeferred.await()
+                _followingCount.value = followingDeferred.await()
 
                 val isOwnProfile  = (targetUid == myUid)
                 val isPrivate     = _user.value?.isPrivate ?: false
@@ -350,9 +365,9 @@ class ProfileViewModel @Inject constructor(
                 val ref  = firestore.collection("feedLikes").document("${post.id}_$myUid")
                 val pRef = firestore.collection("feed").document(post.id)
                 if (nowLiked) {
-                    val me     = firestore.collection("users").document(myUid).get().await()
-                    val myName = me.getString("displayName") ?: me.getString("name") ?: ""
-                    val myPhoto = me.getString("photoURL") ?: ""
+                    // Auth'tan oku — Firestore read gerektirmez
+                    val myName  = auth.currentUser?.displayName ?: ""
+                    val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
                     ref.set(mapOf(
                         "uid"      to myUid,
                         "feedId"   to post.id,

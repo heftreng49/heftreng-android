@@ -110,8 +110,8 @@ class LibraryViewModel @Inject constructor(
             _loading.value = true
             try {
                 val snap = firestore.collection("authors")
-                    .limit(100)
-                    .get().await()
+                    .limit(50)  // 100→50: ilk yükleme daha hızlı, scroll'da daha fazlası yüklenebilir
+                    .get(com.google.firebase.firestore.Source.DEFAULT).await()
                 val list = snap.documents.mapNotNull { doc ->
                     val author = try { doc.toObject(Author::class.java)?.copy(id = doc.id) }
                     catch (_: Exception) { null } ?: run {

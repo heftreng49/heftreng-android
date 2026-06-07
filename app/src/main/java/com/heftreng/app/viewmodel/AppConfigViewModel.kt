@@ -23,13 +23,22 @@ class AppConfigViewModel @Inject constructor(
     private val _loaded  = MutableStateFlow(false)
     val loaded = _loaded.asStateFlow()
 
+    // AppConfig nadiren değişir — 6 saatte bir server'a git
+    private val CONFIG_TTL_MS = 6L * 60L * 60L * 1000L
+    private var lastFetchMs = 0L
+
     init { load() }
 
-    fun load() {
+    fun load(forceServer: Boolean = false) {
         viewModelScope.launch {
             try {
+                val now = System.currentTimeMillis()
+                val stale = (now - lastFetchMs) > CONFIG_TTL_MS
+                // Önce cache'den hızlıca yükle — sonra TTL dolmuşsa server'a git
+                val source = if (forceServer || stale) Source.DEFAULT else Source.CACHE
                 val doc = firestore.collection("appConfig")
-                    .document("features").get(Source.SERVER).await()
+                    .document("features").get(source).await()
+                if (doc.exists()) lastFetchMs = now
                 if (doc.exists()) {
                     val d = doc.data ?: return@launch
                     _config.value = AppConfig(

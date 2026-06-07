@@ -91,27 +91,39 @@ class MessagesViewModel @Inject constructor(
                 _uid.value = newUid
                 if (newUid.isNotEmpty()) {
                     listenConversations()
-                    viewModelScope.launch {
-                        try {
-                            val doc = firestore.collection("users").document(newUid).get().await()
-                            val name = (doc.getString("displayName") ?: doc.getString("name"))
-                                ?.takeIf { it.isNotBlank() }
-                            if (name != null) _myFirestoreName = name
-                        } catch (_: Exception) {}
+                    // Auth'tan displayName oku — Firestore read gerektirmez
+                    val authName = auth.currentUser?.displayName?.takeIf { it.isNotBlank() }
+                    if (authName != null) {
+                        _myFirestoreName = authName
+                    } else {
+                        // Firestore fallback: auth'ta isim yoksa (nadir durum)
+                        viewModelScope.launch {
+                            try {
+                                val doc = firestore.collection("users").document(newUid).get().await()
+                                val name = (doc.getString("displayName") ?: doc.getString("name"))
+                                    ?.takeIf { it.isNotBlank() }
+                                if (name != null) _myFirestoreName = name
+                            } catch (_: Exception) {}
+                        }
                     }
                 }
             }
         }
-        // İlk açılışta da çek
+        // İlk açılışta — auth'tan oku
         val curUid = auth.currentUser?.uid
         if (!curUid.isNullOrBlank()) {
-            viewModelScope.launch {
-                try {
-                    val doc = firestore.collection("users").document(curUid).get().await()
-                    val name = (doc.getString("displayName") ?: doc.getString("name"))
-                        ?.takeIf { it.isNotBlank() }
-                    if (name != null) _myFirestoreName = name
-                } catch (_: Exception) {}
+            val authName = auth.currentUser?.displayName?.takeIf { it.isNotBlank() }
+            if (authName != null) {
+                _myFirestoreName = authName
+            } else {
+                viewModelScope.launch {
+                    try {
+                        val doc = firestore.collection("users").document(curUid).get().await()
+                        val name = (doc.getString("displayName") ?: doc.getString("name"))
+                            ?.takeIf { it.isNotBlank() }
+                        if (name != null) _myFirestoreName = name
+                    } catch (_: Exception) {}
+                }
             }
         }
     }

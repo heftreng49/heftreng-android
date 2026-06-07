@@ -406,10 +406,9 @@ class FeedViewModel @Inject constructor(
                 val likeRef = firestore.collection("feedLikes").document("${post.id}_$uid")
                 val postRef = firestore.collection("feed").document(post.id)
                 if (nowLiked) {
-                    val uDoc    = try { firestore.collection("users").document(uid).get().await() } catch (_: Exception) { null }
-                    val myName  = (uDoc?.getString("displayName") ?: uDoc?.getString("name"))
-                        ?.takeIf { it.isNotBlank() } ?: auth.currentUser?.displayName ?: ""
-                    val myPhoto = uDoc?.getString("photoURL") ?: auth.currentUser?.photoUrl?.toString() ?: ""
+                    // Auth'tan oku — Firestore read gerektirmez, ücretsiz
+                    val myName  = auth.currentUser?.displayName?.takeIf { it.isNotBlank() } ?: ""
+                    val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
                     
                     likeRef.set(mapOf(
                         "uid"      to uid,
@@ -950,10 +949,11 @@ class FeedViewModel @Inject constructor(
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
-                val userDoc = firestore.collection("users").document(uid).get().await()
-                val d       = userDoc.data ?: emptyMap<String, Any>()
-                val myName  = d["displayName"] as? String ?: d["name"] as? String ?: ""
-                val myPhoto = d["photoURL"] as? String ?: ""
+                val d       = cachedUserDoc(uid) ?: emptyMap()
+                val myName  = d["displayName"] as? String ?: d["name"] as? String
+                    ?: auth.currentUser?.displayName ?: ""
+                val myPhoto = d["photoURL"] as? String
+                    ?: auth.currentUser?.photoUrl?.toString() ?: ""
                 val preview = chapterBody.replace(Regex("<[^>]+>"), "").trim().take(200)
                 firestore.collection("feed").add(mapOf(
                     "uid"          to uid,

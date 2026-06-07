@@ -61,6 +61,9 @@ class SocialViewModel @Inject constructor(
     private var followingTargetUid: String = ""
     private val FOLLOW_PAGE = 30
 
+    // Session-level cache — aynı kullanıcı için tekrar Firestore'a gitme
+    private val _userEnrichCache = mutableMapOf<String, Pair<String, String>>() // uid → (name, photoURL)
+
     val uid get() = auth.currentUser?.uid ?: ""
 
     // ── Gönderi beğenenleri ──────────────────────────────────────────────────
@@ -347,24 +350,33 @@ class SocialViewModel @Inject constructor(
     private suspend fun enrichFromUsers(entries: List<LikeEntry>): List<LikeEntry> {
         if (entries.isEmpty()) return entries
         val enriched = entries.toMutableList()
-        entries.map { it.uid }.filter { it.isNotBlank() }.chunked(10).forEach { chunk ->
+        // Sadece cache'de olmayan uid'leri çek
+        val missing = entries.map { it.uid }
+            .filter { it.isNotBlank() && it !in _userEnrichCache }
+            .distinct()
+        missing.chunked(10).forEach { chunk ->
             try {
                 val userSnap = firestore.collection("users")
                     .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
                     .get().await()
                 userSnap.documents.forEach { userDoc ->
-                    val idx = enriched.indexOfFirst { it.uid == userDoc.id }
-                    if (idx >= 0) {
-                        val uData = userDoc.data ?: return@forEach
-                        val freshName = (uData["displayName"] as? String)?.takeIf { it.isNotBlank() }
-                            ?: (uData["name"] as? String)?.takeIf { it.isNotBlank() }
-                            ?: enriched[idx].name
-                        val freshPhoto = (uData["photoURL"] as? String)?.takeIf { it.isNotBlank() }
-                            ?: enriched[idx].photoURL
-                        enriched[idx] = enriched[idx].copy(name = freshName, photoURL = freshPhoto)
-                    }
+                    val uData = userDoc.data ?: return@forEach
+                    _userEnrichCache[userDoc.id] = Pair(
+                        (uData["displayName"] as? String)?.takeIf { it.isNotBlank() }
+                            ?: (uData["name"] as? String)?.takeIf { it.isNotBlank() } ?: "",
+                        (uData["photoURL"] as? String)?.takeIf { it.isNotBlank() } ?: "",
+                    )
                 }
             } catch (_: Exception) {}
+        }
+        enriched.forEachIndexed { idx, entry ->
+            val cached = _userEnrichCache[entry.uid] ?: return@forEachIndexed
+            if (cached.first.isNotBlank() || cached.second.isNotBlank()) {
+                enriched[idx] = entry.copy(
+                    name     = cached.first.takeIf { it.isNotBlank() } ?: entry.name,
+                    photoURL = cached.second.takeIf { it.isNotBlank() } ?: entry.photoURL,
+                )
+            }
         }
         return enriched
     }
@@ -372,24 +384,30 @@ class SocialViewModel @Inject constructor(
     private suspend fun enrichFollowFromUsers(entries: List<FollowEntry>): List<FollowEntry> {
         if (entries.isEmpty()) return entries
         val enriched = entries.toMutableList()
-        entries.map { it.uid }.filter { it.isNotBlank() }.chunked(10).forEach { chunk ->
+        val missing = entries.map { it.uid }
+            .filter { it.isNotBlank() && it !in _userEnrichCache }
+            .distinct()
+        missing.chunked(10).forEach { chunk ->
             try {
                 val userSnap = firestore.collection("users")
                     .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
                     .get().await()
                 userSnap.documents.forEach { userDoc ->
-                    val idx = enriched.indexOfFirst { it.uid == userDoc.id }
-                    if (idx >= 0) {
-                        val uData = userDoc.data ?: return@forEach
-                        val freshName = (uData["displayName"] as? String)?.takeIf { it.isNotBlank() }
-                            ?: (uData["name"] as? String)?.takeIf { it.isNotBlank() }
-                            ?: enriched[idx].name
-                        val freshPhoto = (uData["photoURL"] as? String)?.takeIf { it.isNotBlank() }
-                            ?: enriched[idx].photoURL
-                        enriched[idx] = enriched[idx].copy(name = freshName, photoURL = freshPhoto)
-                    }
+                    val uData = userDoc.data ?: return@forEach
+                    _userEnrichCache[userDoc.id] = Pair(
+                        (uData["displayName"] as? String)?.takeIf { it.isNotBlank() }
+                            ?: (uData["name"] as? String)?.takeIf { it.isNotBlank() } ?: "",
+                        (uData["photoURL"] as? String)?.takeIf { it.isNotBlank() } ?: "",
+                    )
                 }
             } catch (_: Exception) {}
+        }
+        enriched.forEachIndexed { idx, entry ->
+            val cached = _userEnrichCache[entry.uid] ?: return@forEachIndexed
+            enriched[idx] = entry.copy(
+                name     = cached.first.takeIf { it.isNotBlank() } ?: entry.name,
+                photoURL = cached.second.takeIf { it.isNotBlank() } ?: entry.photoURL,
+            )
         }
         return enriched
     }

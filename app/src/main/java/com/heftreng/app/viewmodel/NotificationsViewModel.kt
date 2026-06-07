@@ -67,7 +67,7 @@ class NotificationsViewModel @Inject constructor(
             .document(uid)
             .collection("msgs")
             .orderBy("ts", Query.Direction.DESCENDING)
-            .limit(60)
+            .limit(25)  // 60→25: listener başlangıçta daha az döküman çeker
             .addSnapshotListener { snap, err ->
                 _loading.value = false
                 if (err != null || snap == null) {
