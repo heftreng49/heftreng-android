@@ -396,14 +396,11 @@ fun MessageDetailScreen(
         if (otherUidForPresence.isNotEmpty()) {
             presenceVm.listenPresence(otherUidForPresence)
             presenceVm.listenTyping(convId, otherUidForPresence)
-
-    // Ekrandan çıkınca presence/typing listener'ları kapat — zombie önleme
-    androidx.compose.runtime.DisposableEffect(convId) {
-        onDispose {
-            presenceVm.stopListening()
         }
     }
-        }
+    // Ekrandan çıkınca presence/typing kapatılsın — zombie önleme
+    DisposableEffect(otherUidForPresence) {
+        onDispose { presenceVm.stopListening() }
     }
 
     // StateFlow reaktif olarak dinle — UI otomatik güncellenir

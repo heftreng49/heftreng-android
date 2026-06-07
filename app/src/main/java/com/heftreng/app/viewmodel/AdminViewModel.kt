@@ -131,7 +131,7 @@ class AdminViewModel @Inject constructor(
     private val _stats        = MutableStateFlow<Map<String, Int>>(emptyMap())
     val stats = _stats.asStateFlow()
 
-    // statsListener kaldırıldı → get() + 60s periyodik yenileme
+    private var statsRefreshJob: kotlinx.coroutines.Job? = null
 
     data class UserActivity(
         val uid         : String  = "", val displayName : String  = "", val photoURL    : String  = "",
@@ -596,15 +596,13 @@ class AdminViewModel @Inject constructor(
 
     fun clearEditResult() { _editResult.value = "" }
 
-    private var statsRefreshJob: kotlinx.coroutines.Job? = null
-
-    // ── İstatistikler — 60 sn'de bir get() ile çek, listener yok ─────────────
+    // ── İstatistikler ─────────────────────────────────────────────────────────
     fun startStatsListener() {
         if (statsRefreshJob?.isActive == true) return
         statsRefreshJob = viewModelScope.launch {
             while (true) {
                 fetchStatsOnce()
-                kotlinx.coroutines.delay(60_000L) // 60 sn'de bir
+                kotlinx.coroutines.delay(60_000L)
             }
         }
         viewModelScope.launch { loadActiveUsers() }
@@ -616,21 +614,21 @@ class AdminViewModel @Inject constructor(
             val d = snap.data ?: return
             fun i(k: String) = (d[k] as? Long)?.toInt() ?: (d[k] as? Int) ?: 0
             val ps = PlatformStats(
-                totalUsers    = i("totalUsers"),   androidUsers  = i("androidUsers"), webUsers = i("webUsers"),
-                onlineNow     = i("onlineNow"),    newUsersToday = i("newUsersToday"),
-                totalPosts    = i("totalPosts"),   newPostsToday = i("newPostsToday"),
-                totalQuotes   = i("totalQuotes"),  totalReviews  = i("totalReviews"),
-                totalComments = i("totalComments"),totalSerials  = i("totalSerials"),
-                totalBooks    = i("totalBooks"),   pendingPosts  = i("pendingPosts"),
-                pendingReports = i("pendingReports"), bannedUsers = i("bannedUsers"),
-                lastUpdated   = (d["lastUpdated"] as? Long) ?: 0L,
+                totalUsers     = i("totalUsers"),    androidUsers   = i("androidUsers"),  webUsers       = i("webUsers"),
+                onlineNow      = i("onlineNow"),     newUsersToday  = i("newUsersToday"),
+                totalPosts     = i("totalPosts"),    newPostsToday  = i("newPostsToday"),
+                totalQuotes    = i("totalQuotes"),   totalReviews   = i("totalReviews"),
+                totalComments  = i("totalComments"), totalSerials   = i("totalSerials"),
+                totalBooks     = i("totalBooks"),    pendingPosts   = i("pendingPosts"),
+                pendingReports = i("pendingReports"),bannedUsers    = i("bannedUsers"),
+                lastUpdated    = (d["lastUpdated"] as? Long) ?: 0L,
             )
             _platformStats.value = ps
             _stats.value = mapOf(
-                "users"    to ps.totalUsers,  "online"   to ps.onlineNow,  "posts"    to ps.totalPosts,
+                "users"    to ps.totalUsers,   "online"   to ps.onlineNow,    "posts"    to ps.totalPosts,
                 "newUsers" to ps.newUsersToday,"newPosts" to ps.newPostsToday,
-                "serials"  to ps.totalSerials,"books"    to ps.totalBooks,
-                "pending"  to ps.pendingPosts,"reports"  to ps.pendingReports,"banned" to ps.bannedUsers,
+                "serials"  to ps.totalSerials, "books"    to ps.totalBooks,
+                "pending"  to ps.pendingPosts, "reports"  to ps.pendingReports,"banned"  to ps.bannedUsers,
             )
         } catch (e: Exception) { e.printStackTrace() }
     }
@@ -825,6 +823,5 @@ class AdminViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         statsRefreshJob?.cancel()
-        statsListener = null
     }
 }
