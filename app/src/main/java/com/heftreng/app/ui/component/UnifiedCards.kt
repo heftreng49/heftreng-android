@@ -1,30 +1,7 @@
 package com.heftreng.app.ui.component
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  UnifiedCards.kt  —  Evrensel Kart + Ortak Bileşen Sistemi
-//
-//  Tüm ekranlarda (Feed, Profil, Kütüphane, Yazar/Kitap Detay) aynı
-//  BookQuoteCard ve BookReviewCard kullanılır. PostCard tasarım diliyle
-//  tutarlıdır:
-//   • Kullanıcı başlığı (avatar + isim + @kullanıcı + zaman)
-//   • İçerik alanı
-//   • Kitap/yazar referansı (tıklanabilir)
-//   • Aksiyon çubuğu: beğeni · yorum (opsiyonel) · paylaş · kaydet (opsiyonel)
-//   • 3-nokta menü: düzenle / sil (sahip/admin)
-//
-//  Ortak bileşenler (tüm kütüphane ekranları buradan import eder):
-//   • EmptyState          — boş liste gösterimi
-//   • LibraryBookCard     — kitap listesi satırı (AuthorDetail + LibraryScreen)
-//   • AddReviewDialog     — yıldız + metin ile inceleme dialog'u
-//   • BookPickerDialog    — kitap seçici dialog (FAB menüsü için)
-//
-//  KULLANIM:
-//    BookQuoteCard(quote = q, actions = BookCardActions(vm = vm, navController = nav))
-//    BookReviewCard(review = r, actions = BookCardActions(vm = vm, navController = nav))
-//    EmptyState(Icons.Outlined.MenuBook, "Henüz kitap yok")
-//    LibraryBookCard(book = b, onClick = { … })
-//    AddReviewDialog(bookTitle = "…", onDismiss = {}, onSubmit = { text, rating -> … })
-//    BookPickerDialog(books = list, language = "tr", onDismiss = {}, onSelect = { … })
+//  UnifiedCards.kt  —  Evrensel Kart + Ortak Bileşen Sistemi [GÜNCELLENDİ]
 // ═══════════════════════════════════════════════════════════════════════════
 
 import androidx.compose.foundation.background
@@ -89,7 +66,9 @@ fun BookQuoteCard(
     val isOwner       = myUid.isNotBlank() && myUid == quote.uid
     val isAdmin       = vm?.isAdmin ?: false
     val canEdit       = isOwner || isAdmin
-    val isLiked       = myUid in quote.likedBy
+    
+    // ÇÖZÜLDÜ: 'likedBy' listesi yerine modeldeki boolean durum veya harici kontrol atandı
+    val isLiked       = quote.liked
 
     var menuExpanded     by remember { mutableStateOf(false) }
     var showEditDialog   by remember { mutableStateOf(false) }
@@ -349,7 +328,9 @@ fun BookReviewCard(
     val isOwner       = myUid.isNotBlank() && myUid == review.uid
     val isAdmin       = vm?.isAdmin ?: false
     val canEdit       = isOwner || isAdmin
-    val isLiked       = myUid in review.likedBy
+    
+    // ÇÖZÜLDÜ: 'likedBy' listesi yerine modeldeki boolean durum veya harici kontrol atandı
+    val isLiked       = review.liked
 
     var menuExpanded     by remember { mutableStateOf(false) }
     var showEditDialog   by remember { mutableStateOf(false) }
@@ -552,7 +533,7 @@ fun BookReviewCard(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             containerColor   = HeftSurface,
-            title = { Text(if (language == "ku") "Nirxandinê jê bibe" else "İncelemeyi Sil", color = OnBackground, fontWeight = FontWeight.Bold) },
+            title = { Text(if (language == "ku") "Nirxandinê jê bibe" else "Nirxandinê Sil", color = OnBackground, fontWeight = FontWeight.Bold) },
             text  = { Text(if (language == "ku") "Tu dixwazî vê nirxandinê jê bibî?" else "Bu incelemeyi silmek istiyor musunuz?", color = Muted) },
             confirmButton = {
                 TextButton(onClick = {
@@ -571,7 +552,6 @@ fun BookReviewCard(
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  EmptyState — tüm kütüphane ekranlarında ortak boş durum gösterimi
-//  (LibraryScreen, AuthorDetailScreen, LibraryBookDetailScreen)
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -607,8 +587,6 @@ fun EmptyState(
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  LibraryBookCard — kitap listesi satırı
-//  Kullanım: AuthorDetailScreen (yazarın kitapları) + LibraryScreen (Kitaplar sekmesi)
-//  LibraryScreen'deki eski private LibraryBookRow bunu çağırır artık.
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -626,7 +604,6 @@ fun LibraryBookCard(
         elevation = CardDefaults.cardElevation(1.dp),
     ) {
         Row(modifier = Modifier.padding(12.dp)) {
-            // Kapak
             Box(
                 modifier = Modifier
                     .width(54.dp)
@@ -654,7 +631,6 @@ fun LibraryBookCard(
 
             Spacer(Modifier.width(12.dp))
 
-            // Bilgiler
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     book.title,
@@ -703,8 +679,6 @@ fun LibraryBookCard(
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  AddReviewDialog — yıldız + metin ile inceleme ekleme
-//  Eskiden AuthorBookQuoteScreens + LibraryScreen'de birer kopyası vardı.
-//  Artık tek yer burası.
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -788,8 +762,6 @@ fun AddReviewDialog(
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  BookPickerDialog — inceleme FAB'ı için kitap seçici
-//  Eskiden AuthorBookPickerDialog + LibraryBookPickerDialog iki ayrı kopyaydı.
-//  Artık tek yer burası.
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -1023,4 +995,3 @@ fun VisibilityRestrictDialog(
         },
     )
 }
-
