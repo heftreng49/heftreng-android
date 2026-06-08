@@ -22,6 +22,9 @@ import androidx.compose.ui.unit.*
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.ui.theme.*
+import com.heftreng.app.ui.component.AdBannerView
+import com.heftreng.app.viewmodel.AdsViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.heftreng.app.viewmodel.BlogPost
 import com.heftreng.app.viewmodel.BlogViewModel
 import java.text.SimpleDateFormat
@@ -36,10 +39,17 @@ fun BlogScreen(
     navController : NavController,
     vm            : BlogViewModel,
     language      : String = "tr",
+    adsVm         : AdsViewModel = hiltViewModel(),
 ) {
     val ku = language == "ku"
     val state    by vm.state.collectAsState()
+    val bannerUnitId  by adsVm.bannerBlogUnitId.collectAsState()
+    val bannerCfg     by adsVm.bannerBlogConfig.collectAsState()
+    val blogBannerSize = bannerCfg?.bannerSize ?: "adaptive"
+    val bannerPos      = bannerCfg?.position ?: 4  // her 4 yazıda bir reklam
     var selLabel by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) { adsVm.loadAdConfigs() }
 
     // Tüm etiketleri topla
     val allLabels = remember(state.posts) {
@@ -105,11 +115,20 @@ fun BlogScreen(
                         verticalArrangement   = Arrangement.spacedBy(12.dp),
                         modifier              = Modifier.fillMaxSize(),
                     ) {
-                        items(state.posts, key = { it.id }) { post ->
+                        itemsIndexed(state.posts, key = { _, post -> post.id }) { index, post ->
                             BlogPostCard(
                                 post     = post,
                                 onClick  = { navController.navigate("blog_post/${post.id}") },
                             )
+                            // Her bannerPos. yazıdan sonra reklam göster
+                            if (bannerUnitId != null && (index + 1) % bannerPos == 0) {
+                                AdBannerView(
+                                    unitId     = bannerUnitId,
+                                    adsVm      = adsVm,
+                                    slot       = AdsViewModel.BannerSlot.BLOG,
+                                    bannerSize = blogBannerSize,
+                                )
+                            }
                         }
 
                         // Sayfa sonu — daha fazla yükle

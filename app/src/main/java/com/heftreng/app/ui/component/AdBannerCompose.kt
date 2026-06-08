@@ -43,12 +43,14 @@ fun AdBannerView(
         AdsViewModel.BannerSlot.FEED  -> adsVm?.bannerFeedLoaded?.collectAsState()?.value  ?: false
         AdsViewModel.BannerSlot.LIB   -> adsVm?.bannerLibLoaded?.collectAsState()?.value   ?: false
         AdsViewModel.BannerSlot.KURDI -> adsVm?.bannerKurdiLoaded?.collectAsState()?.value ?: false
+        AdsViewModel.BannerSlot.BLOG  -> adsVm?.bannerBlogLoaded?.collectAsState()?.value  ?: false
     }
 
     val cachedView = when (slot) {
         AdsViewModel.BannerSlot.FEED  -> adsVm?.cachedFeedBanner
         AdsViewModel.BannerSlot.LIB   -> adsVm?.cachedLibBanner
         AdsViewModel.BannerSlot.KURDI -> adsVm?.cachedKurdiBanner
+        AdsViewModel.BannerSlot.BLOG  -> adsVm?.cachedBlogBanner
     }
 
     var menuExpanded by remember { mutableStateOf(false) }

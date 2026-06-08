@@ -31,7 +31,10 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.ui.theme.*
+import com.heftreng.app.ui.component.AdBannerView
+import com.heftreng.app.viewmodel.AdsViewModel
 import com.heftreng.app.viewmodel.BlogViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // BLOG YAZI DETAY — TAM NATIVE (WebView yok)
@@ -43,11 +46,18 @@ fun BlogPostScreen(
     postId        : String,
     navController : NavController,
     vm            : BlogViewModel,
+    adsVm         : AdsViewModel = hiltViewModel(),
 ) {
     val post    by vm.detail.collectAsState()
     val loading by vm.detailLoading.collectAsState()
+    val bannerUnitId  by adsVm.bannerBlogUnitId.collectAsState()
+    val bannerCfg     by adsVm.bannerBlogConfig.collectAsState()
+    val blogBannerSize = bannerCfg?.bannerSize ?: "adaptive"
 
-    LaunchedEffect(postId) { vm.loadPostDetail(postId) }
+    LaunchedEffect(postId) {
+        vm.loadPostDetail(postId)
+        adsVm.loadAdConfigs()
+    }
 
     Scaffold(
         containerColor = Background,
@@ -146,8 +156,30 @@ fun BlogPostScreen(
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         Spacer(Modifier.height(16.dp))
 
+                        // Yazı ortası reklam — içerikten önce
+                        if (bannerUnitId != null) {
+                            AdBannerView(
+                                unitId     = bannerUnitId,
+                                adsVm      = adsVm,
+                                slot       = AdsViewModel.BannerSlot.BLOG,
+                                bannerSize = blogBannerSize,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
+
                         // İçerik — tamamen native
                         HtmlContent(html = p.content)
+
+                        // Yazı sonu reklam
+                        if (bannerUnitId != null) {
+                            Spacer(Modifier.height(16.dp))
+                            AdBannerView(
+                                unitId     = bannerUnitId,
+                                adsVm      = adsVm,
+                                slot       = AdsViewModel.BannerSlot.BLOG,
+                                bannerSize = blogBannerSize,
+                            )
+                        }
                     }
                 }
             }

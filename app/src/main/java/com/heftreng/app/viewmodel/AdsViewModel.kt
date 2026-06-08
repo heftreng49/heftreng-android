@@ -36,17 +36,22 @@ class AdsViewModel @Inject constructor(
     private val _bannerKurdiLoaded   = MutableStateFlow(false)
     val bannerKurdiLoaded   = _bannerKurdiLoaded.asStateFlow()
 
+    private val _bannerBlogLoaded    = MutableStateFlow(false)
+    val bannerBlogLoaded    = _bannerBlogLoaded.asStateFlow()
+
     var cachedFeedBanner   : AdView? = null; private set
     var cachedLibBanner    : AdView? = null; private set
     var cachedKurdiBanner  : AdView? = null; private set
+    var cachedBlogBanner   : AdView? = null; private set
 
     // Yeniden deneme sayaçları (Match Rate koruması için)
     private var feedRetryCount = 0
     private var libRetryCount = 0
     private var kurdiRetryCount = 0
+    private var blogRetryCount  = 0
     private val MAX_RETRY_ATTEMPTS = 3
 
-    fun preloadBanner(unitId: String, slot: BannerSlot, bannerSize: String = "adaptive") {
+    fun preloadBanner(unitId: String, slot: BannerSlot) {
         if (unitId.isBlank()) return
         
         // Eğer zaten yüklenmiş geçerli bir reklam varsa mükerrer istek atmayı engelle
@@ -54,6 +59,7 @@ class AdsViewModel @Inject constructor(
             BannerSlot.FEED -> _bannerFeedLoaded.value
             BannerSlot.LIB -> _bannerLibLoaded.value
             BannerSlot.KURDI -> _bannerKurdiLoaded.value
+            BannerSlot.BLOG  -> _bannerBlogLoaded.value
         }
         if (isAlreadyLoaded) return
 
@@ -64,14 +70,8 @@ class AdsViewModel @Inject constructor(
         val adWidth        = (adWidthPixels / density).toInt()
         val adaptiveSize   = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(appContext, adWidth)
 
-        val resolvedSize = when (bannerSize) {
-            "banner"           -> AdSize.BANNER
-            "medium_rectangle" -> AdSize.MEDIUM_RECTANGLE
-            "large_banner"     -> AdSize.LARGE_BANNER
-            else               -> adaptiveSize  // "adaptive" veya bilinmeyen → adaptive
-        }
         val adView = AdView(appContext).apply {
-            setAdSize(resolvedSize)
+            setAdSize(adaptiveSize)
             adUnitId = unitId
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
             adListener = object : AdListener() {
@@ -81,6 +81,7 @@ class AdsViewModel @Inject constructor(
                         BannerSlot.FEED  -> { feedRetryCount = 0; cachedFeedBanner  = this@apply; _bannerFeedLoaded.value  = true }
                         BannerSlot.LIB   -> { libRetryCount = 0; cachedLibBanner   = this@apply; _bannerLibLoaded.value   = true }
                         BannerSlot.KURDI -> { kurdiRetryCount = 0; cachedKurdiBanner = this@apply; _bannerKurdiLoaded.value = true }
+                        BannerSlot.BLOG  -> { blogRetryCount  = 0; cachedBlogBanner  = this@apply; _bannerBlogLoaded.value  = true }
                     }
                 }
                 override fun onAdFailedToLoad(e: LoadAdError) {
@@ -110,6 +111,13 @@ class AdsViewModel @Inject constructor(
                                     preloadBanner(unitId, slot)
                                 }
                             }
+                            BannerSlot.BLOG -> {
+                                if (blogRetryCount < MAX_RETRY_ATTEMPTS) {
+                                    blogRetryCount++
+                                    delay(blogRetryCount * 5000L)
+                                    preloadBanner(unitId, slot)
+                                }
+                            }
                         }
                     }
                 }
@@ -126,16 +134,18 @@ class AdsViewModel @Inject constructor(
             BannerSlot.FEED  -> { cachedFeedBanner?.destroy(); cachedFeedBanner = adView }
             BannerSlot.LIB  -> { cachedLibBanner?.destroy(); cachedLibBanner = adView }
             BannerSlot.KURDI -> { cachedKurdiBanner?.destroy(); cachedKurdiBanner = adView }
+            BannerSlot.BLOG  -> { cachedBlogBanner?.destroy();  cachedBlogBanner  = adView }
         }
     }
 
-    enum class BannerSlot { FEED, LIB, KURDI }
+    enum class BannerSlot { FEED, LIB, KURDI, BLOG }
 
     override fun onCleared() {
         super.onCleared()
         cachedFeedBanner?.destroy()
         cachedLibBanner?.destroy()
         cachedKurdiBanner?.destroy()
+        cachedBlogBanner?.destroy()
         interstitialAd = null
         rewardedAd     = null
     }
@@ -149,6 +159,9 @@ class AdsViewModel @Inject constructor(
 
     private val _bannerKurdiConfig  = MutableStateFlow<CmsAdConfig?>(null)
     val bannerKurdiConfig = _bannerKurdiConfig.asStateFlow()
+
+    private val _bannerBlogConfig   = MutableStateFlow<CmsAdConfig?>(null)
+    val bannerBlogConfig  = _bannerBlogConfig.asStateFlow()
 
     private val _interstitialConfig = MutableStateFlow<CmsAdConfig?>(null)
     val interstitialConfig = _interstitialConfig.asStateFlow()
@@ -202,6 +215,11 @@ class AdsViewModel @Inject constructor(
         else if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    val bannerBlogUnitId: StateFlow<String?> = combine(_bannerBlogConfig, _adsEnabled) { config, enabled ->
+        if (config == null || !config.enabled || !enabled) null
+        else if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     val bannerPosition: StateFlow<Int> = _bannerConfig
         .map { it?.position ?: 5 }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 5)
@@ -249,21 +267,28 @@ class AdsViewModel @Inject constructor(
                             _bannerConfig.value = config
                             if (config.enabled && _adsEnabled.value) {
                                 val uid = if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
-                                preloadBanner(uid, BannerSlot.FEED, config.bannerSize)
+                                preloadBanner(uid, BannerSlot.FEED)
                             }
                         }
                         doc.id == "banner_library" -> {
                             _bannerLibraryConfig.value = config
                             if (config.enabled && _adsEnabled.value) {
                                 val uid = if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
-                                preloadBanner(uid, BannerSlot.LIB, config.bannerSize)
+                                preloadBanner(uid, BannerSlot.LIB)
                             }
                         }
                         doc.id == "banner_kurdi" -> {
                             _bannerKurdiConfig.value = config
                             if (config.enabled && _adsEnabled.value) {
                                 val uid = if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
-                                preloadBanner(uid, BannerSlot.KURDI, config.bannerSize)
+                                preloadBanner(uid, BannerSlot.KURDI)
+                            }
+                        }
+                        doc.id == "banner_blog" -> {
+                            _bannerBlogConfig.value = config
+                            if (config.enabled && _adsEnabled.value) {
+                                val uid = if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
+                                preloadBanner(uid, BannerSlot.BLOG, config.bannerSize)
                             }
                         }
                         doc.id == "interstitial_serial" -> _interstitialConfig.value = config

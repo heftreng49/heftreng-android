@@ -1025,6 +1025,17 @@ private fun AdsTab(adsVm: AdsViewModel) {
             )
         }
 
+        // ── Banner Blog ────────────────────────────────────────────────────
+        item {
+            AdConfigCard(
+                title     = "Banner — Blog",
+                docId     = "banner_blog",
+                config    = adsVm.bannerBlogConfig.collectAsState().value,
+                onSaved   = { adsVm.loadAdConfigs() },
+                onDeleted = null,
+            )
+        }
+
         // ── Dinamik Slotlar (CMS'den eklenenler) ──────────────────────────
         items(allBanners.entries.toList(), key = { it.key }) { (docId, config) ->
             AdConfigCard(

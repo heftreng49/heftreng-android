@@ -562,13 +562,14 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 modifier         = Modifier.padding(innerPadding),
             ) {
                 composable(Screen.Blog.route) {
-                    BlogScreen(navController = navController, vm = blogVm, language = language)
+                    BlogScreen(navController = navController, vm = blogVm, language = language, adsVm = adsVm)
                 }
                 composable("blog_post/{postId}") { back ->
                     BlogPostScreen(
                         postId        = back.arguments?.getString("postId") ?: "",
                         navController = navController,
                         vm            = blogVm,
+                        adsVm         = adsVm,
                     )
                 }
                 composable(Screen.Feed.route) {
