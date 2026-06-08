@@ -145,9 +145,9 @@ fun AdBannerView(
         AlertDialog(
             onDismissRequest = { showDialog = false },
             title            = { Text("Bu bir reklamdır") },
-            text             = { Text("Heftreng tamamen ücretsiz bir uygulamadır. Uygulamayı sürdürebilmek ve sunucu maliyetlerini karşılayabilmek için Google AdMob aracılığıyla reklam gösteriyoruz.
+            text             = { Text("""Heftreng tamamen ücretsiz bir uygulamadır. Uygulamayı sürdürebilmek ve sunucu maliyetlerini karşılayabilmek için Google AdMob aracılığıyla reklam gösteriyoruz.
 
-Gördüğünüz içerik, Google tarafından belirlenen bir reklamdır.") },
+Gördüğünüz içerik, Google tarafından belirlenen bir reklamdır.""") },
             confirmButton    = { TextButton(onClick = { showDialog = false }) { Text("Tamam") } },
         )
     }
