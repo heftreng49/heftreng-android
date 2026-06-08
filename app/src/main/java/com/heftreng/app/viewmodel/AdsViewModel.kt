@@ -169,11 +169,7 @@ class AdsViewModel @Inject constructor(
     // ÇÖZÜLDÜ: List<AdScreen> tip uyuşmazlığı ve lambda parametre çıkarımı düzeltildi
     fun getBannerConfigsForScreen(screen: String): List<com.heftreng.app.data.model.CmsAdConfig> {
         if (!_adsEnabled.value) return emptyList()
-        val targetScreen = try {
-            com.heftreng.app.data.model.AdScreen.valueOf(screen.trim().uppercase())
-        } catch (e: Exception) {
-            return emptyList()
-        }
+        val targetScreen = screen.trim().lowercase()
         return _allBannerConfigs.value.values.filter { config ->
             config.enabled && config.screens.contains(targetScreen)
         }.sortedBy { config -> config.position }
@@ -248,9 +244,9 @@ class AdsViewModel @Inject constructor(
                         scenarioUnlockLesson = d["scenarioUnlockLesson"] as? Boolean ?: true,
                         scenarioSaveStreak   = d["scenarioSaveStreak"]   as? Boolean ?: true,
                         adType               = d["adType"]      as? String ?: "banner",
-                        bannerSize           = try { com.heftreng.app.data.model.AdBannerSize.valueOf((d["bannerSize"] as? String ?: "ADAPTIVE").trim().uppercase()) } catch(e: Exception) { com.heftreng.app.data.model.AdBannerSize.ADAPTIVE },
-                        placement            = try { com.heftreng.app.data.model.AdPlacement.valueOf((d["placement"] as? String ?: "IN_LIST").trim().uppercase()) } catch(e: Exception) { com.heftreng.app.data.model.AdPlacement.IN_LIST },
-                        screens              = (d["screens"] as? String ?: "FEED").split(",").map { try { com.heftreng.app.data.model.AdScreen.valueOf(it.trim().uppercase()) } catch(e: Exception) { com.heftreng.app.data.model.AdScreen.FEED } },
+                        bannerSize           = (d["bannerSize"] as? String ?: "adaptive").trim().lowercase(),
+                        placement            = (d["placement"] as? String ?: "in_list").trim().lowercase(),
+                        screens              = (d["screens"] as? String ?: "feed").trim().lowercase(),
                         label                = d["label"]       as? String ?: "",
                         bgColor              = d["bgColor"]     as? String ?: "",
                         cornerRadius         = (d["cornerRadius"]  as? Long)?.toInt() ?: 0,
