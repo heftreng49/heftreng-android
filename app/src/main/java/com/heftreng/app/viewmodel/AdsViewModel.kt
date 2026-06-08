@@ -288,7 +288,7 @@ class AdsViewModel @Inject constructor(
                             _bannerBlogConfig.value = config
                             if (config.enabled && _adsEnabled.value) {
                                 val uid = if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
-                                preloadBanner(uid, BannerSlot.BLOG, config.bannerSize)
+                                preloadBanner(uid, BannerSlot.BLOG)
                             }
                         }
                         doc.id == "interstitial_serial" -> _interstitialConfig.value = config
