@@ -86,8 +86,10 @@ fun FeedScreen(
     val loading     by vm.loading.collectAsState()
     val hasMore     by vm.hasMore.collectAsState()
     val loadingMore by vm.loadingMore.collectAsState()
-    val bannerUnitId by adsVm.bannerUnitId.collectAsState()
-    val bannerPos    by adsVm.bannerPosition.collectAsState()
+    val bannerUnitId   by adsVm.bannerUnitId.collectAsState()
+    val bannerPos      by adsVm.bannerPosition.collectAsState()
+    val bannerCfg      by adsVm.bannerConfig.collectAsState()
+    val feedBannerSize = bannerCfg?.bannerSize ?: "adaptive"
     val blockedUsers by settingsVm.blockedUsers.collectAsState()
 
     val serverRefreshing by vm.serverRefreshing.collectAsState()
@@ -423,7 +425,7 @@ fun FeedScreen(
                     if (bannerUnitId != null &&
                         postIndex >= 0 &&
                         (postIndex + 1) % bannerPos == 0) {
-                        AdBannerView(unitId = bannerUnitId, adsVm = adsVm, slot = AdsViewModel.BannerSlot.FEED)
+                        AdBannerView(unitId = bannerUnitId, adsVm = adsVm, slot = AdsViewModel.BannerSlot.FEED, bannerSize = feedBannerSize)
                     }
                 }
                 // ── Daha Fazla Göster ─────────────────────────────────────

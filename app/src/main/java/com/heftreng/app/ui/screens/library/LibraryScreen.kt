@@ -102,7 +102,9 @@ fun LibraryScreen(
     val authors by libraryVm.authors.collectAsState()
     var books   by remember { mutableStateOf<List<LibraryBook>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
-    val bannerUnitId by adsVm.bannerLibraryUnitId.collectAsState()
+    val bannerUnitId    by adsVm.bannerLibraryUnitId.collectAsState()
+    val bannerLibCfg    by adsVm.bannerLibraryConfig.collectAsState()
+    val libBannerSize   = bannerLibCfg?.bannerSize ?: "adaptive"
 
     LaunchedEffect(Unit) {
         loading = true
@@ -258,10 +260,10 @@ fun LibraryScreen(
                     modifier                = Modifier.fillMaxSize(),
                 ) { page ->
                     when (page) {
-                        0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, bannerUnitId = bannerUnitId, adsVm = adsVm)
-                        1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm, bannerUnitId = bannerUnitId, adsVm = adsVm)
-                        2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language, bannerUnitId = bannerUnitId, adsVm = adsVm)
-                        3 -> LibraryBooksTab(books = books, navController = navController, language = language, bannerUnitId = bannerUnitId, adsVm = adsVm)
+                        0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize)
+                        1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize)
+                        2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize)
+                        3 -> LibraryBooksTab(books = books, navController = navController, language = language, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize)
                         else -> {}
                     }
                 }
@@ -352,6 +354,7 @@ private fun LibraryQuotesTab(
     feedVm       : FeedViewModel,
     bannerUnitId : String? = null,
     adsVm        : com.heftreng.app.viewmodel.AdsViewModel? = null,
+    bannerSize   : String = "adaptive",
 ) {
     if (quotes.isEmpty()) {
         EmptyState(Icons.Outlined.FormatQuote, Strings.libraryNoQuotes(language))
@@ -383,7 +386,7 @@ private fun LibraryQuotesTab(
                 },
             )
             if (bannerUnitId != null && (index + 1) % 5 == 0) {
-                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB)
+                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB, bannerSize = bannerSize)
             }
         }
     }
@@ -397,6 +400,7 @@ private fun LibraryReviewsTab(
     vm           : LibraryViewModel? = null,
     bannerUnitId : String? = null,
     adsVm        : com.heftreng.app.viewmodel.AdsViewModel? = null,
+    bannerSize   : String = "adaptive",
 ) {
     if (reviews.isEmpty()) {
         EmptyState(Icons.Outlined.RateReview, Strings.libraryNoReviews(language))
@@ -407,7 +411,7 @@ private fun LibraryReviewsTab(
         itemsIndexed(reviews, key = { _, r -> r.id }) { index, review ->
             BookReviewCard(review = review, actions = actions, language = language)
             if (bannerUnitId != null && (index + 1) % 5 == 0) {
-                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB)
+                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB, bannerSize = bannerSize)
             }
         }
     }
@@ -420,6 +424,7 @@ private fun LibraryAuthorsTab(
     navController: NavController,
     bannerUnitId : String? = null,
     adsVm        : com.heftreng.app.viewmodel.AdsViewModel? = null,
+    bannerSize   : String = "adaptive",
 ) {
     if (authors.isEmpty()) {
         EmptyState(Icons.Outlined.Person, Strings.libraryNoAuthors(language))
@@ -432,7 +437,7 @@ private fun LibraryAuthorsTab(
         itemsIndexed(authors, key = { _, a -> a.id }) { index, author ->
             LibraryAuthorRow(author = author, navController = navController)
             if (bannerUnitId != null && (index + 1) % 6 == 0) {
-                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB)
+                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB, bannerSize = bannerSize)
             }
         }
     }
@@ -445,6 +450,7 @@ private fun LibraryBooksTab(
     navController: NavController,
     bannerUnitId : String? = null,
     adsVm        : com.heftreng.app.viewmodel.AdsViewModel? = null,
+    bannerSize   : String = "adaptive",
 ) {
     if (books.isEmpty()) {
         EmptyState(Icons.Outlined.AutoStories, Strings.libraryNoBooks(language))
@@ -460,7 +466,7 @@ private fun LibraryBooksTab(
                 onClick = { navController.navigate("library_book_detail/${book.id}") },
             )
             if (bannerUnitId != null && (index + 1) % 6 == 0) {
-                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB)
+                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB, bannerSize = bannerSize)
             }
         }
     }

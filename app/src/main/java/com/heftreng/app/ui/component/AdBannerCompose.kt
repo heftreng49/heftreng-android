@@ -31,10 +31,11 @@ import com.heftreng.app.viewmodel.AdsViewModel
 // adsVm null ise factory'den yeni AdView üretir (fallback)
 @Composable
 fun AdBannerView(
-    unitId   : String?,
-    modifier : Modifier = Modifier,
-    adsVm    : AdsViewModel? = null,
-    slot     : AdsViewModel.BannerSlot = AdsViewModel.BannerSlot.FEED,
+    unitId     : String?,
+    modifier   : Modifier = Modifier,
+    adsVm      : AdsViewModel? = null,
+    slot       : AdsViewModel.BannerSlot = AdsViewModel.BannerSlot.FEED,
+    bannerSize : String = "adaptive",   // CMS'den gelen boyut: adaptive/banner/medium_rectangle/large_banner
 ) {
     if (unitId.isNullOrBlank()) return
 
@@ -134,7 +135,12 @@ fun AdBannerView(
                         factory = { ctx ->
                             val dm    = ctx.resources.displayMetrics
                             val width = ((dm.widthPixels / dm.density).toInt() - 28) // padding çıkar
-                            val size  = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(ctx, width)
+                            val size  = when (bannerSize) {
+                                "banner"           -> AdSize.BANNER
+                                "medium_rectangle" -> AdSize.MEDIUM_RECTANGLE
+                                "large_banner"     -> AdSize.LARGE_BANNER
+                                else               -> AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(ctx, width)
+                            }
                             AdView(ctx).apply {
                                 setAdSize(size)
                                 adUnitId = unitId

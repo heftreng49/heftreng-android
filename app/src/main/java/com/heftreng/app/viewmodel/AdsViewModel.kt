@@ -46,7 +46,7 @@ class AdsViewModel @Inject constructor(
     private var kurdiRetryCount = 0
     private val MAX_RETRY_ATTEMPTS = 3
 
-    fun preloadBanner(unitId: String, slot: BannerSlot) {
+    fun preloadBanner(unitId: String, slot: BannerSlot, bannerSize: String = "adaptive") {
         if (unitId.isBlank()) return
         
         // Eğer zaten yüklenmiş geçerli bir reklam varsa mükerrer istek atmayı engelle
@@ -64,8 +64,14 @@ class AdsViewModel @Inject constructor(
         val adWidth        = (adWidthPixels / density).toInt()
         val adaptiveSize   = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(appContext, adWidth)
 
+        val resolvedSize = when (bannerSize) {
+            "banner"           -> AdSize.BANNER
+            "medium_rectangle" -> AdSize.MEDIUM_RECTANGLE
+            "large_banner"     -> AdSize.LARGE_BANNER
+            else               -> adaptiveSize  // "adaptive" veya bilinmeyen → adaptive
+        }
         val adView = AdView(appContext).apply {
-            setAdSize(adaptiveSize)
+            setAdSize(resolvedSize)
             adUnitId = unitId
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
             adListener = object : AdListener() {
@@ -243,21 +249,21 @@ class AdsViewModel @Inject constructor(
                             _bannerConfig.value = config
                             if (config.enabled && _adsEnabled.value) {
                                 val uid = if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
-                                preloadBanner(uid, BannerSlot.FEED)
+                                preloadBanner(uid, BannerSlot.FEED, config.bannerSize)
                             }
                         }
                         doc.id == "banner_library" -> {
                             _bannerLibraryConfig.value = config
                             if (config.enabled && _adsEnabled.value) {
                                 val uid = if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
-                                preloadBanner(uid, BannerSlot.LIB)
+                                preloadBanner(uid, BannerSlot.LIB, config.bannerSize)
                             }
                         }
                         doc.id == "banner_kurdi" -> {
                             _bannerKurdiConfig.value = config
                             if (config.enabled && _adsEnabled.value) {
                                 val uid = if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
-                                preloadBanner(uid, BannerSlot.KURDI)
+                                preloadBanner(uid, BannerSlot.KURDI, config.bannerSize)
                             }
                         }
                         doc.id == "interstitial_serial" -> _interstitialConfig.value = config

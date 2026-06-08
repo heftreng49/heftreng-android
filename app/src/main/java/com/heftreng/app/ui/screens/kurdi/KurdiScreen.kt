@@ -71,6 +71,8 @@ fun KurdiScreen(
     val canSaveStreak           = adsVm.canShowScenario(AdsViewModel.RewardType.SAVE_STREAK)
     val remainingAds            = adsVm.remainingRewardedAds
     val bannerUnitId    by adsVm.bannerKurdiUnitId.collectAsState()
+    val bannerKurdiCfg  by adsVm.bannerKurdiConfig.collectAsState()
+    val kurdiBannerSize = bannerKurdiCfg?.bannerSize ?: "adaptive"
 
     val context  = androidx.compose.ui.platform.LocalContext.current
     val activity = context as? android.app.Activity
@@ -285,6 +287,7 @@ fun KurdiScreen(
                 tempUnlockedIds = tempUnlockedIds,
                 canWatchAd      = canUnlockLesson,
                 bannerUnitId    = bannerUnitId,
+                bannerSize      = kurdiBannerSize,
                 adsVm           = adsVm,
                 onNext   = { vm.getNextLesson()?.let { vm.openLesson(it.id) } },
                 onOpen   = { lessonId -> vm.openLesson(lessonId) },
@@ -408,6 +411,7 @@ private fun UnitsTab(
     tempUnlockedIds : Set<String> = emptySet(),
     canWatchAd      : Boolean = false,
     bannerUnitId    : String? = null,
+    bannerSize      : String = "adaptive",
     adsVm           : AdsViewModel? = null,
     onNext          : () -> Unit,
     onOpen          : (String) -> Unit,
@@ -452,7 +456,8 @@ private fun UnitsTab(
                 if (bannerUnitId != null && unitIndex > 0 && unitIndex % 2 == 0) {
                     item(key = "banner_${unit.id}") {
                         AdBannerView(
-                            unitId   = bannerUnitId,
+                            unitId      = bannerUnitId,
+                            bannerSize  = bannerSize,
                             modifier = Modifier.padding(vertical = 8.dp),
                             adsVm    = adsVm,
                             slot     = AdsViewModel.BannerSlot.KURDI,
