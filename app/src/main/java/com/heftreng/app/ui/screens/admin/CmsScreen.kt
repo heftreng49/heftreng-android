@@ -934,8 +934,11 @@ private fun AdsTab(adsVm: AdsViewModel) {
     val interstitialConfig by adsVm.interstitialConfig.collectAsState()
     val rewardedConfig     by adsVm.rewardedConfig.collectAsState()
     val adsEnabled         by adsVm.adsEnabled.collectAsState()
+    val allBanners         by adsVm.allBannerConfigs.collectAsState()
     val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
     val scope     = androidx.compose.runtime.rememberCoroutineScope()
+
+    var showAddSlotDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier       = Modifier.fillMaxSize(),
@@ -950,30 +953,42 @@ private fun AdsTab(adsVm: AdsViewModel) {
                         Text("Reklamlar", color = OnBackground, fontWeight = FontWeight.Bold)
                         Text(
                             if (adsEnabled) "Tüm reklamlar aktif" else "Tüm reklamlar kapalı",
-                            color    = if (adsEnabled) Success else Muted,
-                            fontSize = 12.sp,
+                            color = if (adsEnabled) Success else Muted, fontSize = 12.sp,
                         )
                     }
                     Switch(
-                        checked         = adsEnabled,
+                        checked = adsEnabled,
                         onCheckedChange = { enabled ->
                             scope.launch {
                                 try {
                                     firestore.collection("cms_ads").document("global")
-                                        .set(mapOf("enabled" to enabled))
-                                        .await()
+                                        .set(mapOf("enabled" to enabled)).await()
                                     adsVm.loadAdConfigs()
                                 } catch (e: Exception) { e.printStackTrace() }
                             }
                         },
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor  = Success,
-                            checkedTrackColor  = Success.copy(alpha = 0.3f),
+                            checkedThumbColor   = Success,
+                            checkedTrackColor   = Success.copy(alpha = 0.3f),
                             uncheckedThumbColor = Muted,
                             uncheckedTrackColor = Muted.copy(alpha = 0.2f),
                         ),
                     )
                 }
+            }
+        }
+
+        // ── Yeni Slot Ekle Butonu ──────────────────────────────────────────
+        item {
+            OutlinedButton(
+                onClick  = { showAddSlotDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                border   = androidx.compose.foundation.BorderStroke(1.dp, Amber.copy(alpha = 0.5f)),
+                shape    = RoundedCornerShape(10.dp),
+            ) {
+                Icon(Icons.Default.Add, null, tint = Amber, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Yeni Reklam Slotu Ekle", color = Amber)
             }
         }
 
@@ -983,257 +998,333 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title      = "Banner — Feed",
                 docId      = "banner_feed",
                 config     = bannerConfig,
-                extraLabel = "Pozisyon (kaçıncı kartta)",
-                extraKey   = "position",
                 onSaved    = { adsVm.loadAdConfigs() },
+                onDeleted  = null, // varsayılan slot — silinemez
             )
         }
 
         // ── Banner Kütüphane ───────────────────────────────────────────────
         item {
             AdConfigCard(
-                title      = "Banner — Kütüphane",
-                docId      = "banner_library",
-                config     = adsVm.bannerLibraryConfig.collectAsState().value,
-                extraLabel = "Pozisyon (kaçıncı öğede)",
-                extraKey   = "position",
-                onSaved    = { adsVm.loadAdConfigs() },
+                title     = "Banner — Kütüphane",
+                docId     = "banner_library",
+                config    = adsVm.bannerLibraryConfig.collectAsState().value,
+                onSaved   = { adsVm.loadAdConfigs() },
+                onDeleted = null,
             )
         }
 
         // ── Banner Kürtçe ──────────────────────────────────────────────────
         item {
             AdConfigCard(
-                title      = "Banner — Kürtçe Dersler",
-                docId      = "banner_kurdi",
-                config     = adsVm.bannerKurdiConfig.collectAsState().value,
-                extraLabel = "Kaç ünitede bir",
-                extraKey   = "position",
-                onSaved    = { adsVm.loadAdConfigs() },
+                title     = "Banner — Kürtçe Dersler",
+                docId     = "banner_kurdi",
+                config    = adsVm.bannerKurdiConfig.collectAsState().value,
+                onSaved   = { adsVm.loadAdConfigs() },
+                onDeleted = null,
+            )
+        }
+
+        // ── Dinamik Slotlar (CMS'den eklenenler) ──────────────────────────
+        items(allBanners.entries.toList(), key = { it.key }) { (docId, config) ->
+            AdConfigCard(
+                title     = config.label.ifBlank { docId },
+                docId     = docId,
+                config    = config,
+                onSaved   = { adsVm.loadAdConfigs() },
+                onDeleted = {
+                    scope.launch {
+                        try {
+                            firestore.collection("cms_ads").document(docId).delete().await()
+                            adsVm.loadAdConfigs()
+                        } catch (e: Exception) { e.printStackTrace() }
+                    }
+                },
             )
         }
 
         // ── Interstitial Serial ────────────────────────────────────────────
         item {
             AdConfigCard(
-                title      = "Interstitial — Seri Okuma",
-                docId      = "interstitial_serial",
-                config     = interstitialConfig,
-                extraLabel = "Sıklık (kaç chapter'da bir)",
-                extraKey   = "frequency",
-                onSaved    = { adsVm.loadAdConfigs() },
+                title     = "Interstitial — Seri Okuma",
+                docId     = "interstitial_serial",
+                config    = interstitialConfig,
+                onSaved   = { adsVm.loadAdConfigs() },
+                onDeleted = null,
             )
         }
 
-        // ── Rewarded — Ödüllü Reklam Kontrol Merkezi ─────────────────────
+        // ── Rewarded ──────────────────────────────────────────────────────
         item {
-            val cfg = rewardedConfig
-            val firestore2 = firestore
-            val scope2     = scope
-
-            // Local state — config'den beslenir
-            var unitId        by remember(cfg) { mutableStateOf(cfg?.unitId   ?: "") }
-            var enabled       by remember(cfg) { mutableStateOf(cfg?.enabled  ?: false) }
-            var testMode      by remember(cfg) { mutableStateOf(cfg?.testMode ?: true) }
-            var xpReward      by remember(cfg) { mutableStateOf((cfg?.xpReward ?: 50).toString()) }
-            var dailyLimit    by remember(cfg) { mutableStateOf((cfg?.dailyLimit ?: 3).toString()) }
-            var scnDoubleXp   by remember(cfg) { mutableStateOf(cfg?.scenarioDoubleXp     ?: true) }
-            var scnUnlock     by remember(cfg) { mutableStateOf(cfg?.scenarioUnlockLesson ?: true) }
-            var scnStreak     by remember(cfg) { mutableStateOf(cfg?.scenarioSaveStreak   ?: true) }
-            var saving        by remember { mutableStateOf(false) }
-
-            CmsCard {
-                // Başlık
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Rewarded — Ödüllü Reklam", color = Amber,
-                            fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Text(
-                            if (enabled) "Aktif" else "Kapalı",
-                            color    = if (enabled) Success else Muted,
-                            fontSize = 11.sp,
-                        )
-                    }
-                    Switch(
-                        checked = enabled, onCheckedChange = { enabled = it },
-                        colors  = SwitchDefaults.colors(
-                            checkedThumbColor  = Success,
-                            checkedTrackColor  = Success.copy(alpha = 0.3f),
-                            uncheckedThumbColor = Muted,
-                            uncheckedTrackColor = Muted.copy(alpha = 0.2f),
-                        ),
-                    )
-                }
-
-                Spacer(Modifier.height(10.dp))
-                cmsField(unitId, { unitId = it }, "Unit ID")
-                Spacer(Modifier.height(6.dp))
-
-                // Test modu
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Test Modu", color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = testMode, onCheckedChange = { testMode = it },
-                        colors  = SwitchDefaults.colors(
-                            checkedThumbColor = Amber, checkedTrackColor = Amber.copy(alpha = 0.3f),
-                        ),
-                    )
-                }
-                if (testMode) {
-                    Text("Test ID kullanılıyor — gerçek gelir sayılmaz",
-                        color = Amber, fontSize = 11.sp)
-                }
-
-                Spacer(Modifier.height(10.dp))
-                androidx.compose.material3.HorizontalDivider(
-                    color = com.heftreng.app.ui.theme.Divider, thickness = 0.5.dp)
-                Spacer(Modifier.height(10.dp))
-
-                // XP ve günlük limit
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        cmsField(xpReward, { xpReward = it.filter(Char::isDigit) },
-                            "Ders XP Ödülü",
-                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
-                    }
-                    Column(Modifier.weight(1f)) {
-                        cmsField(dailyLimit, { dailyLimit = it.filter(Char::isDigit) },
-                            "Günlük Limit",
-                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
-                        Text("Kullanıcı başına/gün max reklam",
-                            color = Muted, fontSize = 10.sp)
-                    }
-                }
-
-                Spacer(Modifier.height(10.dp))
-                androidx.compose.material3.HorizontalDivider(
-                    color = com.heftreng.app.ui.theme.Divider, thickness = 0.5.dp)
-                Spacer(Modifier.height(10.dp))
-
-                // Senaryo açma/kapama
-                Text("Senaryolar", color = OnBackground,
-                    fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                Spacer(Modifier.height(6.dp))
-
-                // Senaryo 1 — Çift XP
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (scnDoubleXp) Success.copy(0.08f)
-                                    else com.heftreng.app.ui.theme.SurfaceVar)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("⚡ Çift XP", color = OnBackground,
-                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                        Text("Ders bittikten sonra XP'yi 2 katla",
-                            color = Muted, fontSize = 11.sp)
-                    }
-                    Switch(
-                        checked = scnDoubleXp, onCheckedChange = { scnDoubleXp = it },
-                        colors  = SwitchDefaults.colors(
-                            checkedThumbColor = Success, checkedTrackColor = Success.copy(0.3f),
-                        ),
-                    )
-                }
-
-                Spacer(Modifier.height(6.dp))
-
-                // Senaryo 2 — Kilitli Ders Açma
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (scnUnlock) com.heftreng.app.ui.theme.Primary.copy(0.08f)
-                                    else com.heftreng.app.ui.theme.SurfaceVar)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("🔓 Kilitli Ders Aç", color = OnBackground,
-                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                        Text("Kilitli derse tıklanınca reklam izleyerek aç",
-                            color = Muted, fontSize = 11.sp)
-                    }
-                    Switch(
-                        checked = scnUnlock, onCheckedChange = { scnUnlock = it },
-                        colors  = SwitchDefaults.colors(
-                            checkedThumbColor = com.heftreng.app.ui.theme.Primary,
-                            checkedTrackColor = com.heftreng.app.ui.theme.Primary.copy(0.3f),
-                        ),
-                    )
-                }
-
-                Spacer(Modifier.height(6.dp))
-
-                // Senaryo 3 — Streak Kurtarma
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (scnStreak) Color(0x14EF4444)
-                                    else com.heftreng.app.ui.theme.SurfaceVar)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("🔥 Streak Kurtarma", color = OnBackground,
-                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                        Text("Seri bozulunca reklam izleyerek kurtar",
-                            color = Muted, fontSize = 11.sp)
-                    }
-                    Switch(
-                        checked = scnStreak, onCheckedChange = { scnStreak = it },
-                        colors  = SwitchDefaults.colors(
-                            checkedThumbColor = Color(0xFFEF4444),
-                            checkedTrackColor = Color(0x33EF4444),
-                        ),
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                // Kaydet
-                Button(
-                    onClick = {
-                        saving = true
-                        scope2.launch {
-                            try {
-                                firestore2.collection("cms_ads").document("rewarded_xp").set(
-                                    mapOf(
-                                        "unitId"               to unitId.trim(),
-                                        "enabled"              to enabled,
-                                        "testMode"             to testMode,
-                                        "xpReward"             to (xpReward.toIntOrNull() ?: 50),
-                                        "dailyLimit"           to (dailyLimit.toIntOrNull() ?: 3),
-                                        "scenarioDoubleXp"     to scnDoubleXp,
-                                        "scenarioUnlockLesson" to scnUnlock,
-                                        "scenarioSaveStreak"   to scnStreak,
-                                    )
-                                ).await()
-                                adsVm.loadAdConfigs()
-                            } catch (e: Exception) { e.printStackTrace() }
-                            finally { saving = false }
-                        }
-                    },
-                    enabled  = !saving,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape    = RoundedCornerShape(10.dp),
-                    colors   = ButtonDefaults.buttonColors(
-                        containerColor = Amber, contentColor = Color.Black),
-                ) {
-                    if (saving) {
-                        CircularProgressIndicator(color = Color.Black,
-                            modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text("Kaydet", fontWeight = FontWeight.Bold)
-                }
-            }
+            RewardedConfigCard(
+                config    = rewardedConfig,
+                firestore = firestore,
+                scope     = scope,
+                onSaved   = { adsVm.loadAdConfigs() },
+            )
         }
     }
+
+    // ── Yeni Slot Dialog ──────────────────────────────────────────────────────
+    if (showAddSlotDialog) {
+        AddAdSlotDialog(
+            onDismiss = { showAddSlotDialog = false },
+            onSave    = { docId, config ->
+                scope.launch {
+                    try {
+                        firestore.collection("cms_ads").document(docId).set(
+                            mapOf(
+                                "unitId"       to config.unitId,
+                                "enabled"      to config.enabled,
+                                "testMode"     to config.testMode,
+                                "adType"       to config.adType,
+                                "bannerSize"   to config.bannerSize,
+                                "placement"    to config.placement,
+                                "screens"      to config.screens,
+                                "position"     to config.position,
+                                "frequency"    to config.frequency,
+                                "label"        to config.label,
+                                "bgColor"      to config.bgColor,
+                                "cornerRadius" to config.cornerRadius,
+                                "paddingTop"   to config.paddingTop,
+                                "paddingBottom" to config.paddingBottom,
+                            )
+                        ).await()
+                        adsVm.loadAdConfigs()
+                        showAddSlotDialog = false
+                    } catch (e: Exception) { e.printStackTrace() }
+                }
+            },
+        )
+    }
+}
+
+// ── Yeni Slot Dialog ─────────────────────────────────────────────────────────
+@Composable
+private fun AddAdSlotDialog(
+    onDismiss: () -> Unit,
+    onSave   : (docId: String, config: com.heftreng.app.data.model.CmsAdConfig) -> Unit,
+) {
+    var label        by remember { mutableStateOf("") }
+    var unitId       by remember { mutableStateOf("") }
+    var adType       by remember { mutableStateOf("banner") }
+    var bannerSize   by remember { mutableStateOf("adaptive") }
+    var placement    by remember { mutableStateOf("in_list") }
+    var position     by remember { mutableStateOf("5") }
+    var frequency    by remember { mutableStateOf("3") }
+    var bgColor      by remember { mutableStateOf("") }
+    var cornerRadius by remember { mutableStateOf("0") }
+    var paddingTop   by remember { mutableStateOf("0") }
+    var paddingBottom by remember { mutableStateOf("0") }
+    var testMode     by remember { mutableStateOf(true) }
+    var enabled      by remember { mutableStateOf(true) }
+
+    // Ekran seçimi
+    val screenOptions = listOf("feed","profile","library","library_book","author_detail","kurdi","blog","search","messages")
+    val selectedScreens = remember { mutableStateListOf("feed") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = { Text("Yeni Reklam Slotu", color = OnBackground, fontWeight = FontWeight.Bold) },
+        text  = {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 500.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                item { cmsField(label, { label = it }, "Slot Adı (örn: Banner — Blog)") }
+                item { cmsField(unitId, { unitId = it }, "AdMob Unit ID") }
+
+                // Reklam tipi
+                item {
+                    Text("Reklam Tipi", color = Muted, fontSize = 12.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("banner" to "Banner", "interstitial" to "Tam Ekran").forEach { (v, l) ->
+                            FilterChip(
+                                selected = adType == v,
+                                onClick  = { adType = v },
+                                label    = { Text(l, fontSize = 12.sp) },
+                                colors   = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Amber.copy(alpha = 0.2f),
+                                    selectedLabelColor     = Amber,
+                                ),
+                            )
+                        }
+                    }
+                }
+
+                // Banner boyutu (sadece banner tipinde)
+                if (adType == "banner") {
+                    item {
+                        Text("Banner Boyutu", color = Muted, fontSize = 12.sp)
+                        Spacer(Modifier.height(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf(
+                                "adaptive" to "Adaptif",
+                                "banner" to "Küçük",
+                                "medium_rectangle" to "Orta",
+                                "large_banner" to "Büyük",
+                            ).forEach { (v, l) ->
+                                FilterChip(
+                                    selected = bannerSize == v,
+                                    onClick  = { bannerSize = v },
+                                    label    = { Text(l, fontSize = 11.sp) },
+                                    colors   = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Primary.copy(alpha = 0.2f),
+                                        selectedLabelColor     = Primary,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Yerleşim tipi
+                item {
+                    Text("Yerleşim", color = Muted, fontSize = 12.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf("in_list" to "Liste İçi", "top" to "Üst", "bottom" to "Alt").forEach { (v, l) ->
+                                FilterChip(
+                                    selected = placement == v, onClick = { placement = v },
+                                    label = { Text(l, fontSize = 11.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Primary.copy(alpha = 0.2f),
+                                        selectedLabelColor = Primary,
+                                    ),
+                                )
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf("overlay" to "Overlay", "between_sections" to "Bölümler Arası").forEach { (v, l) ->
+                                FilterChip(
+                                    selected = placement == v, onClick = { placement = v },
+                                    label = { Text(l, fontSize = 11.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Primary.copy(alpha = 0.2f),
+                                        selectedLabelColor = Primary,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Ekran seçimi
+                item {
+                    Text("Gösterileceği Ekranlar", color = Muted, fontSize = 12.sp)
+                    Spacer(Modifier.height(4.dp))
+                    val screenLabels = mapOf(
+                        "feed" to "Feed", "profile" to "Profil", "library" to "Kütüphane",
+                        "library_book" to "Kitap", "author_detail" to "Yazar",
+                        "kurdi" to "Kürtçe", "blog" to "Blog",
+                        "search" to "Arama", "messages" to "Mesajlar",
+                    )
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        screenOptions.forEach { screen ->
+                            FilterChip(
+                                selected = selectedScreens.contains(screen),
+                                onClick  = {
+                                    if (selectedScreens.contains(screen)) selectedScreens.remove(screen)
+                                    else selectedScreens.add(screen)
+                                },
+                                label = { Text(screenLabels[screen] ?: screen, fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Amber.copy(alpha = 0.2f),
+                                    selectedLabelColor     = Amber,
+                                ),
+                            )
+                        }
+                    }
+                }
+
+                // Pozisyon / Sıklık
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            cmsField(position, { position = it.filter(Char::isDigit) }, "Pozisyon (kaçıncı item)",
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            cmsField(frequency, { frequency = it.filter(Char::isDigit) }, "Sıklık",
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                        }
+                    }
+                }
+
+                // Tasarım
+                item {
+                    Text("Tasarım (opsiyonel)", color = Muted, fontSize = 12.sp)
+                    Spacer(Modifier.height(4.dp))
+                    cmsField(bgColor, { bgColor = it }, "Arka plan rengi (#09090b)")
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            cmsField(cornerRadius, { cornerRadius = it.filter(Char::isDigit) }, "Köşe (dp)",
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            cmsField(paddingTop, { paddingTop = it.filter(Char::isDigit) }, "Üst boşluk",
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            cmsField(paddingBottom, { paddingBottom = it.filter(Char::isDigit) }, "Alt boşluk",
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                        }
+                    }
+                }
+
+                // Aktif / Test
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Text("Aktif", color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Switch(checked = enabled, onCheckedChange = { enabled = it },
+                                colors = SwitchDefaults.colors(checkedThumbColor = Success, checkedTrackColor = Success.copy(alpha = 0.3f)))
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Text("Test", color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Switch(checked = testMode, onCheckedChange = { testMode = it },
+                                colors = SwitchDefaults.colors(checkedThumbColor = Amber, checkedTrackColor = Amber.copy(alpha = 0.3f)))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val docId = "custom_${label.lowercase().replace(" ", "_")}_${System.currentTimeMillis() / 1000}"
+                    val config = com.heftreng.app.data.model.CmsAdConfig(
+                        unitId        = unitId.trim(),
+                        enabled       = enabled,
+                        testMode      = testMode,
+                        adType        = adType,
+                        bannerSize    = bannerSize,
+                        placement     = placement,
+                        screens       = selectedScreens.joinToString(","),
+                        position      = position.toIntOrNull() ?: 5,
+                        frequency     = frequency.toIntOrNull() ?: 3,
+                        label         = label.trim(),
+                        bgColor       = bgColor.trim(),
+                        cornerRadius  = cornerRadius.toIntOrNull() ?: 0,
+                        paddingTop    = paddingTop.toIntOrNull() ?: 0,
+                        paddingBottom = paddingBottom.toIntOrNull() ?: 0,
+                    )
+                    onSave(docId, config)
+                },
+                enabled = label.isNotBlank() && selectedScreens.isNotEmpty(),
+                colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+            ) { Text("Kaydet", fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("İptal", color = Muted) }
+        },
+    )
 }
 
 @Composable
@@ -1241,9 +1332,10 @@ private fun AdConfigCard(
     title      : String,
     docId      : String,
     config     : com.heftreng.app.data.model.CmsAdConfig?,
-    extraLabel : String,
-    extraKey   : String,
     onSaved    : () -> Unit,
+    onDeleted  : (() -> Unit)? = null,
+    extraLabel : String = "Pozisyon (kaçıncı kartta)",
+    extraKey   : String = "position",
 ) {
     val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
 
@@ -1260,14 +1352,46 @@ private fun AdConfigCard(
     }
     var saving by remember { mutableStateOf(false) }
 
+    // Boyut seçici state
+    var bannerSize by remember(config) { mutableStateOf(config?.bannerSize ?: "adaptive") }
+
     CmsCard {
-        Text(title, color = Amber, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, color = Amber, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            if (onDeleted != null) {
+                IconButton(onClick = onDeleted, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.DeleteOutline, null, tint = Error, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
         Spacer(Modifier.height(8.dp))
 
         cmsField(unitId, { unitId = it }, "Unit ID")
         Spacer(Modifier.height(6.dp))
         cmsField(extra, { extra = it.filter(Char::isDigit) }, extraLabel,
             keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+        Spacer(Modifier.height(6.dp))
+
+        // Banner boyutu seçici
+        if (config?.adType != "interstitial" && config?.adType != "rewarded") {
+            Text("Banner Boyutu", color = Muted, fontSize = 11.sp)
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("adaptive" to "Adaptif", "banner" to "Küçük",
+                       "medium_rectangle" to "Orta", "large_banner" to "Büyük").forEach { (v, l) ->
+                    FilterChip(
+                        selected = bannerSize == v,
+                        onClick  = { bannerSize = v },
+                        label    = { Text(l, fontSize = 10.sp) },
+                        colors   = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Primary.copy(alpha = 0.2f),
+                            selectedLabelColor     = Primary,
+                        ),
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+        }
         Spacer(Modifier.height(6.dp))
 
         Row(
@@ -1308,10 +1432,11 @@ private fun AdConfigCard(
                 saving = true
                 val extraInt = extra.toIntOrNull() ?: 5
                 val data = mutableMapOf<String, Any>(
-                    "unitId"   to unitId.trim(),
-                    "enabled"  to enabled,
-                    "testMode" to testMode,
-                    extraKey   to extraInt,
+                    "unitId"     to unitId.trim(),
+                    "enabled"    to enabled,
+                    "testMode"   to testMode,
+                    "bannerSize" to bannerSize,
+                    extraKey      to extraInt,
                 )
                 firestore.collection("cms_ads").document(docId)
                     .set(data)
@@ -2492,3 +2617,104 @@ private fun QuoteAdminCard(
         }
     }
 }
+@Composable
+private fun RewardedConfigCard(
+    config    : com.heftreng.app.data.model.CmsAdConfig?,
+    firestore : com.google.firebase.firestore.FirebaseFirestore,
+    scope     : kotlinx.coroutines.CoroutineScope,
+    onSaved   : () -> Unit,
+) {
+    val cfg = config
+    var unitId      by remember(cfg) { mutableStateOf(cfg?.unitId   ?: "") }
+    var enabled     by remember(cfg) { mutableStateOf(cfg?.enabled  ?: false) }
+    var testMode    by remember(cfg) { mutableStateOf(cfg?.testMode ?: true) }
+    var xpReward    by remember(cfg) { mutableStateOf((cfg?.xpReward   ?: 50).toString()) }
+    var dailyLimit  by remember(cfg) { mutableStateOf((cfg?.dailyLimit ?: 3).toString()) }
+    var scnDoubleXp by remember(cfg) { mutableStateOf(cfg?.scenarioDoubleXp     ?: true) }
+    var scnUnlock   by remember(cfg) { mutableStateOf(cfg?.scenarioUnlockLesson ?: true) }
+    var scnStreak   by remember(cfg) { mutableStateOf(cfg?.scenarioSaveStreak   ?: true) }
+    var saving      by remember { mutableStateOf(false) }
+
+    CmsCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Rewarded — Ödüllü Reklam", color = Amber, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(if (enabled) "Aktif" else "Kapalı", color = if (enabled) Success else Muted, fontSize = 11.sp)
+            }
+            Switch(checked = enabled, onCheckedChange = { enabled = it },
+                colors = SwitchDefaults.colors(checkedThumbColor = Success, checkedTrackColor = Success.copy(alpha = 0.3f)))
+        }
+        Spacer(Modifier.height(10.dp))
+        cmsField(unitId, { unitId = it }, "Unit ID")
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Test Modu", color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            Switch(checked = testMode, onCheckedChange = { testMode = it },
+                colors = SwitchDefaults.colors(checkedThumbColor = Amber, checkedTrackColor = Amber.copy(alpha = 0.3f)))
+        }
+        if (testMode) Text("Test ID kullanılıyor", color = Amber, fontSize = 11.sp)
+        Spacer(Modifier.height(10.dp))
+        HorizontalDivider(color = com.heftreng.app.ui.theme.Divider, thickness = 0.5.dp)
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f)) {
+                cmsField(xpReward, { xpReward = it.filter(Char::isDigit) }, "XP Ödülü",
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+            }
+            Column(Modifier.weight(1f)) {
+                cmsField(dailyLimit, { dailyLimit = it.filter(Char::isDigit) }, "Günlük Limit",
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        HorizontalDivider(color = com.heftreng.app.ui.theme.Divider, thickness = 0.5.dp)
+        Spacer(Modifier.height(10.dp))
+        Text("Senaryolar", color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+        Spacer(Modifier.height(6.dp))
+        listOf(
+            Triple("⚡ Çift XP", "Ders bittikten sonra XP'yi 2 katla", scnDoubleXp) to { v: Boolean -> scnDoubleXp = v },
+            Triple("🔓 Kilitli Ders Aç", "Kilitli derse tıklayınca reklam izleyerek aç", scnUnlock) to { v: Boolean -> scnUnlock = v },
+            Triple("🔥 Streak Kurtarma", "Seri bozulunca reklam izleyerek kurtar", scnStreak) to { v: Boolean -> scnStreak = v },
+        ).forEach { (triple, setter) ->
+            val (label, desc, checked) = triple
+            Row(verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                    .background(if (checked) Success.copy(alpha = 0.08f) else SurfaceVar)
+                    .padding(12.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text(label, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Text(desc, color = Muted, fontSize = 11.sp)
+                }
+                Switch(checked = checked, onCheckedChange = setter,
+                    colors = SwitchDefaults.colors(checkedThumbColor = Success, checkedTrackColor = Success.copy(alpha = 0.3f)))
+            }
+            Spacer(Modifier.height(6.dp))
+        }
+        Spacer(Modifier.height(6.dp))
+        Button(
+            onClick = {
+                saving = true
+                scope.launch {
+                    try {
+                        firestore.collection("cms_ads").document("rewarded_xp").set(mapOf(
+                            "unitId" to unitId.trim(), "enabled" to enabled, "testMode" to testMode,
+                            "xpReward" to (xpReward.toIntOrNull() ?: 50),
+                            "dailyLimit" to (dailyLimit.toIntOrNull() ?: 3),
+                            "scenarioDoubleXp" to scnDoubleXp,
+                            "scenarioUnlockLesson" to scnUnlock,
+                            "scenarioSaveStreak" to scnStreak,
+                        )).await()
+                        onSaved()
+                    } catch (e: Exception) { e.printStackTrace() }
+                    finally { saving = false }
+                }
+            },
+            enabled = !saving, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
+            colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+        ) {
+            if (saving) { CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(14.dp), strokeWidth = 2.dp); Spacer(Modifier.width(8.dp)) }
+            Text("Kaydet", fontWeight = FontWeight.Bold)
+        }
+    }
+}
+

@@ -352,18 +352,54 @@ data class AiExercise(
 )
 
 // ─── CMS REKLAM KONFİGÜRASYONU ─────────────────────────────
+// Reklam boyutu seçenekleri
+// ADAPTIVE (varsayılan, ekrana uyum sağlar), BANNER (320x50),
+// MEDIUM_RECTANGLE (300x250), LARGE_BANNER (320x100)
+enum class AdBannerSize { ADAPTIVE, BANNER, MEDIUM_RECTANGLE, LARGE_BANNER }
+
+// Reklam yerleşim tipi
+// IN_LIST: liste içinde belirli pozisyonda, TOP: ekran üstü, BOTTOM: ekran altı,
+// OVERLAY: tam sayfa üzeri overlay, BETWEEN_SECTIONS: bölümler arası
+enum class AdPlacement { IN_LIST, TOP, BOTTOM, OVERLAY, BETWEEN_SECTIONS }
+
+// Hangi ekranlarda gösterileceği
+// Birden fazla ekran seçilebilir — ekrana göre farklı pozisyon/sıklık uygulanır
+enum class AdScreen {
+    FEED, PROFILE, LIBRARY, LIBRARY_BOOK, AUTHOR_DETAIL,
+    KURDI, BLOG, SEARCH, MESSAGES
+}
+
 data class CmsAdConfig(
     val id          : String  = "",
     val unitId      : String  = "",
     val enabled     : Boolean = false,
     val testMode    : Boolean = true,
-    val position    : Int     = 5,
-    val frequency   : Int     = 3,
+    val position    : Int     = 5,      // IN_LIST modunda kaçıncı itemdan sonra
+    val frequency   : Int     = 3,      // BETWEEN_SECTIONS/OVERLAY modunda sıklık
     val xpReward    : Int     = 50,
     val dailyLimit  : Int     = 3,
     val scenarioDoubleXp     : Boolean = true,
     val scenarioUnlockLesson : Boolean = true,
-    val scenarioSaveStreak   : Boolean = true
+    val scenarioSaveStreak   : Boolean = true,
+
+    // ── Yeni alanlar ─────────────────────────────────────────────────────────
+    // Reklam tipi: banner / interstitial / rewarded / native
+    val adType      : String  = "banner",
+    // Banner boyutu (sadece banner tipinde geçerli)
+    val bannerSize  : String  = "adaptive",   // adaptive/banner/medium_rectangle/large_banner
+    // Yerleşim tipi
+    val placement   : String  = "in_list",    // in_list/top/bottom/overlay/between_sections
+    // Gösterileceği ekranlar (virgülle ayrılmış: "feed,library,profile")
+    val screens     : String  = "feed",
+    // Ekran adı (CMS'de gösterim için)
+    val label       : String  = "",
+    // Arka plan rengi (#09090b gibi) — null ise şeffaf
+    val bgColor     : String  = "",
+    // Köşe yuvarlaklığı (dp)
+    val cornerRadius: Int     = 0,
+    // Üst/alt boşluk (dp)
+    val paddingTop  : Int     = 0,
+    val paddingBottom: Int    = 0,
 )
 
 // ─── ŞİKAYET ────────────────────────────────────────────────────────

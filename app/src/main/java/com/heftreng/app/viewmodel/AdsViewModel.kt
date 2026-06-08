@@ -150,6 +150,32 @@ class AdsViewModel @Inject constructor(
     private val _rewardedConfig     = MutableStateFlow<CmsAdConfig?>(null)
     val rewardedConfig = _rewardedConfig.asStateFlow()
 
+    // Tüm banner konfigürasyonları — CMS'den dinamik olarak yüklenir
+    // Ekranlar bu map'e bakarak kendi slotlarını bulur
+    private val _allBannerConfigs = MutableStateFlow<Map<String, com.heftreng.app.data.model.CmsAdConfig>>(emptyMap())
+    val allBannerConfigs = _allBannerConfigs.asStateFlow()
+
+    // Belirli bir ekrana ait aktif banner config'lerini döndürür
+    fun getBannerConfigsForScreen(screen: String): List<com.heftreng.app.data.model.CmsAdConfig> {
+        if (!_adsEnabled.value) return emptyList()
+        return _allBannerConfigs.value.values.filter { config ->
+            config.enabled && config.screens.split(",").map { it.trim() }.contains(screen)
+        }.sortedBy { it.position }
+    }
+
+    // Reklam boyutuna göre AdSize döndürür
+    fun getAdSize(bannerSize: String): com.google.android.gms.ads.AdSize {
+        val displayMetrics = appContext.resources.displayMetrics
+        val adWidth = (displayMetrics.widthPixels / displayMetrics.density).toInt()
+        return when (bannerSize) {
+            "banner"           -> com.google.android.gms.ads.AdSize.BANNER
+            "medium_rectangle" -> com.google.android.gms.ads.AdSize.MEDIUM_RECTANGLE
+            "large_banner"     -> com.google.android.gms.ads.AdSize.LARGE_BANNER
+            else               -> com.google.android.gms.ads.AdSize
+                .getCurrentOrientationAnchoredAdaptiveBannerAdSize(appContext, adWidth)
+        }
+    }
+
     private val _adsEnabled         = MutableStateFlow(true)
     val adsEnabled = _adsEnabled.asStateFlow()
 
@@ -201,31 +227,46 @@ class AdsViewModel @Inject constructor(
                         scenarioDoubleXp     = d["scenarioDoubleXp"]     as? Boolean ?: true,
                         scenarioUnlockLesson = d["scenarioUnlockLesson"] as? Boolean ?: true,
                         scenarioSaveStreak   = d["scenarioSaveStreak"]   as? Boolean ?: true,
+                        adType               = d["adType"]      as? String ?: "banner",
+                        bannerSize           = d["bannerSize"]  as? String ?: "adaptive",
+                        placement            = d["placement"]   as? String ?: "in_list",
+                        screens              = d["screens"]     as? String ?: "feed",
+                        label                = d["label"]       as? String ?: "",
+                        bgColor              = d["bgColor"]     as? String ?: "",
+                        cornerRadius         = (d["cornerRadius"]  as? Long)?.toInt() ?: 0,
+                        paddingTop           = (d["paddingTop"]    as? Long)?.toInt() ?: 0,
+                        paddingBottom        = (d["paddingBottom"]  as? Long)?.toInt() ?: 0,
                     )
-                    when (doc.id) {
-                        "banner_feed" -> {
+                    // Dinamik slot sistemi — doc.id'ye göre dağıt
+                    when {
+                        doc.id == "banner_feed" -> {
                             _bannerConfig.value = config
                             if (config.enabled && _adsEnabled.value) {
                                 val uid = if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
                                 preloadBanner(uid, BannerSlot.FEED)
                             }
                         }
-                        "banner_library" -> {
+                        doc.id == "banner_library" -> {
                             _bannerLibraryConfig.value = config
                             if (config.enabled && _adsEnabled.value) {
                                 val uid = if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
                                 preloadBanner(uid, BannerSlot.LIB)
                             }
                         }
-                        "banner_kurdi" -> {
+                        doc.id == "banner_kurdi" -> {
                             _bannerKurdiConfig.value = config
                             if (config.enabled && _adsEnabled.value) {
                                 val uid = if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
                                 preloadBanner(uid, BannerSlot.KURDI)
                             }
                         }
-                        "interstitial_serial" -> _interstitialConfig.value = config
-                        "rewarded_xp"         -> _rewardedConfig.value     = config
+                        doc.id == "interstitial_serial" -> _interstitialConfig.value = config
+                        doc.id == "rewarded_xp"         -> _rewardedConfig.value     = config
+                        // Dinamik slotlar — CMS'den eklenen özel konumlar
+                        config.adType == "banner" && config.enabled -> {
+                            _allBannerConfigs.value = _allBannerConfigs.value + (doc.id to config)
+                        }
+                        else -> {}
                     }
                 }
             } catch (e: Exception) {
