@@ -376,9 +376,9 @@ data class CmsAdConfig(
 
     val adType      : String  = "banner",
     // ÇÖZÜLDÜ: Tip güvenliği ve Firestore enum desteği için String alanlar Enum listesine / tipine çevrildi
-    val bannerSize  : AdBannerSize = AdBannerSize.ADAPTIVE,   
-    val placement   : AdPlacement  = AdPlacement.IN_LIST,    
-    val screens     : List<AdScreen> = listOf(AdScreen.FEED),
+    val bannerSize  : String = "adaptive",
+    val placement   : String = "in_list",
+    val screens     : String = "feed",
     
     val label       : String  = "",
     val bgColor     : String  = "",

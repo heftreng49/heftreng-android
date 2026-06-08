@@ -68,7 +68,7 @@ fun BookQuoteCard(
     val canEdit       = isOwner || isAdmin
     
     // ÇÖZÜLDÜ: 'likedBy' listesi yerine modeldeki boolean durum veya harici kontrol atandı
-    val isLiked       = quote.liked
+    val isLiked       = quote.isLikedByMe
 
     var menuExpanded     by remember { mutableStateOf(false) }
     var showEditDialog   by remember { mutableStateOf(false) }
@@ -330,7 +330,7 @@ fun BookReviewCard(
     val canEdit       = isOwner || isAdmin
     
     // ÇÖZÜLDÜ: 'likedBy' listesi yerine modeldeki boolean durum veya harici kontrol atandı
-    val isLiked       = review.liked
+    val isLiked       = review.isLikedByMe
 
     var menuExpanded     by remember { mutableStateOf(false) }
     var showEditDialog   by remember { mutableStateOf(false) }

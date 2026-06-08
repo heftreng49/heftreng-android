@@ -261,9 +261,9 @@ fun ConversationsScreen(
 
                             // Tema: .msgp-conv-meta — sağ taraf
                             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                if (conv.lastMessageAt.isNotBlank()) {
+                                if (conv.lastMessageAt != null) {
                                     // .msgp-conv-time
-                                    Text(formatTime(conv.lastMessageAt), color = Muted, fontSize = 10.sp)
+                                    Text(formatTime(conv.lastMessageAt?.toDate()?.toString() ?: ""), color = Muted, fontSize = 10.sp)
                                 }
                                 // .msgp-unread-dot
                                 if (unread) {
@@ -1130,7 +1130,7 @@ private fun MsgRow(
     onLongPress   : (androidx.compose.ui.geometry.Offset) -> Unit,
 ) {
     if (msg.text.isBlank() && msg.imageUrl.isBlank() && msg.audioUrl.isBlank()) return
-    val iLiked = myUid in msg.likedBy
+    val iLiked = false // likedBy subcollection'a taşındı
 
     // ── Swipe + LongPress + DoubleTap — tek pointerInput ─────────────────────
     val swipeThreshold = 80f
@@ -1307,7 +1307,7 @@ private fun MsgRow(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
             ) {
-                Text(formatTime(msg.createdAt), color = Muted, fontSize = 11.sp)
+                Text(formatTime(msg.createdAt?.toDate()?.toString() ?: ""), color = Muted, fontSize = 11.sp)
                 if (isMine) {
                     Spacer(Modifier.width(3.dp))
                     // Tema: .msg-read.read → mavi, .msg-read.sent → soluk
@@ -1320,7 +1320,7 @@ private fun MsgRow(
             }
 
             // Tema: .msg-like-badge
-            if (msg.likedBy.isNotEmpty()) {
+            if (false) { // likedBy subcollection'a taşındı
                 Surface(
                     shape  = RoundedCornerShape(99.dp),
                     color  = if (iLiked) Color(0xFFF43F5E).copy(alpha = 0.1f) else SurfaceVar,
@@ -1333,7 +1333,7 @@ private fun MsgRow(
                         Icon(Icons.Default.Favorite, null,
                             tint = if (iLiked) Color(0xFFF43F5E) else Muted,
                             modifier = Modifier.size(11.dp))
-                        Text("${msg.likedBy.size}", color = if (iLiked) Color(0xFFF43F5E) else Muted, fontSize = 10.sp)
+                        Text("0", color = if (iLiked) Color(0xFFF43F5E) else Muted, fontSize = 10.sp)
                     }
                 }
             }
