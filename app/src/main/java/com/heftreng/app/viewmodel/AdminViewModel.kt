@@ -294,7 +294,7 @@ class AdminViewModel @Inject constructor(
             try {
                 val snap = firestore.collection("users")
                     .orderBy("displayName")
-                    .limit(200).get().await()
+                    .limit(100).get().await()
                 _users.value = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     User(
@@ -308,7 +308,7 @@ class AdminViewModel @Inject constructor(
             } catch (e: Exception) {
                 // orderBy index yoksa sıralamasız çek
                 try {
-                    val snap = firestore.collection("users").limit(200).get().await()
+                    val snap = firestore.collection("users").limit(100).get().await()
                     _users.value = snap.documents.mapNotNull { doc ->
                         val d = doc.data ?: return@mapNotNull null
                         User(
@@ -649,10 +649,10 @@ class AdminViewModel @Inject constructor(
             val todayTs   = com.google.firebase.Timestamp(todaySec, 0)
             val existingStats = try { firestore.collection("appConfig").document("stats").get().await().data } catch (_:Exception) { null }
             fun ei(k: String) = (existingStats?.get(k) as? Long)?.toInt() ?: 0
-            val newUsersToday  = try { firestore.collection("users").whereGreaterThanOrEqualTo("createdAt", todayTs).limit(500).get().await().size() } catch (_:Exception) { 0 }
-            val bannedUsers    = try { firestore.collection("users").whereEqualTo("banned", true).limit(500).get().await().size() } catch (_:Exception) { 0 }
-            val onlineNow      = try { firestore.collection("presence").whereEqualTo("online", true).limit(300).get().await().documents.count { (it.getTimestamp("lastSeen")?.seconds ?: 0L) >= twoMinAgo } } catch (_:Exception) { 0 }
-            val newPostsToday  = try { firestore.collection("feed").whereGreaterThanOrEqualTo("ts", todayTs).whereEqualTo("moderationStatus","active").limit(200).get().await().size() } catch (_:Exception) { 0 }
+            val newUsersToday  = try { firestore.collection("users").whereGreaterThanOrEqualTo("createdAt", todayTs).limit(100).get().await().size() } catch (_:Exception) { 0 }
+            val bannedUsers    = try { firestore.collection("users").whereEqualTo("banned", true).limit(100).get().await().size() } catch (_:Exception) { 0 }
+            val onlineNow      = try { firestore.collection("presence").whereEqualTo("online", true).limit(100).get().await().documents.count { (it.getTimestamp("lastSeen")?.seconds ?: 0L) >= twoMinAgo } } catch (_:Exception) { 0 }
+            val newPostsToday  = try { firestore.collection("feed").whereGreaterThanOrEqualTo("ts", todayTs).whereEqualTo("moderationStatus","active").limit(100).get().await().size() } catch (_:Exception) { 0 }
             val pendingPosts   = try { firestore.collection("pendingPosts").limit(100).get().await().size() } catch (_:Exception) { 0 }
             val pendingReports = try { firestore.collection("reports").whereEqualTo("status","pending").limit(100).get().await().size() } catch (_:Exception) { 0 }
             val map = mapOf(
@@ -671,7 +671,7 @@ class AdminViewModel @Inject constructor(
     private suspend fun loadActiveUsers() {
         try {
             val oneWeekAgo   = com.google.firebase.Timestamp(System.currentTimeMillis()/1000 - 7*86400, 0)
-            val presenceSnap = firestore.collection("presence").limit(200).get().await()
+            val presenceSnap = firestore.collection("presence").limit(100).get().await()
             val result = mutableListOf<UserActivity>()
             val twoMinMs = 120_000L
             presenceSnap.documents.forEach { doc ->

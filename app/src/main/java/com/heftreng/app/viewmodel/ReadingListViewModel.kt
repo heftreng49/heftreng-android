@@ -47,7 +47,7 @@ class ReadingListViewModel @Inject constructor(
                     .document(targetUid)
                     .collection("books")
                     .orderBy("updatedAt", Query.Direction.DESCENDING)
-                    .limit(100).get().await()
+                    .limit(50).get().await()
 
                 val map = mutableMapOf<String, MutableList<ReadingListEntry>>()
                 RlStatus.values().forEach { map[it.key] = mutableListOf() }

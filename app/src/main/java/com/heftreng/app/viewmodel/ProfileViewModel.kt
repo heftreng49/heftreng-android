@@ -124,7 +124,7 @@ class ProfileViewModel @Inject constructor(
                         // count() desteklenmiyorsa küçük limit fallback
                         firestore.collection("follows")
                             .whereEqualTo("targetUid", targetUid)
-                            .limit(500).get().await().size()
+                            .limit(100).get().await().size()
                     }
                 }
                 val followingDeferred = viewModelScope.async {
@@ -136,7 +136,7 @@ class ProfileViewModel @Inject constructor(
                     } catch (_: Exception) {
                         firestore.collection("follows")
                             .whereEqualTo("fromUid", targetUid)
-                            .limit(500).get().await().size()
+                            .limit(100).get().await().size()
                     }
                 }
                 _followersCount.value = followersDeferred.await()

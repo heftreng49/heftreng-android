@@ -55,7 +55,7 @@ fun SavedPostsScreen(
         try {
             val saveSnap = db.collection("feedSaves")
                 .whereEqualTo("uid", uid)
-                .limit(100)
+                .limit(50)
                 .get().await()
 
             // Client-side sırala (Firestore composite index gerekmez)

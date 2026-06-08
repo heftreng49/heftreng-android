@@ -128,7 +128,7 @@ fun LibraryScreen(
         val reviewsJob = launch {
             // collectionGroup tek sorguda tüm reviews — N+1 yok
             try {
-                val rSnap = db.collectionGroup("reviews").limit(200).get().await()
+                val rSnap = db.collectionGroup("reviews").limit(100).get().await()
                 reviews = rSnap.documents.mapNotNull { doc ->
                     val d    = doc.data ?: return@mapNotNull null
                     val text = d["text"] as? String ?: return@mapNotNull null

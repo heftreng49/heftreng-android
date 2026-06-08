@@ -729,7 +729,7 @@ class KurdiViewModel @Inject constructor(
             try {
                 val snap = firestore.collection("kf_dict")
                     .orderBy("ku", Query.Direction.ASCENDING)
-                    .limit(500).get().await()
+                    .limit(200).get().await()
                 _dictEntries.value = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     DictEntry(

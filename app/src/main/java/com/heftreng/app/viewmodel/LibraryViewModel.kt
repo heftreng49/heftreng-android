@@ -666,7 +666,7 @@ class LibraryViewModel @Inject constructor(
                 // bookName VEYA quote.book dolu olan her postu işle.
                 val snap = firestore.collection("feed")
                     .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(500).get().await()
+                    .limit(100).get().await()
 
                 val docs = snap.documents.filter { doc ->
                     val d = doc.data ?: return@filter false
