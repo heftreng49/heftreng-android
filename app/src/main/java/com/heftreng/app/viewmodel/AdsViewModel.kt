@@ -44,7 +44,6 @@ class AdsViewModel @Inject constructor(
     var cachedKurdiBanner  : AdView? = null; private set
     var cachedBlogBanner   : AdView? = null; private set
 
-    // Yeniden deneme sayaçları (Match Rate koruması için)
     private var feedRetryCount = 0
     private var libRetryCount = 0
     private var kurdiRetryCount = 0
@@ -54,7 +53,6 @@ class AdsViewModel @Inject constructor(
     fun preloadBanner(unitId: String, slot: BannerSlot) {
         if (unitId.isBlank()) return
         
-        // Eğer zaten yüklenmiş geçerli bir reklam varsa mükerrer istek atmayı engelle
         val isAlreadyLoaded = when (slot) {
             BannerSlot.FEED -> _bannerFeedLoaded.value
             BannerSlot.LIB -> _bannerLibLoaded.value
@@ -63,7 +61,6 @@ class AdsViewModel @Inject constructor(
         }
         if (isAlreadyLoaded) return
 
-        // Adaptive banner: ekran genişliğine göre boyutlanır → en yüksek fill rate
         val displayMetrics = appContext.resources.displayMetrics
         val adWidthPixels  = displayMetrics.widthPixels.toFloat()
         val density        = displayMetrics.density
@@ -76,7 +73,6 @@ class AdsViewModel @Inject constructor(
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
             adListener = object : AdListener() {
                 override fun onAdLoaded() {
-                    // Başarılı yüklemede sayacı sıfırla
                     when (slot) {
                         BannerSlot.FEED  -> { feedRetryCount = 0; cachedFeedBanner  = this@apply; _bannerFeedLoaded.value  = true }
                         BannerSlot.LIB   -> { libRetryCount = 0; cachedLibBanner   = this@apply; _bannerLibLoaded.value   = true }
@@ -87,13 +83,12 @@ class AdsViewModel @Inject constructor(
                 override fun onAdFailedToLoad(e: LoadAdError) {
                     android.util.Log.w("AdsVM", "Preload failed [${slot}]: ${e.message}")
                     
-                    // Kademeli yeniden deneme (AdMob spam koruması)
                     viewModelScope.launch {
                         when (slot) {
                             BannerSlot.FEED -> {
                                 if (feedRetryCount < MAX_RETRY_ATTEMPTS) {
                                     feedRetryCount++
-                                    delay(feedRetryCount * 5000L) // 5s, 10s, 15s beklemelerle
+                                    delay(feedRetryCount * 5000L)
                                     preloadBanner(unitId, slot)
                                 }
                             }
@@ -124,12 +119,11 @@ class AdsViewModel @Inject constructor(
             }
             loadAd(
                 AdRequest.Builder()
-                    .setContentUrl("https://heftreng.app")   // Contextual hedefleme
+                    .setContentUrl("https://heftreng.app")
                     .build()
             )
         }
 
-        // Eski cache'i güvenli bir şekilde temizle
         when (slot) {
             BannerSlot.FEED  -> { cachedFeedBanner?.destroy(); cachedFeedBanner = adView }
             BannerSlot.LIB  -> { cachedLibBanner?.destroy(); cachedLibBanner = adView }
@@ -169,20 +163,22 @@ class AdsViewModel @Inject constructor(
     private val _rewardedConfig     = MutableStateFlow<CmsAdConfig?>(null)
     val rewardedConfig = _rewardedConfig.asStateFlow()
 
-    // Tüm banner konfigürasyonları — CMS'den dinamik olarak yüklenir
-    // Ekranlar bu map'e bakarak kendi slotlarını bulur
     private val _allBannerConfigs = MutableStateFlow<Map<String, com.heftreng.app.data.model.CmsAdConfig>>(emptyMap())
     val allBannerConfigs = _allBannerConfigs.asStateFlow()
 
-    // Belirli bir ekrana ait aktif banner config'lerini döndürür
+    // ÇÖZÜLDÜ: List<AdScreen> tip uyuşmazlığı ve lambda parametre çıkarımı düzeltildi
     fun getBannerConfigsForScreen(screen: String): List<com.heftreng.app.data.model.CmsAdConfig> {
         if (!_adsEnabled.value) return emptyList()
+        val targetScreen = try {
+            com.heftreng.app.data.model.AdScreen.valueOf(screen.trim().uppercase())
+        } catch (e: Exception) {
+            return emptyList()
+        }
         return _allBannerConfigs.value.values.filter { config ->
-            config.enabled && config.screens.split(",").map { it.trim() }.contains(screen)
-        }.sortedBy { it.position }
+            config.enabled && config.screens.contains(targetScreen)
+        }.sortedBy { config -> config.position }
     }
 
-    // Reklam boyutuna göre AdSize döndürür
     fun getAdSize(bannerSize: String): com.google.android.gms.ads.AdSize {
         val displayMetrics = appContext.resources.displayMetrics
         val adWidth = (displayMetrics.widthPixels / displayMetrics.density).toInt()
@@ -198,8 +194,6 @@ class AdsViewModel @Inject constructor(
     private val _adsEnabled         = MutableStateFlow(true)
     val adsEnabled = _adsEnabled.asStateFlow()
 
-    // NOT: UI tarafında bu Flow'ları sadece 'reklam gösterilmeli mi' kontrolü için kullan, 
-    // Compose içinde ASLA tekrar 'loadAd()' tetikleme.
     val bannerUnitId: StateFlow<String?> = combine(_bannerConfig, _adsEnabled) { config, enabled ->
         if (config == null || !config.enabled || !enabled) null
         else if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
@@ -239,6 +233,8 @@ class AdsViewModel @Inject constructor(
                 snap.documents.forEach { doc ->
                     if (doc.id == "global") return@forEach
                     val d = doc.data ?: return@forEach
+                    
+                    // ÇÖZÜLDÜ: String alanlar yeni Enum ve List yapılarına güvenli biçimde parse ediliyor
                     val config = CmsAdConfig(
                         id                   = doc.id,
                         unitId               = d["unitId"]    as? String  ?: "",
@@ -252,16 +248,16 @@ class AdsViewModel @Inject constructor(
                         scenarioUnlockLesson = d["scenarioUnlockLesson"] as? Boolean ?: true,
                         scenarioSaveStreak   = d["scenarioSaveStreak"]   as? Boolean ?: true,
                         adType               = d["adType"]      as? String ?: "banner",
-                        bannerSize           = d["bannerSize"]  as? String ?: "adaptive",
-                        placement            = d["placement"]   as? String ?: "in_list",
-                        screens              = d["screens"]     as? String ?: "feed",
+                        bannerSize           = try { com.heftreng.app.data.model.AdBannerSize.valueOf((d["bannerSize"] as? String ?: "ADAPTIVE").trim().uppercase()) } catch(e: Exception) { com.heftreng.app.data.model.AdBannerSize.ADAPTIVE },
+                        placement            = try { com.heftreng.app.data.model.AdPlacement.valueOf((d["placement"] as? String ?: "IN_LIST").trim().uppercase()) } catch(e: Exception) { com.heftreng.app.data.model.AdPlacement.IN_LIST },
+                        screens              = (d["screens"] as? String ?: "FEED").split(",").map { try { com.heftreng.app.data.model.AdScreen.valueOf(it.trim().uppercase()) } catch(e: Exception) { com.heftreng.app.data.model.AdScreen.FEED } },
                         label                = d["label"]       as? String ?: "",
                         bgColor              = d["bgColor"]     as? String ?: "",
                         cornerRadius         = (d["cornerRadius"]  as? Long)?.toInt() ?: 0,
                         paddingTop           = (d["paddingTop"]    as? Long)?.toInt() ?: 0,
                         paddingBottom        = (d["paddingBottom"]  as? Long)?.toInt() ?: 0,
                     )
-                    // Dinamik slot sistemi — doc.id'ye göre dağıt
+                    
                     when {
                         doc.id == "banner_feed" -> {
                             _bannerConfig.value = config
@@ -293,7 +289,6 @@ class AdsViewModel @Inject constructor(
                         }
                         doc.id == "interstitial_serial" -> _interstitialConfig.value = config
                         doc.id == "rewarded_xp"         -> _rewardedConfig.value     = config
-                        // Dinamik slotlar — CMS'den eklenen özel konumlar
                         config.adType == "banner" && config.enabled -> {
                             _allBannerConfigs.value = _allBannerConfigs.value + (doc.id to config)
                         }
@@ -317,7 +312,7 @@ class AdsViewModel @Inject constructor(
     fun loadInterstitial(context: Context) {
         val config = _interstitialConfig.value ?: return
         if (!config.enabled || !_adsEnabled.value) return
-        if (interstitialAd != null) return // Zaten yüklüyse tekrar isteme
+        if (interstitialAd != null) return
 
         val unitId = if (config.testMode) AdMobTestIds.INTERSTITIAL else AdMobProdIds.INTERSTITIAL
         if (unitId.isBlank()) return
@@ -343,13 +338,13 @@ class AdsViewModel @Inject constructor(
                 override fun onAdFailedToShowFullScreenContent(e: AdError) {
                     interstitialAd = null
                     onDismiss()
-                    loadInterstitial(activity) // Başarısız gösterimde de zinciri kırma
+                    loadInterstitial(activity)
                 }
             }
             ad.show(activity)
         } else {
             onDismiss()
-            loadInterstitial(activity) // Reklam yoksa bir sonraki sefer için yüklemesini başlat
+            loadInterstitial(activity)
         }
     }
 
@@ -403,7 +398,7 @@ class AdsViewModel @Inject constructor(
     fun loadRewarded(context: Context) {
         val config = _rewardedConfig.value ?: return
         if (!config.enabled || !_adsEnabled.value) return
-        if (rewardedAd != null) return // Zaten yüklüyse tekrar istek atma
+        if (rewardedAd != null) return
 
         val unitId = if (config.testMode) AdMobTestIds.REWARDED else AdMobProdIds.REWARDED
         if (unitId.isBlank()) return
