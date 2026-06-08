@@ -102,41 +102,50 @@ fun AdBannerView(
 
             Spacer(Modifier.height(10.dp))
 
-            // ── Sabit rezervasyon kutusu — No Layout Shift ────────────────────
-            // Reklam yüklenene kadar bu alan iskelet animasyonuyla bekler,
-            // reklam gelince sadece içi dolar, dışarıdaki kartlar hiç oynamaz.
+            // ── Reklam kapsayıcı ───────────────────────────────────────────────
+            // Her AdSize kendi yüksekliğini belirler — dışarıdan sabit yükseklik vermiyoruz.
+            // wrapContentHeight + minHeight ile layout shift olmaz.
+            val minH = when (bannerSize) {
+                "medium_rectangle" -> 250.dp
+                "large_banner"     -> 100.dp
+                "banner"           -> 50.dp
+                else               -> 50.dp  // adaptive: gerçek yükseklik AdMob'dan gelir
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .wrapContentHeight()    // Adaptive banner yüksekliğe göre açılır
+                    .defaultMinSize(minHeight = minH)
                     .clip(RoundedCornerShape(8.dp))
                     .border(BorderStroke(0.5.dp,
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
                         RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center,
             ) {
+                // Shimmer: reklam henüz yüklenmemişse
                 if (!isLoaded) {
-                    // Shimmer skeleton — reklam yüklenene kadar gösterilir
-                    Box(modifier = Modifier.fillMaxWidth().height(60.dp)) {
+                    Box(modifier = Modifier.fillMaxWidth().height(minH)) {
                         AdShimmer()
                     }
                 }
 
-                // Preloaded view varsa kullan, yoksa factory'den yeni üret
+                // Preloaded cache — aynı slot'un cached view'ı
                 if (cachedView != null) {
                     AndroidView(
-                        factory = {
+                        factory = { _ ->
                             (cachedView.parent as? ViewGroup)?.removeView(cachedView)
                             cachedView
                         },
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight(),
                     )
                 } else {
-                    // Fallback — preload olmadıysa normal yükle
+                    // Fallback: preload yoksa inline yükle
                     AndroidView(
                         factory = { ctx ->
                             val dm    = ctx.resources.displayMetrics
-                            val width = ((dm.widthPixels / dm.density).toInt() - 28) // padding çıkar
+                            val width = ((dm.widthPixels / dm.density).toInt() - 28)
                             val size  = when (bannerSize) {
                                 "banner"           -> AdSize.BANNER
                                 "medium_rectangle" -> AdSize.MEDIUM_RECTANGLE
@@ -148,14 +157,16 @@ fun AdBannerView(
                                 adUnitId = unitId
                                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                                 adListener = object : AdListener() {
-                                    override fun onAdLoaded() { Log.d("AdBanner", "Yüklendi") }
-                                    override fun onAdFailedToLoad(e: LoadAdError) { Log.e("AdBanner", e.message) }
+                                    override fun onAdLoaded() {
+                                        Log.d("AdBanner", "Yüklendi: slot=$slot size=$bannerSize")
+                                    }
+                                    override fun onAdFailedToLoad(e: LoadAdError) {
+                                        Log.e("AdBanner", "Hata: ${e.code} ${e.message}")
+                                    }
                                 }
-                                loadAd(
-                                    AdRequest.Builder()
-                                        .setContentUrl("https://heftreng.app")
-                                        .build()
-                                )
+                                loadAd(AdRequest.Builder()
+                                    .setContentUrl("https://heftreng.app")
+                                    .build())
                             }
                         },
                         update = { adView ->
@@ -165,7 +176,9 @@ fun AdBannerView(
                                     .setContentUrl("https://heftreng.app").build())
                             }
                         },
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight(),
                     )
                 }
             }
