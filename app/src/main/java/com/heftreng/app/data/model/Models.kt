@@ -21,6 +21,7 @@ data class User(
     val xp             : Int    = 0,
     val streak         : Int    = 0,
     val banned             : Boolean= false,
+    val emailVerified      : Boolean= false,
     val isPrivate          : Boolean= false,
     val messagePermission  : String = "everyone", // "everyone" | "followers" | "nobody"
     // FATURA: usernameLower — öneride index için, Firestore'a yazılır, client günceller
