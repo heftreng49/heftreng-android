@@ -334,10 +334,9 @@ fun AdminScreen(
                             LazyColumn(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
                                 items(filtered, key = { it.uid }) { user ->
                                     AdminUserRow(
-                                        user       = user,
+                                        user        = user,
                                         onToggleBan = { vm.toggleBan(user.uid, !user.banned) },
-                                        onVerify    = { vm.verifyUser(user.uid) },
-                                        onRevoke    = { vm.revokeVerification(user.uid) },
+                                        onVerify    = if (!user.emailVerified) {{ vm.verifyUser(user.uid) }} else null,
                                     )
                                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                                 }
@@ -364,7 +363,6 @@ fun AdminScreen(
                                             user        = user,
                                             onToggleBan = { vm.toggleBan(user.uid, !user.banned) },
                                             onVerify    = { vm.verifyUser(user.uid) },
-                                            onRevoke    = null,
                                         )
                                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                                     }
@@ -2043,8 +2041,7 @@ private fun StaffTab(
 private fun AdminUserRow(
     user        : com.heftreng.app.data.model.User,
     onToggleBan : () -> Unit,
-    onVerify    : () -> Unit,
-    onRevoke    : (() -> Unit)?,
+    onVerify    : (() -> Unit)? = null,
 ) {
     Row(
         modifier          = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -2094,22 +2091,13 @@ private fun AdminUserRow(
                 Text("● BANLANDI", color = com.heftreng.app.ui.theme.Error, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
         }
-        // Doğrula / İptal et butonu
-        if (!user.emailVerified) {
+        // Admin doğrulama butonu — sadece doğrulanmamış email kullanıcılarında göster
+        if (!user.emailVerified && onVerify != null) {
             IconButton(onClick = onVerify) {
                 Icon(
                     Icons.Default.VerifiedUser,
                     contentDescription = "Doğrula",
                     tint     = Color(0xFF22C55E),
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        } else if (onRevoke != null) {
-            IconButton(onClick = onRevoke) {
-                Icon(
-                    Icons.Default.RemoveCircleOutline,
-                    contentDescription = "Doğrulamayı İptal Et",
-                    tint     = com.heftreng.app.ui.theme.Muted,
                     modifier = Modifier.size(20.dp),
                 )
             }

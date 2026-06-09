@@ -180,11 +180,13 @@ class AuthViewModel @Inject constructor(
                             updates["photoURL"] = it
                         }
                     }
+                    updates["signInMethod"] = "google"
                     firestore.collection("users").document(user.uid).update(updates)
                     acceptTerms(method = "google_login")
                 }
                 _currentUser.value = user
                 syncFcmToken(user.uid)
+                syncEmailVerified(user) // Google her zaman true — Firestore'u güncelle
                 // Hesabı kaydet
                 saveAccount(
                     email       = user.email ?: "",
@@ -215,6 +217,7 @@ class AuthViewModel @Inject constructor(
                 }
                 // Kullanıcı adı boşsa aşağıdaki tek Firestore çağrısında hallederiz
                 syncFcmToken(user.uid)
+                syncEmailVerified(user) // Link'e tıkladıysa true olur, Firestore'u güncelle
                 acceptTerms(method = "email_login")
                 // ── Tek Firestore çağrısı: displayName hem Auth'a hem saveAccount'a ──
                 val userDoc  = try { firestore.collection("users").document(user.uid).get().await() } catch (_: Exception) { null }
@@ -306,7 +309,6 @@ class AuthViewModel @Inject constructor(
     private fun syncFcmToken(uid: String) {
         viewModelScope.launch {
             try {
-                // Taze token her zaman al — pending olanı da üzerine yazar
                 val token = FirebaseMessaging.getInstance().token.await()
                 if (token.isNotEmpty()) {
                     firestore.collection("users").document(uid)
@@ -315,6 +317,19 @@ class AuthViewModel @Inject constructor(
                             "fcmUpdatedAt" to FieldValue.serverTimestamp(),
                         ))
                 }
+            } catch (_: Exception) {}
+        }
+    }
+
+    // Firebase Auth'un isEmailVerified değerini Firestore'a yaz.
+    // Böylece admin paneli Firestore'dan okuyabilir; admin'in elle onaylamasına gerek yok.
+    // Google kullanıcıları her zaman true döndürür, email kullanıcıları linke tıklayınca true olur.
+    private fun syncEmailVerified(user: com.google.firebase.auth.FirebaseUser) {
+        viewModelScope.launch {
+            try {
+                user.reload().await() // Auth token'ını yenile — en güncel değeri al
+                firestore.collection("users").document(user.uid)
+                    .update("emailVerified", user.isEmailVerified)
             } catch (_: Exception) {}
         }
     }
@@ -365,7 +380,11 @@ class AuthViewModel @Inject constructor(
             "xp"          to 0,  "kf_xp"     to 0,
             "level"       to 1,
             "streak"      to 0,  "kf_streak" to 0,
-            "banned"      to false,
+            "banned"        to false,
+            // Google ile giriş yapanların emaili Firebase tarafından zaten doğrulanmış olur.
+            // Email/şifre ile kayıt olanlarda admin onayı gerektiği için false başlatıyoruz.
+            "emailVerified" to user.providerData.any { it.providerId == "google.com" },
+            "signInMethod"  to if (user.providerData.any { it.providerId == "google.com" }) "google" else "email",
             "createdAt"   to com.google.firebase.Timestamp.now(),
             "lastSeen"    to com.google.firebase.Timestamp.now(),
             "appVersion"  to "",
