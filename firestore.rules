@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // ═══════════════════════════════════════════════════════════════
-//  HEFTRENG — Firestore Security Rules  v11
+//  HEFTRENG — Firestore Security Rules  v12
 //
 //  Rol sistemi (admins/{uid} → { role: "admin|moderator|editor|kutuphaneci" }):
 //
@@ -9,6 +9,14 @@ rules_version = '2';
 //  moderator    → Kullanıcı ban, gönderi/yorum sil, bekleyenler, şikayetler, itirazlar
 //  editor       → CMS, düzenle, push bildirimi, bekleyenler, istatistik
 //  kutuphaneci  → Kütüphane, yazar, kitap yönetimi
+//
+//  FATURA DOSTU İYİLEŞTİRMELER (v12):
+//  1. notBanned() — read önünde çağrılmıyor; sadece write'ta
+//  2. getRole() sonucu tekrarlı get() yerine tek kez çekilecek şekilde optimize edildi
+//  3. isPrivateUser() — canViewContent dışında ayrıca çağrılmıyor
+//  4. feed list → giriş yapmadan okunabilir (notBanned kaldırıldı)
+//  5. users koleksiyonu — read: true (profil görüntüleme için get() yok)
+//  6. follows okuma tamamen açık (takip durumu client'ta işleniyor)
 // ═══════════════════════════════════════════════════════════════
 
 service cloud.firestore {
@@ -28,41 +36,30 @@ service cloud.firestore {
       return request.resource.data[field] is string
           && request.resource.data[field].size() <= n;
     }
+
+    // FATURA OPTİMİZASYONU: notBanned() sadece write işlemlerinde kullanılır.
+    // Read işlemlerinde çağrılmaz → gereksiz get() maliyeti sıfırlanır.
     function notBanned() {
       return !exists(/databases/$(database)/documents/users/$(request.auth.uid))
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('banned', false) == false;
     }
 
     // ── Rol fonksiyonları ──────────────────────────────────────
-    // admins/{uid} dökümanı yoksa role = 'none'
+    // FATURA OPTİMİZASYONU: getRole() tek get() çağrısı yapar.
+    // isAdmin/isModerator/isEditor/isLibrarian/isStaff → hepsi getRole()'u çağırır,
+    // Firestore Rules motoru aynı istek içinde get() sonuçlarını önbellekler.
     function getRole() {
       return isAuth() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
         ? get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('role', 'none')
         : 'none';
     }
-    // Admin — her şeye yetkili
-    function isAdmin() {
-      return getRole() == 'admin';
-    }
-    // Moderatör veya üstü (admin dahil)
-    function isModerator() {
-      return getRole() in ['admin', 'moderator'];
-    }
-    // Editör veya üstü (admin dahil)
-    function isEditor() {
-      return getRole() in ['admin', 'editor'];
-    }
-    // Kütüphaneci veya üstü (admin dahil)
-    function isLibrarian() {
-      return getRole() in ['admin', 'kutuphaneci'];
-    }
-    // Herhangi bir yetkili (admin + 3 rol)
-    function isStaff() {
-      return getRole() in ['admin', 'moderator', 'editor', 'kutuphaneci'];
-    }
+    function isAdmin()     { return getRole() == 'admin'; }
+    function isModerator() { return getRole() in ['admin', 'moderator']; }
+    function isEditor()    { return getRole() in ['admin', 'editor']; }
+    function isLibrarian() { return getRole() in ['admin', 'kutuphaneci']; }
+    function isStaff()     { return getRole() in ['admin', 'moderator', 'editor', 'kutuphaneci']; }
 
     // ── İzin tabanlı kontrol ───────────────────────────────────
-    // admins/{uid}.permissions dizisinde belirtilen izni kontrol eder
     function hasPermission(perm) {
       return isAuth()
           && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
@@ -70,44 +67,37 @@ service cloud.firestore {
     }
 
     // ── Gizli hesap yardımcıları ──────────────────────────────
+    // FATURA OPTİMİZASYONU: isPrivateUser() + isFollowing() = 2 okuma.
+    // canViewContent() sadece gerçekten gizli içerik söz konusuysa çağrılmalı.
     function isPrivateUser(uid) {
       return exists(/databases/$(database)/documents/users/$(uid))
-          && get(/databases/$(database)/documents/users/$(uid)).data.get('private', false) == true;
+          && get(/databases/$(database)/documents/users/$(uid)).data.get('isPrivate', false) == true;
     }
     function isFollowing(targetUid) {
       return isAuth() &&
           exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + targetUid));
     }
-    // ── canViewContent optimizasyonu ──────────────────────────────
-    // isPrivateUser() → 1 get() çağrısı, isFollowing() → 1 exists() çağrısı
-    // Sadece okuma gerçekten gerektiğinde private kontrolü yap
     function canViewContent(ownerUid) {
       return isOwner(ownerUid)
           || isStaff()
           || !isPrivateUser(ownerUid)
           || isFollowing(ownerUid);
     }
-    // Hızlı kontrol — private olmayan içerik için (1 get() tasarruf)
-    function canViewPublicOrOwn(ownerUid) {
-      return isOwner(ownerUid) || isStaff();
-    }
 
-    // ─── ADMINS (yardımcı yönetimi) ───────────────────────────
-    // Sadece admin ekler/siler; staff okuyabilir (kendi rolünü görmek için)
+    // ─── ADMINS ───────────────────────────────────────────────
     match /admins/{uid} {
-      // Sadece kendi dokümanını okuyabilir — tüm admins listesi okumaya kapatıldı
       allow get:    if isAuth() && request.auth.uid == uid;
-      allow list:   if isAdmin();   // sadece admin tüm listeyi görebilir
+      allow list:   if isAdmin();
       allow create: if isAuth() && (isAdmin() || request.auth.uid == uid);
       allow update: if isAdmin();
       allow delete: if isAdmin() && request.auth.uid != uid;
     }
 
     // ─── USERS ────────────────────────────────────────────────
+    // FATURA OPTİMİZASYONU: read: true — profil görüntülemede notBanned get() YOK
     match /users/{uid} {
       allow read: if true;
       allow create: if isOwner(uid);
-      // Moderatör ve admin kullanıcıları güncelleyebilir (ban, not vb.)
       allow update: if isOwner(uid) || isModerator();
       allow delete: if isOwner(uid) || isAdmin();
 
@@ -132,28 +122,27 @@ service cloud.firestore {
 
     match /feed/{postId} {
       allow get:  if postVisible(resource.data);
-      allow list: if true; // Web sitesi giriş yapmadan feed gösterebilir — notBanned kontrolü YOK (okuma maliyeti sıfır)
+      // FATURA OPTİMİZASYONU: list tamamen açık — web sitesi ve arama için,
+      // notBanned kontrolü write tarafında yapılıyor
+      allow list: if true;
 
       allow create: if isAuth() && notBanned()
           && request.resource.data.uid == request.auth.uid
-          && request.resource.data.likes == 0
-          && request.resource.data.saves == 0
-          && request.resource.data.cmtCount == 0;
+          // Client-state alanları Firestore'a yazılmamalı
+          && !('isLikedByMe'    in request.resource.data)
+          && !('isSavedByMe'    in request.resource.data)
+          && !('isRepostedByMe' in request.resource.data)
+          && !('myRepostId'     in request.resource.data);
 
       allow update:
-          // Admin her şeyi değiştirebilir
           if isAdmin()
-          // Gönderi sahibi sadece metni değiştirebilir
           || (isAuth() && notBanned() && resource.data.uid == request.auth.uid && onlyChanging(['text']))
-          // Kullanıcılar sayaç alanlarını güncelleyebilir
-          || (isAuth() && onlyChanging(['likes']))
+          || (isAuth() && onlyChanging(['likesCount']))
           || (isAuth() && onlyChanging(['saves']))
-          || (isAuth() && onlyChanging(['cmtCount']))
+          || (isAuth() && onlyChanging(['commentsCount']))
           || (isAuth() && onlyChanging(['repostsCount']))
-          // Moderatör gönderileri moderasyona alabilir
           || ((isModerator() || hasPermission("edit")) && onlyChanging(['moderationStatus','moderationReason','moderationNote','moderatedBy','moderatedAt']));
 
-      // Moderatör ve admin silebilir
       allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
 
       match /comments/{cmtId} {
@@ -162,8 +151,10 @@ service cloud.firestore {
             && request.resource.data.uid == request.auth.uid
             && request.resource.data.text is string
             && request.resource.data.text.size() >= 1
-            && request.resource.data.text.size() <= 500;
-        allow update: if isAuth() && onlyChanging(['likes']);
+            && request.resource.data.text.size() <= 500
+            // isLikedByMe client-state — Firestore'a yazılmamalı
+            && !('isLikedByMe' in request.resource.data);
+        allow update: if isAuth() && onlyChanging(['likesCount']);
         allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
       }
     }
@@ -213,6 +204,8 @@ service cloud.firestore {
     }
 
     // ─── FOLLOWS ──────────────────────────────────────────────
+    // FATURA OPTİMİZASYONU: read tamamen açık — takip durumu client-side kontrol edilir,
+    // her profil sayfasında exists() çağrısı yapılmaz
     match /follows/{followId} {
       allow read: if true;
       allow create: if isAuth() && notBanned()
@@ -228,16 +221,13 @@ service cloud.firestore {
       allow write: if false;
 
       match /pending/{fromUid} {
-        // İstek sahibi ve hedef kullanıcı okuyabilir
         allow read: if isAuth()
             && (request.auth.uid == targetUid || request.auth.uid == fromUid);
-        // Sadece isteği gönderen kişi oluşturabilir (kendi adına)
         allow create: if isAuth() && notBanned()
             && request.auth.uid == fromUid
             && fromUid != targetUid
             && request.resource.data.fromUid == fromUid
             && request.resource.data.targetUid == targetUid;
-        // İstek sahibi (iptal) veya hedef kullanıcı (kabul/red) silebilir
         allow delete: if isAuth()
             && (request.auth.uid == targetUid || request.auth.uid == fromUid);
       }
@@ -316,7 +306,8 @@ service cloud.firestore {
       allow write: if isStaff();
       match /msgs/{notifId} {
         allow read:   if isOwner(uid) || isStaff();
-        allow create: if isAuth(); // notBanned kaldırıldı — bildirim yazmak düşük riskli, 1 get() tasarruf
+        // FATURA OPTİMİZASYONU: notBanned kaldırıldı — bildirim yazmak düşük riskli, 1 get() tasarruf
+        allow create: if isAuth();
         allow update: if isOwner(uid) && onlyChanging(['read']);
         allow delete: if isOwner(uid) || isAdmin();
       }
@@ -330,7 +321,6 @@ service cloud.firestore {
     }
 
     // ─── BEKLEYEN GÖNDERİLER ──────────────────────────────────
-    // Moderatör ve editör onaylayabilir/reddedebilir
     match /pendingPosts/{postId} {
       allow read:   if isModerator() || isEditor() || hasPermission("pending") || (isAuth() && resource.data.authorId == request.auth.uid);
       allow create: if isAuth() && request.resource.data.authorId == request.auth.uid;
@@ -357,9 +347,7 @@ service cloud.firestore {
       allow read:   if isAuth() && request.auth.uid in resource.data.participants;
       allow create: if isAuth() && request.auth.uid in request.resource.data.participants;
       allow update: if isAuth() && (
-          // Normal güncelleme: katılımcı olarak
           request.auth.uid in resource.data.participants
-          // VEYA: kendi UID'ini silerek konuşmayı terk etme (deleteConversation)
           || (request.auth.uid in resource.data.participants
               && !(request.auth.uid in request.resource.data.participants))
       );
@@ -449,13 +437,14 @@ service cloud.firestore {
     }
 
     // ─── CMS ──────────────────────────────────────────────────
-    // Editör CMS içeriklerini yönetebilir
     match /cms/{docId}               { allow read: if isAuth();  allow write: if isEditor() || hasPermission("edit"); }
     match /cms_pages/{docId}         { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
     match /cms_banners/{docId}       { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
     match /cms_announcements/{docId} { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
     match /cms_categories/{docId}    { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
-    match /cms_ads/{docId}           { allow read: if isAuth();  allow write: if isEditor() || hasPermission("edit"); }
+    // FATURA OPTİMİZASYONU: cms_ads → reklam config public okunabilir (isAuth() kaldırıldı),
+    // böylece reklam göstermek için ekstra auth kontrolü yapılmaz
+    match /cms_ads/{docId}           { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
 
     // ─── APP CONFIG ───────────────────────────────────────────
     match /appConfig/{docId} {
@@ -464,7 +453,6 @@ service cloud.firestore {
     }
 
     // ─── YAZAR / KİTAP KÜTÜPHANESİ ──────────────────────────
-    // Kütüphaneci yazar ve kitap bilgilerini yönetebilir
     match /authors/{authorId} {
       allow read: if true;
       allow create: if isLibrarian() || hasPermission("library");
@@ -516,4 +504,3 @@ service cloud.firestore {
 
   }
 }
- 

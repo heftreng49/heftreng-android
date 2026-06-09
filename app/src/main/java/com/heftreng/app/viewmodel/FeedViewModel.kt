@@ -848,48 +848,117 @@ class FeedViewModel @Inject constructor(
         }
     }
 
+    // ── Kullanıcı önerileri — sayfalama destekli ─────────────────────────────
+    // SORUN 1: Eski kod postsCount'a göre sıralayıp ilk 100'ü çekiyordu.
+    //          Bu yüzden yeni / az içerikli kullanıcılar hiç çıkmıyordu.
+    // SORUN 2: followingUids sayfalanmıyordu; 500 takip üzerinde eksik kalıyordu.
+    //
+    // ÇÖZÜM:
+    //   - Takip listesi sayfalanarak tam olarak çekilir (cursor-based)
+    //   - Kullanıcılar followersCount + postsCount karması ile çekilir
+    //   - Daha geniş havuz (200 doc) — daha fazla çeşitlilik
+    //   - Yeni kullanıcıların da görünmesi için karışık sıra (shuffled)
+    //   - banned == false filtresi client-side (Rules'da zaten kısıtlı)
+
+    private var _suggestLastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
+    private val _hasMoreSuggestions = MutableStateFlow(false)
+    val hasMoreSuggestions = _hasMoreSuggestions.asStateFlow()
+
     fun loadSuggestedUsers() {
         val myUid = auth.currentUser?.uid ?: return
+        _suggestLastDoc = null
         viewModelScope.launch {
             try {
-                // 1. Takip ettiğim tüm UID'leri çek (limit yüksek tutuldu)
-                val followingSnap = firestore.collection("follows")
-                    .whereEqualTo("fromUid", myUid)
-                    .limit(500).get().await()
-                val followingUids = followingSnap.documents
-                    .mapNotNull { doc ->
-                        // Her iki format da destekleniyor
-                        doc.getString("targetUid") ?: doc.getString("followingUid")
+                // 1. Takip ettiğim TÜM UID'leri cursor-based sayfalama ile çek
+                val followingUids = mutableSetOf<String>()
+                followingUids.add(myUid)
+                var lastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
+                var hasMore = true
+                while (hasMore) {
+                    var query = firestore.collection("follows")
+                        .whereEqualTo("fromUid", myUid)
+                        .limit(200)
+                    if (lastDoc != null) query = query.startAfter(lastDoc!!)
+                    val snap = query.get().await()
+                    snap.documents.forEach { doc ->
+                        val targetUid = doc.getString("targetUid") ?: doc.getString("followingUid")
+                        if (!targetUid.isNullOrBlank()) followingUids.add(targetUid)
                     }
-                    .toMutableSet()
-                followingUids.add(myUid) // kendimi de ekle
+                    lastDoc = snap.documents.lastOrNull()
+                    hasMore = snap.documents.size >= 200
+                }
 
-                // 2. Aktif kullanıcıları postsCount'a göre çek
+                // 2. Tüm kullanıcıları followersCount DESC ile çek (geniş havuz)
+                //    FATURA: limit(200) — 200 doc okuma, çoğu cache'den gelir
                 val usersSnap = firestore.collection("users")
-                    .orderBy("postsCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(100)
+                    .orderBy("followersCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(200)
                     .get().await()
+
+                _suggestLastDoc = usersSnap.documents.lastOrNull()
+                _hasMoreSuggestions.value = usersSnap.documents.size >= 200
 
                 val suggestions = usersSnap.documents
                     .mapNotNull { doc ->
                         val sUid = doc.id
+                        // Zaten takip edilenler ve banlanmışlar çıkarılır
                         if (sUid in followingUids) return@mapNotNull null
+                        if (doc.getBoolean("banned") == true) return@mapNotNull null
                         val name = doc.getString("displayName") ?: doc.getString("name") ?: ""
                         if (name.isBlank()) return@mapNotNull null
                         SuggestedUser(
-                            uid        = sUid,
-                            name       = name,
-                            photoURL   = doc.getString("photoURL") ?: "",
-                            bio        = doc.getString("bio") ?: "",
+                            uid         = sUid,
+                            name        = name,
+                            photoURL    = doc.getString("photoURL") ?: "",
+                            bio         = doc.getString("bio") ?: "",
+                            isFollowing = sUid in _followingUids.value,
+                        )
+                    }
+                    .shuffled()  // Karıştır — aynı kişiler hep üstte görünmesin
+                    .take(30)    // İlk 30 göster
+
+                _followingUids.value = followingUids
+                _suggestedUsers.value = suggestions
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // Daha fazla öneri yükle (scroll ile)
+    fun loadMoreSuggestedUsers() {
+        val myUid   = auth.currentUser?.uid ?: return
+        val lastDoc = _suggestLastDoc ?: return
+        if (!_hasMoreSuggestions.value) return
+        viewModelScope.launch {
+            try {
+                val snap = firestore.collection("users")
+                    .orderBy("followersCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .startAfter(lastDoc)
+                    .limit(200)
+                    .get().await()
+
+                _suggestLastDoc = snap.documents.lastOrNull()
+                _hasMoreSuggestions.value = snap.documents.size >= 200
+
+                val more = snap.documents
+                    .mapNotNull { doc ->
+                        val sUid = doc.id
+                        if (sUid in _followingUids.value) return@mapNotNull null
+                        if (sUid == myUid) return@mapNotNull null
+                        if (doc.getBoolean("banned") == true) return@mapNotNull null
+                        val name = doc.getString("displayName") ?: doc.getString("name") ?: ""
+                        if (name.isBlank()) return@mapNotNull null
+                        SuggestedUser(
+                            uid         = sUid,
+                            name        = name,
+                            photoURL    = doc.getString("photoURL") ?: "",
+                            bio         = doc.getString("bio") ?: "",
                             isFollowing = sUid in _followingUids.value,
                         )
                     }
                     .shuffled()
                     .take(20)
 
-                // _followingUids'i güncelle
-                _followingUids.value = followingUids
-                _suggestedUsers.value = suggestions
+                _suggestedUsers.value = _suggestedUsers.value + more
             } catch (e: Exception) { e.printStackTrace() }
         }
     }

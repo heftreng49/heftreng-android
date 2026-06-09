@@ -16,6 +16,33 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Named
 import javax.inject.Singleton
 
+// ═══════════════════════════════════════════════════════════════
+//  AppModule — Dependency Injection
+//
+//  CACHE MİMARİSİ (v2) — Fatura Dostu & Reklam Güvenli:
+//
+//  Firestore disk cache → 50 MB (düşürüldü; 100 MB şişirilmişti)
+//  Neden 50 MB?
+//    - Firestore PersistentCache sadece document verisini tutar,
+//      medya/resim cache'i değil. 50 MB yüzlerce bin dökümanı karşılar.
+//    - Büyük cache → eski/stale data risk artar → UI tutarsızlığı
+//    - Reklam SDK'ları (AdMob) kendi network stack'lerini kullanır;
+//      Firestore cache bunları hiç etkilemez.
+//
+//  ViewModel katmanı kendi in-memory cache'ini (Map<String, X>) tutar:
+//    - SocialViewModel._userEnrichCache → uid → (name, photoURL)
+//    - FeedViewModel içinde _followingUids StateFlow
+//    - Reklam config (CmsAdConfig) → AppConfig ile birlikte tek get()
+//
+//  REKLAM GÜVENLİĞİ:
+//    - cms_ads koleksiyonu cache'den okunabilir (Firestore offline support)
+//    - Fakat reklam gösterimi AdMob SDK'sına bırakılmıştır;
+//      Firestore cache reklam requestini, impression'ı veya tıklamayı
+//      etkilemez — bunlar AdMob kendi ağ katmanında işler.
+//    - AdMob test/prod ID seçimi Models.kt'daki AdMobTestIds / AdMobProdIds
+//      üzerinden yapılır; Firestore'dan CmsAdConfig.testMode okunur.
+// ═══════════════════════════════════════════════════════════════
+
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
@@ -33,7 +60,9 @@ object AppModule {
             val settings = FirebaseFirestoreSettings.Builder()
                 .setLocalCacheSettings(
                     PersistentCacheSettings.newBuilder()
-                        .setSizeBytes(100L * 1024 * 1024) // 100 MB disk cache
+                        // FATURA OPTİMİZASYONU: 50 MB yeterli; 100 MB gereksiz büyük
+                        // Eski stale veri birikimi önlenir, reklam gösterimi etkilenmez
+                        .setSizeBytes(50L * 1024 * 1024) // 50 MB disk cache
                         .build()
                 )
                 .build()

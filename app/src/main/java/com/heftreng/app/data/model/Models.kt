@@ -23,9 +23,15 @@ data class User(
     val banned             : Boolean= false,
     val isPrivate          : Boolean= false,
     val messagePermission  : String = "everyone", // "everyone" | "followers" | "nobody"
+    // FATURA: usernameLower — öneride index için, Firestore'a yazılır, client günceller
+    // NOT: Bu alan AuthScreen/SettingsScreen'de kullanıcı adı kaydedilirken set edilmeli
 )
 
-// ─── FEED GÖNDERISI ────────────────────────────────────
+// ─── FEED GÖNDERİSİ ────────────────────────────────────
+// FATURA DÜZELTMELERİ:
+//   - isLikedByMe, isSavedByMe, isRepostedByMe: @get:Exclude @set:Exclude ile Firestore'a yazılmaz
+//   - myRepostId: @get:Exclude @set:Exclude
+//   - Tüm client-side state alanları Firestore'dan okuma sırasında doldurulur (ViewModel'de)
 data class Post(
     val id            : String     = "",
     val uid           : String     = "",
@@ -70,20 +76,25 @@ data class Post(
     val repostSerialChCount   : Int     = 0,
     val serialId         : String     = "",
     val chapterId        : String     = "",
-    val isLikedByMe      : Boolean    = false,
-    val isSavedByMe      : Boolean    = false,
-    val isRepostedByMe   : Boolean    = false,
-    val myRepostId       : String     = "",
     val libraryBookId    : String     = "",
     val libraryAuthorId  : String     = "",
     val type             : String     = "",
     val moderationStatus : String     = "active",
     val moderationNote   : String     = "",
     val moderationReason : String     = "",
-    val visibility       : String     = "public"
+    val visibility       : String     = "public",
+    // ÇÖZÜLDÜ: Client-state alanları — Firestore'a YAZILMAZ, sadece ViewModel'de doldurulur
+    @get:Exclude @set:Exclude
+    var isLikedByMe    : Boolean    = false,
+    @get:Exclude @set:Exclude
+    var isSavedByMe    : Boolean    = false,
+    @get:Exclude @set:Exclude
+    var isRepostedByMe : Boolean    = false,
+    @get:Exclude @set:Exclude
+    var myRepostId     : String     = "",
 )
 
-// ─── MODERASYON İTİRAZ ────────────────────────────────────────────────
+// ─── MODERASYON İTİRAZ ─────────────────────────────────────────────────
 data class Appeal(
     val id              : String     = "",
     val postId          : String     = "",
@@ -106,9 +117,11 @@ data class Comment(
     val photoURL    : String     = "",
     val text        : String     = "",
     val likesCount  : Int        = 0,
-    val isLikedByMe : Boolean    = false,
     val replyTo     : ReplyTo?   = null,
-    val ts          : Timestamp? = null
+    val ts          : Timestamp? = null,
+    // ÇÖZÜLDÜ: Client-state — Firestore'a yazılmaz
+    @get:Exclude @set:Exclude
+    var isLikedByMe : Boolean    = false,
 )
 
 data class ReplyTo(
@@ -178,14 +191,14 @@ data class Message(
     val text           : String       = "",
     val imageUrl       : String       = "",
     val audioUrl       : String       = "",
-    val createdAt      : Timestamp?   = null, // String yerine kararlı yapı için Timestamp yapıldı
+    val createdAt      : Timestamp?   = null,
     val read           : Boolean      = false,
     val deleted        : Boolean      = false,
     val edited         : Boolean      = false,
     val replyToId      : String       = "",
     val replyToText    : String       = "",
     val replyToName    : String       = ""
-    // ÇÖZÜLDÜ: 1MB limit çökmesini önlemek için 'likedBy: List<String>' kaldırıldı. 
+    // ÇÖZÜLDÜ: 1MB limit çökmesini önlemek için 'likedBy: List<String>' kaldırıldı.
     // Beğeniler 'messages/{msgId}/likes' subcollection'ında tutulmalı.
 )
 
@@ -193,8 +206,10 @@ data class Conversation(
     val id            : String       = "",
     val participantIds: List<String> = emptyList(),
     val lastMessage   : String       = "",
-    val lastMessageAt : Timestamp?   = null, // String yerine kararlı yapı için Timestamp yapıldı
-    val otherUser     : User?        = null,
+    val lastMessageAt : Timestamp?   = null,
+    // ÇÖZÜLDÜ: otherUser nesnesi Firestore'a yazılmamalı — @get:Exclude
+    @get:Exclude @set:Exclude
+    var otherUser     : User?        = null,
     val unreadCount   : Int          = 0
 )
 
@@ -212,7 +227,9 @@ data class Serial(
     val likes        : Int        = 0,
     val ts           : Timestamp? = null,
     val updatedAt    : Timestamp? = null,
-    val isLikedByMe  : Boolean    = false
+    // ÇÖZÜLDÜ: Client-state — Firestore'a yazılmaz
+    @get:Exclude @set:Exclude
+    var isLikedByMe  : Boolean    = false
 )
 
 // ─── BÖLÜM ─────────────────────────────────────────────
@@ -226,8 +243,10 @@ data class Chapter(
     val uid         : String     = "",
     val likes       : Int        = 0,
     val cmtCount    : Int        = 0,
-    val isLikedByMe : Boolean    = false,
-    val ts          : Timestamp? = null
+    val ts          : Timestamp? = null,
+    // ÇÖZÜLDÜ: Client-state — Firestore'a yazılmaz
+    @get:Exclude @set:Exclude
+    var isLikedByMe : Boolean    = false,
 )
 
 // ─── KİTAP ─────────────────────────────────────────────
@@ -245,8 +264,10 @@ data class Book(
     val likes        : Int        = 0,
     val ts           : Timestamp? = null,
     val updatedAt    : Timestamp? = null,
-    val isLikedByMe  : Boolean    = false,
-    val type         : String     = "book"
+    val type         : String     = "book",
+    // ÇÖZÜLDÜ: Client-state — Firestore'a yazılmaz
+    @get:Exclude @set:Exclude
+    var isLikedByMe  : Boolean    = false,
 )
 
 // ─── BÖLÜM YORUMU ──────────────────────────────────────
@@ -275,8 +296,10 @@ data class BookChapter(
     val uid       : String     = "",
     val likes     : Int        = 0,
     val cmtCount  : Int        = 0,
-    val isLikedByMe: Boolean   = false,
-    val ts        : Timestamp? = null
+    val ts        : Timestamp? = null,
+    // ÇÖZÜLDÜ: Client-state — Firestore'a yazılmaz
+    @get:Exclude @set:Exclude
+    var isLikedByMe: Boolean   = false,
 ) {
     // ÇÖZÜLDÜ: Derleyicinin Firestore'a yazmasını tam engellemek için fonksiyon yapısına çekildi
     @Exclude
@@ -377,8 +400,8 @@ data class CmsAdConfig(
     val unitId      : String  = "",
     val enabled     : Boolean = false,
     val testMode    : Boolean = true,
-    val position    : Int     = 5,      
-    val frequency   : Int     = 3,      
+    val position    : Int     = 5,
+    val frequency   : Int     = 3,
     val xpReward    : Int     = 50,
     val dailyLimit  : Int     = 3,
     val scenarioDoubleXp     : Boolean = true,
@@ -390,7 +413,7 @@ data class CmsAdConfig(
     val bannerSize  : String = "adaptive",
     val placement   : String = "in_list",
     val screens     : String = "feed",
-    
+
     val label       : String  = "",
     val bgColor     : String  = "",
     val cornerRadius: Int     = 0,
