@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // ═══════════════════════════════════════════════════════════════
-//  HEFTRENG — Firestore Security Rules  v10
+//  HEFTRENG — Firestore Security Rules  v11
 //
 //  Rol sistemi (admins/{uid} → { role: "admin|moderator|editor|kutuphaneci" }):
 //
@@ -220,6 +220,27 @@ service cloud.firestore {
           && request.resource.data.fromUid != request.resource.data.targetUid;
       allow delete: if isAuth()
           && resource.data.fromUid == request.auth.uid;
+    }
+
+    // ─── FOLLOW REQUESTS (gizli hesap takip istekleri) ────────
+    match /followRequests/{targetUid} {
+      allow read:  if false;
+      allow write: if false;
+
+      match /pending/{fromUid} {
+        // İstek sahibi ve hedef kullanıcı okuyabilir
+        allow read: if isAuth()
+            && (request.auth.uid == targetUid || request.auth.uid == fromUid);
+        // Sadece isteği gönderen kişi oluşturabilir (kendi adına)
+        allow create: if isAuth() && notBanned()
+            && request.auth.uid == fromUid
+            && fromUid != targetUid
+            && request.resource.data.fromUid == fromUid
+            && request.resource.data.targetUid == targetUid;
+        // İstek sahibi (iptal) veya hedef kullanıcı (kabul/red) silebilir
+        allow delete: if isAuth()
+            && (request.auth.uid == targetUid || request.auth.uid == fromUid);
+      }
     }
 
     // ─── POSTS ────────────────────────────────────────────────
