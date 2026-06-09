@@ -298,11 +298,12 @@ class AdminViewModel @Inject constructor(
                 _users.value = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     User(
-                        uid         = doc.id,
-                        displayName = d["displayName"] as? String ?: d["name"] as? String ?: "",
-                        email       = d["email"]    as? String ?: "",
-                        photoURL    = d["photoURL"] as? String ?: "",
-                        banned      = d["banned"]   as? Boolean ?: false,
+                        uid           = doc.id,
+                        displayName   = d["displayName"] as? String ?: d["name"] as? String ?: "",
+                        email         = d["email"]    as? String ?: "",
+                        photoURL      = d["photoURL"] as? String ?: "",
+                        banned        = d["banned"]   as? Boolean ?: false,
+                        emailVerified = d["emailVerified"] as? Boolean ?: false,
                     )
                 }
             } catch (e: Exception) {
@@ -312,11 +313,12 @@ class AdminViewModel @Inject constructor(
                     _users.value = snap.documents.mapNotNull { doc ->
                         val d = doc.data ?: return@mapNotNull null
                         User(
-                            uid         = doc.id,
-                            displayName = d["displayName"] as? String ?: d["name"] as? String ?: "",
-                            email       = d["email"]    as? String ?: "",
-                            photoURL    = d["photoURL"] as? String ?: "",
-                            banned      = d["banned"]   as? Boolean ?: false,
+                            uid           = doc.id,
+                            displayName   = d["displayName"] as? String ?: d["name"] as? String ?: "",
+                            email         = d["email"]    as? String ?: "",
+                            photoURL      = d["photoURL"] as? String ?: "",
+                            banned        = d["banned"]   as? Boolean ?: false,
+                            emailVerified = d["emailVerified"] as? Boolean ?: false,
                         )
                     }
                 } catch (e2: Exception) { e2.printStackTrace() }
@@ -342,11 +344,12 @@ class AdminViewModel @Inject constructor(
                 fun mapUser(doc: com.google.firebase.firestore.DocumentSnapshot): User? {
                     val d = doc.data ?: return null
                     return User(
-                        uid         = doc.id,
-                        displayName = d["displayName"] as? String ?: d["name"] as? String ?: "",
-                        email       = d["email"]    as? String ?: "",
-                        photoURL    = d["photoURL"] as? String ?: "",
-                        banned      = d["banned"]   as? Boolean ?: false,
+                        uid           = doc.id,
+                        displayName   = d["displayName"] as? String ?: d["name"] as? String ?: "",
+                        email         = d["email"]    as? String ?: "",
+                        photoURL      = d["photoURL"] as? String ?: "",
+                        banned        = d["banned"]   as? Boolean ?: false,
+                        emailVerified = d["emailVerified"] as? Boolean ?: false,
                     )
                 }
 
@@ -401,6 +404,109 @@ class AdminViewModel @Inject constructor(
             try {
                 firestore.collection("users").document(uid).update("banned", ban).await()
                 _users.value = _users.value.map { if (it.uid == uid) it.copy(banned = ban) else it }
+                _unverifiedUsers.value = _unverifiedUsers.value.map { if (it.uid == uid) it.copy(banned = ban) else it }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Doğrulanmamış kullanıcılar ────────────────────────────────────────────
+    private val _unverifiedUsers = MutableStateFlow<List<User>>(emptyList())
+    val unverifiedUsers = _unverifiedUsers.asStateFlow()
+
+    private val _unverifiedLoading = MutableStateFlow(false)
+    val unverifiedLoading = _unverifiedLoading.asStateFlow()
+
+    fun loadUnverifiedUsers() {
+        if (_perms.value?.can("users") != true) return
+        viewModelScope.launch {
+            _unverifiedLoading.value = true
+            try {
+                // emailVerified == false veya alan hiç set edilmemiş kullanıcılar
+                val snap = firestore.collection("users")
+                    .whereEqualTo("emailVerified", false)
+                    .limit(100).get().await()
+                val results = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    // Google ile giriş yapanları (email yok) filtrele
+                    val email = d["email"] as? String ?: ""
+                    if (email.isBlank()) return@mapNotNull null
+                    User(
+                        uid           = doc.id,
+                        displayName   = d["displayName"] as? String ?: d["name"] as? String ?: "",
+                        email         = email,
+                        photoURL      = d["photoURL"] as? String ?: "",
+                        banned        = d["banned"]   as? Boolean ?: false,
+                        emailVerified = false,
+                    )
+                }.toMutableList()
+                // emailVerified alanı hiç olmayan kullanıcılar — ayrı sorgu
+                try {
+                    val all = firestore.collection("users").limit(200).get().await()
+                    val noField = all.documents.mapNotNull { doc ->
+                        val d = doc.data ?: return@mapNotNull null
+                        if (d.containsKey("emailVerified")) return@mapNotNull null
+                        val email = d["email"] as? String ?: ""
+                        if (email.isBlank()) return@mapNotNull null
+                        val existingIds = results.map { it.uid }.toSet()
+                        if (doc.id in existingIds) return@mapNotNull null
+                        User(
+                            uid           = doc.id,
+                            displayName   = d["displayName"] as? String ?: d["name"] as? String ?: "",
+                            email         = email,
+                            photoURL      = d["photoURL"] as? String ?: "",
+                            banned        = d["banned"]   as? Boolean ?: false,
+                            emailVerified = false,
+                        )
+                    }
+                    results.addAll(noField)
+                } catch (_: Exception) {}
+                _unverifiedUsers.value = results.sortedBy { it.displayName }
+            } catch (e: Exception) { e.printStackTrace() }
+            finally { _unverifiedLoading.value = false }
+        }
+    }
+
+    fun verifyUser(uid: String) {
+        if (uid.isBlank() || _perms.value?.can("users") != true) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("users").document(uid)
+                    .update("emailVerified", true).await()
+                // Doğrulanmamış listeden çıkar
+                _unverifiedUsers.value = _unverifiedUsers.value.filter { it.uid != uid }
+                // Kullanıcılar listesinde de güncelle
+                _users.value = _users.value.map {
+                    if (it.uid == uid) it.copy(emailVerified = true) else it
+                }
+                // Admin log bildirimi ekle
+                firestore.collection("userNotifs").document(uid).collection("msgs").add(mapOf(
+                    "fromUid"   to (auth.currentUser?.uid ?: ""),
+                    "fromName"  to "Heftreng",
+                    "fromPhoto" to "",
+                    "type"      to "verified",
+                    "feedId"    to "",
+                    "postId"    to "",
+                    "title"     to "Hesabın doğrulandı ✓",
+                    "sub"       to "",
+                    "ico"       to "verified_user",
+                    "message"   to "Hesabın admin tarafından doğrulandı.",
+                    "url"       to "",
+                    "read"      to false,
+                    "ts"        to com.google.firebase.Timestamp.now(),
+                )).await()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun revokeVerification(uid: String) {
+        if (uid.isBlank() || _perms.value?.can("users") != true) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("users").document(uid)
+                    .update("emailVerified", false).await()
+                _users.value = _users.value.map {
+                    if (it.uid == uid) it.copy(emailVerified = false) else it
+                }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }

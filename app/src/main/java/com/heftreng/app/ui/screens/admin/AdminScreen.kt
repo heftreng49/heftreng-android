@@ -47,7 +47,9 @@ fun AdminScreen(
     val isAdmin     by vm.isAdmin.collectAsState()
     val perms       by vm.perms.collectAsState()  // null = yükleniyor
     val staffList   by vm.staffList.collectAsState()
-    val users       by vm.users.collectAsState()
+    val users           by vm.users.collectAsState()
+    val unverifiedUsers by vm.unverifiedUsers.collectAsState()
+    val unverifiedLoading by vm.unverifiedLoading.collectAsState()
     val pendingPosts by vm.pendingPosts.collectAsState()
     val loading     by vm.loading.collectAsState()
     val pushResult  by vm.pushResult.collectAsState()
@@ -266,50 +268,107 @@ fun AdminScreen(
 
                 // ── Kullanıcılar ─────────────────────────────────────────────────
                 "users" -> {
+                    var showUnverified by remember { mutableStateOf(false) }
+
                     Column(Modifier.fillMaxSize()) {
-                        OutlinedTextField(
-                            value         = userSearch,
-                            onValueChange = { userSearch = it },
-                            placeholder   = { Text("Kullanıcı ara…", color = Muted) },
-                            singleLine    = true,
-                            modifier      = Modifier.fillMaxWidth().padding(12.dp),
-                            shape         = RoundedCornerShape(12.dp),
-                            colors        = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor      = Amber,
-                                unfocusedBorderColor    = Divider,
-                                focusedTextColor        = OnBackground,
-                                unfocusedTextColor      = OnBackground,
-                                unfocusedContainerColor = SurfaceVar,
-                                focusedContainerColor   = SurfaceVar,
-                            ),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                            leadingIcon = { Icon(Icons.Default.Search, null, tint = Muted) },
-                        )
-                        val filtered = users.filter {
-                            userSearch.isBlank() ||
-                            it.displayName.contains(userSearch, ignoreCase = true) ||
-                            it.email.contains(userSearch, ignoreCase = true)
-                        }
-                        LazyColumn(contentPadding = PaddingValues(horizontal = 12.dp)) {
-                            items(filtered, key = { it.uid }) { user ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
+                        // Alt sekme: Tümü / Doğrulanmamış
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            listOf(false to "Tümü", true to "Doğrulanmamış").forEach { (isUnverified, label) ->
+                                val selected = showUnverified == isUnverified
+                                OutlinedButton(
+                                    onClick = {
+                                        showUnverified = isUnverified
+                                        if (isUnverified) vm.loadUnverifiedUsers()
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape    = RoundedCornerShape(10.dp),
+                                    colors   = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = if (selected) Amber else Color.Transparent,
+                                        contentColor   = if (selected) Color.Black else Muted,
+                                    ),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp, if (selected) Amber else Divider,
+                                    ),
                                 ) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text(user.displayName.ifBlank { "—" }, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                        Text(user.email, color = Muted, fontSize = 11.sp)
-                                        if (user.banned) Text("● BANLANDI", color = Error, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    IconButton(onClick = { vm.toggleBan(user.uid, !user.banned) }) {
-                                        Icon(
-                                            if (user.banned) Icons.Default.LockOpen else Icons.Default.Block,
-                                            null,
-                                            tint = if (user.banned) Success else Error,
-                                        )
+                                    Text(
+                                        if (isUnverified && unverifiedUsers.isNotEmpty())
+                                            "$label (${unverifiedUsers.size})"
+                                        else label,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                    )
+                                }
+                            }
+                        }
+
+                        if (!showUnverified) {
+                            // ── Tüm kullanıcılar ──────────────────────────────
+                            OutlinedTextField(
+                                value         = userSearch,
+                                onValueChange = { userSearch = it },
+                                placeholder   = { Text("Kullanıcı ara…", color = Muted) },
+                                singleLine    = true,
+                                modifier      = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                                shape         = RoundedCornerShape(12.dp),
+                                colors        = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor      = Amber,
+                                    unfocusedBorderColor    = Divider,
+                                    focusedTextColor        = OnBackground,
+                                    unfocusedTextColor      = OnBackground,
+                                    unfocusedContainerColor = SurfaceVar,
+                                    focusedContainerColor   = SurfaceVar,
+                                ),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                leadingIcon = { Icon(Icons.Default.Search, null, tint = Muted) },
+                            )
+                            val filtered = users.filter {
+                                userSearch.isBlank() ||
+                                it.displayName.contains(userSearch, ignoreCase = true) ||
+                                it.email.contains(userSearch, ignoreCase = true)
+                            }
+                            LazyColumn(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
+                                items(filtered, key = { it.uid }) { user ->
+                                    AdminUserRow(
+                                        user       = user,
+                                        onToggleBan = { vm.toggleBan(user.uid, !user.banned) },
+                                        onVerify    = { vm.verifyUser(user.uid) },
+                                        onRevoke    = { vm.revokeVerification(user.uid) },
+                                    )
+                                    HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                                }
+                            }
+                        } else {
+                            // ── Doğrulanmamış kullanıcılar ────────────────────
+                            if (unverifiedLoading) {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(color = Amber)
+                                }
+                            } else if (unverifiedUsers.isEmpty()) {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF22C55E),
+                                            modifier = Modifier.size(44.dp))
+                                        Text("Tüm hesaplar doğrulanmış", color = Muted, fontSize = 14.sp)
                                     }
                                 }
-                                HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                            } else {
+                                LazyColumn(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
+                                    items(unverifiedUsers, key = { it.uid }) { user ->
+                                        AdminUserRow(
+                                            user        = user,
+                                            onToggleBan = { vm.toggleBan(user.uid, !user.banned) },
+                                            onVerify    = { vm.verifyUser(user.uid) },
+                                            onRevoke    = null,
+                                        )
+                                        HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                                    }
+                                }
                             }
                         }
                     }
@@ -1975,6 +2034,93 @@ private fun StaffTab(
                 }
             }
             Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+// ── Admin Kullanıcı Satırı ────────────────────────────────────────────────────
+@Composable
+private fun AdminUserRow(
+    user        : com.heftreng.app.data.model.User,
+    onToggleBan : () -> Unit,
+    onVerify    : () -> Unit,
+    onRevoke    : (() -> Unit)?,
+) {
+    Row(
+        modifier          = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    user.displayName.ifBlank { "—" },
+                    color      = com.heftreng.app.ui.theme.OnBackground,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize   = 13.sp,
+                )
+                if (user.emailVerified) {
+                    Surface(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                        color = Color(0xFF22C55E).copy(alpha = 0.15f),
+                    ) {
+                        Text(
+                            "✓ Doğrulandı",
+                            color    = Color(0xFF22C55E),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                        )
+                    }
+                } else {
+                    Surface(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                        color = com.heftreng.app.ui.theme.Amber.copy(alpha = 0.15f),
+                    ) {
+                        Text(
+                            "Doğrulanmamış",
+                            color    = com.heftreng.app.ui.theme.Amber,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+            }
+            Text(user.email, color = com.heftreng.app.ui.theme.Muted, fontSize = 11.sp)
+            if (user.banned) {
+                Text("● BANLANDI", color = com.heftreng.app.ui.theme.Error, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        // Doğrula / İptal et butonu
+        if (!user.emailVerified) {
+            IconButton(onClick = onVerify) {
+                Icon(
+                    Icons.Default.VerifiedUser,
+                    contentDescription = "Doğrula",
+                    tint     = Color(0xFF22C55E),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        } else if (onRevoke != null) {
+            IconButton(onClick = onRevoke) {
+                Icon(
+                    Icons.Default.RemoveCircleOutline,
+                    contentDescription = "Doğrulamayı İptal Et",
+                    tint     = com.heftreng.app.ui.theme.Muted,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+        // Ban / Unban
+        IconButton(onClick = onToggleBan) {
+            Icon(
+                if (user.banned) Icons.Default.LockOpen else Icons.Default.Block,
+                null,
+                tint = if (user.banned) com.heftreng.app.ui.theme.Success else com.heftreng.app.ui.theme.Error,
+            )
         }
     }
 }
