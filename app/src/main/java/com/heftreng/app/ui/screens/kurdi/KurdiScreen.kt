@@ -341,6 +341,96 @@ fun KurdiScreen(
 }
 
 // -- XP / Streak kartı --------------------------------------------------------
+// ── Podium Bloğu (Liderlik Top 3) ────────────────────────────────────────────
+@Composable
+private fun PodiumBlock(
+    entry      : KurdiViewModel.LeaderEntry,
+    medalColor : Color,
+    heightDp   : Int,
+    ku         : Boolean,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Bottom,
+        modifier = Modifier.width(90.dp),
+    ) {
+        // İsim
+        Text(
+            entry.displayName.ifBlank { if (ku) "Bikarhêner" else "Kullanıcı" },
+            color      = OnBackground,
+            fontSize   = 10.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines   = 1,
+            overflow   = TextOverflow.Ellipsis,
+            textAlign  = TextAlign.Center,
+        )
+        Spacer(Modifier.height(3.dp))
+        // XP
+        Text(
+            "${entry.kfXp} XP",
+            color    = medalColor,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(4.dp))
+        // Avatar + madalya
+        Box(contentAlignment = Alignment.BottomEnd) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(Primary, PrimaryLight)))
+                    .border(2.dp, medalColor, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (entry.photoURL.isNotBlank()) {
+                    coil.compose.AsyncImage(
+                        model = coil.request.ImageRequest.Builder(
+                            androidx.compose.ui.platform.LocalContext.current
+                        ).data(entry.photoURL).crossfade(true).build(),
+                        contentDescription = null,
+                        contentScale       = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier           = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Text(
+                        entry.displayName.firstOrNull()?.uppercase() ?: "?",
+                        color      = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 16.sp,
+                    )
+                }
+            }
+            Text(
+                when (entry.rank) { 1 -> "🥇"; 2 -> "🥈"; else -> "🥉" },
+                fontSize = 14.sp,
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        // Podyum bloğu
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(heightDp.dp)
+                .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
+                .background(medalColor.copy(alpha = 0.18f))
+                .border(
+                    1.dp,
+                    medalColor.copy(alpha = 0.4f),
+                    RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "#${entry.rank}",
+                color      = medalColor,
+                fontWeight = FontWeight.Black,
+                fontSize   = 16.sp,
+            )
+        }
+    }
+}
+
 // ── Liderlik Tablosu Sekmesi ──────────────────────────────────────────────────
 @Composable
 private fun LeaderboardTab(
@@ -348,29 +438,64 @@ private fun LeaderboardTab(
     loading  : Boolean,
     language : String,
 ) {
-    val ku = language == "ku"
-
-    // Madalya renkleri
+    val ku     = language == "ku"
     val gold   = Color(0xFFFFD700)
     val silver = Color(0xFFC0C0C0)
     val bronze = Color(0xFFCD7F32)
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Başlık
-        Row(
+        // Gradient başlık banner
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .background(
+                    Brush.linearGradient(listOf(Color(0xFF1A1333), Color(0xFF0F1E2E)))
+                )
+                .padding(horizontal = 20.dp, vertical = 18.dp),
         ) {
-            Text("🏆", fontSize = 22.sp)
-            Text(
-                Strings.leaderboardTitle(language),
-                fontWeight = FontWeight.Bold,
-                fontSize   = 17.sp,
-                color      = OnBackground,
-            )
+            Column {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("🏆", fontSize = 28.sp)
+                    Column {
+                        Text(
+                            Strings.leaderboardTitle(language),
+                            fontWeight = FontWeight.Black,
+                            fontSize   = 18.sp,
+                            color      = OnBackground,
+                        )
+                        Text(
+                            if (ku) "Baştirîn 20 xwendekar" else "En iyi 20 öğrenci",
+                            color    = Muted,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+                // Top 3 podium (sadece yeterli veri varsa)
+                if (entries.size >= 3) {
+                    Spacer(Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        // 2. sıra
+                        entries.getOrNull(1)?.let { e ->
+                            PodiumBlock(entry = e, medalColor = silver, heightDp = 70, ku = ku)
+                        }
+                        // 1. sıra (ortada + daha yüksek)
+                        entries.getOrNull(0)?.let { e ->
+                            PodiumBlock(entry = e, medalColor = gold, heightDp = 90, ku = ku)
+                        }
+                        // 3. sıra
+                        entries.getOrNull(2)?.let { e ->
+                            PodiumBlock(entry = e, medalColor = bronze, heightDp = 58, ku = ku)
+                        }
+                    }
+                }
+            }
         }
         HorizontalDivider(color = Divider, thickness = 0.5.dp)
 
@@ -516,73 +641,161 @@ private fun LeaderboardTab(
 }
 
 // ── XP / Streak Kartı ─────────────────────────────────────────────────────────
+@Composable
+private fun XpStreakCard(
+    xp           : Int,
+    streak       : Int,
+    level        : Int,
+    language     : String,
+    remainingAds : Int = 3,
+) {
+    val ku       = language == "ku"
+    val progress = if (xp <= 0) 0f else ((xp % 100) / 100f).coerceIn(0f, 1f)
+    val xpToNext = 100 - (xp % 100)
 
-    Surface(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = HeftSurface,
+            .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
-        Column {
-            Row(
-                modifier          = Modifier.padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        Strings.levelLabel(language, level),
-                    fontWeight = FontWeight.Bold,
-                    color      = Primary,
-                    fontSize   = 13.sp,
-                )
-                Spacer(Modifier.height(6.dp))
-                val progress = if (xp <= 0) 0f else ((xp % 100) / 100f).coerceIn(0f, 1f)
-                LinearProgressIndicator(
-                    progress   = { progress },
-                    modifier   = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-                    color      = Primary,
-                    trackColor = SurfaceVar,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text("$xp XP", color = Muted, fontSize = 11.sp)
-            }
-            Spacer(Modifier.width(20.dp))
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("🔥", fontSize = 26.sp)
-                Text(
-                    "$streak",
-                    fontWeight = FontWeight.Black,
-                    color      = Amber,
-                    fontSize   = 15.sp,
-                )
-                Text("Streak", color = Muted, fontSize = 10.sp)
-            }
-        }
-        // Günlük ödüllü reklam hakkı göstergesi
-        if (remainingAds < 3) {
-            androidx.compose.material3.HorizontalDivider(color = com.heftreng.app.ui.theme.Divider, thickness = 0.5.dp)
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
-            ) {
-                repeat(3) { i ->
-                    Box(
-                        modifier = Modifier.size(8.dp).clip(CircleShape)
-                            .background(if (i < remainingAds) Amber else com.heftreng.app.ui.theme.Divider)
+        // Gradient arka plan
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            Primary.copy(alpha = 0.18f),
+                            PrimaryLight.copy(alpha = 0.08f),
+                        )
                     )
-                }
-                Text(
-                    if (language == "ku") "$remainingAds mafê vîdyoyê mayî"
-                    else "$remainingAds ödüllü reklam hakkı kaldı",
-                    color = Muted, fontSize = 10.sp,
                 )
+                .border(1.dp, Primary.copy(alpha = 0.25f), RoundedCornerShape(20.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                // Üst satır: Seviye rozeti + Streak + XP sayacı
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    // Seviye rozeti
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(CircleShape)
+                            .background(Primary),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                if (ku) "Ast" else "Sv.",
+                                color    = Color.White.copy(alpha = 0.7f),
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Text(
+                                "$level",
+                                color      = Color.White,
+                                fontWeight = FontWeight.Black,
+                                fontSize   = 18.sp,
+                            )
+                        }
+                    }
+
+                    // XP çubuğu
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "$xp XP",
+                                color      = Primary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize   = 14.sp,
+                            )
+                            Text(
+                                if (ku) "+$xpToNext ast" else "+$xpToNext sonraki",
+                                color    = Muted,
+                                fontSize = 11.sp,
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(10.dp)
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(SurfaceVar)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(progress)
+                                    .height(10.dp)
+                                    .background(
+                                        Brush.horizontalGradient(listOf(Primary, PrimaryLight)),
+                                        RoundedCornerShape(5.dp),
+                                    )
+                            )
+                        }
+                    }
+
+                    // Streak
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Amber.copy(alpha = 0.12f))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                    ) {
+                        Text("🔥", fontSize = 20.sp)
+                        Text(
+                            "$streak",
+                            fontWeight = FontWeight.Black,
+                            color      = Amber,
+                            fontSize   = 16.sp,
+                        )
+                        Text(
+                            if (ku) "Zincîr" else "Seri",
+                            color    = Muted,
+                            fontSize = 9.sp,
+                        )
+                    }
+                }
+
+                // Reklam hakkı göstergesi
+                if (remainingAds < 3) {
+                    Spacer(Modifier.height(12.dp))
+                    HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text("▶️", fontSize = 13.sp)
+                        repeat(3) { i ->
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(if (i < remainingAds) Amber else Divider)
+                            )
+                        }
+                        Spacer(Modifier.width(2.dp))
+                        Text(
+                            if (ku) "$remainingAds mafê vîdyoyê mayî"
+                            else    "$remainingAds ödüllü reklam hakkı kaldı",
+                            color    = Muted,
+                            fontSize = 11.sp,
+                        )
+                    }
+                }
             }
         }
     }
-} // Surface
-} // XpStreakCard
+}
 
 // -- Ünite yol haritası sekmesi -----------------------------------------------
 @Composable
@@ -683,22 +896,36 @@ private fun DailyNudgeCard(
     val hasNext = lessons.any { it.id !in doneIds }
     if (!hasNext) return
 
-    Surface(
+    val doneTodayCount = doneIds.size
+    val totalCount     = lessons.size
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                Brush.linearGradient(listOf(Color(0xFF1A1333), Color(0xFF0F1E2E)))
+            )
+            .border(1.dp, Primary.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
             .clickable { onClick() },
-        shape = RoundedCornerShape(14.dp),
-        color = Color(0xFF1A1333),
-        border = BorderStroke(1.dp, Primary.copy(alpha = 0.3f)),
     ) {
         Row(
-            modifier          = Modifier.padding(14.dp),
+            modifier          = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("🎯", fontSize = 26.sp)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
+            // İkon kutusu
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Primary.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("🎯", fontSize = 24.sp)
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     Strings.dailyGoal(language),
                     fontWeight = FontWeight.Bold,
@@ -710,18 +937,29 @@ private fun DailyNudgeCard(
                     color    = Muted,
                     fontSize = 12.sp,
                 )
+                if (doneTodayCount > 0) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        if (language == "ku") "$doneTodayCount / $totalCount ders qediya"
+                        else "$doneTodayCount / $totalCount ders tamamlandı",
+                        color    = Primary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
             }
-            Spacer(Modifier.width(8.dp))
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = Primary,
+            Spacer(Modifier.width(10.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Primary)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
             ) {
                 Text(
                     Strings.startLesson(language),
                     color      = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize   = 12.sp,
-                    modifier   = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                 )
             }
         }
@@ -737,55 +975,89 @@ private fun UnitHeader(
     pct   : Int,
     color : Color,
 ) {
-    Surface(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(14.dp),
-        color = HeftSurface,
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(HeftSurface)
+            .border(1.dp, color.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
     ) {
-        Column(Modifier.padding(14.dp)) {
+        // Sol renkli şerit
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .matchParentSize()
+                .background(color, RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 14.dp, top = 14.dp, bottom = 14.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Ünite ikonu
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
-                        .background(color.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
-                        .border(1.5.dp, color.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(color.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(unit.icon, fontSize = 22.sp)
+                    Text(unit.icon, fontSize = 24.sp)
                 }
                 Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(unit.ttl, fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 15.sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        unit.ttl,
+                        fontWeight = FontWeight.Bold,
+                        color      = OnBackground,
+                        fontSize   = 15.sp,
+                    )
                     if (unit.desc.isNotBlank()) {
                         Text(unit.desc, color = Muted, fontSize = 12.sp)
                     }
-                    Spacer(Modifier.height(4.dp))
-                    Text("$done/$total ders tamamlandı", color = Muted, fontSize = 11.sp)
                 }
-                Text(
-                    "$pct%",
-                    color      = color,
-                    fontWeight = FontWeight.Bold,
-                    fontSize   = 13.sp,
-                )
+                // Yuvarlak % rozeti
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(color.copy(alpha = if (pct == 100) 1f else 0.15f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (pct == 100) "✓" else "$pct%",
+                        color      = if (pct == 100) Color.White else color,
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = if (pct == 100) 18.sp else 12.sp,
+                    )
+                }
             }
             Spacer(Modifier.height(10.dp))
-            // Progress bar
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(SurfaceVar)
+            // Progress bar + ders sayısı
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(pct / 100f)
-                        .height(6.dp)
-                        .background(color, RoundedCornerShape(3.dp))
+                        .weight(1f)
+                        .height(7.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(SurfaceVar)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(pct / 100f)
+                            .height(7.dp)
+                            .background(color, RoundedCornerShape(4.dp))
+                    )
+                }
+                Text(
+                    "$done/$total",
+                    color      = Muted,
+                    fontSize   = 11.sp,
+                    fontWeight = FontWeight.Medium,
                 )
             }
         }
@@ -968,12 +1240,15 @@ private fun LessonPathNode(
             ) {
                 when {
                     isDone   -> Text("⭐", fontSize = 26.sp)
-                    isLocked -> androidx.compose.foundation.layout.Column(
+                    isLocked -> Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        Icon(Icons.Default.Lock, null, tint = Muted, modifier = Modifier.size(18.dp))
-                        Text("▶️", fontSize = 10.sp)
+                        Icon(Icons.Default.Lock, null, tint = Muted, modifier = Modifier.size(16.dp))
+                        Text(
+                            if (canWatchAd) "▶️" else "🔒",
+                            fontSize = 12.sp,
+                        )
                     }
                     isActive -> Text(lesson.emoji, fontSize = 26.sp)
                     else     -> Text(lesson.emoji, fontSize = 26.sp)
