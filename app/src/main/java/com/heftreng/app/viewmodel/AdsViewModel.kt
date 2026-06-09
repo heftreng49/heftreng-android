@@ -309,7 +309,13 @@ class AdsViewModel @Inject constructor(
                             }
                         }
                         doc.id == "interstitial_serial" -> _interstitialConfig.value = config
-                        doc.id == "rewarded_xp"         -> _rewardedConfig.value     = config
+                        doc.id == "rewarded_xp" -> {
+                            _rewardedConfig.value = config
+                            // Config gelir gelmez rewarded'ı yükle
+                            if (config.enabled && _adsEnabled.value) {
+                                loadRewarded(appContext)
+                            }
+                        }
                         config.adType == "banner" && config.enabled -> {
                             _allBannerConfigs.value = _allBannerConfigs.value + (doc.id to config)
                         }
@@ -428,7 +434,14 @@ class AdsViewModel @Inject constructor(
             context, unitId, AdRequest.Builder().build(),
             object : RewardedAdLoadCallback() {
                 override fun onAdLoaded(ad: RewardedAd) { rewardedAd = ad }
-                override fun onAdFailedToLoad(error: LoadAdError) { rewardedAd = null }
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    rewardedAd = null
+                    android.util.Log.w("AdsVM", "Rewarded yüklenemedi: ${error.message} — 5sn sonra tekrar denenecek")
+                    viewModelScope.launch {
+                        delay(5000L)
+                        loadRewarded(context)
+                    }
+                }
             }
         )
     }

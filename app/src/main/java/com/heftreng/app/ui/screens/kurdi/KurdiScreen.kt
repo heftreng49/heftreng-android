@@ -79,8 +79,7 @@ fun KurdiScreen(
 
     LaunchedEffect(Unit) {
         adsVm.initPrefs(context)
-        adsVm.loadRewarded(context)
-        adsVm.loadAdConfigs()
+        adsVm.loadAdConfigs() // Config önce yüklenmeli; rewarded/banner loadAdConfigs içinden tetiklenir
     }
 
     // Ödüllü reklam sonrası uygulanan senaryo
