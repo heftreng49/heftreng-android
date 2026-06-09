@@ -106,6 +106,12 @@ class AuthViewModel @Inject constructor(
                     auth.signOut()
                     val result = auth.signInWithEmailAndPassword(account.email, account.password).await()
                     val user = result.user ?: return@launch
+                    if (!user.isEmailVerified) {
+                        try { user.sendEmailVerification().await() } catch (_: Exception) {}
+                        auth.signOut()
+                        _error.value = "EMAIL_NOT_VERIFIED"
+                        return@launch
+                    }
                     syncFcmToken(user.uid)
                     _currentUser.value = user
                 }
@@ -209,15 +215,18 @@ class AuthViewModel @Inject constructor(
             try {
                 val result = auth.signInWithEmailAndPassword(email, password).await()
                 val user   = result.user ?: return@launch
-                // Email doğrulanmamışsa engelleme — sadece arka planda doğrulama emaili gönder
+
+                // Email doğrulanmamışsa içeri alma — doğrulama maili yeniden gönder
                 if (!user.isEmailVerified) {
                     try { user.sendEmailVerification().await() } catch (_: Exception) {}
-                    // _verificationPending: UI'da soft banner göstermek için
+                    auth.signOut()
                     _verificationPending.value = true
+                    _error.value = "EMAIL_NOT_VERIFIED" // AuthScreen bu kodu yakalar
+                    return@launch
                 }
-                // Kullanıcı adı boşsa aşağıdaki tek Firestore çağrısında hallederiz
+
                 syncFcmToken(user.uid)
-                syncEmailVerified(user) // Link'e tıkladıysa true olur, Firestore'u güncelle
+                syncEmailVerified(user) // Firestore'u güncelle
                 acceptTerms(method = "email_login")
                 // ── Tek Firestore çağrısı: displayName hem Auth'a hem saveAccount'a ──
                 val userDoc  = try { firestore.collection("users").document(user.uid).get().await() } catch (_: Exception) { null }

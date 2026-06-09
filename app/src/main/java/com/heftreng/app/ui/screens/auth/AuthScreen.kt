@@ -353,9 +353,13 @@ fun AuthScreen(
                 }
             }
 
-            error?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
-                LaunchedEffect(it) { vm.clearError() }
+            error?.let { errCode ->
+                val errMsg = if (errCode == "EMAIL_NOT_VERIFIED")
+                    Strings.emailNotVerified(language)
+                else
+                    errCode
+                Text(errMsg, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                LaunchedEffect(errCode) { vm.clearError() }
             }
 
             Button(

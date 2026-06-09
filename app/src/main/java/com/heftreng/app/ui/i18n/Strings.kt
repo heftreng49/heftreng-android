@@ -448,6 +448,7 @@ object Strings {
     // ── Auth ──────────────────────────────────────────────────────────────────
     fun continueWithGoogle(l: String)    = t(l, "Google ile devam et",        "Bi Google re berdewam bike")
     fun googleRecommended(l: String)     = t(l, "Önerilen",                   "Pêşniyarkirî")
+    fun emailNotVerified(l: String)      = t(l, "E-posta adresin doğrulanmamış. Gelen kutunu kontrol et, doğrulama maili tekrar gönderildi.", "Navnîşana e-nameyê nehat pejirandin. Qutiya xwe ya giriyan binêre, e-nameya piştrastkirinê ji nû ve hate şandin.")
     fun googleWarning(l: String)         = t(l, "Google ile giriş yapmanızı öneririz. E-posta ile kayıt olursanız, e-posta doğrulaması gerekebilir.", "Em pêşniyar dikin ku bi Google têkevin. Ger bi e-nameyê qeyd bikin, dibe ku pejirandina e-nameyê pêwist be.")
     fun orDivider(l: String)             = t(l, "ya da",                      "an jî")
     fun yourName(l: String)              = t(l, "Adın",                       "Navê te")
