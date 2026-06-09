@@ -83,6 +83,7 @@ fun FeedScreen(
     val posts       by vm.posts.collectAsState()
     val suggestedUsers by vm.suggestedUsers.collectAsState()
     var showAllSuggestions by remember { mutableStateOf(false) }
+    val hasMoreSuggestions by vm.hasMoreSuggestions.collectAsState()
     val loading     by vm.loading.collectAsState()
     val hasMore     by vm.hasMore.collectAsState()
     val loadingMore by vm.loadingMore.collectAsState()
@@ -342,7 +343,9 @@ fun FeedScreen(
                         SuggestedUsersCard(
                             users            = if (showAllSuggestions) suggestedUsers else suggestedUsers.take(3),
                             showAll          = showAllSuggestions,
+                            hasMore          = hasMoreSuggestions,
                             onShowAll        = { showAllSuggestions = true },
+                            onLoadMore       = { vm.loadMoreSuggestedUsers() },
                             onFollow         = { uid -> vm.followSuggestedUser(uid) },
                             onNavigate       = { uid -> navController.navigate(Screen.Profile.go(uid)) },
                             language         = language,
@@ -1463,7 +1466,9 @@ fun postTimeAgo(seconds: Long, ku: Boolean = false): String {
 private fun SuggestedUsersCard(
     users     : List<FeedViewModel.SuggestedUser>,
     showAll   : Boolean,
+    hasMore   : Boolean = false,
     onShowAll : () -> Unit,
+    onLoadMore: () -> Unit = {},
     onFollow  : (uid: String) -> Unit,
     onNavigate: (uid: String) -> Unit,
     language  : String = "tr",
@@ -1519,6 +1524,21 @@ private fun SuggestedUsersCard(
                 ) {
                     Text(
                         if (ku) "Zêdetir nîşan bide" else "Daha fazla göster",
+                        color    = Primary,
+                        fontSize = 13.sp,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.Default.ExpandMore, null, tint = Primary, modifier = Modifier.size(16.dp))
+                }
+            } else if (hasMore) {
+                TextButton(
+                    onClick  = onLoadMore,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                ) {
+                    Text(
+                        if (ku) "Zêdetir pêşniyar bar bike" else "Daha Fazla Öneri",
                         color    = Primary,
                         fontSize = 13.sp,
                     )

@@ -667,7 +667,10 @@ class ProfileViewModel @Inject constructor(
                     mapOf("uid" to myUid, "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp())
                 ).await()
                 // users dokümanını güncelle
-                firestore.collection("users").document(myUid).update(mapOf("username" to handle)).await()
+                firestore.collection("users").document(myUid).update(mapOf(
+                    "username"      to handle,
+                    "usernameLower" to handle.lowercase(),
+                )).await()
                 _user.value = _user.value?.copy(username = handle)
                 onSuccess()
             } catch (e: Exception) { onError(e.message ?: "Hata") }
