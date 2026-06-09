@@ -138,6 +138,90 @@ class NotificationsViewModel @Inject constructor(
         }
     }
 
+    // ── Takip isteğini onayla ─────────────────────────────────
+    fun acceptFollowRequest(fromUid: String, notifId: String) {
+        val myUid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                val reqRef = firestore.collection("followRequests").document(myUid)
+                    .collection("pending").document(fromUid)
+                if (!reqRef.get().await().exists()) return@launch
+
+                val reqDoc    = reqRef.get().await()
+                val fromName  = reqDoc.getString("fromName")  ?: ""
+                val fromPhoto = reqDoc.getString("fromPhoto") ?: ""
+
+                val myDoc   = firestore.collection("users").document(myUid).get().await()
+                val myName  = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
+                val myPhoto = myDoc.getString("photoURL") ?: ""
+
+                // follows koleksiyonuna ekle
+                firestore.collection("follows").document("${fromUid}_$myUid").set(mapOf(
+                    "fromUid"     to fromUid,
+                    "fromName"    to fromName,
+                    "fromPhoto"   to fromPhoto,
+                    "targetUid"   to myUid,
+                    "targetName"  to myName,
+                    "targetPhoto" to myPhoto,
+                    "ts"          to com.google.firebase.Timestamp.now(),
+                )).await()
+
+                // Sayaçlar
+                firestore.collection("users").document(myUid)
+                    .update("followerCount", com.google.firebase.firestore.FieldValue.increment(1))
+                firestore.collection("users").document(fromUid)
+                    .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
+
+                // Bekleyen isteği sil
+                reqRef.delete().await()
+
+                // Bildirimi okundu işaretle + status güncelle
+                if (notifId.isNotBlank()) {
+                    firestore.collection("userNotifs").document(myUid)
+                        .collection("msgs").document(notifId)
+                        .update("read", true, "status", "accepted").await()
+                }
+
+                // İsteği gönderene kabul bildirimi gönder
+                firestore.collection("userNotifs").document(fromUid).collection("msgs").add(mapOf(
+                    "fromUid"   to myUid,
+                    "fromName"  to myName,
+                    "fromPhoto" to myPhoto,
+                    "type"      to "follow_request_accepted",
+                    "feedId"    to "",
+                    "postId"    to "",
+                    "title"     to "$myName takip isteğini kabul etti",
+                    "sub"       to "",
+                    "ico"       to "person_add",
+                    "message"   to "$myName takip isteğini kabul etti",
+                    "url"       to "",
+                    "read"      to false,
+                    "ts"        to com.google.firebase.Timestamp.now(),
+                )).await()
+
+                // UI'da bildirimi kaldır (snapshot listener zaten güncelleyecek ama anında hissettir)
+                markRead(notifId)
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Takip isteğini reddet ─────────────────────────────────
+    fun declineFollowRequest(fromUid: String, notifId: String) {
+        val myUid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                firestore.collection("followRequests").document(myUid)
+                    .collection("pending").document(fromUid).delete().await()
+                if (notifId.isNotBlank()) {
+                    firestore.collection("userNotifs").document(myUid)
+                        .collection("msgs").document(notifId)
+                        .update("read", true, "status", "declined").await()
+                }
+                markRead(notifId)
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         listenerReg?.remove()

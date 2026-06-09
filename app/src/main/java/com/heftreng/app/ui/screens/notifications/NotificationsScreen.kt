@@ -28,14 +28,12 @@ import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.NotificationsViewModel
-import com.heftreng.app.viewmodel.ProfileViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsScreen(
     navController: NavController,
     vm: NotificationsViewModel = hiltViewModel(),
-    profileVm: ProfileViewModel = hiltViewModel(),
     language: String = "tr",
 ) {
     val ku = language == "ku"
@@ -111,10 +109,10 @@ fun NotificationsScreen(
                             notif    = notif,
                             language = language,
                             onAcceptFollowRequest = if (notif.type == "follow_request") {
-                                { profileVm.acceptFollowRequest(notif.fromUid, notif.id) }
+                                { vm.acceptFollowRequest(notif.fromUid, notif.id) }
                             } else null,
                             onDeclineFollowRequest = if (notif.type == "follow_request") {
-                                { profileVm.declineFollowRequest(notif.fromUid, notif.id) }
+                                { vm.declineFollowRequest(notif.fromUid, notif.id) }
                             } else null,
                             onClick  = {
                                 vm.markRead(notif.id)
