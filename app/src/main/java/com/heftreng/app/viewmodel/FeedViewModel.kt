@@ -119,7 +119,7 @@ class FeedViewModel @Inject constructor(
             try {
                 val snap = firestore.collection("follows")
                     .whereEqualTo("fromUid", uid)
-                    .limit(200).get().await()
+                    .limit(1000).get().await()
                 _followingUids.value = snap.documents
                     .mapNotNull { it.getString("targetUid") }.toSet()
             } catch (e: Exception) { e.printStackTrace() }
@@ -140,18 +140,18 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val likedSnap = firestore.collection("feedLikes")
-                    .whereEqualTo("uid", currentUid).limit(100).get().await()
+                    .whereEqualTo("uid", currentUid).limit(300).get().await()
                 likedIds = likedSnap.documents
                     .mapNotNull { it.getString("feedId") ?: it.getString("postId") }.toSet()
 
                 val savedSnap = firestore.collection("feedSaves")
-                    .whereEqualTo("uid", currentUid).limit(100).get().await()
+                    .whereEqualTo("uid", currentUid).limit(300).get().await()
                 savedIds = savedSnap.documents
                     .mapNotNull { it.getString("feedId") ?: it.getString("postId") }.toSet()
 
                 val repostSnap = firestore.collection("feed")
                     .whereEqualTo("uid", currentUid)
-                    .whereEqualTo("repostType", "feed").limit(50).get().await()
+                    .whereEqualTo("repostType", "feed").limit(100).get().await()
                 myRepostMap = repostSnap.documents.mapNotNull { doc ->
                     val orig = doc.getString("repostId") ?: return@mapNotNull null
                     orig to doc.id
@@ -855,7 +855,7 @@ class FeedViewModel @Inject constructor(
                 // 1. Takip ettiğim tüm UID'leri çek (limit yüksek tutuldu)
                 val followingSnap = firestore.collection("follows")
                     .whereEqualTo("fromUid", myUid)
-                    .limit(100).get().await()
+                    .limit(500).get().await()
                 val followingUids = followingSnap.documents
                     .mapNotNull { doc ->
                         // Her iki format da destekleniyor
@@ -867,25 +867,28 @@ class FeedViewModel @Inject constructor(
                 // 2. Aktif kullanıcıları postsCount'a göre çek
                 val usersSnap = firestore.collection("users")
                     .orderBy("postsCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(50)
+                    .limit(100)
                     .get().await()
 
                 val suggestions = usersSnap.documents
                     .mapNotNull { doc ->
-                        val sUid = doc.id  // document ID her zaman doğru UID
+                        val sUid = doc.id
                         if (sUid in followingUids) return@mapNotNull null
                         val name = doc.getString("displayName") ?: doc.getString("name") ?: ""
                         if (name.isBlank()) return@mapNotNull null
                         SuggestedUser(
-                            uid      = sUid,
-                            name     = name,
-                            photoURL = doc.getString("photoURL") ?: "",
-                            bio      = doc.getString("bio") ?: "",
+                            uid        = sUid,
+                            name       = name,
+                            photoURL   = doc.getString("photoURL") ?: "",
+                            bio        = doc.getString("bio") ?: "",
+                            isFollowing = sUid in _followingUids.value,
                         )
                     }
                     .shuffled()
                     .take(20)
 
+                // _followingUids'i güncelle
+                _followingUids.value = followingUids
                 _suggestedUsers.value = suggestions
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -893,6 +896,14 @@ class FeedViewModel @Inject constructor(
 
     fun followSuggestedUser(targetUid: String) {
         val myUid = auth.currentUser?.uid ?: return
+
+        // 1. Optimistic update — UI anında güncellenir
+        _suggestedUsers.value = _suggestedUsers.value.map {
+            if (it.uid == targetUid) it.copy(isFollowing = true) else it
+        }
+        // _followingUids'e ekle — loadSuggestedUsers tekrar çalışsa da filtreler
+        _followingUids.value = _followingUids.value + targetUid
+
         viewModelScope.launch {
             try {
                 ensureMyProfileCached()
@@ -908,17 +919,21 @@ class FeedViewModel @Inject constructor(
                     "targetUid"   to targetUid,
                     "targetName"  to tName,
                     "targetPhoto" to tPhoto,
-                    "ts"          to Timestamp.now(),
+                    "ts"          to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                 )).await()
                 firestore.collection("users").document(myUid)
                     .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
                 firestore.collection("users").document(targetUid)
                     .update("followerCount", com.google.firebase.firestore.FieldValue.increment(1))
                 sendNotif(targetUid, "follow", "$myName sizi takip etmeye başladı", "", "")
+            } catch (e: Exception) {
+                // Hata: geri al
+                _followingUids.value = _followingUids.value - targetUid
                 _suggestedUsers.value = _suggestedUsers.value.map {
-                    if (it.uid == targetUid) it.copy(isFollowing = true) else it
+                    if (it.uid == targetUid) it.copy(isFollowing = false) else it
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+                e.printStackTrace()
+            }
         }
     }
 
@@ -1105,7 +1120,7 @@ class FeedViewModel @Inject constructor(
         try {
             val oldSnap = firestore.collection("feed")
                 .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                .limit(100).get().await()
+                .limit(300).get().await()
             oldSnap.documents.forEach { doc ->
                 if (seenIds.contains(doc.id)) return@forEach
                 val d = doc.data ?: return@forEach

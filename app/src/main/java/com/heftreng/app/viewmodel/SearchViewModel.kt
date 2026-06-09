@@ -345,25 +345,36 @@ class SearchViewModel @Inject constructor(
     }
 
     // ── Takip önerileri — düşük maliyetli: sadece 50 kullanıcı çek ──
+    // Takip ettiklerimi local'de de tut — anlık filtre için
+    private val _followingUids = mutableSetOf<String>()
+
     fun loadSuggestions() {
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
-                // Takip edilenleri küçük limit ile al (500 -> 100)
+                // Her iki format destekleniyor (targetUid ve followingUid)
                 val followSnap = firestore.collection("follows")
                     .whereEqualTo("fromUid", uid)
-                    .limit(100).get().await()
-                val followedUids = followSnap.documents
-                    .mapNotNull { it.getString("targetUid") }.toSet() + uid
+                    .limit(500).get().await()
 
-                // Kullanıcıları followersCount desc ile al — zaten sıralı gelir (200 -> 50)
+                val followedUids = followSnap.documents
+                    .mapNotNull { doc ->
+                        doc.getString("targetUid") ?: doc.getString("followingUid")
+                    }.toMutableSet()
+                followedUids.add(uid)  // kendimi de ekle
+
+                // Local set'i güncelle
+                _followingUids.clear()
+                _followingUids.addAll(followedUids)
+
+                // followerCount desc ile en aktif kullanıcıları çek
                 val usersSnap = firestore.collection("users")
                     .orderBy("followerCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(50).get().await()
+                    .limit(100).get().await()
 
                 _suggestions.value = usersSnap.documents
                     .mapNotNull { it.toUser() }
-                    .filter { it.uid !in followedUids }
+                    .filter { it.uid !in _followingUids }
                     .take(30)
 
             } catch (e: Exception) {
@@ -374,30 +385,54 @@ class SearchViewModel @Inject constructor(
 
     // ── Takip et / bırak ─────────────────────────────────────
     fun toggleFollow(targetUid: String) {
+        val isFollowing = targetUid in _followingUids
+
+        // 1. Optimistic update — UI anında güncellenir
+        if (isFollowing) {
+            _followingUids.remove(targetUid)
+        } else {
+            _followingUids.add(targetUid)
+        }
+        // Öneri listesinden anında kaldır (takip edildiyse)
+        if (!isFollowing) {
+            _suggestions.value = _suggestions.value.filter { it.uid != targetUid }
+        }
+
         viewModelScope.launch {
             try {
                 val ref = firestore.collection("follows").document("${uid}_$targetUid")
-                if (ref.get().await().exists()) {
+                if (isFollowing) {
                     ref.delete().await()
+                    firestore.collection("users").document(uid)
+                        .update("followingCount", com.google.firebase.firestore.FieldValue.increment(-1))
+                    firestore.collection("users").document(targetUid)
+                        .update("followerCount", com.google.firebase.firestore.FieldValue.increment(-1))
                 } else {
-                    val myDoc = try { firestore.collection("users").document(uid).get().await() } catch (_: Exception) { null }
+                    val myDoc = try {
+                        firestore.collection("users").document(uid).get().await()
+                    } catch (_: Exception) { null }
                     ref.set(mapOf(
                         "fromUid"   to uid,
                         "fromName"  to (myDoc?.getString("displayName") ?: myDoc?.getString("name") ?: ""),
                         "fromPhoto" to (myDoc?.getString("photoURL") ?: ""),
                         "targetUid" to targetUid,
-                        "ts"        to com.google.firebase.Timestamp.now(),
+                        "ts"        to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                     )).await()
-                    // Sayaç güncelle
                     firestore.collection("users").document(uid)
                         .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
                     firestore.collection("users").document(targetUid)
                         .update("followerCount", com.google.firebase.firestore.FieldValue.increment(1))
                 }
-                loadSuggestions()
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                // Hata durumunda optimistic update'i geri al
+                if (isFollowing) _followingUids.add(targetUid)
+                else _followingUids.remove(targetUid)
+                e.printStackTrace()
+            }
         }
     }
+
+    fun isFollowing(targetUid: String): Boolean = targetUid in _followingUids
 
     private fun com.google.firebase.firestore.DocumentSnapshot.toUser(): User? {
         val d = data ?: return null
