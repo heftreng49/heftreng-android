@@ -64,9 +64,13 @@ import com.heftreng.app.viewmodel.SocialViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
 // ── Birleşik Kitap Listesi ────────────────────────────────────────────────────
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun BooksScreen(
     navController: NavController,
@@ -78,6 +82,16 @@ fun BooksScreen(
     var showCreate by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.loadBooks() }
+
+    var isRefreshing by remember { mutableStateOf(false) }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing || loading,
+        onRefresh  = {
+            isRefreshing = true
+            vm.loadBooks()
+        }
+    )
+    LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
 
     Scaffold(
         modifier = Modifier.imePadding(),
@@ -140,7 +154,7 @@ fun BooksScreen(
 }
 
 // ── Kitap/Seri Detay ──────────────────────────────────────────────────────────
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun BookDetailScreen(
     bookId       : String,
@@ -168,6 +182,16 @@ fun BookDetailScreen(
     var editBody  by remember { mutableStateOf("") }
 
     LaunchedEffect(bookId) { vm.loadBook(bookId, type) }
+
+    var isRefreshingDetail by remember { mutableStateOf(false) }
+    val pullRefreshStateDetail = rememberPullRefreshState(
+        refreshing = isRefreshingDetail || loading,
+        onRefresh  = {
+            isRefreshingDetail = true
+            vm.loadBook(bookId, type)
+        }
+    )
+    LaunchedEffect(isRefreshingDetail) { if (isRefreshingDetail) isRefreshingDetail = false }
 
     Scaffold(
         modifier = Modifier.imePadding(),
@@ -197,6 +221,7 @@ fun BookDetailScreen(
             )
         }
     ) { padding ->
+        Box(Modifier.fillMaxSize().pullRefresh(pullRefreshStateDetail)) {
         if (loading && book == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Amber)

@@ -56,11 +56,15 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import java.io.File
 import androidx.core.content.ContextCompat
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
 // ── Konuşma Listesi ─────────────────────────────────────────────────────────
 // Tema: .msgp-wrap, .msgp-hd, .msgp-conv-item, .msgp-conv-av, .msgp-unread-dot
 
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalMaterialApi::class)
 @Composable
 fun ConversationsScreen(
     navController: NavController,
@@ -91,6 +95,16 @@ fun ConversationsScreen(
         it.lastMessage.contains(searchQuery, ignoreCase = true)
     }
 
+
+    var isRefreshing by remember { mutableStateOf(false) }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing || loading,
+        onRefresh  = {
+            isRefreshing = true
+            vm.listenConversations()
+        }
+    )
+    LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
     Scaffold(
         containerColor = Background,
         topBar = {
@@ -142,6 +156,7 @@ fun ConversationsScreen(
             )
         }
     ) { padding ->
+        Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
         when {
             loading && conversations.isEmpty() -> {
                 // Tema: .msgp-loading
@@ -285,8 +300,15 @@ fun ConversationsScreen(
                 }
             }
         }
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
+            state      = pullRefreshState,
+            modifier   = Modifier.align(Alignment.TopCenter),
+        )
+        } // pullRefresh Box
+
     }
-}
+}}
 
 // ── Mesaj Detay Ekranı ────────────────────────────────────────────────────────
 // Tema: .msg-chat-ov, .msg-chat-hd, .msg-chat-body, .msg-inp-bar

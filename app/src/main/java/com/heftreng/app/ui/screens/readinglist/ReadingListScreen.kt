@@ -31,6 +31,10 @@ import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.ReadingListViewModel
 import com.heftreng.app.viewmodel.RlStatus
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
 // ── Okuma Listesi ekranı ───────────────────────────────────────────────────────
 // Firestore: readingLists/{uid}/books — 4 sekme: okuyorum | okumak_istiyorum | okudum | biraktim
@@ -49,6 +53,16 @@ fun ReadingListScreen(
 
     LaunchedEffect(uid) { vm.load(uid) }
 
+
+    var isRefreshing by remember { mutableStateOf(false) }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh  = {
+            isRefreshing = true
+            vm.load()
+        }
+    )
+    LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
     Scaffold(
         containerColor = Background,
         topBar = {
@@ -63,6 +77,7 @@ fun ReadingListScreen(
             )
         }
     ) { padding ->
+        Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
 
             // Durum sekmeleri — XML'deki 4 durum
@@ -295,5 +310,12 @@ fun ReadingListStatusSheet(
                 }
             }
         }
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
+            state      = pullRefreshState,
+            modifier   = Modifier.align(Alignment.TopCenter),
+        )
+        } // pullRefresh Box
+
     }
-}
+}}

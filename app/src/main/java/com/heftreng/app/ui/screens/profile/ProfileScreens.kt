@@ -45,8 +45,12 @@ import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.FollowListSheet
 import com.heftreng.app.viewmodel.SettingsViewModel
 import com.heftreng.app.viewmodel.*
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalMaterialApi::class)
 @Composable
 fun ProfileScreen(
     uid          : String,
@@ -119,6 +123,16 @@ fun ProfileScreen(
         rlVm.load(targetUid)
     }
 
+
+    var isRefreshing by remember { mutableStateOf(false) }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh  = {
+            isRefreshing = true
+            vm.load(targetUid, forceRefresh = true)
+        }
+    )
+    LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
     Scaffold(
         modifier       = Modifier.imePadding(),
         containerColor = Background,
@@ -181,6 +195,7 @@ fun ProfileScreen(
             )
         }
     ) { padding ->
+        Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
 
         if (loading && user == null) {
             Box(
@@ -1048,5 +1063,12 @@ fun EditProfileScreen(
                 colors        = heftrangTextFieldColors(),
             )
         }
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
+            state      = pullRefreshState,
+            modifier   = Modifier.align(Alignment.TopCenter),
+        )
+        } // pullRefresh Box
+
     }
-}
+}}

@@ -29,6 +29,10 @@ import com.heftreng.app.viewmodel.BlogPost
 import com.heftreng.app.viewmodel.BlogViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // BLOG LİSTESİ EKRANI
@@ -56,6 +60,16 @@ fun BlogScreen(
         state.posts.flatMap { it.labels }.distinct().sorted()
     }
 
+
+    var isRefreshing by remember { mutableStateOf(false) }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh  = {
+            isRefreshing = true
+            vm.loadPosts(refresh = true)
+        }
+    )
+    LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
     Scaffold(
         containerColor = Background,
         topBar = {
@@ -310,8 +324,15 @@ private fun BlogShimmerCard() {
                 Box(modifier = Modifier.fillMaxWidth(0.5f).height(12.dp).clip(RoundedCornerShape(4.dp)).background(shimmer))
             }
         }
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
+            state      = pullRefreshState,
+            modifier   = Modifier.align(Alignment.TopCenter),
+        )
+        } // pullRefresh Box
+
     }
-}
+}}
 
 // ── Tarih formatı ─────────────────────────────────────────────────────────────
 private fun formatBlogDate(iso: String): String {

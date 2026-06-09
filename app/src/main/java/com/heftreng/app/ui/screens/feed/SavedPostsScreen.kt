@@ -29,8 +29,14 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import java.net.URLEncoder
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun SavedPostsScreen(
     navController : NavController,
@@ -50,8 +56,8 @@ fun SavedPostsScreen(
     val listState   = rememberLazyListState()
 
     // feedSaves koleksiyonundan uid'ye göre çek, sonra feed dokümanlarını getir
-    LaunchedEffect(uid) {
-        if (uid.isBlank()) { loading = false; return@LaunchedEffect }
+    suspend fun loadSaved() {
+        if (uid.isBlank()) { loading = false; return }
         try {
             val saveSnap = db.collection("feedSaves")
                 .whereEqualTo("uid", uid)
@@ -67,7 +73,7 @@ fun SavedPostsScreen(
                 it.getString("feedId") ?: it.getString("postId")
             }.distinct()
 
-            if (postIds.isEmpty()) { loading = false; return@LaunchedEffect }
+            if (postIds.isEmpty()) { loading = false; return }
 
             // Firestore'da `in` query max 30, parçalara böl
             val posts = mutableListOf<Post>()
@@ -127,6 +133,18 @@ fun SavedPostsScreen(
         }
     }
 
+    var isRefreshing by remember { mutableStateOf(false) }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing || loading,
+        onRefresh  = {
+            isRefreshing = true
+        }
+    )
+    LaunchedEffect(uid) { loadSaved() }
+    LaunchedEffect(isRefreshing) {
+        if (isRefreshing) { loadSaved(); isRefreshing = false }
+    }
+
     Scaffold(
         containerColor = Background,
         topBar = {
@@ -146,6 +164,7 @@ fun SavedPostsScreen(
             )
         },
     ) { padding ->
+        Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
         when {
             loading -> {
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
@@ -232,5 +251,12 @@ fun SavedPostsScreen(
                 }
             }
         }
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
+            state      = pullRefreshState,
+            modifier   = Modifier.align(Alignment.TopCenter),
+        )
+        } // pullRefresh Box
+
     }
-}
+}}

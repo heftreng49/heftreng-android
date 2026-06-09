@@ -71,6 +71,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import kotlin.math.roundToInt
 import java.net.URLEncoder
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Ana ekran
@@ -164,6 +168,16 @@ fun LibraryScreen(
     var showAddAuthor          by remember { mutableStateOf(false) }
     var showAddBook            by remember { mutableStateOf(false) }
 
+
+    var isRefreshing by remember { mutableStateOf(false) }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh  = {
+            isRefreshing = true
+            libraryVm.loadAuthors(forceRefresh = true)
+        }
+    )
+    LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
     Scaffold(
         containerColor = Background,
         topBar = {
@@ -219,6 +233,7 @@ fun LibraryScreen(
             }
         },
     ) { padding ->
+        Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
 
             TabRow(
@@ -517,8 +532,15 @@ private fun StatChip(text: String, icon: androidx.compose.ui.graphics.vector.Ima
         Icon(icon, null, tint = Muted, modifier = Modifier.size(12.dp))
         Spacer(Modifier.width(3.dp))
         Text(text, color = Muted, fontSize = 11.sp)
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
+            state      = pullRefreshState,
+            modifier   = Modifier.align(Alignment.TopCenter),
+        )
+        } // pullRefresh Box
+
     }
-}
+}}
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Admin: Yeni Yazar Ekle

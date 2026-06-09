@@ -29,6 +29,10 @@ import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.PendingPost
 import com.heftreng.app.viewmodel.SettingsViewModel
 import com.heftreng.app.viewmodel.YazarViewModel
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // YAZAR PANELİ — Blog yazısı gönderme
@@ -83,6 +87,16 @@ fun YazarScreen(
 
     LaunchedEffect(Unit) { vm.loadMyPosts() }
 
+
+    var isRefreshing by remember { mutableStateOf(false) }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh  = {
+            isRefreshing = true
+            vm.loadMyPosts()
+        }
+    )
+    LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
     Scaffold(
         containerColor = Background,
         snackbarHost = {
@@ -600,8 +614,15 @@ private fun YazarField(
         if (counter != null) {
             Text(counter, color = Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp, start = 4.dp))
         }
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
+            state      = pullRefreshState,
+            modifier   = Modifier.align(Alignment.TopCenter),
+        )
+        } // pullRefresh Box
+
     }
-}
+}}
 
 @Composable
 private fun yazarFieldColors() = OutlinedTextFieldDefaults.colors(
