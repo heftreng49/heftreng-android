@@ -32,6 +32,10 @@ class ProfileViewModel @Inject constructor(
     private val _isFollowing = MutableStateFlow(false)
     val isFollowing = _isFollowing.asStateFlow()
 
+    // "none" | "pending" | "accepted"
+    private val _followRequestStatus = MutableStateFlow("none")
+    val followRequestStatus = _followRequestStatus.asStateFlow()
+
     private val _followersCount = MutableStateFlow(0)
     val followersCount = _followersCount.asStateFlow()
 
@@ -90,8 +94,15 @@ class ProfileViewModel @Inject constructor(
                         firestore.collection("follows").document("${myUid}_$targetUid").get().await()
                     else null
                 }
-                val userDoc   = userDocDeferred.await()
-                val followDoc = followDocDeferred.await()
+                val followRequestDeferred = viewModelScope.async {
+                    if (targetUid != myUid && myUid.isNotEmpty())
+                        firestore.collection("followRequests").document(targetUid)
+                            .collection("pending").document(myUid).get().await()
+                    else null
+                }
+                val userDoc           = userDocDeferred.await()
+                val followDoc         = followDocDeferred.await()
+                val followRequestDoc  = followRequestDeferred.await()
 
                 val d = userDoc.data ?: return@launch
                 _user.value = User(
@@ -112,6 +123,13 @@ class ProfileViewModel @Inject constructor(
                 )
 
                 if (followDoc != null) _isFollowing.value = followDoc.exists()
+
+                // Takip isteği durumu
+                _followRequestStatus.value = when {
+                    _isFollowing.value                       -> "accepted"
+                    followRequestDoc?.exists() == true       -> "pending"
+                    else                                     -> "none"
+                }
 
                 // follows koleksiyonu — count() aggregate (tüm dokümanları çekmez, sadece sayar)
                 val followersDeferred = viewModelScope.async {
@@ -256,62 +274,213 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
+    // ── Ana takip butonu — gizli hesap kontrolü yapar ────────────────────────
     fun toggleFollow(targetUid: String) {
+        val isPrivate = _user.value?.isPrivate ?: false
+        when {
+            _isFollowing.value                      -> unfollowUser(targetUid)
+            _followRequestStatus.value == "pending" -> cancelFollowRequest(targetUid)
+            isPrivate                               -> sendFollowRequest(targetUid)
+            else                                    -> followUserDirectly(targetUid)
+        }
+    }
+
+    // ── Takipten çık ─────────────────────────────────────────────────────────
+    private fun unfollowUser(targetUid: String) {
         viewModelScope.launch {
             try {
-                val followDoc = firestore.collection("follows").document("${myUid}_$targetUid")
-                if (_isFollowing.value) {
-                    followDoc.delete().await()
-                    _isFollowing.value = false
-                    _followersCount.value = (_followersCount.value - 1).coerceAtLeast(0)
-                    firestore.collection("users").document(targetUid)
-                        .update("followerCount", com.google.firebase.firestore.FieldValue.increment(-1))
-                    firestore.collection("users").document(myUid)
-                        .update("followingCount", com.google.firebase.firestore.FieldValue.increment(-1))
-                } else {
-                    // XML: follows/{fromUid_targetUid} şeması —
-                    // fromUid, fromName, fromPhoto, targetUid, targetName, targetPhoto, ts
-                    val myDoc       = firestore.collection("users").document(myUid).get().await()
-                    val fromName    = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
-                    val fromPhoto   = myDoc.getString("photoURL") ?: ""
-                    val targetDoc   = firestore.collection("users").document(targetUid).get().await()
-                    val targetName  = targetDoc.getString("displayName") ?: targetDoc.getString("name") ?: ""
-                    val targetPhoto = targetDoc.getString("photoURL") ?: ""
-                    followDoc.set(mapOf(
-                        "fromUid"     to myUid,
-                        "fromName"    to fromName,
-                        "fromPhoto"   to fromPhoto,
-                        "targetUid"   to targetUid,
-                        "targetName"  to targetName,
-                        "targetPhoto" to targetPhoto,
-                        "ts"          to Timestamp.now(),
-                    )).await()
-                    _isFollowing.value = true
-                    _followersCount.value += 1
-                    firestore.collection("users").document(targetUid)
-                        .update("followerCount", com.google.firebase.firestore.FieldValue.increment(1))
-                    firestore.collection("users").document(myUid)
-                        .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
-                    // Bildirim
-                    firestore.collection("userNotifs").document(targetUid).collection("msgs").add(mapOf(
+                firestore.collection("follows").document("${myUid}_$targetUid").delete().await()
+                _isFollowing.value = false
+                _followRequestStatus.value = "none"
+                _followersCount.value = (_followersCount.value - 1).coerceAtLeast(0)
+                firestore.collection("users").document(targetUid)
+                    .update("followerCount", FieldValue.increment(-1))
+                firestore.collection("users").document(myUid)
+                    .update("followingCount", FieldValue.increment(-1))
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Gizli hesaba takip isteği gönder ─────────────────────────────────────
+    private fun sendFollowRequest(targetUid: String) {
+        viewModelScope.launch {
+            try {
+                val myDoc     = firestore.collection("users").document(myUid).get().await()
+                val fromName  = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
+                val fromPhoto = myDoc.getString("photoURL") ?: ""
+
+                // followRequests/{targetUid}/pending/{fromUid}
+                firestore.collection("followRequests").document(targetUid)
+                    .collection("pending").document(myUid).set(mapOf(
                         "fromUid"   to myUid,
                         "fromName"  to fromName,
                         "fromPhoto" to fromPhoto,
-                        "type"      to "follow",
-                        "feedId"    to "",          // tema: feedId (follow'da boş)
-                        "postId"    to "",          // Android uyumu
-                        "title"     to "$fromName seni takip etmeye başladı",
-                        "sub"       to "",
-                        "ico"       to "person_add",
-                        "message"   to "$fromName seni takip etmeye başladı",
-                        "url"       to "",
-                        "read"      to false,
+                        "targetUid" to targetUid,
                         "ts"        to Timestamp.now(),
                     )).await()
+
+                _followRequestStatus.value = "pending"
+
+                // Bildirim
+                firestore.collection("userNotifs").document(targetUid).collection("msgs").add(mapOf(
+                    "fromUid"   to myUid,
+                    "fromName"  to fromName,
+                    "fromPhoto" to fromPhoto,
+                    "type"      to "follow_request",
+                    "feedId"    to "",
+                    "postId"    to "",
+                    "title"     to "$fromName seni takip etmek istiyor",
+                    "sub"       to "",
+                    "ico"       to "person_add",
+                    "message"   to "$fromName seni takip etmek istiyor",
+                    "url"       to "",
+                    "read"      to false,
+                    "ts"        to Timestamp.now(),
+                )).await()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Bekleyen isteği iptal et ──────────────────────────────────────────────
+    private fun cancelFollowRequest(targetUid: String) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("followRequests").document(targetUid)
+                    .collection("pending").document(myUid).delete().await()
+                _followRequestStatus.value = "none"
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Açık hesaba direkt takip ──────────────────────────────────────────────
+    private fun followUserDirectly(targetUid: String) {
+        viewModelScope.launch {
+            try {
+                val myDoc       = firestore.collection("users").document(myUid).get().await()
+                val fromName    = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
+                val fromPhoto   = myDoc.getString("photoURL") ?: ""
+                val targetDoc   = firestore.collection("users").document(targetUid).get().await()
+                val targetName  = targetDoc.getString("displayName") ?: targetDoc.getString("name") ?: ""
+                val targetPhoto = targetDoc.getString("photoURL") ?: ""
+
+                firestore.collection("follows").document("${myUid}_$targetUid").set(mapOf(
+                    "fromUid"     to myUid,
+                    "fromName"    to fromName,
+                    "fromPhoto"   to fromPhoto,
+                    "targetUid"   to targetUid,
+                    "targetName"  to targetName,
+                    "targetPhoto" to targetPhoto,
+                    "ts"          to Timestamp.now(),
+                )).await()
+
+                _isFollowing.value = true
+                _followRequestStatus.value = "accepted"
+                _followersCount.value += 1
+                firestore.collection("users").document(targetUid)
+                    .update("followerCount", FieldValue.increment(1))
+                firestore.collection("users").document(myUid)
+                    .update("followingCount", FieldValue.increment(1))
+
+                // Bildirim
+                firestore.collection("userNotifs").document(targetUid).collection("msgs").add(mapOf(
+                    "fromUid"   to myUid,
+                    "fromName"  to fromName,
+                    "fromPhoto" to fromPhoto,
+                    "type"      to "follow",
+                    "feedId"    to "",
+                    "postId"    to "",
+                    "title"     to "$fromName seni takip etmeye başladı",
+                    "sub"       to "",
+                    "ico"       to "person_add",
+                    "message"   to "$fromName seni takip etmeye başladı",
+                    "url"       to "",
+                    "read"      to false,
+                    "ts"        to Timestamp.now(),
+                )).await()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Takip isteğini onayla (bildirim ekranından çağrılır) ──────────────────
+    fun acceptFollowRequest(fromUid: String, notifId: String) {
+        viewModelScope.launch {
+            try {
+                val myUidLocal = auth.currentUser?.uid ?: return@launch
+                val reqRef = firestore.collection("followRequests").document(myUidLocal)
+                    .collection("pending").document(fromUid)
+                val reqDoc = reqRef.get().await()
+                if (!reqDoc.exists()) return@launch
+
+                val fromName  = reqDoc.getString("fromName")  ?: ""
+                val fromPhoto = reqDoc.getString("fromPhoto") ?: ""
+                val myDoc     = firestore.collection("users").document(myUidLocal).get().await()
+                val myName    = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
+                val myPhoto   = myDoc.getString("photoURL") ?: ""
+
+                // follows koleksiyonuna ekle
+                firestore.collection("follows").document("${fromUid}_$myUidLocal").set(mapOf(
+                    "fromUid"     to fromUid,
+                    "fromName"    to fromName,
+                    "fromPhoto"   to fromPhoto,
+                    "targetUid"   to myUidLocal,
+                    "targetName"  to myName,
+                    "targetPhoto" to myPhoto,
+                    "ts"          to Timestamp.now(),
+                )).await()
+
+                // Sayaçlar
+                firestore.collection("users").document(myUidLocal)
+                    .update("followerCount", FieldValue.increment(1))
+                firestore.collection("users").document(fromUid)
+                    .update("followingCount", FieldValue.increment(1))
+
+                // İsteği sil
+                reqRef.delete().await()
+
+                // Bildirimi okundu olarak işaretle
+                if (notifId.isNotBlank()) {
+                    firestore.collection("userNotifs").document(myUidLocal)
+                        .collection("msgs").document(notifId)
+                        .update("read", true, "status", "accepted")
+                }
+
+                // İsteği gönderene kabul bildirimi gönder
+                firestore.collection("userNotifs").document(fromUid).collection("msgs").add(mapOf(
+                    "fromUid"   to myUidLocal,
+                    "fromName"  to myName,
+                    "fromPhoto" to myPhoto,
+                    "type"      to "follow_request_accepted",
+                    "feedId"    to "",
+                    "postId"    to "",
+                    "title"     to "$myName takip isteğini kabul etti",
+                    "sub"       to "",
+                    "ico"       to "person_add",
+                    "message"   to "$myName takip isteğini kabul etti",
+                    "url"       to "",
+                    "read"      to false,
+                    "ts"        to Timestamp.now(),
+                )).await()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // ── Takip isteğini reddet ─────────────────────────────────────────────────
+    fun declineFollowRequest(fromUid: String, notifId: String) {
+        viewModelScope.launch {
+            try {
+                val myUidLocal = auth.currentUser?.uid ?: return@launch
+                firestore.collection("followRequests").document(myUidLocal)
+                    .collection("pending").document(fromUid).delete().await()
+                if (notifId.isNotBlank()) {
+                    firestore.collection("userNotifs").document(myUidLocal)
+                        .collection("msgs").document(notifId)
+                        .update("read", true, "status", "declined")
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
+
+
 
     fun loadMorePosts(targetUid: String) {
         val last = lastPostDoc ?: return

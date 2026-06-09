@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -27,12 +28,14 @@ import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.NotificationsViewModel
+import com.heftreng.app.viewmodel.ProfileViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsScreen(
     navController: NavController,
     vm: NotificationsViewModel = hiltViewModel(),
+    profileVm: ProfileViewModel = hiltViewModel(),
     language: String = "tr",
 ) {
     val ku = language == "ku"
@@ -107,10 +110,18 @@ fun NotificationsScreen(
                         NotifItem(
                             notif    = notif,
                             language = language,
+                            onAcceptFollowRequest = if (notif.type == "follow_request") {
+                                { profileVm.acceptFollowRequest(notif.fromUid, notif.id) }
+                            } else null,
+                            onDeclineFollowRequest = if (notif.type == "follow_request") {
+                                { profileVm.declineFollowRequest(notif.fromUid, notif.id) }
+                            } else null,
                             onClick  = {
                                 vm.markRead(notif.id)
                                 when (notif.type) {
-                                    "follow" -> navController.navigate(Screen.Profile.go(notif.fromUid))
+                                    "follow",
+                                    "follow_request_accepted" -> navController.navigate(Screen.Profile.go(notif.fromUid))
+                                    "follow_request" -> navController.navigate(Screen.Profile.go(notif.fromUid))
                                     "like", "cmt", "comment", "repost",
                                     "chapter", "post_approved", "post_rejected" -> {
                                         val pid = notif.postId
@@ -141,8 +152,17 @@ fun NotificationsScreen(
 }
 
 @Composable
-fun NotifItem(notif: Notification, onClick: () -> Unit = {}, language: String = "tr") {
+fun NotifItem(
+    notif: Notification,
+    onClick: () -> Unit = {},
+    language: String = "tr",
+    onAcceptFollowRequest: (() -> Unit)? = null,
+    onDeclineFollowRequest: (() -> Unit)? = null,
+) {
     val ku = language == "ku"
+    // follow_request için onay/red yapıldıktan sonra butonları gizle
+    var requestHandled by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -185,6 +205,35 @@ fun NotifItem(notif: Notification, onClick: () -> Unit = {}, language: String = 
                 notif.message.ifBlank { notifDefaultMessage(notif.type, ku) },
                 color = OnSurface, fontSize = 13.sp, lineHeight = 18.sp,
             )
+            // Takip isteği — onay/red butonları
+            if (notif.type == "follow_request" && !requestHandled &&
+                onAcceptFollowRequest != null && onDeclineFollowRequest != null
+            ) {
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            onAcceptFollowRequest()
+                            requestHandled = true
+                        },
+                        shape  = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = androidx.compose.ui.graphics.Color.Black),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                    ) {
+                        Text(Strings.followRequestAccept(language), fontSize = 12.sp)
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            onDeclineFollowRequest()
+                            requestHandled = true
+                        },
+                        shape  = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                    ) {
+                        Text(Strings.followRequestDecline(language), fontSize = 12.sp, color = OnBackground)
+                    }
+                }
+            }
         }
 
         if (!notif.read) {
@@ -195,27 +244,33 @@ fun NotifItem(notif: Notification, onClick: () -> Unit = {}, language: String = 
 }
 
 fun notifIcon(type: String): ImageVector = when (type) {
-    "like"    -> Icons.Default.Favorite
-    "comment" -> Icons.Default.ChatBubble
-    "follow"  -> Icons.Default.PersonAdd
-    "repost"  -> Icons.Default.Repeat
-    else      -> Icons.Default.Notifications
+    "like"                     -> Icons.Default.Favorite
+    "comment"                  -> Icons.Default.ChatBubble
+    "follow"                   -> Icons.Default.PersonAdd
+    "follow_request"           -> Icons.Default.PersonAdd
+    "follow_request_accepted"  -> Icons.Default.PersonAdd
+    "repost"                   -> Icons.Default.Repeat
+    else                       -> Icons.Default.Notifications
 }
 
 fun notifIconColor(type: String) = when (type) {
-    "like"    -> androidx.compose.ui.graphics.Color(0xFFEF4444)
-    "comment" -> androidx.compose.ui.graphics.Color(0xFF3B82F6)
-    "follow"  -> androidx.compose.ui.graphics.Color(0xFF10B981)
-    else      -> androidx.compose.ui.graphics.Color(0xFFF59E0B)
+    "like"                    -> androidx.compose.ui.graphics.Color(0xFFEF4444)
+    "comment"                 -> androidx.compose.ui.graphics.Color(0xFF3B82F6)
+    "follow"                  -> androidx.compose.ui.graphics.Color(0xFF10B981)
+    "follow_request"          -> androidx.compose.ui.graphics.Color(0xFFF59E0B)
+    "follow_request_accepted" -> androidx.compose.ui.graphics.Color(0xFF10B981)
+    else                      -> androidx.compose.ui.graphics.Color(0xFFF59E0B)
 }
 
 fun notifDefaultMessage(type: String, ku: Boolean = false): String {
     val l = if (ku) "ku" else "tr"
     return when (type) {
-        "like"    -> Strings.notifLike(l)
-        "comment" -> Strings.notifComment(l)
-        "follow"  -> Strings.notifFollow(l)
-        "repost"  -> Strings.notifRepost(l)
-        else      -> Strings.notifNew(l)
+        "like"                    -> Strings.notifLike(l)
+        "comment"                 -> Strings.notifComment(l)
+        "follow"                  -> Strings.notifFollow(l)
+        "follow_request"          -> Strings.notifFollowRequest(l)
+        "follow_request_accepted" -> if (ku) "Daxwaza şopînê qebûl kir" else "Takip isteğini kabul etti"
+        "repost"                  -> Strings.notifRepost(l)
+        else                      -> Strings.notifNew(l)
     }
 }

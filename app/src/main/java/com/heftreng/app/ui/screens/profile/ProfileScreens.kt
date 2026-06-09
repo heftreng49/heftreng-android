@@ -63,6 +63,7 @@ fun ProfileScreen(
     val user           by vm.user.collectAsState()
     val posts          by vm.posts.collectAsState()
     val isFollowing    by vm.isFollowing.collectAsState()
+    val followRequestStatus by vm.followRequestStatus.collectAsState()
     val hasMorePosts   by vm.hasMorePosts.collectAsState()
     val loadingMore    by vm.loadingMorePosts.collectAsState()
     val hasMoreFollowers by socialVm.hasMoreFollowers.collectAsState()
@@ -207,6 +208,7 @@ fun ProfileScreen(
                     user           = user,
                     isMe           = isMe,
                     isFollowing    = isFollowing,
+                    followRequestStatus = followRequestStatus,
                     followersCount = followersCount,
                     followingCount = followingCount,
                     postsCount     = posts.size,
@@ -608,6 +610,7 @@ private fun ProfileHeader(
     user          : User?,
     isMe          : Boolean,
     isFollowing   : Boolean,
+    followRequestStatus: String = "none",
     followersCount: Int,
     followingCount: Int,
     postsCount    : Int,
@@ -698,17 +701,29 @@ private fun ProfileHeader(
                         ) {
                             Icon(Icons.Outlined.ChatBubbleOutline, null, tint = OnBackground)
                         }
-                        // Takip butonu
+                        // Takip butonu — 3 durum: takip ediliyor / istek bekliyor / takip et
                         Button(
                             onClick = onFollow,
                             shape   = RoundedCornerShape(10.dp),
                             colors  = ButtonDefaults.buttonColors(
-                                containerColor = if (isFollowing) SurfaceVar else Amber,
-                                contentColor   = if (isFollowing) OnBackground else Color.Black,
+                                containerColor = when {
+                                    isFollowing                       -> SurfaceVar
+                                    followRequestStatus == "pending"  -> SurfaceVar
+                                    else                              -> Amber
+                                },
+                                contentColor = when {
+                                    isFollowing                       -> OnBackground
+                                    followRequestStatus == "pending"  -> OnBackground
+                                    else                              -> Color.Black
+                                },
                             ),
                         ) {
                             Text(
-                                if (isFollowing) Strings.unfollow(language) else Strings.follow(language),
+                                when {
+                                    isFollowing                       -> Strings.unfollow(language)
+                                    followRequestStatus == "pending"  -> Strings.followRequested(language)
+                                    else                              -> Strings.follow(language)
+                                },
                                 fontSize = 13.sp,
                             )
                         }

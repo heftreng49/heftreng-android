@@ -156,7 +156,18 @@ data class FollowRelation(
     val targetUid   : String     = "",
     val targetName  : String     = "",
     val targetPhoto : String     = "",
-    val ts          : Timestamp? = null
+    val ts          : Timestamp? = null,
+    val status      : String     = "accepted" // "accepted" | "pending"
+)
+
+// ─── TAKİP İSTEĞİ ──────────────────────────────────────
+// Koleksiyon: followRequests/{targetUid}/pending/{fromUid}
+data class FollowRequest(
+    val fromUid   : String     = "",
+    val fromName  : String     = "",
+    val fromPhoto : String     = "",
+    val targetUid : String     = "",
+    val ts        : Timestamp? = null
 )
 
 // ─── MESAJ / KONUŞMA ───────────────────────────────────

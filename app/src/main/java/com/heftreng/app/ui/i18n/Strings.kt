@@ -51,6 +51,11 @@ object Strings {
     fun unfollow(l: String)        = t(l, "Takibi Bırak",    "Şopînê berde")
     fun followers(l: String)       = t(l, "Takipçi",         "Şopîner")
     fun following(l: String)       = t(l, "Takip",           "Şopandî")
+    fun followRequested(l: String) = t(l, "İstek Gönderildi","Daxwaz Şand")
+    fun followRequestAccept(l: String) = t(l, "Onayla",      "Qebûl bike")
+    fun followRequestDecline(l: String) = t(l, "Reddet",     "Red bike")
+    fun followRequestTitle(l: String, name: String) =
+        t(l, "$name seni takip etmek istiyor", "$name dixwaze te şopîne")
     fun likes(l: String)           = t(l, "Beğeni",          "Hez kirin")
     fun comments(l: String)        = t(l, "Yorum",           "Şîrove")
     fun posts(l: String)           = t(l, "Gönderi",         "Nivîs")
@@ -218,6 +223,7 @@ object Strings {
     // ── Arama (yeni) ──────────────────────────────────────────────────────────
     fun suggestedPeople(l: String)  = t(l, "Önerilen Kişiler",     "Kesên Pêşniyarkirî")
     fun followAction(l: String)     = follow(l)   // alias → follow()
+    fun notifFollowRequest(l: String) = t(l, "Takip isteği gönderdi", "Daxwaza şopînê şand")
     fun resultTypeLabel(l: String, type: String) = when (type) {
         "post"           -> t(l, "Gönderi",         "Nivîs")
         "serial"         -> t(l, "Seri",            "Rêzedîmen")
