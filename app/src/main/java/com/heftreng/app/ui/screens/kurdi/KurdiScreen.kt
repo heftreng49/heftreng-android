@@ -819,17 +819,20 @@ private fun LessonPath(
             val isLocked       = index > firstNotDone && !isTempUnlocked
 
             LessonPathNode(
-                lesson   = lesson,
-                isDone   = isDone,
-                isActive = isActive,
-                isLocked = isLocked,
-                color    = color,
-                index    = index,
-                total    = lessons.size,
-                language = language,
-                onClick  = {
+                lesson     = lesson,
+                isDone     = isDone,
+                isActive   = isActive,
+                isLocked   = isLocked,
+                color      = color,
+                index      = index,
+                total      = lessons.size,
+                language   = language,
+                canWatchAd = canWatchAd,
+                onClick    = {
+                    // isLocked durumu artık LessonPathNode içindeki dialog yönetiyor
+                    // Buraya sadece "Onayla" butonundan gelinir
                     if (!isLocked) onOpen(lesson.id)
-                    else if (canWatchAd) onLockedClick(lesson.id)
+                    else onLockedClick(lesson.id)
                 },
             )
         }
@@ -838,16 +841,87 @@ private fun LessonPath(
 
 @Composable
 private fun LessonPathNode(
-    lesson   : KfLesson,
-    isDone   : Boolean,
-    isActive : Boolean,
-    isLocked : Boolean,
-    color    : Color,
-    index    : Int,
-    total    : Int,
-    language : String = "tr",
-    onClick  : () -> Unit,
+    lesson      : KfLesson,
+    isDone      : Boolean,
+    isActive    : Boolean,
+    isLocked    : Boolean,
+    color       : Color,
+    index       : Int,
+    total       : Int,
+    language    : String = "tr",
+    canWatchAd  : Boolean = false,
+    onClick     : () -> Unit,
 ) {
+    val ku = language == "ku"
+    var showUnlockDialog by remember { mutableStateOf(false) }
+
+    // Kilitli ders — reklam izleyerek aç dialog
+    if (showUnlockDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnlockDialog = false },
+            containerColor   = HeftSurface,
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("🔒", fontSize = 20.sp)
+                    Text(
+                        if (ku) "Ders Kilîtkirî" else "Ders Kilitli",
+                        color      = OnBackground,
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 16.sp,
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (ku) "Ev ders kilîtkirî ye. Tu dikarî vîdyoyekê temaşe bikî û vê dersê vekî."
+                        else    "Bu ders kilitli. Kısa bir video izleyerek bu dersi hemen açabilirsin.",
+                        color    = Muted,
+                        fontSize = 14.sp,
+                    )
+                    if (!canWatchAd) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Amber.copy(alpha = 0.12f),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text("⚠️", fontSize = 14.sp)
+                                Text(
+                                    if (ku) "Îro mafê vîdyoyê nemaye."
+                                    else    "Bugünkü reklam hakkın doldu.",
+                                    color    = Amber,
+                                    fontSize = 12.sp,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (canWatchAd) {
+                    Button(
+                        onClick = { showUnlockDialog = false; onClick() },
+                        colors  = ButtonDefaults.buttonColors(containerColor = Primary),
+                        shape   = RoundedCornerShape(10.dp),
+                    ) {
+                        Text("▶  " + if (ku) "Vîdyo temaşe bike û veke" else "Video izle ve aç", color = Color.White)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnlockDialog = false }) {
+                    Text(if (ku) "Betal bike" else "İptal", color = Muted)
+                }
+            },
+        )
+    }
     // Zigzag offset — site temasındaki gibi sola-ortaya-sağa sıralanır
     val offsets = listOf(0.3f, 0.5f, 0.7f, 0.5f)
     val hAlign  = offsets[index % offsets.size]
@@ -886,7 +960,10 @@ private fun LessonPathNode(
                         shape = CircleShape,
                     )
                     .shadow(if (isDone || isActive) 6.dp else 0.dp, CircleShape)
-                    .clickable(enabled = !isLocked) { onClick() },
+                    .clickable {
+                        if (isLocked) showUnlockDialog = true
+                        else onClick()
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 when {
