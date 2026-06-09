@@ -150,6 +150,7 @@ fun KurdiScreen(
         add(Strings.kurdiUnits(language))
         add(Strings.kurdiDict(language))
         add(Strings.kurdiGrammar(language))
+        add(Strings.kurdiLeaderboard(language))
         if (isAdmin) add(Strings.kurdiAi(language))
     }
 
@@ -305,7 +306,17 @@ fun KurdiScreen(
             )
             1 -> DictionaryTab(language, isAdmin = isAdmin, vm = vm)
             2 -> GrammarTab(language, isAdmin = isAdmin, vm = vm)
-            3 -> if (isAdmin) AiLessonTab(language, vm)
+            3 -> {
+                val leaderboard        by vm.leaderboard.collectAsState()
+                val leaderboardLoading by vm.leaderboardLoading.collectAsState()
+                LaunchedEffect(Unit) { vm.loadLeaderboard() }
+                LeaderboardTab(
+                    entries  = leaderboard,
+                    loading  = leaderboardLoading,
+                    language = language,
+                )
+            }
+            4 -> if (isAdmin) AiLessonTab(language, vm)
         }
     }
 
@@ -330,8 +341,182 @@ fun KurdiScreen(
 }
 
 // -- XP / Streak kartı --------------------------------------------------------
+// ── Liderlik Tablosu Sekmesi ──────────────────────────────────────────────────
 @Composable
-private fun XpStreakCard(xp: Int, streak: Int, level: Int, language: String, remainingAds: Int = 3) {
+private fun LeaderboardTab(
+    entries  : List<KurdiViewModel.LeaderEntry>,
+    loading  : Boolean,
+    language : String,
+) {
+    val ku = language == "ku"
+
+    // Madalya renkleri
+    val gold   = Color(0xFFFFD700)
+    val silver = Color(0xFFC0C0C0)
+    val bronze = Color(0xFFCD7F32)
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Başlık
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("🏆", fontSize = 22.sp)
+            Text(
+                Strings.leaderboardTitle(language),
+                fontWeight = FontWeight.Bold,
+                fontSize   = 17.sp,
+                color      = OnBackground,
+            )
+        }
+        HorizontalDivider(color = Divider, thickness = 0.5.dp)
+
+        when {
+            loading -> Box(
+                Modifier.fillMaxWidth().height(300.dp),
+                contentAlignment = Alignment.Center,
+            ) { CircularProgressIndicator(color = Primary, modifier = Modifier.size(32.dp)) }
+
+            entries.isEmpty() -> Box(
+                Modifier.fillMaxWidth().height(300.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("🏅", fontSize = 40.sp)
+                    Text(Strings.leaderboardEmpty(language), color = Muted, fontSize = 14.sp)
+                }
+            }
+
+            else -> LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
+                items(entries, key = { it.uid }) { entry ->
+                    val rankColor = when (entry.rank) {
+                        1 -> gold
+                        2 -> silver
+                        3 -> bronze
+                        else -> Muted
+                    }
+                    val rowBg = if (entry.isMe) Primary.copy(alpha = 0.08f) else Color.Transparent
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(rowBg)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        // Sıra numarası / madalya
+                        Box(
+                            modifier = Modifier.size(32.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            when (entry.rank) {
+                                1 -> Text("🥇", fontSize = 22.sp)
+                                2 -> Text("🥈", fontSize = 22.sp)
+                                3 -> Text("🥉", fontSize = 22.sp)
+                                else -> Text(
+                                    "${entry.rank}.",
+                                    color      = rankColor,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize   = 14.sp,
+                                )
+                            }
+                        }
+
+                        // Avatar
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.linearGradient(listOf(Primary, PrimaryLight))
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (entry.photoURL.isNotBlank()) {
+                                coil.compose.AsyncImage(
+                                    model = coil.request.ImageRequest.Builder(
+                                        androidx.compose.ui.platform.LocalContext.current
+                                    ).data(entry.photoURL).crossfade(true).build(),
+                                    contentDescription = null,
+                                    contentScale       = androidx.compose.ui.layout.ContentScale.Crop,
+                                    modifier           = Modifier.fillMaxSize(),
+                                )
+                            } else {
+                                Text(
+                                    entry.displayName.firstOrNull()?.uppercase() ?: "?",
+                                    color      = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize   = 16.sp,
+                                )
+                            }
+                        }
+
+                        // İsim + XP
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text(
+                                    entry.displayName.ifBlank { if (ku) "Bikarhêner" else "Kullanıcı" },
+                                    color      = OnBackground,
+                                    fontWeight = if (entry.isMe) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize   = 14.sp,
+                                    maxLines   = 1,
+                                    overflow   = TextOverflow.Ellipsis,
+                                    modifier   = Modifier.weight(1f, fill = false),
+                                )
+                                if (entry.isMe) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Primary,
+                                    ) {
+                                        Text(
+                                            Strings.leaderboardYou(language),
+                                            color    = Color.White,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        )
+                                    }
+                                }
+                            }
+                            Text(
+                                "${entry.kfXp} XP",
+                                color      = Primary,
+                                fontSize   = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+
+                        // Kf_xp büyük gösterim (sağ taraf)
+                        if (entry.rank <= 3) {
+                            Text(
+                                "★",
+                                color    = rankColor,
+                                fontSize = 18.sp,
+                            )
+                        }
+                    }
+                    HorizontalDivider(
+                        color     = Divider,
+                        thickness = 0.5.dp,
+                        modifier  = Modifier.padding(start = 78.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ── XP / Streak Kartı ─────────────────────────────────────────────────────────
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()

@@ -199,6 +199,50 @@ class KurdiViewModel @Inject constructor(
     private val _grammarLoading = MutableStateFlow(false)
     val grammarLoading = _grammarLoading.asStateFlow()
 
+    // ── Liderlik Tablosu ──────────────────────────────────────────────────────
+    data class LeaderEntry(
+        val rank       : Int    = 0,
+        val uid        : String = "",
+        val displayName: String = "",
+        val photoURL   : String = "",
+        val kfXp       : Int    = 0,
+        val isMe       : Boolean = false,
+    )
+    private val _leaderboard        = MutableStateFlow<List<LeaderEntry>>(emptyList())
+    val leaderboard                 = _leaderboard.asStateFlow()
+    private val _leaderboardLoading = MutableStateFlow(false)
+    val leaderboardLoading          = _leaderboardLoading.asStateFlow()
+
+    fun loadLeaderboard() {
+        if (_leaderboardLoading.value) return
+        viewModelScope.launch {
+            _leaderboardLoading.value = true
+            try {
+                val myUid = auth.currentUser?.uid ?: ""
+                val snap = firestore.collection("users")
+                    .orderBy("kf_xp", Query.Direction.DESCENDING)
+                    .limit(20)
+                    .get()
+                    .await()
+                _leaderboard.value = snap.documents.mapIndexed { idx, doc ->
+                    LeaderEntry(
+                        rank        = idx + 1,
+                        uid         = doc.id,
+                        displayName = doc.getString("displayName")
+                            ?: doc.getString("name") ?: "Kullanıcı",
+                        photoURL    = doc.getString("photoURL") ?: "",
+                        kfXp        = (doc.getLong("kf_xp") ?: 0L).toInt(),
+                        isMe        = doc.id == myUid,
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _leaderboardLoading.value = false
+            }
+        }
+    }
+
     val uid get() = auth.currentUser?.uid ?: ""
 
     init { load() }
