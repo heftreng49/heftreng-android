@@ -228,6 +228,9 @@ object Strings {
     fun suggestedPeople(l: String)  = t(l, "Önerilen Kişiler",     "Kesên Pêşniyarkirî")
     fun followAction(l: String)     = follow(l)   // alias → follow()
     fun notifFollowRequest(l: String) = t(l, "Takip isteği gönderdi", "Daxwaza şopînê şand")
+    fun notifGroupToday(l: String)    = t(l, "Bugün",     "Îro")
+    fun notifGroupWeek(l: String)     = t(l, "Bu Hafta",  "Vê Hefteyê")
+    fun notifGroupOlder(l: String)    = t(l, "Daha Önce", "Berê")
     fun resultTypeLabel(l: String, type: String) = when (type) {
         "post"           -> t(l, "Gönderi",         "Nivîs")
         "serial"         -> t(l, "Seri",            "Rêzedîmen")
@@ -445,11 +448,6 @@ object Strings {
     // ── Auth ──────────────────────────────────────────────────────────────────
     fun continueWithGoogle(l: String)    = t(l, "Google ile devam et",        "Bi Google re berdewam bike")
     fun orDivider(l: String)             = t(l, "ya da",                      "an jî")
-    fun googleRecommended(l: String)     = t(l, "Önerilen yöntem",            "Rêbaza pêşniyarkirî")
-    fun googleWarning(l: String)         = t(l,
-        "E-posta ile giriş yaparsanız hesabınıza erişmekte sorun yaşayabilirsiniz. Google ile giriş daha güvenli ve hızlıdır.",
-        "Heke bi e-nameyê têkevî dibe ku pirsgirêkên têketinê hebe. Google zûtir û ewletir e."
-    )
     fun yourName(l: String)              = t(l, "Adın",                       "Navê te")
 
     // ── PostDetailScreen ──────────────────────────────────────────────────────

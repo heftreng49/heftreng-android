@@ -85,9 +85,12 @@ class NotificationsViewModel @Inject constructor(
                         type      = d["type"]      as? String  ?: "",
                         message   = (d["message"] as? String)?.takeIf { it.isNotBlank() }
                             ?: d["title"] as? String ?: "",
-                        // feedId → postId olarak map et (tema feedId, Android postId kullanıyor)
+                        sub       = (d["sub"] as? String)?.takeIf { it.isNotBlank() }
+                            ?: d["body"] as? String ?: "",
+                        // feedId → postId olarak map et
                         postId    = (d["feedId"] as? String)?.takeIf { it.isNotBlank() }
                             ?: d["postId"] as? String,
+                        imageUrl  = d["imageUrl"] as? String ?: "",
                         url       = d["url"]   as? String  ?: "",
                         read      = d["read"]  as? Boolean ?: false,
                         ts        = d["ts"]    as? Timestamp,

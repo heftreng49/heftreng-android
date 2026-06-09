@@ -22,7 +22,6 @@ data class User(
     val streak         : Int    = 0,
     val banned             : Boolean= false,
     val isPrivate          : Boolean= false,
-    val emailVerified      : Boolean= false,
     val messagePermission  : String = "everyone", // "everyone" | "followers" | "nobody"
     // FATURA: usernameLower — öneride index için, Firestore'a yazılır, client günceller
     // NOT: Bu alan AuthScreen/SettingsScreen'de kullanıcı adı kaydedilirken set edilmeli
@@ -148,17 +147,19 @@ data class FollowEntry(
 
 // ─── BİLDİRİM ──────────────────────────────────────────
 data class Notification(
-    val id        : String     = "",
-    val userId    : String     = "",
-    val fromUid   : String     = "",
-    val fromName  : String     = "",
-    val fromPhoto : String     = "",
-    val type      : String     = "",
-    val message   : String     = "",
-    val postId    : String?    = null,
-    val url       : String     = "",
-    val read      : Boolean    = false,
-    val ts        : Timestamp? = null
+    val id          : String     = "",
+    val userId      : String     = "",
+    val fromUid     : String     = "",
+    val fromName    : String     = "",
+    val fromPhoto   : String     = "",
+    val type        : String     = "",
+    val message     : String     = "",   // ana mesaj / başlık
+    val sub         : String     = "",   // alt açıklama / içerik önizlemesi
+    val postId      : String?    = null,
+    val imageUrl    : String     = "",   // post görseli varsa
+    val url         : String     = "",
+    val read        : Boolean    = false,
+    val ts          : Timestamp? = null
 )
 
 // ─── TAKİP ─────────────────────────────────────────────
