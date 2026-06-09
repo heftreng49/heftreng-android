@@ -81,6 +81,7 @@ fun BlogScreen(
             )
         },
     ) { pad ->
+        Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
         Column(modifier = Modifier.padding(pad).fillMaxSize()) {
 
             // ── Etiket filtreleri ─────────────────────────────────────────────
@@ -165,6 +166,13 @@ fun BlogScreen(
                 }
             }
         }
+    
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
+            state      = pullRefreshState,
+            modifier   = Modifier.align(Alignment.TopCenter),
+        )
+        } // pullRefresh Box
     }
 }
 
@@ -324,15 +332,8 @@ private fun BlogShimmerCard() {
                 Box(modifier = Modifier.fillMaxWidth(0.5f).height(12.dp).clip(RoundedCornerShape(4.dp)).background(shimmer))
             }
         }
-        PullRefreshIndicator(
-            refreshing = isRefreshing,
-            state      = pullRefreshState,
-            modifier   = Modifier.align(Alignment.TopCenter),
-        )
-        } // pullRefresh Box
-
     }
-}}
+}
 
 // ── Tarih formatı ─────────────────────────────────────────────────────────────
 private fun formatBlogDate(iso: String): String {

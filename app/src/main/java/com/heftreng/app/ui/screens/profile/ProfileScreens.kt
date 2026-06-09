@@ -50,7 +50,7 @@ import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ProfileScreen(
     uid          : String,
@@ -575,6 +575,13 @@ fun ProfileScreen(
                 }
             }
         }
+    
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
+            state      = pullRefreshState,
+            modifier   = Modifier.align(Alignment.TopCenter),
+        )
+        } // pullRefresh Box
     }
 
     // ── Takipçi/Takip sheet'leri ─────────────────────────────────────────────
@@ -1063,12 +1070,5 @@ fun EditProfileScreen(
                 colors        = heftrangTextFieldColors(),
             )
         }
-        PullRefreshIndicator(
-            refreshing = isRefreshing,
-            state      = pullRefreshState,
-            modifier   = Modifier.align(Alignment.TopCenter),
-        )
-        } // pullRefresh Box
-
     }
-}}
+}

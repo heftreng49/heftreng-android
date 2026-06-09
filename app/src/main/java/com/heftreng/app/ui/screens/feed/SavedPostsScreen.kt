@@ -36,7 +36,7 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SavedPostsScreen(
     navController : NavController,
@@ -56,8 +56,8 @@ fun SavedPostsScreen(
     val listState   = rememberLazyListState()
 
     // feedSaves koleksiyonundan uid'ye göre çek, sonra feed dokümanlarını getir
-    suspend fun loadSaved() {
-        if (uid.isBlank()) { loading = false; return }
+    LaunchedEffect(uid) {
+        if (uid.isBlank()) { loading = false; return@LaunchedEffect }
         try {
             val saveSnap = db.collection("feedSaves")
                 .whereEqualTo("uid", uid)
@@ -73,7 +73,7 @@ fun SavedPostsScreen(
                 it.getString("feedId") ?: it.getString("postId")
             }.distinct()
 
-            if (postIds.isEmpty()) { loading = false; return }
+            if (postIds.isEmpty()) { loading = false; return@LaunchedEffect }
 
             // Firestore'da `in` query max 30, parçalara böl
             val posts = mutableListOf<Post>()
@@ -133,18 +133,20 @@ fun SavedPostsScreen(
         }
     }
 
+
+    val scope = rememberCoroutineScope()
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing || loading,
         onRefresh  = {
-            isRefreshing = true
+            scope.launch {
+                isRefreshing = true
+                savedPosts = emptyList()
+                loading = true
+            }
         }
     )
-    LaunchedEffect(uid) { loadSaved() }
-    LaunchedEffect(isRefreshing) {
-        if (isRefreshing) { loadSaved(); isRefreshing = false }
-    }
-
+    LaunchedEffect(isRefreshing) { /* trigger above */ }
     Scaffold(
         containerColor = Background,
         topBar = {
@@ -251,12 +253,12 @@ fun SavedPostsScreen(
                 }
             }
         }
+    
         PullRefreshIndicator(
             refreshing = isRefreshing,
             state      = pullRefreshState,
             modifier   = Modifier.align(Alignment.TopCenter),
         )
         } // pullRefresh Box
-
     }
-}}
+}

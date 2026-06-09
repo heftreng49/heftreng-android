@@ -83,6 +83,7 @@ fun BooksScreen(
 
     LaunchedEffect(Unit) { vm.loadBooks() }
 
+
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing || loading,
@@ -92,7 +93,6 @@ fun BooksScreen(
         }
     )
     LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
-
     Scaffold(
         modifier = Modifier.imePadding(),
         containerColor = Background,
@@ -108,6 +108,7 @@ fun BooksScreen(
             )
         }
     ) { padding ->
+        Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
         if (loading && books.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Amber)
@@ -139,6 +140,13 @@ fun BooksScreen(
                 }
             }
         }
+    
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
+            state      = pullRefreshState,
+            modifier   = Modifier.align(Alignment.TopCenter),
+        )
+        } // pullRefresh Box
     }
 
     if (showCreate) {
@@ -183,6 +191,7 @@ fun BookDetailScreen(
 
     LaunchedEffect(bookId) { vm.loadBook(bookId, type) }
 
+
     var isRefreshingDetail by remember { mutableStateOf(false) }
     val pullRefreshStateDetail = rememberPullRefreshState(
         refreshing = isRefreshingDetail || loading,
@@ -192,7 +201,6 @@ fun BookDetailScreen(
         }
     )
     LaunchedEffect(isRefreshingDetail) { if (isRefreshingDetail) isRefreshingDetail = false }
-
     Scaffold(
         modifier = Modifier.imePadding(),
         containerColor = Background,
@@ -282,6 +290,13 @@ fun BookDetailScreen(
                 }
             }
         }
+    
+        PullRefreshIndicator(
+            refreshing = isRefreshingDetail,
+            state      = pullRefreshStateDetail,
+            modifier   = Modifier.align(Alignment.TopCenter),
+        )
+        } // pullRefresh Box
     }
 
     // Kitap/Seri silme dialog

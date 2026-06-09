@@ -284,6 +284,13 @@ fun LibraryScreen(
                 }
             }
         }
+    
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
+            state      = pullRefreshState,
+            modifier   = Modifier.align(Alignment.TopCenter),
+        )
+        } // pullRefresh Box
     }
 
     // ── Alıntı Ekle — Feed'deki QuoteDialog ──────────────────────────────
@@ -532,15 +539,8 @@ private fun StatChip(text: String, icon: androidx.compose.ui.graphics.vector.Ima
         Icon(icon, null, tint = Muted, modifier = Modifier.size(12.dp))
         Spacer(Modifier.width(3.dp))
         Text(text, color = Muted, fontSize = 11.sp)
-        PullRefreshIndicator(
-            refreshing = isRefreshing,
-            state      = pullRefreshState,
-            modifier   = Modifier.align(Alignment.TopCenter),
-        )
-        } // pullRefresh Box
-
     }
-}}
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Admin: Yeni Yazar Ekle

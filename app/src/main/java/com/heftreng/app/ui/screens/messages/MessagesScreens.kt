@@ -64,7 +64,7 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 // ── Konuşma Listesi ─────────────────────────────────────────────────────────
 // Tema: .msgp-wrap, .msgp-hd, .msgp-conv-item, .msgp-conv-av, .msgp-unread-dot
 
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ConversationsScreen(
     navController: NavController,
@@ -98,7 +98,7 @@ fun ConversationsScreen(
 
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullRefreshState(
-        refreshing = isRefreshing || loading,
+        refreshing = isRefreshing,
         onRefresh  = {
             isRefreshing = true
             vm.listenConversations()
@@ -300,15 +300,15 @@ fun ConversationsScreen(
                 }
             }
         }
+    
         PullRefreshIndicator(
             refreshing = isRefreshing,
             state      = pullRefreshState,
             modifier   = Modifier.align(Alignment.TopCenter),
         )
         } // pullRefresh Box
-
     }
-}}
+}
 
 // ── Mesaj Detay Ekranı ────────────────────────────────────────────────────────
 // Tema: .msg-chat-ov, .msg-chat-hd, .msg-chat-body, .msg-inp-bar

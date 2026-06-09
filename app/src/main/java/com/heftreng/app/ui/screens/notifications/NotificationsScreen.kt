@@ -161,6 +161,13 @@ fun NotificationsScreen(
                 }
             }
         }
+    
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
+            state      = pullRefreshState,
+            modifier   = Modifier.align(Alignment.TopCenter),
+        )
+        } // pullRefresh Box
     }
 }
 
@@ -285,12 +292,5 @@ fun notifDefaultMessage(type: String, ku: Boolean = false): String {
         "follow_request_accepted" -> if (ku) "Daxwaza şopînê qebûl kir" else "Takip isteğini kabul etti"
         "repost"                  -> Strings.notifRepost(l)
         else                      -> Strings.notifNew(l)
-        PullRefreshIndicator(
-            refreshing = isRefreshing,
-            state      = pullRefreshState,
-            modifier   = Modifier.align(Alignment.TopCenter),
-        )
-        } // pullRefresh Box
-
     }
-}}
+}

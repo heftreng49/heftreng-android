@@ -97,6 +97,16 @@ fun YazarScreen(
         }
     )
     LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
+
+    var isRefreshing by remember { mutableStateOf(false) }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh  = {
+            isRefreshing = true
+            vm.loadMyPosts()
+        }
+    )
+    LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
     Scaffold(
         containerColor = Background,
         snackbarHost = {
@@ -126,6 +136,7 @@ fun YazarScreen(
             )
         },
     ) { pad ->
+        Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
         Column(Modifier.fillMaxSize().padding(pad)) {
 
             // ── Sekmeler ───────────────────────────────────────────────────────
@@ -162,6 +173,13 @@ fun YazarScreen(
                 1 -> MyPostsTab(posts = myPosts, loading = loading, vm = vm, language = language)
             }
         }
+    
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
+            state      = pullRefreshState,
+            modifier   = Modifier.align(Alignment.TopCenter),
+        )
+        } // pullRefresh Box
     }
 }
 
@@ -614,15 +632,8 @@ private fun YazarField(
         if (counter != null) {
             Text(counter, color = Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp, start = 4.dp))
         }
-        PullRefreshIndicator(
-            refreshing = isRefreshing,
-            state      = pullRefreshState,
-            modifier   = Modifier.align(Alignment.TopCenter),
-        )
-        } // pullRefresh Box
-
     }
-}}
+}
 
 @Composable
 private fun yazarFieldColors() = OutlinedTextFieldDefaults.colors(
