@@ -11,6 +11,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.res.painterResource
+import com.heftreng.app.R
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -197,21 +199,87 @@ fun AuthScreen(
                 }
             }
 
-            // Google ile giriş
-            OutlinedButton(
+            // ── Google ile Giriş — Önerilen Yöntem ───────────────────────────
+            // Önerilen rozeti
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xFF22C55E).copy(alpha = 0.15f),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text("✓", color = Color(0xFF22C55E), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            Strings.googleRecommended(language),
+                            color = Color(0xFF22C55E),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
+
+            // Google butonu — logo + metin
+            Button(
                 onClick = {
                     val client = vm.getGoogleSignInClient(context)
                     googleLauncher.launch(client.signInIntent)
                 },
-                modifier = Modifier.fillMaxWidth(),
-                shape    = RoundedCornerShape(12.dp),
-                colors   = ButtonDefaults.outlinedButtonColors(contentColor = OnBackground),
-                border   = androidx.compose.foundation.BorderStroke(1.dp, Divider),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape  = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White,
+                    contentColor   = Color(0xFF1F1F1F),
+                ),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
             ) {
-                Text(
-                    Strings.continueWithGoogle(language),
-                    modifier = Modifier.padding(vertical = 4.dp),
-                )
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        painter            = painterResource(R.drawable.ic_google),
+                        contentDescription = "Google",
+                        modifier           = Modifier.size(22.dp),
+                        tint               = Color.Unspecified,
+                    )
+                    Text(
+                        Strings.continueWithGoogle(language),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize   = 15.sp,
+                        color      = Color(0xFF1F1F1F),
+                    )
+                }
+            }
+
+            // E-posta ile devam etmek hakkında uyarı
+            Surface(
+                shape    = RoundedCornerShape(10.dp),
+                color    = Amber.copy(alpha = 0.10f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("⚠️", fontSize = 16.sp)
+                    Text(
+                        Strings.googleWarning(language),
+                        color      = Amber,
+                        fontSize   = 12.sp,
+                        lineHeight = 18.sp,
+                    )
+                }
             }
 
             Row(
@@ -219,7 +287,10 @@ fun AuthScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 HorizontalDivider(modifier = Modifier.weight(1f), color = Divider)
-                Text(Strings.orDivider(language), color = Muted, fontSize = 12.sp)
+                Text(
+                    "  ${Strings.orDivider(language)}  ",
+                    color = Muted, fontSize = 12.sp,
+                )
                 HorizontalDivider(modifier = Modifier.weight(1f), color = Divider)
             }
 

@@ -445,6 +445,11 @@ object Strings {
     // ── Auth ──────────────────────────────────────────────────────────────────
     fun continueWithGoogle(l: String)    = t(l, "Google ile devam et",        "Bi Google re berdewam bike")
     fun orDivider(l: String)             = t(l, "ya da",                      "an jî")
+    fun googleRecommended(l: String)     = t(l, "Önerilen yöntem",            "Rêbaza pêşniyarkirî")
+    fun googleWarning(l: String)         = t(l,
+        "E-posta ile giriş yaparsanız hesabınıza erişmekte sorun yaşayabilirsiniz. Google ile giriş daha güvenli ve hızlıdır.",
+        "Heke bi e-nameyê têkevî dibe ku pirsgirêkên têketinê hebe. Google zûtir û ewletir e."
+    )
     fun yourName(l: String)              = t(l, "Adın",                       "Navê te")
 
     // ── PostDetailScreen ──────────────────────────────────────────────────────
