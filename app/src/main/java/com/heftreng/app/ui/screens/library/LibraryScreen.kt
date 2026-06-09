@@ -80,7 +80,7 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 //  Ana ekran
 // ─────────────────────────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun LibraryScreen(
     navController: NavController,

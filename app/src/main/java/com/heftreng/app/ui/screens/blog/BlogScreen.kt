@@ -37,7 +37,7 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 // ═══════════════════════════════════════════════════════════════════════════════
 // BLOG LİSTESİ EKRANI
 // ═══════════════════════════════════════════════════════════════════════════════
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun BlogScreen(
     navController : NavController,

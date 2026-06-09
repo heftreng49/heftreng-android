@@ -39,7 +39,7 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 // Sekmeler: Yaz | Yazılarım
 // ═══════════════════════════════════════════════════════════════════════════════
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalMaterialApi::class)
 @Composable
 fun YazarScreen(
     navController: NavController,
@@ -88,15 +88,6 @@ fun YazarScreen(
     LaunchedEffect(Unit) { vm.loadMyPosts() }
 
 
-    var isRefreshing by remember { mutableStateOf(false) }
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = isRefreshing,
-        onRefresh  = {
-            isRefreshing = true
-            vm.loadMyPosts()
-        }
-    )
-    LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
 
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullRefreshState(

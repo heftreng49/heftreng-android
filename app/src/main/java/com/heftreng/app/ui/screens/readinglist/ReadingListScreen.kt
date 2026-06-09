@@ -38,7 +38,7 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
 // ── Okuma Listesi ekranı ───────────────────────────────────────────────────────
 // Firestore: readingLists/{uid}/books — 4 sekme: okuyorum | okumak_istiyorum | okudum | biraktim
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun ReadingListScreen(
     uid           : String,
