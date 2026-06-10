@@ -56,6 +56,14 @@ fun AuthScreen(
     var showForgotDialog by remember { mutableStateOf(false) }
     var termsAccepted    by remember { mutableStateOf(false) }
 
+    // ── Yerel sticky state — VM state true olunca yapışır, sadece "Geri Dön" ile sıfırlanır.
+    // NavHost veya clearError() müdahalesinden korunur.
+    var showVerifySent    by remember { mutableStateOf(false) }
+    var showVerifyPending by remember { mutableStateOf(false) }
+
+    LaunchedEffect(verificationSent)    { if (verificationSent)    showVerifySent    = true }
+    LaunchedEffect(verificationPending) { if (verificationPending) showVerifyPending = true }
+
     // Kullanıcı oturumu varsa ve email doğrulandıysa ana sayfaya geç.
     // Doğrulanmamışsa doğrulama ekranı göster — onAuthSuccess çağrılmaz.
     LaunchedEffect(currentUser) {
@@ -65,6 +73,7 @@ fun AuthScreen(
             onAuthSuccess()
         } else {
             // E-posta ile giriş yaptı ama henüz doğrulanmamış
+            showVerifyPending = true
             vm.triggerVerificationPending()
         }
     }
@@ -82,7 +91,7 @@ fun AuthScreen(
     }
 
     // ── Giriş sonrası: doğrulanmamış hesap ekranı ─────────────────────────
-    if (verificationPending) {
+    if (showVerifyPending) {
         var notYetError by remember { mutableStateOf(false) }
         Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
             Column(
@@ -139,6 +148,7 @@ fun AuthScreen(
                         notYetError = false
                         vm.reloadAndCheckVerification(
                             onVerified = {
+                                showVerifyPending = false
                                 vm.clearVerificationPending()
                                 onAuthSuccess()
                             },
@@ -161,7 +171,7 @@ fun AuthScreen(
                     modifier = Modifier.fillMaxWidth(),
                     border   = androidx.compose.foundation.BorderStroke(1.dp, Amber.copy(alpha = 0.5f)),
                 ) { Text(if (ku) "Dîsa Bişîne" else "Tekrar Gönder", color = Amber) }
-                TextButton(onClick = { vm.clearVerificationPending(); vm.signOut() }) {
+                TextButton(onClick = { showVerifyPending = false; vm.clearVerificationPending(); vm.signOut() }) {
                     Text(if (ku) "Vegere" else "Geri Dön / Çıkış", color = Muted)
                 }
             }
@@ -170,7 +180,7 @@ fun AuthScreen(
     }
 
     // ── Kayıt sonrası: doğrulama maili gönderildi ekranı ─────────────────
-    if (verificationSent) {
+    if (showVerifySent) {
         var notYetError by remember { mutableStateOf(false) }
         Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
             Column(
@@ -220,6 +230,7 @@ fun AuthScreen(
                         notYetError = false
                         vm.reloadAndCheckVerification(
                             onVerified = {
+                                showVerifySent = false
                                 vm.clearVerificationSent()
                                 onAuthSuccess()
                             },
@@ -239,7 +250,7 @@ fun AuthScreen(
                     modifier = Modifier.fillMaxWidth(),
                     border   = androidx.compose.foundation.BorderStroke(1.dp, Amber.copy(alpha = 0.5f)),
                 ) { Text("Tekrar Gönder", color = Amber) }
-                TextButton(onClick = { vm.clearVerificationSent(); vm.signOut() }) {
+                TextButton(onClick = { showVerifySent = false; vm.clearVerificationSent(); vm.signOut() }) {
                     Text("Geri Dön", color = Muted)
                 }
             }
