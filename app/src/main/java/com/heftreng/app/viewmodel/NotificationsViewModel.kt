@@ -8,6 +8,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.Notification
+import com.heftreng.app.util.AppLifecycleObserver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,22 +42,33 @@ class NotificationsViewModel @Inject constructor(
     private val _uid = MutableStateFlow(auth.currentUser?.uid ?: "")
 
     init {
-        // Auth state listener — login sonrası uid gelince load et
-        auth.addAuthStateListener { firebaseAuth ->
-            val newUid = firebaseAuth.currentUser?.uid ?: ""
-            if (newUid.isNotEmpty() && newUid != _uid.value) {
-                _uid.value = newUid
-                startListening(newUid)
-            } else if (newUid.isEmpty()) {
-                _uid.value = ""
-                listenerReg?.remove()
-                listenerReg = null
-                _notifications.value = emptyList()
-                _unreadCount.value = 0
-            }
+        // Foreground → listener başlat; background → listener kapat
+        // Böylece uygulama arka planda olduğunda Firestore okuması yapmaz.
+        val foregroundCb: () -> Unit = {
+            val uid = auth.currentUser?.uid
+            if (!uid.isNullOrBlank()) startListening(uid)
         }
-        // Zaten login durumdaysa hemen başlat
-        auth.currentUser?.uid?.let { if (it.isNotEmpty()) startListening(it) }
+        val backgroundCb: () -> Unit = {
+            listenerReg?.remove()
+            listenerReg = null
+        }
+        AppLifecycleObserver.addForegroundCallback(foregroundCb)
+        AppLifecycleObserver.addBackgroundCallback(backgroundCb)
+
+        // ViewModel temizlenince callback'leri kaldır — memory leak önleme
+        // onCleared() içinde de remove yapılıyor; çift güvenlik.
+        viewModelScope.launch {
+            // onCleared'a kadar bekleyip temizle
+            kotlinx.coroutines.awaitCancellation()
+        }.invokeOnCompletion {
+            AppLifecycleObserver.removeForegroundCallback(foregroundCb)
+            AppLifecycleObserver.removeBackgroundCallback(backgroundCb)
+        }
+
+        // Şu an zaten foreground'daysa hemen başlat
+        if (AppLifecycleObserver.isInForeground.value) {
+            auth.currentUser?.uid?.let { if (it.isNotEmpty()) startListening(it) }
+        }
     }
 
     private fun startListening(uid: String) {

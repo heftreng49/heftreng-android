@@ -292,13 +292,9 @@ fun HeftrangNavHost(initialRoute: String? = null) {
         return
     }
 
-    // Mesaj badge için app açılır açılmaz conversations dinle
-    LaunchedEffect(currentUser?.uid) {
-        if (currentUser != null) {
-            msgsVm.listenConversations()
-            notifVm.load()
-        }
-    }
+    // Mesaj ve bildirim listener'ları artık ViewModel'lar tarafından AppLifecycleObserver
+    // üzerinden yönetiliyor — foreground'da açık, background'da kapalı.
+    // Burada ekstra çağrıya gerek yok.
 
     // Tema MainActivity'de uygulanıyor, burada tekrar sarmalamaya gerek yok
     LaunchedEffect(initialRoute) {

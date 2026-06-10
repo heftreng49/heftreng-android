@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
+import com.heftreng.app.util.AppLifecycleObserver
 
 // ═══════════════════════════════════════════════════════════════
 //  MessagesViewModel — Firestore tabanlı [GÜNCELLENDİ]
@@ -61,12 +62,13 @@ class MessagesViewModel @Inject constructor(
     private val MSG_PAGE     = 50
 
     init {
+        // Kullanıcı adı önbelleğe al (auth state değişince güncelle)
         auth.addAuthStateListener { firebaseAuth ->
             val newUid = firebaseAuth.currentUser?.uid ?: ""
             if (newUid != _uid.value) {
                 _uid.value = newUid
                 if (newUid.isNotEmpty()) {
-                    listenConversations()
+                    // listenConversations() — foreground callback'ten çağrılır, burada değil
                     val authName = auth.currentUser?.displayName?.takeIf { it.isNotBlank() }
                     if (authName != null) {
                         _myFirestoreName = authName
@@ -80,8 +82,35 @@ class MessagesViewModel @Inject constructor(
                             } catch (_: Exception) {}
                         }
                     }
+                } else {
+                    // Çıkış yapıldı — listener kapat
+                    convListener?.remove(); convListener = null
+                    _conversations.value = emptyList()
                 }
             }
+        }
+
+        // Foreground → konuşmaları dinle; background → sadece convListener kapat
+        // (msgListener MessagesScreen'den yönetilir — o ekran kapalıyken zaten kapalı)
+        val foregroundCb: () -> Unit = {
+            if (uid.isNotEmpty()) listenConversations()
+        }
+        val backgroundCb: () -> Unit = {
+            convListener?.remove()
+            convListener = null
+        }
+        AppLifecycleObserver.addForegroundCallback(foregroundCb)
+        AppLifecycleObserver.addBackgroundCallback(backgroundCb)
+        viewModelScope.launch {
+            kotlinx.coroutines.awaitCancellation()
+        }.invokeOnCompletion {
+            AppLifecycleObserver.removeForegroundCallback(foregroundCb)
+            AppLifecycleObserver.removeBackgroundCallback(backgroundCb)
+        }
+
+        // Şu an zaten foreground'daysa hemen başlat
+        if (AppLifecycleObserver.isInForeground.value && uid.isNotEmpty()) {
+            listenConversations()
         }
         val curUid = auth.currentUser?.uid
         if (!curUid.isNullOrBlank()) {

@@ -25,6 +25,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
+import com.heftreng.app.util.AppLifecycleObserver
 import com.heftreng.app.navigation.HeftrangNavHost
 import com.heftreng.app.ui.theme.HeftrangTheme
 import com.heftreng.app.viewmodel.AuthViewModel
@@ -73,6 +74,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // Foreground/background durumunu tüm ViewModel'lar için tek noktadan takip et
+        AppLifecycleObserver.register()
+
         // EdgeToEdge modunu aktifleştiriyoruz — sistem çubuklarını şeffaf yapar
         enableEdgeToEdge()
         // NOT: WindowCompat.setDecorFitsSystemWindows kaldırıldı,
