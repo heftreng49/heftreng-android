@@ -869,7 +869,6 @@ fun AdminScreen(
                     }
                 }
                 } // stats LazyColumn
-                } // stats tab
                 // ── Düzenle ───────────────────────────────────────────────────
                 "edit" -> {
                     LazyColumn(
@@ -1110,7 +1109,6 @@ fun AdminScreen(
         )
     }
 }
-
 @Composable
 private fun adminTextField(
     value   : String,
