@@ -26,7 +26,7 @@ jobs:
       - name: Bağımlılıkları yükle
         run: |
           cd scripts
-          npm install
+          npm install firebase-admin
 
       - name: Migration script'i çalıştır
         env:
