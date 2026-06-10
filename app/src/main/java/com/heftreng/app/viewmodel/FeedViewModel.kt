@@ -115,11 +115,17 @@ class FeedViewModel @Inject constructor(
 
     fun loadFollowingUids(uid: String) {
         if (uid.isBlank()) return
+        // loadSuggestedUsers zaten _followingUids'i cursor-based çekiyor.
+        // O çalıştıysa tekrar sorgu atmıyoruz — fatura tasarrufu.
+        if (_followingUids.value.isNotEmpty()) return
         viewModelScope.launch {
             try {
+                // FATURA OPTİMİZASYONU: 1000 → 300.
+                // Feed filtreleme için 300 yeterli; çok fazla takip varsa
+                // loadSuggestedUsers'ın cursor-based versiyonu devreye girer.
                 val snap = firestore.collection("follows")
                     .whereEqualTo("fromUid", uid)
-                    .limit(1000).get().await()
+                    .limit(300).get().await()
                 _followingUids.value = snap.documents
                     .mapNotNull { it.getString("targetUid") }.toSet()
             } catch (e: Exception) { e.printStackTrace() }
@@ -139,16 +145,36 @@ class FeedViewModel @Inject constructor(
         if (interactionCache.isValid()) { syncInteractionsToState(); return }
         viewModelScope.launch {
             try {
-                val likedSnap = firestore.collection("feedLikes")
-                    .whereEqualTo("uid", currentUid).limit(300).get().await()
-                likedIds = likedSnap.documents
-                    .mapNotNull { it.getString("feedId") ?: it.getString("postId") }.toSet()
+                val postIds = _posts.value.map { it.id }.filter { it.isNotBlank() }
+                if (postIds.isNotEmpty()) {
+                    // FATURA OPTİMİZASYONU: limit(300) yerine sadece ekrandaki postları kontrol et.
+                    // Doc ID formatı: {postId}_{uid} — whereIn ile max 30 okuma (PAGE_SIZE kadar).
+                    val likeDocIds  = postIds.map { "${it}_$currentUid" }
+                    val saveDocIds  = postIds.map { "${it}_$currentUid" }
+                    val newLikedIds  = mutableSetOf<String>()
+                    val newSavedIds  = mutableSetOf<String>()
+                    likeDocIds.chunked(10).forEach { chunk ->
+                        firestore.collection("feedLikes")
+                            .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                            .get().await().documents.forEach { doc ->
+                                val postId = doc.id.removeSuffix("_$currentUid")
+                                newLikedIds.add(postId)
+                            }
+                    }
+                    saveDocIds.chunked(10).forEach { chunk ->
+                        firestore.collection("feedSaves")
+                            .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                            .get().await().documents.forEach { doc ->
+                                val postId = doc.id.removeSuffix("_$currentUid")
+                                newSavedIds.add(postId)
+                            }
+                    }
+                    // Mevcut set'leri koru, yeni postları ekle
+                    likedIds = likedIds + newLikedIds
+                    savedIds = savedIds + newSavedIds
+                }
 
-                val savedSnap = firestore.collection("feedSaves")
-                    .whereEqualTo("uid", currentUid).limit(300).get().await()
-                savedIds = savedSnap.documents
-                    .mapNotNull { it.getString("feedId") ?: it.getString("postId") }.toSet()
-
+                // Repost map: kendi repostlarım — feed'e yazılıyor, limit küçük tutulabilir
                 val repostSnap = firestore.collection("feed")
                     .whereEqualTo("uid", currentUid)
                     .whereEqualTo("repostType", "feed").limit(100).get().await()
@@ -157,9 +183,39 @@ class FeedViewModel @Inject constructor(
                     orig to doc.id
                 }.toMap()
 
-                interactionCache.set(Unit)  // Cache'i doldur
+                interactionCache.set(Unit)
                 syncInteractionsToState()
             } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // Yeni sayfa yüklendiğinde o sayfanın beğeni/kayıt durumlarını kontrol et
+    fun refreshInteractionsForPage(posts: List<Post>) {
+        val currentUid = auth.currentUser?.uid ?: return
+        if (posts.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val postIds = posts.map { it.id }.filter { it.isNotBlank() }
+                val newLikedIds = mutableSetOf<String>()
+                val newSavedIds = mutableSetOf<String>()
+                postIds.map { "${it}_$currentUid" }.chunked(10).forEach { chunk ->
+                    firestore.collection("feedLikes")
+                        .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                        .get().await().documents.forEach { doc ->
+                            newLikedIds.add(doc.id.removeSuffix("_$currentUid"))
+                        }
+                }
+                postIds.map { "${it}_$currentUid" }.chunked(10).forEach { chunk ->
+                    firestore.collection("feedSaves")
+                        .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                        .get().await().documents.forEach { doc ->
+                            newSavedIds.add(doc.id.removeSuffix("_$currentUid"))
+                        }
+                }
+                likedIds = likedIds + newLikedIds
+                savedIds = savedIds + newSavedIds
+                syncInteractionsToState()
+            } catch (_: Exception) {}
         }
     }
 
@@ -266,6 +322,8 @@ class FeedViewModel @Inject constructor(
                 
                 _posts.value = _posts.value + mapInteractions(filtered)
                 enrichPostsInBackground(filtered)
+                // Yeni sayfanın beğeni/kayıt durumlarını kontrol et
+                refreshInteractionsForPage(filtered)
             } catch (e: Exception) { 
                 e.printStackTrace() 
             } finally { 
