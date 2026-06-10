@@ -922,8 +922,13 @@ class FeedViewModel @Inject constructor(
     private val _hasMoreSuggestions = MutableStateFlow(false)
     val hasMoreSuggestions = _hasMoreSuggestions.asStateFlow()
 
-    fun loadSuggestedUsers() {
+    // Session cache: öneriler zaten yüklendiyse tekrar Firestore'a gitme
+    private var suggestionsLoaded = false
+
+    fun loadSuggestedUsers(forceReload: Boolean = false) {
         val myUid = auth.currentUser?.uid ?: return
+        // Guard: zaten yüklendiyse ve zorlamadıysa ekstra okuma yapma
+        if (suggestionsLoaded && !forceReload && _suggestedUsers.value.isNotEmpty()) return
         _suggestLastDoc = null
         viewModelScope.launch {
             try {
@@ -977,6 +982,7 @@ class FeedViewModel @Inject constructor(
 
                 _followingUids.value = followingUids
                 _suggestedUsers.value = suggestions
+                suggestionsLoaded = true
             } catch (e: Exception) { e.printStackTrace() }
         }
     }

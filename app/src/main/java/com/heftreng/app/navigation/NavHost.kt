@@ -138,12 +138,16 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     var showAccountSwitch by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    // Email doğrulama soft banner — login sonrası bir kez göster
-    LaunchedEffect(verificationPending) {
-        if (verificationPending) {
+    // Email doğrulama soft banner — sadece kullanıcı zaten authenticated iken göster.
+    // AuthScreen kendi verificationPending state'ini yönetir; burada clearVerificationPending()
+    // ÇAĞIRILMAMALI — aksi hâlde AuthScreen state'i hiç true görmez ve doğrulama ekranı açılmaz.
+    LaunchedEffect(verificationPending, currentUser) {
+        if (verificationPending && currentUser != null) {
+            // Kullanıcı giriş yapmış ama email doğrulanmamış (nadir durum — soft banner yeterli)
             showVerifyBanner = true
             authVm.clearVerificationPending()
         }
+        // currentUser == null ise AuthScreen verificationPending'i kendisi gösterir; dokunma.
     }
 
     // Google ile hesap geçişi launcher
