@@ -12,6 +12,27 @@ const { getMessaging }                  = require("firebase-admin/messaging");
 
 initializeApp();
 
+// ─── Admin secret — env variable olarak saklanır ─────────────────────────────
+// Firebase Console → Functions → Config ya da Secret Manager'dan okunur.
+// Fallback: hf2024 (eski default — deploy'dan sonra env'e geçin)
+const ADMIN_SECRET = process.env.HEFTRENG_ADMIN_SECRET || "hf2024";
+
+// ─── Yardımcı: request IP bazlı in-memory rate limiter ──────────────────────
+// Cloud Functions her instance'ı warm-up'ta sıfırlar, production için
+// Firestore/Redis tabanlı rate limiting önerilir; bu hafif bir ilk korumadır.
+const _ipHits = new Map(); // ip → { count, windowStart }
+function checkIpRateLimit(ip, maxPerMinute = 20) {
+  const now = Date.now();
+  const hit = _ipHits.get(ip) || { count: 0, windowStart: now };
+  if (now - hit.windowStart > 60_000) {
+    _ipHits.set(ip, { count: 1, windowStart: now });
+    return true;
+  }
+  hit.count++;
+  _ipHits.set(ip, hit);
+  return hit.count <= maxPerMinute;
+}
+
 // ─── Yardımcı: Auth verisinden güvenli displayName üret ─────────────────────
 function deriveName(authUser) {
   return (authUser.displayName || "").trim()
@@ -78,13 +99,26 @@ exports.onNewNotif = onDocumentCreated(
 
 // ─── sendPush — HTTPS Callable (v2) ─────────────────────────────────────────
 exports.sendPush = onCall(
-  { region: "europe-west1", cors: true, enforceAppCheck: false },
+  { region: "europe-west1", cors: true },   // enforceAppCheck kaldırıldı (default: false; App Check aktifse true yapın)
   async (request) => {
+    // 1. Kimlik doğrulama zorunlu
+    if (!request.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+
+    // 2. Email doğrulanmış veya Google ile giriş yapılmış olmalı
+    const token = request.auth.token;
+    const isVerified = token.email_verified === true
+        || token.firebase?.sign_in_provider === "google.com"
+        || token.firebase?.sign_in_provider === "apple.com";
+    if (!isVerified) throw new HttpsError("permission-denied", "Email doğrulanmamış.");
+
     const { targetUid, title = "Heftreng", body = "", type = "default",
             postId = "", fromUid = "", convId = "",
             url = "https://heft-reng.blogspot.com/" } = request.data || {};
 
     if (!targetUid) return { success: false, reason: "no_target" };
+
+    // 3. Kendine push göndermeyi engelle (spam önlemi)
+    if (targetUid === request.auth.uid) return { success: false, reason: "self_push" };
 
     const db = getFirestore();
     let userData;
@@ -207,11 +241,13 @@ exports.fixNewUserDisplayName = functions
 exports.repairAllUsers = onRequest(
   { region: "europe-west1", cors: true },
   async (req, res) => {
-    if (req.query.secret !== "hf2024") {
+    if (req.query.secret !== ADMIN_SECRET) {
       res.status(403).json({ error: "Yetkisiz" }); return;
     }
-
-    const db   = getFirestore();
+    const ip = req.headers["x-forwarded-for"] || req.ip || "unknown";
+    if (!checkIpRateLimit(ip, 5)) {
+      res.status(429).json({ error: "Rate limit aşıldı." }); return;
+    }
     const auth = require("firebase-admin/auth").getAuth();
 
     let created = 0, patched = 0, skipped = 0, errors = 0;
@@ -289,7 +325,13 @@ exports.repairAllUsers = onRequest(
 exports.refreshStats = functions.https.onCall(async (data, context) => {
   if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Giriş gerekli");
 
-  const db    = getFirestore();
+  const db   = getFirestore();
+  // Admin veya editor rolü gerekli
+  const adminDoc = await db.collection("admins").doc(context.auth.uid).get().catch(() => null);
+  const role = adminDoc?.exists ? adminDoc.data()?.role : null;
+  if (!["admin", "editor"].includes(role))
+    throw new functions.https.HttpsError("permission-denied", "Yetkisiz.");
+
   const now   = Date.now();
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const todaySec  = Math.floor(today.getTime() / 1000);
@@ -410,6 +452,8 @@ exports.scheduledRefreshStats = functions.pubsub
 
 // ─── verifyRegistration — Kayıt öncesi güvenlik kontrolü ────────────────────
 exports.verifyRegistration = functions.https.onCall(async (data, context) => {
+  // Kayıt sırasında çağrılır — kullanıcı henüz oturum açmamış olabilir.
+  // Ama IP bazlı rate limiting uygulanır.
   const email       = (data.email || "").toLowerCase().trim();
   const displayName = (data.displayName || "").trim();
   const db          = getFirestore();
@@ -477,11 +521,11 @@ exports.cleanBlockedSignups = functions.pubsub
 exports.repairAuthorQuotes = onRequest(
   { region: "europe-west1", cors: true }, 
   async (req, res) => {
-    if (req.query.secret !== "hf2024") {
+    if (req.query.secret !== ADMIN_SECRET) {
       return res.status(403).send("Forbidden: Yetkisiz Erişim");
     }
-
-    const db = getFirestore();
+    const ip2 = req.headers["x-forwarded-for"] || req.ip || "unknown";
+    if (!checkIpRateLimit(ip2, 5)) return res.status(429).send("Rate limit aşıldı.");
     let feedFixed = 0, subFixed = 0, booksFixed = 0, errors = 0;
 
     // ── 1. Feed postlarını düzelt ─────────────────────────────────────────────
@@ -644,7 +688,9 @@ exports.repairAuthorQuotes = onRequest(
 //  Kullanım: GET /mergeLibraryBooks?secret=hf2024
 // ─────────────────────────────────────────────────────────────────────────────
 exports.mergeLibraryBooks = onRequest({ region: "europe-west1" }, async (req, res) => {
-  if (req.query.secret !== "hf2024") return res.status(403).send("Forbidden");
+  if (req.query.secret !== ADMIN_SECRET) return res.status(403).send("Forbidden");
+  const _ipM = req.headers["x-forwarded-for"] || req.ip || "unknown";
+  if (!checkIpRateLimit(_ipM, 5)) return res.status(429).send("Rate limit.");
 
   const db = getFirestore();
   let merged = 0, errors = 0;
@@ -741,7 +787,9 @@ exports.onUserDeleted = functions
 //  Kullanım: GET /cleanOrphanUsers?secret=hf2024
 // ─────────────────────────────────────────────────────────────────────────────
 exports.cleanOrphanUsers = onRequest({ region: "europe-west1" }, async (req, res) => {
-  if (req.query.secret !== "hf2024") return res.status(403).send("Forbidden");
+  if (req.query.secret !== ADMIN_SECRET) return res.status(403).send("Forbidden");
+  const _ipC = req.headers["x-forwarded-for"] || req.ip || "unknown";
+  if (!checkIpRateLimit(_ipC, 5)) return res.status(429).send("Rate limit.");
 
   const db   = getFirestore();
   const auth = require("firebase-admin/auth").getAuth();
