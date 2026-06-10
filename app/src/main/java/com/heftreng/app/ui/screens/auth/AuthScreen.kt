@@ -354,11 +354,54 @@ fun AuthScreen(
             }
 
             error?.let { errCode ->
-                val errMsg = if (errCode == "EMAIL_NOT_VERIFIED")
-                    Strings.emailNotVerified(language)
-                else
-                    errCode
-                Text(errMsg, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                if (errCode == "EMAIL_NOT_VERIFIED") {
+                    Surface(
+                        shape  = RoundedCornerShape(12.dp),
+                        color  = MaterialTheme.colorScheme.error.copy(alpha = 0.10f),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                Strings.emailNotVerifiedTitle(language),
+                                color      = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.Bold,
+                                fontSize   = 13.sp,
+                            )
+                            Text(
+                                Strings.emailNotVerifiedBody(language),
+                                color      = MaterialTheme.colorScheme.error,
+                                fontSize   = 12.sp,
+                                lineHeight = 17.sp,
+                            )
+                            HorizontalDivider(
+                                color     = MaterialTheme.colorScheme.error.copy(alpha = 0.20f),
+                                thickness = 0.5.dp,
+                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Icon(
+                                    painter            = painterResource(R.drawable.ic_google),
+                                    contentDescription = null,
+                                    modifier           = Modifier.size(14.dp),
+                                    tint               = Color.Unspecified,
+                                )
+                                Text(
+                                    Strings.emailNotVerifiedGoogle(language),
+                                    color      = Muted,
+                                    fontSize   = 11.sp,
+                                    lineHeight = 16.sp,
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Text(errCode, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                }
                 LaunchedEffect(errCode) { vm.clearError() }
             }
 

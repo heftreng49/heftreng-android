@@ -44,6 +44,21 @@ service cloud.firestore {
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('banned', false) == false;
     }
 
+    // E-posta doğrulaması yapılmamış kullanıcılar write yapamaz.
+    // Google kullanıcıları giriş anında emailVerified=true yazılır, bu kontrolden geçer.
+    // notBanned() ile aynı get() çağrısını yapmamak için users doc'unu bir kez çekiyoruz;
+    // Rules motoru aynı istek içinde get() sonuçlarını önbellekler — fatura maliyeti 1 okuma.
+    function isVerified() {
+      return !exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('emailVerified', false) == true;
+    }
+
+    // Hem ban yok hem doğrulanmış — tek get() ile (Rules önbelleği sayesinde)
+    function notBannedAndVerified() {
+      let u = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return u.get('banned', false) == false && u.get('emailVerified', false) == true;
+    }
+
     // ── Rol fonksiyonları ──────────────────────────────────────
     // FATURA OPTİMİZASYONU: getRole() tek get() çağrısı yapar.
     // isAdmin/isModerator/isEditor/isLibrarian/isStaff → hepsi getRole()'u çağırır,
@@ -103,7 +118,7 @@ service cloud.firestore {
 
       match /kf_progress/{doc} {
         allow read:  if isOwner(uid) || isAdmin();
-        allow write: if isOwner(uid) || isAdmin();
+        allow write: if (isOwner(uid) && isVerified()) || isAdmin();
       }
       match /readProgress/{doc} {
         allow read:  if isOwner(uid) || isAdmin();
@@ -126,7 +141,7 @@ service cloud.firestore {
       // notBanned kontrolü write tarafında yapılıyor
       allow list: if true;
 
-      allow create: if isAuth() && notBanned()
+      allow create: if isAuth() && notBannedAndVerified()
           && request.resource.data.uid == request.auth.uid
           // Client-state alanları Firestore'a yazılmamalı
           && !('isLikedByMe'    in request.resource.data)
@@ -136,7 +151,7 @@ service cloud.firestore {
 
       allow update:
           if isAdmin()
-          || (isAuth() && notBanned() && resource.data.uid == request.auth.uid && onlyChanging(['text']))
+          || (isAuth() && notBannedAndVerified() && resource.data.uid == request.auth.uid && onlyChanging(['text']))
           || (isAuth() && onlyChanging(['likesCount']))
           || (isAuth() && onlyChanging(['saves']))
           || (isAuth() && onlyChanging(['commentsCount']))
@@ -147,7 +162,7 @@ service cloud.firestore {
 
       match /comments/{cmtId} {
         allow read: if canViewContent(get(/databases/$(database)/documents/feed/$(postId)).data.uid);
-        allow create: if isAuth() && notBanned()
+        allow create: if isAuth() && notBannedAndVerified()
             && request.resource.data.uid == request.auth.uid
             && request.resource.data.text is string
             && request.resource.data.text.size() >= 1
@@ -165,7 +180,7 @@ service cloud.firestore {
       allow write: if false;
       match /msgs/{msgId} {
         allow read: if true;
-        allow create: if isAuth() && notBanned()
+        allow create: if isAuth() && notBannedAndVerified()
             && request.resource.data.uid == request.auth.uid
             && request.resource.data.text is string
             && request.resource.data.text.size() >= 1
@@ -184,22 +199,22 @@ service cloud.firestore {
     }
     match /chapterLikes/{likeId} {
       allow read:   if isAuth();
-      allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow create: if isAuth() && notBannedAndVerified() && request.resource.data.uid == request.auth.uid;
       allow delete: if isAuth() && resource.data.uid == request.auth.uid;
     }
     match /feedLikes/{likeId} {
       allow read:   if isAuth();
-      allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow create: if isAuth() && notBannedAndVerified() && request.resource.data.uid == request.auth.uid;
       allow delete: if isAuth() && resource.data.uid == request.auth.uid;
     }
     match /feedSaves/{saveId} {
       allow read:   if isAuth();
-      allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow create: if isAuth() && notBannedAndVerified() && request.resource.data.uid == request.auth.uid;
       allow delete: if isAuth() && resource.data.uid == request.auth.uid;
     }
     match /likes/{likeId} {
       allow read:   if isAuth();
-      allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow create: if isAuth() && notBannedAndVerified() && request.resource.data.uid == request.auth.uid;
       allow delete: if isAuth() && resource.data.uid == request.auth.uid;
     }
 
@@ -208,7 +223,7 @@ service cloud.firestore {
     // her profil sayfasında exists() çağrısı yapılmaz
     match /follows/{followId} {
       allow read: if true;
-      allow create: if isAuth() && notBanned()
+      allow create: if isAuth() && notBannedAndVerified()
           && request.resource.data.fromUid == request.auth.uid
           && request.resource.data.fromUid != request.resource.data.targetUid;
       allow delete: if isAuth()
@@ -223,7 +238,7 @@ service cloud.firestore {
       match /pending/{fromUid} {
         allow read: if isAuth()
             && (request.auth.uid == targetUid || request.auth.uid == fromUid);
-        allow create: if isAuth() && notBanned()
+        allow create: if isAuth() && notBannedAndVerified()
             && request.auth.uid == fromUid
             && fromUid != targetUid
             && request.resource.data.fromUid == fromUid
@@ -236,9 +251,9 @@ service cloud.firestore {
     // ─── POSTS ────────────────────────────────────────────────
     match /posts/{postId} {
       allow read:   if canViewContent(resource.data.uid);
-      allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow create: if isAuth() && notBannedAndVerified() && request.resource.data.uid == request.auth.uid;
       allow update: if isAdmin()
-          || (isAuth() && notBanned() && resource.data.uid == request.auth.uid)
+          || (isAuth() && notBannedAndVerified() && resource.data.uid == request.auth.uid)
           || (isAuth() && onlyChanging(['likes']));
       allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
     }
@@ -246,12 +261,12 @@ service cloud.firestore {
     // ─── SERIALS & CHAPTERS ───────────────────────────────────
     match /serials/{serialId} {
       allow read: if canViewContent(resource.data.uid);
-      allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow create: if isAuth() && notBannedAndVerified() && request.resource.data.uid == request.auth.uid;
       allow update, delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator();
 
       match /chapters/{chapterId} {
         allow read: if canViewContent(get(/databases/$(database)/documents/serials/$(serialId)).data.uid);
-        allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid;
+        allow create: if isAuth() && notBannedAndVerified() && request.resource.data.uid == request.auth.uid;
         allow update: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator()
             || (isAuth() && onlyChanging(['likes']))
             || (isAuth() && onlyChanging(['cmtCount']));
@@ -259,7 +274,7 @@ service cloud.firestore {
 
         match /comments/{cmtId} {
           allow read: if canViewContent(get(/databases/$(database)/documents/serials/$(serialId)).data.uid);
-          allow create: if isAuth() && notBanned()
+          allow create: if isAuth() && notBannedAndVerified()
               && request.resource.data.uid == request.auth.uid
               && request.resource.data.text is string
               && request.resource.data.text.size() >= 1
@@ -275,13 +290,13 @@ service cloud.firestore {
     // ─── KİTAPLAR (kullanıcı kitapları) ──────────────────────
     match /books/{bookId} {
       allow read: if canViewContent(resource.data.uid);
-      allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid;
-      allow update: if (isAuth() && notBanned() && resource.data.uid == request.auth.uid) || isModerator();
+      allow create: if isAuth() && notBannedAndVerified() && request.resource.data.uid == request.auth.uid;
+      allow update: if (isAuth() && notBannedAndVerified() && resource.data.uid == request.auth.uid) || isModerator();
       allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
 
       match /chapters/{chapterId} {
         allow read: if canViewContent(get(/databases/$(database)/documents/books/$(bookId)).data.uid);
-        allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid;
+        allow create: if isAuth() && notBannedAndVerified() && request.resource.data.uid == request.auth.uid;
         allow update, delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator();
       }
     }
@@ -289,7 +304,7 @@ service cloud.firestore {
     // ─── SERİ BEĞENİLERİ ──────────────────────────────────────
     match /serialLikes/{likeId} {
       allow read:   if isAuth();
-      allow create: if isAuth() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow create: if isAuth() && notBannedAndVerified() && request.resource.data.uid == request.auth.uid;
       allow update: if isAuth() && resource.data.uid == request.auth.uid;
       allow delete: if isAuth() && resource.data.uid == request.auth.uid;
     }
@@ -297,7 +312,7 @@ service cloud.firestore {
     // ─── NOTIFICATIONS ────────────────────────────────────────
     match /notifications/{notifId} {
       allow read:   if isAuth() && (resource.data.toUid == request.auth.uid || isAdmin());
-      allow create: if isAuth() && notBanned() && request.resource.data.fromUid == request.auth.uid;
+      allow create: if isAuth() && notBannedAndVerified() && request.resource.data.fromUid == request.auth.uid;
       allow update: if isAuth() && resource.data.toUid == request.auth.uid && onlyChanging(['read']);
       allow delete: if (isAuth() && resource.data.toUid == request.auth.uid) || isAdmin();
     }
@@ -462,21 +477,21 @@ service cloud.firestore {
 
       match /follows/{uid} {
         allow read:   if true;
-        allow create: if isOwner(uid) && notBanned();
+        allow create: if isOwner(uid) && notBannedAndVerified();
         allow delete: if isOwner(uid);
       }
     }
 
     match /library_books/{bookId} {
       allow read: if true;
-      allow create: if isLibrarian() || hasPermission("library") || (isAuth() && notBanned());
+      allow create: if isLibrarian() || hasPermission("library") || (isAuth() && notBannedAndVerified());
       allow update: if isLibrarian() || hasPermission("library")
           || (isAuth() && onlyChanging(['quoteCount','reviewCount','avgRating']));
       allow delete: if isLibrarian() || hasPermission("library");
 
       match /quotes/{quoteId} {
         allow read: if true;
-        allow create: if isAuth() && notBanned()
+        allow create: if isAuth() && notBannedAndVerified()
             && request.resource.data.uid == request.auth.uid
             && request.resource.data.text is string
             && request.resource.data.text.size() >= 1
@@ -488,7 +503,7 @@ service cloud.firestore {
 
       match /reviews/{reviewId} {
         allow read: if true;
-        allow create: if isAuth() && notBanned()
+        allow create: if isAuth() && notBannedAndVerified()
             && request.resource.data.uid == request.auth.uid
             && request.resource.data.text is string
             && request.resource.data.text.size() >= 1
