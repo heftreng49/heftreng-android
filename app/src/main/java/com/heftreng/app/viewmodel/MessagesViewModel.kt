@@ -631,6 +631,18 @@ class MessagesViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Sohbet ekranından çıkınca çağır — msgListener kapatılır.
+     * Ekran tekrar açılınca listenMessages() yeni listener başlatır.
+     */
+    fun stopMsgListener() {
+        msgListener?.remove()
+        msgListener = null
+        currentConvId = ""
+        oldestMsgDoc  = null
+        newestMsgTs   = null
+    }
+
     override fun onCleared() {
         super.onCleared()
         convListener?.remove()

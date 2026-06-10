@@ -150,6 +150,12 @@ fun NotificationsScreen(
     )
     LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
 
+    // Ekran açılınca listener başlat, kapanınca kapat — FCM devralır
+    DisposableEffect(Unit) {
+        vm.load()
+        onDispose { vm.stopListening() }
+    }
+
     Scaffold(
         containerColor = Background,
         topBar = {

@@ -119,6 +119,12 @@ class NotificationsViewModel @Inject constructor(
         startListening(uid)
     }
 
+    /** Ekrandan çıkınca çağır — listener kapatılır, FCM devralır. */
+    fun stopListening() {
+        listenerReg?.remove()
+        listenerReg = null
+    }
+
     fun markRead(notifId: String) {
         _notifications.value = _notifications.value.map { n ->
             if (n.id == notifId) n.copy(read = true) else n

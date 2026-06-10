@@ -410,6 +410,7 @@ fun MessageDetailScreen(
         onDispose {
             presenceVm.goOffline()
             presenceVm.setTyping(convId, false)
+            vm.stopMsgListener()   // Ekrandan çıkınca msgListener kapat — FCM devralır
         }
     }
 
