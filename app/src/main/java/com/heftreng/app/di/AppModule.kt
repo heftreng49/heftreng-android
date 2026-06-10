@@ -8,11 +8,16 @@ import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.PersistentCacheSettings
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.storage.FirebaseStorage
+import com.heftreng.app.BuildConfig
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.postgrest.Postgrest
+import io.github.jan.supabase.realtime.Realtime
 import javax.inject.Named
 import javax.inject.Singleton
 
@@ -41,6 +46,11 @@ import javax.inject.Singleton
 //      etkilemez — bunlar AdMob kendi ağ katmanında işler.
 //    - AdMob test/prod ID seçimi Models.kt'daki AdMobTestIds / AdMobProdIds
 //      üzerinden yapılır; Firestore'dan CmsAdConfig.testMode okunur.
+//
+//  SUPABASE:
+//    - URL ve ANON_KEY build zamanında BuildConfig'e gömülür.
+//    - CI → GitHub Secrets (SUPABASE_URL, SUPABASE_ANON_KEY)
+//    - Lokal → local.properties (git'e gitmez)
 // ═══════════════════════════════════════════════════════════════
 
 @Module
@@ -78,6 +88,18 @@ object AppModule {
 
     @Provides @Singleton
     fun provideFirebaseStorage(): FirebaseStorage = FirebaseStorage.getInstance()
+
+    @Provides @Singleton
+    fun provideSupabaseClient(): SupabaseClient = createSupabaseClient(
+        // Değerler build.gradle.kts'de BuildConfig'e gömülür:
+        //   CI   → GitHub Secrets: SUPABASE_URL, SUPABASE_ANON_KEY
+        //   Lokal → local.properties: SUPABASE_URL=..., SUPABASE_ANON_KEY=...
+        supabaseUrl = BuildConfig.SUPABASE_URL,
+        supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
+    ) {
+        install(Postgrest)
+        install(Realtime)
+    }
 
     @Provides @Singleton
     fun provideContext(@ApplicationContext context: Context): Context = context

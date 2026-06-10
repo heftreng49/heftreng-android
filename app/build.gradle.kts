@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.google.services)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -19,6 +20,22 @@ android {
         // Lokalde 1 olur, CI'da her build'de 1 artar — artık elle değiştirmene gerek yok
         versionCode = (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1)
         versionName = "1.0.${versionCode}"
+
+        // Supabase credentials — GitHub Secrets'tan (CI) veya local.properties'den (lokal) okunur
+        // Lokal geliştirme için gradle/local.properties dosyasına ekle (git'e gitmez):
+        //   SUPABASE_URL=https://xxxxx.supabase.co
+        //   SUPABASE_ANON_KEY=eyJxxx...
+        val supabaseUrl = System.getenv("SUPABASE_URL")
+            ?: (rootProject.file("local.properties").takeIf { it.exists() }
+                ?.let { java.util.Properties().apply { load(it.inputStream()) }.getProperty("SUPABASE_URL") })
+            ?: ""
+        val supabaseAnonKey = System.getenv("SUPABASE_ANON_KEY")
+            ?: (rootProject.file("local.properties").takeIf { it.exists() }
+                ?.let { java.util.Properties().apply { load(it.inputStream()) }.getProperty("SUPABASE_ANON_KEY") })
+            ?: ""
+
+        buildConfigField("String", "SUPABASE_URL",      "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
 
     signingConfigs {
@@ -118,6 +135,12 @@ dependencies {
     implementation(libs.coil.compose)
     implementation("com.google.android.play:app-update-ktx:2.1.0")
     implementation(libs.ktor.client.android)
+
+    // Supabase
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.postgrest)
+    implementation(libs.supabase.realtime)
+    implementation(libs.ktor.client.okhttp)
 
     // --- TEMAYI KURTARAN KRİTİK EKLEME ---
     // Themes.xml'deki "Theme.Material3..." hatasını bu satır çözer.

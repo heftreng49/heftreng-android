@@ -1,0 +1,37 @@
+name: Supabase — Firestore Verisini Taşı
+
+# Manuel tetiklenir — veriler taşındıktan sonra bir daha çalıştırmana gerek yok
+# Yeniden çalıştırsan da sorun olmaz: upsert kullandığı için duplicate oluşmaz
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (sadece say, yazma)'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Bağımlılıkları yükle
+        run: |
+          cd scripts
+          npm install
+
+      - name: Migration script'i çalıştır
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SUPABASE_URL:             ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY:     ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DRY_RUN:                  ${{ github.event.inputs.dry_run }}
+        run: node scripts/migrate_to_supabase.js

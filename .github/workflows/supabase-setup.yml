@@ -1,0 +1,26 @@
+name: Supabase — Tabloları Oluştur
+
+# Sadece manuel tetiklenir — bir kez çalıştırman yeterli
+on:
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Supabase CLI kur
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Schema SQL'i çalıştır
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_URL:       ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          psql "$SUPABASE_DB_URL" \
+            -f scripts/supabase_schema.sql \
+            --set ON_ERROR_STOP=1
+          echo "✅ Tablolar oluşturuldu"

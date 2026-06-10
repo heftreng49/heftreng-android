@@ -15,7 +15,8 @@ coil = "2.7.0"
 ktor = "3.0.0"
 accompanist = "0.36.0"
 googleMaterial = "1.11.0"
-admob          = "23.2.0"
+admob = "23.2.0"
+supabase = "3.1.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -56,10 +57,17 @@ kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "ko
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
 
+# Supabase
+supabase-bom       = { group = "io.github.jan-tennert.supabase", name = "bom",              version.ref = "supabase" }
+supabase-postgrest = { group = "io.github.jan-tennert.supabase", name = "postgrest-kt" }
+supabase-realtime  = { group = "io.github.jan-tennert.supabase", name = "realtime-kt" }
+ktor-client-okhttp = { group = "io.ktor",                        name = "ktor-client-okhttp", version.ref = "ktor" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 google-services = { id = "com.google.gms.google-services", version = "4.4.2" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

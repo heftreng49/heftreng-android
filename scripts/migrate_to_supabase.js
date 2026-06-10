@@ -1,0 +1,142 @@
+// scripts/migrate_to_supabase.js
+// Firestore'daki authors + library_books koleksiyonlarını Supabase'e taşır.
+// Upsert kullandığı için defalarca çalıştırılabilir — duplicate olmaz.
+
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getFirestore }        = require('firebase-admin/firestore');
+const { createClient }        = require('@supabase/supabase-js');
+
+// ── Config ────────────────────────────────────────────────────────────────────
+const DRY_RUN        = process.env.DRY_RUN === 'true';
+const SUPABASE_URL   = process.env.SUPABASE_URL;
+const SUPABASE_KEY   = process.env.SUPABASE_SERVICE_KEY; // service_role key — write yetkisi var
+const FB_SA          = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+const BATCH_SIZE     = 50; // Supabase'e kaç kayıt aynı anda gönderilsin
+
+// ── İstemcileri başlat ────────────────────────────────────────────────────────
+initializeApp({ credential: cert(FB_SA) });
+const db       = getFirestore();
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── Yardımcılar ───────────────────────────────────────────────────────────────
+function chunk(arr, size) {
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+  return chunks;
+}
+
+function safeStr(val) {
+  return (typeof val === 'string' ? val : '') || '';
+}
+
+function safeInt(val) {
+  const n = parseInt(val, 10);
+  return isNaN(n) ? 0 : n;
+}
+
+function safeFloat(val) {
+  const n = parseFloat(val);
+  return isNaN(n) ? 0 : n;
+}
+
+// ── 1. Authors ────────────────────────────────────────────────────────────────
+async function migrateAuthors() {
+  console.log('\n📚 Authors koleksiyonu okunuyor...');
+  const snap = await db.collection('authors').get();
+  console.log(`   ${snap.size} yazar bulundu`);
+
+  if (DRY_RUN) { console.log('   [DRY RUN] yazma atlandı'); return []; }
+
+  const rows = snap.docs.map(doc => {
+    const d = doc.data();
+    return {
+      id:             doc.id,
+      name:           safeStr(d.name),
+      bio:            safeStr(d.bio),
+      photo_url:      safeStr(d.photoURL),
+      birth_year:     safeInt(d.birthYear),
+      nationality:    safeStr(d.nationality),
+      book_count:     safeInt(d.bookCount),
+      quote_count:    safeInt(d.quoteCount),
+      review_count:   safeInt(d.reviewCount),
+      follower_count: safeInt(d.followerCount),
+    };
+  });
+
+  let inserted = 0;
+  for (const batch of chunk(rows, BATCH_SIZE)) {
+    const { error } = await supabase
+      .from('authors')
+      .upsert(batch, { onConflict: 'id' });
+
+    if (error) {
+      console.error('   ❌ Yazar batch hatası:', error.message);
+    } else {
+      inserted += batch.length;
+      process.stdout.write(`   ✅ ${inserted}/${rows.length}\r`);
+    }
+  }
+  console.log(`\n   ✅ ${inserted} yazar taşındı`);
+  return rows.map(r => r.id); // sonraki adım için id listesi
+}
+
+// ── 2. Library Books ──────────────────────────────────────────────────────────
+async function migrateBooks() {
+  console.log('\n📖 Library books koleksiyonu okunuyor...');
+  const snap = await db.collection('library_books').get();
+  console.log(`   ${snap.size} kitap bulundu`);
+
+  if (DRY_RUN) { console.log('   [DRY RUN] yazma atlandı'); return; }
+
+  const rows = snap.docs.map(doc => {
+    const d = doc.data();
+    return {
+      id:           doc.id,
+      title:        safeStr(d.title),
+      author_id:    safeStr(d.authorId)  || null, // FK — boşsa null yaz
+      author_name:  safeStr(d.authorName),
+      cover_img:    safeStr(d.coverImg),
+      genre:        safeStr(d.genre),
+      publish_year: safeInt(d.publishYear),
+      synopsis:     safeStr(d.synopsis),
+      page_count:   safeInt(d.pageCount),
+      quote_count:  safeInt(d.quoteCount),
+      review_count: safeInt(d.reviewCount),
+      avg_rating:   safeFloat(d.avgRating),
+    };
+  });
+
+  let inserted = 0;
+  for (const batch of chunk(rows, BATCH_SIZE)) {
+    const { error } = await supabase
+      .from('library_books')
+      .upsert(batch, { onConflict: 'id' });
+
+    if (error) {
+      console.error('   ❌ Kitap batch hatası:', error.message);
+    } else {
+      inserted += batch.length;
+      process.stdout.write(`   ✅ ${inserted}/${rows.length}\r`);
+    }
+  }
+  console.log(`\n   ✅ ${inserted} kitap taşındı`);
+}
+
+// ── Ana akış ──────────────────────────────────────────────────────────────────
+async function main() {
+  console.log('═══════════════════════════════════════════');
+  console.log('  Heftreng — Firestore → Supabase Migration');
+  console.log(`  Mod: ${DRY_RUN ? '🔍 DRY RUN (yazma yok)' : '🚀 CANLI'}`);
+  console.log('═══════════════════════════════════════════');
+
+  await migrateAuthors();
+  await migrateBooks();
+
+  console.log('\n🎉 Migration tamamlandı!');
+}
+
+main().catch(err => {
+  console.error('FATAL:', err);
+  process.exit(1);
+});
