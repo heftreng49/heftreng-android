@@ -369,7 +369,7 @@ class SearchViewModel @Inject constructor(
 
                 // followerCount desc ile en aktif kullanıcıları çek
                 val usersSnap = firestore.collection("users")
-                    .orderBy("followerCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .orderBy("followersCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
                     .limit(100).get().await()
 
                 _suggestions.value = usersSnap.documents
@@ -406,7 +406,7 @@ class SearchViewModel @Inject constructor(
                     firestore.collection("users").document(uid)
                         .update("followingCount", com.google.firebase.firestore.FieldValue.increment(-1))
                     firestore.collection("users").document(targetUid)
-                        .update("followerCount", com.google.firebase.firestore.FieldValue.increment(-1))
+                        .update("followersCount", com.google.firebase.firestore.FieldValue.increment(-1))
                 } else {
                     val myDoc = try {
                         firestore.collection("users").document(uid).get().await()
@@ -421,7 +421,7 @@ class SearchViewModel @Inject constructor(
                     firestore.collection("users").document(uid)
                         .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
                     firestore.collection("users").document(targetUid)
-                        .update("followerCount", com.google.firebase.firestore.FieldValue.increment(1))
+                        .update("followersCount", com.google.firebase.firestore.FieldValue.increment(1))
                 }
             } catch (e: Exception) {
                 // Hata durumunda optimistic update'i geri al

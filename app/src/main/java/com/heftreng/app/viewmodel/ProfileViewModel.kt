@@ -272,7 +272,7 @@ class ProfileViewModel @Inject constructor(
                 _followRequestStatus.value = "none"
                 _followersCount.value = (_followersCount.value - 1).coerceAtLeast(0)
                 firestore.collection("users").document(targetUid)
-                    .update("followerCount", FieldValue.increment(-1))
+                    .update("followersCount", FieldValue.increment(-1))
                 firestore.collection("users").document(myUid)
                     .update("followingCount", FieldValue.increment(-1))
             } catch (e: Exception) { e.printStackTrace() }
@@ -355,7 +355,7 @@ class ProfileViewModel @Inject constructor(
                 _followRequestStatus.value = "accepted"
                 _followersCount.value += 1
                 firestore.collection("users").document(targetUid)
-                    .update("followerCount", FieldValue.increment(1))
+                    .update("followersCount", FieldValue.increment(1))
                 firestore.collection("users").document(myUid)
                     .update("followingCount", FieldValue.increment(1))
 

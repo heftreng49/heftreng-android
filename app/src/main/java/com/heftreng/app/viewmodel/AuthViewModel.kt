@@ -390,6 +390,9 @@ class AuthViewModel @Inject constructor(
             "level"       to 1,
             "streak"      to 0,  "kf_streak" to 0,
             "banned"        to false,
+            "followersCount" to 0,
+            "followingCount" to 0,
+            "postsCount"     to 0,
             // Google ile giriş yapanların emaili Firebase tarafından zaten doğrulanmış olur.
             // Email/şifre ile kayıt olanlarda admin onayı gerektiği için false başlatıyoruz.
             "emailVerified" to user.providerData.any { it.providerId == "google.com" },
