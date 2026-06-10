@@ -54,9 +54,12 @@ service cloud.firestore {
     }
 
     // Hem ban yok hem doğrulanmış — tek get() ile (Rules önbelleği sayesinde)
+    // exists() kontrolü: doc yoksa (yeni kayıt akışı) verified sayılır — createUserDoc henüz yazılmamış olabilir.
     function notBannedAndVerified() {
-      let u = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-      return u.get('banned', false) == false && u.get('emailVerified', false) == true;
+      let ref = /databases/$(database)/documents/users/$(request.auth.uid);
+      return !exists(ref)
+        || (get(ref).data.get('banned', false) == false
+            && get(ref).data.get('emailVerified', false) == true);
     }
 
     // ── Rol fonksiyonları ──────────────────────────────────────
