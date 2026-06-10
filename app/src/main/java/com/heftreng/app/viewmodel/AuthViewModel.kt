@@ -132,7 +132,19 @@ class AuthViewModel @Inject constructor(
     private val _verificationPending = MutableStateFlow(false)
     val verificationPending = _verificationPending.asStateFlow()
     fun clearVerificationPending() { _verificationPending.value = false }
-    fun clearVerificationSent() { _verificationSent.value = false }
+    fun clearVerificationSent()    { _verificationSent.value    = false }
+    /** Giriş yapıldı ama e-posta henüz doğrulanmamış — UI'dan tetiklenir. */
+    fun triggerVerificationPending() {
+        if (!_verificationPending.value) {
+            _verificationPending.value = true
+            // Eğer daha önce mail gönderilmemişse gönder
+            viewModelScope.launch {
+                try {
+                    auth.currentUser?.sendEmailVerification()?.await()
+                } catch (_: Exception) {}
+            }
+        }
+    }
 
     private val _currentUser = MutableStateFlow<FirebaseUser?>(auth.currentUser)
     val currentUser = _currentUser.asStateFlow()

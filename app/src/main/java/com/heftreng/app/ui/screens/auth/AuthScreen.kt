@@ -41,7 +41,8 @@ fun AuthScreen(
 ) {
     val context     = LocalContext.current
     val currentUser      by vm.currentUser.collectAsState()
-    val verificationSent by vm.verificationSent.collectAsState()
+    val verificationSent    by vm.verificationSent.collectAsState()
+    val verificationPending by vm.verificationPending.collectAsState()
     val loading     by vm.loading.collectAsState()
     val error       by vm.error.collectAsState()
     val language    by settingsVm.language.collectAsState()
@@ -55,8 +56,17 @@ fun AuthScreen(
     var showForgotDialog by remember { mutableStateOf(false) }
     var termsAccepted    by remember { mutableStateOf(false) }
 
+    // Kullanıcı oturumu varsa ve email doğrulandıysa ana sayfaya geç.
+    // Doğrulanmamışsa doğrulama ekranı göster — onAuthSuccess çağrılmaz.
     LaunchedEffect(currentUser) {
-        if (currentUser != null) onAuthSuccess()
+        val user = currentUser ?: return@LaunchedEffect
+        val isGoogle = user.providerData.any { it.providerId == "google.com" }
+        if (isGoogle || user.isEmailVerified) {
+            onAuthSuccess()
+        } else {
+            // E-posta ile giriş yaptı ama henüz doğrulanmamış
+            vm.triggerVerificationPending()
+        }
     }
 
     val googleLauncher = rememberLauncherForActivityResult(
@@ -71,7 +81,95 @@ fun AuthScreen(
         }
     }
 
-    // ── Email Doğrulama Bekleme Ekranı ─────────────────────────────────────
+    // ── Giriş sonrası: doğrulanmamış hesap ekranı ─────────────────────────
+    if (verificationPending) {
+        var notYetError by remember { mutableStateOf(false) }
+        Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
+            Column(
+                modifier            = Modifier.fillMaxWidth().padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text("📧", fontSize = 56.sp)
+                Text(
+                    if (ku) "E-posta Verifikasyonê" else "Email Doğrulama Gerekli",
+                    color      = OnBackground,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 22.sp,
+                )
+                Text(
+                    if (ku)
+                        "Hesabê te hêj nehatiye verîfîkekirin. Ji kerema xwe e-nameyê xwe kontrol bike û li ser lînkê bikirtîne."
+                    else
+                        "Hesabınız henüz doğrulanmamış. Email adresinize gönderilen linke tıklayın.",
+                    color     = Muted,
+                    fontSize  = 14.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    lineHeight = 22.sp,
+                )
+                Surface(
+                    shape    = RoundedCornerShape(10.dp),
+                    color    = Amber.copy(alpha = 0.12f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text("📁", fontSize = 20.sp)
+                        Text(
+                            if (ku) "Ger name hat, qutiya spamê jî kontrol bike."
+                            else    "E-posta gelmedi mi? Spam / Önemsiz klasörünüzü de kontrol edin.",
+                            color = Amber, fontSize = 12.sp, lineHeight = 18.sp,
+                        )
+                    }
+                }
+                if (notYetError) {
+                    Text(
+                        if (ku) "Hêj nehatiye verîfîkekirin. Ji kerema xwe li ser lînkê bikirtîne."
+                        else    "Henüz doğrulanmamış. Lütfen email'inizdeki linke tıklayın.",
+                        color     = Color(0xFFEF4444),
+                        fontSize  = 13.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
+                Button(
+                    onClick = {
+                        notYetError = false
+                        vm.reloadAndCheckVerification(
+                            onVerified = {
+                                vm.clearVerificationPending()
+                                onAuthSuccess()
+                            },
+                            onNotYet = { notYetError = true },
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors   = ButtonDefaults.buttonColors(containerColor = Amber),
+                ) {
+                    if (loading)
+                        CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                    else
+                        Text(
+                            if (ku) "✅ E-posta Verifîke Kir" else "✅ Email'i Doğruladım",
+                            color = Color.White, fontWeight = FontWeight.Bold,
+                        )
+                }
+                OutlinedButton(
+                    onClick  = { vm.resendVerificationEmail() },
+                    modifier = Modifier.fillMaxWidth(),
+                    border   = androidx.compose.foundation.BorderStroke(1.dp, Amber.copy(alpha = 0.5f)),
+                ) { Text(if (ku) "Dîsa Bişîne" else "Tekrar Gönder", color = Amber) }
+                TextButton(onClick = { vm.clearVerificationPending(); vm.signOut() }) {
+                    Text(if (ku) "Vegere" else "Geri Dön / Çıkış", color = Muted)
+                }
+            }
+        }
+        return
+    }
+
+    // ── Kayıt sonrası: doğrulama maili gönderildi ekranı ─────────────────
     if (verificationSent) {
         var notYetError by remember { mutableStateOf(false) }
         Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
@@ -121,7 +219,10 @@ fun AuthScreen(
                     onClick = {
                         notYetError = false
                         vm.reloadAndCheckVerification(
-                            onVerified = { vm.clearVerificationSent() },
+                            onVerified = {
+                                vm.clearVerificationSent()
+                                onAuthSuccess()
+                            },
                             onNotYet   = { notYetError = true },
                         )
                     },
