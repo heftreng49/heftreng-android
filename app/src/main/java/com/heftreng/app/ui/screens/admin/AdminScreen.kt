@@ -637,17 +637,16 @@ fun AdminScreen(
                 "stats" -> {
                     val backfillRunning  by vm.backfillRunning.collectAsState()
                     val backfillProgress by vm.backfillProgress.collectAsState()
-
                     LazyColumn(
                     modifier            = Modifier.fillMaxSize(),
                     contentPadding      = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    // ── Sayaç Düzeltme Kartı ──────────────────────────────────
+                    // ── Sayaç Düzeltme ────────────────────────────────────────
                     item {
                         Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = SurfaceVar,
+                            shape    = RoundedCornerShape(16.dp),
+                            color    = SurfaceVar,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Column(
@@ -655,47 +654,42 @@ fun AdminScreen(
                                 verticalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
+                                    verticalAlignment     = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    Icon(Icons.Default.SyncProblem, null,
-                                        tint = Amber, modifier = Modifier.size(20.dp))
-                                    Text(
-                                        "Takip Sayaçlarını Düzelt",
-                                        color = OnBackground,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                    )
+                                    Icon(Icons.Default.Sync, null, tint = Amber,
+                                        modifier = Modifier.size(20.dp))
+                                    Text("Takip Sayaçlarını Düzelt",
+                                        color = OnBackground, fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp)
                                 }
                                 Text(
                                     "Mevcut kullanıcıların followersCount / followingCount " +
-                                    "değerleri eksik veya yanlış olabilir. Bu işlem " +
-                                    "tüm kullanıcıları tarayıp follows koleksiyonundan " +
-                                    "gerçek sayıları hesaplar ve günceller.",
-                                    color = Muted,
-                                    fontSize = 12.sp,
-                                    lineHeight = 17.sp,
+                                    "değerleri eksik olabilir. Bu işlem tüm kullanıcıları " +
+                                    "tarayıp gerçek sayıları hesaplar ve günceller.",
+                                    color = Muted, fontSize = 12.sp, lineHeight = 17.sp,
                                 )
                                 if (backfillProgress.isNotBlank()) {
+                                    val isOk  = backfillProgress.startsWith("✅")
+                                    val isErr = backfillProgress.startsWith("❌")
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
-                                        color = if (backfillProgress.startsWith("✅"))
-                                            Color(0xFF22C55E).copy(alpha = 0.12f)
-                                        else if (backfillProgress.startsWith("❌"))
-                                            Color(0xFFEF4444).copy(alpha = 0.12f)
-                                        else Amber.copy(alpha = 0.10f),
+                                        color = when {
+                                            isOk  -> androidx.compose.ui.graphics.Color(0xFF22C55E).copy(alpha = 0.12f)
+                                            isErr -> Error.copy(alpha = 0.12f)
+                                            else  -> Amber.copy(alpha = 0.10f)
+                                        },
                                         modifier = Modifier.fillMaxWidth(),
                                     ) {
                                         Text(
                                             backfillProgress,
-                                            color = if (backfillProgress.startsWith("✅"))
-                                                Color(0xFF22C55E)
-                                            else if (backfillProgress.startsWith("❌"))
-                                                Color(0xFFEF4444)
-                                            else Amber,
-                                            fontSize = 12.sp,
+                                            color = when {
+                                                isOk  -> androidx.compose.ui.graphics.Color(0xFF22C55E)
+                                                isErr -> Error
+                                                else  -> Amber
+                                            },
+                                            fontSize = 12.sp, fontWeight = FontWeight.Medium,
                                             modifier = Modifier.padding(10.dp),
-                                            fontWeight = FontWeight.Medium,
                                         )
                                     }
                                 }
@@ -704,22 +698,19 @@ fun AdminScreen(
                                     enabled  = !backfillRunning,
                                     shape    = RoundedCornerShape(10.dp),
                                     colors   = ButtonDefaults.buttonColors(
-                                        containerColor = Amber,
-                                        contentColor   = Color.Black,
-                                    ),
+                                        containerColor = Amber, contentColor = androidx.compose.ui.graphics.Color.Black),
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     if (backfillRunning) {
                                         CircularProgressIndicator(
                                             modifier = Modifier.size(16.dp),
-                                            color    = Color.Black,
+                                            color = androidx.compose.ui.graphics.Color.Black,
                                             strokeWidth = 2.dp,
                                         )
                                         Spacer(Modifier.width(8.dp))
                                         Text("İşleniyor…", fontWeight = FontWeight.Bold)
                                     } else {
-                                        Icon(Icons.Default.Sync, null,
-                                            modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.Sync, null, modifier = Modifier.size(16.dp))
                                         Spacer(Modifier.width(6.dp))
                                         Text("Sayaçları Yenile", fontWeight = FontWeight.Bold)
                                     }
@@ -727,7 +718,6 @@ fun AdminScreen(
                             }
                         }
                     }
-
                     item {
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                             Column {
