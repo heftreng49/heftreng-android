@@ -79,19 +79,23 @@ async function migrateAuthors() {
 }
 
 // ── 2. Library Books ──────────────────────────────────────────────────────────
-async function migrateBooks() {
+async function migrateBooks(authorIds) {
   console.log('\n📖 Library books koleksiyonu okunuyor...');
   const snap = await db.collection('library_books').get();
   console.log(`   ${snap.size} kitap bulundu`);
 
   if (DRY_RUN) { console.log('   [DRY RUN] yazma atlandı'); return; }
 
+  const authorSet = new Set(authorIds);
+
   const rows = snap.docs.map(doc => {
     const d = doc.data();
+    const authorId = safeStr(d.authorId) || null;
     return {
       id:           doc.id,
       title:        safeStr(d.title),
-      author_id:    safeStr(d.authorId) || null,
+      // FK kontrolü — authors tablosunda yoksa null yaz
+      author_id:    (authorId && authorSet.has(authorId)) ? authorId : null,
       author_name:  safeStr(d.authorName),
       cover_img:    safeStr(d.coverImg),
       genre:        safeStr(d.genre),
@@ -103,6 +107,10 @@ async function migrateBooks() {
       avg_rating:   safeFloat(d.avgRating),
     };
   });
+
+  // Kaç kitabın author_id'si null oldu — bilgi amaçlı
+  const nullCount = rows.filter(r => r.author_id === null && safeStr(snap.docs.find(d => d.id === r.id)?.data().authorId)).length;
+  if (nullCount > 0) console.log(`   ⚠️  ${nullCount} kitabın author_id'si authors tablosunda yok → null yazıldı`);
 
   let inserted = 0;
   for (const batch of chunk(rows, BATCH_SIZE)) {
@@ -122,8 +130,8 @@ async function main() {
   if (!SUPABASE_URL) throw new Error('SUPABASE_URL env değişkeni eksik');
   if (!SUPABASE_KEY) throw new Error('SUPABASE_SERVICE_KEY env değişkeni eksik');
 
-  await migrateAuthors();
-  await migrateBooks();
+  const authorIds = await migrateAuthors();
+  await migrateBooks(authorIds);
 
   console.log('\n🎉 Migration tamamlandı!');
 }
