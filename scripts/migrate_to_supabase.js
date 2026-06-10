@@ -119,6 +119,45 @@ async function migrateBooks(authorIds) {
     process.stdout.write(`   ✅ ${inserted}/${rows.length}\r`);
   }
   console.log(`\n   ✅ ${inserted} kitap taşındı`);
+  return rows.map(r => r.id);
+}
+
+// ── 3. Book Quotes (subcollection) ───────────────────────────────────────────
+async function migrateQuotes(bookIds) {
+  console.log('\n💬 Book quotes taşınıyor...');
+  if (DRY_RUN) { console.log('   [DRY RUN] yazma atlandı'); return; }
+
+  let total = 0, inserted = 0;
+  for (const bookId of bookIds) {
+    const snap = await db.collection('library_books').doc(bookId)
+      .collection('quotes').get();
+    if (snap.empty) continue;
+    total += snap.size;
+
+    const rows = snap.docs.map(doc => {
+      const d = doc.data();
+      return {
+        id:                doc.id,
+        book_id:           bookId,
+        author_id:         safeStr(d.authorId)   || null,
+        book_title:        safeStr(d.bookTitle),
+        author_name:       safeStr(d.authorName),
+        text:              safeStr(d.text),
+        uid:               safeStr(d.uid),
+        user_display_name: safeStr(d.userDisplayName),
+        user_photo_url:    safeStr(d.userPhotoURL),
+        feed_post_id:      safeStr(d.feedPostId),
+        likes_count:       safeInt(d.likesCount),
+        created_at:        d.ts?.toDate?.()?.toISOString() || new Date().toISOString(),
+      };
+    });
+
+    for (const batch of chunk(rows, BATCH_SIZE)) {
+      await upsert('book_quotes', batch);
+      inserted += batch.length;
+    }
+  }
+  console.log(`   ✅ ${inserted}/${total} alıntı taşındı`);
 }
 
 // ── Ana akış ──────────────────────────────────────────────────────────────────
@@ -131,7 +170,8 @@ async function main() {
   if (!SUPABASE_KEY) throw new Error('SUPABASE_SERVICE_KEY env değişkeni eksik');
 
   const authorIds = await migrateAuthors();
-  await migrateBooks(authorIds);
+  const bookIds   = await migrateBooks(authorIds);
+  await migrateQuotes(bookIds);
 
   console.log('\n🎉 Migration tamamlandı!');
 }

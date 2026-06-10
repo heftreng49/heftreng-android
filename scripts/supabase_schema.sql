@@ -63,3 +63,29 @@ create policy "public_read_library_books"
 
 -- Yazma şimdilik kapalı — sonraki adımda Firebase'den sync eklenecek
 -- (service_role key ile server-side yazılacak)
+
+-- ── Kitap Alıntıları ──────────────────────────────────────────────────────────
+create table if not exists book_quotes (
+    id                text primary key,
+    book_id           text references library_books(id) on delete cascade,
+    author_id         text references authors(id) on delete set null,
+    book_title        text    default '',
+    author_name       text    default '',
+    text              text    not null,
+    uid               text    default '',
+    user_display_name text    default '',
+    user_photo_url    text    default '',
+    feed_post_id      text    default '',
+    likes_count       int     default 0,
+    created_at        timestamptz default now()
+);
+
+create index if not exists book_quotes_book_id_idx    on book_quotes(book_id);
+create index if not exists book_quotes_author_id_idx  on book_quotes(author_id);
+create index if not exists book_quotes_uid_idx        on book_quotes(uid);
+create index if not exists book_quotes_text_search_idx
+    on book_quotes using gin(to_tsvector('simple', text));
+
+alter table book_quotes enable row level security;
+create policy if not exists "book_quotes_read"
+    on book_quotes for select using (true);
