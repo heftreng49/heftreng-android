@@ -60,6 +60,11 @@ jobs:
               const db = ctx.firestore();
               await db.collection("users").doc("user1").set({
                 uid: "user1", displayName: "User1", isPrivate: false, banned: false,
+                emailVerified: true, signInMethod: "google",
+              });
+              await db.collection("users").doc("user2").set({
+                uid: "user2", displayName: "User2", isPrivate: false, banned: false,
+                emailVerified: true, signInMethod: "google",
               });
               await db.collection("feed").doc("public_post").set({
                 uid: "user1", visibility: "public", text: "herkese acik",
