@@ -295,9 +295,12 @@ class AuthViewModel @Inject constructor(
                 syncFcmToken(user.uid)
                 acceptTerms(method = "email_register")
                 try { user.sendEmailVerification().await() } catch (_: Exception) {}
-                _verificationSent.value = true
+                // signOut ÖNCE yapılmalı — authStateListener currentUser=null görür,
+                // LaunchedEffect tetiklenmez, kullanıcı doğrudan içeri giremez.
                 auth.signOut()
                 _currentUser.value = null
+                // signOut tamamlandıktan SONRA verificationSent set et
+                _verificationSent.value = true
             } catch (e: com.google.firebase.functions.FirebaseFunctionsException) {
                 // Function çalışmazsa (offline, cold start) devam et — açık kalmasın
                 android.util.Log.w("AuthVM", "verifyRegistration unavailable: ${e.message}")
@@ -308,9 +311,9 @@ class AuthViewModel @Inject constructor(
                     syncFcmToken(user.uid)
                     acceptTerms(method = "email_register")
                     try { user.sendEmailVerification().await() } catch (_: Exception) {}
-                    _verificationSent.value = true
                     auth.signOut()
                     _currentUser.value = null
+                    _verificationSent.value = true
                 } catch (e2: Exception) {
                     _error.value = e2.message
                 }

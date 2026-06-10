@@ -68,6 +68,8 @@ fun AuthScreen(
     // Doğrulanmamışsa doğrulama ekranı göster — onAuthSuccess çağrılmaz.
     LaunchedEffect(currentUser) {
         val user = currentUser ?: return@LaunchedEffect
+        // Kayıt akışı devam ediyorsa (verificationSent zaten true) — içeri alma
+        if (showVerifySent || showVerifyPending) return@LaunchedEffect
         val isGoogle = user.providerData.any { it.providerId == "google.com" }
         if (isGoogle || user.isEmailVerified) {
             onAuthSuccess()
