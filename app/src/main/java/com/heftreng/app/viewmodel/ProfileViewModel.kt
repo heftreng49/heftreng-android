@@ -115,9 +115,11 @@ class ProfileViewModel @Inject constructor(
                     coverPhoto  = d["coverPhoto"] as? String ?: "",
                     bio         = d["bio"] as? String ?: "",
                     website     = d["website"] as? String ?: "",
-                    level       = (d["level"] as? Long)?.toInt() ?: 1,
-                    xp          = (d["xp"] as? Long)?.toInt() ?: 0,
-                    streak      = (d["streak"] as? Long)?.toInt() ?: 0,
+                    level          = (d["level"] as? Long)?.toInt() ?: 1,
+                    xp             = (d["xp"] as? Long)?.toInt() ?: 0,
+                    streak         = (d["streak"] as? Long)?.toInt() ?: 0,
+                    followersCount = (d["followersCount"] as? Long)?.toInt() ?: 0,
+                    followingCount = (d["followingCount"] as? Long)?.toInt() ?: 0,
                     isPrivate          = d["private"]           as? Boolean ?: false,
                     messagePermission  = d["messagePermission"] as? String  ?: "everyone",
                 )
@@ -131,34 +133,10 @@ class ProfileViewModel @Inject constructor(
                     else                                     -> "none"
                 }
 
-                // follows koleksiyonu — count() aggregate (tüm dokümanları çekmez, sadece sayar)
-                val followersDeferred = viewModelScope.async {
-                    try {
-                        firestore.collection("follows")
-                            .whereEqualTo("targetUid", targetUid)
-                            .count().get(com.google.firebase.firestore.AggregateSource.SERVER).await()
-                            .count.toInt()
-                    } catch (_: Exception) {
-                        // count() desteklenmiyorsa küçük limit fallback
-                        firestore.collection("follows")
-                            .whereEqualTo("targetUid", targetUid)
-                            .limit(100).get().await().size()
-                    }
-                }
-                val followingDeferred = viewModelScope.async {
-                    try {
-                        firestore.collection("follows")
-                            .whereEqualTo("fromUid", targetUid)
-                            .count().get(com.google.firebase.firestore.AggregateSource.SERVER).await()
-                            .count.toInt()
-                    } catch (_: Exception) {
-                        firestore.collection("follows")
-                            .whereEqualTo("fromUid", targetUid)
-                            .limit(100).get().await().size()
-                    }
-                }
-                _followersCount.value = followersDeferred.await()
-                _followingCount.value = followingDeferred.await()
+                // followersCount / followingCount users doc'undan okundu — COUNT() sorgusu yok.
+                // follow/unfollow anında ViewModel'de +1/-1 güncelleniyor, tutarlılık korunuyor.
+                _followersCount.value = _user.value?.followersCount ?: 0
+                _followingCount.value = _user.value?.followingCount ?: 0
 
                 val isOwnProfile  = (targetUid == myUid)
                 val isPrivate     = _user.value?.isPrivate ?: false

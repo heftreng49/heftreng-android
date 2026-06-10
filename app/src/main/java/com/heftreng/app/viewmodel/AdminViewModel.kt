@@ -727,20 +727,21 @@ class AdminViewModel @Inject constructor(
             val todayTs   = com.google.firebase.Timestamp(todaySec, 0)
             val existingStats = try { firestore.collection("appConfig").document("stats").get().await().data } catch (_:Exception) { null }
             fun ei(k: String) = (existingStats?.get(k) as? Long)?.toInt() ?: 0
+            // FATURA OPTİMİZASYONU:
+            // Statik sayaçlar (totalUsers, bannedUsers, pendingPosts vb.) appConfig/stats'ta
+            // increment/decrement ile güncelleniyor — burada tekrar collection taranmıyor.
+            // Sadece gerçek zamanlı veriler (online, bugünkü yeni kayıt/gönderi) sorgulanıyor.
             val newUsersToday  = try { firestore.collection("users").whereGreaterThanOrEqualTo("createdAt", todayTs).limit(100).get().await().size() } catch (_:Exception) { 0 }
-            val bannedUsers    = try { firestore.collection("users").whereEqualTo("banned", true).limit(100).get().await().size() } catch (_:Exception) { 0 }
             val onlineNow      = try { firestore.collection("presence").whereEqualTo("online", true).limit(100).get().await().documents.count { (it.getTimestamp("lastSeen")?.seconds ?: 0L) >= twoMinAgo } } catch (_:Exception) { 0 }
             val newPostsToday  = try { firestore.collection("feed").whereGreaterThanOrEqualTo("ts", todayTs).whereEqualTo("moderationStatus","active").limit(100).get().await().size() } catch (_:Exception) { 0 }
-            val pendingPosts   = try { firestore.collection("pendingPosts").limit(100).get().await().size() } catch (_:Exception) { 0 }
-            val pendingReports = try { firestore.collection("reports").whereEqualTo("status","pending").limit(100).get().await().size() } catch (_:Exception) { 0 }
             val map = mapOf(
-                "totalUsers" to ei("totalUsers"), "androidUsers" to ei("androidUsers"), "webUsers" to ei("webUsers"),
-                "onlineNow" to onlineNow, "newUsersToday" to newUsersToday,
-                "totalPosts" to ei("totalPosts"), "newPostsToday" to newPostsToday,
-                "totalQuotes" to ei("totalQuotes"), "totalReviews" to ei("totalReviews"),
-                "totalComments" to ei("totalComments"), "totalSerials" to ei("totalSerials"), "totalBooks" to ei("totalBooks"),
-                "pendingPosts" to pendingPosts, "pendingReports" to pendingReports,
-                "bannedUsers" to bannedUsers, "lastUpdated" to System.currentTimeMillis(),
+                "totalUsers"    to ei("totalUsers"),    "androidUsers"  to ei("androidUsers"),  "webUsers"      to ei("webUsers"),
+                "onlineNow"     to onlineNow,           "newUsersToday" to newUsersToday,
+                "totalPosts"    to ei("totalPosts"),    "newPostsToday" to newPostsToday,
+                "totalQuotes"   to ei("totalQuotes"),   "totalReviews"  to ei("totalReviews"),
+                "totalComments" to ei("totalComments"), "totalSerials"  to ei("totalSerials"),   "totalBooks"    to ei("totalBooks"),
+                "pendingPosts"  to ei("pendingPosts"),  "pendingReports" to ei("pendingReports"),
+                "bannedUsers"   to ei("bannedUsers"),   "lastUpdated"   to System.currentTimeMillis(),
             )
             try { firestore.collection("appConfig").document("stats").set(map, com.google.firebase.firestore.SetOptions.merge()).await() } catch (_:Exception) {}
         } catch (e: Exception) { e.printStackTrace() }
