@@ -711,6 +711,86 @@ class AdminViewModel @Inject constructor(
         } catch (e: Exception) { e.printStackTrace() }
     }
 
+    // ── Sayaç Geri Doldurma ───────────────────────────────────────────────────
+    // Mevcut kullanıcıların followersCount / followingCount değerlerini
+    // follows koleksiyonundan hesaplayıp Firestore'a yazar.
+    // Bir kez çalıştırılması yeterli.
+
+    private val _backfillProgress = MutableStateFlow<String>("")
+    val backfillProgress = _backfillProgress.asStateFlow()
+
+    private val _backfillRunning = MutableStateFlow(false)
+    val backfillRunning = _backfillRunning.asStateFlow()
+
+    fun backfillFollowerCounts() {
+        if (_backfillRunning.value) return
+        if (_perms.value?.can("users") != true) return
+        viewModelScope.launch {
+            _backfillRunning.value = true
+            _backfillProgress.value = "Kullanıcılar yükleniyor…"
+            try {
+                // Tüm kullanıcıları çek (sayfalı)
+                var lastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
+                var totalProcessed = 0
+                var totalUpdated   = 0
+
+                while (true) {
+                    var query = firestore.collection("users").limit(200)
+                    if (lastDoc != null) query = query.startAfter(lastDoc)
+                    val snap = query.get().await()
+                    if (snap.isEmpty) break
+
+                    val batch = firestore.batch()
+                    var batchCount = 0
+
+                    for (userDoc in snap.documents) {
+                        val uid = userDoc.id
+
+                        // Bu kullanıcıyı kaç kişi takip ediyor
+                        val followersSnap = firestore.collection("follows")
+                            .whereEqualTo("targetUid", uid).get().await()
+                        val realFollowers = followersSnap.size()
+
+                        // Bu kullanıcı kaç kişiyi takip ediyor
+                        val followingSnap = firestore.collection("follows")
+                            .whereEqualTo("fromUid", uid).get().await()
+                        val realFollowing = followingSnap.size()
+
+                        val storedFollowers = (userDoc.getLong("followersCount") ?: -1L).toInt()
+                        val storedFollowing = (userDoc.getLong("followingCount") ?: -1L).toInt()
+
+                        // Sadece yanlış olanları güncelle
+                        if (storedFollowers != realFollowers || storedFollowing != realFollowing) {
+                            batch.update(userDoc.reference, mapOf(
+                                "followersCount" to realFollowers,
+                                "followingCount" to realFollowing,
+                            ))
+                            batchCount++
+                            totalUpdated++
+                        }
+                        totalProcessed++
+                    }
+
+                    if (batchCount > 0) batch.commit().await()
+
+                    _backfillProgress.value =
+                        "$totalProcessed kullanıcı işlendi, $totalUpdated güncellendi…"
+
+                    lastDoc = snap.documents.last()
+                    if (snap.documents.size < 200) break
+                }
+
+                _backfillProgress.value =
+                    "✅ Tamamlandı — $totalProcessed kullanıcı, $totalUpdated güncelleme"
+            } catch (e: Exception) {
+                _backfillProgress.value = "❌ Hata: ${e.message}"
+                e.printStackTrace()
+            } finally {
+                _backfillRunning.value = false
+            }
+        }
+    }
+
     fun loadStats() {
         viewModelScope.launch {
             _statsLoading.value = true
