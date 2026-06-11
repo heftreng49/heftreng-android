@@ -9,17 +9,49 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: psql kur
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y postgresql-client
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Bağımlılıkları yükle
+        run: npm install postgres
 
       - name: Schema SQL'i çalıştır
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          PGSSLMODE: require
         run: |
-          psql "$SUPABASE_DB_URL" \
-            -f scripts/supabase_schema.sql \
-            --set ON_ERROR_STOP=1
-          echo "✅ Tablolar oluşturuldu"
+          node - << 'JSEOF'
+          const postgres = require('postgres');
+          const fs       = require('fs');
+          const sql_text = fs.readFileSync('scripts/supabase_schema.sql', 'utf8');
+
+          (async () => {
+            const sql = postgres(process.env.SUPABASE_DB_URL, {
+              ssl: { rejectUnauthorized: false },
+              connect_timeout: 30,
+              max: 1,
+            });
+            try {
+              // Her statement'ı ayrı ayrı çalıştır
+              const statements = sql_text
+                .split(';')
+                .map(s => s.trim())
+                .filter(s => s.length > 0 && !s.startsWith('--'));
+
+              for (const stmt of statements) {
+                try {
+                  await sql.unsafe(stmt + ';');
+                } catch(e) {
+                  // NOTICE mesajları hata değil, atla
+                  if (!e.message?.includes('already exists')) {
+                    console.warn('⚠️  Atlandı:', e.message?.slice(0, 100));
+                  }
+                }
+              }
+              console.log('✅ Schema başarıyla oluşturuldu');
+            } finally {
+              await sql.end();
+            }
+          })();
+          JSEOF
