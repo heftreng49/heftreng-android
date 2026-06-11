@@ -687,4 +687,28 @@ class LibraryViewModel @Inject constructor(
             }
         }
     }
+
+    // ── LibraryScreen için doğrudan Supabase okuma ────────────────────────────
+    // LibraryScreen local state'ini doldurmak için kullanılır
+
+    suspend fun loadBooksForScreen(): List<LibraryBook> =
+        try {
+            library.getBooks(100).map { it.toDomain() }
+        } catch (e: Exception) {
+            android.util.Log.e("LibraryVM", "loadBooksForScreen: ${e.message}")
+            emptyList()
+        }
+
+    suspend fun loadReviewsForScreen(): List<BookReview> =
+        try {
+            // Tüm kitapların reviews'larını paralel çek
+            val books = library.getBooks(100)
+            books.flatMap { book ->
+                try { library.getReviewsByBook(book.id, 20).map { it.toDomain() } }
+                catch (_: Exception) { emptyList() }
+            }.sortedByDescending { it.ts?.seconds ?: 0L }
+        } catch (e: Exception) {
+            android.util.Log.e("LibraryVM", "loadReviewsForScreen: ${e.message}")
+            emptyList()
+        }
 }

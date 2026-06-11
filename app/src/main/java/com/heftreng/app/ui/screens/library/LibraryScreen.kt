@@ -43,8 +43,6 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.Author
 import com.heftreng.app.data.model.BookQuote
 import com.heftreng.app.data.model.BookReview
@@ -65,7 +63,6 @@ import com.heftreng.app.viewmodel.AdsViewModel
 import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.viewmodel.LibraryViewModel
-import kotlinx.coroutines.tasks.await
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -99,7 +96,6 @@ fun LibraryScreen(
     val selectedTab by derivedStateOf { pagerState.currentPage }
     val scope       = rememberCoroutineScope()
 
-    val db = remember { FirebaseFirestore.getInstance() }
 
     val quotes by feedVm.libraryQuotes.collectAsState()
     var reviews by remember { mutableStateOf<List<BookReview>>(emptyList()) }
@@ -121,35 +117,14 @@ fun LibraryScreen(
         }
         val booksJob = launch {
             try {
-                val bSnap = db.collection("library_books").limit(100).get().await()
-                books = bSnap.documents
-                    .mapNotNull { it.toObject(LibraryBook::class.java)?.copy(id = it.id) }
-                    .sortedByDescending { it.ts?.seconds ?: 0L }
+                books = libraryVm.loadBooksForScreen()
             } catch (e: Exception) {
                 android.util.Log.e("LibraryScreen", "books: ${e.message}")
             }
         }
         val reviewsJob = launch {
-            // collectionGroup tek sorguda tüm reviews — N+1 yok
             try {
-                val rSnap = db.collectionGroup("reviews").limit(100).get().await()
-                reviews = rSnap.documents.mapNotNull { doc ->
-                    val d    = doc.data ?: return@mapNotNull null
-                    val text = d["text"] as? String ?: return@mapNotNull null
-                    BookReview(
-                        id              = doc.id,
-                        bookId          = d["bookId"] as? String ?: "",
-                        authorId        = d["authorId"] as? String ?: "",
-                        bookTitle       = d["bookName"] as? String ?: "",
-                        authorName      = (d["authorName"] as? String)?.trim() ?: "",
-                        text            = text,
-                        rating          = (d["rating"] as? Number)?.toFloat() ?: 0f,
-                        uid             = d["uid"] as? String ?: "",
-                        userDisplayName = (d["name"] as? String) ?: d["displayName"] as? String ?: "",
-                        userPhotoURL    = d["photoURL"] as? String ?: "",
-                        ts              = d["ts"] as? com.google.firebase.Timestamp,
-                    )
-                }.sortedByDescending { it.ts?.seconds ?: 0L }
+                reviews = libraryVm.loadReviewsForScreen()
             } catch (e: Exception) {
                 android.util.Log.e("LibraryScreen", "reviews: ${e.message}")
             }
