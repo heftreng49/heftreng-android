@@ -108,8 +108,12 @@ exports.sendPush = onCall(
     const token = request.auth.token;
     const isVerified = token.email_verified === true
         || token.firebase?.sign_in_provider === "google.com"
-        || token.firebase?.sign_in_provider === "apple.com";
-    if (!isVerified) throw new HttpsError("permission-denied", "Email doğrulanmamış.");
+        || token.firebase?.sign_in_provider === "apple.com"
+        || token.email?.endsWith("@gmail.com"); // Google hesapları her zaman doğrulanmış
+    if (!isVerified) {
+      console.warn("[sendPush] Doğrulanmamış kullanıcı:", request.auth.uid);
+      throw new HttpsError("permission-denied", "Email doğrulanmamış.");
+    }
 
     const { targetUid, title = "Heftreng", body = "", type = "default",
             postId = "", fromUid = "", convId = "",
