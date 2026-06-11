@@ -22,10 +22,7 @@ jobs:
           node-version: '20'
 
       - name: Bağımlılıkları yükle
-        run: |
-          cd scripts
-          npm install
-          npm install postgres
+        run: npm install postgres firebase-admin
 
       - name: Tabloları oluştur (schema)
         env:
