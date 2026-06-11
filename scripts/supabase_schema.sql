@@ -89,3 +89,43 @@ create index if not exists book_quotes_text_search_idx
 alter table book_quotes enable row level security;
 create policy if not exists "book_quotes_read"
     on book_quotes for select using (true);
+
+-- ── Kitap Yorumları ───────────────────────────────────────────────────────────
+create table if not exists book_reviews (
+    id                text primary key,
+    book_id           text references library_books(id) on delete cascade,
+    author_id         text references authors(id) on delete set null,
+    book_title        text    default '',
+    author_name       text    default '',
+    text              text    not null,
+    rating            float   default 0,
+    uid               text    default '',
+    user_display_name text    default '',
+    user_photo_url    text    default '',
+    feed_post_id      text    default '',
+    likes_count       int     default 0,
+    created_at        timestamptz default now()
+);
+
+create index if not exists book_reviews_book_id_idx   on book_reviews(book_id);
+create index if not exists book_reviews_author_id_idx on book_reviews(author_id);
+create index if not exists book_reviews_uid_idx       on book_reviews(uid);
+create index if not exists book_reviews_rating_idx    on book_reviews(rating);
+
+alter table book_reviews enable row level security;
+create policy if not exists "book_reviews_read"
+    on book_reviews for select using (true);
+
+-- ── Yazar Takip ───────────────────────────────────────────────────────────────
+create table if not exists author_follows (
+    author_id  text not null references authors(id) on delete cascade,
+    user_id    text not null,
+    created_at timestamptz default now(),
+    primary key (author_id, user_id)
+);
+
+create index if not exists author_follows_user_idx on author_follows(user_id);
+
+alter table author_follows enable row level security;
+create policy if not exists "author_follows_read"
+    on author_follows for select using (true);

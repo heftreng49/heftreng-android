@@ -4,39 +4,89 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.Author
 import com.heftreng.app.data.model.BookQuote
 import com.heftreng.app.data.model.BookReview
 import com.heftreng.app.data.model.LibraryBook
+import com.heftreng.app.data.repository.AuthorRow
+import com.heftreng.app.data.repository.BookQuoteRow
+import com.heftreng.app.data.repository.BookReviewRow
+import com.heftreng.app.data.repository.LibraryBookRow
 import com.heftreng.app.data.repository.LibraryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import com.heftreng.app.util.CacheEntry
+import java.util.UUID
 import javax.inject.Inject
 
 // ═══════════════════════════════════════════════════════════════════════
-//  LibraryViewModel
+//  LibraryViewModel — Supabase tabanlı (v2)
 //
-//  Sorumlu olduğu koleksiyonlar:
-//    authors/{authorId}
-//      follows/{uid}            → takip ilişkisi
-//      books/{bookId}           → libary_books referans (isteğe bağlı sub)
-//    library_books/{bookId}
-//      quotes/{quoteId}
-//      reviews/{reviewId}
-//
-//  Her alıntı / inceleme aynı anda:
-//    • library_books/{id}/quotes (veya reviews)  ← detay sayfası için
-//    • authors/{authorId} quoteCount/reviewCount  ← sayaç güncelleme
-//    • feed/{newId}                               ← sosyal akış için
-//    • users/{uid}/posts/{newId}                  ← profil için
+//  Okuma + Yazma: Supabase (authors, library_books, book_quotes, book_reviews)
+//  Feed yazımı: Firestore (sosyal akış orada kalıyor)
 // ═══════════════════════════════════════════════════════════════════════
+
+// ── Row → Domain model dönüşümleri ───────────────────────────────────────────
+
+private fun AuthorRow.toDomain() = Author(
+    id            = id,
+    name          = name,
+    bio           = bio,
+    photoURL      = photoUrl,
+    birthYear     = birthYear,
+    nationality   = nationality,
+    bookCount     = bookCount,
+    quoteCount    = quoteCount,
+    reviewCount   = reviewCount,
+    followerCount = followerCount,
+)
+
+private fun LibraryBookRow.toDomain() = LibraryBook(
+    id          = id,
+    title       = title,
+    authorId    = authorId ?: "",
+    authorName  = authorName,
+    coverImg    = coverImg,
+    genre       = genre,
+    publishYear = publishYear,
+    synopsis    = synopsis,
+    pageCount   = pageCount,
+    quoteCount  = quoteCount,
+    reviewCount = reviewCount,
+    avgRating   = avgRating,
+)
+
+private fun BookQuoteRow.toDomain() = BookQuote(
+    id              = id,
+    bookId          = bookId,
+    authorId        = authorId ?: "",
+    bookTitle       = bookTitle,
+    authorName      = authorName,
+    text            = text,
+    uid             = uid,
+    userDisplayName = userDisplayName,
+    userPhotoURL    = userPhotoUrl,
+    feedPostId      = feedPostId,
+    likesCount      = likesCount,
+)
+
+private fun BookReviewRow.toDomain() = BookReview(
+    id              = id,
+    bookId          = bookId,
+    authorId        = authorId ?: "",
+    bookTitle       = bookTitle,
+    authorName      = authorName,
+    text            = text,
+    rating          = rating,
+    uid             = uid,
+    userDisplayName = userDisplayName,
+    userPhotoURL    = userPhotoUrl,
+    feedPostId      = feedPostId,
+    likesCount      = likesCount,
+)
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
@@ -45,106 +95,53 @@ class LibraryViewModel @Inject constructor(
     private val library  : LibraryRepository,
 ) : ViewModel() {
 
-    // ── State ─────────────────────────────────────────────────────────────
-    private val _authors       = MutableStateFlow<List<Author>>(emptyList())
+    // ── State ─────────────────────────────────────────────────────────────────
+    private val _authors        = MutableStateFlow<List<Author>>(emptyList())
     val authors = _authors.asStateFlow()
 
     private val _selectedAuthor = MutableStateFlow<Author?>(null)
     val selectedAuthor = _selectedAuthor.asStateFlow()
 
-    private val _authorBooks   = MutableStateFlow<List<LibraryBook>>(emptyList())
+    private val _authorBooks    = MutableStateFlow<List<LibraryBook>>(emptyList())
     val authorBooks = _authorBooks.asStateFlow()
 
-    private val _authorQuotes  = MutableStateFlow<List<BookQuote>>(emptyList())
+    private val _authorQuotes   = MutableStateFlow<List<BookQuote>>(emptyList())
     val authorQuotes = _authorQuotes.asStateFlow()
 
-    private val _authorReviews = MutableStateFlow<List<BookReview>>(emptyList())
+    private val _authorReviews  = MutableStateFlow<List<BookReview>>(emptyList())
     val authorReviews = _authorReviews.asStateFlow()
 
     private val _selectedBook   = MutableStateFlow<LibraryBook?>(null)
     val selectedBook = _selectedBook.asStateFlow()
 
-    private val _bookQuotes    = MutableStateFlow<List<BookQuote>>(emptyList())
+    private val _bookQuotes     = MutableStateFlow<List<BookQuote>>(emptyList())
     val bookQuotes = _bookQuotes.asStateFlow()
 
-    private val _bookReviews   = MutableStateFlow<List<BookReview>>(emptyList())
+    private val _bookReviews    = MutableStateFlow<List<BookReview>>(emptyList())
     val bookReviews = _bookReviews.asStateFlow()
 
-    private val _loading = MutableStateFlow(false)
+    private val _loading        = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
-    private val _error = MutableStateFlow<String?>(null)
+    private val _error          = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
     private val _isFollowingAuthor = MutableStateFlow(false)
     val isFollowingAuthor = _isFollowingAuthor.asStateFlow()
 
-    val myUid get() = auth.currentUser?.uid ?: ""
-    private var _cachedDisplayName: String = auth.currentUser?.displayName ?: ""
-    val myName get() = _cachedDisplayName.ifBlank { auth.currentUser?.displayName ?: "" }
-
-    init {
-        val curUid = auth.currentUser?.uid
-        if (!curUid.isNullOrBlank()) {
-            viewModelScope.launch {
-                try {
-                    val doc = firestore.collection("users").document(curUid).get().await()
-                    val name = (doc.getString("displayName") ?: doc.getString("name"))
-                        ?.takeIf { it.isNotBlank() }
-                    if (name != null) _cachedDisplayName = name
-                } catch (_: Exception) {}
-            }
-        }
-    }
+    val myUid   get() = auth.currentUser?.uid ?: ""
+    val myName  get() = auth.currentUser?.displayName ?: ""
     val myPhoto get() = auth.currentUser?.photoUrl?.toString() ?: ""
-    val myUser get() = auth.currentUser?.email?.substringBefore("@") ?: ""
+    val myUser  get() = auth.currentUser?.email?.substringBefore("@") ?: ""
 
-    // ── In-memory cache — TTL tabanlı ───────────────────────────────────────
-    private val authorCache     = mutableMapOf<String, Author>()
-    private val bookCache       = mutableMapOf<String, LibraryBook>()
-    // Yazar listesi 5 dk TTL (pull-to-refresh yapılmadıkça tekrar yüklemez)
-    private val authorsListCache = CacheEntry<List<Author>>(ttlMs = 5 * 60_000L)
-    // Kitap listesi 5 dk TTL
-    private val booksListCache   = CacheEntry<List<LibraryBook>>(ttlMs = 5 * 60_000L)
+    // ── Authors ───────────────────────────────────────────────────────────────
 
-    // ── Yazar Listesi ─────────────────────────────────────────────────────
     fun loadAuthors(forceRefresh: Boolean = false) {
-        // TTL cache kontrolü — 5 dk içinde tekrar çekme
-        if (!forceRefresh) {
-            authorsListCache.get()?.let { cached ->
-                _authors.value = cached; return
-            }
-            if (_authors.value.isNotEmpty()) return
-        } else {
-            authorsListCache.invalidate()
-        }
+        if (_authors.value.isNotEmpty() && !forceRefresh) return
         viewModelScope.launch {
             _loading.value = true
             try {
-                val snap = firestore.collection("authors")
-                    .limit(50)
-                    .get(com.google.firebase.firestore.Source.DEFAULT).await()
-                val list = snap.documents.mapNotNull { doc ->
-                    val author = try { doc.toObject(Author::class.java)?.copy(id = doc.id) }
-                    catch (_: Exception) { null } ?: run {
-                        val d = doc.data ?: return@mapNotNull null
-                        Author(
-                            id            = doc.id,
-                            name          = d["name"] as? String ?: "",
-                            bio           = d["bio"] as? String ?: "",
-                            photoURL      = d["photoURL"] as? String ?: "",
-                            birthYear     = (d["birthYear"] as? Number)?.toInt() ?: 0,
-                            nationality   = d["nationality"] as? String ?: "",
-                            bookCount     = (d["bookCount"] as? Number)?.toInt() ?: 0,
-                            quoteCount    = (d["quoteCount"] as? Number)?.toInt() ?: 0,
-                            reviewCount   = (d["reviewCount"] as? Number)?.toInt() ?: 0,
-                            followerCount = (d["followerCount"] as? Number)?.toInt() ?: 0,
-                        )
-                    }
-                    author.also { authorCache[doc.id] = it }
-                }.sortedBy { it.name }
-                _authors.value = list
-                authorsListCache.set(list)  // TTL cache'e yaz
+                _authors.value = library.getAuthors(50).map { it.toDomain() }
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -153,66 +150,21 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    // ── Yazar Detayı ──────────────────────────────────────────────────────
     fun loadAuthor(authorId: String) {
         viewModelScope.launch {
-            // Cache'te varsa anında göster, arka planda yine de güncelle
-            authorCache[authorId]?.let {
-                _selectedAuthor.value = it
-                _loading.value = false
-            }
-            val isFirstLoad = _selectedAuthor.value == null
-            _loading.value = isFirstLoad
+            _loading.value = true
             try {
-                val doc = firestore.collection("authors").document(authorId).get().await()
-                // toObject bazen Firestore type mismatch yüzünden null döner — manuel map ile güvenli al
-                val author: Author? = try {
-                    doc.toObject(Author::class.java)?.copy(id = doc.id)
-                } catch (_: Exception) { null } ?: run {
-                    val d = doc.data
-                    if (d != null) Author(
-                        id           = doc.id,
-                        name         = d["name"] as? String ?: "",
-                        bio          = d["bio"] as? String ?: "",
-                        photoURL     = d["photoURL"] as? String ?: "",
-                        birthYear    = (d["birthYear"] as? Number)?.toInt() ?: 0,
-                        nationality  = d["nationality"] as? String ?: "",
-                        bookCount    = (d["bookCount"] as? Number)?.toInt() ?: 0,
-                        quoteCount   = (d["quoteCount"] as? Number)?.toInt() ?: 0,
-                        reviewCount  = (d["reviewCount"] as? Number)?.toInt() ?: 0,
-                        followerCount= (d["followerCount"] as? Number)?.toInt() ?: 0,
-                    ) else null
-                }
-                _selectedAuthor.value = author
-                if (author != null) authorCache[authorId] = author // cache'e yaz
-                if (myUid.isNotBlank()) {
-                    val followDoc = firestore.collection("authors").document(authorId)
-                        .collection("follows").document(myUid).get().await()
-                    _isFollowingAuthor.value = followDoc.exists()
-                }
+                val author = library.getAuthor(authorId)?.toDomain() ?: return@launch
+                _isFollowingAuthor.value = library.isFollowingAuthor(authorId)
+                _selectedAuthor.value = author.copy(isFollowedByMe = _isFollowingAuthor.value)
 
-                // Yazarın kitapları
-                loadBooksByAuthor(authorId)
-                // Yazarın alıntıları (tüm kitaplardan)
-                loadAuthorQuotes(authorId)
-                // Yazarın incelemeleri
-                loadAuthorReviews(authorId)
+                val booksDeferred  = async { library.getBooksByAuthor(authorId) }
+                val quotesDeferred = async { library.getQuotesByAuthor(authorId) }
+                val reviewsDeferred= async { library.getReviewsByAuthor(authorId) }
 
-                // Sayaçları gerçek veriden hesapla ve author objesini güncelle
-                val bookCount  = _authorBooks.value.size
-                val quoteCount = _authorQuotes.value.size
-                if (author != null && (author.bookCount != bookCount || author.quoteCount != quoteCount)) {
-                    _selectedAuthor.value = author.copy(
-                        bookCount  = bookCount,
-                        quoteCount = quoteCount,
-                    )
-                    // Firestore'a da yaz (arka planda)
-                    try {
-                        firestore.collection("authors").document(authorId)
-                            .update(mapOf("bookCount" to bookCount, "quoteCount" to quoteCount))
-                            .await()
-                    } catch (_: Exception) {}
-                }
+                _authorBooks.value   = booksDeferred.await().map  { it.toDomain() }
+                _authorQuotes.value  = quotesDeferred.await().map { it.toDomain() }
+                _authorReviews.value = reviewsDeferred.await().map{ it.toDomain() }
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -221,186 +173,92 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadBooksByAuthor(authorId: String) {
-        val snap = firestore.collection("library_books")
-            .whereEqualTo("authorId", authorId)
-            .limit(50).get().await()
-        val books = snap.documents.mapNotNull { doc ->
-            doc.toObject(LibraryBook::class.java)?.copy(id = doc.id)
-        }.sortedByDescending { it.publishYear }
-        _authorBooks.value = books
-    }
-
-    private suspend fun loadAuthorQuotes(authorId: String) {
-        val allQuotes = mutableListOf<BookQuote>()
-        val seenIds   = mutableSetOf<String>()
-
-        // ── 1. collectionGroup("quotes") — orderBy kaldırıldı, index gerekmez
-        try {
-            val snap = firestore.collectionGroup("quotes")
-                .whereEqualTo("authorId", authorId)
-                .limit(50).get().await()
-            snap.documents.forEach { doc ->
-                val q = doc.toObject(BookQuote::class.java)?.copy(id = doc.id)
-                if (q != null && seenIds.add(doc.id)) {
-                    allQuotes.add(q)
-                    q.feedPostId.takeIf { it.isNotBlank() }?.let { seenIds.add(it) }
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("LibraryVM", "loadAuthorQuotes collectionGroup: ${e.message}")
-        }
-
-        // ── 2. Bu yazara ait her kitabın quotes subcollection'ını da tara
-        //    (collectionGroup index yoksa veya authorId eşleşmiyorsa yakalanır)
-        try {
-            val booksSnap = firestore.collection("library_books")
-                .whereEqualTo("authorId", authorId)
-                .limit(30).get().await()
-            booksSnap.documents.forEach { bookDoc ->
-                val quotesSnap = firestore.collection("library_books")
-                    .document(bookDoc.id).collection("quotes")
-                    .limit(30).get().await()
-                quotesSnap.documents.forEach { doc ->
-                    if (!seenIds.add(doc.id)) return@forEach
-                    val q = doc.toObject(BookQuote::class.java)?.copy(id = doc.id)
-                    if (q != null) allQuotes.add(q)
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("LibraryVM", "loadAuthorQuotes bookByBook: ${e.message}")
-        }
-
-        // ── 3. feed fallback — libraryAuthorId eşleşen postlar
-        try {
-            val feedSnap = firestore.collection("feed")
-                .whereEqualTo("libraryAuthorId", authorId)
-                .get().await()
-            feedSnap.documents.forEach { doc ->
-                if (seenIds.contains(doc.id)) return@forEach
-                val d    = doc.data ?: return@forEach
-                val quoteObj = d["quote"] as? Map<*, *>
-                val text  = (quoteObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
-                    ?: (d["quoteText"] as? String)?.takeIf { it.isNotBlank() }
-                    ?: return@forEach
-                if (seenIds.add(doc.id)) {
-                    allQuotes.add(BookQuote(
-                        id              = doc.id,
-                        bookId          = d["libraryBookId"]  as? String ?: "",
-                        authorId        = authorId,
-                        bookTitle       = (d["bookName"]      as? String)?.takeIf { it.isNotBlank() }
-                                          ?: quoteObj?.get("book") as? String ?: "",
-                        authorName      = (d["authorName"]    as? String)?.takeIf { it.isNotBlank() }
-                                          ?: quoteObj?.get("author") as? String ?: "",
-                        text            = text,
-                        uid             = d["uid"]            as? String ?: "",
-                        userDisplayName = (d["displayName"]   as? String)?.takeIf { it.isNotBlank() }
-                                          ?: d["name"] as? String ?: "",
-                        userPhotoURL    = d["photoURL"]       as? String ?: "",
-                        ts              = d["ts"]             as? com.google.firebase.Timestamp,
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("LibraryVM", "loadAuthorQuotes feed fallback: ${e.message}")
-        }
-
-        _authorQuotes.value = allQuotes.sortedByDescending { it.ts?.seconds ?: 0L }
-    }
-
-    private suspend fun loadAuthorReviews(authorId: String) {
-        // collectionGroup + orderBy index gerektirir → kitap kitap toplayarak çöz
-        try {
-            val booksSnap = firestore.collection("library_books")
-                .whereEqualTo("authorId", authorId)
-                .limit(50).get().await()
-            val allReviews = mutableListOf<BookReview>()
-            booksSnap.documents.forEach { bookDoc ->
-                try {
-                    val rSnap = firestore.collection("library_books")
-                        .document(bookDoc.id).collection("reviews")
-                        .limit(20).get().await()
-                    rSnap.documents.mapNotNullTo(allReviews) { doc ->
-                        doc.toObject(BookReview::class.java)?.copy(id = doc.id)
-                    }
-                } catch (_: Exception) {}
-            }
-            _authorReviews.value = allReviews.sortedByDescending { it.ts?.seconds ?: 0L }
-        } catch (e: Exception) {
-            android.util.Log.w("LibraryVM", "loadAuthorReviews: ${e.message}")
-        }
-    }
-
-    // ── Yazar Takip ───────────────────────────────────────────────────────
     fun toggleFollowAuthor(authorId: String) {
-        if (myUid.isBlank()) return
         viewModelScope.launch {
-            val followRef = firestore.collection("authors").document(authorId)
-                .collection("follows").document(myUid)
-            val authorRef = firestore.collection("authors").document(authorId)
-            val following = _isFollowingAuthor.value
-
-            if (following) {
-                followRef.delete().await()
-                authorRef.update("followerCount", FieldValue.increment(-1)).await()
-                _isFollowingAuthor.value = false
-                _selectedAuthor.value = _selectedAuthor.value?.copy(
-                    followerCount = (_selectedAuthor.value?.followerCount ?: 1) - 1
-                )
-            } else {
-                followRef.set(mapOf("uid" to myUid, "ts" to Timestamp.now())).await()
-                authorRef.update("followerCount", FieldValue.increment(1)).await()
-                _isFollowingAuthor.value = true
-                _selectedAuthor.value = _selectedAuthor.value?.copy(
-                    followerCount = (_selectedAuthor.value?.followerCount ?: 0) + 1
-                )
+            try {
+                if (_isFollowingAuthor.value) {
+                    library.unfollowAuthor(authorId)
+                    _isFollowingAuthor.value = false
+                    _selectedAuthor.value = _selectedAuthor.value?.copy(
+                        isFollowedByMe = false,
+                        followerCount  = (_selectedAuthor.value?.followerCount ?: 1) - 1,
+                    )
+                } else {
+                    library.followAuthor(authorId)
+                    _isFollowingAuthor.value = true
+                    _selectedAuthor.value = _selectedAuthor.value?.copy(
+                        isFollowedByMe = true,
+                        followerCount  = (_selectedAuthor.value?.followerCount ?: 0) + 1,
+                    )
+                }
+            } catch (e: Exception) {
+                _error.value = e.message
             }
         }
     }
 
-    // ── Yazar Oluştur (Admin) ─────────────────────────────────────────────
     fun createAuthor(
         name       : String,
-        bio        : String,
+        bio        : String = "",
         photoURL   : String = "",
         birthYear  : Int    = 0,
         nationality: String = "",
     ) {
         viewModelScope.launch {
             try {
-                val data = hashMapOf(
-                    "name"        to name,
-                    "bio"         to bio,
-                    "photoURL"    to photoURL,
-                    "birthYear"   to birthYear,
-                    "nationality" to nationality,
-                    "bookCount"   to 0,
-                    "quoteCount"  to 0,
-                    "reviewCount" to 0,
-                    "followerCount" to 0,
-                    "ts"          to Timestamp.now(),
-                )
-                firestore.collection("authors").add(data).await()
-                loadAuthors()
+                val id = UUID.randomUUID().toString()
+                library.upsertAuthor(AuthorRow(
+                    id          = id,
+                    name        = name,
+                    bio         = bio,
+                    photoUrl    = photoURL,
+                    birthYear   = birthYear,
+                    nationality = nationality,
+                ))
+                loadAuthors(forceRefresh = true)
             } catch (e: Exception) {
                 _error.value = e.message
             }
         }
     }
 
-    // ── Kitap Detayı ──────────────────────────────────────────────────────
+    fun updateAuthor(
+        authorId   : String,
+        name       : String,
+        bio        : String,
+        photoURL   : String,
+        birthYear  : Int,
+        nationality: String,
+    ) {
+        viewModelScope.launch {
+            try {
+                val current = library.getAuthor(authorId) ?: return@launch
+                library.upsertAuthor(current.copy(
+                    name        = name,
+                    bio         = bio,
+                    photoUrl    = photoURL,
+                    birthYear   = birthYear,
+                    nationality = nationality,
+                ))
+                loadAuthor(authorId)
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+
+    // ── Library Books ─────────────────────────────────────────────────────────
+
     fun loadLibraryBook(bookId: String) {
         viewModelScope.launch {
-            // Cache'te varsa anında göster
-            bookCache[bookId]?.let { _selectedBook.value = it }
-            _loading.value = _selectedBook.value == null
+            _loading.value = true
             try {
-                val doc = firestore.collection("library_books").document(bookId).get().await()
-                val book = doc.toObject(LibraryBook::class.java)?.copy(id = doc.id)
+                val book = library.getBook(bookId)?.toDomain() ?: return@launch
                 _selectedBook.value = book
-                if (book != null) bookCache[bookId] = book // cache'e yaz
-                loadBookQuotes(bookId)
-                loadBookReviews(bookId)
+                val qDeferred = async { library.getQuotesByBook(bookId) }
+                val rDeferred = async { library.getReviewsByBook(bookId) }
+                _bookQuotes.value  = qDeferred.await().map { it.toDomain() }
+                _bookReviews.value = rDeferred.await().map { it.toDomain() }
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -409,99 +267,84 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadBookQuotes(bookId: String) {
-        val snap = firestore.collection("library_books").document(bookId)
-            .collection("quotes")
-            .orderBy("ts", Query.Direction.DESCENDING)
-            .limit(50).get().await()
-        _bookQuotes.value = snap.documents.mapNotNull { doc ->
-            doc.toObject(BookQuote::class.java)?.copy(id = doc.id)
-        }
-    }
-
-    private suspend fun loadBookReviews(bookId: String) {
-        val snap = firestore.collection("library_books").document(bookId)
-            .collection("reviews")
-            .orderBy("ts", Query.Direction.DESCENDING)
-            .limit(50).get().await()
-        _bookReviews.value = snap.documents.mapNotNull { doc ->
-            doc.toObject(BookReview::class.java)?.copy(id = doc.id)
-        }
-    }
-
-    // ── Kütüphane Kitabı Oluştur ──────────────────────────────────────────
     fun createLibraryBook(
         title      : String,
         authorId   : String,
         authorName : String,
+        coverImg   : String = "",
         genre      : String = "",
         publishYear: Int    = 0,
         synopsis   : String = "",
         pageCount  : Int    = 0,
-        coverImg   : String = "",
     ) {
         viewModelScope.launch {
             try {
-                // Önce aynı kitap var mı kontrol et
-                val titleLower = title.trim().lowercase()
-                val existing = if (authorId.isNotBlank()) {
-                    firestore.collection("library_books")
-                        .whereEqualTo("titleLower", titleLower)
-                        .whereEqualTo("authorId", authorId)
-                        .limit(1).get().await()
-                } else {
-                    firestore.collection("library_books")
-                        .whereEqualTo("titleLower", titleLower)
-                        .limit(1).get().await()
-                }
-                if (!existing.isEmpty) return@launch // zaten var, oluşturma
-
-                val data = hashMapOf(
-                    "title"       to title.trim(),
-                    "titleLower"  to titleLower,
-                    "authorId"    to authorId,
-                    "authorName"  to authorName,
-                    "coverImg"    to coverImg,
-                    "genre"       to genre,
-                    "publishYear" to publishYear,
-                    "synopsis"    to synopsis,
-                    "pageCount"   to pageCount,
-                    "quoteCount"  to 0,
-                    "reviewCount" to 0,
-                    "avgRating"   to 0f,
-                    "ts"          to Timestamp.now(),
-                )
-                firestore.collection("library_books").add(data).await()
+                val id = UUID.randomUUID().toString()
+                library.upsertBook(LibraryBookRow(
+                    id          = id,
+                    title       = title,
+                    authorId    = authorId.ifBlank { null },
+                    authorName  = authorName,
+                    coverImg    = coverImg,
+                    genre       = genre,
+                    publishYear = publishYear,
+                    synopsis    = synopsis,
+                    pageCount   = pageCount,
+                ))
                 if (authorId.isNotBlank()) {
-                    firestore.collection("authors").document(authorId)
-                        .update("bookCount", FieldValue.increment(1)).await()
+                    val author = library.getAuthor(authorId)
+                    if (author != null) library.updateAuthorCounters(authorId, bookCount = author.bookCount + 1)
                 }
+                loadAuthors(forceRefresh = true)
             } catch (e: Exception) {
                 _error.value = e.message
             }
         }
     }
 
-    // ── Alıntı Ekle ───────────────────────────────────────────────────────
-    // library_books/{id}/quotes  +  authors/{id} sayaç  +  feed  +  users/{uid}/posts
+    fun updateLibraryBook(
+        bookId     : String,
+        title      : String,
+        authorId   : String,
+        authorName : String,
+        coverImg   : String,
+        genre      : String,
+        publishYear: Int,
+        synopsis   : String,
+        pageCount  : Int,
+    ) {
+        viewModelScope.launch {
+            try {
+                val current = library.getBook(bookId) ?: return@launch
+                library.upsertBook(current.copy(
+                    title       = title,
+                    authorId    = authorId.ifBlank { null },
+                    authorName  = authorName,
+                    coverImg    = coverImg,
+                    genre       = genre,
+                    publishYear = publishYear,
+                    synopsis    = synopsis,
+                    pageCount   = pageCount,
+                ))
+                loadLibraryBook(bookId)
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+
+    // ── Alıntı Ekle ───────────────────────────────────────────────────────────
+
     fun addBookQuote(book: LibraryBook, quoteText: String) {
         if (myUid.isBlank() || quoteText.isBlank()) return
         viewModelScope.launch {
             try {
                 val now = Timestamp.now()
+                val (resolvedAuthorId, resolvedBookId) = if (book.id.isBlank())
+                    library.ensureAuthorAndBook(book.authorName, book.title)
+                else Pair(book.authorId, book.id)
 
-                // ── 1. Yazar ve kitap ID'lerini tek kaynaktan doğrula ────────
-                // Direkt book.id / book.authorId kullanmak yerine LibraryRepository
-                // üzerinden geçiyoruz — FeedViewModel.createPost ile aynı yol,
-                // böylece ID uyuşmazlığı olmaz.
-                val resolvedBookId   = book.id.ifBlank {
-                    library.ensureAuthorAndBook(book.authorName, book.title).second
-                }
-                val resolvedAuthorId = book.authorId.ifBlank {
-                    library.ensureAuthorAndBook(book.authorName, book.title).first
-                }
-
-                // ── 2. Feed'e yaz (tek kayıt) ────────────────────────────────
+                // Feed'e yaz (Firestore — sosyal akış)
                 val feedRef = firestore.collection("feed").add(
                     hashMapOf(
                         "uid"             to myUid,
@@ -526,8 +369,7 @@ class LibraryViewModel @Inject constructor(
                     )
                 ).await()
 
-                // ── 3. library_books alt koleksiyonuna tek kayıt yaz ─────────
-                // addQuoteToLibrary: hem quotes alt kol hem sayaçları günceller
+                // Supabase'e yaz
                 library.addQuoteToLibrary(
                     libraryBookId   = resolvedBookId,
                     libraryAuthorId = resolvedAuthorId,
@@ -540,88 +382,166 @@ class LibraryViewModel @Inject constructor(
                     feedPostId      = feedRef.id,
                 )
 
-                // ── 4. Yerel state güncelle ───────────────────────────────────
-                loadBookQuotes(resolvedBookId)
-                if (resolvedAuthorId.isNotBlank()) loadAuthorQuotes(resolvedAuthorId)
-
+                // Yerel state güncelle
+                if (resolvedBookId.isNotBlank()) {
+                    _bookQuotes.value = library.getQuotesByBook(resolvedBookId).map { it.toDomain() }
+                }
+                if (resolvedAuthorId.isNotBlank()) {
+                    _authorQuotes.value = library.getQuotesByAuthor(resolvedAuthorId).map { it.toDomain() }
+                }
             } catch (e: Exception) {
                 _error.value = e.message
             }
         }
     }
 
-    // ── İnceleme Ekle ────────────────────────────────────────────────────
+    // ── Yorum Ekle ────────────────────────────────────────────────────────────
+
     fun addBookReview(book: LibraryBook, reviewText: String, rating: Float) {
         if (myUid.isBlank() || reviewText.isBlank()) return
         viewModelScope.launch {
             try {
-                val now = Timestamp.now()
-                val reviewData = hashMapOf(
-                    "bookId"          to book.id,
-                    "authorId"        to book.authorId,
-                    "bookTitle"       to book.title,
-                    "authorName"      to book.authorName,
-                    "text"            to reviewText,
-                    "rating"          to rating,
-                    "uid"             to myUid,
-                    "userDisplayName" to myName,
-                    "userPhotoURL"    to myPhoto,
-                    "ts"              to now,
-                )
+                val now   = Timestamp.now()
+                val newId = UUID.randomUUID().toString()
 
-                // 1. library_books/{id}/reviews
-                val reviewRef = firestore.collection("library_books").document(book.id)
-                    .collection("reviews").add(reviewData).await()
+                // Feed'e yaz (Firestore)
+                val feedRef = firestore.collection("feed").add(
+                    hashMapOf(
+                        "uid"             to myUid,
+                        "displayName"     to myName,
+                        "name"            to myName,
+                        "photoURL"        to myPhoto,
+                        "text"            to reviewText,
+                        "bookName"        to book.title,
+                        "authorName"      to book.authorName,
+                        "rating"          to rating,
+                        "libraryBookId"   to book.id,
+                        "libraryAuthorId" to book.authorId,
+                        "type"            to "library_review",
+                        "ts"              to now,
+                    )
+                ).await()
 
-                // 2. feed'e yaz
-                val feedData = hashMapOf(
-                    "uid"            to myUid,
-                    "displayName"    to myName,
-                    "name"           to myName,
-                    "photoURL"       to myPhoto,
-                    "text"           to reviewText,
-                    "bookName"       to book.title,
-                    "authorName"     to book.authorName,
-                    "rating"         to rating,
-                    "libraryBookId"  to book.id,
-                    "libraryAuthorId" to book.authorId,
-                    "type"           to "library_review",
-                    "ts"             to now,
-                )
-                val feedRef = firestore.collection("feed").add(feedData).await()
-                reviewRef.update("feedPostId", feedRef.id)
+                // Supabase'e yaz
+                library.insertReview(BookReviewRow(
+                    id              = newId,
+                    bookId          = book.id,
+                    authorId        = book.authorId.ifBlank { null },
+                    bookTitle       = book.title,
+                    authorName      = book.authorName,
+                    text            = reviewText,
+                    rating          = rating,
+                    uid             = myUid,
+                    userDisplayName = myName,
+                    userPhotoUrl    = myPhoto,
+                    feedPostId      = feedRef.id,
+                ))
 
-                // 3. Sayaçlar — tüm koleksiyonu çekmek yerine increment + yerel hesap
-                val currentBook = _selectedBook.value
+                // Sayaçları güncelle
+                val currentBook    = _selectedBook.value
                 val newReviewCount = (currentBook?.reviewCount ?: 0) + 1
-                val currentAvg = currentBook?.avgRating ?: 0f
+                val currentAvg     = currentBook?.avgRating ?: 0f
                 val newAvg = if (currentAvg == 0f) rating
                     else ((currentAvg * (newReviewCount - 1)) + rating) / newReviewCount
 
-                firestore.collection("library_books").document(book.id).update(
-                    mapOf(
-                        "reviewCount" to FieldValue.increment(1),
-                        "avgRating"   to newAvg,
-                    )
-                )
-                firestore.collection("authors").document(book.authorId)
-                    .update("reviewCount", FieldValue.increment(1))
+                library.updateBookCounters(book.id, reviewCount = newReviewCount, avgRating = newAvg)
+                if (book.authorId.isNotBlank()) {
+                    val author = library.getAuthor(book.authorId)
+                    if (author != null) library.updateAuthorCounters(book.authorId, reviewCount = author.reviewCount + 1)
+                }
 
-                // 4. Yerel state güncelle — ekstra Firestore okuması yok
-                _selectedBook.value = currentBook?.copy(
-                    reviewCount = newReviewCount,
-                    avgRating   = newAvg,
-                )
-                loadBookReviews(book.id)
-                loadAuthorReviews(book.authorId)
+                _selectedBook.value = currentBook?.copy(reviewCount = newReviewCount, avgRating = newAvg)
+                _bookReviews.value  = library.getReviewsByBook(book.id).map { it.toDomain() }
             } catch (e: Exception) {
                 _error.value = e.message
             }
         }
     }
 
-    // ── Eski feed/quotes uyumluluk yüklemesi ─────────────────────────────
-    // authorName veya bookName alanı üzerinden feed'den alıntıları getir
+    // ── Beğeni ────────────────────────────────────────────────────────────────
+
+    fun toggleLikeQuote(bookId: String, quoteId: String) {
+        viewModelScope.launch {
+            try {
+                val current = _bookQuotes.value.find { it.id == quoteId } ?: return@launch
+                val delta   = if (current.isLikedByMe) -1 else 1
+                library.incrementQuoteLikes(quoteId, delta)
+                _bookQuotes.value = _bookQuotes.value.map {
+                    if (it.id == quoteId) it.copy(
+                        isLikedByMe = !it.isLikedByMe,
+                        likesCount  = (it.likesCount + delta).coerceAtLeast(0),
+                    ) else it
+                }
+            } catch (e: Exception) { _error.value = e.message }
+        }
+    }
+
+    fun toggleLikeReview(bookId: String, reviewId: String) {
+        viewModelScope.launch {
+            try {
+                val current = _bookReviews.value.find { it.id == reviewId } ?: return@launch
+                val delta   = if (current.isLikedByMe) -1 else 1
+                library.incrementReviewLikes(reviewId, delta)
+                _bookReviews.value = _bookReviews.value.map {
+                    if (it.id == reviewId) it.copy(
+                        isLikedByMe = !it.isLikedByMe,
+                        likesCount  = (it.likesCount + delta).coerceAtLeast(0),
+                    ) else it
+                }
+            } catch (e: Exception) { _error.value = e.message }
+        }
+    }
+
+    // ── Sil / Düzenle ─────────────────────────────────────────────────────────
+
+    fun deleteQuote(bookId: String, quoteId: String, quoteUid: String) {
+        if (myUid != quoteUid) return
+        viewModelScope.launch {
+            try {
+                library.deleteQuote(quoteId)
+                val book = library.getBook(bookId)
+                if (book != null) library.updateBookCounters(bookId, quoteCount = (book.quoteCount - 1).coerceAtLeast(0))
+                _bookQuotes.value = _bookQuotes.value.filter { it.id != quoteId }
+            } catch (e: Exception) { _error.value = e.message }
+        }
+    }
+
+    fun editQuote(bookId: String, quoteId: String, quoteUid: String, newText: String) {
+        if (myUid != quoteUid) return
+        viewModelScope.launch {
+            try {
+                library.updateQuoteText(quoteId, newText)
+                _bookQuotes.value = _bookQuotes.value.map {
+                    if (it.id == quoteId) it.copy(text = newText) else it
+                }
+            } catch (e: Exception) { _error.value = e.message }
+        }
+    }
+
+    fun deleteReview(bookId: String, reviewId: String, reviewUid: String) {
+        if (myUid != reviewUid) return
+        viewModelScope.launch {
+            try {
+                library.deleteReview(reviewId)
+                _bookReviews.value = _bookReviews.value.filter { it.id != reviewId }
+            } catch (e: Exception) { _error.value = e.message }
+        }
+    }
+
+    fun editReview(bookId: String, reviewId: String, reviewUid: String, newText: String, newRating: Float) {
+        if (myUid != reviewUid) return
+        viewModelScope.launch {
+            try {
+                library.updateReviewText(reviewId, newText, newRating)
+                _bookReviews.value = _bookReviews.value.map {
+                    if (it.id == reviewId) it.copy(text = newText, rating = newRating) else it
+                }
+            } catch (e: Exception) { _error.value = e.message }
+        }
+    }
+
+    // ── Legacy / Uyumluluk ───────────────────────────────────────────────────
+    // Feed'deki eski alıntılar (Firestore) — yalnızca okuma, taşıma için
     fun loadLegacyFeedQuotesByAuthor(authorName: String) {
         viewModelScope.launch {
             try {
@@ -629,7 +549,6 @@ class LibraryViewModel @Inject constructor(
                     .whereEqualTo("quote.author", authorName).limit(50).get().await()
                 val snap2 = firestore.collection("feed")
                     .whereEqualTo("authorName", authorName).limit(50).get().await()
-
                 val all = (snap1.documents + snap2.documents).distinctBy { it.id }
                 val mapped = all.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
@@ -647,8 +566,6 @@ class LibraryViewModel @Inject constructor(
                         ts              = d["ts"] as? Timestamp,
                     )
                 }.sortedByDescending { it.ts?.seconds ?: 0L }
-
-                // Sadece yazar tabına ekliyoruz; authorQuotes state'ini eski + yeni olarak birleştir
                 val existing = _authorQuotes.value
                 val ids = existing.map { it.id }.toSet()
                 _authorQuotes.value = existing + mapped.filter { it.id !in ids }
@@ -656,374 +573,39 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
+    // fetchBooksForAuthor — FeedViewModel'den çağrılıyor
+    suspend fun fetchBooksForAuthor(authorId: String): List<LibraryBook> =
+        try { library.getBooksByAuthor(authorId).map { it.toDomain() } }
+        catch (_: Exception) { emptyList() }
+
     fun clearError() { _error.value = null }
 
-    fun migrateLegacyFeedQuotes(onProgress: (Int, Int) -> Unit = { _, _ -> }) {
-        viewModelScope.launch {
-            try {
-                // Eski postlarda "libraryBookId" alanı ABSENT (yok) — whereEqualTo("","") eşleşmez.
-                // Tek güvenilir yol: feed'i toplu çekip bellekte filtrele.
-                // bookName VEYA quote.book dolu olan her postu işle.
-                val snap = firestore.collection("feed")
-                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(100).get().await()
-
-                val docs = snap.documents.filter { doc ->
-                    val d = doc.data ?: return@filter false
-                    // libraryBookId zaten dolu olanları atla
-                    val existingBookId = d["libraryBookId"] as? String ?: ""
-                    if (existingBookId.isNotBlank()) return@filter false
-                    val qObj  = d["quote"] as? Map<*, *>
-                    val bName = (qObj?.get("book") as? String)?.trim()?.isNotBlank() == true
-                        || (d["bookName"] as? String)?.trim()?.isNotBlank() == true
-                    val qText = (qObj?.get("text") as? String)?.trim()?.isNotBlank() == true
-                        || (d["quoteText"] as? String)?.trim()?.isNotBlank() == true
-                    bName && qText
-                }
-
-                val total = docs.size
-                var done  = 0
-
-                docs.forEach { doc ->
-                    val d          = doc.data ?: return@forEach
-                    val qObj       = d["quote"] as? Map<*, *>
-                    val bookName   = ((qObj?.get("book") as? String)?.takeIf { it.isNotBlank() }
-                        ?: d["bookName"] as? String ?: "").trim()
-                    val authorName = ((qObj?.get("author") as? String)?.takeIf { it.isNotBlank() }
-                        ?: d["authorName"] as? String ?: "").trim()
-
-                    if (bookName.isBlank() && authorName.isBlank()) { done++; return@forEach }
-
-                    val (authorId, bookId) = library.ensureAuthorAndBook(authorName, bookName)
-
-                    val updates = mutableMapOf<String, Any>()
-                    if (authorId.isNotBlank()) updates["libraryAuthorId"] = authorId
-                    if (bookId.isNotBlank())   updates["libraryBookId"]   = bookId
-                    // type alanı yoksa yaz — loadLibraryQuotesAsync bu alanla filtreler
-                    val currentType = doc.data?.get("type") as? String ?: ""
-                    if (currentType.isBlank()) updates["type"] = "library_quote"
-
-                    if (updates.isNotEmpty()) {
-                        try { doc.reference.update(updates).await() } catch (_: Exception) {}
-                    }
-
-                    // Ayrıca library_books/{bookId}/quotes'a ekle (yoksa)
-                    if (bookId.isNotBlank()) {
-                        val qText = (qObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
-                            ?: d["quoteText"] as? String ?: ""
-                        if (qText.isNotBlank()) {
-                            migrateQuoteToLibrary(
-                                feedDocId  = doc.id,
-                                bookId     = bookId,
-                                authorId   = authorId,
-                                bookTitle  = bookName,
-                                authorName = authorName,
-                                quoteText  = qText,
-                                uid        = d["uid"] as? String ?: "",
-                                userName   = (d["name"] as? String)?.takeIf { it.isNotBlank() }
-                                    ?: d["displayName"] as? String ?: "",
-                                userPhoto  = d["photoURL"] as? String ?: "",
-                                ts         = d["ts"] as? com.google.firebase.Timestamp,
-                            )
-                        }
-                    }
-
-                    done++
-                    onProgress(done, total)
-                }
-            } catch (e: Exception) {
-                _error.value = e.message
-            }
-        }
-    }
-
-    private suspend fun migrateQuoteToLibrary(
-        feedDocId : String,
-        bookId    : String,
-        authorId  : String,
-        bookTitle : String,
-        authorName: String,
-        quoteText : String,
-        uid       : String,
-        userName  : String,
-        userPhoto : String,
-        ts        : com.google.firebase.Timestamp?,
-    ) {
-        // Aynı feedPostId zaten varsa — userDisplayName boşsa güncelle, yoksa atla
-        val existing = firestore.collection("library_books").document(bookId)
-            .collection("quotes")
-            .whereEqualTo("feedPostId", feedDocId)
-            .limit(1).get().await()
-        if (!existing.isEmpty) {
-            val existingDoc = existing.documents[0]
-            val existingName = existingDoc.getString("userDisplayName") ?: ""
-            if (existingName.isBlank() && userName.isNotBlank()) {
-                existingDoc.reference.update(mapOf(
-                    "userDisplayName" to userName,
-                    "userPhotoURL"    to userPhoto,
-                    "uid"             to uid,
-                )).await()
-            }
-            return
-        }
-
-        val data = hashMapOf(
-            "bookId"          to bookId,
-            "authorId"        to authorId,
-            "bookTitle"       to bookTitle,
-            "authorName"      to authorName,
-            "text"            to quoteText,
-            "uid"             to uid,
-            "userDisplayName" to userName,
-            "userPhotoURL"    to userPhoto,
-            "feedPostId"      to feedDocId,
-            "likesCount"      to 0,
-            "ts"              to (ts ?: com.google.firebase.Timestamp.now()),
-        )
-        try {
-            firestore.collection("library_books").document(bookId)
-                .collection("quotes").add(data).await()
-            firestore.collection("library_books").document(bookId)
-                .update("quoteCount", com.google.firebase.firestore.FieldValue.increment(1))
-            if (authorId.isNotBlank()) {
-                firestore.collection("authors").document(authorId)
-                    .update("quoteCount", com.google.firebase.firestore.FieldValue.increment(1))
-            }
-        } catch (_: Exception) {}
-    }
-
-    // ══════════════════════════════════════════════════════════════════════
-    //  ADMİN: Yazar / Kitap Güncelleme
-    // ══════════════════════════════════════════════════════════════════════
-    fun updateAuthor(
-        authorId   : String,
-        name       : String,
-        bio        : String,
-        photoURL   : String,
-        birthYear  : Int,
-        nationality: String,
-    ) {
-        viewModelScope.launch {
-            try {
-                val data = mapOf(
-                    "name"        to name,
-                    "nameLower"   to name.trim().lowercase(),
-                    "bio"         to bio,
-                    "photoURL"    to photoURL,
-                    "birthYear"   to birthYear,
-                    "nationality" to nationality,
-                    "updatedAt"   to com.google.firebase.Timestamp.now(),
-                )
-                firestore.collection("authors").document(authorId).update(data).await()
-                // State güncelle
-                _selectedAuthor.value = _selectedAuthor.value?.copy(
-                    name        = name,
-                    bio         = bio,
-                    photoURL    = photoURL,
-                    birthYear   = birthYear,
-                    nationality = nationality,
-                )
-            } catch (e: Exception) {
-                _error.value = e.message
-            }
-        }
-    }
-
-    fun updateLibraryBook(
-        bookId     : String,
-        title      : String,
-        synopsis   : String,
-        genre      : String,
-        publishYear: Int,
-        pageCount  : Int,
-        coverImg   : String,
-    ) {
-        viewModelScope.launch {
-            try {
-                val data = mapOf(
-                    "title"       to title,
-                    "titleLower"  to title.trim().lowercase(),
-                    "synopsis"    to synopsis,
-                    "genre"       to genre,
-                    "publishYear" to publishYear,
-                    "pageCount"   to pageCount,
-                    "coverImg"    to coverImg,
-                    "updatedAt"   to com.google.firebase.Timestamp.now(),
-                )
-                firestore.collection("library_books").document(bookId).update(data).await()
-                _selectedBook.value = _selectedBook.value?.copy(
-                    title       = title,
-                    synopsis    = synopsis,
-                    genre       = genre,
-                    publishYear = publishYear,
-                    pageCount   = pageCount,
-                    coverImg    = coverImg,
-                )
-            } catch (e: Exception) {
-                _error.value = e.message
-            }
-        }
-    }
-
-    // ══════════════════════════════════════════════════════════════════════
-    //  Alıntı & İnceleme — Beğeni / Silme / Düzenleme
-    // ══════════════════════════════════════════════════════════════════════
-
-    val isAdmin: Boolean
-        get() = auth.currentUser?.email == "siirgibi49@gmail.com"
-
-    // ── Alıntı Beğen ───────────────────────────────────────────────────
-    fun toggleLikeQuote(bookId: String, quoteId: String) {
-        val uid = myUid.ifBlank { return }
-        viewModelScope.launch {
-            try {
-                val ref = firestore.collection("library_books").document(bookId)
-                    .collection("quotes").document(quoteId)
-                val snap = ref.get().await()
-                @Suppress("UNCHECKED_CAST")
-                val likedBy = (snap.get("likedBy") as? List<String>) ?: emptyList()
-                if (uid in likedBy) {
-                    ref.update(
-                        "likedBy",    com.google.firebase.firestore.FieldValue.arrayRemove(uid),
-                        "likesCount", com.google.firebase.firestore.FieldValue.increment(-1),
-                    ).await()
-                } else {
-                    ref.update(
-                        "likedBy",    com.google.firebase.firestore.FieldValue.arrayUnion(uid),
-                        "likesCount", com.google.firebase.firestore.FieldValue.increment(1),
-                    ).await()
-                }
-                loadBookQuotes(bookId)
-            } catch (e: Exception) { e.printStackTrace() }
-        }
-    }
-
-    // ── Alıntı Sil ─────────────────────────────────────────────────────
-    fun deleteQuote(bookId: String, quoteId: String, quoteUid: String) {
-        if (myUid != quoteUid && !isAdmin) return
-        viewModelScope.launch {
-            try {
-                firestore.collection("library_books").document(bookId)
-                    .collection("quotes").document(quoteId).delete().await()
-                firestore.collection("library_books").document(bookId)
-                    .update("quoteCount", com.google.firebase.firestore.FieldValue.increment(-1))
-                loadBookQuotes(bookId)
-            } catch (e: Exception) { e.printStackTrace() }
-        }
-    }
-
-    // ── Alıntı Düzenle ─────────────────────────────────────────────────
-    fun editQuote(bookId: String, quoteId: String, quoteUid: String, newText: String) {
-        if (myUid != quoteUid && !isAdmin) return
-        viewModelScope.launch {
-            try {
-                firestore.collection("library_books").document(bookId)
-                    .collection("quotes").document(quoteId)
-                    .update("text", newText).await()
-                loadBookQuotes(bookId)
-            } catch (e: Exception) { e.printStackTrace() }
-        }
-    }
-
-    // ── İnceleme Beğen ─────────────────────────────────────────────────
-    fun toggleLikeReview(bookId: String, reviewId: String) {
-        val uid = myUid.ifBlank { return }
-        viewModelScope.launch {
-            try {
-                val ref = firestore.collection("library_books").document(bookId)
-                    .collection("reviews").document(reviewId)
-                val snap = ref.get().await()
-                @Suppress("UNCHECKED_CAST")
-                val likedBy = (snap.get("likedBy") as? List<String>) ?: emptyList()
-                if (uid in likedBy) {
-                    ref.update(
-                        "likedBy",    com.google.firebase.firestore.FieldValue.arrayRemove(uid),
-                        "likesCount", com.google.firebase.firestore.FieldValue.increment(-1),
-                    ).await()
-                } else {
-                    ref.update(
-                        "likedBy",    com.google.firebase.firestore.FieldValue.arrayUnion(uid),
-                        "likesCount", com.google.firebase.firestore.FieldValue.increment(1),
-                    ).await()
-                }
-                loadBookReviews(bookId)
-            } catch (e: Exception) { e.printStackTrace() }
-        }
-    }
-
-    // ── İnceleme Sil ───────────────────────────────────────────────────
-    fun deleteReview(bookId: String, reviewId: String, reviewUid: String) {
-        if (myUid != reviewUid && !isAdmin) return
-        viewModelScope.launch {
-            try {
-                firestore.collection("library_books").document(bookId)
-                    .collection("reviews").document(reviewId).delete().await()
-                loadBookReviews(bookId)
-            } catch (e: Exception) { e.printStackTrace() }
-        }
-    }
-
-    // ── İnceleme Düzenle ───────────────────────────────────────────────
-    fun editReview(bookId: String, reviewId: String, reviewUid: String, newText: String, newRating: Float) {
-        if (myUid != reviewUid && !isAdmin) return
-        viewModelScope.launch {
-            try {
-                firestore.collection("library_books").document(bookId)
-                    .collection("reviews").document(reviewId)
-                    .update("text", newText, "rating", newRating).await()
-                loadBookReviews(bookId)
-            } catch (e: Exception) { e.printStackTrace() }
-        }
-    }
-
-    // ── Sayaçları Yeniden Hesapla (Admin) ──────────────────────────────
+    // rebuildCounters (Admin araç)
     fun rebuildCounters(onComplete: (String) -> Unit) {
         viewModelScope.launch {
             try {
-                val authors = firestore.collection("authors").get().await()
-                var processed = 0
-                for (authorDoc in authors.documents) {
-                    val authorId = authorDoc.id
-                    val books = firestore.collection("library_books")
-                        .whereEqualTo("authorId", authorId).get().await()
-                    var totalQuotes  = 0
-                    var totalReviews = 0
-                    for (bookDoc in books.documents) {
-                        val qCount = firestore.collection("library_books")
-                            .document(bookDoc.id).collection("quotes").get().await().size()
-                        val rCount = firestore.collection("library_books")
-                            .document(bookDoc.id).collection("reviews").get().await().size()
-                        firestore.collection("library_books").document(bookDoc.id)
-                            .update("quoteCount", qCount, "reviewCount", rCount).await()
-                        totalQuotes  += qCount
-                        totalReviews += rCount
+                val authors = library.getAuthors(500)
+                for (author in authors) {
+                    val books  = library.getBooksByAuthor(author.id)
+                    var qTotal = 0
+                    var rTotal = 0
+                    for (book in books) {
+                        val qCount = library.getQuotesByBook(book.id).size
+                        val rCount = library.getReviewsByBook(book.id).size
+                        library.updateBookCounters(book.id, quoteCount = qCount, reviewCount = rCount)
+                        qTotal += qCount
+                        rTotal += rCount
                     }
-                    firestore.collection("authors").document(authorId)
-                        .update(
-                            "bookCount",   books.size(),
-                            "quoteCount",  totalQuotes,
-                            "reviewCount", totalReviews,
-                        ).await()
-                    processed++
+                    library.updateAuthorCounters(author.id,
+                        bookCount   = books.size,
+                        quoteCount  = qTotal,
+                        reviewCount = rTotal,
+                    )
                 }
-                onComplete("$processed yazar güncellendi ✓")
+                onComplete("✅ Sayaçlar yenilendi")
             } catch (e: Exception) {
-                onComplete("Hata: ${e.message}")
+                onComplete("❌ ${e.message}")
             }
-        }
-    }
-
-    // ── Yazar Kitaplarını Getir (suspend) ──────────────────────────────
-    suspend fun fetchBooksForAuthor(authorId: String): List<LibraryBook> {
-        return try {
-            firestore.collection("library_books")
-                .whereEqualTo("authorId", authorId)
-                .get().await()
-                .documents.mapNotNull { doc ->
-                    doc.toObject(LibraryBook::class.java)?.copy(id = doc.id)
-                }
-        } catch (e: Exception) {
-            emptyList()
         }
     }
 }
