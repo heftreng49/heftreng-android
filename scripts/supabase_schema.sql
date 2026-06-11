@@ -1,11 +1,13 @@
--- ══════════════════════════════════════════════════════════════
---  Heftreng — Supabase Schema (Adım 1: Library arama tabloları)
---  Dashboard → SQL Editor → New query → buraya yapıştır → Run
--- ══════════════════════════════════════════════════════════════
+-- ══════════════════════════════════════════════════════════════════════
+--  Heftreng — Supabase Schema  (idempotent — defalarca çalıştırılabilir)
+-- ══════════════════════════════════════════════════════════════════════
 
--- ── Yazarlar ─────────────────────────────────────────────────
+-- ── Yardımcı: policy varsa sil, yoksa geç ────────────────────────────
+-- PostgreSQL'de "create policy if not exists" yok, drop + create yapıyoruz.
+
+-- ── Authors ───────────────────────────────────────────────────────────
 create table if not exists authors (
-    id            text primary key,          -- Firestore doc id (geçiş kolaylığı için)
+    id            text primary key,
     name          text not null,
     name_lower    text generated always as (lower(name)) stored,
     bio           text    default '',
@@ -19,16 +21,16 @@ create table if not exists authors (
     created_at    timestamptz default now()
 );
 
--- Türkçe/Kürtçe karakterleri de kapsayan simple full-text index
-create index if not exists authors_fts
-    on authors using gin(to_tsvector('simple', name));
-
--- prefix araması için btree index (ilike '%q%' yerine ilike 'q%' da çalışır)
+create index if not exists authors_fts           on authors using gin(to_tsvector('simple', name));
 create index if not exists authors_name_lower_idx on authors (name_lower);
 
--- ── Kütüphane Kitapları ──────────────────────────────────────
+alter table authors enable row level security;
+drop policy if exists "public_read_authors" on authors;
+create policy "public_read_authors" on authors for select using (true);
+
+-- ── Library Books ─────────────────────────────────────────────────────
 create table if not exists library_books (
-    id            text primary key,          -- Firestore doc id
+    id            text primary key,
     title         text not null,
     title_lower   text generated always as (lower(title)) stored,
     author_id     text references authors(id) on delete set null,
@@ -44,27 +46,15 @@ create table if not exists library_books (
     created_at    timestamptz default now()
 );
 
-create index if not exists library_books_fts
-    on library_books using gin(to_tsvector('simple', title));
-
+create index if not exists library_books_fts           on library_books using gin(to_tsvector('simple', title));
 create index if not exists library_books_title_lower_idx on library_books (title_lower);
 create index if not exists library_books_author_id_idx   on library_books (author_id);
 
--- ── Row Level Security — sadece okuma açık (anonim erişim) ──
-alter table authors       enable row level security;
 alter table library_books enable row level security;
+drop policy if exists "public_read_library_books" on library_books;
+create policy "public_read_library_books" on library_books for select using (true);
 
--- Herkes okuyabilir (anon key yeterli)
-create policy "public_read_authors"
-    on authors for select using (true);
-
-create policy "public_read_library_books"
-    on library_books for select using (true);
-
--- Yazma şimdilik kapalı — sonraki adımda Firebase'den sync eklenecek
--- (service_role key ile server-side yazılacak)
-
--- ── Kitap Alıntıları ──────────────────────────────────────────────────────────
+-- ── Book Quotes ───────────────────────────────────────────────────────
 create table if not exists book_quotes (
     id                text primary key,
     book_id           text references library_books(id) on delete cascade,
@@ -87,10 +77,10 @@ create index if not exists book_quotes_text_search_idx
     on book_quotes using gin(to_tsvector('simple', text));
 
 alter table book_quotes enable row level security;
-create policy if not exists "book_quotes_read"
-    on book_quotes for select using (true);
+drop policy if exists "book_quotes_read" on book_quotes;
+create policy "book_quotes_read" on book_quotes for select using (true);
 
--- ── Kitap Yorumları ───────────────────────────────────────────────────────────
+-- ── Book Reviews ──────────────────────────────────────────────────────
 create table if not exists book_reviews (
     id                text primary key,
     book_id           text references library_books(id) on delete cascade,
@@ -113,10 +103,10 @@ create index if not exists book_reviews_uid_idx       on book_reviews(uid);
 create index if not exists book_reviews_rating_idx    on book_reviews(rating);
 
 alter table book_reviews enable row level security;
-create policy if not exists "book_reviews_read"
-    on book_reviews for select using (true);
+drop policy if exists "book_reviews_read" on book_reviews;
+create policy "book_reviews_read" on book_reviews for select using (true);
 
--- ── Yazar Takip ───────────────────────────────────────────────────────────────
+-- ── Author Follows ────────────────────────────────────────────────────
 create table if not exists author_follows (
     author_id  text not null references authors(id) on delete cascade,
     user_id    text not null,
@@ -127,5 +117,5 @@ create table if not exists author_follows (
 create index if not exists author_follows_user_idx on author_follows(user_id);
 
 alter table author_follows enable row level security;
-create policy if not exists "author_follows_read"
-    on author_follows for select using (true);
+drop policy if exists "author_follows_read" on author_follows;
+create policy "author_follows_read" on author_follows for select using (true);
