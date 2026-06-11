@@ -128,13 +128,13 @@ class LibraryRepository @Inject constructor(
 
     suspend fun getAuthor(id: String): AuthorRow? =
         db["authors"].select {
-            filter("id", "eq", id)
+            eq("id", id)
             limit(1)
         }.decodeSingleOrNull()
 
     suspend fun searchAuthors(query: String): List<AuthorRow> =
         db["authors"].select {
-            filter("name", "ilike", "%$query%")
+            ilike("name", "%$query%")
             limit(20)
         }.decodeList()
 
@@ -155,7 +155,7 @@ class LibraryRepository @Inject constructor(
                 reviewCount = reviewCount ?: c.reviewCount,
                 bookCount   = bookCount   ?: c.bookCount,
             )
-        ) { filter("id", "eq", id) }
+        ) { eq("id", id) }
     }
 
     // ── Library Books ─────────────────────────────────────────────────────────
@@ -168,13 +168,13 @@ class LibraryRepository @Inject constructor(
 
     suspend fun getBooksByAuthor(authorId: String): List<LibraryBookRow> =
         db["library_books"].select {
-            filter("author_id", "eq", authorId)
+            eq("author_id", authorId)
             order("created_at", Order.DESCENDING)
         }.decodeList()
 
     suspend fun getBook(id: String): LibraryBookRow? =
         db["library_books"].select {
-            filter("id", "eq", id)
+            eq("id", id)
             limit(1)
         }.decodeSingleOrNull()
 
@@ -195,21 +195,21 @@ class LibraryRepository @Inject constructor(
                 reviewCount = reviewCount ?: c.reviewCount,
                 avgRating   = avgRating   ?: c.avgRating,
             )
-        ) { filter("id", "eq", id) }
+        ) { eq("id", id) }
     }
 
     // ── Book Quotes ───────────────────────────────────────────────────────────
 
     suspend fun getQuotesByBook(bookId: String, limit: Int = 50): List<BookQuoteRow> =
         db["book_quotes"].select {
-            filter("book_id", "eq", bookId)
+            eq("book_id", bookId)
             order("created_at", Order.DESCENDING)
             limit(limit.toLong())
         }.decodeList()
 
     suspend fun getQuotesByAuthor(authorId: String, limit: Int = 50): List<BookQuoteRow> =
         db["book_quotes"].select {
-            filter("author_id", "eq", authorId)
+            eq("author_id", authorId)
             order("created_at", Order.DESCENDING)
             limit(limit.toLong())
         }.decodeList()
@@ -220,36 +220,36 @@ class LibraryRepository @Inject constructor(
 
     suspend fun updateQuoteText(id: String, newText: String) {
         db["book_quotes"].update(mapOf("text" to newText)) {
-            filter("id", "eq", id)
+            eq("id", id)
         }
     }
 
     suspend fun deleteQuote(id: String) {
-        db["book_quotes"].delete { filter("id", "eq", id) }
+        db["book_quotes"].delete { eq("id", id) }
     }
 
     suspend fun incrementQuoteLikes(id: String, delta: Int) {
         val row = db["book_quotes"].select {
-            filter("id", "eq", id)
+            eq("id", id)
             limit(1)
         }.decodeSingleOrNull<BookQuoteRow>() ?: return
         db["book_quotes"].update(
             mapOf("likes_count" to (row.likesCount + delta).coerceAtLeast(0))
-        ) { filter("id", "eq", id) }
+        ) { eq("id", id) }
     }
 
     // ── Book Reviews ──────────────────────────────────────────────────────────
 
     suspend fun getReviewsByBook(bookId: String, limit: Int = 50): List<BookReviewRow> =
         db["book_reviews"].select {
-            filter("book_id", "eq", bookId)
+            eq("book_id", bookId)
             order("created_at", Order.DESCENDING)
             limit(limit.toLong())
         }.decodeList()
 
     suspend fun getReviewsByAuthor(authorId: String, limit: Int = 50): List<BookReviewRow> =
         db["book_reviews"].select {
-            filter("author_id", "eq", authorId)
+            eq("author_id", authorId)
             order("created_at", Order.DESCENDING)
             limit(limit.toLong())
         }.decodeList()
@@ -261,21 +261,21 @@ class LibraryRepository @Inject constructor(
     suspend fun updateReviewText(id: String, newText: String, newRating: Float) {
         db["book_reviews"].update(
             mapOf("text" to newText, "rating" to newRating)
-        ) { filter("id", "eq", id) }
+        ) { eq("id", id) }
     }
 
     suspend fun deleteReview(id: String) {
-        db["book_reviews"].delete { filter("id", "eq", id) }
+        db["book_reviews"].delete { eq("id", id) }
     }
 
     suspend fun incrementReviewLikes(id: String, delta: Int) {
         val row = db["book_reviews"].select {
-            filter("id", "eq", id)
+            eq("id", id)
             limit(1)
         }.decodeSingleOrNull<BookReviewRow>() ?: return
         db["book_reviews"].update(
             mapOf("likes_count" to (row.likesCount + delta).coerceAtLeast(0))
-        ) { filter("id", "eq", id) }
+        ) { eq("id", id) }
     }
 
     // ── Author Follows ────────────────────────────────────────────────────────
@@ -284,8 +284,8 @@ class LibraryRepository @Inject constructor(
         val uid = auth.currentUser?.uid ?: return false
         return try {
             db["author_follows"].select {
-                filter("author_id", "eq", authorId)
-                filter("user_id",   "eq", uid)
+                eq("author_id", authorId)
+                eq("user_id", uid)
                 limit(1)
             }.decodeList<Map<String, String>>().isNotEmpty()
         } catch (_: Exception) { false }
@@ -299,19 +299,19 @@ class LibraryRepository @Inject constructor(
         val a = getAuthor(authorId) ?: return
         db["authors"].update(
             mapOf("follower_count" to a.followerCount + 1)
-        ) { filter("id", "eq", authorId) }
+        ) { eq("id", authorId) }
     }
 
     suspend fun unfollowAuthor(authorId: String) {
         val uid = auth.currentUser?.uid ?: return
         db["author_follows"].delete {
-            filter("author_id", "eq", authorId)
-            filter("user_id",   "eq", uid)
+            eq("author_id", authorId)
+            eq("user_id", uid)
         }
         val a = getAuthor(authorId) ?: return
         db["authors"].update(
             mapOf("follower_count" to (a.followerCount - 1).coerceAtLeast(0))
-        ) { filter("id", "eq", authorId) }
+        ) { eq("id", authorId) }
     }
 
     // ── ensureAuthorAndBook ───────────────────────────────────────────────────
@@ -328,7 +328,7 @@ class LibraryRepository @Inject constructor(
     private suspend fun findOrCreateAuthor(name: String): String {
         return try {
             val existing = db["authors"].select {
-                filter("name", "ilike", name)
+                ilike("name", name)
                 limit(1)
             }.decodeSingleOrNull<AuthorRow>()
             if (existing != null) return existing.id
@@ -346,7 +346,7 @@ class LibraryRepository @Inject constructor(
     ): String {
         return try {
             val existing = db["library_books"].select {
-                filter("title", "ilike", title)
+                ilike("title", title)
                 limit(1)
             }.decodeSingleOrNull<LibraryBookRow>()
             if (existing != null) return existing.id
@@ -362,7 +362,7 @@ class LibraryRepository @Inject constructor(
                 val a = getAuthor(authorId)
                 if (a != null) db["authors"].update(
                     mapOf("book_count" to a.bookCount + 1)
-                ) { filter("id", "eq", authorId) }
+                ) { eq("id", authorId) }
             }
             newId
         } catch (_: Exception) { "" }
