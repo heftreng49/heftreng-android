@@ -162,88 +162,6 @@ async function migrateQuotes(bookIds) {
 }
 
 // ── Ana akış ──────────────────────────────────────────────────────────────────
-async function ensureSchema() {
-  console.log('\n🔧 Tablolar kontrol ediliyor / oluşturuluyor...');
-  const ddl = `
-    create table if not exists authors (
-      id text primary key, name text not null,
-      name_lower text generated always as (lower(name)) stored,
-      bio text default '', photo_url text default '',
-      birth_year int default 0, nationality text default '',
-      book_count int default 0, quote_count int default 0,
-      review_count int default 0, follower_count int default 0,
-      created_at timestamptz default now()
-    );
-    create index if not exists authors_name_lower_idx on authors (name_lower);
-
-    create table if not exists library_books (
-      id text primary key, title text not null,
-      title_lower text generated always as (lower(title)) stored,
-      author_id text references authors(id) on delete set null,
-      author_name text default '', cover_img text default '',
-      genre text default '', publish_year int default 0,
-      synopsis text default '', page_count int default 0,
-      quote_count int default 0, review_count int default 0,
-      avg_rating float default 0, created_at timestamptz default now()
-    );
-    create index if not exists library_books_author_id_idx on library_books (author_id);
-
-    create table if not exists book_quotes (
-      id text primary key,
-      book_id text references library_books(id) on delete cascade,
-      author_id text references authors(id) on delete set null,
-      book_title text default '', author_name text default '',
-      text text not null, uid text default '',
-      user_display_name text default '', user_photo_url text default '',
-      feed_post_id text default '', likes_count int default 0,
-      created_at timestamptz default now()
-    );
-    create index if not exists book_quotes_book_id_idx   on book_quotes(book_id);
-    create index if not exists book_quotes_author_id_idx on book_quotes(author_id);
-
-    create table if not exists book_reviews (
-      id text primary key,
-      book_id text references library_books(id) on delete cascade,
-      author_id text references authors(id) on delete set null,
-      book_title text default '', author_name text default '',
-      text text not null, rating float default 0,
-      uid text default '', user_display_name text default '',
-      user_photo_url text default '', feed_post_id text default '',
-      likes_count int default 0, created_at timestamptz default now()
-    );
-    create index if not exists book_reviews_book_id_idx on book_reviews(book_id);
-
-    create table if not exists author_follows (
-      author_id text not null references authors(id) on delete cascade,
-      user_id text not null, created_at timestamptz default now(),
-      primary key (author_id, user_id)
-    );
-  `;
-
-  // Her statement ayrı ayrı çalıştır — biri hata verse diğerleri devam eder
-  const stmts = ddl.split(';').map(s => s.trim()).filter(s => s.length > 2);
-  for (const stmt of stmts) {
-    try {
-      await fetch(`${SUPABASE_URL}/rest/v1/rpc/exec_sql`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-        },
-        body: JSON.stringify({ query: stmt }),
-      });
-    } catch (_) {}
-  }
-
-  // Supabase schema cache'i yenile (PostgREST reload)
-  await fetch(`${SUPABASE_URL}/rest/v1/`, {
-    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` },
-  });
-
-  console.log('   ✅ Tablolar hazır');
-}
-
 async function main() {
   console.log('🚀 Supabase migration başlıyor...');
   console.log(`   DRY_RUN: ${DRY_RUN}`);
@@ -252,7 +170,6 @@ async function main() {
   if (!SUPABASE_URL) throw new Error('SUPABASE_URL env değişkeni eksik');
   if (!SUPABASE_KEY) throw new Error('SUPABASE_SERVICE_KEY env değişkeni eksik');
 
-  await ensureSchema();
   const authorIds = await migrateAuthors();
   const bookIds   = await migrateBooks(authorIds);
   await migrateQuotes(bookIds);
