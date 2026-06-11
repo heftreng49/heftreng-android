@@ -138,6 +138,12 @@ class LibraryRepository @Inject constructor(
             limit(20)
         }.decodeList()
 
+    suspend fun searchBooks(query: String): List<LibraryBookRow> =
+        db["library_books"].select {
+            filter { ilike("title", "%$query%") }
+            limit(20)
+        }.decodeList()
+
     suspend fun upsertAuthor(row: AuthorRow) {
         db["authors"].upsert(row)
     }

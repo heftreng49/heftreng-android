@@ -48,7 +48,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.BookQuote
 import com.heftreng.app.data.model.BookReview
 import com.heftreng.app.data.model.LibraryBook
@@ -1051,41 +1050,17 @@ private fun LegacyQuoteListPage(
 fun AuthorQuotesSmartScreen(
     authorName   : String,
     navController: NavController,
+    vm           : LibraryViewModel = hiltViewModel(),
 ) {
-    val db = remember { FirebaseFirestore.getInstance() }
     // null = yükleniyor, "" = bulunamadı, "id" = bulundu
     var resolvedId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(authorName) {
         if (authorName.isBlank()) { resolvedId = ""; return@LaunchedEffect }
         try {
-            // 1. Tam ada göre ara
-            var snap = db.collection("authors")
-                .whereEqualTo("name", authorName.trim())
-                .limit(1).get().await()
-            if (!snap.isEmpty) {
-                resolvedId = snap.documents[0].id
-                return@LaunchedEffect
-            }
-            // 2. lowercase'e göre ara
-            snap = db.collection("authors")
-                .whereEqualTo("nameLower", authorName.trim().lowercase())
-                .limit(1).get().await()
-            if (!snap.isEmpty) {
-                resolvedId = snap.documents[0].id
-                return@LaunchedEffect
-            }
-            // 3. Bulunamadı → otomatik oluştur
-            val newId = db.collection("authors").add(hashMapOf(
-                "name"          to authorName.trim(),
-                "nameLower"     to authorName.trim().lowercase(),
-                "bio"           to "", "photoURL" to "", "birthYear" to 0,
-                "nationality"   to "", "bookCount" to 0, "quoteCount" to 0,
-                "reviewCount"   to 0, "followerCount" to 0,
-                "autoCreated"   to true,
-                "ts"            to com.google.firebase.Timestamp.now(),
-            )).await().id
-            resolvedId = newId
+            // 1. Supabase'de ilike ile ara
+            val found = vm.findOrCreateAuthorByName(authorName.trim())
+            resolvedId = found.ifBlank { "" }
         } catch (_: Exception) {
             resolvedId = "" // Hata: legacy ekrana düş
         }
@@ -1123,41 +1098,16 @@ fun AuthorQuotesSmartScreen(
 fun BookQuotesSmartScreen(
     bookName     : String,
     navController: NavController,
+    vm           : LibraryViewModel = hiltViewModel(),
 ) {
-    val db = remember { FirebaseFirestore.getInstance() }
     var resolvedId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(bookName) {
         if (bookName.isBlank()) { resolvedId = ""; return@LaunchedEffect }
         try {
-            // 1. Tam ada göre ara
-            var snap = db.collection("library_books")
-                .whereEqualTo("title", bookName.trim())
-                .limit(1).get().await()
-            if (!snap.isEmpty) {
-                resolvedId = snap.documents[0].id
-                return@LaunchedEffect
-            }
-            // 2. lowercase'e göre ara
-            snap = db.collection("library_books")
-                .whereEqualTo("titleLower", bookName.trim().lowercase())
-                .limit(1).get().await()
-            if (!snap.isEmpty) {
-                resolvedId = snap.documents[0].id
-                return@LaunchedEffect
-            }
-            // 3. Bulunamadı → otomatik oluştur
-            val newId = db.collection("library_books").add(hashMapOf(
-                "title"       to bookName.trim(),
-                "titleLower"  to bookName.trim().lowercase(),
-                "authorId"    to "", "authorName" to "",
-                "coverImg"    to "", "genre" to "", "publishYear" to 0,
-                "synopsis"    to "", "pageCount" to 0,
-                "quoteCount"  to 0, "reviewCount" to 0, "avgRating" to 0f,
-                "autoCreated" to true,
-                "ts"          to com.google.firebase.Timestamp.now(),
-            )).await().id
-            resolvedId = newId
+            // Supabase'de ilike ile ara, yoksa oluştur
+            val found = vm.findOrCreateBookByTitle(bookName.trim())
+            resolvedId = found.ifBlank { "" }
         } catch (_: Exception) {
             resolvedId = ""
         }
