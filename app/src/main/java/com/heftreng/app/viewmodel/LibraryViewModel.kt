@@ -133,6 +133,7 @@ class LibraryViewModel @Inject constructor(
     val myName  get() = auth.currentUser?.displayName ?: ""
     val myPhoto get() = auth.currentUser?.photoUrl?.toString() ?: ""
     val myUser  get() = auth.currentUser?.email?.substringBefore("@") ?: ""
+    val isAdmin get() = auth.currentUser?.email == "siirgibi49@gmail.com"
 
     // ── Authors ───────────────────────────────────────────────────────────────
 
@@ -305,21 +306,21 @@ class LibraryViewModel @Inject constructor(
     fun updateLibraryBook(
         bookId     : String,
         title      : String,
-        authorId   : String,
-        authorName : String,
-        coverImg   : String,
+        synopsis   : String,
         genre      : String,
         publishYear: Int,
-        synopsis   : String,
         pageCount  : Int,
+        coverImg   : String,
+        authorId   : String = "",
+        authorName : String = "",
     ) {
         viewModelScope.launch {
             try {
                 val current = library.getBook(bookId) ?: return@launch
                 library.upsertBook(current.copy(
                     title       = title,
-                    authorId    = authorId.ifBlank { null },
-                    authorName  = authorName,
+                    authorId    = authorId.ifBlank { current.authorId },
+                    authorName  = authorName.ifBlank { current.authorName },
                     coverImg    = coverImg,
                     genre       = genre,
                     publishYear = publishYear,
@@ -495,7 +496,7 @@ class LibraryViewModel @Inject constructor(
     // ── Sil / Düzenle ─────────────────────────────────────────────────────────
 
     fun deleteQuote(bookId: String, quoteId: String, quoteUid: String) {
-        if (myUid != quoteUid) return
+        if (myUid != quoteUid && !isAdmin) return
         viewModelScope.launch {
             try {
                 library.deleteQuote(quoteId)
@@ -507,7 +508,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun editQuote(bookId: String, quoteId: String, quoteUid: String, newText: String) {
-        if (myUid != quoteUid) return
+        if (myUid != quoteUid && !isAdmin) return
         viewModelScope.launch {
             try {
                 library.updateQuoteText(quoteId, newText)
@@ -519,7 +520,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun deleteReview(bookId: String, reviewId: String, reviewUid: String) {
-        if (myUid != reviewUid) return
+        if (myUid != reviewUid && !isAdmin) return
         viewModelScope.launch {
             try {
                 library.deleteReview(reviewId)
@@ -529,7 +530,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun editReview(bookId: String, reviewId: String, reviewUid: String, newText: String, newRating: Float) {
-        if (myUid != reviewUid) return
+        if (myUid != reviewUid && !isAdmin) return
         viewModelScope.launch {
             try {
                 library.updateReviewText(reviewId, newText, newRating)
@@ -577,6 +578,84 @@ class LibraryViewModel @Inject constructor(
     suspend fun fetchBooksForAuthor(authorId: String): List<LibraryBook> =
         try { library.getBooksByAuthor(authorId).map { it.toDomain() } }
         catch (_: Exception) { emptyList() }
+
+    // ── Admin: Eski feed alıntılarını Supabase'e taşı ────────────────────────
+    fun migrateLegacyFeedQuotes(onProgress: (Int, Int) -> Unit = { _, _ -> }) {
+        viewModelScope.launch {
+            try {
+                val snap = firestore.collection("feed")
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(100).get().await()
+
+                val docs = snap.documents.filter { doc ->
+                    val d = doc.data ?: return@filter false
+                    val existingBookId = d["libraryBookId"] as? String ?: ""
+                    if (existingBookId.isNotBlank()) return@filter false
+                    val qObj  = d["quote"] as? Map<*, *>
+                    val bName = (qObj?.get("book") as? String)?.trim()?.isNotBlank() == true
+                        || (d["bookName"] as? String)?.trim()?.isNotBlank() == true
+                    val qText = (qObj?.get("text") as? String)?.trim()?.isNotBlank() == true
+                        || (d["quoteText"] as? String)?.trim()?.isNotBlank() == true
+                    bName && qText
+                }
+
+                val total = docs.size
+                var done  = 0
+
+                docs.forEach { doc ->
+                    val d          = doc.data ?: return@forEach
+                    val qObj       = d["quote"] as? Map<*, *>
+                    val bookName   = ((qObj?.get("book") as? String)?.takeIf { it.isNotBlank() }
+                        ?: d["bookName"] as? String ?: "").trim()
+                    val authorName = ((qObj?.get("author") as? String)?.takeIf { it.isNotBlank() }
+                        ?: d["authorName"] as? String ?: "").trim()
+
+                    if (bookName.isBlank() && authorName.isBlank()) {
+                        done++; onProgress(done, total); return@forEach
+                    }
+
+                    val (authorId, bookId) = library.ensureAuthorAndBook(authorName, bookName)
+
+                    // Feed dökümanını güncelle
+                    val updates = mutableMapOf<String, Any>()
+                    if (authorId.isNotBlank()) updates["libraryAuthorId"] = authorId
+                    if (bookId.isNotBlank())   updates["libraryBookId"]   = bookId
+                    val currentType = d["type"] as? String ?: ""
+                    if (currentType.isBlank()) updates["type"] = "library_quote"
+                    if (updates.isNotEmpty()) {
+                        try { doc.reference.update(updates).await() } catch (_: Exception) {}
+                    }
+
+                    // Supabase book_quotes'a ekle
+                    if (bookId.isNotBlank()) {
+                        val qText = (qObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
+                            ?: d["quoteText"] as? String ?: ""
+                        if (qText.isNotBlank()) {
+                            try {
+                                library.addQuoteToLibrary(
+                                    libraryBookId   = bookId,
+                                    libraryAuthorId = authorId,
+                                    bookName        = bookName,
+                                    authorName      = authorName,
+                                    quoteText       = qText,
+                                    uid             = d["uid"] as? String ?: "",
+                                    userDisplayName = (d["name"] as? String)?.takeIf { it.isNotBlank() }
+                                        ?: d["displayName"] as? String ?: "",
+                                    userPhotoURL    = d["photoURL"] as? String ?: "",
+                                    feedPostId      = doc.id,
+                                )
+                            } catch (_: Exception) {}
+                        }
+                    }
+
+                    done++
+                    onProgress(done, total)
+                }
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
 
     fun clearError() { _error.value = null }
 
