@@ -58,6 +58,20 @@ jobs:
           })();
           JSEOF
 
+      - name: PostgREST cache reload bekle
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          echo "⏳ PostgREST schema cache yenileniyor (15 sn)..."
+          sleep 15
+          # Cache reload tetikle
+          curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "$SUPABASE_URL/rest/v1/" \
+            -H "apikey: $SUPABASE_SERVICE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" || true
+          echo " ✅ Hazır"
+
       - name: Migration script'i çalıştır
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
