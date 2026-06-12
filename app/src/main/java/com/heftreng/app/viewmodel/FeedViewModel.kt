@@ -12,6 +12,9 @@ import com.heftreng.app.data.model.Comment
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.data.repository.LibraryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.heftreng.app.data.model.FeedLikeRow
+import com.heftreng.app.data.model.FeedSaveRow
+import com.heftreng.app.data.model.FollowRow
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
@@ -132,7 +135,7 @@ class FeedViewModel @Inject constructor(
                         filter { eq("from_uid", uid) }
                         limit(300)
                     }
-                    .decodeList<SocialViewModel.FollowRow>()
+                    .decodeList<FollowRow>()
                 _followingUids.value = rows.map { it.targetUid }.toSet()
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -161,7 +164,7 @@ class FeedViewModel @Inject constructor(
                                 isIn("post_id", postIds)
                             }
                         }
-                        .decodeList<SocialViewModel.LikeRow>()
+                        .decodeList<FeedLikeRow>()
                         .map { it.postId }.toSet()
 
                     val savedPostIds = supabase.postgrest["feed_saves"]
@@ -171,7 +174,7 @@ class FeedViewModel @Inject constructor(
                                 isIn("post_id", postIds)
                             }
                         }
-                        .decodeList<SocialViewModel.LikeRow>()
+                        .decodeList<FeedSaveRow>()
                         .map { it.postId }.toSet()
 
                     likedIds = likedIds + likedPostIds
@@ -204,11 +207,11 @@ class FeedViewModel @Inject constructor(
 
                 val newLikedIds = supabase.postgrest["feed_likes"]
                     .select { filter { eq("uid", currentUid); isIn("post_id", postIds) } }
-                    .decodeList<SocialViewModel.LikeRow>().map { it.postId }.toSet()
+                    .decodeList<FeedLikeRow>().map { it.postId }.toSet()
 
                 val newSavedIds = supabase.postgrest["feed_saves"]
                     .select { filter { eq("uid", currentUid); isIn("post_id", postIds) } }
-                    .decodeList<SocialViewModel.LikeRow>().map { it.postId }.toSet()
+                    .decodeList<FeedSaveRow>().map { it.postId }.toSet()
 
                 likedIds = likedIds + newLikedIds
                 savedIds = savedIds + newSavedIds
@@ -480,9 +483,13 @@ class FeedViewModel @Inject constructor(
                     val myName  = auth.currentUser?.displayName?.takeIf { it.isNotBlank() } ?: ""
                     val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
                     supabase.postgrest["feed_likes"].upsert(
-                        mapOf("id" to "${post.id}_$uid", "post_id" to post.id,
-                              "uid" to uid, "name" to myName, "photo_url" to myPhoto),
-                        onConflict = "id"
+                        FeedLikeRow(
+                            id       = "${post.id}_$uid",
+                            postId   = post.id,
+                            uid      = uid,
+                            name     = myName,
+                            photoUrl = myPhoto,
+                        )
                     )
                     postRef.update("likes", FieldValue.increment(1)).await()
                     if (post.uid != uid) sendNotif(post.uid, "like", "$myName gönderini beğendi", post.text.take(60), post.id)
@@ -534,8 +541,11 @@ class FeedViewModel @Inject constructor(
                 val postRef = firestore.collection("feed").document(post.id)
                 if (nowSaved) {
                     supabase.postgrest["feed_saves"].upsert(
-                        mapOf("id" to "${post.id}_$uid", "post_id" to post.id, "uid" to uid),
-                        onConflict = "id"
+                        FeedSaveRow(
+                            id     = "${post.id}_$uid",
+                            postId = post.id,
+                            uid    = uid,
+                        )
                     )
                     postRef.update("saves", FieldValue.increment(1)).await()
                 } else {
@@ -935,7 +945,7 @@ class FeedViewModel @Inject constructor(
                 followingUids.add(myUid)
                 val followRows = supabase.postgrest["follows"]
                     .select { filter { eq("from_uid", myUid) }; limit(500) }
-                    .decodeList<SocialViewModel.FollowRow>()
+                    .decodeList<FollowRow>()
                 followRows.forEach { followingUids.add(it.targetUid) }
 
                 // 2. Tüm kullanıcıları followersCount DESC ile çek (geniş havuz)
@@ -1033,16 +1043,15 @@ class FeedViewModel @Inject constructor(
                 val tName   = tDoc.getString("displayName") ?: tDoc.getString("name") ?: ""
                 val tPhoto  = tDoc.getString("photoURL") ?: ""
                 supabase.postgrest["follows"].upsert(
-                    mapOf(
-                        "id"           to "${myUid}_${targetUid}",
-                        "from_uid"     to myUid,
-                        "from_name"    to myName,
-                        "from_photo"   to myPhoto,
-                        "target_uid"   to targetUid,
-                        "target_name"  to tName,
-                        "target_photo" to tPhoto,
-                    ),
-                    onConflict = "id"
+                    FollowRow(
+                        id          = "${myUid}_${targetUid}",
+                        fromUid     = myUid,
+                        fromName    = myName,
+                        fromPhoto   = myPhoto,
+                        targetUid   = targetUid,
+                        targetName  = tName,
+                        targetPhoto = tPhoto,
+                    )
                 )
                 firestore.collection("users").document(myUid)
                     .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
@@ -1207,7 +1216,7 @@ class FeedViewModel @Inject constructor(
             try {
                 val libFollowRows = supabase.postgrest["follows"]
                     .select { filter { eq("from_uid", myUid) }; limit(500) }
-                    .decodeList<SocialViewModel.FollowRow>()
+                    .decodeList<FollowRow>()
                 libFollowRows.forEach { followingUids.add(it.targetUid) }
             } catch (_: Exception) {}
         }
