@@ -22,52 +22,14 @@ jobs:
           node-version: '20'
 
       - name: Bağımlılıkları yükle
-        run: npm install postgres firebase-admin
+        working-directory: scripts
+        run: npm install
 
-      - name: Tabloları oluştur (postgres ile direkt DDL)
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: |
-          node - << 'JSEOF'
-          const postgres = require('postgres');
-          const fs = require('fs');
-          const schema = fs.readFileSync('scripts/supabase_schema.sql', 'utf8');
-          (async () => {
-            const sql = postgres(process.env.SUPABASE_DB_URL, {
-              ssl: { rejectUnauthorized: false },
-              connect_timeout: 30,
-              max: 1,
-            });
-            try {
-              const stmts = schema.split(';')
-                .map(s => s.trim())
-                .filter(s => s.length > 2 && !s.startsWith('--'));
-              for (const stmt of stmts) {
-                try {
-                  await sql.unsafe(stmt + ';');
-                } catch(e) {
-                  if (!e.message?.includes('already exists')) {
-                    console.warn('⚠️ ', e.message?.slice(0, 120));
-                  }
-                }
-              }
-              console.log('✅ Tüm tablolar oluşturuldu / mevcut');
-            } finally {
-              await sql.end();
-            }
-          })();
-          JSEOF
-
-      - name: PostgREST cache reload için bekle (60sn)
-        run: |
-          echo "⏳ Supabase REST API cache yenileniyor..."
-          sleep 60
-          echo "✅ Hazır"
-
-      - name: Migration çalıştır
+      - name: Migration script'i çalıştır
+        working-directory: scripts
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           SUPABASE_URL:             ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY:     ${{ secrets.SUPABASE_SERVICE_KEY }}
           DRY_RUN:                  ${{ github.event.inputs.dry_run }}
-        run: node scripts/migrate_to_supabase.js
+        run: node migrate_to_supabase.js
