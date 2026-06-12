@@ -173,8 +173,128 @@ async function main() {
   const authorIds = await migrateAuthors();
   const bookIds   = await migrateBooks(authorIds);
   await migrateQuotes(bookIds);
+  await migrateFollows();
+  await migrateFeedLikes();
+  await migrateFeedSaves();
+  await migrateSerialLikes();
 
   console.log('\n🎉 Migration tamamlandı!');
 }
 
 main().catch(e => { console.error('❌ Hata:', e.message); process.exit(1); });
+
+// ── 4. Follows ────────────────────────────────────────────────────────────────
+async function migrateFollows() {
+  console.log('\n👥 Follows koleksiyonu okunuyor...');
+  if (DRY_RUN) { console.log('   [DRY RUN] yazma atlandı'); return; }
+
+  const snap = await db.collection('follows').get();
+  console.log(`   ${snap.size} takip ilişkisi bulundu`);
+
+  const rows = snap.docs.map(doc => {
+    const d = doc.data();
+    return {
+      id:           doc.id,
+      from_uid:     safeStr(d.fromUid),
+      from_name:    safeStr(d.fromName),
+      from_photo:   safeStr(d.fromPhoto),
+      target_uid:   safeStr(d.targetUid),
+      target_name:  safeStr(d.targetName),
+      target_photo: safeStr(d.targetPhoto),
+      created_at:   d.ts?.toDate?.()?.toISOString() || new Date().toISOString(),
+    };
+  }).filter(r => r.from_uid && r.target_uid);
+
+  let inserted = 0;
+  for (const batch of chunk(rows, BATCH_SIZE)) {
+    await upsert('follows', batch);
+    inserted += batch.length;
+    process.stdout.write(`   ✅ ${inserted}/${rows.length}\r`);
+  }
+  console.log(`\n   ✅ ${inserted} takip ilişkisi taşındı`);
+}
+
+// ── 5. Feed Likes ─────────────────────────────────────────────────────────────
+async function migrateFeedLikes() {
+  console.log('\n❤️  Feed likes koleksiyonu okunuyor...');
+  if (DRY_RUN) { console.log('   [DRY RUN] yazma atlandı'); return; }
+
+  const snap = await db.collection('feedLikes').get();
+  console.log(`   ${snap.size} beğeni bulundu`);
+
+  const rows = snap.docs.map(doc => {
+    const d = doc.data();
+    return {
+      id:         doc.id,
+      post_id:    safeStr(d.feedId || d.postId),
+      uid:        safeStr(d.uid),
+      name:       safeStr(d.displayName || d.name),
+      photo_url:  safeStr(d.photoURL || d.photoUrl),
+      created_at: d.ts?.toDate?.()?.toISOString() || new Date().toISOString(),
+    };
+  }).filter(r => r.post_id && r.uid);
+
+  let inserted = 0;
+  for (const batch of chunk(rows, BATCH_SIZE)) {
+    await upsert('feed_likes', batch);
+    inserted += batch.length;
+    process.stdout.write(`   ✅ ${inserted}/${rows.length}\r`);
+  }
+  console.log(`\n   ✅ ${inserted} feed beğenisi taşındı`);
+}
+
+// ── 6. Feed Saves ─────────────────────────────────────────────────────────────
+async function migrateFeedSaves() {
+  console.log('\n🔖 Feed saves koleksiyonu okunuyor...');
+  if (DRY_RUN) { console.log('   [DRY RUN] yazma atlandı'); return; }
+
+  const snap = await db.collection('feedSaves').get();
+  console.log(`   ${snap.size} kayıt bulundu`);
+
+  const rows = snap.docs.map(doc => {
+    const d = doc.data();
+    return {
+      id:         doc.id,
+      post_id:    safeStr(d.feedId || d.postId),
+      uid:        safeStr(d.uid),
+      created_at: d.ts?.toDate?.()?.toISOString() || new Date().toISOString(),
+    };
+  }).filter(r => r.post_id && r.uid);
+
+  let inserted = 0;
+  for (const batch of chunk(rows, BATCH_SIZE)) {
+    await upsert('feed_saves', batch);
+    inserted += batch.length;
+    process.stdout.write(`   ✅ ${inserted}/${rows.length}\r`);
+  }
+  console.log(`\n   ✅ ${inserted} kayıt taşındı`);
+}
+
+// ── 7. Serial Likes ───────────────────────────────────────────────────────────
+async function migrateSerialLikes() {
+  console.log('\n📚 Serial likes koleksiyonu okunuyor...');
+  if (DRY_RUN) { console.log('   [DRY RUN] yazma atlandı'); return; }
+
+  const snap = await db.collection('serialLikes').get();
+  console.log(`   ${snap.size} serial beğenisi bulundu`);
+
+  const rows = snap.docs.map(doc => {
+    const d = doc.data();
+    return {
+      id:         doc.id,
+      serial_id:  safeStr(d.serialId),
+      uid:        safeStr(d.uid),
+      name:       safeStr(d.displayName || d.name),
+      photo_url:  safeStr(d.photoURL || d.photoUrl),
+      created_at: d.ts?.toDate?.()?.toISOString() || new Date().toISOString(),
+    };
+  }).filter(r => r.serial_id && r.uid);
+
+  let inserted = 0;
+  for (const batch of chunk(rows, BATCH_SIZE)) {
+    await upsert('serial_likes', batch);
+    inserted += batch.length;
+    process.stdout.write(`   ✅ ${inserted}/${rows.length}\r`);
+  }
+  console.log(`\n   ✅ ${inserted} serial beğenisi taşındı`);
+}
