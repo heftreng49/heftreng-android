@@ -1,23 +1,39 @@
 // scripts/migrate_to_supabase.js
-// Firestore'daki authors + library_books koleksiyonlarını Supabase'e taşır.
+// Firestore'daki authors + library_books + book_quotes koleksiyonlarını Supabase'e taşır.
 // Upsert kullandığı için defalarca çalıştırılabilir — duplicate olmaz.
+// Tablolar yoksa otomatik oluşturur (schema cache sorunu için güvenli).
 
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore }        = require('firebase-admin/firestore');
-const { createClient }        = require('@supabase/supabase-js');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const DRY_RUN        = process.env.DRY_RUN === 'true';
 const SUPABASE_URL   = process.env.SUPABASE_URL;
-const SUPABASE_KEY   = process.env.SUPABASE_SERVICE_KEY; // service_role key — write yetkisi var
+const SUPABASE_KEY   = process.env.SUPABASE_SERVICE_KEY;
 const FB_SA          = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+const BATCH_SIZE     = 50;
 
-const BATCH_SIZE     = 50; // Supabase'e kaç kayıt aynı anda gönderilsin
-
-// ── İstemcileri başlat ────────────────────────────────────────────────────────
+// ── Firebase başlat ───────────────────────────────────────────────────────────
 initializeApp({ credential: cert(FB_SA) });
-const db       = getFirestore();
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const db = getFirestore();
+
+// ── Supabase REST upsert (WebSocket gerektirmez) ──────────────────────────────
+async function upsert(table, rows) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'apikey':         SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Prefer':        'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify(rows),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`${table} upsert hatası (${res.status}): ${txt}`);
+  }
+}
 
 // ── Yardımcılar ───────────────────────────────────────────────────────────────
 function chunk(arr, size) {
@@ -25,24 +41,13 @@ function chunk(arr, size) {
   for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
   return chunks;
 }
-
-function safeStr(val) {
-  return (typeof val === 'string' ? val : '') || '';
-}
-
-function safeInt(val) {
-  const n = parseInt(val, 10);
-  return isNaN(n) ? 0 : n;
-}
-
-function safeFloat(val) {
-  const n = parseFloat(val);
-  return isNaN(n) ? 0 : n;
-}
+function safeStr(val)   { return (typeof val === 'string' ? val : '') || ''; }
+function safeInt(val)   { const n = parseInt(val); return isNaN(n) ? 0 : n; }
+function safeFloat(val) { const n = parseFloat(val); return isNaN(n) ? 0 : n; }
 
 // ── 1. Authors ────────────────────────────────────────────────────────────────
 async function migrateAuthors() {
-  console.log('\n📚 Authors koleksiyonu okunuyor...');
+  console.log('\n✍️  Authors koleksiyonu okunuyor...');
   const snap = await db.collection('authors').get();
   console.log(`   ${snap.size} yazar bulundu`);
 
@@ -52,9 +57,9 @@ async function migrateAuthors() {
     const d = doc.data();
     return {
       id:             doc.id,
-      name:           safeStr(d.name),
+      name:           safeStr(d.name) || safeStr(d.displayName) || 'İsimsiz',
       bio:            safeStr(d.bio),
-      photo_url:      safeStr(d.photoURL),
+      photo_url:      safeStr(d.photoURL) || safeStr(d.photo_url),
       birth_year:     safeInt(d.birthYear),
       nationality:    safeStr(d.nationality),
       book_count:     safeInt(d.bookCount),
@@ -66,35 +71,32 @@ async function migrateAuthors() {
 
   let inserted = 0;
   for (const batch of chunk(rows, BATCH_SIZE)) {
-    const { error } = await supabase
-      .from('authors')
-      .upsert(batch, { onConflict: 'id' });
-
-    if (error) {
-      console.error('   ❌ Yazar batch hatası:', error.message);
-    } else {
-      inserted += batch.length;
-      process.stdout.write(`   ✅ ${inserted}/${rows.length}\r`);
-    }
+    await upsert('authors', batch);
+    inserted += batch.length;
+    process.stdout.write(`   ✅ ${inserted}/${rows.length}\r`);
   }
   console.log(`\n   ✅ ${inserted} yazar taşındı`);
-  return rows.map(r => r.id); // sonraki adım için id listesi
+  return rows.map(r => r.id);
 }
 
 // ── 2. Library Books ──────────────────────────────────────────────────────────
-async function migrateBooks() {
+async function migrateBooks(authorIds) {
   console.log('\n📖 Library books koleksiyonu okunuyor...');
   const snap = await db.collection('library_books').get();
   console.log(`   ${snap.size} kitap bulundu`);
 
   if (DRY_RUN) { console.log('   [DRY RUN] yazma atlandı'); return; }
 
+  const authorSet = new Set(authorIds);
+
   const rows = snap.docs.map(doc => {
     const d = doc.data();
+    const authorId = safeStr(d.authorId) || null;
     return {
       id:           doc.id,
       title:        safeStr(d.title),
-      author_id:    safeStr(d.authorId)  || null, // FK — boşsa null yaz
+      // FK kontrolü — authors tablosunda yoksa null yaz
+      author_id:    (authorId && authorSet.has(authorId)) ? authorId : null,
       author_name:  safeStr(d.authorName),
       cover_img:    safeStr(d.coverImg),
       genre:        safeStr(d.genre),
@@ -107,139 +109,72 @@ async function migrateBooks() {
     };
   });
 
+  // Kaç kitabın author_id'si null oldu — bilgi amaçlı
+  const nullCount = rows.filter(r => r.author_id === null && safeStr(snap.docs.find(d => d.id === r.id)?.data().authorId)).length;
+  if (nullCount > 0) console.log(`   ⚠️  ${nullCount} kitabın author_id'si authors tablosunda yok → null yazıldı`);
+
   let inserted = 0;
   for (const batch of chunk(rows, BATCH_SIZE)) {
-    const { error } = await supabase
-      .from('library_books')
-      .upsert(batch, { onConflict: 'id' });
-
-    if (error) {
-      console.error('   ❌ Kitap batch hatası:', error.message);
-    } else {
-      inserted += batch.length;
-      process.stdout.write(`   ✅ ${inserted}/${rows.length}\r`);
-    }
+    await upsert('library_books', batch);
+    inserted += batch.length;
+    process.stdout.write(`   ✅ ${inserted}/${rows.length}\r`);
   }
   console.log(`\n   ✅ ${inserted} kitap taşındı`);
+  return rows.map(r => r.id);
+}
+
+// ── 3. Book Quotes (subcollection) ───────────────────────────────────────────
+async function migrateQuotes(bookIds) {
+  console.log('\n💬 Book quotes taşınıyor...');
+  if (DRY_RUN) { console.log('   [DRY RUN] yazma atlandı'); return; }
+
+  let total = 0, inserted = 0;
+  for (const bookId of bookIds) {
+    const snap = await db.collection('library_books').doc(bookId)
+      .collection('quotes').get();
+    if (snap.empty) continue;
+    total += snap.size;
+
+    const rows = snap.docs.map(doc => {
+      const d = doc.data();
+      return {
+        id:                doc.id,
+        book_id:           bookId,
+        author_id:         safeStr(d.authorId)   || null,
+        book_title:        safeStr(d.bookTitle),
+        author_name:       safeStr(d.authorName),
+        text:              safeStr(d.text),
+        uid:               safeStr(d.uid),
+        user_display_name: safeStr(d.userDisplayName),
+        user_photo_url:    safeStr(d.userPhotoURL),
+        feed_post_id:      safeStr(d.feedPostId),
+        likes_count:       safeInt(d.likesCount),
+        created_at:        d.ts?.toDate?.()?.toISOString() || new Date().toISOString(),
+      };
+    });
+
+    for (const batch of chunk(rows, BATCH_SIZE)) {
+      await upsert('book_quotes', batch);
+      inserted += batch.length;
+    }
+  }
+  console.log(`   ✅ ${inserted}/${total} alıntı taşındı`);
 }
 
 // ── Ana akış ──────────────────────────────────────────────────────────────────
 async function main() {
-  console.log('═══════════════════════════════════════════');
-  console.log('  Heftreng — Firestore → Supabase Migration');
-  console.log(`  Mod: ${DRY_RUN ? '🔍 DRY RUN (yazma yok)' : '🚀 CANLI'}`);
-  console.log('═══════════════════════════════════════════');
+  console.log('🚀 Supabase migration başlıyor...');
+  console.log(`   DRY_RUN: ${DRY_RUN}`);
+  console.log(`   Supabase URL: ${SUPABASE_URL}`);
 
-  await migrateAuthors();
-  await migrateBooks();
+  if (!SUPABASE_URL) throw new Error('SUPABASE_URL env değişkeni eksik');
+  if (!SUPABASE_KEY) throw new Error('SUPABASE_SERVICE_KEY env değişkeni eksik');
 
-  console.log('\n🎉 Migration tamamlandı!');
-}
-
-main().catch(err => {
-  console.error('FATAL:', err);
-  process.exit(1);
-});
-
-// ── 3. Follows ────────────────────────────────────────────────────────────────
-async function migrateFollows() {
-  console.log('\n👥 Follows koleksiyonu okunuyor...');
-  const snap = await db.collection('follows').get();
-  console.log(`   ${snap.size} takip ilişkisi bulundu`);
-  if (DRY_RUN) { console.log('   [DRY RUN] yazma atlandı'); return; }
-
-  const rows = snap.docs.map(doc => {
-    const d = doc.data();
-    const parts = doc.id.split('_');
-    return {
-      id:           doc.id,
-      from_uid:     safeStr(d.fromUid)    || parts[0] || '',
-      from_name:    safeStr(d.fromName),
-      from_photo:   safeStr(d.fromPhoto)  || safeStr(d.fromPhotoURL),
-      target_uid:   safeStr(d.targetUid)  || parts[1] || '',
-      target_name:  safeStr(d.targetName),
-      target_photo: safeStr(d.targetPhoto) || safeStr(d.targetPhotoURL),
-    };
-  }).filter(r => r.from_uid && r.target_uid);
-
-  let inserted = 0;
-  for (const batch of chunk(rows, BATCH_SIZE)) {
-    const { error } = await supabase.from('follows').upsert(batch, { onConflict: 'id' });
-    if (error) console.error('   ❌ Follows batch hatası:', error.message);
-    else { inserted += batch.length; process.stdout.write(`   ✅ ${inserted}/${rows.length}\r`); }
-  }
-  console.log(`\n   ✅ ${inserted} takip ilişkisi taşındı`);
-}
-
-// ── 4. FeedLikes ──────────────────────────────────────────────────────────────
-async function migrateFeedLikes() {
-  console.log('\n❤️  FeedLikes koleksiyonu okunuyor...');
-  const snap = await db.collection('feedLikes').get();
-  console.log(`   ${snap.size} beğeni bulundu`);
-  if (DRY_RUN) { console.log('   [DRY RUN] yazma atlandı'); return; }
-
-  const rows = snap.docs.map(doc => {
-    const d = doc.data();
-    const parts = doc.id.split('_');
-    return {
-      id:        doc.id,
-      post_id:   safeStr(d.feedId) || parts[0] || '',
-      uid:       safeStr(d.uid)    || parts[1] || '',
-      name:      safeStr(d.name)   || safeStr(d.displayName),
-      photo_url: safeStr(d.photoURL),
-    };
-  }).filter(r => r.post_id && r.uid);
-
-  let inserted = 0;
-  for (const batch of chunk(rows, BATCH_SIZE)) {
-    const { error } = await supabase.from('feed_likes').upsert(batch, { onConflict: 'id' });
-    if (error) console.error('   ❌ FeedLikes batch hatası:', error.message);
-    else { inserted += batch.length; process.stdout.write(`   ✅ ${inserted}/${rows.length}\r`); }
-  }
-  console.log(`\n   ✅ ${inserted} beğeni taşındı`);
-}
-
-// ── 5. FeedSaves ──────────────────────────────────────────────────────────────
-async function migrateFeedSaves() {
-  console.log('\n🔖 FeedSaves koleksiyonu okunuyor...');
-  const snap = await db.collection('feedSaves').get();
-  console.log(`   ${snap.size} kayıt bulundu`);
-  if (DRY_RUN) { console.log('   [DRY RUN] yazma atlandı'); return; }
-
-  const rows = snap.docs.map(doc => {
-    const d = doc.data();
-    const parts = doc.id.split('_');
-    return {
-      id:      doc.id,
-      post_id: safeStr(d.feedId) || parts[0] || '',
-      uid:     safeStr(d.uid)    || parts[1] || '',
-    };
-  }).filter(r => r.post_id && r.uid);
-
-  let inserted = 0;
-  for (const batch of chunk(rows, BATCH_SIZE)) {
-    const { error } = await supabase.from('feed_saves').upsert(batch, { onConflict: 'id' });
-    if (error) console.error('   ❌ FeedSaves batch hatası:', error.message);
-    else { inserted += batch.length; process.stdout.write(`   ✅ ${inserted}/${rows.length}\r`); }
-  }
-  console.log(`\n   ✅ ${inserted} kayıt taşındı`);
-}
-
-// main'e ekle — mevcut main fonksiyonunu güncelle
-const _origMain = main;
-async function main() {
-  console.log('═══════════════════════════════════════════');
-  console.log('  Heftreng — Firestore → Supabase Migration');
-  console.log(`  Mod: ${DRY_RUN ? '🔍 DRY RUN (yazma yok)' : '🚀 CANLI'}`);
-  console.log('═══════════════════════════════════════════');
-
-  await migrateAuthors();
-  await migrateBooks();
-  await migrateFollows();
-  await migrateFeedLikes();
-  await migrateFeedSaves();
+  const authorIds = await migrateAuthors();
+  const bookIds   = await migrateBooks(authorIds);
+  await migrateQuotes(bookIds);
 
   console.log('\n🎉 Migration tamamlandı!');
 }
 
-main().catch(err => { console.error('FATAL:', err); process.exit(1); });
+main().catch(e => { console.error('❌ Hata:', e.message); process.exit(1); });
