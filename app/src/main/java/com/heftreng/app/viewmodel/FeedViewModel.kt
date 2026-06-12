@@ -165,7 +165,7 @@ class FeedViewModel @Inject constructor(
                             }
                         }
                         .decodeList<FeedLikeRow>()
-                        .map { it.postId }.toSet()
+                        .mapNotNull { it.postId.takeIf { id -> id.isNotBlank() } }.toSet()
 
                     val savedPostIds = supabase.postgrest["feed_saves"]
                         .select {
@@ -175,10 +175,11 @@ class FeedViewModel @Inject constructor(
                             }
                         }
                         .decodeList<FeedSaveRow>()
-                        .map { it.postId }.toSet()
+                        .mapNotNull { it.postId.takeIf { id -> id.isNotBlank() } }.toSet()
 
                     likedIds = likedIds + likedPostIds
                     savedIds = savedIds + savedPostIds
+                    android.util.Log.d("FeedVM", "likedPostIds=$likedPostIds")
                 }
 
                 // Repost map: kendi repostlarım — feed'e yazılıyor, limit küçük tutulabilir
@@ -207,16 +208,19 @@ class FeedViewModel @Inject constructor(
 
                 val newLikedIds = supabase.postgrest["feed_likes"]
                     .select { filter { eq("uid", currentUid); isIn("post_id", postIds) } }
-                    .decodeList<FeedLikeRow>().map { it.postId }.toSet()
+                    .decodeList<FeedLikeRow>()
+                    .mapNotNull { it.postId.takeIf { id -> id.isNotBlank() } }.toSet()
 
                 val newSavedIds = supabase.postgrest["feed_saves"]
                     .select { filter { eq("uid", currentUid); isIn("post_id", postIds) } }
-                    .decodeList<FeedSaveRow>().map { it.postId }.toSet()
+                    .decodeList<FeedSaveRow>()
+                    .mapNotNull { it.postId.takeIf { id -> id.isNotBlank() } }.toSet()
+                android.util.Log.d("FeedVM", "refreshLikedIds=$newLikedIds")
 
                 likedIds = likedIds + newLikedIds
                 savedIds = savedIds + newSavedIds
                 syncInteractionsToState()
-            } catch (_: Exception) {}
+            } catch (e: Exception) { android.util.Log.e("FeedVM", "refreshInteractions: \${e.message}") }
         }
     }
 
