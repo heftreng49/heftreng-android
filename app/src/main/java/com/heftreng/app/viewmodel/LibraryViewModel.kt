@@ -694,49 +694,43 @@ class LibraryViewModel @Inject constructor(
     // ── Smart Screen yönlendirme — Supabase'de ara, yoksa oluştur ───────────
     // AuthorQuotesSmartScreen ve BookQuotesSmartScreen tarafından kullanılır
 
-    suspend fun findOrCreateAuthorByName(name: String): String =
-        try {
-            // 1. ilike ile ara
+    suspend fun findOrCreateAuthorByName(name: String): String {
+        return try {
             val existing = library.searchAuthors(name).firstOrNull {
                 it.name.equals(name, ignoreCase = true)
             }
-            if (existing != null) return existing.id
-
-            // 2. Bulunamadı → Supabase'de oluştur
-            val newId = java.util.UUID.randomUUID().toString()
-            library.upsertAuthor(
-                com.heftreng.app.data.repository.AuthorRow(
-                    id   = newId,
-                    name = name,
+            if (existing != null) existing.id
+            else {
+                val newId = java.util.UUID.randomUUID().toString()
+                library.upsertAuthor(
+                    com.heftreng.app.data.repository.AuthorRow(id = newId, name = name)
                 )
-            )
-            newId
+                newId
+            }
         } catch (e: Exception) {
             android.util.Log.e("LibraryVM", "findOrCreateAuthorByName: ${e.message}")
             ""
         }
+    }
 
-    suspend fun findOrCreateBookByTitle(title: String): String =
-        try {
-            // 1. ilike ile ara
+    suspend fun findOrCreateBookByTitle(title: String): String {
+        return try {
             val existing = library.searchBooks(title).firstOrNull {
                 it.title.equals(title, ignoreCase = true)
             }
-            if (existing != null) return existing.id
-
-            // 2. Bulunamadı → Supabase'de oluştur
-            val newId = java.util.UUID.randomUUID().toString()
-            library.upsertBook(
-                com.heftreng.app.data.repository.LibraryBookRow(
-                    id    = newId,
-                    title = title,
+            if (existing != null) existing.id
+            else {
+                val newId = java.util.UUID.randomUUID().toString()
+                library.upsertBook(
+                    com.heftreng.app.data.repository.LibraryBookRow(id = newId, title = title)
                 )
-            )
-            newId
+                newId
+            }
         } catch (e: Exception) {
             android.util.Log.e("LibraryVM", "findOrCreateBookByTitle: ${e.message}")
             ""
         }
+    }
 
     suspend fun loadBooksForScreen(): List<LibraryBook> =
         try {
