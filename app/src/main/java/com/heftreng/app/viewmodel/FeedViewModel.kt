@@ -519,11 +519,25 @@ class FeedViewModel @Inject constructor(
                 val cmtRef  = firestore.collection("feed").document(postId)
                     .collection("comments").document(comment.id)
                 if (nowLiked) {
+                    val myName  = auth.currentUser?.displayName ?: ""
+                    val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
                     likeRef.set(mapOf("uid" to uid, "ts" to Timestamp.now())).await()
                     cmtRef.update("likes", FieldValue.increment(1)).await()
+                    supabase.postgrest["comment_likes"].upsert(
+                        mapOf(
+                            "id"         to "${comment.id}_$uid",
+                            "comment_id" to comment.id,
+                            "uid"        to uid,
+                            "name"       to myName,
+                            "photo_url"  to myPhoto,
+                        )
+                    )
                 } else {
                     likeRef.delete().await()
                     cmtRef.update("likes", FieldValue.increment(-1)).await()
+                    supabase.postgrest["comment_likes"].delete {
+                        filter { eq("id", "${comment.id}_$uid") }
+                    }
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }

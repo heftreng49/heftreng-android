@@ -10,6 +10,9 @@ import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.Notification
 import com.heftreng.app.util.AppLifecycleObserver
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.postgrest.postgrest
+import com.heftreng.app.data.model.FollowRow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -25,6 +28,7 @@ import javax.inject.Inject
 class NotificationsViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val supabase : SupabaseClient,
 ) : ViewModel() {
 
     private val _notifications = MutableStateFlow<List<Notification>>(emptyList())
@@ -176,7 +180,7 @@ class NotificationsViewModel @Inject constructor(
                 val myName  = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
                 val myPhoto = myDoc.getString("photoURL") ?: ""
 
-                // follows koleksiyonuna ekle
+                // follows koleksiyonuna ekle — Firestore + Supabase
                 firestore.collection("follows").document("${fromUid}_$myUid").set(mapOf(
                     "fromUid"     to fromUid,
                     "fromName"    to fromName,
@@ -186,6 +190,18 @@ class NotificationsViewModel @Inject constructor(
                     "targetPhoto" to myPhoto,
                     "ts"          to com.google.firebase.Timestamp.now(),
                 )).await()
+                // Supabase
+                supabase.postgrest["follows"].upsert(
+                    FollowRow(
+                        id          = "${fromUid}_$myUid",
+                        fromUid     = fromUid,
+                        fromName    = fromName,
+                        fromPhoto   = fromPhoto,
+                        targetUid   = myUid,
+                        targetName  = myName,
+                        targetPhoto = myPhoto,
+                    )
+                )
 
                 // Sayaçlar
                 firestore.collection("users").document(myUid)

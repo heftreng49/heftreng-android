@@ -12,6 +12,9 @@ import com.heftreng.app.data.model.Book
 import com.heftreng.app.data.model.BookChapter
 import com.heftreng.app.data.model.ChapterComment
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.postgrest.postgrest
+import com.heftreng.app.data.model.SerialLikeRow
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.*
@@ -23,6 +26,7 @@ import javax.inject.Inject
 class BookViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val supabase : SupabaseClient,
 ) : ViewModel() {
 
     // ── State ────────────────────────────────────────────────────────────────
@@ -349,18 +353,37 @@ class BookViewModel @Inject constructor(
                 val likeRef = firestore.collection(likeCol).document("${book.id}_$uid")
                 val bookRef = firestore.collection(col).document(book.id)
                 if (nowLiked) {
+                    val myName  = auth.currentUser?.displayName ?: ""
+                    val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
                     likeRef.set(mapOf(
                         "uid"      to uid,
                         "feedId"   to book.id,
                         "serialId" to book.id,
-                        "name"     to (auth.currentUser?.displayName ?: ""),
-                        "photoURL" to (auth.currentUser?.photoUrl?.toString() ?: ""),
+                        "name"     to myName,
+                        "photoURL" to myPhoto,
                         "ts"       to Timestamp.now(),
                     )).await()
                     bookRef.update("likes", FieldValue.increment(1)).await()
+                    // Supabase — sadece serial için
+                    if (book.type == "serial") {
+                        supabase.postgrest["serial_likes"].upsert(
+                            SerialLikeRow(
+                                id       = "${book.id}_$uid",
+                                serialId = book.id,
+                                uid      = uid,
+                                name     = myName,
+                                photoUrl = myPhoto,
+                            )
+                        )
+                    }
                 } else {
                     likeRef.delete().await()
                     bookRef.update("likes", FieldValue.increment(-1)).await()
+                    if (book.type == "serial") {
+                        supabase.postgrest["serial_likes"].delete {
+                            filter { eq("id", "${book.id}_$uid") }
+                        }
+                    }
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }

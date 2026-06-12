@@ -10,6 +10,9 @@ import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.data.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.postgrest.postgrest
+import com.heftreng.app.data.model.FollowRow
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -19,8 +22,9 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
-    private val auth: FirebaseAuth,
+    private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val supabase : SupabaseClient,
 ) : ViewModel() {
 
     private val _user = MutableStateFlow<User?>(null)
@@ -448,7 +452,6 @@ class ProfileViewModel @Inject constructor(
                 val ref  = firestore.collection("feedLikes").document("${post.id}_$myUid")
                 val pRef = firestore.collection("feed").document(post.id)
                 if (nowLiked) {
-                    // Auth'tan oku — Firestore read gerektirmez
                     val myName  = auth.currentUser?.displayName ?: ""
                     val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
                     ref.set(mapOf(
@@ -459,7 +462,16 @@ class ProfileViewModel @Inject constructor(
                         "ts"       to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                     )).await()
                     pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(1)).await()
-                    // Bildirim — kendi gönderisini beğenirse gönderme
+                    // Supabase
+                    supabase.postgrest["feed_likes"].upsert(
+                        mapOf(
+                            "id"        to "${post.id}_$myUid",
+                            "post_id"   to post.id,
+                            "uid"       to myUid,
+                            "name"      to myName,
+                            "photo_url" to myPhoto,
+                        )
+                    )
                     if (post.uid.isNotEmpty() && post.uid != myUid) {
                         firestore.collection("userNotifs").document(post.uid).collection("msgs").add(mapOf(
                             "fromUid"   to myUid,
@@ -477,6 +489,10 @@ class ProfileViewModel @Inject constructor(
                 } else {
                     ref.delete().await()
                     pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(-1)).await()
+                    // Supabase
+                    supabase.postgrest["feed_likes"].delete {
+                        filter { eq("id", "${post.id}_$myUid") }
+                    }
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
