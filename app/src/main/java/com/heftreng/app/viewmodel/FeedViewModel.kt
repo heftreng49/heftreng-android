@@ -165,7 +165,7 @@ class FeedViewModel @Inject constructor(
                             }
                         }
                         .decodeList<FeedLikeRow>()
-                        .mapNotNull { it.postId.takeIf { id -> id.isNotBlank() } }.toSet()
+                        .map { it.postId }.toSet()
 
                     val savedPostIds = supabase.postgrest["feed_saves"]
                         .select {
@@ -175,11 +175,10 @@ class FeedViewModel @Inject constructor(
                             }
                         }
                         .decodeList<FeedSaveRow>()
-                        .mapNotNull { it.postId.takeIf { id -> id.isNotBlank() } }.toSet()
+                        .map { it.postId }.toSet()
 
                     likedIds = likedIds + likedPostIds
                     savedIds = savedIds + savedPostIds
-                    android.util.Log.d("FeedVM", "likedPostIds=$likedPostIds")
                 }
 
                 // Repost map: kendi repostlarım — feed'e yazılıyor, limit küçük tutulabilir
@@ -208,19 +207,16 @@ class FeedViewModel @Inject constructor(
 
                 val newLikedIds = supabase.postgrest["feed_likes"]
                     .select { filter { eq("uid", currentUid); isIn("post_id", postIds) } }
-                    .decodeList<FeedLikeRow>()
-                    .mapNotNull { it.postId.takeIf { id -> id.isNotBlank() } }.toSet()
+                    .decodeList<FeedLikeRow>().map { it.postId }.toSet()
 
                 val newSavedIds = supabase.postgrest["feed_saves"]
                     .select { filter { eq("uid", currentUid); isIn("post_id", postIds) } }
-                    .decodeList<FeedSaveRow>()
-                    .mapNotNull { it.postId.takeIf { id -> id.isNotBlank() } }.toSet()
-                android.util.Log.d("FeedVM", "refreshLikedIds=$newLikedIds")
+                    .decodeList<FeedSaveRow>().map { it.postId }.toSet()
 
                 likedIds = likedIds + newLikedIds
                 savedIds = savedIds + newSavedIds
                 syncInteractionsToState()
-            } catch (e: Exception) { android.util.Log.e("FeedVM", "refreshInteractions: \${e.message}") }
+            } catch (_: Exception) {}
         }
     }
 
@@ -1195,14 +1191,16 @@ class FeedViewModel @Inject constructor(
                 val toUserDoc = firestore.collection("users").document(toUid).get().await()
                 val fcmToken  = toUserDoc.getString("fcmToken") ?: ""
                 if (fcmToken.isNotBlank()) {
-                    com.google.firebase.functions.FirebaseFunctions.getInstance()
+                    com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west1")
                         .getHttpsCallable("sendPush")
                         .call(mapOf(
-                            "token"  to fcmToken,
-                            "title"  to fromName,
-                            "body"   to title,
-                            "url"    to if (feedId.isNotBlank()) "post/$feedId" else "",
-                            "toUid"  to toUid,
+                            "targetUid" to toUid,
+                            "title"     to fromName,
+                            "body"      to title,
+                            "url"       to if (feedId.isNotBlank()) "heftreng://post/$feedId" else "heftreng://home",
+                            "type"      to type,
+                            "postId"    to feedId,
+                            "fromUid"   to uid,
                         )).await()
                 }
             } catch (_: Exception) {}
