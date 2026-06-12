@@ -484,20 +484,70 @@ class AdminViewModel @Inject constructor(
     }
 
     // ── Push bildirimi ────────────────────────────────────────────────────────
-    fun sendPush(title: String, body: String, url: String = "", targetUid: String = "") {
+    fun sendPush(
+        title    : String,
+        body     : String,
+        url      : String = "",
+        targetUid: String = "",
+        postId   : String = "",
+        topic    : String = "all_users",
+        imageUrl : String = "",
+    ) {
         if (_perms.value?.can("push") != true) return
         viewModelScope.launch {
             try {
                 _pushResult.value = "Gönderiliyor…"
-                val data = hashMapOf(
-                    "targetUid" to targetUid.ifBlank { auth.currentUser?.uid ?: "" },
-                    "title" to title, "body" to body,
-                    "url"   to url.ifBlank { "https://heft-reng.blogspot.com/" },
-                    "type"  to "default",
+
+                // Gönderi bilgisini çek — postId varsa Firestore'dan al
+                var resolvedPostId = postId
+                var postText       = ""
+                var postAuthor     = ""
+                if (postId.isNotBlank()) {
+                    try {
+                        val doc = firestore.collection("feed").document(postId).get().await()
+                        postText   = doc.getString("text") ?: ""
+                        postAuthor = doc.getString("displayName") ?: doc.getString("name") ?: ""
+                    } catch (_: Exception) {}
+                }
+
+                val functions = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west1")
+                val baseData  = hashMapOf(
+                    "title"    to title,
+                    "body"     to body,
+                    "url"      to url.ifBlank { if (postId.isNotBlank()) "heftreng://post/$postId" else "heftreng://home" },
+                    "type"     to if (postId.isNotBlank()) "post_push" else "admin_push",
+                    "postId"   to resolvedPostId,
+                    "postText" to postText.take(100),
+                    "postAuthor" to postAuthor,
+                    "imageUrl" to imageUrl,
+                    "fromUid"  to (auth.currentUser?.uid ?: ""),
                 )
-                com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west1")
-                    .getHttpsCallable("sendPush").call(data).await()
-                _pushResult.value = "✓ Push gönderildi"
+
+                if (topic == "all_users" || targetUid.isBlank()) {
+                    // Herkese gönder — kullanıcıları batch'le FCM'e gönder
+                    val snap = firestore.collection("users")
+                        .whereGreaterThan("fcmToken", "")
+                        .limit(500).get().await()
+                    var sent = 0; var failed = 0
+                    for (doc in snap.documents) {
+                        val fcmToken = doc.getString("fcmToken") ?: continue
+                        if (fcmToken.startsWith("https://")) continue
+                        try {
+                            functions.getHttpsCallable("sendPush").call(
+                                baseData + hashMapOf("targetUid" to doc.id)
+                            ).await()
+                            sent++
+                        } catch (_: Exception) { failed++ }
+                    }
+                    _pushResult.value = "✓ $sent kullanıcıya gönderildi" +
+                                        if (failed > 0) " ($failed başarısız)" else ""
+                } else {
+                    // Belirli kullanıcıya gönder
+                    functions.getHttpsCallable("sendPush").call(
+                        baseData + hashMapOf("targetUid" to targetUid)
+                    ).await()
+                    _pushResult.value = "✓ Push gönderildi"
+                }
             } catch (e: Exception) { _pushResult.value = "✗ Hata: ${e.message}" }
         }
     }

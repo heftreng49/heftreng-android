@@ -57,10 +57,17 @@ fun AdminScreen(
     val activeUsers  by vm.activeUsers.collectAsState()
     val statsLoading by vm.statsLoading.collectAsState()
 
-    var pushTitle   by remember { mutableStateOf("") }
-    var pushBody    by remember { mutableStateOf("") }
-    var pushUrl     by remember { mutableStateOf("") }
-    var pushUid     by remember { mutableStateOf("") }
+    var pushTitle      by remember { mutableStateOf("") }
+    var pushBody       by remember { mutableStateOf("") }
+    var pushUrl        by remember { mutableStateOf("") }
+    var pushUid        by remember { mutableStateOf("") }
+    var pushPostId     by remember { mutableStateOf("") }
+    var pushPostSearch by remember { mutableStateOf("") }
+    var pushTarget     by remember { mutableStateOf("all") } // "all" | "uid" | "topic"
+    var pushTopic      by remember { mutableStateOf("all_users") }
+    var pushEmoji      by remember { mutableStateOf("") }
+    var pushImageUrl   by remember { mutableStateOf("") }
+    var pushExpanded   by remember { mutableStateOf(false) }
     var notifTitle  by remember { mutableStateOf("") }
     var notifBody   by remember { mutableStateOf("") }
     var notifType   by remember { mutableStateOf("sys") }
@@ -190,33 +197,223 @@ fun AdminScreen(
                 "push" -> LazyColumn(
                     modifier       = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     item {
-                        Text("Toplu Push Bildirimi", color = Amber, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                        Spacer(Modifier.height(8.dp))
-                        adminTextField(pushTitle, { pushTitle = it }, "Başlık *")
-                        Spacer(Modifier.height(8.dp))
-                        adminTextField(pushBody, { pushBody = it }, "Mesaj *", minLines = 3)
-                        Spacer(Modifier.height(8.dp))
-                        adminTextField(pushUrl, { pushUrl = it }, "URL (opsiyonel)")
-                        Spacer(Modifier.height(8.dp))
-                        adminTextField(pushUid, { pushUid = it }, "Hedef UID (boşsa herkese)")
+                        // ── Başlık ────────────────────────────────────────────
+                        Text("Push Bildirimi", color = Amber, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         Spacer(Modifier.height(12.dp))
-                        Button(
-                            onClick = { vm.sendPush(pushTitle, pushBody, pushUrl, pushUid) },
-                            enabled = pushTitle.isNotBlank() && pushBody.isNotBlank(),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
-                        ) {
-                            Icon(Icons.Default.Send, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Push Gönder", fontWeight = FontWeight.Bold)
+
+                        // ── Hedef seçimi ──────────────────────────────────────
+                        Text("Hedef", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("all" to "Herkes", "uid" to "Kullanıcı", "topic" to "Konu").forEach { (k, v) ->
+                                val selected = pushTarget == k
+                                FilterChip(
+                                    selected = selected,
+                                    onClick  = { pushTarget = k },
+                                    label    = { Text(v, fontSize = 12.sp) },
+                                    colors   = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Amber,
+                                        selectedLabelColor     = Color.Black,
+                                    )
+                                )
+                            }
                         }
-                        if (pushResult.isNotBlank()) {
+                        if (pushTarget == "uid") {
                             Spacer(Modifier.height(8.dp))
-                            Text(pushResult, color = if (pushResult.startsWith("✓")) Success else Error, fontSize = 13.sp)
+                            adminTextField(pushUid, { pushUid = it }, "Hedef UID *")
+                        }
+                        if (pushTarget == "topic") {
+                            Spacer(Modifier.height(8.dp))
+                            adminTextField(pushTopic, { pushTopic = it }, "Topic (örn: all_users)")
+                        }
+
+                        Spacer(Modifier.height(14.dp))
+                        Divider(color = Color.White.copy(alpha = 0.08f))
+                        Spacer(Modifier.height(14.dp))
+
+                        // ── İçerik ────────────────────────────────────────────
+                        Text("İçerik", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(6.dp))
+
+                        // Emoji + Başlık yan yana
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            adminTextField(pushEmoji, { pushEmoji = it }, "📣", modifier = Modifier.width(64.dp))
+                            adminTextField(
+                                pushTitle, { pushTitle = it }, "Başlık *",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        adminTextField(pushBody, { pushBody = it }, "Mesaj içeriği *", minLines = 3)
+
+                        Spacer(Modifier.height(14.dp))
+                        Divider(color = Color.White.copy(alpha = 0.08f))
+                        Spacer(Modifier.height(14.dp))
+
+                        // ── Gönderi ekle ──────────────────────────────────────
+                        Text("Gönderi Ekle (opsiyonel)", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(6.dp))
+                        adminTextField(pushPostId, { pushPostId = it }, "Post ID (Firestore doc id)")
+                        Spacer(Modifier.height(6.dp))
+                        if (pushPostId.isNotBlank()) {
+                            Surface(
+                                color  = Color.White.copy(alpha = 0.05f),
+                                shape  = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Article, null, tint = Amber, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Post ID: $pushPostId", fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f))
+                                    Spacer(Modifier.weight(1f))
+                                    IconButton(onClick = { pushPostId = "" }, modifier = Modifier.size(20.dp)) {
+                                        Icon(Icons.Default.Close, null, tint = Error, modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(14.dp))
+                        Divider(color = Color.White.copy(alpha = 0.08f))
+                        Spacer(Modifier.height(14.dp))
+
+                        // ── Ekstra (opsiyonel) ────────────────────────────────
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { pushExpanded = !pushExpanded }
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment      = Alignment.CenterVertically,
+                        ) {
+                            Text("Ekstra Ayarlar", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+                            Icon(
+                                if (pushExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        if (pushExpanded) {
+                            Spacer(Modifier.height(8.dp))
+                            adminTextField(pushUrl, { pushUrl = it }, "Deep Link URL (opsiyonel)")
+                            Spacer(Modifier.height(8.dp))
+                            adminTextField(pushImageUrl, { pushImageUrl = it }, "Görsel URL (opsiyonel)")
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        // ── Önizleme kartı ────────────────────────────────────
+                        if (pushTitle.isNotBlank() || pushBody.isNotBlank()) {
+                            Text("Önizleme", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
+                            Spacer(Modifier.height(6.dp))
+                            Surface(
+                                color  = Color(0xFF1E1E2E),
+                                shape  = RoundedCornerShape(14.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                                shadowElevation = 4.dp,
+                            ) {
+                                Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    // Uygulama ikonu alanı
+                                    Surface(
+                                        color = Amber.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.size(42.dp),
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(pushEmoji.ifBlank { "📣" }, fontSize = 22.sp)
+                                        }
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            buildString {
+                                                if (pushEmoji.isNotBlank()) append("$pushEmoji ")
+                                                append(pushTitle.ifBlank { "Başlık" })
+                                            },
+                                            color      = Color.White,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize   = 13.sp,
+                                            maxLines   = 1,
+                                        )
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(
+                                            pushBody.ifBlank { "Mesaj içeriği" },
+                                            color   = Color.White.copy(alpha = 0.65f),
+                                            fontSize = 12.sp,
+                                            maxLines = 2,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        )
+                                        if (pushPostId.isNotBlank()) {
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(
+                                                "📎 Gönderi eklendi",
+                                                color    = Amber.copy(alpha = 0.8f),
+                                                fontSize = 11.sp,
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        "şimdi",
+                                        color    = Color.White.copy(alpha = 0.35f),
+                                        fontSize = 10.sp,
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(16.dp))
+                        }
+
+                        // ── Gönder butonu ─────────────────────────────────────
+                        Button(
+                            onClick = {
+                                val finalTitle = buildString {
+                                    if (pushEmoji.isNotBlank()) append("$pushEmoji ")
+                                    append(pushTitle)
+                                }
+                                val targetUid = when (pushTarget) {
+                                    "uid"   -> pushUid
+                                    "topic" -> ""
+                                    else    -> ""
+                                }
+                                vm.sendPush(
+                                    title    = finalTitle,
+                                    body     = pushBody,
+                                    url      = pushUrl,
+                                    targetUid = targetUid,
+                                    postId   = pushPostId,
+                                    topic    = if (pushTarget == "topic") pushTopic else if (pushTarget == "all") "all_users" else "",
+                                    imageUrl = pushImageUrl,
+                                )
+                            },
+                            enabled  = pushTitle.isNotBlank() && pushBody.isNotBlank() &&
+                                       (pushTarget != "uid" || pushUid.isNotBlank()),
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            shape    = RoundedCornerShape(12.dp),
+                            colors   = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                        ) {
+                            Icon(Icons.Default.Send, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Push Gönder", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+
+                        if (pushResult.isNotBlank()) {
+                            Spacer(Modifier.height(10.dp))
+                            Surface(
+                                color = if (pushResult.startsWith("✓")) Success.copy(alpha = 0.12f) else Error.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    pushResult,
+                                    color    = if (pushResult.startsWith("✓")) Success else Error,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.padding(10.dp),
+                                )
+                            }
                         }
                     }
                 }
