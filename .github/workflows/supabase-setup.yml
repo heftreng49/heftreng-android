@@ -1,5 +1,6 @@
 name: Supabase — Tabloları Oluştur
 
+# Sadece manuel tetiklenir — bir kez çalıştırman yeterli
 on:
   workflow_dispatch:
 
@@ -9,126 +10,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Node.js kur
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: psql kur
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
 
-      - name: postgres paketi yükle
-        run: npm install postgres
-
-      - name: Schema oluştur
+      - name: Schema SQL'i çalıştır
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          node - << 'JSEOF'
-          const postgres = require('postgres');
-
-          const SCHEMA = `
-            create table if not exists authors (
-              id text primary key,
-              name text not null,
-              bio text default '',
-              photo_url text default '',
-              birth_year int default 0,
-              nationality text default '',
-              book_count int default 0,
-              quote_count int default 0,
-              review_count int default 0,
-              follower_count int default 0,
-              created_at timestamptz default now()
-            );
-            create index if not exists authors_name_idx on authors(lower(name));
-
-            create table if not exists library_books (
-              id text primary key,
-              title text not null,
-              author_id text references authors(id) on delete set null,
-              author_name text default '',
-              cover_img text default '',
-              genre text default '',
-              publish_year int default 0,
-              synopsis text default '',
-              page_count int default 0,
-              quote_count int default 0,
-              review_count int default 0,
-              avg_rating float default 0,
-              created_at timestamptz default now()
-            );
-            create index if not exists library_books_author_idx on library_books(author_id);
-            create index if not exists library_books_title_idx  on library_books(lower(title));
-
-            create table if not exists book_quotes (
-              id text primary key,
-              book_id text references library_books(id) on delete cascade,
-              author_id text references authors(id) on delete set null,
-              book_title text default '',
-              author_name text default '',
-              text text not null,
-              uid text default '',
-              user_display_name text default '',
-              user_photo_url text default '',
-              feed_post_id text default '',
-              likes_count int default 0,
-              created_at timestamptz default now()
-            );
-            create index if not exists book_quotes_book_idx   on book_quotes(book_id);
-            create index if not exists book_quotes_author_idx on book_quotes(author_id);
-
-            create table if not exists book_reviews (
-              id text primary key,
-              book_id text references library_books(id) on delete cascade,
-              author_id text references authors(id) on delete set null,
-              book_title text default '',
-              author_name text default '',
-              text text not null,
-              rating float default 0,
-              uid text default '',
-              user_display_name text default '',
-              user_photo_url text default '',
-              feed_post_id text default '',
-              likes_count int default 0,
-              created_at timestamptz default now()
-            );
-            create index if not exists book_reviews_book_idx on book_reviews(book_id);
-
-            create table if not exists author_follows (
-              author_id text not null references authors(id) on delete cascade,
-              user_id text not null,
-              created_at timestamptz default now(),
-              primary key (author_id, user_id)
-            );
-            create index if not exists author_follows_user_idx on author_follows(user_id);
-          `;
-
-          (async () => {
-            const sql = postgres(process.env.SUPABASE_DB_URL, {
-              ssl: { rejectUnauthorized: false },
-              connect_timeout: 30,
-              max: 1,
-            });
-            try {
-              const stmts = SCHEMA
-                .split(';')
-                .map(s => s.trim())
-                .filter(s => s.length > 5);
-
-              let ok = 0, skip = 0;
-              for (const stmt of stmts) {
-                try {
-                  await sql.unsafe(stmt);
-                  ok++;
-                } catch(e) {
-                  if (e.message?.includes('already exists')) {
-                    skip++;
-                  } else {
-                    console.warn('⚠️ ', stmt.slice(0, 60), '->', e.message?.slice(0, 80));
-                  }
-                }
-              }
-              console.log(`✅ Schema hazır — ${ok} çalıştı, ${skip} zaten vardı`);
-            } finally {
-              await sql.end();
-            }
-          })();
-          JSEOF
+          psql "$SUPABASE_DB_URL" -f scripts/supabase_schema.sql --set ON_ERROR_STOP=1
+          psql "$SUPABASE_DB_URL" -f scripts/supabase_social_schema.sql --set ON_ERROR_STOP=1
+          echo "✅ Tüm tablolar oluşturuldu"

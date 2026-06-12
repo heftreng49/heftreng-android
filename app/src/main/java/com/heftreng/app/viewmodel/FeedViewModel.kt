@@ -12,6 +12,9 @@ import com.heftreng.app.data.model.Comment
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.data.repository.LibraryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -23,6 +26,7 @@ class FeedViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
     private val library  : LibraryRepository,
+    private val supabase : SupabaseClient,
 ) : ViewModel() {
 
     private val _posts    = MutableStateFlow<List<Post>>(emptyList())
@@ -123,11 +127,13 @@ class FeedViewModel @Inject constructor(
                 // FATURA OPTİMİZASYONU: 1000 → 300.
                 // Feed filtreleme için 300 yeterli; çok fazla takip varsa
                 // loadSuggestedUsers'ın cursor-based versiyonu devreye girer.
-                val snap = firestore.collection("follows")
-                    .whereEqualTo("fromUid", uid)
-                    .limit(300).get().await()
-                _followingUids.value = snap.documents
-                    .mapNotNull { it.getString("targetUid") }.toSet()
+                val rows = supabase.postgrest["follows"]
+                    .select {
+                        filter { eq("from_uid", uid) }
+                        limit(300)
+                    }
+                    .decodeList<SocialViewModel.FollowRow>()
+                _followingUids.value = rows.map { it.targetUid }.toSet()
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
@@ -147,31 +153,29 @@ class FeedViewModel @Inject constructor(
             try {
                 val postIds = _posts.value.map { it.id }.filter { it.isNotBlank() }
                 if (postIds.isNotEmpty()) {
-                    // FATURA OPTİMİZASYONU: limit(300) yerine sadece ekrandaki postları kontrol et.
-                    // Doc ID formatı: {postId}_{uid} — whereIn ile max 30 okuma (PAGE_SIZE kadar).
-                    val likeDocIds  = postIds.map { "${it}_$currentUid" }
-                    val saveDocIds  = postIds.map { "${it}_$currentUid" }
-                    val newLikedIds  = mutableSetOf<String>()
-                    val newSavedIds  = mutableSetOf<String>()
-                    likeDocIds.chunked(10).forEach { chunk ->
-                        firestore.collection("feedLikes")
-                            .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
-                            .get().await().documents.forEach { doc ->
-                                val postId = doc.id.removeSuffix("_$currentUid")
-                                newLikedIds.add(postId)
+                    // Supabase: tek sorguda tüm postların like/save durumu — N sorgu → 2 sorgu
+                    val likedPostIds = supabase.postgrest["feed_likes"]
+                        .select {
+                            filter {
+                                eq("uid", currentUid)
+                                isIn("post_id", postIds)
                             }
-                    }
-                    saveDocIds.chunked(10).forEach { chunk ->
-                        firestore.collection("feedSaves")
-                            .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
-                            .get().await().documents.forEach { doc ->
-                                val postId = doc.id.removeSuffix("_$currentUid")
-                                newSavedIds.add(postId)
+                        }
+                        .decodeList<SocialViewModel.LikeRow>()
+                        .map { it.postId }.toSet()
+
+                    val savedPostIds = supabase.postgrest["feed_saves"]
+                        .select {
+                            filter {
+                                eq("uid", currentUid)
+                                isIn("post_id", postIds)
                             }
-                    }
-                    // Mevcut set'leri koru, yeni postları ekle
-                    likedIds = likedIds + newLikedIds
-                    savedIds = savedIds + newSavedIds
+                        }
+                        .decodeList<SocialViewModel.LikeRow>()
+                        .map { it.postId }.toSet()
+
+                    likedIds = likedIds + likedPostIds
+                    savedIds = savedIds + savedPostIds
                 }
 
                 // Repost map: kendi repostlarım — feed'e yazılıyor, limit küçük tutulabilir
@@ -196,22 +200,16 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val postIds = posts.map { it.id }.filter { it.isNotBlank() }
-                val newLikedIds = mutableSetOf<String>()
-                val newSavedIds = mutableSetOf<String>()
-                postIds.map { "${it}_$currentUid" }.chunked(10).forEach { chunk ->
-                    firestore.collection("feedLikes")
-                        .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
-                        .get().await().documents.forEach { doc ->
-                            newLikedIds.add(doc.id.removeSuffix("_$currentUid"))
-                        }
-                }
-                postIds.map { "${it}_$currentUid" }.chunked(10).forEach { chunk ->
-                    firestore.collection("feedSaves")
-                        .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
-                        .get().await().documents.forEach { doc ->
-                            newSavedIds.add(doc.id.removeSuffix("_$currentUid"))
-                        }
-                }
+                if (postIds.isEmpty()) return@launch
+
+                val newLikedIds = supabase.postgrest["feed_likes"]
+                    .select { filter { eq("uid", currentUid); isIn("post_id", postIds) } }
+                    .decodeList<SocialViewModel.LikeRow>().map { it.postId }.toSet()
+
+                val newSavedIds = supabase.postgrest["feed_saves"]
+                    .select { filter { eq("uid", currentUid); isIn("post_id", postIds) } }
+                    .decodeList<SocialViewModel.LikeRow>().map { it.postId }.toSet()
+
                 likedIds = likedIds + newLikedIds
                 savedIds = savedIds + newSavedIds
                 syncInteractionsToState()
@@ -477,25 +475,21 @@ class FeedViewModel @Inject constructor(
         }
         viewModelScope.launch {
             try {
-                val likeRef = firestore.collection("feedLikes").document("${post.id}_$uid")
                 val postRef = firestore.collection("feed").document(post.id)
                 if (nowLiked) {
-                    // Auth'tan oku — Firestore read gerektirmez, ücretsiz
                     val myName  = auth.currentUser?.displayName?.takeIf { it.isNotBlank() } ?: ""
                     val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
-                    
-                    likeRef.set(mapOf(
-                        "uid"      to uid,
-                        "feedId"   to post.id,
-                        "name"     to myName,
-                        "photoURL" to myPhoto,
-                        "ts"       to Timestamp.now(),
-                    )).await()
-                    
+                    supabase.postgrest["feed_likes"].upsert(
+                        mapOf("id" to "${post.id}_$uid", "post_id" to post.id,
+                              "uid" to uid, "name" to myName, "photo_url" to myPhoto),
+                        onConflict = "id"
+                    )
                     postRef.update("likes", FieldValue.increment(1)).await()
                     if (post.uid != uid) sendNotif(post.uid, "like", "$myName gönderini beğendi", post.text.take(60), post.id)
                 } else {
-                    likeRef.delete().await()
+                    supabase.postgrest["feed_likes"].delete {
+                        filter { eq("id", "${post.id}_$uid") }
+                    }
                     postRef.update("likes", FieldValue.increment(-1)).await()
                 }
             } catch (e: Exception) { e.printStackTrace() }
@@ -537,13 +531,17 @@ class FeedViewModel @Inject constructor(
         }
         viewModelScope.launch {
             try {
-                val saveRef = firestore.collection("feedSaves").document("${post.id}_$uid")
                 val postRef = firestore.collection("feed").document(post.id)
                 if (nowSaved) {
-                    saveRef.set(mapOf("uid" to uid, "feedId" to post.id, "ts" to Timestamp.now())).await()
+                    supabase.postgrest["feed_saves"].upsert(
+                        mapOf("id" to "${post.id}_$uid", "post_id" to post.id, "uid" to uid),
+                        onConflict = "id"
+                    )
                     postRef.update("saves", FieldValue.increment(1)).await()
                 } else {
-                    saveRef.delete().await()
+                    supabase.postgrest["feed_saves"].delete {
+                        filter { eq("id", "${post.id}_$uid") }
+                    }
                     postRef.update("saves", FieldValue.increment(-1)).await()
                 }
             } catch (e: Exception) {
@@ -932,24 +930,13 @@ class FeedViewModel @Inject constructor(
         _suggestLastDoc = null
         viewModelScope.launch {
             try {
-                // 1. Takip ettiğim TÜM UID'leri cursor-based sayfalama ile çek
+                // 1. Takip ettiğim TÜM UID'leri Supabase'den çek — tek sorgu
                 val followingUids = mutableSetOf<String>()
                 followingUids.add(myUid)
-                var lastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
-                var hasMore = true
-                while (hasMore) {
-                    var query = firestore.collection("follows")
-                        .whereEqualTo("fromUid", myUid)
-                        .limit(200)
-                    if (lastDoc != null) query = query.startAfter(lastDoc!!)
-                    val snap = query.get().await()
-                    snap.documents.forEach { doc ->
-                        val targetUid = doc.getString("targetUid") ?: doc.getString("followingUid")
-                        if (!targetUid.isNullOrBlank()) followingUids.add(targetUid)
-                    }
-                    lastDoc = snap.documents.lastOrNull()
-                    hasMore = snap.documents.size >= 200
-                }
+                val followRows = supabase.postgrest["follows"]
+                    .select { filter { eq("from_uid", myUid) }; limit(500) }
+                    .decodeList<SocialViewModel.FollowRow>()
+                followRows.forEach { followingUids.add(it.targetUid) }
 
                 // 2. Tüm kullanıcıları followersCount DESC ile çek (geniş havuz)
                 //    FATURA: limit(200) — 200 doc okuma, çoğu cache'den gelir
@@ -1045,15 +1032,18 @@ class FeedViewModel @Inject constructor(
                 val tDoc    = firestore.collection("users").document(targetUid).get().await()
                 val tName   = tDoc.getString("displayName") ?: tDoc.getString("name") ?: ""
                 val tPhoto  = tDoc.getString("photoURL") ?: ""
-                firestore.collection("follows").document("${myUid}_${targetUid}").set(mapOf(
-                    "fromUid"     to myUid,
-                    "fromName"    to myName,
-                    "fromPhoto"   to myPhoto,
-                    "targetUid"   to targetUid,
-                    "targetName"  to tName,
-                    "targetPhoto" to tPhoto,
-                    "ts"          to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                )).await()
+                supabase.postgrest["follows"].upsert(
+                    mapOf(
+                        "id"           to "${myUid}_${targetUid}",
+                        "from_uid"     to myUid,
+                        "from_name"    to myName,
+                        "from_photo"   to myPhoto,
+                        "target_uid"   to targetUid,
+                        "target_name"  to tName,
+                        "target_photo" to tPhoto,
+                    ),
+                    onConflict = "id"
+                )
                 firestore.collection("users").document(myUid)
                     .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
                 firestore.collection("users").document(targetUid)
@@ -1215,11 +1205,10 @@ class FeedViewModel @Inject constructor(
         val followingUids = mutableSetOf<String>()
         if (myUid.isNotEmpty()) {
             try {
-                val followSnap = firestore.collection("follows")
-                    .whereEqualTo("fromUid", myUid).get().await()
-                followSnap.documents.forEach { doc ->
-                    doc.getString("targetUid")?.let { followingUids.add(it) }
-                }
+                val libFollowRows = supabase.postgrest["follows"]
+                    .select { filter { eq("from_uid", myUid) }; limit(500) }
+                    .decodeList<SocialViewModel.FollowRow>()
+                libFollowRows.forEach { followingUids.add(it.targetUid) }
             } catch (_: Exception) {}
         }
 
