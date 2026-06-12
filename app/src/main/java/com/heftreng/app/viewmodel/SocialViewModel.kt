@@ -70,7 +70,7 @@ class SocialViewModel @Inject constructor(
                 val rows = supabase.postgrest["feed_likes"]
                     .select { filter { eq("post_id", postId) }; limit(50); order("created_at", Order.DESCENDING) }
                     .decodeList<FeedLikeRow>()
-                _likers.value = enrichLikes(rows.map { LikeEntry(uid = it.uid, name = it.name, photoURL = it.photoUrl) })
+                _likers.value = enrichLikes(rows.map { LikeEntry(uid = it.uid, name = it.name.orEmpty(), photoURL = it.photoUrl.orEmpty()) })
             } catch (e: Exception) {
                 android.util.Log.e("SocialVM", "loadPostLikers: ${e.message}")
             } finally { _loading.value = false }
@@ -85,7 +85,7 @@ class SocialViewModel @Inject constructor(
                 val rows = supabase.postgrest["comment_likes"]
                     .select { filter { eq("comment_id", commentId) }; limit(50) }
                     .decodeList<CommentLikeRow>()
-                _likers.value = enrichLikes(rows.map { LikeEntry(uid = it.uid, name = it.name, photoURL = it.photoUrl) })
+                _likers.value = enrichLikes(rows.map { LikeEntry(uid = it.uid, name = it.name.orEmpty(), photoURL = it.photoUrl.orEmpty()) })
             } catch (e: Exception) {
                 android.util.Log.e("SocialVM", "loadCommentLikers: ${e.message}")
             } finally { _loading.value = false }
@@ -100,7 +100,7 @@ class SocialViewModel @Inject constructor(
                 val rows = supabase.postgrest["serial_likes"]
                     .select { filter { eq("serial_id", serialId) }; limit(50) }
                     .decodeList<SerialLikeRow>()
-                _likers.value = enrichLikes(rows.map { LikeEntry(uid = it.uid, name = it.name, photoURL = it.photoUrl) })
+                _likers.value = enrichLikes(rows.map { LikeEntry(uid = it.uid, name = it.name.orEmpty(), photoURL = it.photoUrl.orEmpty()) })
             } catch (e: Exception) {
                 android.util.Log.e("SocialVM", "loadSerialLikers: ${e.message}")
             } finally { _loading.value = false }

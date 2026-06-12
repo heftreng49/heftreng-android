@@ -21,20 +21,20 @@ data class FollowRow(
 
 @Serializable
 data class FeedLikeRow(
-    val id        : String = "",
-    @SerialName("post_id")    val postId   : String = "",
-    val uid       : String = "",
-    val name      : String = "",
-    @SerialName("photo_url")  val photoUrl : String = "",
-    @SerialName("created_at") val createdAt: String = "",
+    val id        : String  = "",
+    @SerialName("post_id")    val postId   : String  = "",
+    val uid       : String  = "",
+    val name      : String? = null,
+    @SerialName("photo_url")  val photoUrl : String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
 )
 
 @Serializable
 data class FeedSaveRow(
-    val id        : String = "",
-    @SerialName("post_id")    val postId   : String = "",
-    val uid       : String = "",
-    @SerialName("created_at") val createdAt: String = "",
+    val id        : String  = "",
+    @SerialName("post_id")    val postId   : String  = "",
+    val uid       : String  = "",
+    @SerialName("created_at") val createdAt: String? = null,
 )
 
 @Serializable
@@ -49,10 +49,10 @@ data class CommentLikeRow(
 
 @Serializable
 data class SerialLikeRow(
-    val id        : String = "",
-    @SerialName("serial_id")  val serialId : String = "",
-    val uid       : String = "",
-    val name      : String = "",
-    @SerialName("photo_url")  val photoUrl : String = "",
-    @SerialName("created_at") val createdAt: String = "",
+    val id        : String  = "",
+    @SerialName("serial_id")  val serialId : String  = "",
+    val uid       : String  = "",
+    val name      : String? = null,
+    @SerialName("photo_url")  val photoUrl : String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
 )

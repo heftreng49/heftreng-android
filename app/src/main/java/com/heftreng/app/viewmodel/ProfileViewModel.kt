@@ -9,10 +9,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.data.model.User
-import com.heftreng.app.data.model.FollowRow
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -22,9 +19,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
-    private val auth     : FirebaseAuth,
+    private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
-    private val supabase : SupabaseClient,
 ) : ViewModel() {
 
     private val _user = MutableStateFlow<User?>(null)
@@ -94,19 +90,9 @@ class ProfileViewModel @Inject constructor(
                     firestore.collection("users").document(targetUid).get().await()
                 }
                 val followDocDeferred = viewModelScope.async {
-                    if (targetUid != myUid && myUid.isNotEmpty()) {
-                        try {
-                            val rows = supabase.postgrest["follows"].select {
-                                filter { eq("id", "${myUid}_$targetUid") }
-                                limit(1)
-                            }.decodeList<FollowRow>()
-                            rows.isNotEmpty()
-                        } catch (_: Exception) {
-                            // Supabase erişilemezse Firestore'a fallback
-                            firestore.collection("follows").document("${myUid}_$targetUid")
-                                .get().await().exists()
-                        }
-                    } else false
+                    if (targetUid != myUid && myUid.isNotEmpty())
+                        firestore.collection("follows").document("${myUid}_$targetUid").get().await()
+                    else null
                 }
                 val followRequestDeferred = viewModelScope.async {
                     if (targetUid != myUid && myUid.isNotEmpty())
@@ -115,7 +101,7 @@ class ProfileViewModel @Inject constructor(
                     else null
                 }
                 val userDoc           = userDocDeferred.await()
-                val isFollowingResult = followDocDeferred.await()
+                val followDoc         = followDocDeferred.await()
                 val followRequestDoc  = followRequestDeferred.await()
 
                 val d = userDoc.data ?: return@launch
@@ -138,7 +124,7 @@ class ProfileViewModel @Inject constructor(
                     messagePermission  = d["messagePermission"] as? String  ?: "everyone",
                 )
 
-                _isFollowing.value = isFollowingResult
+                if (followDoc != null) _isFollowing.value = followDoc.exists()
 
                 // Takip isteği durumu
                 _followRequestStatus.value = when {
@@ -281,12 +267,7 @@ class ProfileViewModel @Inject constructor(
     private fun unfollowUser(targetUid: String) {
         viewModelScope.launch {
             try {
-                // Firestore
                 firestore.collection("follows").document("${myUid}_$targetUid").delete().await()
-                // Supabase
-                supabase.postgrest["follows"].delete {
-                    filter { eq("id", "${myUid}_$targetUid") }
-                }
                 _isFollowing.value = false
                 _followRequestStatus.value = "none"
                 _followersCount.value = (_followersCount.value - 1).coerceAtLeast(0)
@@ -360,7 +341,6 @@ class ProfileViewModel @Inject constructor(
                 val targetName  = targetDoc.getString("displayName") ?: targetDoc.getString("name") ?: ""
                 val targetPhoto = targetDoc.getString("photoURL") ?: ""
 
-                // Firestore
                 firestore.collection("follows").document("${myUid}_$targetUid").set(mapOf(
                     "fromUid"     to myUid,
                     "fromName"    to fromName,
@@ -370,19 +350,6 @@ class ProfileViewModel @Inject constructor(
                     "targetPhoto" to targetPhoto,
                     "ts"          to Timestamp.now(),
                 )).await()
-
-                // Supabase
-                supabase.postgrest["follows"].upsert(
-                    FollowRow(
-                        id          = "${myUid}_$targetUid",
-                        fromUid     = myUid,
-                        fromName    = fromName,
-                        fromPhoto   = fromPhoto,
-                        targetUid   = targetUid,
-                        targetName  = targetName,
-                        targetPhoto = targetPhoto,
-                    )
-                )
 
                 _isFollowing.value = true
                 _followRequestStatus.value = "accepted"
