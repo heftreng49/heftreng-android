@@ -143,17 +143,15 @@ fun NotificationsScreen(
     val loading       by vm.loading.collectAsState()
     val unreadCount   = notifications.count { !it.read }
 
-    var isRefreshing by remember { mutableStateOf(false) }
+    val refreshing by vm.refreshing.collectAsState()
     val pullRefreshState = rememberPullRefreshState(
-        refreshing = isRefreshing,
-        onRefresh  = { isRefreshing = true; vm.load() }
+        refreshing = refreshing,
+        onRefresh  = { vm.refresh() }
     )
-    LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
 
-    // Ekran açılınca listener başlat, kapanınca kapat — FCM devralır
-    DisposableEffect(Unit) {
+    // Ekran açılınca listener'ı başlat (zaten kuruluysa no-op)
+    LaunchedEffect(Unit) {
         vm.load()
-        onDispose { vm.stopListening() }
     }
 
     Scaffold(
@@ -298,9 +296,10 @@ fun NotificationsScreen(
             }
 
             PullRefreshIndicator(
-                refreshing = isRefreshing,
+                refreshing = refreshing,
                 state      = pullRefreshState,
                 modifier   = Modifier.align(Alignment.TopCenter),
+                contentColor = Amber,
             )
         }
     }
