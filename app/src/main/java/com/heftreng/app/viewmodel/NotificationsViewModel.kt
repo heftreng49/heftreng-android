@@ -11,6 +11,7 @@ import com.heftreng.app.data.model.Notification
 import com.heftreng.app.util.AppLifecycleObserver
 import com.heftreng.app.data.model.FollowRow
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch

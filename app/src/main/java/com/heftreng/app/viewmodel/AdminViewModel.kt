@@ -10,7 +10,6 @@ import com.heftreng.app.data.model.FollowRow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
-import io.github.jan.supabase.postgrest.query.Count
 import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -489,7 +488,15 @@ class AdminViewModel @Inject constructor(
     }
 
     // ── Push bildirimi ────────────────────────────────────────────────────────
-    fun sendPush(title: String, body: String, url: String = "", targetUid: String = "") {
+    fun sendPush(
+        title    : String,
+        body     : String,
+        url      : String = "",
+        targetUid: String = "",
+        postId   : String = "",
+        topic    : String = "all_users",
+        imageUrl : String = "",
+    ) {
         if (_perms.value?.can("push") != true) return
         viewModelScope.launch {
             try {
@@ -756,18 +763,17 @@ class AdminViewModel @Inject constructor(
                         val uid = userDoc.id
 
                         // Supabase'den gerçek sayıları al — tek sorgu, çok daha hızlı
+                        // Supabase'den count — decodeList ile say
                         val realFollowers = try {
-                            supabase.postgrest["follows"]
-                                .select(count = Count.EXACT) {
-                                    filter { eq("target_uid", uid) }
-                                }.countOrNull()?.toInt() ?: 0
+                            supabase.postgrest["follows"].select {
+                                filter { eq("target_uid", uid) }
+                            }.decodeList<FollowRow>().size
                         } catch (_: Exception) { 0 }
 
                         val realFollowing = try {
-                            supabase.postgrest["follows"]
-                                .select(count = Count.EXACT) {
-                                    filter { eq("from_uid", uid) }
-                                }.countOrNull()?.toInt() ?: 0
+                            supabase.postgrest["follows"].select {
+                                filter { eq("from_uid", uid) }
+                            }.decodeList<FollowRow>().size
                         } catch (_: Exception) { 0 }
 
                         val storedFollowers = (userDoc.getLong("followersCount") ?: -1L).toInt()
