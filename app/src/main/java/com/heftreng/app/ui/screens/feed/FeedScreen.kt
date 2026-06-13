@@ -253,13 +253,20 @@ fun FeedScreen(
             TabRow(
                 selectedTabIndex = selectedFeedTab,
                 containerColor   = Background,
-                contentColor     = Primary,
+                contentColor     = Amber,
+                divider          = { HorizontalDivider(color = Divider, thickness = 0.5.dp) },
                 indicator        = { tabPositions ->
                     Box(
                         Modifier
                             .tabIndicatorOffset(tabPositions[selectedFeedTab])
-                            .height(2.dp)
-                            .background(Primary)
+                            .padding(horizontal = 28.dp)
+                            .height(2.5.dp)
+                            .clip(RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
+                            .background(
+                                brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                    listOf(Color(0xFF8B5CF6), Color(0xFFEC4899))
+                                )
+                            )
                     )
                 },
             ) {
@@ -267,8 +274,15 @@ fun FeedScreen(
                     Tab(
                         selected               = selectedFeedTab == i,
                         onClick                = { selectedFeedTab = i },
-                        text                   = { Text(title, fontSize = 13.sp, fontWeight = if (selectedFeedTab == i) FontWeight.Bold else FontWeight.Normal) },
-                        selectedContentColor   = Primary,
+                        text                   = {
+                            Text(
+                                title,
+                                fontSize      = 13.sp,
+                                fontWeight    = if (selectedFeedTab == i) FontWeight.Bold else FontWeight.Normal,
+                                letterSpacing = 0.2.sp,
+                            )
+                        },
+                        selectedContentColor   = OnBackground,
                         unselectedContentColor = Muted,
                     )
                 }
@@ -282,7 +296,7 @@ fun FeedScreen(
             Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
             LazyColumn(
                 modifier       = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 100.dp),
+                contentPadding = PaddingValues(top = 6.dp, bottom = 100.dp),
             ) {
                 // ── Inline compose — tema .compose ────────────────────────
                 if (selectedFeedTab == 0) item {
@@ -851,8 +865,11 @@ fun PostCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Background)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 5.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(HeftCard)
+            .border(0.5.dp, Divider, RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         // Header
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -861,7 +878,13 @@ fun PostCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
-                    modifier = Modifier.size(40.dp).clip(CircleShape).background(SurfaceVar),
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(brush = androidx.compose.ui.graphics.Brush.linearGradient(listOf(GradientStart, GradientEnd)))
+                        .padding(1.5.dp)
+                        .clip(CircleShape)
+                        .background(SurfaceVar),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (post.photoURL.isNotBlank()) {
@@ -887,7 +910,7 @@ fun PostCard(
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(post.displayName.ifBlank { Strings.anonymous(language) }, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
+                    Text(post.displayName.ifBlank { Strings.anonymous(language) }, fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 14.sp)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
                             if (post.username.isNotBlank()) "@${post.username}" else "—",
@@ -978,7 +1001,7 @@ fun PostCard(
             }
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(12.dp))
 
         // İçerik — tıklanınca tekil gönderi ekranına
         Column(

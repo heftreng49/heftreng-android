@@ -270,28 +270,40 @@ fun AuthScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 32.dp),
+                .padding(horizontal = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             // Logo
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                            listOf(Color(0xFF8B5CF6), Color(0xFFEC4899))
+                        )
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("H", fontSize = 36.sp, fontWeight = FontWeight.Black, color = Color.White)
+            }
+            Spacer(Modifier.height(4.dp))
             Text(
-                text         = "heftreng",
-                fontSize     = 40.sp,
-                fontWeight   = FontWeight.Bold,
-                color        = Amber,
-                letterSpacing = (-1).sp,
+                text          = "heftreng",
+                fontSize      = 32.sp,
+                fontWeight    = FontWeight.Black,
+                color         = OnBackground,
+                letterSpacing = (-1.5).sp,
             )
             Text(
-                text     = if (isRegister)
-                    Strings.register(language)
-                else
-                    Strings.welcome(language),
+                text     = if (isRegister) Strings.register(language) else Strings.welcome(language),
                 fontSize = 14.sp,
                 color    = Muted,
+                letterSpacing = 0.2.sp,
             )
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
 
             // Dil seçimi — giriş ekranında da görünür
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -348,8 +360,8 @@ fun AuthScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),
-                shape  = RoundedCornerShape(12.dp),
+                    .height(54.dp),
+                shape  = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.White,
                     contentColor   = Color(0xFF1F1F1F),
@@ -519,30 +531,40 @@ fun AuthScreen(
                 LaunchedEffect(errCode) { vm.clearError() }
             }
 
-            Button(
-                onClick = {
-                    if (isRegister) vm.registerWithEmail(email, password, displayName)
-                    else vm.signInWithEmail(email, password)
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape    = RoundedCornerShape(12.dp),
-                colors   = ButtonDefaults.buttonColors(
-                    containerColor = if (isRegister && !termsAccepted) Muted else Amber,
-                    contentColor   = Color.Black,
-                ),
-                enabled = !loading && (!isRegister || termsAccepted),
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        brush = if (!loading && (!isRegister || termsAccepted))
+                            androidx.compose.ui.graphics.Brush.linearGradient(
+                                listOf(Color(0xFF8B5CF6), Color(0xFFEC4899))
+                            )
+                        else
+                            androidx.compose.ui.graphics.Brush.linearGradient(
+                                listOf(Color(0xFF4B4B6B), Color(0xFF4B4B6B))
+                            )
+                    )
+                    .clickable(enabled = !loading && (!isRegister || termsAccepted)) {
+                        if (isRegister) vm.registerWithEmail(email, password, displayName)
+                        else vm.signInWithEmail(email, password)
+                    },
+                contentAlignment = Alignment.Center,
             ) {
                 if (loading) {
                     CircularProgressIndicator(
-                        modifier    = Modifier.size(20.dp),
-                        color       = Color.Black,
-                        strokeWidth = 2.dp,
+                        modifier    = Modifier.size(22.dp),
+                        color       = Color.White,
+                        strokeWidth = 2.5.dp,
                     )
                 } else {
                     Text(
                         if (isRegister) Strings.register(language) else Strings.login(language),
-                        fontWeight = FontWeight.SemiBold,
-                        modifier   = Modifier.padding(vertical = 4.dp),
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 15.sp,
+                        color      = Color.White,
+                        letterSpacing = 0.3.sp,
                     )
                 }
             }

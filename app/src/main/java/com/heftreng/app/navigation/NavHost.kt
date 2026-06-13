@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -408,6 +409,14 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     NavigationBar(
                         containerColor = HeftSurface,
                         tonalElevation = 0.dp,
+                        modifier = Modifier.drawBehind {
+                            drawLine(
+                                color = androidx.compose.ui.graphics.Color(0xFF23204A),
+                                start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                                end   = androidx.compose.ui.geometry.Offset(size.width, 0f),
+                                strokeWidth = 0.5.dp.toPx(),
+                            )
+                        },
                     ) {
                         bottomNavItems.forEach { item ->
                             val selected = currentRoute == item.route ||
@@ -491,14 +500,19 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                                     }
                                 },
                                 label = {
-                                    Text(item.label, fontSize = 10.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                                    Text(
+                                        item.label,
+                                        fontSize      = 10.sp,
+                                        fontWeight    = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                        letterSpacing = 0.sp,
+                                    )
                                 },
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor   = Amber,
                                     selectedTextColor   = Amber,
                                     unselectedIconColor = Muted,
                                     unselectedTextColor = Muted,
-                                    indicatorColor      = Amber.copy(alpha = 0.15f),
+                                    indicatorColor      = Amber.copy(alpha = 0.18f),
                                 ),
                             )
                         }

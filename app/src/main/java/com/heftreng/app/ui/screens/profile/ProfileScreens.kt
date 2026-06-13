@@ -265,13 +265,20 @@ fun ProfileScreen(
                 TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor   = Background,
-                    contentColor     = Amber,
+                    contentColor     = OnBackground,
+                    divider          = { androidx.compose.material3.HorizontalDivider(color = Divider, thickness = 0.5.dp) },
                     indicator = { tabPositions ->
                         Box(
                             Modifier
                                 .tabIndicatorOffset(tabPositions[selectedTab])
-                                .height(2.dp)
-                                .background(Amber)
+                                .padding(horizontal = 24.dp)
+                                .height(2.5.dp)
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
+                                .background(
+                                    brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                        listOf(androidx.compose.ui.graphics.Color(0xFF8B5CF6), androidx.compose.ui.graphics.Color(0xFFEC4899))
+                                    )
+                                )
                         )
                     }
                 ) {
@@ -279,8 +286,14 @@ fun ProfileScreen(
                         Tab(
                             selected               = selectedTab == i,
                             onClick                = { selectedTab = i },
-                            text                   = { Text(title, fontSize = 12.sp) },
-                            selectedContentColor   = Amber,
+                            text                   = {
+                                Text(
+                                    title,
+                                    fontSize   = 12.sp,
+                                    fontWeight = if (selectedTab == i) FontWeight.Bold else FontWeight.Normal,
+                                )
+                            },
+                            selectedContentColor   = OnBackground,
                             unselectedContentColor = Muted,
                         )
                     }

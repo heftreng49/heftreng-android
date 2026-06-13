@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.unit.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +16,8 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.offset
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontStyle
@@ -51,61 +54,70 @@ fun QuoteCard(
     modifier    : Modifier = Modifier,
 ) {
     if (quoteText.isBlank()) return
-    Row(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(SurfaceVar)
-            .border(1.dp, Amber.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
-            .padding(12.dp),
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(
+                        Amber.copy(alpha = 0.08f),
+                        androidx.compose.ui.graphics.Color(0xFF9B72F5).copy(alpha = 0.06f),
+                    )
+                )
+            )
+            .border(
+                width = 1.dp,
+                brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(Amber.copy(alpha = 0.4f), androidx.compose.ui.graphics.Color(0xFF9B72F5).copy(alpha = 0.3f))
+                ),
+                shape = RoundedCornerShape(14.dp),
+            )
+            .padding(14.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .width(3.dp)
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(2.dp))
-                .background(Amber)
+        // Büyük alıntı ikonu — arka plan süsü
+        Text(
+            "“",
+            fontSize = 56.sp,
+            color    = Amber.copy(alpha = 0.12f),
+            fontWeight = FontWeight.Black,
+            modifier = Modifier.align(Alignment.TopStart).offset(x = (-4).dp, y = (-10).dp),
         )
-        Spacer(Modifier.width(10.dp))
-        Column {
+        Column(modifier = Modifier.padding(start = 8.dp)) {
+            Text(
+                "${quoteText.take(300)}${if (quoteText.length > 300) "…" else ""}",
+                color      = OnSurface,
+                fontSize   = 14.sp,
+                fontStyle  = FontStyle.Italic,
+                lineHeight = 22.sp,
+                fontWeight = FontWeight.Medium,
+            )
             if (bookName.isNotBlank() || authorName.isNotBlank()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AutoStories, null, tint = Amber, modifier = Modifier.size(12.dp))
-                    Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Icon(Icons.Default.AutoStories, null, tint = Amber, modifier = Modifier.size(11.dp))
                     if (bookName.isNotBlank()) {
                         Text(
                             bookName,
                             color      = Amber,
-                            fontSize   = 10.sp,
+                            fontSize   = 11.sp,
                             fontWeight = FontWeight.SemiBold,
-                            modifier   = if (onTapBook != null)
-                                Modifier.clickable { onTapBook(bookName) }
-                            else Modifier,
+                            modifier   = if (onTapBook != null) Modifier.clickable { onTapBook(bookName) } else Modifier,
                         )
                     }
                     if (bookName.isNotBlank() && authorName.isNotBlank()) {
-                        Text(" — ", color = Muted, fontSize = 10.sp)
+                        Text("·", color = Muted, fontSize = 11.sp)
                     }
                     if (authorName.isNotBlank()) {
                         Text(
                             authorName,
                             color    = Muted,
-                            fontSize = 10.sp,
-                            modifier = if (onTapAuthor != null)
-                                Modifier.clickable { onTapAuthor(authorName) }
-                            else Modifier,
+                            fontSize = 11.sp,
+                            modifier = if (onTapAuthor != null) Modifier.clickable { onTapAuthor(authorName) } else Modifier,
                         )
                     }
                 }
-                Spacer(Modifier.height(4.dp))
             }
-            Text(
-                "❝ ${quoteText.take(300)}${if (quoteText.length > 300) "…" else ""}",
-                color     = OnSurface,
-                fontSize  = 13.sp,
-                fontStyle = FontStyle.Italic,
-                lineHeight = 20.sp,
-            )
         }
     }
 }
