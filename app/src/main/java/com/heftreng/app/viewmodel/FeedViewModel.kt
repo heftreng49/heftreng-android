@@ -480,8 +480,9 @@ class FeedViewModel @Inject constructor(
             try {
                 val postRef = firestore.collection("feed").document(post.id)
                 if (nowLiked) {
-                    val myName  = auth.currentUser?.displayName?.takeIf { it.isNotBlank() } ?: ""
-                    val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
+                    ensureMyProfileCached()
+                    val myName  = _cachedMyName.ifBlank { auth.currentUser?.displayName ?: "" }
+                    val myPhoto = _cachedMyPhoto.ifBlank { auth.currentUser?.photoUrl?.toString() ?: "" }
                     supabase.postgrest["feed_likes"].upsert(
                         FeedLikeRow(
                             id       = "${post.id}_$uid",
@@ -491,7 +492,7 @@ class FeedViewModel @Inject constructor(
                             photoUrl = myPhoto,
                         )
                     )
-                    postRef.update("likes", FieldValue.increment(1)).await()
+                    try { postRef.update("likes", FieldValue.increment(1)).await() } catch (_: Exception) {}
                     if (post.uid != uid) sendNotif(post.uid, "like", "$myName gönderini beğendi", post.text.take(60), post.id)
                 } else {
                     supabase.postgrest["feed_likes"].delete {
@@ -519,25 +520,11 @@ class FeedViewModel @Inject constructor(
                 val cmtRef  = firestore.collection("feed").document(postId)
                     .collection("comments").document(comment.id)
                 if (nowLiked) {
-                    val myName  = auth.currentUser?.displayName ?: ""
-                    val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
                     likeRef.set(mapOf("uid" to uid, "ts" to Timestamp.now())).await()
                     cmtRef.update("likes", FieldValue.increment(1)).await()
-                    supabase.postgrest["comment_likes"].upsert(
-                        mapOf(
-                            "id"         to "${comment.id}_$uid",
-                            "comment_id" to comment.id,
-                            "uid"        to uid,
-                            "name"       to myName,
-                            "photo_url"  to myPhoto,
-                        )
-                    )
                 } else {
                     likeRef.delete().await()
                     cmtRef.update("likes", FieldValue.increment(-1)).await()
-                    supabase.postgrest["comment_likes"].delete {
-                        filter { eq("id", "${comment.id}_$uid") }
-                    }
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -626,7 +613,7 @@ class FeedViewModel @Inject constructor(
                     "replyToCmtId" to "",
                     "ts"           to Timestamp.now(),
                 )).await()
-                firestore.collection("feed").document(post.id).update("cmtCount", FieldValue.increment(1)).await()
+                try { firestore.collection("feed").document(post.id).update("cmtCount", FieldValue.increment(1)).await() } catch (_: Exception) {}
                 _posts.value = _posts.value.map {
                     if (it.id == post.id) it.copy(commentsCount = it.commentsCount + 1) else it
                 }
@@ -1183,8 +1170,18 @@ class FeedViewModel @Inject constructor(
     private suspend fun sendNotif(toUid: String, type: String, title: String, sub: String = "", feedId: String = "") {
         try {
             ensureMyProfileCached()
-            val fromName  = _cachedMyName
+            val fromName  = _cachedMyName.ifBlank { auth.currentUser?.displayName ?: "Kullanıcı" }
             val fromPhoto = _cachedMyPhoto
+            // title içindeki isim boşsa _cachedMyName ile yeniden oluştur
+            val resolvedTitle = if (title.startsWith(" ") || title.startsWith("  ")) {
+                when (type) {
+                    "like"   -> "$fromName gönderini beğendi"
+                    "cmt", "comment" -> "$fromName gönderine yorum yaptı"
+                    "repost" -> "$fromName gönderini paylaştı"
+                    "follow" -> "$fromName sizi takip etmeye başladı"
+                    else     -> title.trim()
+                }
+            } else title
             val ico = when (type) { "like" -> "favorite"; "cmt" -> "chat_bubble"; "follow" -> "person_add"; "repost" -> "repeat"; else -> "notifications" }
             firestore.collection("userNotifs").document(toUid).collection("msgs").add(mapOf(
                 "fromUid"   to uid,
@@ -1193,10 +1190,10 @@ class FeedViewModel @Inject constructor(
                 "type"      to type,
                 "feedId"    to feedId,
                 "postId"    to feedId,
-                "title"     to title,
+                "title"     to resolvedTitle,
                 "sub"       to sub,
                 "ico"       to ico,
-                "message"   to title,
+                "message"   to resolvedTitle,
                 "url"       to "",
                 "read"      to false,
                 "ts"        to Timestamp.now(),
@@ -1205,16 +1202,14 @@ class FeedViewModel @Inject constructor(
                 val toUserDoc = firestore.collection("users").document(toUid).get().await()
                 val fcmToken  = toUserDoc.getString("fcmToken") ?: ""
                 if (fcmToken.isNotBlank()) {
-                    com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west1")
+                    com.google.firebase.functions.FirebaseFunctions.getInstance()
                         .getHttpsCallable("sendPush")
                         .call(mapOf(
-                            "targetUid" to toUid,
-                            "title"     to fromName,
-                            "body"      to title,
-                            "url"       to if (feedId.isNotBlank()) "heftreng://post/$feedId" else "heftreng://home",
-                            "type"      to type,
-                            "postId"    to feedId,
-                            "fromUid"   to uid,
+                            "token"  to fcmToken,
+                            "title"  to fromName,
+                            "body"   to title,
+                            "url"    to if (feedId.isNotBlank()) "post/$feedId" else "",
+                            "toUid"  to toUid,
                         )).await()
                 }
             } catch (_: Exception) {}
