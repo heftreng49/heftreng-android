@@ -27,6 +27,8 @@ import com.heftreng.app.viewmodel.SocialViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.tasks.await
 import java.net.URLEncoder
 import androidx.compose.material.ExperimentalMaterialApi
@@ -59,19 +61,26 @@ fun SavedPostsScreen(
     LaunchedEffect(uid) {
         if (uid.isBlank()) { loading = false; return@LaunchedEffect }
         try {
-            val saveSnap = db.collection("feedSaves")
-                .whereEqualTo("uid", uid)
-                .limit(50)
-                .get().await()
+            // feed_saves — Supabase'den oku
+            val supabaseClient = io.github.jan.supabase.createSupabaseClient(
+                supabaseUrl  = com.heftreng.app.BuildConfig.SUPABASE_URL,
+                supabaseKey  = com.heftreng.app.BuildConfig.SUPABASE_ANON_KEY,
+            ) { install(io.github.jan.supabase.postgrest.Postgrest) }
 
-            // Client-side sırala (Firestore composite index gerekmez)
-            val sortedDocs = saveSnap.documents.sortedByDescending {
-                (it.getTimestamp("ts")?.seconds ?: 0L)
+            val postIds = try {
+                supabaseClient.postgrest["feed_saves"].select {
+                    filter { eq("uid", uid) }
+                    limit(50)
+                    order("created_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                }.decodeList<com.heftreng.app.data.model.FeedSaveRow>()
+                    .mapNotNull { it.postId.takeIf { id -> id.isNotBlank() } }.distinct()
+            } catch (_: Exception) {
+                // Fallback: Firestore
+                val saveSnap = db.collection("feedSaves")
+                    .whereEqualTo("uid", uid).limit(50).get().await()
+                saveSnap.documents.sortedByDescending { it.getTimestamp("ts")?.seconds ?: 0L }
+                    .mapNotNull { it.getString("feedId") ?: it.getString("postId") }.distinct()
             }
-
-            val postIds = sortedDocs.mapNotNull {
-                it.getString("feedId") ?: it.getString("postId")
-            }.distinct()
 
             if (postIds.isEmpty()) { loading = false; return@LaunchedEffect }
 

@@ -9,10 +9,10 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.data.model.User
+import com.heftreng.app.data.model.FollowRow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
-import com.heftreng.app.data.model.FollowRow
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -94,9 +94,15 @@ class ProfileViewModel @Inject constructor(
                     firestore.collection("users").document(targetUid).get().await()
                 }
                 val followDocDeferred = viewModelScope.async {
-                    if (targetUid != myUid && myUid.isNotEmpty())
-                        firestore.collection("follows").document("${myUid}_$targetUid").get().await()
-                    else null
+                    if (targetUid != myUid && myUid.isNotEmpty()) {
+                        try {
+                            val rows = supabase.postgrest["follows"].select {
+                                filter { eq("id", "${myUid}_$targetUid") }
+                                limit(1)
+                            }.decodeList<FollowRow>()
+                            rows.isNotEmpty()
+                        } catch (_: Exception) { false }
+                    } else false
                 }
                 val followRequestDeferred = viewModelScope.async {
                     if (targetUid != myUid && myUid.isNotEmpty())
@@ -105,7 +111,7 @@ class ProfileViewModel @Inject constructor(
                     else null
                 }
                 val userDoc           = userDocDeferred.await()
-                val followDoc         = followDocDeferred.await()
+                val isFollowingResult = followDocDeferred.await()
                 val followRequestDoc  = followRequestDeferred.await()
 
                 val d = userDoc.data ?: return@launch
@@ -128,7 +134,7 @@ class ProfileViewModel @Inject constructor(
                     messagePermission  = d["messagePermission"] as? String  ?: "everyone",
                 )
 
-                if (followDoc != null) _isFollowing.value = followDoc.exists()
+                _isFollowing.value = isFollowingResult
 
                 // Takip isteği durumu
                 _followRequestStatus.value = when {
@@ -164,14 +170,12 @@ class ProfileViewModel @Inject constructor(
                 // Beğenilen ID'leri tek toplu sorguyla al
                 val postIds = snap.documents.map { it.id }
                 val likedIds = if (myUid.isNotEmpty() && postIds.isNotEmpty()) {
-                    val likeKeys = postIds.map { "${it}_$myUid" }
-                    likeKeys.chunked(10).flatMap { chunk ->
-                        try {
-                            firestore.collection("feedLikes")
-                                .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
-                                .get().await().documents.map { it.id.substringBefore("_$myUid") }
-                        } catch (_: Exception) { emptyList() }
-                    }.toSet()
+                    try {
+                        supabase.postgrest["feed_likes"].select {
+                            filter { eq("uid", myUid); isIn("post_id", postIds) }
+                        }.decodeList<com.heftreng.app.data.model.FeedLikeRow>()
+                            .mapNotNull { it.postId.takeIf { id -> id.isNotBlank() } }.toSet()
+                    } catch (_: Exception) { emptySet() }
                 } else emptySet()
 
                 val rawPosts = snap.documents.mapNotNull { doc ->
@@ -271,7 +275,9 @@ class ProfileViewModel @Inject constructor(
     private fun unfollowUser(targetUid: String) {
         viewModelScope.launch {
             try {
-                firestore.collection("follows").document("${myUid}_$targetUid").delete().await()
+                supabase.postgrest["follows"].delete {
+                    filter { eq("id", "${myUid}_$targetUid") }
+                }
                 _isFollowing.value = false
                 _followRequestStatus.value = "none"
                 _followersCount.value = (_followersCount.value - 1).coerceAtLeast(0)
@@ -345,15 +351,17 @@ class ProfileViewModel @Inject constructor(
                 val targetName  = targetDoc.getString("displayName") ?: targetDoc.getString("name") ?: ""
                 val targetPhoto = targetDoc.getString("photoURL") ?: ""
 
-                firestore.collection("follows").document("${myUid}_$targetUid").set(mapOf(
-                    "fromUid"     to myUid,
-                    "fromName"    to fromName,
-                    "fromPhoto"   to fromPhoto,
-                    "targetUid"   to targetUid,
-                    "targetName"  to targetName,
-                    "targetPhoto" to targetPhoto,
-                    "ts"          to Timestamp.now(),
-                )).await()
+                supabase.postgrest["follows"].upsert(
+                    FollowRow(
+                        id          = "${myUid}_$targetUid",
+                        fromUid     = myUid,
+                        fromName    = fromName,
+                        fromPhoto   = fromPhoto,
+                        targetUid   = targetUid,
+                        targetName  = targetName,
+                        targetPhoto = targetPhoto,
+                    )
+                )
 
                 _isFollowing.value = true
                 _followRequestStatus.value = "accepted"
@@ -449,50 +457,29 @@ class ProfileViewModel @Inject constructor(
         }
         viewModelScope.launch {
             try {
-                val ref  = firestore.collection("feedLikes").document("${post.id}_$myUid")
                 val pRef = firestore.collection("feed").document(post.id)
                 if (nowLiked) {
                     val myName  = auth.currentUser?.displayName ?: ""
                     val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
-                    ref.set(mapOf(
-                        "uid"      to myUid,
-                        "feedId"   to post.id,
-                        "name"     to myName,
-                        "photoURL" to myPhoto,
-                        "ts"       to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                    )).await()
-                    pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(1)).await()
-                    // Supabase
                     supabase.postgrest["feed_likes"].upsert(
-                        mapOf(
-                            "id"        to "${post.id}_$myUid",
-                            "post_id"   to post.id,
-                            "uid"       to myUid,
-                            "name"      to myName,
-                            "photo_url" to myPhoto,
+                        com.heftreng.app.data.model.FeedLikeRow(
+                            id = "${post.id}_$myUid", postId = post.id,
+                            uid = myUid, name = myName, photoUrl = myPhoto,
                         )
                     )
+                    pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(1)).await()
                     if (post.uid.isNotEmpty() && post.uid != myUid) {
                         firestore.collection("userNotifs").document(post.uid).collection("msgs").add(mapOf(
-                            "fromUid"   to myUid,
-                            "fromName"  to myName,
-                            "fromPhoto" to myPhoto,
-                            "type"      to "like",
-                            "feedId"    to post.id,
-                            "postId"    to post.id,
-                            "title"     to "$myName gönderini beğendi",
-                            "sub"       to post.text.take(60),
-                            "ico"       to "favorite",
-                            "ts"        to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                            "fromUid" to myUid, "fromName" to myName, "fromPhoto" to myPhoto,
+                            "type" to "like", "feedId" to post.id, "postId" to post.id,
+                            "title" to "$myName gönderini beğendi", "sub" to post.text.take(60),
+                            "ico" to "favorite",
+                            "ts" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                         )).await()
                     }
                 } else {
-                    ref.delete().await()
+                    supabase.postgrest["feed_likes"].delete { filter { eq("id", "${post.id}_$myUid") } }
                     pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(-1)).await()
-                    // Supabase
-                    supabase.postgrest["feed_likes"].delete {
-                        filter { eq("id", "${post.id}_$myUid") }
-                    }
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -533,13 +520,14 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             _savedLoading.value = true
             try {
-                // feedSaves/{postId_uid} — site ile aynı koleksiyon
-                val savesSnap = firestore.collection("feedSaves")
-                    .whereEqualTo("uid", uid)
-                    .limit(30).get().await()
-
-                val postIds = savesSnap.documents.mapNotNull { it.getString("feedId") }
-                    .filter { it.isNotBlank() }.distinct()
+                // feed_saves Supabase'den oku
+                val postIds = try {
+                    supabase.postgrest["feed_saves"].select {
+                        filter { eq("uid", uid) }
+                        limit(30)
+                    }.decodeList<com.heftreng.app.data.model.FeedSaveRow>()
+                        .mapNotNull { it.postId.takeIf { id -> id.isNotBlank() } }.distinct()
+                } catch (_: Exception) { emptyList() }
 
                 if (postIds.isEmpty()) { _savedPosts.value = emptyList(); return@launch }
 

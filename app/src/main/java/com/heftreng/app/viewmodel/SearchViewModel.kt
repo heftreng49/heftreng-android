@@ -359,12 +359,12 @@ class SearchViewModel @Inject constructor(
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
-                val followSnap = firestore.collection("follows")
-                    .whereEqualTo("fromUid", uid)
-                    .limit(500).get().await()
-                val followedUids = followSnap.documents
-                    .mapNotNull { it.getString("targetUid") ?: it.getString("followingUid") }
-                    .toMutableSet()
+                val followedUids = try {
+                    supabase.postgrest["follows"].select {
+                        filter { eq("from_uid", uid) }; limit(500)
+                    }.decodeList<com.heftreng.app.data.model.FollowRow>()
+                        .map { it.targetUid }.toMutableSet()
+                } catch (_: Exception) { mutableSetOf() }
                 followedUids.add(uid)
                 _followingUids.clear()
                 _followingUids.addAll(followedUids)
@@ -390,7 +390,9 @@ class SearchViewModel @Inject constructor(
             try {
                 val ref = firestore.collection("follows").document("${uid}_$targetUid")
                 if (isFollowing) {
-                    ref.delete().await()
+                    supabase.postgrest["follows"].delete {
+                        filter { eq("id", "${uid}_$targetUid") }
+                    }
                     firestore.collection("users").document(uid)
                         .update("followingCount", com.google.firebase.firestore.FieldValue.increment(-1))
                     firestore.collection("users").document(targetUid)
@@ -398,13 +400,15 @@ class SearchViewModel @Inject constructor(
                 } else {
                     val myDoc = try { firestore.collection("users").document(uid).get().await() }
                                 catch (_: Exception) { null }
-                    ref.set(mapOf(
-                        "fromUid"   to uid,
-                        "fromName"  to (myDoc?.getString("displayName") ?: myDoc?.getString("name") ?: ""),
-                        "fromPhoto" to (myDoc?.getString("photoURL") ?: ""),
-                        "targetUid" to targetUid,
-                        "ts"        to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                    )).await()
+                    supabase.postgrest["follows"].upsert(
+                        com.heftreng.app.data.model.FollowRow(
+                            id        = "${uid}_$targetUid",
+                            fromUid   = uid,
+                            fromName  = myDoc?.getString("displayName") ?: myDoc?.getString("name") ?: "",
+                            fromPhoto = myDoc?.getString("photoURL") ?: "",
+                            targetUid = targetUid,
+                        )
+                    )
                     firestore.collection("users").document(uid)
                         .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
                     firestore.collection("users").document(targetUid)
