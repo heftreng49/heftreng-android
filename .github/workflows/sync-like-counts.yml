@@ -25,15 +25,10 @@ jobs:
         working-directory: scripts
         run: npm install
 
-      - name: Like sayaçlarını senkronize et
+      - name: Sync script yaz
         working-directory: scripts
-        env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          SUPABASE_URL:             ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY:     ${{ secrets.SUPABASE_SERVICE_KEY }}
-          DRY_RUN:                  ${{ github.event.inputs.dry_run }}
         run: |
-          node -e "
+          cat > sync_counts.js << 'EOF'
           const { initializeApp, cert } = require('firebase-admin/app');
           const { getFirestore }        = require('firebase-admin/firestore');
           const { createClient }        = require('@supabase/supabase-js');
@@ -53,18 +48,18 @@ jobs:
             for (const r of likes) counts[r.post_id] = (counts[r.post_id] || 0) + 1;
             console.log(Object.keys(counts).length, 'post için like sayısı bulundu');
 
-            const saves = await supabase.from('feed_saves').select('post_id');
+            const { data: saves } = await supabase.from('feed_saves').select('post_id');
             const saveCounts = {};
-            for (const r of (saves.data || [])) saveCounts[r.post_id] = (saveCounts[r.post_id] || 0) + 1;
+            for (const r of (saves || [])) saveCounts[r.post_id] = (saveCounts[r.post_id] || 0) + 1;
+            console.log(Object.keys(saveCounts).length, 'post için save sayısı bulundu');
 
             if (DRY_RUN) { console.log('DRY RUN — yazma atlandı'); return; }
 
             const allPostIds = [...new Set([...Object.keys(counts), ...Object.keys(saveCounts)])];
             let updated = 0;
-            const chunks = [];
-            for (let i = 0; i < allPostIds.length; i += 490) chunks.push(allPostIds.slice(i, i + 490));
 
-            for (const chunk of chunks) {
+            for (let i = 0; i < allPostIds.length; i += 490) {
+              const chunk = allPostIds.slice(i, i + 490);
               const batch = db.batch();
               for (const postId of chunk) {
                 const updates = {};
@@ -80,4 +75,13 @@ jobs:
           }
 
           run().catch(e => { console.error('FATAL:', e); process.exit(1); });
-          "
+          EOF
+
+      - name: Sync çalıştır
+        working-directory: scripts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SUPABASE_URL:             ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY:     ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DRY_RUN:                  ${{ github.event.inputs.dry_run }}
+        run: node sync_counts.js
