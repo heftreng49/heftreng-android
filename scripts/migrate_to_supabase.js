@@ -5,6 +5,7 @@
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore }        = require('firebase-admin/firestore');
 const { createClient }        = require('@supabase/supabase-js');
+const ws                      = require('ws');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const DRY_RUN        = process.env.DRY_RUN === 'true';
@@ -17,7 +18,7 @@ const BATCH_SIZE     = 50; // Supabase'e kaç kayıt aynı anda gönderilsin
 // ── İstemcileri başlat ────────────────────────────────────────────────────────
 initializeApp({ credential: cert(FB_SA) });
 const db       = getFirestore();
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { realtime: { transport: ws } });
 
 // ── Yardımcılar ───────────────────────────────────────────────────────────────
 function chunk(arr, size) {
