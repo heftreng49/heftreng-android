@@ -230,6 +230,13 @@ class LibraryRepository @Inject constructor(
         }
     }
 
+    /** Feed gönderisindeki alıntı düzenlenince ilgili book_quotes kaydını da güncelle */
+    suspend fun updateQuoteTextByFeedPostId(feedPostId: String, newText: String) {
+        db["book_quotes"].update(mapOf("text" to newText)) {
+            filter { eq("feed_post_id", feedPostId) }
+        }
+    }
+
     suspend fun deleteQuote(id: String) {
         db["book_quotes"].delete { filter { eq("id", id) } }
     }

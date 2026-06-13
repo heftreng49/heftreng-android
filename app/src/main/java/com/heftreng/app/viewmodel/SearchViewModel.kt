@@ -388,7 +388,6 @@ class SearchViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val ref = firestore.collection("follows").document("${uid}_$targetUid")
                 if (isFollowing) {
                     supabase.postgrest["follows"].delete {
                         filter { eq("id", "${uid}_$targetUid") }

@@ -181,14 +181,16 @@ class FeedViewModel @Inject constructor(
                     savedIds = savedIds + savedPostIds
                 }
 
-                // Repost map: kendi repostlarım — feed'e yazılıyor, limit küçük tutulabilir
-                val repostSnap = firestore.collection("feed")
-                    .whereEqualTo("uid", currentUid)
-                    .whereEqualTo("repostType", "feed").limit(100).get().await()
-                myRepostMap = repostSnap.documents.mapNotNull { doc ->
-                    val orig = doc.getString("repostId") ?: return@mapNotNull null
-                    orig to doc.id
-                }.toMap()
+                // Repost map — sadece ilk yüklemede çek, session boyunca cache'de kalır
+                if (myRepostMap.isEmpty()) {
+                    val repostSnap = firestore.collection("feed")
+                        .whereEqualTo("uid", currentUid)
+                        .whereEqualTo("repostType", "feed").limit(100).get().await()
+                    myRepostMap = repostSnap.documents.mapNotNull { doc ->
+                        val orig = doc.getString("repostId") ?: return@mapNotNull null
+                        orig to doc.id
+                    }.toMap()
+                }
 
                 interactionCache.set(Unit)
                 syncInteractionsToState()
@@ -897,17 +899,12 @@ class FeedViewModel @Inject constructor(
                         authorName = newAuthorName.ifBlank { it.authorName },
                     ) else it
                 }
+                // Bağlı kitap alıntısı varsa (book_quotes) onu da güncelle — Supabase
                 val feedPostSnap = firestore.collection("feed").document(postId).get().await()
                 val libBookId = feedPostSnap.getString("libraryBookId")
                 if (!libBookId.isNullOrBlank()) {
                     try {
-                        val quoteSnap = firestore.collection("library_books").document(libBookId)
-                            .collection("quotes")
-                            .whereEqualTo("feedPostId", postId)
-                            .get().await()
-                        quoteSnap.documents.forEach { doc ->
-                            doc.reference.update("text", newQuoteText.trim())
-                        }
+                        library.updateQuoteTextByFeedPostId(postId, newQuoteText.trim())
                     } catch (_: Exception) {}
                 }
             } catch (e: Exception) { e.printStackTrace() }
@@ -926,7 +923,8 @@ class FeedViewModel @Inject constructor(
     //   - Yeni kullanıcıların da görünmesi için karışık sıra (shuffled)
     //   - banned == false filtresi client-side (Rules'da zaten kısıtlı)
 
-    private var _suggestLastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
+    private var _suggestLastDoc    : com.google.firebase.firestore.DocumentSnapshot? = null
+    private var _suggestLastLoadMs : Long = 0L
     private val _hasMoreSuggestions = MutableStateFlow(false)
     val hasMoreSuggestions = _hasMoreSuggestions.asStateFlow()
 
@@ -935,9 +933,14 @@ class FeedViewModel @Inject constructor(
 
     fun loadSuggestedUsers(forceReload: Boolean = false) {
         val myUid = auth.currentUser?.uid ?: return
-        // Guard: zaten yüklendiyse ve zorlamadıysa ekstra okuma yapma
-        if (suggestionsLoaded && !forceReload && _suggestedUsers.value.isNotEmpty()) return
-        _suggestLastDoc = null
+        val now = System.currentTimeMillis()
+        // 1 saat içinde yüklendiyse ve zorlamadıysa tekrar okuma yapma
+        val cacheValid = suggestionsLoaded
+            && _suggestedUsers.value.isNotEmpty()
+            && (now - _suggestLastLoadMs) < 3_600_000L // 1 saat
+        if (cacheValid && !forceReload) return
+        _suggestLastDoc    = null
+        _suggestLastLoadMs = now
         viewModelScope.launch {
             try {
                 // 1. Takip ettiğim TÜM UID'leri Supabase'den çek — tek sorgu
@@ -948,15 +951,14 @@ class FeedViewModel @Inject constructor(
                     .decodeList<FollowRow>()
                 followRows.forEach { followingUids.add(it.targetUid) }
 
-                // 2. Tüm kullanıcıları followersCount DESC ile çek (geniş havuz)
-                //    FATURA: limit(200) — 200 doc okuma, çoğu cache'den gelir
+                // 2. Kullanıcı havuzu — limit 50 (200 yerine, okuma maliyeti düşürüldü)
                 val usersSnap = firestore.collection("users")
                     .orderBy("followersCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(200)
+                    .limit(50)
                     .get().await()
 
                 _suggestLastDoc = usersSnap.documents.lastOrNull()
-                _hasMoreSuggestions.value = usersSnap.documents.size >= 200
+                _hasMoreSuggestions.value = usersSnap.documents.size >= 50
 
                 val suggestions = usersSnap.documents
                     .mapNotNull { doc ->
@@ -974,8 +976,7 @@ class FeedViewModel @Inject constructor(
                             isFollowing = sUid in _followingUids.value,
                         )
                     }
-                    .shuffled()  // Karıştır — aynı kişiler hep üstte görünmesin
-                    .take(30)    // İlk 30 göster
+                    .shuffled().take(20)
 
                 _followingUids.value = followingUids
                 _suggestedUsers.value = suggestions
@@ -994,11 +995,11 @@ class FeedViewModel @Inject constructor(
                 val snap = firestore.collection("users")
                     .orderBy("followersCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
                     .startAfter(lastDoc)
-                    .limit(200)
+                    .limit(30)          // 200 → 30
                     .get().await()
 
                 _suggestLastDoc = snap.documents.lastOrNull()
-                _hasMoreSuggestions.value = snap.documents.size >= 200
+                _hasMoreSuggestions.value = snap.documents.size >= 30
 
                 val more = snap.documents
                     .mapNotNull { doc ->

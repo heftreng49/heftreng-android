@@ -446,6 +446,9 @@ class ProfileViewModel @Inject constructor(
         }
     }
     // ── Profil gönderilerinde beğeni / silme / düzenleme ─────────────────────
+    private var _cachedMyName2  : String = ""
+    private var _cachedMyPhoto2 : String = ""
+
     fun toggleLikePost(post: com.heftreng.app.data.model.Post) {
         if (myUid.isEmpty()) return
         val nowLiked = !post.isLikedByMe
@@ -459,27 +462,63 @@ class ProfileViewModel @Inject constructor(
             try {
                 val pRef = firestore.collection("feed").document(post.id)
                 if (nowLiked) {
-                    val myName  = auth.currentUser?.displayName ?: ""
-                    val myPhoto = auth.currentUser?.photoUrl?.toString() ?: ""
-                    supabase.postgrest["feed_likes"].upsert(
-                        com.heftreng.app.data.model.FeedLikeRow(
-                            id = "${post.id}_$myUid", postId = post.id,
-                            uid = myUid, name = myName, photoUrl = myPhoto,
+                    // İsim/foto cache'i — boşsa Firestore'dan oku
+                    if (_cachedMyName2.isBlank()) {
+                        val d = firestore.collection("users").document(myUid).get().await().data ?: emptyMap()
+                        _cachedMyName2  = d["displayName"] as? String ?: d["name"] as? String
+                            ?: auth.currentUser?.displayName ?: "Kullanıcı"
+                        _cachedMyPhoto2 = d["photoURL"] as? String ?: ""
+                    }
+                    val myName  = _cachedMyName2
+                    val myPhoto = _cachedMyPhoto2
+
+                    // Duplicate kayıt engelle — uid+post_id ile kontrol
+                    val existing = try {
+                        supabase.postgrest["feed_likes"]
+                            .select { filter { eq("post_id", post.id); eq("uid", myUid) }; limit(1) }
+                            .decodeList<com.heftreng.app.data.model.FeedLikeRow>()
+                    } catch (_: Exception) { emptyList() }
+
+                    if (existing.isEmpty()) {
+                        supabase.postgrest["feed_likes"].insert(
+                            com.heftreng.app.data.model.FeedLikeRow(
+                                id = "", postId = post.id,
+                                uid = myUid, name = myName, photoUrl = myPhoto,
+                            )
                         )
-                    )
-                    pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(1)).await()
-                    if (post.uid.isNotEmpty() && post.uid != myUid) {
-                        firestore.collection("userNotifs").document(post.uid).collection("msgs").add(mapOf(
-                            "fromUid" to myUid, "fromName" to myName, "fromPhoto" to myPhoto,
-                            "type" to "like", "feedId" to post.id, "postId" to post.id,
-                            "title" to "$myName gönderini beğendi", "sub" to post.text.take(60),
-                            "ico" to "favorite",
-                            "ts" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                        )).await()
+                        val realCount = try {
+                            supabase.postgrest["feed_likes"]
+                                .select { filter { eq("post_id", post.id) } }
+                                .decodeList<com.heftreng.app.data.model.FeedLikeRow>().size
+                        } catch (_: Exception) { -1 }
+                        try {
+                            if (realCount >= 0) pRef.update("likes", realCount).await()
+                            else pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                        } catch (_: Exception) {}
+
+                        if (post.uid.isNotEmpty() && post.uid != myUid) {
+                            firestore.collection("userNotifs").document(post.uid).collection("msgs").add(mapOf(
+                                "fromUid" to myUid, "fromName" to myName, "fromPhoto" to myPhoto,
+                                "type" to "like", "feedId" to post.id, "postId" to post.id,
+                                "title" to "$myName gönderini beğendi", "sub" to post.text.take(60),
+                                "ico" to "favorite",
+                                "ts" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                            )).await()
+                        }
                     }
                 } else {
-                    supabase.postgrest["feed_likes"].delete { filter { eq("id", "${post.id}_$myUid") } }
-                    pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(-1)).await()
+                    supabase.postgrest["feed_likes"].delete {
+                        filter { eq("post_id", post.id); eq("uid", myUid) }
+                    }
+                    val realCount = try {
+                        supabase.postgrest["feed_likes"]
+                            .select { filter { eq("post_id", post.id) } }
+                            .decodeList<com.heftreng.app.data.model.FeedLikeRow>().size
+                    } catch (_: Exception) { -1 }
+                    try {
+                        if (realCount >= 0) pRef.update("likes", realCount).await()
+                        else pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(-1)).await()
+                    } catch (_: Exception) {}
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
