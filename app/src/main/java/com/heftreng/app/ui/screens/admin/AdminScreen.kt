@@ -1312,13 +1312,14 @@ private fun adminTextField(
     onChange: (String) -> Unit,
     label   : String,
     minLines: Int = 1,
+    modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
     OutlinedTextField(
         value         = value,
         onValueChange = onChange,
         label         = { Text(label) },
         minLines      = minLines,
-        modifier      = Modifier.fillMaxWidth(),
+        modifier      = modifier,
         shape         = RoundedCornerShape(10.dp),
         colors        = OutlinedTextFieldDefaults.colors(
             focusedBorderColor      = Amber,
