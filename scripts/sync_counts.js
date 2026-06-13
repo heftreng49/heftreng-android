@@ -57,7 +57,7 @@ async function run() {
       const updates = {};
       if (counts[postId]     !== undefined) updates.likes = counts[postId];
       if (saveCounts[postId] !== undefined) updates.saves = saveCounts[postId];
-      batch.update(db.collection('feed').doc(postId), updates);
+      batch.set(db.collection('feed').doc(postId), updates, { merge: true });
     }
     await batch.commit();
     updated += chunk.length;
