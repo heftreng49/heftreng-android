@@ -1,0 +1,83 @@
+name: Supabase — Like Sayaçlarını Senkronize Et
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (sadece say, yazma)'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Bağımlılıkları yükle
+        working-directory: scripts
+        run: npm install
+
+      - name: Like sayaçlarını senkronize et
+        working-directory: scripts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SUPABASE_URL:             ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY:     ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DRY_RUN:                  ${{ github.event.inputs.dry_run }}
+        run: |
+          node -e "
+          const { initializeApp, cert } = require('firebase-admin/app');
+          const { getFirestore }        = require('firebase-admin/firestore');
+          const { createClient }        = require('@supabase/supabase-js');
+
+          const DRY_RUN  = process.env.DRY_RUN === 'true';
+          const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+          initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
+          const db = getFirestore();
+
+          async function run() {
+            console.log('Mod:', DRY_RUN ? 'DRY RUN' : 'CANLI');
+
+            const { data: likes, error } = await supabase.from('feed_likes').select('post_id');
+            if (error) { console.error('Supabase hata:', error.message); process.exit(1); }
+
+            const counts = {};
+            for (const r of likes) counts[r.post_id] = (counts[r.post_id] || 0) + 1;
+            console.log(Object.keys(counts).length, 'post için like sayısı bulundu');
+
+            const saves = await supabase.from('feed_saves').select('post_id');
+            const saveCounts = {};
+            for (const r of (saves.data || [])) saveCounts[r.post_id] = (saveCounts[r.post_id] || 0) + 1;
+
+            if (DRY_RUN) { console.log('DRY RUN — yazma atlandı'); return; }
+
+            const allPostIds = [...new Set([...Object.keys(counts), ...Object.keys(saveCounts)])];
+            let updated = 0;
+            const chunks = [];
+            for (let i = 0; i < allPostIds.length; i += 490) chunks.push(allPostIds.slice(i, i + 490));
+
+            for (const chunk of chunks) {
+              const batch = db.batch();
+              for (const postId of chunk) {
+                const updates = {};
+                if (counts[postId]     !== undefined) updates.likes = counts[postId];
+                if (saveCounts[postId] !== undefined) updates.saves = saveCounts[postId];
+                batch.update(db.collection('feed').doc(postId), updates);
+              }
+              await batch.commit();
+              updated += chunk.length;
+              console.log('Güncellendi:', updated, '/', allPostIds.length);
+            }
+            console.log('✅ Tamamlandı:', updated, 'post güncellendi');
+          }
+
+          run().catch(e => { console.error('FATAL:', e); process.exit(1); });
+          "
