@@ -6,6 +6,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.data.model.User
+import com.heftreng.app.data.model.FollowRow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.flow.*
@@ -75,6 +76,7 @@ data class StaffPermissions(
 class AdminViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val supabase : io.github.jan.supabase.SupabaseClient,
 ) : ViewModel() {
 
     // null = henüz yüklenmedi (loading), StaffPermissions() = yüklendi ama yetkisiz
@@ -484,70 +486,20 @@ class AdminViewModel @Inject constructor(
     }
 
     // ── Push bildirimi ────────────────────────────────────────────────────────
-    fun sendPush(
-        title    : String,
-        body     : String,
-        url      : String = "",
-        targetUid: String = "",
-        postId   : String = "",
-        topic    : String = "all_users",
-        imageUrl : String = "",
-    ) {
+    fun sendPush(title: String, body: String, url: String = "", targetUid: String = "") {
         if (_perms.value?.can("push") != true) return
         viewModelScope.launch {
             try {
                 _pushResult.value = "Gönderiliyor…"
-
-                // Gönderi bilgisini çek — postId varsa Firestore'dan al
-                var resolvedPostId = postId
-                var postText       = ""
-                var postAuthor     = ""
-                if (postId.isNotBlank()) {
-                    try {
-                        val doc = firestore.collection("feed").document(postId).get().await()
-                        postText   = doc.getString("text") ?: ""
-                        postAuthor = doc.getString("displayName") ?: doc.getString("name") ?: ""
-                    } catch (_: Exception) {}
-                }
-
-                val functions = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west1")
-                val baseData  = hashMapOf(
-                    "title"    to title,
-                    "body"     to body,
-                    "url"      to url.ifBlank { if (postId.isNotBlank()) "heftreng://post/$postId" else "heftreng://home" },
-                    "type"     to if (postId.isNotBlank()) "post_push" else "admin_push",
-                    "postId"   to resolvedPostId,
-                    "postText" to postText.take(100),
-                    "postAuthor" to postAuthor,
-                    "imageUrl" to imageUrl,
-                    "fromUid"  to (auth.currentUser?.uid ?: ""),
+                val data = hashMapOf(
+                    "targetUid" to targetUid.ifBlank { auth.currentUser?.uid ?: "" },
+                    "title" to title, "body" to body,
+                    "url"   to url.ifBlank { "https://heft-reng.blogspot.com/" },
+                    "type"  to "default",
                 )
-
-                if (topic == "all_users" || targetUid.isBlank()) {
-                    // Herkese gönder — kullanıcıları batch'le FCM'e gönder
-                    val snap = firestore.collection("users")
-                        .whereGreaterThan("fcmToken", "")
-                        .limit(500).get().await()
-                    var sent = 0; var failed = 0
-                    for (doc in snap.documents) {
-                        val fcmToken = doc.getString("fcmToken") ?: continue
-                        if (fcmToken.startsWith("https://")) continue
-                        try {
-                            functions.getHttpsCallable("sendPush").call(
-                                baseData + hashMapOf("targetUid" to doc.id)
-                            ).await()
-                            sent++
-                        } catch (_: Exception) { failed++ }
-                    }
-                    _pushResult.value = "✓ $sent kullanıcıya gönderildi" +
-                                        if (failed > 0) " ($failed başarısız)" else ""
-                } else {
-                    // Belirli kullanıcıya gönder
-                    functions.getHttpsCallable("sendPush").call(
-                        baseData + hashMapOf("targetUid" to targetUid)
-                    ).await()
-                    _pushResult.value = "✓ Push gönderildi"
-                }
+                com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west1")
+                    .getHttpsCallable("sendPush").call(data).await()
+                _pushResult.value = "✓ Push gönderildi"
             } catch (e: Exception) { _pushResult.value = "✗ Hata: ${e.message}" }
         }
     }
@@ -652,15 +604,19 @@ class AdminViewModel @Inject constructor(
                 // 3. userNotifs
                 try { firestore.collection("userNotifs").document(uid).delete().await() }
                 catch (_: Exception) {}
-                // 4. follows (fromUid)
+                // 4+5. follows — Supabase'den sil (from_uid ve target_uid)
                 try {
-                    firestore.collection("follows").whereEqualTo("fromUid", uid)
-                        .limit(200).get().await().documents.forEach { it.reference.delete() }
+                    supabase.postgrest["follows"].delete {
+                        filter { eq("from_uid", uid) }
+                    }
+                    supabase.postgrest["follows"].delete {
+                        filter { eq("target_uid", uid) }
+                    }
                 } catch (_: Exception) {}
-                // 5. follows (targetUid)
+                // feed_likes ve feed_saves da temizle
                 try {
-                    firestore.collection("follows").whereEqualTo("targetUid", uid)
-                        .limit(200).get().await().documents.forEach { it.reference.delete() }
+                    supabase.postgrest["feed_likes"].delete { filter { eq("uid", uid) } }
+                    supabase.postgrest["feed_saves"].delete { filter { eq("uid", uid) } }
                 } catch (_: Exception) {}
                 // 6. Firebase Auth kullanıcısını sil (Cloud Function üzerinden)
                 try {
@@ -796,15 +752,20 @@ class AdminViewModel @Inject constructor(
                     for (userDoc in snap.documents) {
                         val uid = userDoc.id
 
-                        // Bu kullanıcıyı kaç kişi takip ediyor
-                        val followersSnap = firestore.collection("follows")
-                            .whereEqualTo("targetUid", uid).get().await()
-                        val realFollowers = followersSnap.size()
+                        // Supabase'den gerçek sayıları al — tek sorgu, çok daha hızlı
+                        val realFollowers = try {
+                            supabase.postgrest["follows"]
+                                .select(count = io.github.jan.supabase.postgrest.query.Count.EXACT) {
+                                    filter { eq("target_uid", uid) }
+                                }.countOrNull()?.toInt() ?: 0
+                        } catch (_: Exception) { 0 }
 
-                        // Bu kullanıcı kaç kişiyi takip ediyor
-                        val followingSnap = firestore.collection("follows")
-                            .whereEqualTo("fromUid", uid).get().await()
-                        val realFollowing = followingSnap.size()
+                        val realFollowing = try {
+                            supabase.postgrest["follows"]
+                                .select(count = io.github.jan.supabase.postgrest.query.Count.EXACT) {
+                                    filter { eq("from_uid", uid) }
+                                }.countOrNull()?.toInt() ?: 0
+                        } catch (_: Exception) { 0 }
 
                         val storedFollowers = (userDoc.getLong("followersCount") ?: -1L).toInt()
                         val storedFollowing = (userDoc.getLong("followingCount") ?: -1L).toInt()
