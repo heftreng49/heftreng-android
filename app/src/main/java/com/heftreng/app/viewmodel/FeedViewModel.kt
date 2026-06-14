@@ -349,6 +349,10 @@ class FeedViewModel @Inject constructor(
         val missingUids = posts.map { it.uid }
             .filter { it.isNotBlank() && it !in userCache }
             .distinct()
+
+        // Sayaç senkronizasyonu her zaman çalışır — kullanıcı cache'i eksik olsun olmasın
+        syncPostCounts(posts.map { it.id })
+
         if (missingUids.isEmpty()) return
 
         viewModelScope.launch {
@@ -379,6 +383,36 @@ class FeedViewModel @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    /** Beğeni / yorum sayılarını Supabase'den çek — feed.likesCount/commentsCount artık
+     *  Firestore'da güncellenmiyor (RLS/quota gerektirmemesi için Supabase tek kaynak). */
+    private fun syncPostCounts(postIds: List<String>) {
+        val ids = postIds.filter { it.isNotBlank() }.distinct()
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val likeRows = supabase.postgrest["feed_likes"]
+                    .select { filter { isIn("post_id", ids) } }
+                    .decodeList<FeedLikeRow>()
+                val commentRows = supabase.postgrest["feed_comments"]
+                    .select { filter { isIn("post_id", ids) } }
+                    .decodeList<FeedCommentRow>()
+
+                val likeCounts    = likeRows.groupingBy { it.postId }.eachCount()
+                val commentCounts = commentRows.groupingBy { it.postId }.eachCount()
+
+                if (likeCounts.isEmpty() && commentCounts.isEmpty()) return@launch
+
+                _posts.value = _posts.value.map { post ->
+                    if (post.id !in ids) return@map post
+                    post.copy(
+                        likesCount    = likeCounts[post.id]    ?: post.likesCount,
+                        commentsCount = commentCounts[post.id] ?: post.commentsCount,
+                    )
+                }
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
@@ -472,15 +506,15 @@ class FeedViewModel @Inject constructor(
         val nowLiked = !post.isLikedByMe
         likedIds = if (nowLiked) likedIds + post.id else likedIds - post.id
 
+        // Optimistic UI — Supabase tek kaynak, Firestore'a sayaç yazılmaz
         _posts.value = _posts.value.map {
             if (it.id == post.id) it.copy(
                 isLikedByMe = nowLiked,
-                likesCount  = it.likesCount + if (nowLiked) 1 else -1,
+                likesCount  = maxOf(0, it.likesCount + if (nowLiked) 1 else -1),
             ) else it
         }
         viewModelScope.launch {
             try {
-                val postRef = firestore.collection("feed").document(post.id)
                 if (nowLiked) {
                     ensureMyProfileCached()
                     val myName  = _cachedMyName.ifBlank { auth.currentUser?.displayName ?: "" }
@@ -500,16 +534,6 @@ class FeedViewModel @Inject constructor(
                                 "photo_url" to myPhoto,
                             )
                         )
-                        // Firestore sayacı Supabase'deki gerçek sayıyla senkronize
-                        val realCount = try {
-                            supabase.postgrest["feed_likes"]
-                                .select { filter { eq("post_id", post.id) } }
-                                .decodeList<FeedLikeRow>().size
-                        } catch (_: Exception) { -1 }
-                        try {
-                            if (realCount >= 0) postRef.update("likesCount", realCount).await()
-                            else postRef.update("likesCount", FieldValue.increment(1)).await()
-                        } catch (_: Exception) {}
                         if (post.uid != uid) sendNotif(post.uid, "like", "$myName gönderini beğendi", post.text.take(60), post.id)
                     }
                 } else {
@@ -517,16 +541,9 @@ class FeedViewModel @Inject constructor(
                     supabase.postgrest["feed_likes"].delete {
                         filter { eq("post_id", post.id); eq("uid", uid) }
                     }
-                    val realCount = try {
-                        supabase.postgrest["feed_likes"]
-                            .select { filter { eq("post_id", post.id) } }
-                            .decodeList<FeedLikeRow>().size
-                    } catch (_: Exception) { -1 }
-                    try {
-                        if (realCount >= 0) postRef.update("likesCount", realCount).await()
-                        else postRef.update("likesCount", FieldValue.increment(-1)).await()
-                    } catch (_: Exception) {}
                 }
+                // Gerçek sayıyı arka planda doğrula (yarış durumlarını düzeltir)
+                syncPostCounts(listOf(post.id))
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
@@ -537,21 +554,51 @@ class FeedViewModel @Inject constructor(
         _comments.value = _comments.value.map {
             if (it.id == comment.id) it.copy(
                 isLikedByMe = nowLiked,
-                likesCount  = it.likesCount + if (nowLiked) 1 else -1,
+                likesCount  = maxOf(0, it.likesCount + if (nowLiked) 1 else -1),
             ) else it
         }
         viewModelScope.launch {
             try {
-                val likeRef = firestore.collection("feed").document(postId)
-                    .collection("comments").document(comment.id).collection("likes").document(uid)
-                val cmtRef  = firestore.collection("feed").document(postId)
-                    .collection("comments").document(comment.id)
                 if (nowLiked) {
-                    likeRef.set(mapOf("uid" to uid, "ts" to Timestamp.now())).await()
-                    cmtRef.update("likesCount", FieldValue.increment(1)).await()
+                    ensureMyProfileCached()
+                    val myName  = _cachedMyName.ifBlank { auth.currentUser?.displayName ?: "" }
+                    val myPhoto = _cachedMyPhoto
+                    val existing = try {
+                        supabase.postgrest["comment_likes"]
+                            .select { filter { eq("comment_id", comment.id); eq("uid", uid) }; limit(1) }
+                            .decodeList<CommentLikeRow>()
+                    } catch (_: Exception) { emptyList() }
+                    if (existing.isEmpty()) {
+                        supabase.postgrest["comment_likes"].insert(
+                            mapOf(
+                                "comment_id" to comment.id,
+                                "uid"        to uid,
+                                "name"       to myName,
+                                "photo_url"  to myPhoto,
+                            )
+                        )
+                    }
                 } else {
-                    likeRef.delete().await()
-                    cmtRef.update("likesCount", FieldValue.increment(-1)).await()
+                    supabase.postgrest["comment_likes"].delete {
+                        filter { eq("comment_id", comment.id); eq("uid", uid) }
+                    }
+                }
+                // Gerçek beğeni sayısını comment_likes'tan say ve feed_comments.likes_count'u güncelle
+                val realCount = try {
+                    supabase.postgrest["comment_likes"]
+                        .select { filter { eq("comment_id", comment.id) } }
+                        .decodeList<CommentLikeRow>().size
+                } catch (_: Exception) { -1 }
+                if (realCount >= 0) {
+                    try {
+                        supabase.postgrest["feed_comments"]
+                            .update(mapOf("likes_count" to realCount)) {
+                                filter { eq("id", comment.id) }
+                            }
+                    } catch (_: Exception) {}
+                    _comments.value = _comments.value.map {
+                        if (it.id == comment.id) it.copy(likesCount = realCount) else it
+                    }
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -595,52 +642,67 @@ class FeedViewModel @Inject constructor(
     fun loadComments(postId: String) {
         viewModelScope.launch {
             try {
-                val snap = firestore.collection("feed").document(postId)
-                    .collection("comments").orderBy("ts", Query.Direction.ASCENDING).get().await()
-                _comments.value = snap.documents.mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    val commentUid = (d["uid"] as? String)?.takeIf { it.isNotBlank() }
-                        ?: (d["userId"] as? String)?.takeIf { it.isNotBlank() }
-                        ?: (d["authorId"] as? String)?.takeIf { it.isNotBlank() }
-                        ?: ""
-                    val commentName = (d["name"] as? String ?: d["displayName"] as? String) ?: ""
+                val rows = supabase.postgrest["feed_comments"]
+                    .select { filter { eq("post_id", postId) }; order("created_at", Order.ASCENDING) }
+                    .decodeList<FeedCommentRow>()
+
+                val myLikedCmtIds = if (uid.isNotEmpty() && rows.isNotEmpty()) {
+                    try {
+                        supabase.postgrest["comment_likes"]
+                            .select { filter { eq("uid", uid); isIn("comment_id", rows.map { it.id }) } }
+                            .decodeList<CommentLikeRow>()
+                            .map { it.commentId }.toSet()
+                    } catch (_: Exception) { emptySet() }
+                } else emptySet()
+
+                _comments.value = rows.map { r ->
                     Comment(
-                        id          = doc.id,
-                        postId      = postId,
-                        uid         = commentUid,
-                        displayName = commentName,
-                        photoURL    = d["photoURL"] as? String ?: "",
-                        text        = d["text"]     as? String ?: "",
-                        likesCount  = (d["likes"]   as? Long)?.toInt() ?: 0,
-                        ts          = d["ts"]       as? Timestamp,
+                        id          = r.id,
+                        postId      = r.postId,
+                        uid         = r.uid,
+                        displayName = r.name ?: "",
+                        photoURL    = r.photoUrl ?: "",
+                        text        = r.text,
+                        likesCount  = r.likesCount,
+                        ts          = parseSupabaseTimestamp(r.createdAt),
+                        isLikedByMe = r.id in myLikedCmtIds,
                     )
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
+    /** Supabase ISO 8601 created_at -> Firestore Timestamp (UI bunu kullanıyor) */
+    private fun parseSupabaseTimestamp(iso: String?): Timestamp? {
+        if (iso.isNullOrBlank()) return null
+        return try {
+            val instant = java.time.Instant.parse(iso)
+            Timestamp(instant.epochSecond, instant.nano)
+        } catch (_: Exception) { null }
+    }
+
     fun addComment(post: Post, text: String) {
-        if (uid.isEmpty()) return
+        if (uid.isEmpty() || text.isBlank()) return
         viewModelScope.launch {
             try {
+                ensureMyProfileCached()
                 val d       = cachedUserDoc(uid) ?: myUserData()
                 val myName  = d["displayName"] as? String
                     ?: d["name"] as? String
-                    ?: auth.currentUser?.displayName ?: "Bikarhêner"
+                    ?: _cachedMyName.ifBlank { auth.currentUser?.displayName } ?: "Bikarhêner"
                 val myPhoto = d["photoURL"] as? String
-                    ?: auth.currentUser?.photoUrl?.toString() ?: ""
-                firestore.collection("feed").document(post.id).collection("comments").add(mapOf(
-                    "uid"          to uid,
-                    "name"         to myName,
-                    "displayName"  to myName,
-                    "photoURL"     to myPhoto,
-                    "text"         to text,
-                    "likesCount"  to 0,
-                    "replyTo"      to "",
-                    "replyToCmtId" to "",
-                    "ts"           to Timestamp.now(),
-                )).await()
-                firestore.collection("feed").document(post.id).update("commentsCount", FieldValue.increment(1)).await()
+                    ?: _cachedMyPhoto.ifBlank { auth.currentUser?.photoUrl?.toString() } ?: ""
+
+                supabase.postgrest["feed_comments"].insert(
+                    mapOf(
+                        "post_id" to post.id,
+                        "uid"     to uid,
+                        "name"    to myName,
+                        "photo_url" to myPhoto,
+                        "text"    to text.trim(),
+                    )
+                )
+
                 _posts.value = _posts.value.map {
                     if (it.id == post.id) it.copy(commentsCount = it.commentsCount + 1) else it
                 }
@@ -654,24 +716,30 @@ class FeedViewModel @Inject constructor(
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
-                val cmtDoc  = firestore.collection("feed").document(postId)
-                    .collection("comments").document(commentId).get().await()
-                val postDoc = firestore.collection("feed").document(postId).get().await()
-                val isCommentOwner = cmtDoc.getString("uid") == uid
-                val isPostOwner    = postDoc.getString("uid") == uid
-                if (!isCommentOwner && !isPostOwner) return@launch
-                firestore.collection("feed").document(postId)
-                    .collection("comments").document(commentId).delete().await()
-                firestore.collection("feed").document(postId)
-                    .update("commentsCount", FieldValue.increment(-1)).await()
+                val comment = _comments.value.find { it.id == commentId }
+                val post    = _posts.value.find { it.id == postId }
+                val isCommentOwner = comment?.uid == uid
+                val isPostOwner    = post?.uid == uid
+                if (!isCommentOwner && !isPostOwner) {
+                    _commentError.value = "Bu yorumu silme yetkiniz yok."
+                    return@launch
+                }
+                supabase.postgrest["feed_comments"].delete {
+                    filter { eq("id", commentId) }
+                }
+                try {
+                    supabase.postgrest["comment_likes"].delete {
+                        filter { eq("comment_id", commentId) }
+                    }
+                } catch (_: Exception) {}
+
                 _comments.value = _comments.value.filter { it.id != commentId }
                 _posts.value = _posts.value.map {
                     if (it.id == postId) it.copy(commentsCount = maxOf(0, it.commentsCount - 1)) else it
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                _commentError.value = if (e.message?.contains("PERMISSION_DENIED") == true)
-                    "Bu yorumu silme yetkiniz yok." else "Yorum silinemedi: ${e.message}"
+                _commentError.value = "Yorum silinemedi: ${e.message}"
             }
         }
     }
@@ -680,12 +748,12 @@ class FeedViewModel @Inject constructor(
         if (uid.isEmpty() || newText.isBlank()) return
         viewModelScope.launch {
             try {
-                val cmtDoc = firestore.collection("feed").document(postId)
-                    .collection("comments").document(commentId).get().await()
-                if (cmtDoc.getString("uid") != uid) return@launch
-                firestore.collection("feed").document(postId)
-                    .collection("comments").document(commentId)
-                    .update("text", newText.trim()).await()
+                val comment = _comments.value.find { it.id == commentId }
+                if (comment?.uid != uid) return@launch
+                supabase.postgrest["feed_comments"]
+                    .update(mapOf("text" to newText.trim())) {
+                        filter { eq("id", commentId) }
+                    }
                 _comments.value = _comments.value.map {
                     if (it.id == commentId) it.copy(text = newText.trim()) else it
                 }
@@ -720,7 +788,7 @@ class FeedViewModel @Inject constructor(
                     "repostAuthorPhoto" to post.photoURL,
                     "repostAuthorUid"   to post.uid,
                     "repostImg"         to post.imageURL,
-                    "likes" to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
+                    "likesCount" to 0, "saves" to 0, "commentsCount" to 0, "reposts" to 0,
                     "ts"    to Timestamp.now(),
                 )).await()
                 

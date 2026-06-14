@@ -38,6 +38,19 @@ data class FeedSaveRow(
 )
 
 @Serializable
+data class FeedCommentRow(
+    val id              : String  = "",
+    @SerialName("post_id")         val postId        : String  = "",
+    val uid             : String  = "",
+    val name            : String? = null,
+    @SerialName("photo_url")       val photoUrl      : String? = null,
+    val text            : String  = "",
+    @SerialName("likes_count")     val likesCount    : Int     = 0,
+    @SerialName("reply_to_cmt_id") val replyToCmtId  : String? = null,
+    @SerialName("created_at")      val createdAt     : String? = null,
+)
+
+@Serializable
 data class CommentLikeRow(
     val id         : String = "",
     @SerialName("comment_id") val commentId: String = "",

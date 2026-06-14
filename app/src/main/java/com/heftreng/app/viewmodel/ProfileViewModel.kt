@@ -200,8 +200,8 @@ class ProfileViewModel @Inject constructor(
                         quoteText     = quoteText,
                         bookName      = bookName,
                         authorName    = authorName,
-                        likesCount    = (fd["likes"]    as? Long)?.toInt() ?: 0,
-                        commentsCount = (fd["cmtCount"] as? Long)?.toInt() ?: 0,
+                        likesCount    = (fd["likesCount"]    as? Long)?.toInt() ?: 0,
+                        commentsCount = (fd["commentsCount"] as? Long)?.toInt() ?: 0,
                         repostsCount  = (fd["reposts"]  as? Long)?.toInt() ?: 0,
                         isLikedByMe   = doc.id in likedIds,
                         ts            = fd["ts"] as? Timestamp,
@@ -211,6 +211,7 @@ class ProfileViewModel @Inject constructor(
                 // ── 4. Denormalize veriyle anında ekrana bas ──────────────────
                 _posts.value = rawPosts
                 _loading.value = false
+                syncProfilePostCounts(rawPosts.map { it.id })
 
                 // ── 5. Arka planda güncel avatar/isim ile sessizce güncelle ──
                 enrichPostsInBackground(rawPosts)
@@ -427,6 +428,7 @@ class ProfileViewModel @Inject constructor(
                     )
                 }
                 _posts.value = _posts.value + newPosts
+                syncProfilePostCounts(newPosts.map { it.id })
             } catch (e: Exception) { e.printStackTrace() }
             finally { _loadingMore.value = false }
         }
@@ -445,6 +447,35 @@ class ProfileViewModel @Inject constructor(
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
+    /** Beğeni / yorum sayılarını Supabase'den çek (feed.likesCount/commentsCount artık
+     *  Firestore'da güncellenmiyor — Supabase tek kaynak). */
+    private fun syncProfilePostCounts(postIds: List<String>) {
+        val ids = postIds.filter { it.isNotBlank() }.distinct()
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val likeRows = supabase.postgrest["feed_likes"]
+                    .select { filter { isIn("post_id", ids) } }
+                    .decodeList<com.heftreng.app.data.model.FeedLikeRow>()
+                val commentRows = supabase.postgrest["feed_comments"]
+                    .select { filter { isIn("post_id", ids) } }
+                    .decodeList<com.heftreng.app.data.model.FeedCommentRow>()
+
+                val likeCounts    = likeRows.groupingBy { it.postId }.eachCount()
+                val commentCounts = commentRows.groupingBy { it.postId }.eachCount()
+                if (likeCounts.isEmpty() && commentCounts.isEmpty()) return@launch
+
+                _posts.value = _posts.value.map { post ->
+                    if (post.id !in ids) return@map post
+                    post.copy(
+                        likesCount    = likeCounts[post.id]    ?: post.likesCount,
+                        commentsCount = commentCounts[post.id] ?: post.commentsCount,
+                    )
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
     // ── Profil gönderilerinde beğeni / silme / düzenleme ─────────────────────
     private var _cachedMyName2  : String = ""
     private var _cachedMyPhoto2 : String = ""
@@ -455,14 +486,12 @@ class ProfileViewModel @Inject constructor(
         _posts.value = _posts.value.map {
             if (it.id == post.id) it.copy(
                 isLikedByMe = nowLiked,
-                likesCount  = it.likesCount + if (nowLiked) 1 else -1
+                likesCount  = maxOf(0, it.likesCount + if (nowLiked) 1 else -1)
             ) else it
         }
         viewModelScope.launch {
             try {
-                val pRef = firestore.collection("feed").document(post.id)
                 if (nowLiked) {
-                    // İsim/foto cache'i — boşsa Firestore'dan oku
                     if (_cachedMyName2.isBlank()) {
                         val d = firestore.collection("users").document(myUid).get().await().data ?: emptyMap()
                         _cachedMyName2  = d["displayName"] as? String ?: d["name"] as? String
@@ -472,7 +501,6 @@ class ProfileViewModel @Inject constructor(
                     val myName  = _cachedMyName2
                     val myPhoto = _cachedMyPhoto2
 
-                    // Duplicate kayıt engelle — uid+post_id ile kontrol
                     val existing = try {
                         supabase.postgrest["feed_likes"]
                             .select { filter { eq("post_id", post.id); eq("uid", myUid) }; limit(1) }
@@ -488,16 +516,6 @@ class ProfileViewModel @Inject constructor(
                                 "photo_url" to myPhoto,
                             )
                         )
-                        val realCount = try {
-                            supabase.postgrest["feed_likes"]
-                                .select { filter { eq("post_id", post.id) } }
-                                .decodeList<com.heftreng.app.data.model.FeedLikeRow>().size
-                        } catch (_: Exception) { -1 }
-                        try {
-                            if (realCount >= 0) pRef.update("likesCount", realCount).await()
-                            else pRef.update("likesCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
-                        } catch (_: Exception) {}
-
                         if (post.uid.isNotEmpty() && post.uid != myUid) {
                             firestore.collection("userNotifs").document(post.uid).collection("msgs").add(mapOf(
                                 "fromUid" to myUid, "fromName" to myName, "fromPhoto" to myPhoto,
@@ -512,15 +530,17 @@ class ProfileViewModel @Inject constructor(
                     supabase.postgrest["feed_likes"].delete {
                         filter { eq("post_id", post.id); eq("uid", myUid) }
                     }
-                    val realCount = try {
-                        supabase.postgrest["feed_likes"]
-                            .select { filter { eq("post_id", post.id) } }
-                            .decodeList<com.heftreng.app.data.model.FeedLikeRow>().size
-                    } catch (_: Exception) { -1 }
-                    try {
-                        if (realCount >= 0) pRef.update("likesCount", realCount).await()
-                        else pRef.update("likesCount", com.google.firebase.firestore.FieldValue.increment(-1)).await()
-                    } catch (_: Exception) {}
+                }
+                // Gerçek sayıyı arka planda doğrula
+                val realCount = try {
+                    supabase.postgrest["feed_likes"]
+                        .select { filter { eq("post_id", post.id) } }
+                        .decodeList<com.heftreng.app.data.model.FeedLikeRow>().size
+                } catch (_: Exception) { -1 }
+                if (realCount >= 0) {
+                    _posts.value = _posts.value.map {
+                        if (it.id == post.id) it.copy(likesCount = realCount) else it
+                    }
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
