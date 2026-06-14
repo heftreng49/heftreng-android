@@ -203,20 +203,25 @@ class NotificationsViewModel @Inject constructor(
                 val myName  = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
                 val myPhoto = myDoc.getString("photoURL") ?: ""
 
-                firestore.collection("follows").document("${fromUid}_$myUid").set(mapOf(
-                    "fromUid"     to fromUid,
-                    "fromName"    to fromName,
-                    "fromPhoto"   to fromPhoto,
-                    "targetUid"   to myUid,
-                    "targetName"  to myName,
-                    "targetPhoto" to myPhoto,
-                    "ts"          to com.google.firebase.Timestamp.now(),
-                )).await()
-
-                firestore.collection("users").document(myUid)
-                    .update("followerCount", com.google.firebase.firestore.FieldValue.increment(1))
-                firestore.collection("users").document(fromUid)
-                    .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
+                // ✅ Supabase follows — tek kaynak
+                supabase.postgrest["follows"].upsert(
+                    com.heftreng.app.data.model.FollowRow(
+                        id          = "${fromUid}_$myUid",
+                        fromUid     = fromUid,
+                        fromName    = fromName,
+                        fromPhoto   = fromPhoto,
+                        targetUid   = myUid,
+                        targetName  = myName,
+                        targetPhoto = myPhoto,
+                    )
+                )
+                // Firestore: sadece sayaç güncelle
+                try {
+                    firestore.collection("users").document(myUid)
+                        .update("followerCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                    firestore.collection("users").document(fromUid)
+                        .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                } catch (_: Exception) {}
 
                 reqRef.delete().await()
 
