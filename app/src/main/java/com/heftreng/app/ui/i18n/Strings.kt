@@ -25,6 +25,9 @@ object Strings {
     fun navKurdi(l: String)        = t(l, "Kurdî",       "Kurdî")
     fun navProfile(l: String)      = t(l, "Profil",      "Profîl")
     fun navSearch(l: String)       = t(l, "Keşfet",      "Keşif bike")
+    // Yeni nav — Öncelik 1
+    fun navDiscover(l: String)     = t(l, "Keşfet",      "Vedîtin")
+    fun navCulture(l: String)      = t(l, "Kültür",      "Çand")
     fun navMessages(l: String)     = t(l, "Mesajlar",    "Peyam")
     fun navNotifs(l: String)       = t(l, "Bildirimler", "Agahî")
     fun navSettings(l: String)     = t(l, "Ayarlar",     "Mîheng")

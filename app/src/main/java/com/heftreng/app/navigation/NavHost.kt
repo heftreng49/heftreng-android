@@ -81,9 +81,11 @@ import kotlinx.coroutines.launch
 // ── Routes ───────────────────────────────────────────────────────────────────
 sealed class Screen(val route: String) {
     object Auth          : Screen("auth")
+    object Discover      : Screen("discover")  // 📚 Keşfet — yeni ana sekme
+    object Feed          : Screen("feed")       // 🌿 Kültür — kültür/kitap feed'i
+    // Blog route'ları legacy deep-link uyumluluğu için korunuyor (bottom nav'dan kaldırıldı)
     object Blog         : Screen("blog")
     object BlogPost     : Screen("blog_post/{postId}") { fun go(id: String) = "blog_post/$id" }
-    object Feed          : Screen("feed")
     object Search        : Screen("search")
     object Messages      : Screen("messages")
     object Notifications : Screen("notifications")
@@ -113,7 +115,7 @@ sealed class Screen(val route: String) {
 data class BottomNavItem(val route: String, val label: String, val icon: ImageVector, val iconSel: ImageVector)
 
 private val bottomNavRoutes = setOf(
-    Screen.Feed.route, Screen.Blog.route, Screen.Library.route,
+    Screen.Discover.route, Screen.Feed.route,
     Screen.Kurdi.route, "profile/me",
 )
 
@@ -178,11 +180,14 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val configLoaded by appConfigVm.loaded.collectAsState()
     // Dile göre alt bar etiketleri
     val bottomNavItems = listOf(
-        BottomNavItem(Screen.Feed.route,    Strings.navFeed(language),    Icons.Outlined.DynamicFeed,  Icons.Filled.DynamicFeed),
-        BottomNavItem(Screen.Blog.route,    Strings.navBlog(language),    Icons.Outlined.Article,       Icons.Filled.Article),
-        BottomNavItem(Screen.Library.route, Strings.navLibrary(language), Icons.Outlined.LocalLibrary,  Icons.Filled.LocalLibrary),
-        BottomNavItem(Screen.Kurdi.route,   Strings.navKurdi(language),   Icons.Outlined.Translate,     Icons.Filled.Translate),
-        BottomNavItem("profile/me",         Strings.navProfile(language), Icons.Outlined.PersonOutline, Icons.Filled.Person),
+        // 📚 Keşfet — kitap/yazar/alıntı merkezi
+        BottomNavItem(Screen.Discover.route, Strings.navDiscover(language), Icons.Outlined.AutoStories,   Icons.Filled.AutoStories),
+        // 🌿 Kültür — kültür/kitap/dil odaklı feed
+        BottomNavItem(Screen.Feed.route,     Strings.navCulture(language),  Icons.Outlined.Workspaces,    Icons.Filled.Workspaces),
+        // 🔤 Kurdî — dil öğrenme (değişmedi)
+        BottomNavItem(Screen.Kurdi.route,    Strings.navKurdi(language),    Icons.Outlined.Translate,     Icons.Filled.Translate),
+        // 👤 Profil
+        BottomNavItem("profile/me",          Strings.navProfile(language),  Icons.Outlined.PersonOutline, Icons.Filled.Person),
     )
     val unreadNotif by notifVm.unreadCount.collectAsState()
 
@@ -286,7 +291,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     if (currentUser == null) {
         // Tema MainActivity'de zaten uygulanıyor
         AuthScreen(onAuthSuccess = {
-            navController.navigate(Screen.Feed.route) {
+            navController.navigate(Screen.Discover.route) {
                 popUpTo(Screen.Auth.route) { this.inclusive = true }
             }
         })
@@ -345,11 +350,15 @@ fun HeftrangNavHost(initialRoute: String? = null) {
             contentWindowInsets = WindowInsets(0,0,0,0),
             // ── ÜST BAR — sadece Feed ekranında NavHost yönetir ──
             topBar = {
-                if (currentRoute == Screen.Feed.route) {
+                if (currentRoute == Screen.Feed.route || currentRoute == Screen.Discover.route) {
+                    val topBarTitle = when (currentRoute) {
+                        Screen.Discover.route -> Strings.navDiscover(language)
+                        else                  -> Strings.navCulture(language)
+                    }
                     TopAppBar(
                         title = {
                             Text(
-                                "Heftreng",
+                                topBarTitle,
                                 fontWeight = FontWeight.ExtraBold,
                                 color      = Primary,
                                 fontSize   = 20.sp,
@@ -572,25 +581,42 @@ fun HeftrangNavHost(initialRoute: String? = null) {
 
             NavHost(
                 navController    = navController,
-                startDestination = Screen.Feed.route,
+                startDestination = Screen.Discover.route,
                 modifier         = Modifier.padding(innerPadding),
             ) {
-                composable(Screen.Blog.route) {
-                    BlogScreen(navController = navController, vm = blogVm, language = language)
+                // 📚 Keşfet — yeni ana ekran
+                composable(Screen.Discover.route) {
+                    LibraryScreen(navController = navController, language = language)
                 }
-                composable("blog_post/{postId}") { back ->
-                    BlogPostScreen(
-                        postId        = back.arguments?.getString("postId") ?: "",
-                        navController = navController,
-                        vm            = blogVm,
-                    )
-                }
+                // 🌿 Kültür — kültür/kitap/dil odaklı feed
                 composable(Screen.Feed.route) {
                     FeedScreen(navController = navController, language = language)
                 }
+                // Blog — legacy deep-link desteği, Discover'a yönlendir
+                composable(Screen.Blog.route) {
+                    LaunchedEffect(Unit) {
+                        navController.navigate(Screen.Discover.route) {
+                            popUpTo(Screen.Discover.route) { inclusive = true }
+                        }
+                    }
+                }
+                composable("blog_post/{postId}") {
+                    LaunchedEffect(Unit) {
+                        navController.navigate(Screen.Discover.route) {
+                            popUpTo(Screen.Discover.route) { inclusive = true }
+                        }
+                    }
+                }
                 composable(Screen.Search.route) { SearchScreen(navController, language = language) }
                 composable(Screen.Serials.route) { BooksScreen(navController, language) }
-                composable(Screen.Library.route) { LibraryScreen(navController, language) }
+                // Library route — legacy, Discover'a yönlendir
+                composable(Screen.Library.route) {
+                    LaunchedEffect(Unit) {
+                        navController.navigate(Screen.Discover.route) {
+                            popUpTo(Screen.Discover.route) { inclusive = true }
+                        }
+                    }
+                }
                 composable(Screen.Kurdi.route)   { KurdiScreen(language = language, adminVm = adminVm) }
                 composable("profile/{uid}") { back ->
                     ProfileScreen(
@@ -786,9 +812,9 @@ fun DrawerContent(
             val notifLabel = Strings.navNotifs(language) + if (unreadNotif > 0) " ($unreadNotif)" else ""
             val msgLabel   = Strings.navMessages(language) + if (totalUnread > 0) " ($totalUnread)" else ""
             val items = listOf(
-                Triple(Icons.Outlined.DynamicFeed,       Strings.navFeed(language),     Screen.Feed.route),
+                Triple(Icons.Outlined.AutoStories,       Strings.navDiscover(language), Screen.Discover.route),
+                Triple(Icons.Outlined.Workspaces,        Strings.navCulture(language),  Screen.Feed.route),
                 Triple(Icons.Outlined.Search,            Strings.navSearch(language),   Screen.Search.route),
-                Triple(Icons.Outlined.AutoStories,       Strings.navBooks(language),    Screen.Serials.route),
                 Triple(Icons.Outlined.Translate,         Strings.navKurdi(language),    Screen.Kurdi.route),
                 Triple(Icons.Outlined.NotificationsNone, notifLabel,                    Screen.Notifications.route),
                 Triple(Icons.Outlined.ChatBubbleOutline, msgLabel,                      Screen.Messages.route),
