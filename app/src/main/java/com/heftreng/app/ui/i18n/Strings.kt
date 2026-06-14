@@ -22,12 +22,10 @@ object Strings {
     fun navBlog(l: String)         = t(l, "Blog",        "Blog")
     fun navBooks(l: String)        = t(l, "Kitaplar",    "Pirtûk")
     fun navLibrary(l: String)      = t(l, "Kütüphane",   "Pirtûkxane")
+    fun navDiscover(l: String)     = t(l, "Keşfet",      "Vedîtin")
     fun navKurdi(l: String)        = t(l, "Kurdî",       "Kurdî")
     fun navProfile(l: String)      = t(l, "Profil",      "Profîl")
     fun navSearch(l: String)       = t(l, "Keşfet",      "Keşif bike")
-    // Yeni nav — Öncelik 1
-    fun navDiscover(l: String)     = t(l, "Keşfet",      "Vedîtin")
-    fun navCulture(l: String)      = t(l, "Kültür",      "Çand")
     fun navMessages(l: String)     = t(l, "Mesajlar",    "Peyam")
     fun navNotifs(l: String)       = t(l, "Bildirimler", "Agahî")
     fun navSettings(l: String)     = t(l, "Ayarlar",     "Mîheng")
@@ -389,6 +387,7 @@ object Strings {
 
     // ── Kütüphane Ekranı ─────────────────────────────────────────────────────
     fun libraryTitle(l: String)          = t(l, "Kütüphane",                  "Pirtûkxane")
+    fun discoverTitle(l: String)         = t(l, "Keşfet",                     "Vedîtin")
     fun libraryTabQuotes(l: String)      = t(l, "Alıntılar",                  "Gotinên Bijarte")
     fun libraryTabReviews(l: String)     = t(l, "İncelemeler",                "Nirxandin")
     fun libraryTabAuthors(l: String)     = t(l, "Yazarlar",                   "Nivîskar")
@@ -476,4 +475,13 @@ object Strings {
     fun noComments(l: String)            = t(l, "Henüz yorum yok",            "Hîn şîrove tune")
     fun post(l: String)                  = t(l, "Gönderi",                    "Nivîs")
     fun followSomeone(l: String)         = t(l, "Takip ettiğin kimse gönderi paylaşmadı", "Kesek ku şopandî nivîs par nekir")
+
+    // ── Profil: Okuma Özeti Hero ─────────────────────────────────────────────
+    fun profileBooksRead(l: String, n: Int)   = t(l, "$n kitap okudum",  "$n pirtûk min xwendin")
+    fun profileQuotesCount(l: String, n: Int) = t(l, "$n alıntı",        "$n gotin")
+    fun profileStreakDays(l: String, n: Int)  = t(l, "$n gün streak",    "$n roj streak")
+
+    // ── Feed: Arkadaşlar ne okuyor? şeridi ───────────────────────────────────
+    fun friendsReadingTitle(l: String)        = t(l, "Arkadaşların ne okuyor?", "Hevalên te çi dixwînin?")
+    fun friendsReadingPage(l: String, n: Int) = t(l, "$n. sayfada",             "rûpel $n")
 }

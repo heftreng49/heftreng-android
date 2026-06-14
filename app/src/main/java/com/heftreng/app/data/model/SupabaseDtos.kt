@@ -69,3 +69,22 @@ data class SerialLikeRow(
     @SerialName("photo_url")  val photoUrl : String? = null,
     @SerialName("created_at") val createdAt: String? = null,
 )
+
+// ── Bölüm bazlı okuma yüzdesi — users/{uid}/readProgress taşındı ───────────────
+@Serializable
+data class ReadProgressRow(
+    val uid          : String = "",
+    @SerialName("parent_id")  val parentId : String = "",
+    @SerialName("chapter_id") val chapterId: String = "",
+    val pct          : Int    = 0,
+    @SerialName("updated_at") val updatedAt: String? = null,
+)
+
+// ── Günlük aktivite — streak hesaplamasını genişletmek için ────────────────────
+@Serializable
+data class DailyActivityRow(
+    val uid           : String = "",
+    @SerialName("activity_date") val activityDate: String = "",
+    val actions       : Int    = 0,
+    @SerialName("created_at")   val createdAt    : String? = null,
+)

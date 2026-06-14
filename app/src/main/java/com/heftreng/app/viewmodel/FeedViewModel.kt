@@ -51,6 +51,10 @@ class FeedViewModel @Inject constructor(
     private val _libraryQuotes = MutableStateFlow<List<Post>>(emptyList())
     val libraryQuotes = _libraryQuotes.asStateFlow()
 
+    // ── Arkadaşlar ne okuyor? — Feed üst şeridi ──────────────────────────────
+    private val _friendsReading = MutableStateFlow<List<com.heftreng.app.data.model.FriendReadingItem>>(emptyList())
+    val friendsReading = _friendsReading.asStateFlow()
+
     private val _comments = MutableStateFlow<List<Comment>>(emptyList())
     val comments = _comments.asStateFlow()
 
@@ -120,6 +124,25 @@ class FeedViewModel @Inject constructor(
         }
         refresh()
         loadLibraryQuotes()
+        recordDailyActivityAndStreak()
+    }
+
+    // ── Genel okuma/etkileşim streak'i — daily_activity (Supabase) ──────────
+    // Feed her açıldığında bugünün aktivitesini kaydeder, ardından ardışık
+    // gün sayısını hesaplayıp users/{uid}.streak alanına yazar (profil hero'su
+    // ve Kurdî streak kartı dışındaki genel streak için).
+    private fun recordDailyActivityAndStreak() {
+        val myUid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                library.recordDailyActivity(myUid)
+                val streak = library.computeStreak(myUid)
+                firestore.collection("users").document(myUid)
+                    .update("streak", streak)
+            } catch (e: Exception) {
+                android.util.Log.w("FeedVM", "recordDailyActivityAndStreak: ${e.message}")
+            }
+        }
     }
 
     fun loadFollowingUids(uid: String) {
@@ -938,14 +961,6 @@ class FeedViewModel @Inject constructor(
                     _createPostError.value = "Gönderi paylaşıldı, ancak kütüphane bağlantısı kurulamadı."
                 }
 
-                // quotesShared sayacı — alıntı paylaşılınca +1
-                if (quoteText.isNotBlank()) {
-                    try {
-                        firestore.collection("users").document(uid)
-                            .update("quotesShared", FieldValue.increment(1)).await()
-                    } catch (e: Exception) { e.printStackTrace() }
-                }
-
             } catch (e: Exception) {
                 e.printStackTrace()
                 _createPostError.value = "Gönderi paylaşılamadı: ${e.message}"
@@ -1379,5 +1394,43 @@ class FeedViewModel @Inject constructor(
 
     fun loadLibraryQuotes() {
         viewModelScope.launch { loadLibraryQuotesAsync() }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  Arkadaşlar ne okuyor? — reading_status (Supabase) + follows (isim/foto)
+    //  Yalnızca 'okuyorum' durumundaki kayıtlar; current_page varsa gösterilir.
+    // ══════════════════════════════════════════════════════════════════════
+
+    fun loadFriendsReading() {
+        val myUid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                val followRows = supabase.postgrest["follows"]
+                    .select { filter { eq("from_uid", myUid) }; limit(300) }
+                    .decodeList<FollowRow>()
+                if (followRows.isEmpty()) { _friendsReading.value = emptyList(); return@launch }
+
+                val nameByUid  = followRows.associate { it.targetUid to it.targetName }
+                val photoByUid = followRows.associate { it.targetUid to it.targetPhoto }
+                val uids       = followRows.map { it.targetUid }
+
+                val rows = library.getReadingStatusForUids(uids, status = "okuyorum", limit = 20)
+                _friendsReading.value = rows.map { row ->
+                    com.heftreng.app.data.model.FriendReadingItem(
+                        uid         = row.uid,
+                        name        = nameByUid[row.uid] ?: "",
+                        photoURL    = photoByUid[row.uid] ?: "",
+                        bookId      = row.bookId,
+                        title       = row.title,
+                        coverImg    = row.coverImg,
+                        authorName  = row.authorName,
+                        source      = row.source,
+                        currentPage = row.currentPage,
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("FeedVM", "loadFriendsReading: ${e.message}")
+            }
+        }
     }
 }

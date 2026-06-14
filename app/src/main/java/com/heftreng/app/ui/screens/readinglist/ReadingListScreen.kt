@@ -37,7 +37,7 @@ import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
 // ── Okuma Listesi ekranı ───────────────────────────────────────────────────────
-// Firestore: readingLists/{uid}/books — 4 sekme: okuyorum | okumak_istiyorum | okudum | biraktim
+// Supabase: reading_status — 4 sekme: okuyorum | okumak_istiyorum | okudum | biraktim
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun ReadingListScreen(
@@ -145,6 +145,7 @@ fun ReadingListScreen(
                             }
                         },
                                 onRemove = { vm.remove(entry.sid) },
+                                onUpdatePage = { page -> vm.updateCurrentPage(entry.sid, page) },
                             )
                         }
                     }
@@ -168,10 +169,21 @@ private fun ReadingListBookCard(
     language : String = "tr",
     onClick  : () -> Unit,
     onRemove : () -> Unit,
+    onUpdatePage: (Int) -> Unit = {},
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    var showPageDialog by remember { mutableStateOf(false) }
     val ku = language == "ku"
     val bg = Color(status.color)
+
+    if (showPageDialog) {
+        UpdatePageDialog(
+            currentPage = entry.currentPage,
+            language    = language,
+            onDismiss   = { showPageDialog = false },
+            onConfirm   = { page -> onUpdatePage(page); showPageDialog = false },
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -215,6 +227,24 @@ private fun ReadingListBookCard(
             ) {
                 Text(if (ku) status.labelKu else status.labelTr, color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
             }
+            // Sayfa rozeti — sadece "okuyorum" durumunda ve sayfa girilmişse
+            if (status == RlStatus.READING && entry.currentPage > 0) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        Strings.friendsReadingPage(language, entry.currentPage),
+                        color    = Color.White,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
             // Menü butonu
             Box(Modifier.align(Alignment.TopStart)) {
                 IconButton(
@@ -228,6 +258,12 @@ private fun ReadingListBookCard(
                     onDismissRequest = { showMenu = false },
                     containerColor   = HeftSurface,
                 ) {
+                    if (status == RlStatus.READING) {
+                        DropdownMenuItem(
+                            text    = { Text(if (ku) "Rûpel nûve bike" else "Sayfayı güncelle", color = OnBackground) },
+                            onClick = { showMenu = false; showPageDialog = true },
+                        )
+                    }
                     DropdownMenuItem(
                         text    = { Text(Strings.removeFromList(language), color = Color(0xFFEF4444)) },
                         onClick = { showMenu = false; onRemove() },
@@ -246,6 +282,50 @@ private fun ReadingListBookCard(
             overflow   = TextOverflow.Ellipsis,
         )
     }
+}
+
+@Composable
+private fun UpdatePageDialog(
+    currentPage: Int,
+    language   : String,
+    onDismiss  : () -> Unit,
+    onConfirm  : (Int) -> Unit,
+) {
+    val ku = language == "ku"
+    var text by remember { mutableStateOf(if (currentPage > 0) currentPage.toString() else "") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Text(
+                if (ku) "Li kîderê yî?" else "Şu an kaçıncı sayfadasın?",
+                color = OnBackground,
+            )
+        },
+        text = {
+            OutlinedTextField(
+                value         = text,
+                onValueChange = { input -> if (input.all { it.isDigit() }) text = input },
+                placeholder   = { Text(if (ku) "Hejmara rûpel" else "Sayfa numarası") },
+                singleLine    = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(text.toIntOrNull() ?: 0) }) {
+                Text(Strings.save(language), color = Primary)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(if (ku) "Betal" else "Vazgeç", color = Muted)
+            }
+        },
+    )
 }
 
 // ── Seri/Kitap detay sayfasından okuma listesi durumu seçme bottom sheet ──────

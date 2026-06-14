@@ -14,7 +14,6 @@ package com.heftreng.app.ui.screens.library
 // ═══════════════════════════════════════════════════════════════════════════
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -157,7 +156,19 @@ fun LibraryScreen(
     LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
     Scaffold(
         containerColor = Background,
-        // TopAppBar kaldırıldı — NavHost'taki Discover TopAppBar kullanılıyor
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text       = Strings.discoverTitle(language),
+                        color      = OnBackground,
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 20.sp,
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+            )
+        },
         floatingActionButton = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.End) {
                 // Admin: sekmeye göre yazar/kitap ekle
@@ -240,7 +251,7 @@ fun LibraryScreen(
                     modifier                = Modifier.fillMaxSize(),
                 ) { page ->
                     when (page) {
-                        0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize, books = books, authors = authors)
+                        0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize)
                         1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize)
                         2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize)
                         3 -> LibraryBooksTab(books = books, navController = navController, language = language, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize)
@@ -342,54 +353,12 @@ private fun LibraryQuotesTab(
     bannerUnitId : String? = null,
     adsVm        : com.heftreng.app.viewmodel.AdsViewModel? = null,
     bannerSize   : String = "adaptive",
-    books        : List<LibraryBook> = emptyList(),
-    authors      : List<Author> = emptyList(),
 ) {
     if (quotes.isEmpty()) {
         EmptyState(Icons.Outlined.FormatQuote, Strings.libraryNoQuotes(language))
         return
     }
-    // ── Günün Alıntısı — gün damgasına göre deterministik seçim ──────────
-    val dayIndex   = (System.currentTimeMillis() / 86_400_000L).toInt()
-    val dailyQuote = quotes[((dayIndex % quotes.size) + quotes.size) % quotes.size]
-
-    // ── Bu hafta öne çıkan kitap — en yüksek avgRating, yoksa en çok alıntılı ──
-    val featuredBook = books
-        .filter { it.avgRating > 0f || it.quoteCount > 0 }
-        .maxWithOrNull(compareBy({ it.avgRating }, { it.quoteCount }))
-
-    // ── En çok alıntılanan yazar ──────────────────────────────────────────
-    val topAuthor = quotes
-        .filter { it.authorName.isNotBlank() }
-        .groupingBy { it.authorName }
-        .eachCount()
-        .maxByOrNull { it.value }
-
     LazyColumn(contentPadding = PaddingValues(vertical = 0.dp)) {
-        item(key = "daily_quote_hero") {
-            DailyQuoteHeroCard(
-                quote    = dailyQuote,
-                language = language,
-                onClick  = { navController.navigate("post/${dailyQuote.id}") },
-            )
-        }
-        if (featuredBook != null || topAuthor != null) {
-            item(key = "discover_highlights") {
-                DiscoverHighlightsRow(
-                    featuredBook = featuredBook,
-                    topAuthor    = topAuthor?.key,
-                    topAuthorCount = topAuthor?.value ?: 0,
-                    language     = language,
-                    onBookClick  = { book -> navController.navigate("library_book_detail/${book.id}") },
-                    onAuthorClick = { name ->
-                        val authorId = authors.find { it.name == name }?.id
-                        if (!authorId.isNullOrBlank()) {
-                            navController.navigate("author_detail/$authorId")
-                        }
-                    },
-                )
-            }
-        }
         itemsIndexed(quotes, key = { _, p -> p.id }) { index, post ->
             PostCard(
                 post         = post,
@@ -488,18 +457,18 @@ private fun LibraryBooksTab(
     androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
         columns             = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
         contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalArrangement   = Arrangement.spacedBy(16.dp),
     ) {
-        itemsIndexed(books, key = { _, b -> b.id }) { index, book ->
+        androidx.compose.foundation.lazy.grid.items(books, key = { it.id }) { book ->
             LibraryBookGridCard(
                 book    = book,
                 onClick = { navController.navigate("library_book_detail/${book.id}") },
             )
-            // Banner: tam genişlik için grid span — her 12 kitapta bir
-            if (bannerUnitId != null && (index + 1) % 12 == 0) {
-                // Not: LazyVerticalGrid içinde tam-genişlik banner için item span gerekir,
-                // burada basitlik için banner'ı atlıyoruz (grid + banner span ayrı PR konusu)
+        }
+        if (bannerUnitId != null) {
+            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB, bannerSize = bannerSize)
             }
         }
     }
@@ -693,197 +662,4 @@ private fun LibAdminTextField(label: String, value: String, minLines: Int = 1, o
             focusedLabelColor    = Amber,
         ),
     )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  DailyQuoteHeroCard — "Günün Alıntısı" büyük hero kartı (Keşfet)
-// ─────────────────────────────────────────────────────────────────────────────
-@Composable
-private fun DailyQuoteHeroCard(
-    quote   : Post,
-    language: String,
-    onClick : () -> Unit,
-) {
-    val ku = language == "ku"
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(
-                brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                    listOf(Amber.copy(alpha = 0.18f), Primary.copy(alpha = 0.12f))
-                )
-            )
-            .border(
-                width = 1.dp,
-                brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                    listOf(Amber.copy(alpha = 0.5f), Primary.copy(alpha = 0.3f))
-                ),
-                shape = RoundedCornerShape(18.dp),
-            )
-            .clickable { onClick() }
-            .padding(18.dp),
-    ) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.WbSunny, null, tint = Amber, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    if (ku) "Îro Peyvek" else "Günün Alıntısı",
-                    color      = Amber,
-                    fontSize   = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp,
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            Text(
-                "\u201C${quote.quoteText.take(220)}${if (quote.quoteText.length > 220) "\u2026" else ""}\u201D",
-                color      = OnBackground,
-                fontSize   = 16.sp,
-                fontStyle  = FontStyle.Italic,
-                fontWeight = FontWeight.Medium,
-                lineHeight = 24.sp,
-                maxLines   = 5,
-                overflow   = TextOverflow.Ellipsis,
-            )
-            if (quote.authorName.isNotBlank() || quote.bookName.isNotBlank()) {
-                Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (quote.authorName.isNotBlank()) {
-                        Text(quote.authorName, color = Primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                    if (quote.authorName.isNotBlank() && quote.bookName.isNotBlank()) {
-                        Text("  ·  ", color = Muted, fontSize = 13.sp)
-                    }
-                    if (quote.bookName.isNotBlank()) {
-                        Text(quote.bookName, color = Muted, fontSize = 13.sp)
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  DiscoverHighlightsRow — "Bu hafta öne çıkan kitap" + "En çok alıntılanan yazar"
-// ─────────────────────────────────────────────────────────────────────────────
-@Composable
-private fun DiscoverHighlightsRow(
-    featuredBook  : LibraryBook?,
-    topAuthor     : String?,
-    topAuthorCount: Int,
-    language      : String,
-    onBookClick   : (LibraryBook) -> Unit,
-    onAuthorClick : (String) -> Unit,
-) {
-    val ku = language == "ku"
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        if (featuredBook != null) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(HeftSurface)
-                    .clickable { onBookClick(featuredBook) }
-                    .padding(12.dp),
-            ) {
-                Text(
-                    if (ku) "Pirtûka Vê Hefteyê" else "Bu Hafta Öne Çıkan",
-                    color      = Muted,
-                    fontSize   = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp,
-                )
-                Spacer(Modifier.height(6.dp))
-                Row {
-                    Box(
-                        modifier = Modifier
-                            .width(40.dp)
-                            .height(56.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(SurfaceVar),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (featuredBook.coverImg.isNotBlank()) {
-                            AsyncImage(
-                                model = featuredBook.coverImg,
-                                contentDescription = featuredBook.title,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        } else {
-                            Icon(Icons.Default.AutoStories, null, tint = Muted, modifier = Modifier.size(20.dp))
-                        }
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            featuredBook.title,
-                            color      = OnBackground,
-                            fontSize   = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines   = 2,
-                            overflow   = TextOverflow.Ellipsis,
-                        )
-                        if (featuredBook.authorName.isNotBlank()) {
-                            Text(featuredBook.authorName, color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                }
-            }
-        }
-        if (topAuthor != null) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(HeftSurface)
-                    .clickable { onAuthorClick(topAuthor) }
-                    .padding(12.dp),
-            ) {
-                Text(
-                    if (ku) "Nivîskarê Populer" else "En Çok Alıntılanan",
-                    color      = Muted,
-                    fontSize   = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp,
-                )
-                Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(SurfaceVar),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Default.Person, null, tint = Muted, modifier = Modifier.size(22.dp))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Column {
-                        Text(
-                            topAuthor,
-                            color      = OnBackground,
-                            fontSize   = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines   = 1,
-                            overflow   = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            if (ku) "$topAuthorCount gotin" else "$topAuthorCount alıntı",
-                            color    = Primary,
-                            fontSize = 11.sp,
-                        )
-                    }
-                }
-            }
-        }
-    }
 }

@@ -907,3 +907,171 @@ exports.cleanOrphanUsers = onRequest({ region: "europe-west1" }, async (req, res
     message: `${checked} kontrol edildi, ${deleted} sahipsiz doküman silindi`,
   });
 });
+
+// ══════════════════════════════════════════════════════════════════════════
+//  Öncelik 3 — Retention: Günün Alıntısı + Yazara Abone Olunca Bildirim
+//  Supabase: book_quotes, book_reviews, author_follows tabloları (anon key
+//  yeterli — RLS public_read açık). SUPABASE_URL / SUPABASE_ANON_KEY env
+//  değişkenleri Cloud Functions config'ine eklenmeli:
+//    firebase functions:config:set supabase.url="..." supabase.anon_key="..."
+//  veya v2'de process.env (Secret Manager) kullanın.
+// ══════════════════════════════════════════════════════════════════════════
+
+function getSupabase() {
+  const { createClient } = require("@supabase/supabase-js");
+  const url    = process.env.SUPABASE_URL;
+  const anon   = process.env.SUPABASE_ANON_KEY;
+  if (!url || !anon) throw new Error("SUPABASE_URL / SUPABASE_ANON_KEY tanımlı değil");
+  return createClient(url, anon);
+}
+
+// ─── notifyAuthorFollowers — HTTPS Callable (v2) ────────────────────────────
+// Bir yazara yeni alıntı/inceleme eklendiğinde, o yazarı takip eden
+// kullanıcılara userNotifs/{uid}/msgs yazar → onNewNotif otomatik FCM gönderir.
+// Android: addQuoteToLibrary / addBookReview sonrası çağrılır.
+exports.notifyAuthorFollowers = onCall(
+  { region: "europe-west1", cors: true },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+
+    const {
+      authorId, authorName = "", type = "quote", text = "",
+    } = request.data || {};
+    if (!authorId) return { success: false, reason: "no_author" };
+
+    const fromUid = request.auth.uid;
+    const supabase = getSupabase();
+
+    let followerRows;
+    try {
+      const { data, error } = await supabase
+        .from("author_follows")
+        .select("user_id")
+        .eq("author_id", authorId)
+        .limit(500);
+      if (error) throw error;
+      followerRows = data || [];
+    } catch (e) {
+      console.error("[notifyAuthorFollowers] Supabase hatası:", e.message);
+      return { success: false, reason: "supabase_error" };
+    }
+
+    const followerUids = followerRows
+      .map(r => r.user_id)
+      .filter(uid => uid && uid !== fromUid);
+
+    if (followerUids.length === 0) return { success: true, count: 0 };
+
+    const title = authorName || "Heftreng";
+    const sub   = type === "review"
+      ? (text ? `Yeni inceleme: ${text}` : "Yeni bir inceleme eklendi")
+      : (text ? `Yeni alıntı: ${text}`   : "Yeni bir alıntı eklendi");
+
+    const db = getFirestore();
+    let count = 0;
+    for (let i = 0; i < followerUids.length; i += 400) {
+      const chunk = followerUids.slice(i, i + 400);
+      const batch = db.batch();
+      for (const uid of chunk) {
+        const ref = db.collection("userNotifs").doc(uid).collection("msgs").doc();
+        batch.set(ref, {
+          fromUid:   fromUid,
+          fromName:  authorName,
+          fromPhoto: "",
+          type:      "author_update",
+          feedId:    "",
+          postId:    "",
+          title:     title,
+          sub:       sub.slice(0, 140),
+          message:   title,
+          ico:       "menu_book",
+          url:       `https://heft-reng.blogspot.com/`,
+          read:      false,
+          ts:        new Date(),
+        });
+        count++;
+      }
+      await batch.commit();
+    }
+
+    console.log(`[notifyAuthorFollowers] ✓ ${count} takipçiye bildirim — author: ${authorId}`);
+    return { success: true, count };
+  }
+);
+
+// ─── scheduledDailyQuote — Günün Alıntısı (pubsub, günlük) ──────────────────
+// Supabase book_quotes'tan rastgele bir alıntı seçer, tüm kullanıcılara
+// userNotifs/{uid}/msgs yazar → onNewNotif otomatik FCM gönderir.
+exports.scheduledDailyQuote = functions.pubsub
+  .schedule("0 9 * * *")
+  .timeZone("Europe/Istanbul")
+  .onRun(async () => {
+    const supabase = getSupabase();
+
+    let quote;
+    try {
+      const { count } = await supabase
+        .from("book_quotes")
+        .select("id", { count: "exact", head: true });
+      if (!count) { console.log("[scheduledDailyQuote] book_quotes boş"); return null; }
+
+      const offset = Math.floor(Math.random() * count);
+      const { data, error } = await supabase
+        .from("book_quotes")
+        .select("text, author_name, book_title")
+        .range(offset, offset)
+        .limit(1);
+      if (error) throw error;
+      quote = (data || [])[0];
+      if (!quote) { console.log("[scheduledDailyQuote] alıntı bulunamadı"); return null; }
+    } catch (e) {
+      console.error("[scheduledDailyQuote] Supabase hatası:", e.message);
+      return null;
+    }
+
+    const title = quote.author_name
+      ? `📖 Günün Alıntısı — ${quote.author_name}`
+      : "📖 Günün Alıntısı";
+    const sub = quote.book_title
+      ? `"${quote.text}" — ${quote.book_title}`
+      : `"${quote.text}"`;
+
+    const db = getFirestore();
+    let count = 0;
+    let lastDoc = null;
+    const BATCH_SIZE = 400;
+
+    do {
+      let q = db.collection("users").orderBy("__name__").limit(BATCH_SIZE);
+      if (lastDoc) q = q.startAfter(lastDoc);
+      const snap = await q.get();
+      if (snap.empty) break;
+
+      const batch = db.batch();
+      for (const doc of snap.docs) {
+        const uid = doc.id;
+        const ref = db.collection("userNotifs").doc(uid).collection("msgs").doc();
+        batch.set(ref, {
+          fromUid:   "",
+          fromName:  "Heftreng",
+          fromPhoto: "",
+          type:      "daily_quote",
+          feedId:    "",
+          postId:    "",
+          title:     title,
+          sub:       sub.slice(0, 180),
+          message:   title,
+          ico:       "format_quote",
+          url:       "https://heft-reng.blogspot.com/",
+          read:      false,
+          ts:        new Date(),
+        });
+        count++;
+      }
+      await batch.commit();
+      lastDoc = snap.docs[snap.docs.length - 1];
+    } while (true);
+
+    console.log(`[scheduledDailyQuote] ✓ ${count} kullanıcıya gönderildi`);
+    return null;
+  });

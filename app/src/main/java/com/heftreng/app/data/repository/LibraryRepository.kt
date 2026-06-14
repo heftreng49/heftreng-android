@@ -2,6 +2,7 @@ package com.heftreng.app.data.repository
 
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.heftreng.app.data.model.DailyActivityRow
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
@@ -108,6 +109,25 @@ data class BookReviewRow(
     val likesCount        : Int     = 0,
     @SerialName("created_at")
     val createdAt         : String  = "",
+)
+
+@Serializable
+data class ReadingStatusRow(
+    val uid          : String  = "",
+    @SerialName("book_id")
+    val bookId       : String  = "",
+    val status       : String  = "",
+    val title        : String  = "",
+    @SerialName("cover_img")
+    val coverImg     : String  = "",
+    val bg           : String  = "",
+    @SerialName("author_name")
+    val authorName   : String  = "",
+    val source       : String  = "serial",
+    @SerialName("current_page")
+    val currentPage  : Int     = 0,
+    @SerialName("updated_at")
+    val updatedAt    : String  = "",
 )
 
 @Singleton
@@ -219,14 +239,6 @@ class LibraryRepository @Inject constructor(
             order("created_at", Order.DESCENDING)
             limit(limit.toLong())
         }.decodeList()
-
-    /** Profil "okuma özet kartı" için — kullanıcının paylaştığı alıntı sayısı */
-    suspend fun countQuotesByUser(uid: String): Int =
-        try {
-            db["book_quotes"].select {
-                filter { eq("uid", uid) }
-            }.decodeList<BookQuoteRow>().size
-        } catch (e: Exception) { 0 }
 
     suspend fun insertQuote(row: BookQuoteRow) {
         db["book_quotes"].insert(row)
@@ -432,4 +444,93 @@ class LibraryRepository @Inject constructor(
 
     suspend fun fetchBooksForAuthor(authorId: String): List<LibraryBookRow> =
         try { getBooksByAuthor(authorId) } catch (_: Exception) { emptyList() }
+
+    // ── Reading Status ────────────────────────────────────────────────────────
+    //  reading_status: uid + book_id birincil anahtar. Hem "library_books"
+    //  (source = "library") hem "serials/books" (source = "serial"|"book")
+    //  içerikleri için kullanılır. "Arkadaşlar ne okuyor?" şeridi ve profil
+    //  okuma listesi buradan beslenir.
+
+    suspend fun getReadingStatus(uid: String, limit: Int = 50): List<ReadingStatusRow> =
+        db["reading_status"].select {
+            filter { eq("uid", uid) }
+            order("updated_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList()
+
+    suspend fun upsertReadingStatus(row: ReadingStatusRow) {
+        db["reading_status"].upsert(row)
+    }
+
+    suspend fun deleteReadingStatus(uid: String, bookId: String) {
+        db["reading_status"].delete {
+            filter {
+                eq("uid", uid)
+                eq("book_id", bookId)
+            }
+        }
+    }
+
+    /** "Arkadaşlar ne okuyor?" şeridi — takip edilen kullanıcıların 'okuyorum' durumundaki kayıtları */
+    suspend fun getReadingStatusForUids(uids: List<String>, status: String = "okuyorum", limit: Int = 20): List<ReadingStatusRow> {
+        if (uids.isEmpty()) return emptyList()
+        return db["reading_status"].select {
+            filter {
+                isIn("uid", uids)
+                eq("status", status)
+            }
+            order("updated_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList()
+    }
+
+    // ── Daily Activity / Streak ──────────────────────────────────────────────
+    //  Kurdî ders streak'inden bağımsız, genel uygulama etkileşim streak'i.
+    //  Uygulama her foreground'a geldiğinde recordDailyActivity çağrılır,
+    //  ardından computeStreak ile users/{uid}.streak güncellenir.
+
+    suspend fun recordDailyActivity(uid: String) {
+        if (uid.isBlank()) return
+        val today = java.time.LocalDate.now().toString() // yyyy-MM-dd
+        try {
+            val existing = db["daily_activity"].select {
+                filter { eq("uid", uid); eq("activity_date", today) }
+                limit(1)
+            }.decodeSingleOrNull<DailyActivityRow>()
+            if (existing != null) {
+                db["daily_activity"].update(
+                    mapOf("actions" to existing.actions + 1)
+                ) { filter { eq("uid", uid); eq("activity_date", today) } }
+            } else {
+                db["daily_activity"].insert(DailyActivityRow(uid = uid, activityDate = today, actions = 1))
+            }
+        } catch (_: Exception) { }
+    }
+
+    /** Bugün (veya dün, gün henüz bitmediyse) dahil ardışık aktif gün sayısı. */
+    suspend fun computeStreak(uid: String): Int {
+        if (uid.isBlank()) return 0
+        return try {
+            val rows = db["daily_activity"].select {
+                filter { eq("uid", uid) }
+                order("activity_date", Order.DESCENDING)
+                limit(400)
+            }.decodeList<DailyActivityRow>()
+            if (rows.isEmpty()) return 0
+
+            val dates = rows.mapNotNull {
+                try { java.time.LocalDate.parse(it.activityDate) } catch (_: Exception) { null }
+            }.toSet()
+
+            var cursor = java.time.LocalDate.now()
+            if (cursor !in dates) cursor = cursor.minusDays(1)
+
+            var streak = 0
+            while (cursor in dates) {
+                streak++
+                cursor = cursor.minusDays(1)
+            }
+            streak
+        } catch (_: Exception) { 0 }
+    }
 }

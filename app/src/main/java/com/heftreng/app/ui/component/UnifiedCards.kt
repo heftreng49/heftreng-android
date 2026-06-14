@@ -678,8 +678,9 @@ fun LibraryBookCard(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  LibraryBookGridCard — Keşfet grid görünümü için büyük kapak kartı
+//  LibraryBookGridCard — Keşfet grid görünümü: kapak ön planda, 2 sütun
 // ─────────────────────────────────────────────────────────────────────────────
+
 @Composable
 fun LibraryBookGridCard(
     book    : LibraryBook,
@@ -714,28 +715,33 @@ fun LibraryBookGridCard(
                     modifier = Modifier.size(40.dp),
                 )
             }
+
+            // Puan rozeti
             if (book.avgRating > 0f) {
-                Row(
+                Box(
                     modifier = Modifier
-                        .align(Alignment.BottomStart)
+                        .align(Alignment.TopEnd)
                         .padding(6.dp)
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(Color.Black.copy(alpha = 0.55f))
                         .padding(horizontal = 6.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Default.Star, null, tint = Amber, modifier = Modifier.size(11.dp))
-                    Spacer(Modifier.width(3.dp))
-                    Text(
-                        String.format("%.1f", book.avgRating),
-                        color    = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Star, null, tint = Amber, modifier = Modifier.size(11.dp))
+                        Spacer(Modifier.width(2.dp))
+                        Text(
+                            "%.1f".format(book.avgRating),
+                            color    = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
             }
         }
+
         Spacer(Modifier.height(6.dp))
+
         Text(
             book.title,
             color      = OnBackground,
@@ -743,11 +749,12 @@ fun LibraryBookGridCard(
             fontWeight = FontWeight.SemiBold,
             maxLines   = 2,
             overflow   = TextOverflow.Ellipsis,
+            lineHeight = 16.sp,
         )
         if (book.authorName.isNotBlank()) {
             Text(
                 book.authorName,
-                color    = Muted,
+                color    = Primary,
                 fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

@@ -390,6 +390,11 @@ class LibraryViewModel @Inject constructor(
                 if (resolvedAuthorId.isNotBlank()) {
                     _authorQuotes.value = library.getQuotesByAuthor(resolvedAuthorId).map { it.toDomain() }
                 }
+
+                // Yazarı takip edenlere bildirim (Cloud Function — fire & forget)
+                if (resolvedAuthorId.isNotBlank()) {
+                    notifyAuthorFollowers(resolvedAuthorId, book.authorName, "quote", quoteText)
+                }
             } catch (e: Exception) {
                 _error.value = e.message
             }
@@ -453,6 +458,11 @@ class LibraryViewModel @Inject constructor(
 
                 _selectedBook.value = currentBook?.copy(reviewCount = newReviewCount, avgRating = newAvg)
                 _bookReviews.value  = library.getReviewsByBook(book.id).map { it.toDomain() }
+
+                // Yazarı takip edenlere bildirim (Cloud Function — fire & forget)
+                if (book.authorId.isNotBlank()) {
+                    notifyAuthorFollowers(book.authorId, book.authorName, "review", reviewText)
+                }
             } catch (e: Exception) {
                 _error.value = e.message
             }
@@ -752,4 +762,25 @@ class LibraryViewModel @Inject constructor(
             android.util.Log.e("LibraryVM", "loadReviewsForScreen: ${e.message}")
             emptyList()
         }
+
+    // ── Yazar takipçilerine bildirim — Cloud Function (fire & forget) ───────
+    // notifyAuthorFollowers: author_follows (Supabase) içindeki kullanıcılara
+    // userNotifs/{uid}/msgs yazar → onNewNotif otomatik FCM gönderir.
+    private fun notifyAuthorFollowers(authorId: String, authorName: String, type: String, text: String) {
+        viewModelScope.launch {
+            try {
+                com.google.firebase.functions.FirebaseFunctions
+                    .getInstance("europe-west1")
+                    .getHttpsCallable("notifyAuthorFollowers")
+                    .call(hashMapOf(
+                        "authorId"   to authorId,
+                        "authorName" to authorName,
+                        "type"       to type,
+                        "text"       to text.take(140),
+                    )).await()
+            } catch (e: Exception) {
+                android.util.Log.w("LibraryVM", "notifyAuthorFollowers: ${e.message}")
+            }
+        }
+    }
 }

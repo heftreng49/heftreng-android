@@ -20,9 +20,6 @@ data class User(
     val level          : Int    = 1,
     val xp             : Int    = 0,
     val streak         : Int    = 0,
-    // Okuma özet alanları (Öncelik 1 — profil kartı için)
-    val booksRead      : Int    = 0,
-    val quotesShared   : Int    = 0,
     val banned             : Boolean= false,
     val emailVerified      : Boolean= false,
     val isPrivate          : Boolean= false,
@@ -321,7 +318,21 @@ data class ReadingListEntry(
     val status     : String     = "",
     val updatedAt  : Timestamp? = null,
     val source     : String     = "serial",
-    val authorName : String     = ""
+    val authorName : String     = "",
+    val currentPage: Int        = 0,
+)
+
+// ─── ARKADAŞLAR NE OKUYOR? — Feed üst şeridi ────────────────────
+data class FriendReadingItem(
+    val uid        : String = "",
+    val name       : String = "",
+    val photoURL   : String = "",
+    val bookId     : String = "",
+    val title      : String = "",
+    val coverImg   : String = "",
+    val authorName : String = "",
+    val source     : String = "serial",
+    val currentPage: Int    = 0,
 )
 
 // ─── KURDİ DERS ────────────────────────────────────────

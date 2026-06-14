@@ -124,24 +124,6 @@ async function migrateBooks() {
   console.log(`\n   ✅ ${inserted} kitap taşındı`);
 }
 
-// ── Ana akış ──────────────────────────────────────────────────────────────────
-async function main() {
-  console.log('═══════════════════════════════════════════');
-  console.log('  Heftreng — Firestore → Supabase Migration');
-  console.log(`  Mod: ${DRY_RUN ? '🔍 DRY RUN (yazma yok)' : '🚀 CANLI'}`);
-  console.log('═══════════════════════════════════════════');
-
-  await migrateAuthors();
-  await migrateBooks();
-
-  console.log('\n🎉 Migration tamamlandı!');
-}
-
-main().catch(err => {
-  console.error('FATAL:', err);
-  process.exit(1);
-});
-
 // ── 3. Follows ────────────────────────────────────────────────────────────────
 async function migrateFollows() {
   console.log('\n👥 Follows koleksiyonu okunuyor...');
@@ -226,26 +208,6 @@ async function migrateFeedSaves() {
   console.log(`\n   ✅ ${inserted} kayıt taşındı`);
 }
 
-// main'e ekle — mevcut main fonksiyonunu güncelle
-const _origMain = main;
-async function main() {
-  console.log('═══════════════════════════════════════════');
-  console.log('  Heftreng — Firestore → Supabase Migration');
-  console.log(`  Mod: ${DRY_RUN ? '🔍 DRY RUN (yazma yok)' : '🚀 CANLI'}`);
-  console.log('═══════════════════════════════════════════');
-
-  await migrateAuthors();
-  await migrateBooks();
-  await migrateFollows();
-  await migrateFeedLikes();
-  await migrateFeedSaves();
-  await syncLikeCounts();   // Firestore sayaçlarını Supabase ile senkronize et
-
-  console.log('\n🎉 Migration tamamlandı!');
-}
-
-main().catch(err => { console.error('FATAL:', err); process.exit(1); });
-
 // ── 6. Firestore likes sayaçlarını Supabase gerçek sayısıyla güncelle ─────────
 async function syncLikeCounts() {
   console.log('\n🔢 Like sayaçları senkronize ediliyor...');
@@ -288,3 +250,56 @@ async function syncLikeCounts() {
   }
   console.log(`\n   ✅ ${updated} postun like sayacı güncellendi`);
 }
+
+// ── 7. ReadingLists → reading_status ──────────────────────────────────────────
+// Firestore: readingLists/{uid}/books/{sid} → Supabase: reading_status (uid, book_id)
+async function migrateReadingStatus() {
+  console.log('\n📑 ReadingLists koleksiyonu okunuyor (collectionGroup)...');
+  const snap = await db.collectionGroup('books').get();
+  console.log(`   ${snap.size} okuma listesi kaydı bulundu`);
+  if (DRY_RUN) { console.log('   [DRY RUN] yazma atlandı'); return; }
+
+  const rows = snap.docs.map(doc => {
+    const d   = doc.data();
+    const uid = doc.ref.parent.parent ? doc.ref.parent.parent.id : '';
+    return {
+      uid:          uid,
+      book_id:      safeStr(d.sid) || doc.id,
+      status:       safeStr(d.status),
+      title:        safeStr(d.title),
+      cover_img:    safeStr(d.coverImg),
+      bg:           safeStr(d.bg),
+      author_name:  safeStr(d.authorName),
+      source:       safeStr(d.source) || 'serial',
+      current_page: safeInt(d.currentPage),
+    };
+  }).filter(r => r.uid && r.book_id && r.status);
+
+  let inserted = 0;
+  for (const batch of chunk(rows, BATCH_SIZE)) {
+    const { error } = await supabase.from('reading_status').upsert(batch, { onConflict: 'uid,book_id' });
+    if (error) console.error('   ❌ ReadingStatus batch hatası:', error.message);
+    else { inserted += batch.length; process.stdout.write(`   ✅ ${inserted}/${rows.length}\r`); }
+  }
+  console.log(`\n   ✅ ${inserted} okuma listesi kaydı taşındı`);
+}
+
+// main'e ekle — Öncelik 2: reading_status migrasyonu
+async function main() {
+  console.log('═══════════════════════════════════════════');
+  console.log('  Heftreng — Firestore → Supabase Migration');
+  console.log(`  Mod: ${DRY_RUN ? '🔍 DRY RUN (yazma yok)' : '🚀 CANLI'}`);
+  console.log('═══════════════════════════════════════════');
+
+  await migrateAuthors();
+  await migrateBooks();
+  await migrateFollows();
+  await migrateFeedLikes();
+  await migrateFeedSaves();
+  await migrateReadingStatus();
+  await syncLikeCounts();   // Firestore sayaçlarını Supabase ile senkronize et
+
+  console.log('\n🎉 Migration tamamlandı!');
+}
+
+main().catch(err => { console.error('FATAL:', err); process.exit(1); });

@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -260,6 +261,16 @@ fun ProfileScreen(
                 )
             }
 
+            // ── 1b. Okuma Özeti Hero — "X kitap okudum · Y alıntı · Z gün streak" ──
+            item(key = "reading_summary_hero") {
+                ReadingSummaryHero(
+                    booksRead   = rlEntries["okudum"]?.size ?: 0,
+                    quotesCount = posts.count { it.quoteText.isNotBlank() },
+                    streak      = user?.streak ?: 0,
+                    language    = language,
+                )
+            }
+
             // ── 2. Tab bar — stickyHeader ────────────────────────────────
             stickyHeader(key = "tab_bar") {
                 TabRow(
@@ -334,7 +345,7 @@ fun ProfileScreen(
                 }
             } else when (selectedTab) {
 
-                // ─── Gönderiler (artık 2. sekme = index 1) ──────────────────
+                // ─── Gönderiler ───────────────────────────────────────────
                 1 -> {
                     if (loading && posts.isEmpty()) {
                         item(key = "posts_loading") {
@@ -418,7 +429,7 @@ fun ProfileScreen(
                     }
                 }
 
-                // ─── Kitaplar & Seriler (artık 3. sekme = index 2) ──────────
+                // ─── Kitaplar & Seriler ───────────────────────────────────
                 2 -> {
                     val allMyContent = allMyBooks
                     if (allMyContent.isEmpty()) {
@@ -510,7 +521,7 @@ fun ProfileScreen(
                     }
                 }
 
-                // ─── Okuma Listesi (artık 1. sekme = index 0) ───────────────
+                // ─── Okuma Listesi ────────────────────────────────────────
                 0 -> {
                     val allEmpty = rlEntries.values.all { it.isEmpty() }
                     if (allEmpty) {
@@ -812,21 +823,6 @@ private fun ProfileHeader(
                 StatItem(followingCount, Strings.following(language),   onClick = onFollowing)
                 if ((user?.xp ?: 0) > 0) StatItem(user?.xp ?: 0, "XP", onClick = null)
             }
-
-            // ── Okuma Özet Kartı (Öncelik 1) ─────────────────────────────
-            val booksRead    = user?.booksRead    ?: 0
-            val quotesShared = user?.quotesShared ?: 0
-            val streak       = user?.streak       ?: 0
-            if (booksRead > 0 || quotesShared > 0 || streak > 0) {
-                Spacer(Modifier.height(10.dp))
-                ReadingSummaryCard(
-                    booksRead    = booksRead,
-                    quotesShared = quotesShared,
-                    streak       = streak,
-                    language     = language,
-                )
-            }
-
             Spacer(Modifier.height(12.dp))
             HorizontalDivider(color = Divider)
         }
@@ -876,78 +872,70 @@ private fun RlEntryRow(entry: ReadingListEntry, onClick: () -> Unit) {
 }
 
 @Composable
-fun ReadingSummaryCard(
-    booksRead   : Int,
-    quotesShared: Int,
-    streak      : Int,
-    language    : String,
+fun ReadingSummaryHero(
+    booksRead  : Int,
+    quotesCount: Int,
+    streak     : Int,
+    language   : String = "tr",
 ) {
-    val ku = language == "ku"
-    androidx.compose.material3.Card(
-        modifier  = Modifier.fillMaxWidth(),
-        shape     = RoundedCornerShape(14.dp),
-        colors    = CardDefaults.cardColors(containerColor = Color.Transparent),
-        elevation = CardDefaults.cardElevation(0.dp),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(Primary.copy(alpha = 0.18f), Amber.copy(alpha = 0.10f))
+                )
+            )
+            .padding(vertical = 14.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment     = Alignment.CenterVertically,
     ) {
-        androidx.compose.foundation.layout.Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    androidx.compose.ui.graphics.Brush.linearGradient(
-                        listOf(Amber.copy(alpha = 0.12f), Primary.copy(alpha = 0.08f))
-                    ),
-                    RoundedCornerShape(14.dp),
-                )
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-        ) {
-            Row(
-                modifier              = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                ReadingStat(
-                    icon  = Icons.Outlined.MenuBook,
-                    value = booksRead.toString(),
-                    label = if (ku) "Pirtûk" else "Kitap",
-                )
-                ReadingStatDivider()
-                ReadingStat(
-                    icon  = Icons.Outlined.FormatQuote,
-                    value = quotesShared.toString(),
-                    label = if (ku) "Gotin" else "Alıntı",
-                )
-                ReadingStatDivider()
-                ReadingStat(
-                    icon  = Icons.Filled.Whatshot,
-                    value = "$streak ${if (ku) "roj" else "gün"}",
-                    label = "Streak",
-                    iconTint = if (streak > 0) Color(0xFFEF4444) else Muted,
-                )
-            }
-        }
+        ReadingHeroStat(
+            icon  = Icons.Outlined.AutoStories,
+            value = booksRead.toString(),
+            label = if (language == "ku") "pirtûk xwendin" else "kitap okudum",
+        )
+        ReadingHeroDivider()
+        ReadingHeroStat(
+            icon  = Icons.Outlined.FormatQuote,
+            value = quotesCount.toString(),
+            label = if (language == "ku") "gotin" else "alıntı",
+        )
+        ReadingHeroDivider()
+        ReadingHeroStat(
+            icon  = Icons.Outlined.LocalFireDepartment,
+            value = streak.toString(),
+            label = if (language == "ku") "roj streak" else "gün streak",
+            valueColor = Amber,
+        )
     }
 }
 
 @Composable
-private fun ReadingStat(
-    icon    : androidx.compose.ui.graphics.vector.ImageVector,
-    value   : String,
-    label   : String,
-    iconTint: Color = Amber,
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Icon(icon, null, tint = iconTint, modifier = Modifier.size(18.dp))
-        Text(value, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-        Text(label, color = Muted, fontSize = 10.sp)
-    }
-}
-
-@Composable
-private fun ReadingStatDivider() {
-    androidx.compose.material3.VerticalDivider(
-        modifier  = Modifier.height(36.dp),
-        color     = Divider,
-        thickness = 0.5.dp,
+private fun ReadingHeroDivider() {
+    Box(
+        modifier = Modifier
+            .width(1.dp)
+            .height(32.dp)
+            .background(Divider)
     )
+}
+
+@Composable
+private fun ReadingHeroStat(
+    icon      : ImageVector,
+    value     : String,
+    label     : String,
+    valueColor: Color = OnBackground,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(icon, null, tint = valueColor, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.height(2.dp))
+        Text(value, fontWeight = FontWeight.Bold, color = valueColor, fontSize = 16.sp)
+        Text(label, color = Muted, fontSize = 11.sp)
+    }
 }
 
 @Composable

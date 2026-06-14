@@ -525,20 +525,22 @@ class BookViewModel @Inject constructor(
 
     fun initReadPrefs(context: Context) {}
 
+    // Supabase: read_progress (uid, parent_id, chapter_id) — yüksek frekanslı
+    // scroll yüzdesi artık Firestore'da değil (fatura optimizasyonu).
     fun saveReadProgress(parentId: String, chapterId: String, scrollPct: Float) {
         if (uid.isEmpty()) return
         val pct = (scrollPct * 1000).toInt().coerceIn(0, 1000)
+        _readProgressCache["${parentId}_$chapterId"] = scrollPct
         viewModelScope.launch {
             try {
-                firestore.collection("users").document(uid)
-                    .collection("readProgress")
-                    .document("${parentId}_$chapterId")
-                    .set(mapOf(
-                        "parentId"  to parentId,
-                        "chapterId" to chapterId,
-                        "pct"       to pct,
-                        "updatedAt" to Timestamp.now(),
-                    )).await()
+                supabase.postgrest["read_progress"].upsert(
+                    com.heftreng.app.data.model.ReadProgressRow(
+                        uid       = uid,
+                        parentId  = parentId,
+                        chapterId = chapterId,
+                        pct       = pct,
+                    )
+                )
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
@@ -547,12 +549,15 @@ class BookViewModel @Inject constructor(
         if (uid.isEmpty()) { onResult(0f); return }
         viewModelScope.launch {
             try {
-                val doc = firestore.collection("users").document(uid)
-                    .collection("readProgress")
-                    .document("${parentId}_$chapterId")
-                    .get().await()
-                val pct = (doc.getLong("pct") ?: 0L).toInt()
-                onResult(pct / 1000f)
+                val row = supabase.postgrest["read_progress"].select {
+                    filter {
+                        eq("uid", uid)
+                        eq("parent_id", parentId)
+                        eq("chapter_id", chapterId)
+                    }
+                    limit(1)
+                }.decodeSingleOrNull<com.heftreng.app.data.model.ReadProgressRow>()
+                onResult((row?.pct ?: 0) / 1000f)
             } catch (e: Exception) { onResult(0f) }
         }
     }
@@ -566,12 +571,15 @@ class BookViewModel @Inject constructor(
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
-                val doc = firestore.collection("users").document(uid)
-                    .collection("readProgress")
-                    .document("${parentId}_$chapterId")
-                    .get().await()
-                val pct = (doc.getLong("pct") ?: 0L).toInt()
-                _readProgressCache["${parentId}_$chapterId"] = pct / 1000f
+                val row = supabase.postgrest["read_progress"].select {
+                    filter {
+                        eq("uid", uid)
+                        eq("parent_id", parentId)
+                        eq("chapter_id", chapterId)
+                    }
+                    limit(1)
+                }.decodeSingleOrNull<com.heftreng.app.data.model.ReadProgressRow>()
+                _readProgressCache["${parentId}_$chapterId"] = (row?.pct ?: 0) / 1000f
             } catch (e: Exception) { }
         }
     }
@@ -581,10 +589,13 @@ class BookViewModel @Inject constructor(
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
-                firestore.collection("users").document(uid)
-                    .collection("readProgress")
-                    .document("${parentId}_$chapterId")
-                    .delete().await()
+                supabase.postgrest["read_progress"].delete {
+                    filter {
+                        eq("uid", uid)
+                        eq("parent_id", parentId)
+                        eq("chapter_id", chapterId)
+                    }
+                }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }

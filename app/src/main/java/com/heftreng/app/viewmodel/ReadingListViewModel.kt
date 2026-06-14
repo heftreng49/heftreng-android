@@ -3,14 +3,12 @@ package com.heftreng.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.ReadingListEntry
+import com.heftreng.app.data.repository.LibraryRepository
+import com.heftreng.app.data.repository.ReadingStatusRow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 // Okuma listesi durumları — XML temasıyla birebir aynı
@@ -21,10 +19,31 @@ enum class RlStatus(val key: String, val labelTr: String, val labelKu: String, v
     DROPPED   ("biraktim",           "Bıraktım",            "Berda",             0xFFDC2626),
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+//  ReadingListViewModel — Supabase tabanlı (v2)
+//
+//  Okuma + Yazma: Supabase reading_status tablosu (Firestore readingLists/
+//  taşındı). uid+book_id birincil anahtar — hem library_books hem
+//  serials/books içerikleri için aynı tablo kullanılır (source alanı ile
+//  ayrılır).
+// ═══════════════════════════════════════════════════════════════════════
+
+private fun ReadingStatusRow.toDomain() = ReadingListEntry(
+    sid         = bookId,
+    title       = title,
+    coverImg    = coverImg,
+    bg          = bg,
+    status      = status,
+    updatedAt   = null,
+    source      = source,
+    authorName  = authorName,
+    currentPage = currentPage,
+)
+
 @HiltViewModel
 class ReadingListViewModel @Inject constructor(
-    private val auth     : FirebaseAuth,
-    private val firestore: FirebaseFirestore,
+    private val auth   : FirebaseAuth,
+    private val library: LibraryRepository,
 ) : ViewModel() {
 
     // status → liste
@@ -37,33 +56,19 @@ class ReadingListViewModel @Inject constructor(
     val uid get() = auth.currentUser?.uid ?: ""
 
     // ── Okuma listesini yükle ───────────────────────────
-    // Firestore: readingLists/{uid}/books — status'a göre grupla
+    // Supabase: reading_status — uid'e göre çek, status'a göre grupla
     fun load(targetUid: String = uid) {
         if (targetUid.isEmpty()) return
         viewModelScope.launch {
             _loading.value = true
             try {
-                val snap = firestore.collection("readingLists")
-                    .document(targetUid)
-                    .collection("books")
-                    .orderBy("updatedAt", Query.Direction.DESCENDING)
-                    .limit(50).get().await()
+                val rows = library.getReadingStatus(targetUid, limit = 50)
 
                 val map = mutableMapOf<String, MutableList<ReadingListEntry>>()
                 RlStatus.values().forEach { map[it.key] = mutableListOf() }
 
-                snap.documents.forEach { doc ->
-                    val d   = doc.data ?: return@forEach
-                    val ent = ReadingListEntry(
-                        sid        = d["sid"]        as? String ?: doc.id,
-                        title      = d["title"]      as? String ?: "",
-                        coverImg   = d["coverImg"]   as? String ?: "",
-                        bg         = d["bg"]         as? String ?: "",
-                        status     = d["status"]     as? String ?: "",
-                        updatedAt  = d["updatedAt"]  as? com.google.firebase.Timestamp,
-                        source     = d["source"]     as? String ?: "serial",
-                        authorName = d["authorName"] as? String ?: "",
-                    )
+                rows.forEach { row ->
+                    val ent = row.toDomain()
                     map.getOrPut(ent.status) { mutableListOf() }.add(ent)
                 }
                 _entries.value = map
@@ -73,36 +78,25 @@ class ReadingListViewModel @Inject constructor(
     }
 
     // ── Durumu güncelle / ekle ──────────────────────────
-    // Firestore: readingLists/{uid}/books/{sid}
-    // Alanlar: sid, title, coverImg, bg, status, updatedAt
+    // Supabase: reading_status (uid, book_id) — upsert / delete
     fun setStatus(sid: String, title: String, coverImg: String, bg: String, status: RlStatus?) {
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
-                val ref = firestore.collection("readingLists")
-                    .document(uid).collection("books").document(sid)
-                val prevStatus = getStatus(sid)
                 if (status == null) {
-                    ref.delete().await()
+                    library.deleteReadingStatus(uid, sid)
                 } else {
-                    ref.set(mapOf(
-                        "sid"       to sid,
-                        "title"     to title,
-                        "coverImg"  to coverImg,
-                        "bg"        to bg,
-                        "status"    to status.key,
-                        "updatedAt" to FieldValue.serverTimestamp(),
-                    )).await()
-                }
-                // booksRead sayacı güncelle
-                val userRef = firestore.collection("users").document(uid)
-                when {
-                    status == RlStatus.READ && prevStatus != RlStatus.READ ->
-                        userRef.update("booksRead", FieldValue.increment(1)).await()
-                    status != RlStatus.READ && prevStatus == RlStatus.READ ->
-                        userRef.update("booksRead", FieldValue.increment(-1)).await()
-                    status == null && prevStatus == RlStatus.READ ->
-                        userRef.update("booksRead", FieldValue.increment(-1)).await()
+                    library.upsertReadingStatus(
+                        ReadingStatusRow(
+                            uid      = uid,
+                            bookId   = sid,
+                            status   = status.key,
+                            title    = title,
+                            coverImg = coverImg,
+                            bg       = bg,
+                            source   = "serial",
+                        )
+                    )
                 }
                 load()
             } catch (e: Exception) { e.printStackTrace() }
@@ -123,7 +117,7 @@ class ReadingListViewModel @Inject constructor(
     fun remove(sid: String) = setStatus(sid, "", "", "", null)
 
     // ══════════════════════════════════════════════════════════════════════
-    //  KÜTÜPHANEKİTABI — library_books koleksiyonu için ayrı fonksiyonlar
+    //  KÜTÜPHANE KİTABI — library_books için ayrı fonksiyonlar
     //  source = "library" olarak kaydeder, profil navigate ayrımı buradan
     // ══════════════════════════════════════════════════════════════════════
 
@@ -137,32 +131,21 @@ class ReadingListViewModel @Inject constructor(
         if (uid.isEmpty()) return
         viewModelScope.launch {
             try {
-                val ref = firestore.collection("readingLists")
-                    .document(uid).collection("books").document(bookId)
-                val prevStatus = getStatus(bookId)
                 if (status == null) {
-                    ref.delete().await()
+                    library.deleteReadingStatus(uid, bookId)
                 } else {
-                    ref.set(mapOf(
-                        "sid"        to bookId,
-                        "title"      to title,
-                        "coverImg"   to coverImg,
-                        "bg"         to "",
-                        "authorName" to authorName,
-                        "source"     to "library",
-                        "status"     to status.key,
-                        "updatedAt"  to FieldValue.serverTimestamp(),
-                    )).await()
-                }
-                // booksRead sayacı güncelle
-                val userRef = firestore.collection("users").document(uid)
-                when {
-                    status == RlStatus.READ && prevStatus != RlStatus.READ ->
-                        userRef.update("booksRead", FieldValue.increment(1)).await()
-                    status != RlStatus.READ && prevStatus == RlStatus.READ ->
-                        userRef.update("booksRead", FieldValue.increment(-1)).await()
-                    status == null && prevStatus == RlStatus.READ ->
-                        userRef.update("booksRead", FieldValue.increment(-1)).await()
+                    library.upsertReadingStatus(
+                        ReadingStatusRow(
+                            uid        = uid,
+                            bookId     = bookId,
+                            status     = status.key,
+                            title      = title,
+                            coverImg   = coverImg,
+                            bg         = "",
+                            authorName = authorName,
+                            source     = "library",
+                        )
+                    )
                 }
                 load()
             } catch (e: Exception) { e.printStackTrace() }
@@ -172,4 +155,32 @@ class ReadingListViewModel @Inject constructor(
     fun getLibraryBookStatus(bookId: String): RlStatus? = getStatus(bookId)
 
     fun removeLibraryBook(bookId: String) = setLibraryBookStatus(bookId, "", "", "", null)
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  Okuma ilerlemesi — "X. sayfadayım" paylaşımı (Goodreads benzeri)
+    //  Mevcut durumu korur, sadece current_page'i günceller.
+    // ══════════════════════════════════════════════════════════════════════
+
+    fun updateCurrentPage(sid: String, currentPage: Int) {
+        if (uid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val existing = _entries.value.values.flatten().find { it.sid == sid } ?: return@launch
+                library.upsertReadingStatus(
+                    ReadingStatusRow(
+                        uid         = uid,
+                        bookId      = sid,
+                        status      = existing.status,
+                        title       = existing.title,
+                        coverImg    = existing.coverImg,
+                        bg          = existing.bg,
+                        authorName  = existing.authorName,
+                        source      = existing.source,
+                        currentPage = currentPage,
+                    )
+                )
+                load()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
 }

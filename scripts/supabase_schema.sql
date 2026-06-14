@@ -91,12 +91,57 @@ create table if not exists author_follows (
 );
 create index if not exists author_follows_user_id_idx on author_follows (user_id);
 
+-- ── Reading Status — okuma listesi (readingLists/{uid}/books taşındı) ──
+-- Hem library_books (source='library') hem serials/books (source='serial'|'book')
+-- içerikleri için tek tablo. current_page → "Arkadaşlar ne okuyor?" şeridi.
+create table if not exists reading_status (
+    uid          text not null,
+    book_id      text not null,
+    status       text not null check (status in ('okuyorum','okumak_istiyorum','okudum','biraktim')),
+    title        text default '',
+    cover_img    text default '',
+    bg           text default '',
+    author_name  text default '',
+    source       text default 'serial',
+    current_page int  default 0,
+    updated_at   timestamptz default now(),
+    primary key (uid, book_id)
+);
+create index if not exists reading_status_uid_idx    on reading_status (uid);
+create index if not exists reading_status_status_idx on reading_status (status);
+
+-- ── Read Progress — bölüm bazlı okuma yüzdesi (users/{uid}/readProgress taşındı) ──
+-- Yüksek frekanslı yazma (scroll yüzdesi) — Firestore'da pahalıydı, Supabase'e taşındı.
+create table if not exists read_progress (
+    uid        text not null,
+    parent_id  text not null,
+    chapter_id text not null,
+    pct        int  default 0,
+    updated_at timestamptz default now(),
+    primary key (uid, parent_id, chapter_id)
+);
+create index if not exists read_progress_uid_idx on read_progress (uid);
+
+-- ── Daily Activity — streak'i genişletmek için günlük aktivite kaydı ──
+-- Kurdî ders streak'inden ayrı: okuma/etkileşim bazlı genel streak.
+create table if not exists daily_activity (
+    uid           text not null,
+    activity_date date not null,
+    actions       int  default 0,
+    created_at    timestamptz default now(),
+    primary key (uid, activity_date)
+);
+create index if not exists daily_activity_uid_idx on daily_activity (uid);
+
 -- ── Row Level Security ────────────────────────────────────────
 alter table authors        enable row level security;
 alter table library_books  enable row level security;
 alter table book_quotes    enable row level security;
 alter table book_reviews   enable row level security;
 alter table author_follows enable row level security;
+alter table reading_status enable row level security;
+alter table read_progress  enable row level security;
+alter table daily_activity enable row level security;
 
 -- Herkes okuyabilir
 do $$ begin
@@ -105,6 +150,9 @@ do $$ begin
   if not exists (select 1 from pg_policies where tablename='book_quotes'    and policyname='public_read_book_quotes')    then create policy "public_read_book_quotes"    on book_quotes    for select using (true); end if;
   if not exists (select 1 from pg_policies where tablename='book_reviews'   and policyname='public_read_book_reviews')   then create policy "public_read_book_reviews"   on book_reviews   for select using (true); end if;
   if not exists (select 1 from pg_policies where tablename='author_follows' and policyname='public_read_author_follows') then create policy "public_read_author_follows" on author_follows  for select using (true); end if;
+  if not exists (select 1 from pg_policies where tablename='reading_status' and policyname='public_read_reading_status') then create policy "public_read_reading_status" on reading_status for select using (true); end if;
+  if not exists (select 1 from pg_policies where tablename='read_progress'  and policyname='public_read_read_progress')  then create policy "public_read_read_progress"  on read_progress  for select using (true); end if;
+  if not exists (select 1 from pg_policies where tablename='daily_activity' and policyname='public_read_daily_activity') then create policy "public_read_daily_activity" on daily_activity for select using (true); end if;
 end $$;
 
 -- Yazma: service_role key ile (workflow'dan, Android'dan değil)
@@ -130,5 +178,14 @@ do $$ begin
   end if;
   if not exists (select 1 from pg_policies where tablename='library_books' and policyname='upsert_library_books') then
     create policy "upsert_library_books" on library_books for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='reading_status' and policyname='upsert_reading_status') then
+    create policy "upsert_reading_status" on reading_status for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='read_progress' and policyname='upsert_read_progress') then
+    create policy "upsert_read_progress" on read_progress for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='daily_activity' and policyname='upsert_daily_activity') then
+    create policy "upsert_daily_activity" on daily_activity for all using (true) with check (true);
   end if;
 end $$;
