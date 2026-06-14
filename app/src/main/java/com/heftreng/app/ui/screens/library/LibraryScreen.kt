@@ -155,19 +155,7 @@ fun LibraryScreen(
     LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
     Scaffold(
         containerColor = Background,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text       = Strings.libraryTitle(language),
-                        color      = OnBackground,
-                        fontWeight = FontWeight.Bold,
-                        fontSize   = 20.sp,
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
-            )
-        },
+        // TopAppBar kaldırıldı — NavHost'taki Discover TopAppBar kullanılıyor
         floatingActionButton = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.End) {
                 // Admin: sekmeye göre yazar/kitap ekle
