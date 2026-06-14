@@ -161,6 +161,13 @@ service cloud.firestore {
             && !('isLikedByMe' in request.resource.data);
         allow update: if isAuth() && onlyChanging(['likesCount']);
         allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
+
+        // Yorum beğenileri — her kullanıcı kendi beğeni belgesini yazar/okur
+        match /likes/{likeUid} {
+          allow read: if isAuth();
+          allow create: if isAuth() && likeUid == request.auth.uid;
+          allow delete: if isAuth() && likeUid == request.auth.uid;
+        }
       }
     }
 

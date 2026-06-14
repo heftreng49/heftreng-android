@@ -507,8 +507,8 @@ class FeedViewModel @Inject constructor(
                                 .decodeList<FeedLikeRow>().size
                         } catch (_: Exception) { -1 }
                         try {
-                            if (realCount >= 0) postRef.update("likes", realCount).await()
-                            else postRef.update("likes", FieldValue.increment(1)).await()
+                            if (realCount >= 0) postRef.update("likesCount", realCount).await()
+                            else postRef.update("likesCount", FieldValue.increment(1)).await()
                         } catch (_: Exception) {}
                         if (post.uid != uid) sendNotif(post.uid, "like", "$myName gönderini beğendi", post.text.take(60), post.id)
                     }
@@ -523,8 +523,8 @@ class FeedViewModel @Inject constructor(
                             .decodeList<FeedLikeRow>().size
                     } catch (_: Exception) { -1 }
                     try {
-                        if (realCount >= 0) postRef.update("likes", realCount).await()
-                        else postRef.update("likes", FieldValue.increment(-1)).await()
+                        if (realCount >= 0) postRef.update("likesCount", realCount).await()
+                        else postRef.update("likesCount", FieldValue.increment(-1)).await()
                     } catch (_: Exception) {}
                 }
             } catch (e: Exception) { e.printStackTrace() }
@@ -548,10 +548,10 @@ class FeedViewModel @Inject constructor(
                     .collection("comments").document(comment.id)
                 if (nowLiked) {
                     likeRef.set(mapOf("uid" to uid, "ts" to Timestamp.now())).await()
-                    cmtRef.update("likes", FieldValue.increment(1)).await()
+                    cmtRef.update("likesCount", FieldValue.increment(1)).await()
                 } else {
                     likeRef.delete().await()
-                    cmtRef.update("likes", FieldValue.increment(-1)).await()
+                    cmtRef.update("likesCount", FieldValue.increment(-1)).await()
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -635,12 +635,12 @@ class FeedViewModel @Inject constructor(
                     "displayName"  to myName,
                     "photoURL"     to myPhoto,
                     "text"         to text,
-                    "likes"        to 0,
+                    "likesCount"  to 0,
                     "replyTo"      to "",
                     "replyToCmtId" to "",
                     "ts"           to Timestamp.now(),
                 )).await()
-                firestore.collection("feed").document(post.id).update("cmtCount", FieldValue.increment(1)).await()
+                firestore.collection("feed").document(post.id).update("commentsCount", FieldValue.increment(1)).await()
                 _posts.value = _posts.value.map {
                     if (it.id == post.id) it.copy(commentsCount = it.commentsCount + 1) else it
                 }
@@ -663,7 +663,7 @@ class FeedViewModel @Inject constructor(
                 firestore.collection("feed").document(postId)
                     .collection("comments").document(commentId).delete().await()
                 firestore.collection("feed").document(postId)
-                    .update("cmtCount", FieldValue.increment(-1)).await()
+                    .update("commentsCount", FieldValue.increment(-1)).await()
                 _comments.value = _comments.value.filter { it.id != commentId }
                 _posts.value = _posts.value.map {
                     if (it.id == postId) it.copy(commentsCount = maxOf(0, it.commentsCount - 1)) else it

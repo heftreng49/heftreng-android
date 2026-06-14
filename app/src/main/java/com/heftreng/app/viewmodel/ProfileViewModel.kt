@@ -494,8 +494,8 @@ class ProfileViewModel @Inject constructor(
                                 .decodeList<com.heftreng.app.data.model.FeedLikeRow>().size
                         } catch (_: Exception) { -1 }
                         try {
-                            if (realCount >= 0) pRef.update("likes", realCount).await()
-                            else pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                            if (realCount >= 0) pRef.update("likesCount", realCount).await()
+                            else pRef.update("likesCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
                         } catch (_: Exception) {}
 
                         if (post.uid.isNotEmpty() && post.uid != myUid) {
@@ -518,8 +518,8 @@ class ProfileViewModel @Inject constructor(
                             .decodeList<com.heftreng.app.data.model.FeedLikeRow>().size
                     } catch (_: Exception) { -1 }
                     try {
-                        if (realCount >= 0) pRef.update("likes", realCount).await()
-                        else pRef.update("likes", com.google.firebase.firestore.FieldValue.increment(-1)).await()
+                        if (realCount >= 0) pRef.update("likesCount", realCount).await()
+                        else pRef.update("likesCount", com.google.firebase.firestore.FieldValue.increment(-1)).await()
                     } catch (_: Exception) {}
                 }
             } catch (e: Exception) { e.printStackTrace() }
