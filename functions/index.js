@@ -910,19 +910,19 @@ exports.cleanOrphanUsers = onRequest({ region: "europe-west1" }, async (req, res
 
 // ══════════════════════════════════════════════════════════════════════════
 //  Öncelik 3 — Retention: Günün Alıntısı + Yazara Abone Olunca Bildirim
-//  Supabase: book_quotes, book_reviews, author_follows tabloları (anon key
-//  yeterli — RLS public_read açık). SUPABASE_URL / SUPABASE_ANON_KEY env
-//  değişkenleri Cloud Functions config'ine eklenmeli:
-//    firebase functions:config:set supabase.url="..." supabase.anon_key="..."
-//  veya v2'de process.env (Secret Manager) kullanın.
+//  Supabase: book_quotes, book_reviews, author_follows tabloları (RLS
+//  public_read açık — anon key yeterli). Mevcut GitHub secret'ları
+//  (SUPABASE_URL, SUPABASE_SERVICE_KEY) deploy sırasında functions/.env
+//  dosyasına yazılır — bkz. .github/workflows/deploy-firebase.yml.
+//  SUPABASE_ANON_KEY varsa o öncelikli, yoksa SUPABASE_SERVICE_KEY kullanılır.
 // ══════════════════════════════════════════════════════════════════════════
 
 function getSupabase() {
   const { createClient } = require("@supabase/supabase-js");
-  const url    = process.env.SUPABASE_URL;
-  const anon   = process.env.SUPABASE_ANON_KEY;
-  if (!url || !anon) throw new Error("SUPABASE_URL / SUPABASE_ANON_KEY tanımlı değil");
-  return createClient(url, anon);
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_KEY;
+  if (!url || !key) throw new Error("SUPABASE_URL / SUPABASE_ANON_KEY (veya SUPABASE_SERVICE_KEY) tanımlı değil");
+  return createClient(url, key);
 }
 
 // ─── notifyAuthorFollowers — HTTPS Callable (v2) ────────────────────────────

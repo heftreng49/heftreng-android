@@ -32,6 +32,16 @@ jobs:
           rm -rf node_modules package-lock.json
           npm install
 
+      - name: Configure Supabase env (2nd gen functions)
+        # Firebase Functions v2, deploy sırasında functions/.env.<project-id>
+        # dosyasını otomatik yükler ve process.env'e koyar.
+        run: |
+          cat <<EOF > functions/.env.bloggerheftreng
+          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
+          EOF
+
       - name: Deploy to Firebase
         run: firebase deploy --only functions,firestore:rules,firestore:indexes --force --project bloggerheftreng --token "$FIREBASE_TOKEN"
         env:
