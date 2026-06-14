@@ -68,9 +68,11 @@ class SocialViewModel @Inject constructor(
             _likers.value  = emptyList()
             try {
                 val rows = supabase.postgrest["feed_likes"]
-                    .select { filter { eq("post_id", postId) }; limit(50); order("created_at", Order.DESCENDING) }
+                    .select { filter { eq("post_id", postId) }; limit(100); order("created_at", Order.DESCENDING) }
                     .decodeList<FeedLikeRow>()
-                _likers.value = enrichLikes(rows.map { LikeEntry(uid = it.uid, name = it.name.orEmpty(), photoURL = it.photoUrl.orEmpty()) })
+                // Eski duplicate kayıtlar varsa (aynı kişi birden fazla beğeni) — uid'e göre benzersizleştir
+                val uniqueRows = rows.distinctBy { it.uid }
+                _likers.value = enrichLikes(uniqueRows.map { LikeEntry(uid = it.uid, name = it.name.orEmpty(), photoURL = it.photoUrl.orEmpty()) })
             } catch (e: Exception) {
                 android.util.Log.e("SocialVM", "loadPostLikers: ${e.message}")
             } finally { _loading.value = false }

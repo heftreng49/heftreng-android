@@ -48,12 +48,13 @@ exports.onNewNotif = onDocumentCreated(
     const data = event.data?.data();
     if (!data) { console.warn("[HF Trigger] Belge boş — uid:", uid); return; }
 
-    const type    = data.type    || "default";
-    const title   = data.title   || "Heftreng";
-    const body    = data.sub     || data.message || "";
-    const postId  = data.feedId  || data.postId  || "";
-    const fromUid = data.fromUid || "";
-    const convId  = data.convId  || "";
+    const type     = data.type    || "default";
+    const title    = data.title   || "Heftreng";
+    const body     = data.sub     || data.message || "";
+    const postId   = data.feedId  || data.postId  || "";
+    const fromUid  = data.fromUid || "";
+    const convId   = data.convId  || "";
+    const imageUrl = data.imageUrl || "";
 
     let url = "https://heft-reng.blogspot.com/";
     if (type === "message") url = "https://heft-reng.blogspot.com/p/mesajlar.html";
@@ -79,7 +80,7 @@ exports.onNewNotif = onDocumentCreated(
     const msg = {
       token: fcmToken,
       android: { priority: "high" },
-      data: { type, postId, fromUid, convId, url, title, body, channelId },
+      data: { type, postId, fromUid, convId, url, title, body, channelId, imageUrl },
     };
     const STALE = [
       "messaging/registration-token-not-registered",
@@ -159,6 +160,79 @@ exports.sendPush = onCall(
     }
   }
 );
+
+// ─── sendBroadcastPush — HTTPS Callable (v2) ────────────────────────────────
+// Admin tarafından "Herkese gönder" — tüm kullanıcılara userNotifs/{uid}/msgs
+// yazar. onNewNotif trigger'ı her biri için otomatik FCM push gönderir.
+// Böylece in-app bildirim listesi VE push aynı kaynaktan, tek seferde gelir.
+exports.sendBroadcastPush = onCall(
+  { region: "europe-west1", cors: true, timeoutSeconds: 540, memory: "512MiB" },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+
+    // Admin yetkisi kontrolü — admins/{uid} dökümanındaki role veya permissions
+    const db = getFirestore();
+    const adminUid = request.auth.uid;
+    let isAdmin = false;
+    try {
+      const adminDoc = await db.collection("admins").doc(adminUid).get();
+      if (adminDoc.exists) {
+        const d = adminDoc.data() || {};
+        const role = d.role || "";
+        const legacyPerms = Array.isArray(d.permissions) ? d.permissions : [];
+        // role==="admin" → tüm yetkiler (push dahil); editor rolü de push'a sahip
+        isAdmin = role === "admin" || role === "editor" || legacyPerms.includes("push");
+      }
+    } catch (_) {}
+    if (!isAdmin) throw new HttpsError("permission-denied", "Admin yetkisi gerekli.");
+
+    const { title = "Heftreng", body = "", url = "https://heft-reng.blogspot.com/",
+            postId = "", imageUrl = "" } = request.data || {};
+
+    if (!title || !body) return { success: false, reason: "missing_fields", count: 0 };
+
+    // Tüm kullanıcı uid'lerini çek (sayfalı)
+    let count = 0;
+    let lastDoc = null;
+    const BATCH_SIZE = 400; // Firestore batch limiti 500
+
+    do {
+      let q = db.collection("users").orderBy("__name__").limit(BATCH_SIZE);
+      if (lastDoc) q = q.startAfter(lastDoc);
+      const snap = await q.get();
+      if (snap.empty) break;
+
+      const batch = db.batch();
+      for (const doc of snap.docs) {
+        const uid = doc.id;
+        const ref = db.collection("userNotifs").doc(uid).collection("msgs").doc();
+        batch.set(ref, {
+          fromUid:   "",
+          fromName:  "Heftreng",
+          fromPhoto: "",
+          type:      "admin",
+          feedId:    postId,
+          postId:    postId,
+          title:     title,
+          sub:       body,
+          message:   title,
+          ico:       "campaign",
+          url:       url,
+          imageUrl:  imageUrl,
+          read:      false,
+          ts:        new Date(),
+        });
+        count++;
+      }
+      await batch.commit();
+      lastDoc = snap.docs[snap.docs.length - 1];
+    } while (true);
+
+    console.log(`[HF Broadcast] ✓ ${count} kullanıcıya bildirim yazıldı (admin: ${adminUid})`);
+    return { success: true, count };
+  }
+);
+
 
 // ─── fixNewUserDisplayName — Auth onCreate (v1 gen1) ────────────────────────
 const DISPOSABLE_DOMAINS = [

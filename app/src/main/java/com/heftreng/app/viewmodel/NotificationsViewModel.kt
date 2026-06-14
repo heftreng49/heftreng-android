@@ -9,9 +9,7 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.Notification
 import com.heftreng.app.util.AppLifecycleObserver
-import com.heftreng.app.data.model.FollowRow
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -27,7 +25,6 @@ import javax.inject.Inject
 class NotificationsViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
-    private val supabase : io.github.jan.supabase.SupabaseClient,
 ) : ViewModel() {
 
     private val _notifications = MutableStateFlow<List<Notification>>(emptyList())
@@ -36,55 +33,68 @@ class NotificationsViewModel @Inject constructor(
     private val _unreadCount = MutableStateFlow(0)
     val unreadCount = _unreadCount.asStateFlow()
 
+    // Sadece ilk yüklemede true — bildirimler zaten varken spinner gösterme
     private val _loading = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
-    private var listenerReg: ListenerRegistration? = null
+    // Pull-to-refresh için ayrı state
+    private val _refreshing = MutableStateFlow(false)
+    val refreshing = _refreshing.asStateFlow()
 
-    // uid — auth state değişince güncellenir
-    private val _uid = MutableStateFlow(auth.currentUser?.uid ?: "")
+    private var listenerReg: ListenerRegistration? = null
+    private var listenerUid: String? = null   // hangi uid için listener kurulu
 
     init {
-        // Foreground → listener başlat; background → listener kapat
-        // Böylece uygulama arka planda olduğunda Firestore okuması yapmaz.
         val foregroundCb: () -> Unit = {
             val uid = auth.currentUser?.uid
-            if (!uid.isNullOrBlank()) startListening(uid)
+            // Listener zaten bu uid için kuruluysa yeniden kurma
+            if (!uid.isNullOrBlank() && listenerUid != uid) {
+                startListening(uid)
+            }
         }
         val backgroundCb: () -> Unit = {
+            // Arka planda listener'ı kapat — FCM devralır
             listenerReg?.remove()
             listenerReg = null
+            listenerUid = null
         }
         AppLifecycleObserver.addForegroundCallback(foregroundCb)
         AppLifecycleObserver.addBackgroundCallback(backgroundCb)
 
-        // ViewModel temizlenince callback'leri kaldır — memory leak önleme
-        // onCleared() içinde de remove yapılıyor; çift güvenlik.
         viewModelScope.launch {
-            // onCleared'a kadar bekleyip temizle
             kotlinx.coroutines.awaitCancellation()
         }.invokeOnCompletion {
             AppLifecycleObserver.removeForegroundCallback(foregroundCb)
             AppLifecycleObserver.removeBackgroundCallback(backgroundCb)
         }
 
-        // Şu an zaten foreground'daysa hemen başlat
+        // Şu an foreground'daysa hemen başlat
         if (AppLifecycleObserver.isInForeground.value) {
             auth.currentUser?.uid?.let { if (it.isNotEmpty()) startListening(it) }
         }
     }
 
     private fun startListening(uid: String) {
+        // Aynı uid için listener zaten kuruluysa tekrar kurma
+        if (listenerUid == uid && listenerReg != null) return
+
         listenerReg?.remove()
-        _loading.value = true
+        listenerUid = uid
+
+        // Sadece liste tamamen boşsa spinner göster (cache varsa gösterme)
+        if (_notifications.value.isEmpty()) {
+            _loading.value = true
+        }
+
         listenerReg = firestore
             .collection("userNotifs")
             .document(uid)
             .collection("msgs")
             .orderBy("ts", Query.Direction.DESCENDING)
-            .limit(25)  // 60→25: listener başlangıçta daha az döküman çeker
+            .limit(50)
             .addSnapshotListener { snap, err ->
-                _loading.value = false
+                _loading.value   = false
+                _refreshing.value = false
                 if (err != null || snap == null) {
                     err?.printStackTrace()
                     return@addSnapshotListener
@@ -102,7 +112,6 @@ class NotificationsViewModel @Inject constructor(
                             ?: d["title"] as? String ?: "",
                         sub       = (d["sub"] as? String)?.takeIf { it.isNotBlank() }
                             ?: d["body"] as? String ?: "",
-                        // feedId → postId olarak map et
                         postId    = (d["feedId"] as? String)?.takeIf { it.isNotBlank() }
                             ?: d["postId"] as? String,
                         imageUrl  = d["imageUrl"] as? String ?: "",
@@ -116,16 +125,33 @@ class NotificationsViewModel @Inject constructor(
             }
     }
 
-    // Dışarıdan manuel reload (pull-to-refresh gibi durumlar için)
+    /** Pull-to-refresh: var olan listener'ı koru, sadece refreshing flag'ini aç */
+    fun refresh() {
+        val uid = auth.currentUser?.uid ?: return
+        _refreshing.value = true
+        // Listener zaten canlıysa Firestore otomatik günceller;
+        // yoksa yeniden kur (uid değişmiş olabilir)
+        if (listenerUid != uid || listenerReg == null) {
+            startListening(uid)
+        }
+        // Firestore snapshot gelince refreshing = false yapılacak
+        // Güvenlik için 3sn sonra kapat
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(3000)
+            _refreshing.value = false
+        }
+    }
+
+    /** Ekran ilk açıldığında çağır — listener kurulu değilse başlatır */
     fun load() {
         val uid = auth.currentUser?.uid ?: return
         startListening(uid)
     }
 
-    /** Ekrandan çıkınca çağır — listener kapatılır, FCM devralır. */
+    /** Ekrandan çıkınca çağırma — listener canlı kalsın (badge için).
+     *  Sadece ViewModel temizlenince veya arka plana geçince kapat. */
     fun stopListening() {
-        listenerReg?.remove()
-        listenerReg = null
+        // Artık ekrandan çıkınca kapatmıyoruz; AppLifecycleObserver halleder
     }
 
     fun markRead(notifId: String) {
@@ -152,7 +178,6 @@ class NotificationsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val col = firestore.collection("userNotifs").document(uid).collection("msgs")
-                // Batch ile tek network round-trip'te hepsini güncelle
                 unread.chunked(500).forEach { chunk ->
                     val batch = firestore.batch()
                     chunk.forEach { n -> batch.update(col.document(n.id), "read", true) }
@@ -162,7 +187,6 @@ class NotificationsViewModel @Inject constructor(
         }
     }
 
-    // ── Takip isteğini onayla ─────────────────────────────────
     fun acceptFollowRequest(fromUid: String, notifId: String) {
         val myUid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
@@ -179,36 +203,29 @@ class NotificationsViewModel @Inject constructor(
                 val myName  = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
                 val myPhoto = myDoc.getString("photoURL") ?: ""
 
-                // follows — Supabase'e yaz
-                supabase.postgrest["follows"].upsert(
-                    FollowRow(
-                        id          = "${fromUid}_$myUid",
-                        fromUid     = fromUid,
-                        fromName    = fromName,
-                        fromPhoto   = fromPhoto,
-                        targetUid   = myUid,
-                        targetName  = myName,
-                        targetPhoto = myPhoto,
-                    )
-                )
+                firestore.collection("follows").document("${fromUid}_$myUid").set(mapOf(
+                    "fromUid"     to fromUid,
+                    "fromName"    to fromName,
+                    "fromPhoto"   to fromPhoto,
+                    "targetUid"   to myUid,
+                    "targetName"  to myName,
+                    "targetPhoto" to myPhoto,
+                    "ts"          to com.google.firebase.Timestamp.now(),
+                )).await()
 
-                // Sayaçlar
                 firestore.collection("users").document(myUid)
                     .update("followerCount", com.google.firebase.firestore.FieldValue.increment(1))
                 firestore.collection("users").document(fromUid)
                     .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
 
-                // Bekleyen isteği sil
                 reqRef.delete().await()
 
-                // Bildirimi okundu işaretle + status güncelle
                 if (notifId.isNotBlank()) {
                     firestore.collection("userNotifs").document(myUid)
                         .collection("msgs").document(notifId)
                         .update("read", true, "status", "accepted").await()
                 }
 
-                // İsteği gönderene kabul bildirimi gönder
                 firestore.collection("userNotifs").document(fromUid).collection("msgs").add(mapOf(
                     "fromUid"   to myUid,
                     "fromName"  to myName,
@@ -225,13 +242,11 @@ class NotificationsViewModel @Inject constructor(
                     "ts"        to com.google.firebase.Timestamp.now(),
                 )).await()
 
-                // UI'da bildirimi kaldır (snapshot listener zaten güncelleyecek ama anında hissettir)
                 markRead(notifId)
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
-    // ── Takip isteğini reddet ─────────────────────────────────
     fun declineFollowRequest(fromUid: String, notifId: String) {
         val myUid = auth.currentUser?.uid ?: return
         viewModelScope.launch {

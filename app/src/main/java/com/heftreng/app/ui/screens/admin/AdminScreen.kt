@@ -64,7 +64,7 @@ fun AdminScreen(
     var pushPostId     by remember { mutableStateOf("") }
     var pushPostSearch by remember { mutableStateOf("") }
     var pushTarget     by remember { mutableStateOf("all") } // "all" | "uid" | "topic"
-    var pushTopic      by remember { mutableStateOf("all_users") }
+    // pushTopic kaldırıldı — artık sadece "Herkes" / "Kullanıcı" hedefi var
     var pushEmoji      by remember { mutableStateOf("") }
     var pushImageUrl   by remember { mutableStateOf("") }
     var pushExpanded   by remember { mutableStateOf(false) }
@@ -208,7 +208,7 @@ fun AdminScreen(
                         Text("Hedef", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(6.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("all" to "Herkes", "uid" to "Kullanıcı", "topic" to "Konu").forEach { (k, v) ->
+                            listOf("all" to "Herkes", "uid" to "Kullanıcı").forEach { (k, v) ->
                                 val selected = pushTarget == k
                                 FilterChip(
                                     selected = selected,
@@ -225,11 +225,6 @@ fun AdminScreen(
                             Spacer(Modifier.height(8.dp))
                             adminTextField(pushUid, { pushUid = it }, "Hedef UID *")
                         }
-                        if (pushTarget == "topic") {
-                            Spacer(Modifier.height(8.dp))
-                            adminTextField(pushTopic, { pushTopic = it }, "Topic (örn: all_users)")
-                        }
-
                         Spacer(Modifier.height(14.dp))
                         Divider(color = Color.White.copy(alpha = 0.08f))
                         Spacer(Modifier.height(14.dp))
@@ -374,18 +369,13 @@ fun AdminScreen(
                                     if (pushEmoji.isNotBlank()) append("$pushEmoji ")
                                     append(pushTitle)
                                 }
-                                val targetUid = when (pushTarget) {
-                                    "uid"   -> pushUid
-                                    "topic" -> ""
-                                    else    -> ""
-                                }
+                                val targetUid = if (pushTarget == "uid") pushUid else ""
                                 vm.sendPush(
                                     title    = finalTitle,
                                     body     = pushBody,
                                     url      = pushUrl,
                                     targetUid = targetUid,
                                     postId   = pushPostId,
-                                    topic    = if (pushTarget == "topic") pushTopic else if (pushTarget == "all") "all_users" else "",
                                     imageUrl = pushImageUrl,
                                 )
                             },

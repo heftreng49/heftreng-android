@@ -481,9 +481,11 @@ class ProfileViewModel @Inject constructor(
 
                     if (existing.isEmpty()) {
                         supabase.postgrest["feed_likes"].insert(
-                            com.heftreng.app.data.model.FeedLikeRow(
-                                id = "", postId = post.id,
-                                uid = myUid, name = myName, photoUrl = myPhoto,
+                            mapOf(
+                                "post_id"   to post.id,
+                                "uid"       to myUid,
+                                "name"      to myName,
+                                "photo_url" to myPhoto,
                             )
                         )
                         val realCount = try {

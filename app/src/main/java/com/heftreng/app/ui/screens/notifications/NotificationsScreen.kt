@@ -84,7 +84,8 @@ fun notifIcon(type: String): ImageVector = when (type) {
     "book_chapter"            -> Icons.Default.MenuBook
     "library_quote",
     "library_review"          -> Icons.Default.FormatQuote
-    "sys", "default"          -> Icons.Default.Campaign
+    "sys", "default", "admin"  -> Icons.Default.Campaign
+    "appeal_result"            -> Icons.Default.Gavel
     "message"                 -> Icons.Default.Message
     else                      -> Icons.Default.Notifications
 }
@@ -103,7 +104,8 @@ fun notifIconColor(type: String): Color = when (type) {
     "book_chapter"            -> Color(0xFF6366F1)
     "library_quote",
     "library_review"          -> Color(0xFF0EA5E9)
-    "sys", "default"          -> Color(0xFFF59E0B)
+    "sys", "default", "admin" -> Color(0xFFF59E0B)
+    "appeal_result"           -> Color(0xFF8B5CF6)
     "message"                 -> Color(0xFF14B8A6)
     else                      -> Color(0xFFF59E0B)
 }
@@ -143,17 +145,15 @@ fun NotificationsScreen(
     val loading       by vm.loading.collectAsState()
     val unreadCount   = notifications.count { !it.read }
 
-    var isRefreshing by remember { mutableStateOf(false) }
+    val refreshing by vm.refreshing.collectAsState()
     val pullRefreshState = rememberPullRefreshState(
-        refreshing = isRefreshing,
-        onRefresh  = { isRefreshing = true; vm.load() }
+        refreshing = refreshing,
+        onRefresh  = { vm.refresh() }
     )
-    LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
 
-    // Ekran açılınca listener başlat, kapanınca kapat — FCM devralır
-    DisposableEffect(Unit) {
+    // Ekran açılınca listener'ı başlat (zaten kuruluysa no-op)
+    LaunchedEffect(Unit) {
         vm.load()
-        onDispose { vm.stopListening() }
     }
 
     Scaffold(
@@ -298,9 +298,10 @@ fun NotificationsScreen(
             }
 
             PullRefreshIndicator(
-                refreshing = isRefreshing,
+                refreshing = refreshing,
                 state      = pullRefreshState,
                 modifier   = Modifier.align(Alignment.TopCenter),
+                contentColor = Amber,
             )
         }
     }
@@ -336,6 +337,13 @@ private fun handleNotifClick(
         "serial" -> {
             val sid = Regex("""serial/([\w-]+)""").find(notif.url)?.groupValues?.get(1)
             if (!sid.isNullOrBlank()) navController.navigate("serial/$sid")
+        }
+        "admin", "moderation", "appeal_result" -> {
+            val pid = notif.postId
+            if (!pid.isNullOrBlank()) {
+                navController.navigate(Screen.PostDetail.go(pid))
+            }
+            // url varsa ve harici linkse açma — sadece in-app navigasyon
         }
     }
 }

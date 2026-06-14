@@ -494,22 +494,48 @@ class AdminViewModel @Inject constructor(
         url      : String = "",
         targetUid: String = "",
         postId   : String = "",
-        topic    : String = "all_users",
+        topic    : String = "",
         imageUrl : String = "",
     ) {
         if (_perms.value?.can("push") != true) return
         viewModelScope.launch {
             try {
                 _pushResult.value = "Gönderiliyor…"
-                val data = hashMapOf(
-                    "targetUid" to targetUid.ifBlank { auth.currentUser?.uid ?: "" },
-                    "title" to title, "body" to body,
-                    "url"   to url.ifBlank { "https://heft-reng.blogspot.com/" },
-                    "type"  to "default",
-                )
-                com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west1")
-                    .getHttpsCallable("sendPush").call(data).await()
-                _pushResult.value = "✓ Push gönderildi"
+                if (targetUid.isBlank()) {
+                    // "Herkese gönder" veya "topic" — toplu push
+                    val data = hashMapOf<String, Any>(
+                        "title" to title, "body" to body,
+                        "url"   to url.ifBlank { "https://heft-reng.blogspot.com/" },
+                        "type"  to "default",
+                    )
+                    if (postId.isNotBlank()) data["postId"] = postId
+                    if (imageUrl.isNotBlank()) data["imageUrl"] = imageUrl
+                    val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west1")
+                        .getHttpsCallable("sendBroadcastPush").call(data).await()
+                    @Suppress("UNCHECKED_CAST")
+                    val resMap = result.data as? Map<String, Any?>
+                    val count  = (resMap?.get("count") as? Number)?.toInt() ?: 0
+                    _pushResult.value = "✓ $count kullanıcıya gönderildi"
+                } else {
+                    // Belirli bir kullanıcıya — userNotifs yazarak onNewNotif trigger'ını tetikle
+                    firestore.collection("userNotifs").document(targetUid).collection("msgs").add(mapOf(
+                        "fromUid"   to (auth.currentUser?.uid ?: ""),
+                        "fromName"  to "Heftreng",
+                        "fromPhoto" to "",
+                        "type"      to "admin",
+                        "feedId"    to postId,
+                        "postId"    to postId,
+                        "title"     to title,
+                        "sub"       to body,
+                        "ico"       to "campaign",
+                        "message"   to title,
+                        "url"       to url.ifBlank { "" },
+                        "imageUrl"  to imageUrl,
+                        "read"      to false,
+                        "ts"        to com.google.firebase.Timestamp.now(),
+                    )).await()
+                    _pushResult.value = "✓ Push gönderildi"
+                }
             } catch (e: Exception) { _pushResult.value = "✗ Hata: ${e.message}" }
         }
     }
@@ -919,9 +945,12 @@ class AdminViewModel @Inject constructor(
                 val notifTitle = when (status) { "restricted" -> "Gönderiniz kısıtlandı"; "suspended" -> "Gönderiniz askıya alındı"; "removed" -> "Gönderiniz kaldırıldı"; else -> "Gönderi durumu güncellendi" }
                 val notifBody  = reason.ifBlank { when (status) { "restricted" -> "Gönderiniz yalnızca giriş yapmış kullanıcılara gösterilecek."; "suspended" -> "Gönderiniz inceleniyor."; "removed" -> "Gönderiniz platform kurallarına aykırı bulundu."; else -> "" } }
                 if (targetUid.isNotBlank()) {
-                    firestore.collection("userNotifs").document(targetUid).collection("notifs").add(mapOf(
-                        "type" to "moderation", "title" to notifTitle, "body" to notifBody,
-                        "postId" to postId, "status" to status, "read" to false, "ts" to com.google.firebase.Timestamp.now(),
+                    firestore.collection("userNotifs").document(targetUid).collection("msgs").add(mapOf(
+                        "fromUid" to "", "fromName" to "Heftreng", "fromPhoto" to "",
+                        "type" to "moderation", "title" to notifTitle, "sub" to notifBody,
+                        "message" to notifTitle, "feedId" to postId, "postId" to postId,
+                        "ico" to "gavel", "status" to status, "url" to "",
+                        "read" to false, "ts" to com.google.firebase.Timestamp.now(),
                     )).await()
                 }
                 firestore.collection("moderationLogs").add(mapOf(
@@ -941,9 +970,12 @@ class AdminViewModel @Inject constructor(
                     "moderationStatus" to "active", "moderationReason" to "", "moderationNote" to "",
                 )).await()
                 if (targetUid.isNotBlank()) {
-                    firestore.collection("userNotifs").document(targetUid).collection("notifs").add(mapOf(
+                    firestore.collection("userNotifs").document(targetUid).collection("msgs").add(mapOf(
+                        "fromUid" to "", "fromName" to "Heftreng", "fromPhoto" to "",
                         "type" to "moderation", "title" to "Gönderiniz yeniden aktif edildi",
-                        "body" to "Gönderiniz tekrar herkese açık hale getirildi.",
+                        "sub" to "Gönderiniz tekrar herkese açık hale getirildi.",
+                        "message" to "Gönderiniz yeniden aktif edildi", "feedId" to postId, "postId" to postId,
+                        "ico" to "check_circle", "url" to "",
                         "read" to false, "ts" to com.google.firebase.Timestamp.now(),
                     )).await()
                 }
@@ -972,11 +1004,16 @@ class AdminViewModel @Inject constructor(
                     "status" to "approved", "adminNote" to adminNote, "resolvedAt" to com.google.firebase.Timestamp.now(),
                 )).await()
                 restorePost(appeal.postId, appeal.postOwnerUid)
-                firestore.collection("userNotifs").document(appeal.postOwnerUid).collection("notifs").add(mapOf(
-                    "type" to "appeal_result", "title" to "İtirazınız kabul edildi",
-                    "body" to "Gönderiniz yeniden aktif edildi. ${adminNote.ifBlank { "" }}",
-                    "postId" to appeal.postId, "read" to false, "ts" to com.google.firebase.Timestamp.now(),
-                )).await()
+                run {
+                    val appealBody = "Gönderiniz yeniden aktif edildi. ${adminNote.ifBlank { "" }}"
+                    firestore.collection("userNotifs").document(appeal.postOwnerUid).collection("msgs").add(mapOf(
+                        "fromUid" to "", "fromName" to "Heftreng", "fromPhoto" to "",
+                        "type" to "appeal_result", "title" to "İtirazınız kabul edildi", "sub" to appealBody,
+                        "message" to "İtirazınız kabul edildi", "feedId" to appeal.postId, "postId" to appeal.postId,
+                        "ico" to "thumb_up", "url" to "",
+                        "read" to false, "ts" to com.google.firebase.Timestamp.now(),
+                    )).await()
+                }
                 _appeals.value = _appeals.value.filter { it.id != appeal.id }
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -989,11 +1026,16 @@ class AdminViewModel @Inject constructor(
                 firestore.collection("appeals").document(appeal.id).update(mapOf(
                     "status" to "rejected", "adminNote" to adminNote, "resolvedAt" to com.google.firebase.Timestamp.now(),
                 )).await()
-                firestore.collection("userNotifs").document(appeal.postOwnerUid).collection("notifs").add(mapOf(
-                    "type" to "appeal_result", "title" to "İtirazınız reddedildi",
-                    "body" to "Kararımız geçerliliğini korumaktadır. ${adminNote.ifBlank { "" }}",
-                    "postId" to appeal.postId, "read" to false, "ts" to com.google.firebase.Timestamp.now(),
-                )).await()
+                run {
+                    val appealBody = "Kararımız geçerliliğini korumaktadır. ${adminNote.ifBlank { "" }}"
+                    firestore.collection("userNotifs").document(appeal.postOwnerUid).collection("msgs").add(mapOf(
+                        "fromUid" to "", "fromName" to "Heftreng", "fromPhoto" to "",
+                        "type" to "appeal_result", "title" to "İtirazınız reddedildi", "sub" to appealBody,
+                        "message" to "İtirazınız reddedildi", "feedId" to appeal.postId, "postId" to appeal.postId,
+                        "ico" to "thumb_down", "url" to "",
+                        "read" to false, "ts" to com.google.firebase.Timestamp.now(),
+                    )).await()
+                }
                 _appeals.value = _appeals.value.filter { it.id != appeal.id }
             } catch (e: Exception) { e.printStackTrace() }
         }
