@@ -510,6 +510,7 @@ class ProfileViewModel @Inject constructor(
                     if (existing.isEmpty()) {
                         supabase.postgrest["feed_likes"].insert(
                             mapOf(
+                                "id"        to "${post.id}_$myUid",
                                 "post_id"   to post.id,
                                 "uid"       to myUid,
                                 "name"      to myName,

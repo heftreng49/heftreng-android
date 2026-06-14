@@ -528,6 +528,7 @@ class FeedViewModel @Inject constructor(
                     if (existing.isEmpty()) {
                         supabase.postgrest["feed_likes"].insert(
                             mapOf(
+                                "id"        to "${post.id}_$uid",
                                 "post_id"   to post.id,
                                 "uid"       to uid,
                                 "name"      to myName,
@@ -571,6 +572,7 @@ class FeedViewModel @Inject constructor(
                     if (existing.isEmpty()) {
                         supabase.postgrest["comment_likes"].insert(
                             mapOf(
+                                "id"         to "${comment.id}_$uid",
                                 "comment_id" to comment.id,
                                 "uid"        to uid,
                                 "name"       to myName,
