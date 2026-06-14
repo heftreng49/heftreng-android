@@ -917,7 +917,7 @@ fun ReadingSummaryCard(
                 )
                 ReadingStatDivider()
                 ReadingStat(
-                    icon  = Icons.Filled.LocalFire,
+                    icon  = Icons.Filled.Whatshot,
                     value = "$streak ${if (ku) "roj" else "gün"}",
                     label = "Streak",
                     iconTint = if (streak > 0) Color(0xFFEF4444) else Muted,
