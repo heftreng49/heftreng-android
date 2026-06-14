@@ -14,6 +14,8 @@ import com.heftreng.app.data.repository.LibraryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.heftreng.app.data.model.FeedLikeRow
 import com.heftreng.app.data.model.FeedSaveRow
+import com.heftreng.app.data.model.FeedCommentRow
+import com.heftreng.app.data.model.CommentLikeRow
 import com.heftreng.app.data.model.FollowRow
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
