@@ -812,6 +812,21 @@ private fun ProfileHeader(
                 StatItem(followingCount, Strings.following(language),   onClick = onFollowing)
                 if ((user?.xp ?: 0) > 0) StatItem(user?.xp ?: 0, "XP", onClick = null)
             }
+
+            // ── Okuma Özet Kartı (Öncelik 1) ─────────────────────────────
+            val booksRead    = user?.booksRead    ?: 0
+            val quotesShared = user?.quotesShared ?: 0
+            val streak       = user?.streak       ?: 0
+            if (booksRead > 0 || quotesShared > 0 || streak > 0) {
+                Spacer(Modifier.height(10.dp))
+                ReadingSummaryCard(
+                    booksRead    = booksRead,
+                    quotesShared = quotesShared,
+                    streak       = streak,
+                    language     = language,
+                )
+            }
+
             Spacer(Modifier.height(12.dp))
             HorizontalDivider(color = Divider)
         }
@@ -858,6 +873,81 @@ private fun RlEntryRow(entry: ReadingListEntry, onClick: () -> Unit) {
             overflow   = TextOverflow.Ellipsis,
         )
     }
+}
+
+@Composable
+fun ReadingSummaryCard(
+    booksRead   : Int,
+    quotesShared: Int,
+    streak      : Int,
+    language    : String,
+) {
+    val ku = language == "ku"
+    androidx.compose.material3.Card(
+        modifier  = Modifier.fillMaxWidth(),
+        shape     = RoundedCornerShape(14.dp),
+        colors    = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(0.dp),
+    ) {
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    androidx.compose.ui.graphics.Brush.linearGradient(
+                        listOf(Amber.copy(alpha = 0.12f), Primary.copy(alpha = 0.08f))
+                    ),
+                    RoundedCornerShape(14.dp),
+                )
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                ReadingStat(
+                    icon  = Icons.Outlined.MenuBook,
+                    value = booksRead.toString(),
+                    label = if (ku) "Pirtûk" else "Kitap",
+                )
+                ReadingStatDivider()
+                ReadingStat(
+                    icon  = Icons.Outlined.FormatQuote,
+                    value = quotesShared.toString(),
+                    label = if (ku) "Gotin" else "Alıntı",
+                )
+                ReadingStatDivider()
+                ReadingStat(
+                    icon  = Icons.Filled.LocalFire,
+                    value = "$streak ${if (ku) "roj" else "gün"}",
+                    label = "Streak",
+                    iconTint = if (streak > 0) Color(0xFFEF4444) else Muted,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReadingStat(
+    icon    : androidx.compose.ui.graphics.vector.ImageVector,
+    value   : String,
+    label   : String,
+    iconTint: Color = Amber,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Icon(icon, null, tint = iconTint, modifier = Modifier.size(18.dp))
+        Text(value, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Text(label, color = Muted, fontSize = 10.sp)
+    }
+}
+
+@Composable
+private fun ReadingStatDivider() {
+    androidx.compose.material3.VerticalDivider(
+        modifier  = Modifier.height(36.dp),
+        color     = Divider,
+        thickness = 0.5.dp,
+    )
 }
 
 @Composable

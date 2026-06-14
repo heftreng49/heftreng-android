@@ -20,6 +20,9 @@ data class User(
     val level          : Int    = 1,
     val xp             : Int    = 0,
     val streak         : Int    = 0,
+    // Okuma özet alanları (Öncelik 1 — profil kartı için)
+    val booksRead      : Int    = 0,
+    val quotesShared   : Int    = 0,
     val banned             : Boolean= false,
     val emailVerified      : Boolean= false,
     val isPrivate          : Boolean= false,
