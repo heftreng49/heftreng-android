@@ -101,9 +101,9 @@ fun ProfileScreen(
     val canSeeContent  = isMe || !isPrivate || isFollowing
 
     val tabs = listOf(
+        Strings.readingList(language),
         Strings.posts(language),
         if (ku) "Pirtûk & Rêze" else "Kitaplar & Seriler",
-        Strings.readingList(language),
     )
     var selectedTab by remember { mutableIntStateOf(0) }
 
@@ -334,8 +334,8 @@ fun ProfileScreen(
                 }
             } else when (selectedTab) {
 
-                // ─── Gönderiler ───────────────────────────────────────────
-                0 -> {
+                // ─── Gönderiler (artık 2. sekme = index 1) ──────────────────
+                1 -> {
                     if (loading && posts.isEmpty()) {
                         item(key = "posts_loading") {
                             Box(
@@ -418,8 +418,8 @@ fun ProfileScreen(
                     }
                 }
 
-                // ─── Kitaplar & Seriler ───────────────────────────────────
-                1 -> {
+                // ─── Kitaplar & Seriler (artık 3. sekme = index 2) ──────────
+                2 -> {
                     val allMyContent = allMyBooks
                     if (allMyContent.isEmpty()) {
                         item(key = "books_serials_empty") {
@@ -510,8 +510,8 @@ fun ProfileScreen(
                     }
                 }
 
-                // ─── Okuma Listesi ────────────────────────────────────────
-                2 -> {
+                // ─── Okuma Listesi (artık 1. sekme = index 0) ───────────────
+                0 -> {
                     val allEmpty = rlEntries.values.all { it.isEmpty() }
                     if (allEmpty) {
                         item(key = "rl_empty") {

@@ -136,6 +136,12 @@ class ProfileViewModel @Inject constructor(
 
                 _isFollowing.value = isFollowingResult
 
+                // Okuma özet kartı için gerçek veriler — sadece kendi profilde
+                // (readingLists/{uid} sadece sahibi tarafından okunabilir)
+                if (targetUid == auth.currentUser?.uid) {
+                    syncReadingSummary(targetUid)
+                }
+
                 // Takip isteği durumu
                 _followRequestStatus.value = when {
                     _isFollowing.value                       -> "accepted"
@@ -447,6 +453,32 @@ class ProfileViewModel @Inject constructor(
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
+    /** Profil "okuma özet kartı" — booksRead (readingLists/completed) ve
+     *  quotesShared (Supabase book_quotes uid sayısı) gerçek verilerle doldurulur. */
+    private fun syncReadingSummary(targetUid: String) {
+        viewModelScope.launch {
+            try {
+                val completedBooks = firestore.collection("readingLists")
+                    .document(targetUid)
+                    .collection("books")
+                    .whereEqualTo("status", "completed")
+                    .get().await()
+                    .size()
+
+                val quotesCount = try {
+                    supabase.postgrest["book_quotes"]
+                        .select { filter { eq("uid", targetUid) } }
+                        .decodeList<com.heftreng.app.data.repository.BookQuoteRow>().size
+                } catch (e: Exception) { 0 }
+
+                _user.value = _user.value?.copy(
+                    booksRead    = completedBooks,
+                    quotesShared = quotesCount,
+                )
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
     /** Beğeni / yorum sayılarını Supabase'den çek (feed.likesCount/commentsCount artık
      *  Firestore'da güncellenmiyor — Supabase tek kaynak). */
     private fun syncProfilePostCounts(postIds: List<String>) {

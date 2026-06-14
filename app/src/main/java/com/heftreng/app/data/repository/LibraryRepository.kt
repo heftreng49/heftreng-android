@@ -220,6 +220,14 @@ class LibraryRepository @Inject constructor(
             limit(limit.toLong())
         }.decodeList()
 
+    /** Profil "okuma özet kartı" için — kullanıcının paylaştığı alıntı sayısı */
+    suspend fun countQuotesByUser(uid: String): Int =
+        try {
+            db["book_quotes"].select {
+                filter { eq("uid", uid) }
+            }.decodeList<BookQuoteRow>().size
+        } catch (e: Exception) { 0 }
+
     suspend fun insertQuote(row: BookQuoteRow) {
         db["book_quotes"].insert(row)
     }

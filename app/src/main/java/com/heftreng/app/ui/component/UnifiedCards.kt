@@ -678,6 +678,85 @@ fun LibraryBookCard(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  LibraryBookGridCard — Keşfet grid görünümü için büyük kapak kartı
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+fun LibraryBookGridCard(
+    book    : LibraryBook,
+    onClick : () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(SurfaceVar),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (book.coverImg.isNotBlank()) {
+                AsyncImage(
+                    model              = book.coverImg,
+                    contentDescription = book.title,
+                    contentScale       = ContentScale.Crop,
+                    modifier           = Modifier.fillMaxSize(),
+                )
+            } else {
+                Icon(
+                    Icons.Default.AutoStories,
+                    contentDescription = null,
+                    tint     = Muted,
+                    modifier = Modifier.size(40.dp),
+                )
+            }
+            if (book.avgRating > 0f) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.Star, null, tint = Amber, modifier = Modifier.size(11.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text(
+                        String.format("%.1f", book.avgRating),
+                        color    = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            book.title,
+            color      = OnBackground,
+            fontSize   = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines   = 2,
+            overflow   = TextOverflow.Ellipsis,
+        )
+        if (book.authorName.isNotBlank()) {
+            Text(
+                book.authorName,
+                color    = Muted,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  AddReviewDialog — yıldız + metin ile inceleme ekleme
 // ─────────────────────────────────────────────────────────────────────────────
 
