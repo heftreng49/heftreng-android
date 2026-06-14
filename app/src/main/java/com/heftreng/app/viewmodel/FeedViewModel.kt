@@ -566,32 +566,48 @@ class FeedViewModel @Inject constructor(
                     ensureMyProfileCached()
                     val myName  = _cachedMyName.ifBlank { auth.currentUser?.displayName ?: "" }
                     val myPhoto = _cachedMyPhoto
-                    // upsert — idempotent, select+insert yerine tek işlem
-                    supabase.postgrest["comment_likes"].upsert(
-                        CommentLikeRow(
-                            id        = "${comment.id}_$uid",
-                            commentId = comment.id,
-                            uid       = uid,
-                            name      = myName,
-                            photoUrl  = myPhoto,
+                    val existing = try {
+                        supabase.postgrest["comment_likes"]
+                            .select { filter { eq("comment_id", comment.id); eq("uid", uid) }; limit(1) }
+                            .decodeList<CommentLikeRow>()
+                    } catch (_: Exception) { emptyList() }
+                    if (existing.isEmpty()) {
+                        supabase.postgrest["comment_likes"].insert(
+                            mapOf(
+                                "id"         to "${comment.id}_$uid",
+                                "comment_id" to comment.id,
+                                "uid"        to uid,
+                                "name"       to myName,
+                                "photo_url"  to myPhoto,
+                            )
                         )
-                    )
+                    }
                 } else {
                     supabase.postgrest["comment_likes"].delete {
                         filter { eq("comment_id", comment.id); eq("uid", uid) }
                     }
                 }
-                // likes_count sayaç güncelle — ekstra select yok
-                try {
-                    val delta = if (nowLiked) 1 else -1
-                    supabase.postgrest["feed_comments"]
-                        .update(mapOf("likes_count" to "likes_count + $delta")) {
-                            filter { eq("id", comment.id) }
-                        }
-                } catch (_: Exception) {}
+                // Gerçek beğeni sayısını comment_likes'tan say ve feed_comments.likes_count'u güncelle
+                val realCount = try {
+                    supabase.postgrest["comment_likes"]
+                        .select { filter { eq("comment_id", comment.id) } }
+                        .decodeList<CommentLikeRow>().size
+                } catch (_: Exception) { -1 }
+                if (realCount >= 0) {
+                    try {
+                        supabase.postgrest["feed_comments"]
+                            .update(mapOf("likes_count" to realCount)) {
+                                filter { eq("id", comment.id) }
+                            }
+                    } catch (_: Exception) {}
+                    _comments.value = _comments.value.map {
+                        if (it.id == comment.id) it.copy(likesCount = realCount) else it
+                    }
+                }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
+
     fun toggleSave(post: Post) {
         if (uid.isEmpty()) return
         val nowSaved = !post.isSavedByMe
@@ -613,9 +629,9 @@ class FeedViewModel @Inject constructor(
                     postRef.update("saves", FieldValue.increment(1)).await()
                 } else {
                     supabase.postgrest["feed_saves"].delete {
-                        filter { eq("post_id", post.id); eq("uid", uid) }
+                        filter { eq("id", "${post.id}_$uid") }
                     }
-                    try { postRef.update("saves", FieldValue.increment(-1)).await() } catch (_: Exception) {}
+                    postRef.update("saves", FieldValue.increment(-1)).await()
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -920,6 +936,14 @@ class FeedViewModel @Inject constructor(
 
                 if (libraryLinkFailed) {
                     _createPostError.value = "Gönderi paylaşıldı, ancak kütüphane bağlantısı kurulamadı."
+                }
+
+                // quotesShared sayacı — alıntı paylaşılınca +1
+                if (quoteText.isNotBlank()) {
+                    try {
+                        firestore.collection("users").document(uid)
+                            .update("quotesShared", FieldValue.increment(1)).await()
+                    } catch (e: Exception) { e.printStackTrace() }
                 }
 
             } catch (e: Exception) {

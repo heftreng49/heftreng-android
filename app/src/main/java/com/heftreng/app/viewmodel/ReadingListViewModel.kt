@@ -81,6 +81,7 @@ class ReadingListViewModel @Inject constructor(
             try {
                 val ref = firestore.collection("readingLists")
                     .document(uid).collection("books").document(sid)
+                val prevStatus = getStatus(sid)
                 if (status == null) {
                     ref.delete().await()
                 } else {
@@ -92,6 +93,16 @@ class ReadingListViewModel @Inject constructor(
                         "status"    to status.key,
                         "updatedAt" to FieldValue.serverTimestamp(),
                     )).await()
+                }
+                // booksRead sayacı güncelle
+                val userRef = firestore.collection("users").document(uid)
+                when {
+                    status == RlStatus.READ && prevStatus != RlStatus.READ ->
+                        userRef.update("booksRead", FieldValue.increment(1)).await()
+                    status != RlStatus.READ && prevStatus == RlStatus.READ ->
+                        userRef.update("booksRead", FieldValue.increment(-1)).await()
+                    status == null && prevStatus == RlStatus.READ ->
+                        userRef.update("booksRead", FieldValue.increment(-1)).await()
                 }
                 load()
             } catch (e: Exception) { e.printStackTrace() }
@@ -128,6 +139,7 @@ class ReadingListViewModel @Inject constructor(
             try {
                 val ref = firestore.collection("readingLists")
                     .document(uid).collection("books").document(bookId)
+                val prevStatus = getStatus(bookId)
                 if (status == null) {
                     ref.delete().await()
                 } else {
@@ -141,6 +153,16 @@ class ReadingListViewModel @Inject constructor(
                         "status"     to status.key,
                         "updatedAt"  to FieldValue.serverTimestamp(),
                     )).await()
+                }
+                // booksRead sayacı güncelle
+                val userRef = firestore.collection("users").document(uid)
+                when {
+                    status == RlStatus.READ && prevStatus != RlStatus.READ ->
+                        userRef.update("booksRead", FieldValue.increment(1)).await()
+                    status != RlStatus.READ && prevStatus == RlStatus.READ ->
+                        userRef.update("booksRead", FieldValue.increment(-1)).await()
+                    status == null && prevStatus == RlStatus.READ ->
+                        userRef.update("booksRead", FieldValue.increment(-1)).await()
                 }
                 load()
             } catch (e: Exception) { e.printStackTrace() }
