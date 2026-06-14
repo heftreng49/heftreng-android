@@ -18,6 +18,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -454,20 +458,20 @@ private fun LibraryBooksTab(
         EmptyState(Icons.Outlined.AutoStories, Strings.libraryNoBooks(language))
         return
     }
-    androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-        columns             = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
+    LazyVerticalGrid(
+        columns             = GridCells.Fixed(2),
         contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalArrangement   = Arrangement.spacedBy(16.dp),
     ) {
-        androidx.compose.foundation.lazy.grid.items(books, key = { it.id }) { book ->
+        gridItems(books, key = { it.id }) { book ->
             LibraryBookGridCard(
                 book    = book,
                 onClick = { navController.navigate("library_book_detail/${book.id}") },
             )
         }
         if (bannerUnitId != null) {
-            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB, bannerSize = bannerSize)
             }
         }

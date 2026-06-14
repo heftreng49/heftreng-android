@@ -136,12 +136,6 @@ class ProfileViewModel @Inject constructor(
 
                 _isFollowing.value = isFollowingResult
 
-                // Okuma özet kartı için gerçek veriler — sadece kendi profilde
-                // (readingLists/{uid} sadece sahibi tarafından okunabilir)
-                if (targetUid == auth.currentUser?.uid) {
-                    syncReadingSummary(targetUid)
-                }
-
                 // Takip isteği durumu
                 _followRequestStatus.value = when {
                     _isFollowing.value                       -> "accepted"
@@ -218,6 +212,7 @@ class ProfileViewModel @Inject constructor(
                 _posts.value = rawPosts
                 _loading.value = false
                 syncProfilePostCounts(rawPosts.map { it.id })
+                syncReadingSummary(targetUid)
 
                 // ── 5. Arka planda güncel avatar/isim ile sessizce güncelle ──
                 enrichPostsInBackground(rawPosts)
@@ -453,17 +448,17 @@ class ProfileViewModel @Inject constructor(
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
-    /** Profil "okuma özet kartı" — booksRead (readingLists/completed) ve
-     *  quotesShared (Supabase book_quotes uid sayısı) gerçek verilerle doldurulur. */
+
+    /** Profil "okuma özet kartı" — booksRead (Supabase reading_status, status='okudum')
+     *  ve quotesShared (Supabase book_quotes uid sayısı) gerçek verilerle doldurulur. */
     private fun syncReadingSummary(targetUid: String) {
         viewModelScope.launch {
             try {
-                val completedBooks = firestore.collection("readingLists")
-                    .document(targetUid)
-                    .collection("books")
-                    .whereEqualTo("status", "completed")
-                    .get().await()
-                    .size()
+                val completedBooks = try {
+                    supabase.postgrest["reading_status"]
+                        .select { filter { eq("uid", targetUid); eq("status", "okudum") } }
+                        .decodeList<com.heftreng.app.data.repository.ReadingStatusRow>().size
+                } catch (e: Exception) { 0 }
 
                 val quotesCount = try {
                     supabase.postgrest["book_quotes"]
@@ -478,7 +473,6 @@ class ProfileViewModel @Inject constructor(
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
-
     /** Beğeni / yorum sayılarını Supabase'den çek (feed.likesCount/commentsCount artık
      *  Firestore'da güncellenmiyor — Supabase tek kaynak). */
     private fun syncProfilePostCounts(postIds: List<String>) {

@@ -264,8 +264,8 @@ fun ProfileScreen(
             // ── 1b. Okuma Özeti Hero — "X kitap okudum · Y alıntı · Z gün streak" ──
             item(key = "reading_summary_hero") {
                 ReadingSummaryHero(
-                    booksRead   = rlEntries["okudum"]?.size ?: 0,
-                    quotesCount = posts.count { it.quoteText.isNotBlank() },
+                    booksRead   = user?.booksRead ?: (rlEntries["okudum"]?.size ?: 0),
+                    quotesCount = user?.quotesShared ?: posts.count { it.quoteText.isNotBlank() },
                     streak      = user?.streak ?: 0,
                     language    = language,
                 )

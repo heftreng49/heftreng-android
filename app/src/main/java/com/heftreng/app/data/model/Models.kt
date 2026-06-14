@@ -20,6 +20,8 @@ data class User(
     val level          : Int    = 1,
     val xp             : Int    = 0,
     val streak         : Int    = 0,
+    val booksRead      : Int    = 0,  // okuma özet kartı — reading_status (status='okudum') sayısı
+    val quotesShared   : Int    = 0,  // okuma özet kartı — book_quotes (uid) sayısı
     val banned             : Boolean= false,
     val emailVerified      : Boolean= false,
     val isPrivate          : Boolean= false,
