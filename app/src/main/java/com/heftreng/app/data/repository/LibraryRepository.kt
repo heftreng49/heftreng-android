@@ -240,6 +240,14 @@ class LibraryRepository @Inject constructor(
             limit(limit.toLong())
         }.decodeList()
 
+    /** Profil — "X alıntı" kartına basınca kullanıcının paylaştığı tüm alıntılar */
+    suspend fun getQuotesByUser(uid: String, limit: Int = 100): List<BookQuoteRow> =
+        db["book_quotes"].select {
+            filter { eq("uid", uid) }
+            order("created_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList()
+
     suspend fun insertQuote(row: BookQuoteRow) {
         db["book_quotes"].insert(row)
     }

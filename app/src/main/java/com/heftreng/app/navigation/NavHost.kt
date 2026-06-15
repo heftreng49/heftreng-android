@@ -179,7 +179,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     // Dile göre alt bar etiketleri
     val bottomNavItems = listOf(
         BottomNavItem(Screen.Feed.route,    Strings.navFeed(language),    Icons.Outlined.DynamicFeed,  Icons.Filled.DynamicFeed),
-        BottomNavItem(Screen.Library.route, Strings.navDiscover(language), Icons.Outlined.Explore,      Icons.Filled.Explore),
+        BottomNavItem(Screen.Library.route, Strings.navLibrary(language), Icons.Outlined.Explore,      Icons.Filled.Explore),
         BottomNavItem(Screen.Kurdi.route,   Strings.navKurdi(language),   Icons.Outlined.Translate,     Icons.Filled.Translate),
         BottomNavItem("profile/me",         Strings.navProfile(language), Icons.Outlined.PersonOutline, Icons.Filled.Person),
     )

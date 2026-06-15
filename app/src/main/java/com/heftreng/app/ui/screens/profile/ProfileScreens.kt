@@ -95,6 +95,10 @@ fun ProfileScreen(
     var showFollowers  by remember { mutableStateOf(false) }
     var showFollowing  by remember { mutableStateOf(false) }
     var msgPermDenied  by remember { mutableStateOf(false) }
+    var showReadBooksSheet by remember { mutableStateOf(false) }
+    var showQuotesSheet    by remember { mutableStateOf(false) }
+    val userQuotes        by vm.userQuotes.collectAsState()
+    val userQuotesLoading by vm.userQuotesLoading.collectAsState()
 
     val isMe      = uid == "me" || uid == vm.myUid
     val targetUid = if (uid == "me") vm.myUid else uid
@@ -104,8 +108,8 @@ fun ProfileScreen(
     val canSeeContent  = isMe || !isPrivate || isFollowing
 
     val tabs = listOf(
-        Strings.readingList(language),
         Strings.posts(language),
+        Strings.readingList(language),
         if (ku) "Pirtûk & Rêze" else "Kitaplar & Seriler",
     )
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -270,6 +274,11 @@ fun ProfileScreen(
                     quotesCount = user?.quotesShared ?: posts.count { it.quoteText.isNotBlank() },
                     streak      = user?.streak ?: 0,
                     language    = language,
+                    onBooksClick  = { showReadBooksSheet = true },
+                    onQuotesClick = {
+                        vm.loadUserQuotes(targetUid)
+                        showQuotesSheet = true
+                    },
                 )
             }
 
@@ -355,7 +364,7 @@ fun ProfileScreen(
             } else when (selectedTab) {
 
                 // ─── Gönderiler ───────────────────────────────────────────
-                1 -> {
+                0 -> {
                     if (loading && posts.isEmpty()) {
                         item(key = "posts_loading") {
                             Box(
@@ -531,7 +540,7 @@ fun ProfileScreen(
                 }
 
                 // ─── Okuma Listesi ────────────────────────────────────────
-                0 -> {
+                1 -> {
                     val allEmpty = rlEntries.values.all { it.isEmpty() }
                     if (allEmpty) {
                         item(key = "rl_empty") {
@@ -655,6 +664,37 @@ fun ProfileScreen(
             text  = { Text(if (language == "ku") "Ev bikarhêner tenê ji şopînerên xwe peyam qebûl dike." else "Bu kullanıcı mesajları kısıtlamış.", color = Muted) },
             confirmButton = { TextButton(onClick = { msgPermDenied = false }) { Text("Tamam", color = Primary) } },
             containerColor = HeftSurface,
+        )
+    }
+
+    // ── "X kitap okudum" → okunan kitaplar sheet'i ───────────────────────────
+    if (showReadBooksSheet) {
+        ReadBooksSheet(
+            entries  = rlEntries["okudum"] ?: emptyList(),
+            language = language,
+            onDismiss = { showReadBooksSheet = false },
+            onClick   = { entry ->
+                showReadBooksSheet = false
+                if (entry.source == "library")
+                    navController.navigate("library_book_detail/${entry.sid}")
+                else
+                    navController.navigate("serial/${entry.sid}")
+            },
+        )
+    }
+
+    // ── "X alıntı" → kullanıcının paylaştığı alıntılar sheet'i ───────────────
+    if (showQuotesSheet) {
+        UserQuotesSheet(
+            quotes    = userQuotes,
+            loading   = userQuotesLoading,
+            language  = language,
+            onDismiss = { showQuotesSheet = false },
+            onClick   = { q ->
+                showQuotesSheet = false
+                if (q.bookId.isNotBlank())
+                    navController.navigate("library_book_detail/${q.bookId}")
+            },
         )
     }
 }
@@ -880,12 +920,141 @@ private fun RlEntryRow(entry: ReadingListEntry, onClick: () -> Unit) {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  ReadBooksSheet — "X kitap okudum" tıklanınca açılan, "okudum" durumundaki
+//  kitap/serileri listeleyen bottom sheet (Öncelik: profil ilerleme kartı)
+// ─────────────────────────────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReadBooksSheet(
+    entries  : List<ReadingListEntry>,
+    language : String,
+    onDismiss: () -> Unit,
+    onClick  : (ReadingListEntry) -> Unit,
+) {
+    val ku = language == "ku"
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        dragHandle = {
+            Box(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(36.dp, 4.dp).clip(RoundedCornerShape(2.dp)).background(Divider))
+            }
+        },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                if (ku) "Pirtûkên xwendî (${entries.size})" else "Okunan Kitaplar (${entries.size})",
+                color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp,
+            )
+            IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null, tint = Muted) }
+        }
+        HorizontalDivider(color = Divider, thickness = 0.5.dp)
+
+        if (entries.isEmpty()) {
+            Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
+                Text(if (ku) "Hîn pirtûk tune" else "Henüz okunan kitap yok", color = Muted)
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                items(entries, key = { "readbook_${it.sid}" }) { entry ->
+                    RlEntryRow(entry = entry, onClick = { onClick(entry) })
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  UserQuotesSheet — "X alıntı" tıklanınca açılan, kullanıcının paylaştığı
+//  tüm alıntıları (Supabase book_quotes) listeleyen bottom sheet
+// ─────────────────────────────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun UserQuotesSheet(
+    quotes   : List<com.heftreng.app.data.repository.BookQuoteRow>,
+    loading  : Boolean,
+    language : String,
+    onDismiss: () -> Unit,
+    onClick  : (com.heftreng.app.data.repository.BookQuoteRow) -> Unit,
+) {
+    val ku = language == "ku"
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        dragHandle = {
+            Box(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(36.dp, 4.dp).clip(RoundedCornerShape(2.dp)).background(Divider))
+            }
+        },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                if (ku) "Gotinên min (${quotes.size})" else "Alıntılarım (${quotes.size})",
+                color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp,
+            )
+            IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null, tint = Muted) }
+        }
+        HorizontalDivider(color = Divider, thickness = 0.5.dp)
+
+        if (loading) {
+            Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Amber, modifier = Modifier.size(28.dp))
+            }
+        } else if (quotes.isEmpty()) {
+            Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
+                Text(if (ku) "Hîn gotin tune" else "Henüz alıntı yok", color = Muted)
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                items(quotes, key = { "userquote_${it.id}" }) { q ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onClick(q) }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                    ) {
+                        Text(
+                            "\u201C${q.text}\u201D",
+                            color    = OnBackground,
+                            fontSize = 14.sp,
+                            lineHeight = 19.sp,
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            listOf(q.authorName, q.bookTitle).filter { it.isNotBlank() }.joinToString(" · "),
+                            color    = Amber,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                    HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+}
+
 @Composable
 fun ReadingSummaryHero(
     booksRead  : Int,
     quotesCount: Int,
     streak     : Int,
     language   : String = "tr",
+    onBooksClick : () -> Unit = {},
+    onQuotesClick: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier
@@ -905,12 +1074,14 @@ fun ReadingSummaryHero(
             icon  = Icons.Outlined.AutoStories,
             value = booksRead.toString(),
             label = if (language == "ku") "pirtûk xwendin" else "kitap okudum",
+            onClick = onBooksClick,
         )
         ReadingHeroDivider()
         ReadingHeroStat(
             icon  = Icons.Outlined.FormatQuote,
             value = quotesCount.toString(),
             label = if (language == "ku") "gotin" else "alıntı",
+            onClick = onQuotesClick,
         )
         ReadingHeroDivider()
         ReadingHeroStat(
@@ -938,8 +1109,12 @@ private fun ReadingHeroStat(
     value     : String,
     label     : String,
     valueColor: Color = OnBackground,
+    onClick   : (() -> Unit)? = null,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier = if (onClick != null) Modifier.clickable { onClick() } else Modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Icon(icon, null, tint = valueColor, modifier = Modifier.size(18.dp))
         Spacer(Modifier.height(2.dp))
         Text(value, fontWeight = FontWeight.Bold, color = valueColor, fontSize = 16.sp)

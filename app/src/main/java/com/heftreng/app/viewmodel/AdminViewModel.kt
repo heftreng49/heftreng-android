@@ -121,6 +121,134 @@ class AdminViewModel @Inject constructor(
     private val _pushResult   = MutableStateFlow("")
     val pushResult = _pushResult.asStateFlow()
 
+    // ══════════════════════════════════════════════════════════════════════
+    //  Günlük bildirimler — "Günün Alıntısı" / "Günün Kelimesi"
+    //  Firestore: daily_quote/{date}, daily_word/{date}  (date = yyyy-MM-dd)
+    //  Admin içeriği düzenler ve "Bildirim Gönder" ile FCM tetikler.
+    // ══════════════════════════════════════════════════════════════════════
+    data class DailyQuoteContent(
+        val textTr  : String = "",
+        val textKu  : String = "",
+        val author  : String = "",
+        val book    : String = "",
+    )
+    data class DailyWordContent(
+        val word     : String = "",
+        val meaningTr: String = "",
+        val meaningKu: String = "",
+        val exampleKu: String = "",
+    )
+
+    private val _dailyQuote = MutableStateFlow(DailyQuoteContent())
+    val dailyQuote = _dailyQuote.asStateFlow()
+
+    private val _dailyWord = MutableStateFlow(DailyWordContent())
+    val dailyWord = _dailyWord.asStateFlow()
+
+    private val _dailyResult = MutableStateFlow("")
+    val dailyResult = _dailyResult.asStateFlow()
+
+    private fun todayKey(): String {
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        return sdf.format(java.util.Date())
+    }
+
+    /** Bugünün günün alıntısı / günün kelimesi içeriğini yükle (varsa) */
+    fun loadDailyContent() {
+        if (_perms.value?.can("notif") != true && _perms.value?.can("push") != true) return
+        val date = todayKey()
+        viewModelScope.launch {
+            try {
+                val qDoc = firestore.collection("daily_quote").document(date).get().await()
+                if (qDoc.exists()) {
+                    _dailyQuote.value = DailyQuoteContent(
+                        textTr = qDoc.getString("text_tr") ?: "",
+                        textKu = qDoc.getString("text_ku") ?: "",
+                        author = qDoc.getString("author_name") ?: "",
+                        book   = qDoc.getString("book_name") ?: "",
+                    )
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+            try {
+                val wDoc = firestore.collection("daily_word").document(date).get().await()
+                if (wDoc.exists()) {
+                    _dailyWord.value = DailyWordContent(
+                        word      = wDoc.getString("word") ?: "",
+                        meaningTr = wDoc.getString("meaning_tr") ?: "",
+                        meaningKu = wDoc.getString("meaning_ku") ?: "",
+                        exampleKu = wDoc.getString("example_ku") ?: "",
+                    )
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    /** Günün Alıntısı içeriğini kaydet (daily_quote/{date}) — admin düzenler */
+    fun saveDailyQuote(content: DailyQuoteContent, date: String = todayKey()) {
+        if (_perms.value?.can("notif") != true && _perms.value?.can("push") != true) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("daily_quote").document(date).set(mapOf(
+                    "text_tr"     to content.textTr,
+                    "text_ku"     to content.textKu,
+                    "author_name" to content.author,
+                    "book_name"   to content.book,
+                    "updatedBy"   to (auth.currentUser?.email ?: "admin"),
+                    "updatedAt"   to FieldValue.serverTimestamp(),
+                )).await()
+                _dailyQuote.value = content
+                _dailyResult.value = "✓ Günün Alıntısı kaydedildi"
+            } catch (e: Exception) { _dailyResult.value = "✗ Hata: ${e.message}" }
+        }
+    }
+
+    /** Günün Kelimesi içeriğini kaydet (daily_word/{date}) — admin düzenler */
+    fun saveDailyWord(content: DailyWordContent, date: String = todayKey()) {
+        if (_perms.value?.can("notif") != true && _perms.value?.can("push") != true) return
+        viewModelScope.launch {
+            try {
+                firestore.collection("daily_word").document(date).set(mapOf(
+                    "word"       to content.word,
+                    "meaning_tr" to content.meaningTr,
+                    "meaning_ku" to content.meaningKu,
+                    "example_ku" to content.exampleKu,
+                    "updatedBy"  to (auth.currentUser?.email ?: "admin"),
+                    "updatedAt"  to FieldValue.serverTimestamp(),
+                )).await()
+                _dailyWord.value = content
+                _dailyResult.value = "✓ Günün Kelimesi kaydedildi"
+            } catch (e: Exception) { _dailyResult.value = "✗ Hata: ${e.message}" }
+        }
+    }
+
+    /** Günün Alıntısı'nı kaydet + herkese push gönder ("Tetikle") */
+    fun saveDailyQuoteAndNotify(content: DailyQuoteContent, date: String = todayKey()) {
+        saveDailyQuote(content, date)
+        val body = buildString {
+            append("\u201C${content.textTr}\u201D")
+            if (content.author.isNotBlank()) append(" — ${content.author}")
+        }
+        sendPush(
+            title = "\uD83D\uDCD6 Îro Peyvek — Günün Alıntısı",
+            body  = body,
+            url   = "heftreng://daily_quote",
+        )
+    }
+
+    /** Günün Kelimesi'ni kaydet + herkese push gönder ("Tetikle") */
+    fun saveDailyWordAndNotify(content: DailyWordContent, date: String = todayKey()) {
+        saveDailyWord(content, date)
+        val body = "${content.word} — ${content.meaningTr}"
+        sendPush(
+            title = "\uD83D\uDD24 Îro peyveke nû — Günün Kelimesi",
+            body  = body,
+            url   = "heftreng://daily_word",
+        )
+    }
+
+    fun clearDailyResult() { _dailyResult.value = "" }
+
+
     data class PlatformStats(
         val totalUsers    : Int  = 0, val androidUsers  : Int  = 0, val webUsers      : Int  = 0,
         val onlineNow     : Int  = 0, val newUsersToday : Int  = 0, val totalPosts    : Int  = 0,

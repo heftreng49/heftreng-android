@@ -59,6 +59,23 @@ class ProfileViewModel @Inject constructor(
     private val _hasMorePosts = MutableStateFlow(false)
     val hasMorePosts = _hasMorePosts.asStateFlow()
 
+    // ── İlerleme kartı detayları: "X alıntı" tıklanınca açılan liste ─────────
+    private val _userQuotes = MutableStateFlow<List<com.heftreng.app.data.repository.BookQuoteRow>>(emptyList())
+    val userQuotes = _userQuotes.asStateFlow()
+
+    private val _userQuotesLoading = MutableStateFlow(false)
+    val userQuotesLoading = _userQuotesLoading.asStateFlow()
+
+    fun loadUserQuotes(targetUid: String) {
+        viewModelScope.launch {
+            _userQuotesLoading.value = true
+            try {
+                _userQuotes.value = library.getQuotesByUser(targetUid)
+            } catch (e: Exception) { e.printStackTrace() }
+            finally { _userQuotesLoading.value = false }
+        }
+    }
+
     private val _loadingMore = MutableStateFlow(false)
     val loadingMorePosts = _loadingMore.asStateFlow()
 

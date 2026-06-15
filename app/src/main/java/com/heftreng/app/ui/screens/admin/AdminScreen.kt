@@ -11,6 +11,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.FormatQuote
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
@@ -73,6 +75,20 @@ fun AdminScreen(
     var notifType   by remember { mutableStateOf("sys") }
     var userSearch  by remember { mutableStateOf("") }
 
+    // Günlük bildirimler — Günün Alıntısı / Günün Kelimesi
+    val dailyQuote   by vm.dailyQuote.collectAsState()
+    val dailyWord    by vm.dailyWord.collectAsState()
+    val dailyResult  by vm.dailyResult.collectAsState()
+    var dqTextTr by remember(dailyQuote) { mutableStateOf(dailyQuote.textTr) }
+    var dqTextKu by remember(dailyQuote) { mutableStateOf(dailyQuote.textKu) }
+    var dqAuthor by remember(dailyQuote) { mutableStateOf(dailyQuote.author) }
+    var dqBook   by remember(dailyQuote) { mutableStateOf(dailyQuote.book) }
+    var dwWord      by remember(dailyWord) { mutableStateOf(dailyWord.word) }
+    var dwMeaningTr by remember(dailyWord) { mutableStateOf(dailyWord.meaningTr) }
+    var dwMeaningKu by remember(dailyWord) { mutableStateOf(dailyWord.meaningKu) }
+    var dwExampleKu by remember(dailyWord) { mutableStateOf(dailyWord.exampleKu) }
+    var dailyExpanded by remember { mutableStateOf(false) }
+
     // Düzenle tab state
     val feedPosts   by vm.feedPosts.collectAsState()
     val editResult  by vm.editResult.collectAsState()
@@ -124,6 +140,16 @@ fun AdminScreen(
         if (editResult.isNotBlank()) {
             kotlinx.coroutines.delay(3000)
             vm.clearEditResult()
+        }
+    }
+
+    // Günlük bildirim içeriğini yükle (Push tab açıldığında)
+    LaunchedEffect(Unit) { vm.loadDailyContent() }
+
+    LaunchedEffect(dailyResult) {
+        if (dailyResult.isNotBlank()) {
+            kotlinx.coroutines.delay(3000)
+            vm.clearDailyResult()
         }
     }
 
@@ -403,6 +429,165 @@ fun AdminScreen(
                                     fontSize = 13.sp,
                                     modifier = Modifier.padding(10.dp),
                                 )
+                            }
+                        }
+                    }
+
+                    // ── Günlük Bildirimler — Günün Alıntısı / Günün Kelimesi ──
+                    item {
+                        Spacer(Modifier.height(8.dp))
+                        Divider(color = Color.White.copy(alpha = 0.08f))
+                        Spacer(Modifier.height(14.dp))
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { dailyExpanded = !dailyExpanded },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment      = Alignment.CenterVertically,
+                        ) {
+                            Text("Günlük Bildirimler", color = Amber, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Icon(
+                                if (dailyExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                null, tint = Muted,
+                            )
+                        }
+                        Text(
+                            "Günün Alıntısı ve Günün Kelimesi içeriklerini düzenle, ardından tetikleyerek tüm kullanıcılara push bildirimi gönder.",
+                            color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp,
+                        )
+
+                        if (dailyExpanded) {
+                            Spacer(Modifier.height(12.dp))
+
+                            // ── Günün Alıntısı ────────────────────────────────
+                            Surface(
+                                color  = Color.White.copy(alpha = 0.04f),
+                                shape  = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Outlined.FormatQuote, null, tint = Amber, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Günün Alıntısı", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                    adminTextField(dqTextTr, { dqTextTr = it }, "Alıntı metni (TR) *", minLines = 2)
+                                    Spacer(Modifier.height(8.dp))
+                                    adminTextField(dqTextKu, { dqTextKu = it }, "Alıntı metni (KU)", minLines = 2)
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        adminTextField(dqAuthor, { dqAuthor = it }, "Yazar", modifier = Modifier.weight(1f))
+                                        adminTextField(dqBook, { dqBook = it }, "Kitap", modifier = Modifier.weight(1f))
+                                    }
+                                    Spacer(Modifier.height(10.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                vm.saveDailyQuote(
+                                                    AdminViewModel.DailyQuoteContent(dqTextTr, dqTextKu, dqAuthor, dqBook)
+                                                )
+                                            },
+                                            enabled  = dqTextTr.isNotBlank(),
+                                            modifier = Modifier.weight(1f),
+                                            shape    = RoundedCornerShape(10.dp),
+                                        ) {
+                                            Icon(Icons.Default.Save, null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Kaydet", fontSize = 13.sp)
+                                        }
+                                        Button(
+                                            onClick = {
+                                                vm.saveDailyQuoteAndNotify(
+                                                    AdminViewModel.DailyQuoteContent(dqTextTr, dqTextKu, dqAuthor, dqBook)
+                                                )
+                                            },
+                                            enabled  = dqTextTr.isNotBlank(),
+                                            modifier = Modifier.weight(1f),
+                                            shape    = RoundedCornerShape(10.dp),
+                                            colors   = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                                        ) {
+                                            Icon(Icons.Default.NotificationsActive, null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Tetikle", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(12.dp))
+
+                            // ── Günün Kelimesi ────────────────────────────────
+                            Surface(
+                                color  = Color.White.copy(alpha = 0.04f),
+                                shape  = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Outlined.Translate, null, tint = Primary, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Günün Kelimesi", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                    adminTextField(dwWord, { dwWord = it }, "Kelime (Kurdî) *")
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        adminTextField(dwMeaningTr, { dwMeaningTr = it }, "Anlam (TR) *", modifier = Modifier.weight(1f))
+                                        adminTextField(dwMeaningKu, { dwMeaningKu = it }, "Anlam (KU)", modifier = Modifier.weight(1f))
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                    adminTextField(dwExampleKu, { dwExampleKu = it }, "Örnek cümle (Kurdî)", minLines = 2)
+                                    Spacer(Modifier.height(10.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                vm.saveDailyWord(
+                                                    AdminViewModel.DailyWordContent(dwWord, dwMeaningTr, dwMeaningKu, dwExampleKu)
+                                                )
+                                            },
+                                            enabled  = dwWord.isNotBlank() && dwMeaningTr.isNotBlank(),
+                                            modifier = Modifier.weight(1f),
+                                            shape    = RoundedCornerShape(10.dp),
+                                        ) {
+                                            Icon(Icons.Default.Save, null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Kaydet", fontSize = 13.sp)
+                                        }
+                                        Button(
+                                            onClick = {
+                                                vm.saveDailyWordAndNotify(
+                                                    AdminViewModel.DailyWordContent(dwWord, dwMeaningTr, dwMeaningKu, dwExampleKu)
+                                                )
+                                            },
+                                            enabled  = dwWord.isNotBlank() && dwMeaningTr.isNotBlank(),
+                                            modifier = Modifier.weight(1f),
+                                            shape    = RoundedCornerShape(10.dp),
+                                            colors   = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Color.White),
+                                        ) {
+                                            Icon(Icons.Default.NotificationsActive, null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Tetikle", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (dailyResult.isNotBlank()) {
+                                Spacer(Modifier.height(10.dp))
+                                Surface(
+                                    color = if (dailyResult.startsWith("✓")) Success.copy(alpha = 0.12f) else Error.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        dailyResult,
+                                        color    = if (dailyResult.startsWith("✓")) Success else Error,
+                                        fontSize = 13.sp,
+                                        modifier = Modifier.padding(10.dp),
+                                    )
+                                }
                             }
                         }
                     }

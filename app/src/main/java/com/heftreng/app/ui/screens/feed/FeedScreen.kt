@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -376,24 +377,6 @@ fun FeedScreen(
                     }
                 }
 
-                // ── Arkadaşlar ne okuyor? — Keşfet/Feed üst şeridi ─────────
-                if (selectedFeedTab == 0 && friendsReading.isNotEmpty()) {
-                    item(key = "friends_reading") {
-                        FriendsReadingStrip(
-                            items    = friendsReading,
-                            language = language,
-                            onClick  = { item ->
-                                if (item.source == "library") {
-                                    navController.navigate("library_book_detail/${item.bookId}")
-                                } else {
-                                    navController.navigate("serial/${item.bookId}")
-                                }
-                            },
-                            onAvatarClick = { uid -> navController.navigate(Screen.Profile.go(uid)) },
-                        )
-                    }
-                }
-
                 // ── Blog Yazıları — heft-reng.blogspot.com içeriği ─────────
                 if (selectedFeedTab == 0 && blogState.posts.isNotEmpty()) {
                     item(key = "blog_posts") {
@@ -406,7 +389,7 @@ fun FeedScreen(
                     }
                 }
 
-                items(displayedPosts, key = { it.id }) { post ->
+                itemsIndexed(displayedPosts, key = { _, p -> p.id }) { postIndex, post ->
                     PostCard(
                         post      = post,
                         onLike    = { vm.toggleLike(post) },
@@ -477,11 +460,24 @@ fun FeedScreen(
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     // ── AdMob Banner — her bannerPos. kartta bir ─────────
-                    val postIndex = displayedPosts.indexOf(post)
                     if (bannerUnitId != null &&
-                        postIndex >= 0 &&
                         (postIndex + 1) % bannerPos == 0) {
                         AdBannerView(unitId = bannerUnitId, adsVm = adsVm, slot = AdsViewModel.BannerSlot.FEED, bannerSize = feedBannerSize)
+                    }
+                    // ── Arkadaşlar ne okuyor? — gönderi kartlarının arasına ────
+                    if (selectedFeedTab == 0 && postIndex == 2 && friendsReading.isNotEmpty()) {
+                        FriendsReadingStrip(
+                            items    = friendsReading,
+                            language = language,
+                            onClick  = { item ->
+                                if (item.source == "library") {
+                                    navController.navigate("library_book_detail/${item.bookId}")
+                                } else {
+                                    navController.navigate("serial/${item.bookId}")
+                                }
+                            },
+                            onAvatarClick = { uid -> navController.navigate(Screen.Profile.go(uid)) },
+                        )
                     }
                 }
                 // ── Daha Fazla Göster ─────────────────────────────────────
