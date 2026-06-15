@@ -6,7 +6,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -44,6 +46,7 @@ import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.component.AdBannerView
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.viewmodel.AdsViewModel
+import com.heftreng.app.viewmodel.BlogViewModel
 import com.heftreng.app.ui.component.QuoteCard
 import com.heftreng.app.ui.component.LinkifyText
 import com.heftreng.app.ui.component.FullScreenImageViewer
@@ -79,6 +82,7 @@ fun FeedScreen(
     socialVm     : SocialViewModel = hiltViewModel(),
     adsVm        : AdsViewModel    = hiltViewModel(),
     settingsVm   : SettingsViewModel = hiltViewModel(),
+    blogVm       : BlogViewModel    = hiltViewModel(),
 ) {
     val posts       by vm.posts.collectAsState()
     val suggestedUsers by vm.suggestedUsers.collectAsState()
@@ -114,6 +118,8 @@ fun FeedScreen(
         vm.loadLibraryQuotes()
         vm.loadSuggestedUsers()
         vm.loadFollowingUids(currentUserUid)
+        vm.loadFriendsReading()
+        blogVm.loadPosts()
     }
 
     // ── Feed sekme (Herkes / Takip edilenler) ────────────────────────────────
@@ -126,6 +132,8 @@ fun FeedScreen(
 
     // Takip edilen UIDs — ViewModel'den (get() ile, listener yok)
     val followingUids by vm.followingUids.collectAsState()
+    val friendsReading by vm.friendsReading.collectAsState()
+    val blogState by blogVm.state.collectAsState()
 
     val displayedPosts = remember(posts, selectedFeedTab, followingUids, blockedUsers) {
         val blockedUids = blockedUsers.map { it.uid }.toSet()
@@ -364,6 +372,36 @@ fun FeedScreen(
                             onFollow         = { uid -> vm.followSuggestedUser(uid) },
                             onNavigate       = { uid -> navController.navigate(Screen.Profile.go(uid)) },
                             language         = language,
+                        )
+                    }
+                }
+
+                // ── Arkadaşlar ne okuyor? — Keşfet/Feed üst şeridi ─────────
+                if (selectedFeedTab == 0 && friendsReading.isNotEmpty()) {
+                    item(key = "friends_reading") {
+                        FriendsReadingStrip(
+                            items    = friendsReading,
+                            language = language,
+                            onClick  = { item ->
+                                if (item.source == "library") {
+                                    navController.navigate("library_book_detail/${item.bookId}")
+                                } else {
+                                    navController.navigate("serial/${item.bookId}")
+                                }
+                            },
+                            onAvatarClick = { uid -> navController.navigate(Screen.Profile.go(uid)) },
+                        )
+                    }
+                }
+
+                // ── Blog Yazıları — heft-reng.blogspot.com içeriği ─────────
+                if (selectedFeedTab == 0 && blogState.posts.isNotEmpty()) {
+                    item(key = "blog_posts") {
+                        BlogPostsStrip(
+                            posts    = blogState.posts.take(8),
+                            language = language,
+                            onPostClick = { post -> navController.navigate("blog_post/${post.id}") },
+                            onSeeAll    = { navController.navigate(Screen.Blog.route) },
                         )
                     }
                 }
@@ -1667,5 +1705,263 @@ private fun SuggestedUserRow(
                 )
             }
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  FriendsReadingStrip — "Arkadaşların ne okuyor?" yatay şerit (Feed üstü)
+//  reading_status (status='okuyorum') + follows isim/foto eşleşmesi
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun FriendsReadingStrip(
+    items        : List<com.heftreng.app.data.model.FriendReadingItem>,
+    language     : String = "tr",
+    onClick      : (com.heftreng.app.data.model.FriendReadingItem) -> Unit,
+    onAvatarClick: (String) -> Unit = {},
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color    = HeftSurface,
+    ) {
+        Column {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Outlined.AutoStories,
+                    null,
+                    tint     = Primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    Strings.friendsReadingTitle(language),
+                    color      = OnBackground,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize   = 15.sp,
+                )
+            }
+
+            LazyRow(
+                contentPadding      = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(items, key = { it.uid + it.bookId }) { item ->
+                    FriendReadingCard(
+                        item          = item,
+                        language      = language,
+                        onClick       = { onClick(item) },
+                        onAvatarClick = { onAvatarClick(item.uid) },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            HorizontalDivider(color = Divider, thickness = 0.5.dp)
+        }
+    }
+}
+
+@Composable
+private fun FriendReadingCard(
+    item         : com.heftreng.app.data.model.FriendReadingItem,
+    language     : String,
+    onClick      : () -> Unit,
+    onAvatarClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .width(110.dp)
+            .clickable { onClick() },
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(10.dp))
+                .background(SurfaceVar),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (item.coverImg.isNotBlank()) {
+                AsyncImage(
+                    model              = item.coverImg,
+                    contentDescription = item.title,
+                    contentScale       = ContentScale.Crop,
+                    modifier           = Modifier.fillMaxSize(),
+                )
+            } else {
+                Icon(Icons.Outlined.AutoStories, null, tint = Muted, modifier = Modifier.size(28.dp))
+            }
+
+            // Arkadaşın avatarı — sol üst köşe
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(SurfaceVar)
+                    .clickable { onAvatarClick() },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (item.photoURL.isNotBlank()) {
+                    AsyncImage(
+                        model              = item.photoURL,
+                        contentDescription = item.name,
+                        contentScale       = ContentScale.Crop,
+                        modifier           = Modifier.fillMaxSize().clip(CircleShape),
+                    )
+                } else {
+                    Icon(Icons.Outlined.Person, null, tint = Muted, modifier = Modifier.size(14.dp))
+                }
+            }
+
+            // Sayfa rozeti
+            if (item.currentPage > 0) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        Strings.friendsReadingPage(language, item.currentPage),
+                        color    = Color.White,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            item.title,
+            color      = OnBackground,
+            fontSize   = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines   = 2,
+            overflow   = TextOverflow.Ellipsis,
+            lineHeight = 14.sp,
+        )
+        if (item.name.isNotBlank()) {
+            Text(
+                item.name,
+                color    = Muted,
+                fontSize = 10.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  BlogPostsStrip — "Blog Yazıları" yatay şerit (Feed üstü)
+//  heft-reng.blogspot.com (Blogger API) — Blog sekmesi kaldırıldı, içerik
+//  Kültür/Feed'e entegre edildi. "Tümünü Gör" → mevcut Blog ekranı (rota duruyor).
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun BlogPostsStrip(
+    posts      : List<com.heftreng.app.viewmodel.BlogPost>,
+    language   : String = "tr",
+    onPostClick: (com.heftreng.app.viewmodel.BlogPost) -> Unit,
+    onSeeAll   : () -> Unit,
+) {
+    val ku = language == "ku"
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color    = HeftSurface,
+    ) {
+        Column {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Outlined.Article,
+                    null,
+                    tint     = Primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (ku) "Gotarên Blogê" else "Blog Yazıları",
+                    color      = OnBackground,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize   = 15.sp,
+                    modifier   = Modifier.weight(1f),
+                )
+                Text(
+                    if (ku) "Hemî" else "Tümünü Gör",
+                    color    = Primary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable { onSeeAll() },
+                )
+            }
+
+            LazyRow(
+                contentPadding        = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(posts, key = { it.id }) { post ->
+                    BlogPostCard(post = post, onClick = { onPostClick(post) })
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            HorizontalDivider(color = Divider, thickness = 0.5.dp)
+        }
+    }
+}
+
+@Composable
+private fun BlogPostCard(
+    post   : com.heftreng.app.viewmodel.BlogPost,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .width(200.dp)
+            .clickable { onClick() },
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(110.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(SurfaceVar),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (post.thumbnail.isNotBlank()) {
+                AsyncImage(
+                    model              = post.thumbnail,
+                    contentDescription = post.title,
+                    contentScale       = ContentScale.Crop,
+                    modifier           = Modifier.fillMaxSize(),
+                )
+            } else {
+                Icon(Icons.Outlined.Article, null, tint = Muted, modifier = Modifier.size(28.dp))
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            post.title,
+            color      = OnBackground,
+            fontSize   = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines   = 2,
+            overflow   = TextOverflow.Ellipsis,
+            lineHeight = 16.sp,
+        )
     }
 }
