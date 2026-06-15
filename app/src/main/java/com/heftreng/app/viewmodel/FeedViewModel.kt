@@ -32,6 +32,7 @@ class FeedViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val library  : LibraryRepository,
     private val supabase : SupabaseClient,
+    private val quoteDao : com.heftreng.app.data.local.QuoteDao,
 ) : ViewModel() {
 
     private val _posts    = MutableStateFlow<List<Post>>(emptyList())
@@ -50,6 +51,10 @@ class FeedViewModel @Inject constructor(
 
     private val _libraryQuotes = MutableStateFlow<List<Post>>(emptyList())
     val libraryQuotes = _libraryQuotes.asStateFlow()
+
+    // Öncelik 4: Offline cache — Room'dan gösteriliyorsa true (ağ hatası/çevrimdışı)
+    private val _libraryQuotesOffline = MutableStateFlow(false)
+    val libraryQuotesOffline = _libraryQuotesOffline.asStateFlow()
 
     // ── Arkadaşlar ne okuyor? — Feed üst şeridi ──────────────────────────────
     private val _friendsReading = MutableStateFlow<List<com.heftreng.app.data.model.FriendReadingItem>>(emptyList())
@@ -445,6 +450,41 @@ class FeedViewModel @Inject constructor(
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
+
+    // ── Öncelik 4: Offline cache (Room) — Post <-> CachedQuote dönüştürücüler ──
+    private fun Post.toCachedQuote() = com.heftreng.app.data.local.CachedQuote(
+        id              = id,
+        uid             = uid,
+        displayName     = displayName.ifBlank { name },
+        photoURL        = photoURL,
+        quoteText       = quoteText,
+        bookName        = bookName,
+        authorName      = authorName,
+        likesCount      = likesCount,
+        commentsCount   = commentsCount,
+        repostsCount    = repostsCount,
+        libraryBookId   = libraryBookId,
+        libraryAuthorId = libraryAuthorId,
+        feedPostId      = id,
+        tsMillis        = ts?.toDate()?.time ?: 0L,
+    )
+
+    private fun com.heftreng.app.data.local.CachedQuote.toPost() = Post(
+        id              = feedPostId,
+        uid             = uid,
+        displayName     = displayName,
+        name            = displayName,
+        photoURL        = photoURL,
+        quoteText       = quoteText,
+        bookName        = bookName,
+        authorName      = authorName,
+        likesCount      = likesCount,
+        commentsCount   = commentsCount,
+        repostsCount    = repostsCount,
+        libraryBookId   = libraryBookId,
+        libraryAuthorId = libraryAuthorId,
+        ts              = if (tsMillis > 0) com.google.firebase.Timestamp(java.util.Date(tsMillis)) else null,
+    )
 
     internal fun com.google.firebase.firestore.DocumentSnapshot.toPost(): Post? {
         val d = data ?: return null
@@ -1394,7 +1434,33 @@ class FeedViewModel @Inject constructor(
             android.util.Log.w("FeedVM", "loadLibraryQuotes oldPosts: ${e.message}")
         }
 
-        _libraryQuotes.value = result.sortedByDescending { it.ts?.seconds ?: 0L }
+        val sorted = result.sortedByDescending { it.ts?.seconds ?: 0L }
+
+        // ── Öncelik 4: Offline cache (Room) ──────────────────────────────────
+        if (sorted.isNotEmpty()) {
+            _libraryQuotes.value = sorted
+            _libraryQuotesOffline.value = false
+            try {
+                quoteDao.replaceAll(sorted.take(50).map { it.toCachedQuote() })
+            } catch (e: Exception) {
+                android.util.Log.w("FeedVM", "quoteDao.replaceAll: ${e.message}")
+            }
+        } else {
+            // Ağ sonucu boş — internet yoksa son önbelleğe düş
+            try {
+                val cached = quoteDao.getCachedQuotes(50)
+                if (cached.isNotEmpty()) {
+                    _libraryQuotes.value = cached.map { it.toPost() }
+                    _libraryQuotesOffline.value = true
+                } else {
+                    _libraryQuotes.value = emptyList()
+                    _libraryQuotesOffline.value = false
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("FeedVM", "quoteDao.getCachedQuotes: ${e.message}")
+                _libraryQuotes.value = emptyList()
+            }
+        }
     }
 
     fun loadLibraryQuotes() {

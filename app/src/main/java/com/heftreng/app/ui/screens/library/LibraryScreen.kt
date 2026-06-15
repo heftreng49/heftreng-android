@@ -103,6 +103,7 @@ fun LibraryScreen(
 
 
     val quotes by feedVm.libraryQuotes.collectAsState()
+    val quotesOffline by feedVm.libraryQuotesOffline.collectAsState()
     var reviews by remember { mutableStateOf<List<BookReview>>(emptyList()) }
     val authors by libraryVm.authors.collectAsState()
     var books   by remember { mutableStateOf<List<LibraryBook>>(emptyList()) }
@@ -255,7 +256,7 @@ fun LibraryScreen(
                     modifier                = Modifier.fillMaxSize(),
                 ) { page ->
                     when (page) {
-                        0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize)
+                        0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize, isOffline = quotesOffline)
                         1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize)
                         2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize)
                         3 -> LibraryBooksTab(books = books, navController = navController, language = language, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize)
@@ -357,12 +358,33 @@ private fun LibraryQuotesTab(
     bannerUnitId : String? = null,
     adsVm        : com.heftreng.app.viewmodel.AdsViewModel? = null,
     bannerSize   : String = "adaptive",
+    isOffline    : Boolean = false,
 ) {
     if (quotes.isEmpty()) {
         EmptyState(Icons.Outlined.FormatQuote, Strings.libraryNoQuotes(language))
         return
     }
     LazyColumn(contentPadding = PaddingValues(vertical = 0.dp)) {
+        if (isOffline) {
+            item(key = "offline_banner") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Amber.copy(alpha = 0.12f))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Outlined.CloudOff, null, tint = Amber, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (language == "ku") "Hûn ne girêdayî ne — alîqên dawî tên xuyang kirin"
+                        else "Çevrimdışısın — son görüntülenen alıntılar gösteriliyor",
+                        color    = Amber,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+        }
         itemsIndexed(quotes, key = { _, p -> p.id }) { index, post ->
             PostCard(
                 post         = post,

@@ -148,4 +148,9 @@ dependencies {
 
     // AdMob
     implementation(libs.admob)
+
+    // Room — Offline cache (Öncelik 4: alıntılar)
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
 }

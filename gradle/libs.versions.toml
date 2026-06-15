@@ -17,6 +17,7 @@ accompanist = "0.36.0"
 googleMaterial = "1.11.0"
 admob = "23.2.0"
 supabase = "3.1.4"
+room = "2.6.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -62,6 +63,11 @@ supabase-bom       = { group = "io.github.jan-tennert.supabase", name = "bom",  
 supabase-postgrest = { group = "io.github.jan-tennert.supabase", name = "postgrest-kt" }
 supabase-realtime  = { group = "io.github.jan-tennert.supabase", name = "realtime-kt" }
 ktor-client-okhttp = { group = "io.ktor",                        name = "ktor-client-okhttp", version.ref = "ktor" }
+
+# Room — Offline cache (Öncelik 4)
+room-runtime  = { group = "androidx.room", name = "room-runtime",  version.ref = "room" }
+room-ktx      = { group = "androidx.room", name = "room-ktx",      version.ref = "room" }
+room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
