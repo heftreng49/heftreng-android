@@ -248,6 +248,15 @@ class LibraryRepository @Inject constructor(
             limit(limit.toLong())
         }.decodeList()
 
+    /** Keşfet → Alıntılar — en son eklenen kütüphane alıntıları.
+     *  ÖNCEKİ: Firestore `feed` (type='library_quote' + 300'lük legacy tarama, 2 sorgu).
+     *  ŞİMDİ:  Supabase `book_quotes` — 1 sorgu, RLS public read. */
+    suspend fun getRecentQuotes(limit: Int = 50): List<BookQuoteRow> =
+        db["book_quotes"].select {
+            order("created_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList()
+
     suspend fun insertQuote(row: BookQuoteRow) {
         db["book_quotes"].insert(row)
     }

@@ -451,6 +451,27 @@ class FeedViewModel @Inject constructor(
         }
     }
 
+    // ── Supabase book_quotes → Post (Keşfet/Alıntılar) ───────────────────────
+    private fun com.heftreng.app.data.repository.BookQuoteRow.toPost() = Post(
+        id              = feedPostId,
+        uid             = uid,
+        displayName     = userDisplayName,
+        name            = userDisplayName,
+        photoURL        = userPhotoUrl,
+        quoteText       = text,
+        bookName        = bookTitle,
+        authorName      = authorName,
+        likesCount      = likesCount,
+        libraryBookId   = bookId,
+        libraryAuthorId = authorId ?: "",
+        ts              = parseSupabaseTimestamp(createdAt),
+    )
+
+    private fun parseSupabaseTimestamp(iso: String): Timestamp? = try {
+        if (iso.isBlank()) null
+        else Timestamp(java.util.Date.from(java.time.OffsetDateTime.parse(iso).toInstant()))
+    } catch (_: Exception) { null }
+
     // ── Öncelik 4: Offline cache (Room) — Post <-> CachedQuote dönüştürücüler ──
     private fun Post.toCachedQuote() = com.heftreng.app.data.local.CachedQuote(
         id              = id,
@@ -1370,71 +1391,27 @@ class FeedViewModel @Inject constructor(
         } catch (e: Exception) { e.printStackTrace() }
     }
 
+    // Keşfet → Alıntılar şeridi.
+    // ÖNCEKİ (2 Firestore okuması/açılış): feed type='library_quote' (sınırsız) +
+    //   feed son 300 belge taraması (eski format alıntılar için).
+    // ŞİMDİ: Supabase book_quotes (RLS public read, 1 sorgu) — addBookQuote() artık
+    //   her alıntıyı buraya da yazıyor, kapak/yazar/kitap bilgisiyle katalog bağlantılı.
+    //   Not: book_quotes'a taşınmadan önceki çok eski, kataloğa bağlı olmayan
+    //   alıntılar bu agregasyonda görünmez (yine de kullanıcı profillerinde durur).
     suspend fun loadLibraryQuotesAsync() {
-        val myUid   = auth.currentUser?.uid ?: ""
-        val isAdmin = auth.currentUser?.email == "siirgibi49@gmail.com"
-        val seenIds = mutableSetOf<String>()
-        val result  = mutableListOf<Post>()
-
-        val followingUids = mutableSetOf<String>()
-        if (myUid.isNotEmpty()) {
-            try {
-                val libFollowRows = supabase.postgrest["follows"]
-                    .select { filter { eq("from_uid", myUid) }; limit(500) }
-                    .decodeList<FollowRow>()
-                libFollowRows.forEach { followingUids.add(it.targetUid) }
-            } catch (_: Exception) {}
-        }
+        val result = mutableListOf<Post>()
 
         try {
-            val snap = firestore.collection("feed")
-                .whereEqualTo("type", "library_quote")
-                .get().await()
-
-            snap.documents.forEach { doc ->
-                val d   = doc.data ?: return@forEach
-                val vis = d["visibility"] as? String ?: "public"
-                val ownerUid = d["uid"] as? String ?: ""
-
-                val canSee = when (vis) {
-                    "only_me" -> ownerUid == myUid || isAdmin
-                    "friends" -> ownerUid == myUid || isAdmin || ownerUid in followingUids
-                    else -> true
-                }
-
-                if (canSee && seenIds.add(doc.id)) {
-                    doc.toPost()?.let { result.add(it) }
-                }
+            val rows = library.getRecentQuotes(50)
+            rows.forEach { row ->
+                if (row.feedPostId.isBlank() || row.text.isBlank()) return@forEach
+                result.add(row.toPost())
             }
         } catch (e: Exception) {
-            android.util.Log.w("FeedVM", "loadLibraryQuotes feed: ${e.message}")
+            android.util.Log.w("FeedVM", "loadLibraryQuotes book_quotes: ${e.message}")
         }
 
-        // collectionGroup("quotes") tüm alt koleksiyonu tarardı — her alıntı zaten
-        // addBookQuote() ile feed'e de yazıldığından bu sorgu gereksiz okuma yapıyordu.
-
-        try {
-            val oldSnap = firestore.collection("feed")
-                .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                .limit(300).get().await()
-            oldSnap.documents.forEach { doc ->
-                if (seenIds.contains(doc.id)) return@forEach
-                val d = doc.data ?: return@forEach
-                val bookName = (d["bookName"] as? String)?.takeIf { it.isNotBlank() }
-                    ?: ((d["quote"] as? Map<*,*>)?.get("book") as? String)?.takeIf { it.isNotBlank() }
-                    ?: return@forEach
-                val quoteText = (d["quoteText"] as? String)?.takeIf { it.isNotBlank() }
-                    ?: ((d["quote"] as? Map<*,*>)?.get("text") as? String)?.takeIf { it.isNotBlank() }
-                    ?: return@forEach
-                if (seenIds.add(doc.id)) {
-                    doc.toPost()?.let { result.add(it) }
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("FeedVM", "loadLibraryQuotes oldPosts: ${e.message}")
-        }
-
-        val sorted = result.sortedByDescending { it.ts?.seconds ?: 0L }
+        val sorted = result
 
         // ── Öncelik 4: Offline cache (Room) ──────────────────────────────────
         if (sorted.isNotEmpty()) {

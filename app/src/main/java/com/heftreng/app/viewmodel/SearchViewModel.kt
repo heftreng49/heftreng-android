@@ -10,7 +10,6 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -120,13 +119,16 @@ class SearchViewModel @Inject constructor(
         val qLower = q.lowercase()
         val qCap   = q.replaceFirstChar { it.uppercaseChar() }
 
-        // Firebase (users + feed + serials) ve Supabase (authors + books) paralel
+        // Firebase (users + feed + serials) ve Supabase (authors + books + quote isimleri) paralel
         val firebaseJob  = viewModelScope.async { searchFirebase(q, qLower, qCap) }
         val supabaseJob  = viewModelScope.async { searchSupabase(qLower) }
+        val quoteNamesJob = viewModelScope.async { searchQuoteNames(qLower) }
 
-        val (fbResults, sbResults) = awaitAll(firebaseJob, supabaseJob)
+        val (fbResults, sbResults, quoteResults) = Triple(
+            firebaseJob.await(), supabaseJob.await(), quoteNamesJob.await()
+        )
 
-        val combined = fbResults + sbResults
+        val combined = fbResults + sbResults + quoteResults
         _searchResults.value = combined
         _results.value = combined.filter { it.type == "user" }.map { r ->
             User(
@@ -242,35 +244,35 @@ class SearchViewModel @Inject constructor(
             }
         } catch (e: Exception) { e.printStackTrace() }
 
-        // Feed'den legacy alıntı yazar/kitap isimleri
+        return results
+    }
+
+    // ── Alıntı yazar/kitap isimleri — artık Supabase book_quotes üzerinden ─────
+    // ÖNCEKİ: feed koleksiyonuna 4 ayrı sorgu (whereEqualTo + orderBy×2 alan)
+    // ŞİMDİ:  book_quotes'a 2 ilike sorgusu (author_name, book_title)
+    private suspend fun searchQuoteNames(qLower: String): List<SearchResult> {
+        val results = mutableListOf<SearchResult>()
+
         try {
-            val authorSnap  = firestore.collection("feed").whereEqualTo("quote.author", q).limit(10).get().await()
-            val authorSnap2 = firestore.collection("feed").orderBy("authorName")
-                .startAt(q).endAt(q + "\uF8FF").limit(10).get().await()
-            val authorNames = (authorSnap.documents + authorSnap2.documents).distinctBy { it.id }
-                .mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    ((d["quote"] as? Map<*, *>)?.get("author") as? String
-                        ?: d["authorName"] as? String)?.takeIf { it.isNotBlank() }
-                }.distinct().take(5)
-            results += authorNames.map { name ->
-                SearchResult(id = name, type = "author", title = name, subtitle = "Yazar Alıntıları")
-            }
+            val authorRows = supabase.postgrest["book_quotes"]
+                .select { filter { ilike("author_name", "%$qLower%") }; limit(20) }
+                .decodeList<com.heftreng.app.data.repository.BookQuoteRow>()
+            authorRows.mapNotNull { it.authorName.takeIf { n -> n.isNotBlank() } }
+                .distinct().take(5)
+                .forEach { name ->
+                    results += SearchResult(id = name, type = "author", title = name, subtitle = "Yazar Alıntıları")
+                }
         } catch (_: Exception) {}
 
         try {
-            val bookSnap  = firestore.collection("feed").whereEqualTo("quote.book", q).limit(10).get().await()
-            val bookSnap2 = firestore.collection("feed").orderBy("bookName")
-                .startAt(q).endAt(q + "\uF8FF").limit(10).get().await()
-            val bookNames = (bookSnap.documents + bookSnap2.documents).distinctBy { it.id }
-                .mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    ((d["quote"] as? Map<*, *>)?.get("book") as? String
-                        ?: d["bookName"] as? String)?.takeIf { it.isNotBlank() }
-                }.distinct().take(5)
-            results += bookNames.map { name ->
-                SearchResult(id = name, type = "book_quote", title = name, subtitle = "Kitap Alıntıları")
-            }
+            val bookRows = supabase.postgrest["book_quotes"]
+                .select { filter { ilike("book_title", "%$qLower%") }; limit(20) }
+                .decodeList<com.heftreng.app.data.repository.BookQuoteRow>()
+            bookRows.mapNotNull { it.bookTitle.takeIf { n -> n.isNotBlank() } }
+                .distinct().take(5)
+                .forEach { name ->
+                    results += SearchResult(id = name, type = "book_quote", title = name, subtitle = "Kitap Alıntıları")
+                }
         } catch (_: Exception) {}
 
         return results
