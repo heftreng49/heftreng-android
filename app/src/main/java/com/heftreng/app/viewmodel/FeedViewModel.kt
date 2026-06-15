@@ -139,6 +139,11 @@ class FeedViewModel @Inject constructor(
                 val streak = library.computeStreak(myUid)
                 firestore.collection("users").document(myUid)
                     .update("streak", streak)
+
+                // ── Rozetler — Öncelik 4 ────────────────────────────────────
+                val booksRead    = library.getBooksReadCount(myUid)
+                val quotesShared = library.getQuotesSharedCount(myUid)
+                library.checkAndAwardBadges(myUid, booksRead, quotesShared, streak)
             } catch (e: Exception) {
                 android.util.Log.w("FeedVM", "recordDailyActivityAndStreak: ${e.message}")
             }

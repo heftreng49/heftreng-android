@@ -133,6 +133,15 @@ create table if not exists daily_activity (
 );
 create index if not exists daily_activity_uid_idx on daily_activity (uid);
 
+-- ── Rozetler — kazanılan rozetler (katalog uygulama içinde, BadgeCatalog) ──
+create table if not exists user_badges (
+    uid        text not null,
+    badge_id   text not null,
+    earned_at  timestamptz default now(),
+    primary key (uid, badge_id)
+);
+create index if not exists user_badges_uid_idx on user_badges (uid);
+
 -- ── Row Level Security ────────────────────────────────────────
 alter table authors        enable row level security;
 alter table library_books  enable row level security;
@@ -142,6 +151,7 @@ alter table author_follows enable row level security;
 alter table reading_status enable row level security;
 alter table read_progress  enable row level security;
 alter table daily_activity enable row level security;
+alter table user_badges    enable row level security;
 
 -- Herkes okuyabilir
 do $$ begin
@@ -153,6 +163,7 @@ do $$ begin
   if not exists (select 1 from pg_policies where tablename='reading_status' and policyname='public_read_reading_status') then create policy "public_read_reading_status" on reading_status for select using (true); end if;
   if not exists (select 1 from pg_policies where tablename='read_progress'  and policyname='public_read_read_progress')  then create policy "public_read_read_progress"  on read_progress  for select using (true); end if;
   if not exists (select 1 from pg_policies where tablename='daily_activity' and policyname='public_read_daily_activity') then create policy "public_read_daily_activity" on daily_activity for select using (true); end if;
+  if not exists (select 1 from pg_policies where tablename='user_badges'    and policyname='public_read_user_badges')    then create policy "public_read_user_badges"    on user_badges    for select using (true); end if;
 end $$;
 
 -- Yazma: service_role key ile (workflow'dan, Android'dan değil)
@@ -187,5 +198,8 @@ do $$ begin
   end if;
   if not exists (select 1 from pg_policies where tablename='daily_activity' and policyname='upsert_daily_activity') then
     create policy "upsert_daily_activity" on daily_activity for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='user_badges' and policyname='upsert_user_badges') then
+    create policy "upsert_user_badges" on user_badges for all using (true) with check (true);
   end if;
 end $$;

@@ -32,6 +32,7 @@ object Strings {
 
     // ── Genel Butonlar ────────────────────────────────────────────────────────
     fun save(l: String)            = t(l, "Kaydet",          "Tomar bike")
+    fun ok(l: String)              = t(l, "Tamam",           "Temam")
     fun cancel(l: String)          = t(l, "İptal",           "Betal bike")
     fun delete(l: String)          = t(l, "Sil",             "Jê bibe")
     fun edit(l: String)            = t(l, "Düzenle",         "Biguhêze")

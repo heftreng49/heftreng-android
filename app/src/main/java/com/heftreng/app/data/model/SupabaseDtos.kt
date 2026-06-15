@@ -88,3 +88,11 @@ data class DailyActivityRow(
     val actions       : Int    = 0,
     @SerialName("created_at")   val createdAt    : String? = null,
 )
+
+// ── Rozetler — kazanılan rozetler (katalog Kotlin'de: BadgeCatalog) ────────────
+@Serializable
+data class UserBadgeRow(
+    val uid          : String = "",
+    @SerialName("badge_id") val badgeId : String = "",
+    @SerialName("earned_at") val earnedAt: String? = null,
+)

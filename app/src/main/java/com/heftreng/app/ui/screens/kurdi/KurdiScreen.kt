@@ -12,8 +12,8 @@ package com.heftreng.app.ui.screens.kurdi
 //  Ekranlar:
 //  1. Ana ekran  → XP kartı + günlük hedef + ünite yol haritası
 //  2. Ders ekranı → Kelime flash cards + sorular + XP ödülü
-//  3. Ferheng    → Sözlük (Yakında)
-//  4. Rêziman    → Dilbilgisi (Yakında)
+//  3. Ferheng    → Sözlük (kf_dict, Firebase)
+//  4. Rêziman    → Dilbilgisi (kf_grammar, Firebase)
 //  5. AI Ders    → OpenRouter Gemini ile üretilen ders
 // ═══════════════════════════════════════════════════════════════════════════
 

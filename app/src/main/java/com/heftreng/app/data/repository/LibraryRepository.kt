@@ -533,4 +533,52 @@ class LibraryRepository @Inject constructor(
             streak
         } catch (_: Exception) { 0 }
     }
+
+    // ── Rozetler (user_badges) ───────────────────────────────────────────────
+    //  Katalog Kotlin'de (BadgeCatalog); burada sadece kazanılan rozetler
+    //  saklanır/okunur.
+
+    /** "okudum" durumundaki kitap sayısı — Rozet/Profil özet kartı için. */
+    suspend fun getBooksReadCount(uid: String): Int =
+        try {
+            db["reading_status"].select {
+                filter { eq("uid", uid); eq("status", "okudum") }
+            }.decodeList<ReadingStatusRow>().size
+        } catch (_: Exception) { 0 }
+
+    /** Kullanıcının eklediği toplam alıntı sayısı — Rozet/Profil özet kartı için. */
+    suspend fun getQuotesSharedCount(uid: String): Int =
+        try {
+            db["book_quotes"].select {
+                filter { eq("uid", uid) }
+            }.decodeList<BookQuoteRow>().size
+        } catch (_: Exception) { 0 }
+
+    suspend fun getUserBadgeIds(uid: String): Set<String> {
+        if (uid.isBlank()) return emptySet()
+        return try {
+            db["user_badges"].select {
+                filter { eq("uid", uid) }
+            }.decodeList<com.heftreng.app.data.model.UserBadgeRow>().map { it.badgeId }.toSet()
+        } catch (_: Exception) { emptySet() }
+    }
+
+    suspend fun awardBadge(uid: String, badgeId: String) {
+        if (uid.isBlank()) return
+        try {
+            db["user_badges"].upsert(
+                com.heftreng.app.data.model.UserBadgeRow(uid = uid, badgeId = badgeId)
+            )
+        } catch (_: Exception) { }
+    }
+
+    /** Kazanılması gereken yeni rozetleri hesaplar, kaydeder ve listesini döner. */
+    suspend fun checkAndAwardBadges(uid: String, booksRead: Int, quotesShared: Int, streak: Int): Set<String> {
+        if (uid.isBlank()) return emptySet()
+        val eligible = com.heftreng.app.data.model.BadgeCatalog.eligibleIds(booksRead, quotesShared, streak)
+        val existing = getUserBadgeIds(uid)
+        val newOnes  = eligible - existing
+        newOnes.forEach { awardBadge(uid, it) }
+        return existing + newOnes
+    }
 }

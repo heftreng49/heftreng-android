@@ -25,10 +25,15 @@ class ProfileViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
     private val supabase : SupabaseClient,
+    private val library  : com.heftreng.app.data.repository.LibraryRepository,
 ) : ViewModel() {
 
     private val _user = MutableStateFlow<User?>(null)
     val user = _user.asStateFlow()
+
+    // Rozetler — Öncelik 4 (Supabase user_badges, katalog: BadgeCatalog)
+    private val _badgeIds = MutableStateFlow<Set<String>>(emptySet())
+    val badgeIds = _badgeIds.asStateFlow()
 
     private val _posts = MutableStateFlow<List<Post>>(emptyList())
     val posts = _posts.asStateFlow()
@@ -470,6 +475,8 @@ class ProfileViewModel @Inject constructor(
                     booksRead    = completedBooks,
                     quotesShared = quotesCount,
                 )
+
+                _badgeIds.value = library.getUserBadgeIds(targetUid)
             } catch (e: Exception) { e.printStackTrace() }
         }
     }

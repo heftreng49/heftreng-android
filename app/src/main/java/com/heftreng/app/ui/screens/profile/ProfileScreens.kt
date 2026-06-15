@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -66,6 +67,7 @@ fun ProfileScreen(
     settingsVm   : SettingsViewModel    = hiltViewModel(),
 ) {
     val user           by vm.user.collectAsState()
+    val badgeIds       by vm.badgeIds.collectAsState()
     val posts          by vm.posts.collectAsState()
     val isFollowing    by vm.isFollowing.collectAsState()
     val followRequestStatus by vm.followRequestStatus.collectAsState()
@@ -269,6 +271,13 @@ fun ProfileScreen(
                     streak      = user?.streak ?: 0,
                     language    = language,
                 )
+            }
+
+            // ── 1c. Rozetler — Öncelik 4 (user_badges) ─────────────────────
+            if (badgeIds.isNotEmpty()) {
+                item(key = "badges_row") {
+                    BadgesRow(badgeIds = badgeIds, language = language)
+                }
             }
 
             // ── 2. Tab bar — stickyHeader ────────────────────────────────
@@ -935,6 +944,69 @@ private fun ReadingHeroStat(
         Spacer(Modifier.height(2.dp))
         Text(value, fontWeight = FontWeight.Bold, color = valueColor, fontSize = 16.sp)
         Text(label, color = Muted, fontSize = 11.sp)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  BadgesRow — Öncelik 4 rozet sistemi (Supabase user_badges + BadgeCatalog)
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun BadgesRow(badgeIds: Set<String>, language: String = "tr") {
+    val earned = com.heftreng.app.data.model.BadgeCatalog.all.filter { it.id in badgeIds }
+    if (earned.isEmpty()) return
+
+    LazyRow(
+        contentPadding        = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(earned, key = { it.id }) { badge ->
+            var showInfo by remember { mutableStateOf(false) }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .width(64.dp)
+                    .clickable { showInfo = true },
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(
+                            androidx.compose.ui.graphics.Brush.linearGradient(
+                                listOf(Amber.copy(alpha = 0.30f), Primary.copy(alpha = 0.20f))
+                            )
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(badge.icon, null, tint = Amber, modifier = Modifier.size(24.dp))
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    badge.title(language),
+                    color      = Muted,
+                    fontSize   = 9.sp,
+                    maxLines   = 2,
+                    textAlign  = androidx.compose.ui.text.style.TextAlign.Center,
+                    lineHeight = 11.sp,
+                )
+            }
+
+            if (showInfo) {
+                AlertDialog(
+                    onDismissRequest = { showInfo = false },
+                    containerColor   = HeftSurface,
+                    icon  = { Icon(badge.icon, null, tint = Amber) },
+                    title = { Text(badge.title(language), color = OnBackground, fontWeight = FontWeight.Bold) },
+                    text  = { Text(badge.desc(language), color = Muted) },
+                    confirmButton = {
+                        TextButton(onClick = { showInfo = false }) {
+                            Text(Strings.ok(language), color = Primary)
+                        }
+                    },
+                )
+            }
+        }
     }
 }
 
