@@ -45,8 +45,17 @@ class AuthViewModel @Inject constructor(
         val uid        : String,
     )
 
+    // Kayıt akışı sırasında authStateListener'ın _currentUser'ı erken (doğrulama
+    // ekranından önce) güncellemesini önlemek için flag. createUserWithEmailAndPassword
+    // çağrıldığı anda Firebase Auth SDK kullanıcıyı otomatik oturuma sokar ve listener
+    // tetiklenir — bu, AuthScreen'in doğrulama ekranını atlayıp direkt içeri girmesine
+    // sebep olabiliyordu (race condition).
+    private var registrationInProgress = false
+
     private val authStateListener = FirebaseAuth.AuthStateListener {
-        _currentUser.value = it.currentUser
+        if (!registrationInProgress) {
+            _currentUser.value = it.currentUser
+        }
     }
 
     init {
@@ -137,11 +146,15 @@ class AuthViewModel @Inject constructor(
     fun triggerVerificationPending() {
         if (!_verificationPending.value) {
             _verificationPending.value = true
+            android.util.Log.d("AuthVM", "triggerVerificationPending: verificationPending=true set edildi (email=${auth.currentUser?.email})")
             // Eğer daha önce mail gönderilmemişse gönder
             viewModelScope.launch {
                 try {
                     auth.currentUser?.sendEmailVerification()?.await()
-                } catch (_: Exception) {}
+                    android.util.Log.d("AuthVM", "triggerVerificationPending: sendEmailVerification BAŞARILI")
+                } catch (e: Exception) {
+                    android.util.Log.e("AuthVM", "triggerVerificationPending: sendEmailVerification HATA: ${e.javaClass.simpleName} - ${e.message}", e)
+                }
             }
         }
     }
@@ -227,13 +240,20 @@ class AuthViewModel @Inject constructor(
             try {
                 val result = auth.signInWithEmailAndPassword(email, password).await()
                 val user   = result.user ?: return@launch
+                android.util.Log.d("AuthVM", "signInWithEmail: uid=${user.uid}, isEmailVerified=${user.isEmailVerified}")
 
                 // Email doğrulanmamışsa içeri alma — doğrulama maili yeniden gönder
                 if (!user.isEmailVerified) {
-                    try { user.sendEmailVerification().await() } catch (_: Exception) {}
+                    try {
+                        user.sendEmailVerification().await()
+                        android.util.Log.d("AuthVM", "signInWithEmail: sendEmailVerification BAŞARILI -> ${user.email}")
+                    } catch (e: Exception) {
+                        android.util.Log.e("AuthVM", "signInWithEmail: sendEmailVerification HATA: ${e.javaClass.simpleName} - ${e.message}", e)
+                    }
                     auth.signOut()
                     _verificationPending.value = true
                     _error.value = "EMAIL_NOT_VERIFIED" // AuthScreen bu kodu yakalar
+                    android.util.Log.d("AuthVM", "signInWithEmail: verificationPending=true, EMAIL_NOT_VERIFIED set edildi")
                     return@launch
                 }
 
@@ -272,9 +292,14 @@ class AuthViewModel @Inject constructor(
     fun registerWithEmail(email: String, password: String, displayName: String) {
         viewModelScope.launch {
             _loading.value = true
+            // createUserWithEmailAndPassword çağrılır çağrılmaz authStateListener tetiklenir;
+            // doğrulama maili gönderilip signOut yapılana kadar _currentUser'ın güncellenmesini
+            // engelle (aşağıdaki finally'de tekrar açılır).
+            registrationInProgress = true
             try {
                 // ── KATMAN 1: Cloud Function güvenlik kontrolü ────────────────
                 // Tek kullanımlık email, hız sınırı, isim doğrulama
+                android.util.Log.d("AuthVM", "registerWithEmail: verifyRegistration çağrılıyor (email=$email)")
                 val verifyResult = com.google.firebase.functions.FirebaseFunctions
                     .getInstance()
                     .getHttpsCallable("verifyRegistration")
@@ -283,43 +308,70 @@ class AuthViewModel @Inject constructor(
                 @Suppress("UNCHECKED_CAST")
                 val resultData = verifyResult.data as? Map<String, Any>
                 val allowed    = resultData?.get("allowed") as? Boolean ?: true
+                android.util.Log.d("AuthVM", "verifyRegistration sonucu: allowed=$allowed, data=$resultData")
                 if (!allowed) {
                     _error.value = resultData?.get("reason") as? String ?: "Kayıt engeliendi"
+                    android.util.Log.w("AuthVM", "Kayıt engellendi: ${_error.value}")
                     return@launch
                 }
 
                 // ── KATMAN 2: Firebase Auth ile hesap oluştur ─────────────────
+                android.util.Log.d("AuthVM", "createUserWithEmailAndPassword çağrılıyor")
                 val result = auth.createUserWithEmailAndPassword(email, password).await()
-                val user   = result.user ?: return@launch
+                val user   = result.user ?: run {
+                    android.util.Log.e("AuthVM", "createUserWithEmailAndPassword: user null döndü")
+                    return@launch
+                }
+                android.util.Log.d("AuthVM", "Kullanıcı oluşturuldu: uid=${user.uid}")
                 createUserDoc(user, displayName)
                 syncFcmToken(user.uid)
                 acceptTerms(method = "email_register")
-                try { user.sendEmailVerification().await() } catch (_: Exception) {}
+                try {
+                    user.sendEmailVerification().await()
+                    android.util.Log.d("AuthVM", "sendEmailVerification BAŞARILI -> ${user.email}")
+                } catch (e: Exception) {
+                    android.util.Log.e("AuthVM", "sendEmailVerification HATA: ${e.javaClass.simpleName} - ${e.message}", e)
+                }
                 // signOut ÖNCE yapılmalı — authStateListener currentUser=null görür,
                 // LaunchedEffect tetiklenmez, kullanıcı doğrudan içeri giremez.
                 auth.signOut()
                 _currentUser.value = null
                 // signOut tamamlandıktan SONRA verificationSent set et
                 _verificationSent.value = true
+                android.util.Log.d("AuthVM", "verificationSent = true set edildi")
             } catch (e: com.google.firebase.functions.FirebaseFunctionsException) {
                 // Function çalışmazsa (offline, cold start) devam et — açık kalmasın
-                android.util.Log.w("AuthVM", "verifyRegistration unavailable: ${e.message}")
+                android.util.Log.w("AuthVM", "verifyRegistration unavailable: code=${e.code}, message=${e.message}", e)
                 try {
+                    android.util.Log.d("AuthVM", "Fallback: createUserWithEmailAndPassword çağrılıyor")
                     val result = auth.createUserWithEmailAndPassword(email, password).await()
-                    val user   = result.user ?: return@launch
+                    val user   = result.user ?: run {
+                        android.util.Log.e("AuthVM", "Fallback: createUserWithEmailAndPassword user null döndü")
+                        return@launch
+                    }
+                    android.util.Log.d("AuthVM", "Fallback: Kullanıcı oluşturuldu: uid=${user.uid}")
                     createUserDoc(user, displayName)
                     syncFcmToken(user.uid)
                     acceptTerms(method = "email_register")
-                    try { user.sendEmailVerification().await() } catch (_: Exception) {}
+                    try {
+                        user.sendEmailVerification().await()
+                        android.util.Log.d("AuthVM", "Fallback: sendEmailVerification BAŞARILI -> ${user.email}")
+                    } catch (e3: Exception) {
+                        android.util.Log.e("AuthVM", "Fallback: sendEmailVerification HATA: ${e3.javaClass.simpleName} - ${e3.message}", e3)
+                    }
                     auth.signOut()
                     _currentUser.value = null
                     _verificationSent.value = true
+                    android.util.Log.d("AuthVM", "Fallback: verificationSent = true set edildi")
                 } catch (e2: Exception) {
+                    android.util.Log.e("AuthVM", "Fallback HATA: ${e2.javaClass.simpleName} - ${e2.message}", e2)
                     _error.value = e2.message
                 }
             } catch (e: Exception) {
+                android.util.Log.e("AuthVM", "registerWithEmail genel HATA: ${e.javaClass.simpleName} - ${e.message}", e)
                 _error.value = e.message
             } finally {
+                registrationInProgress = false
                 _loading.value = false
             }
         }
@@ -575,6 +627,7 @@ class AuthViewModel @Inject constructor(
             _loading.value = true
             try {
                 auth.currentUser?.reload()?.await()
+                android.util.Log.d("AuthVM", "reloadAndCheckVerification: isEmailVerified=${auth.currentUser?.isEmailVerified} (email=${auth.currentUser?.email})")
                 if (auth.currentUser?.isEmailVerified == true) {
                     _currentUser.value = auth.currentUser
                     onVerified()
@@ -582,6 +635,7 @@ class AuthViewModel @Inject constructor(
                     onNotYet()
                 }
             } catch (e: Exception) {
+                android.util.Log.e("AuthVM", "reloadAndCheckVerification HATA: ${e.javaClass.simpleName} - ${e.message}", e)
                 _error.value = e.message
             } finally {
                 _loading.value = false
@@ -593,8 +647,10 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 auth.currentUser?.sendEmailVerification()?.await()
+                android.util.Log.d("AuthVM", "resendVerificationEmail: BAŞARILI -> ${auth.currentUser?.email}")
                 _verificationSent.value = true
             } catch (e: Exception) {
+                android.util.Log.e("AuthVM", "resendVerificationEmail HATA: ${e.javaClass.simpleName} - ${e.message}", e)
                 _error.value = e.message
             }
         }

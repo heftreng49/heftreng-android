@@ -62,20 +62,29 @@ fun AuthScreen(
     var showVerifySent    by remember { mutableStateOf(false) }
     var showVerifyPending by remember { mutableStateOf(false) }
 
-    LaunchedEffect(verificationSent)    { if (verificationSent)    showVerifySent    = true }
-    LaunchedEffect(verificationPending) { if (verificationPending) showVerifyPending = true }
+    LaunchedEffect(verificationSent)    {
+        android.util.Log.d("AuthScreen", "verificationSent değişti: $verificationSent")
+        if (verificationSent)    showVerifySent    = true
+    }
+    LaunchedEffect(verificationPending) {
+        android.util.Log.d("AuthScreen", "verificationPending değişti: $verificationPending")
+        if (verificationPending) showVerifyPending = true
+    }
 
     // Kullanıcı oturumu varsa ve email doğrulandıysa ana sayfaya geç.
     // Doğrulanmamışsa doğrulama ekranı göster — onAuthSuccess çağrılmaz.
     LaunchedEffect(currentUser) {
+        android.util.Log.d("AuthScreen", "currentUser değişti: uid=${currentUser?.uid}, email=${currentUser?.email}, isEmailVerified=${currentUser?.isEmailVerified}, showVerifySent=$showVerifySent, showVerifyPending=$showVerifyPending")
         val user = currentUser ?: return@LaunchedEffect
         // Kayıt akışı devam ediyorsa (verificationSent zaten true) — içeri alma
         if (showVerifySent || showVerifyPending) return@LaunchedEffect
         val isGoogle = user.providerData.any { it.providerId == "google.com" }
         if (isGoogle || user.isEmailVerified) {
+            android.util.Log.d("AuthScreen", "onAuthSuccess çağrılıyor (isGoogle=$isGoogle, isEmailVerified=${user.isEmailVerified})")
             onAuthSuccess()
         } else {
             // E-posta ile giriş yaptı ama henüz doğrulanmamış
+            android.util.Log.d("AuthScreen", "showVerifyPending=true set ediliyor, triggerVerificationPending çağrılıyor")
             showVerifyPending = true
             vm.triggerVerificationPending()
         }
@@ -548,6 +557,7 @@ fun AuthScreen(
                             )
                     )
                     .clickable(enabled = !loading && (!isRegister || termsAccepted)) {
+                        android.util.Log.d("AuthScreen", "Buton tıklandı: isRegister=$isRegister, email=$email")
                         if (isRegister) vm.registerWithEmail(email, password, displayName)
                         else vm.signInWithEmail(email, password)
                     },
