@@ -467,10 +467,7 @@ class FeedViewModel @Inject constructor(
         ts              = parseSupabaseTimestamp(createdAt),
     )
 
-    private fun parseSupabaseTimestamp(iso: String): Timestamp? = try {
-        if (iso.isBlank()) null
-        else Timestamp(java.util.Date.from(java.time.OffsetDateTime.parse(iso).toInstant()))
-    } catch (_: Exception) { null }
+    // (parseSupabaseTimestamp zaten daha aşağıda tanımlı — bkz. nullable String? versiyonu)
 
     // ── Öncelik 4: Offline cache (Room) — Post <-> CachedQuote dönüştürücüler ──
     private fun Post.toCachedQuote() = com.heftreng.app.data.local.CachedQuote(
