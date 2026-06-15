@@ -76,6 +76,12 @@ class SearchViewModel @Inject constructor(
     val searchResults = _searchResults.asStateFlow()
 
     private val _suggestions   = MutableStateFlow<List<User>>(emptyList())
+
+    // ── "Feed gönderi" araması — 50 belge, 60s'lik kısa ömürlü önbellek.
+    //    Aksi halde her tuş vuruşunda (debounce sonrası) 50 okuma yapılıyordu.
+    private var feedSearchCache    : List<com.google.firebase.firestore.DocumentSnapshot>? = null
+    private var feedSearchCachedAt : Long = 0L
+    private val FEED_SEARCH_TTL_MS = 60_000L
     val suggestions = _suggestions.asStateFlow()
 
     private val _loading       = MutableStateFlow(false)
@@ -175,12 +181,23 @@ class SearchViewModel @Inject constructor(
             }
         } catch (e: Exception) { e.printStackTrace() }
 
-        // Feed gönderi — son 50 postu çek, client-side filtrele
+        // Feed gönderi — son 50 postu çek, client-side filtrele.
+        // 60s içinde tekrar arama yapılırsa (kullanıcı yazmaya devam ederken)
+        // önbellekteki belgeler tekrar kullanılır, yeniden okuma yapılmaz.
         try {
-            val pSnap = firestore.collection("feed")
-                .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                .limit(50).get().await()
-            results += pSnap.documents.mapNotNull { doc ->
+            val now = System.currentTimeMillis()
+            val cached = feedSearchCache
+            val docs = if (cached != null && (now - feedSearchCachedAt) < FEED_SEARCH_TTL_MS) {
+                cached
+            } else {
+                val pSnap = firestore.collection("feed")
+                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(50).get().await()
+                feedSearchCache    = pSnap.documents
+                feedSearchCachedAt = now
+                pSnap.documents
+            }
+            results += docs.mapNotNull { doc ->
                 val d       = doc.data ?: return@mapNotNull null
                 val text    = d["text"]      as? String ?: ""
                 val qText   = d["quoteText"] as? String ?: ""

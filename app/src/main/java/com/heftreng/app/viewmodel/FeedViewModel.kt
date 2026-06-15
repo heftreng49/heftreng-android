@@ -1241,7 +1241,7 @@ class FeedViewModel @Inject constructor(
                 firestore.collection("users").document(myUid)
                     .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
                 firestore.collection("users").document(targetUid)
-                    .update("followerCount", com.google.firebase.firestore.FieldValue.increment(1))
+                    .update("followersCount", com.google.firebase.firestore.FieldValue.increment(1))
                 sendNotif(targetUid, "follow", "$myName sizi takip etmeye başladı", "", "")
             } catch (e: Exception) {
                 // Hata: geri al

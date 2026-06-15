@@ -221,7 +221,7 @@ class NotificationsViewModel @Inject constructor(
                 // Firestore: sadece sayaç güncelle
                 try {
                     firestore.collection("users").document(myUid)
-                        .update("followerCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                        .update("followersCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
                     firestore.collection("users").document(fromUid)
                         .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
                 } catch (_: Exception) {}
