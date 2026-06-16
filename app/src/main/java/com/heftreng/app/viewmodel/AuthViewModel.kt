@@ -142,6 +142,12 @@ class AuthViewModel @Inject constructor(
     val verificationPending = _verificationPending.asStateFlow()
     fun clearVerificationPending() { _verificationPending.value = false }
     fun clearVerificationSent()    { _verificationSent.value    = false }
+
+    // ── Doğrulama bekleyen hesabın bilgileri (bellekte, diske yazılmaz) ──────
+    // signOut sonrası auth.currentUser=null olduğu için reload/resend için gerekiyor.
+    private var pendingEmail    = ""
+    private var pendingPassword = ""
+    private fun clearPendingCredentials() { pendingEmail = ""; pendingPassword = "" }
     /** Giriş yapıldı ama e-posta henüz doğrulanmamış — UI'dan tetiklenir. */
     fun triggerVerificationPending() {
         if (!_verificationPending.value) {
@@ -250,6 +256,8 @@ class AuthViewModel @Inject constructor(
                     } catch (e: Exception) {
                         android.util.Log.e("AuthVM", "signInWithEmail: sendEmailVerification HATA: ${e.javaClass.simpleName} - ${e.message}", e)
                     }
+                    pendingEmail    = email
+                    pendingPassword = password
                     auth.signOut()
                     _verificationPending.value = true
                     _error.value = "EMAIL_NOT_VERIFIED" // AuthScreen bu kodu yakalar
@@ -334,6 +342,8 @@ class AuthViewModel @Inject constructor(
                 }
                 // signOut ÖNCE yapılmalı — authStateListener currentUser=null görür,
                 // LaunchedEffect tetiklenmez, kullanıcı doğrudan içeri giremez.
+                pendingEmail    = email
+                pendingPassword = password
                 auth.signOut()
                 _currentUser.value = null
                 // signOut tamamlandıktan SONRA verificationSent set et
@@ -506,6 +516,9 @@ class AuthViewModel @Inject constructor(
     fun signOut() {
         auth.signOut()
         _currentUser.value = null
+        clearPendingCredentials()
+        _verificationPending.value = false
+        _verificationSent.value    = false
     }
 
     fun sendPasswordReset(
@@ -630,13 +643,39 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
             try {
-                auth.currentUser?.reload()?.await()
-                android.util.Log.d("AuthVM", "reloadAndCheckVerification: isEmailVerified=${auth.currentUser?.isEmailVerified} (email=${auth.currentUser?.email})")
-                if (auth.currentUser?.isEmailVerified == true) {
-                    _currentUser.value = auth.currentUser
-                    onVerified()
+                val current = auth.currentUser
+                if (current == null) {
+                    // signOut yapıldıktan sonra currentUser null — pending credentials ile yeniden giriş
+                    if (pendingEmail.isBlank() || pendingPassword.isBlank()) {
+                        _error.value = "Oturum süresi doldu, lütfen tekrar giriş yapın."
+                        return@launch
+                    }
+                    val result = auth.signInWithEmailAndPassword(pendingEmail, pendingPassword).await()
+                    val user   = result.user ?: run { _error.value = "Giriş başarısız"; return@launch }
+                    user.reload().await()
+                    android.util.Log.d("AuthVM", "reloadAndCheckVerification (re-login): isEmailVerified=${user.isEmailVerified}")
+                    if (user.isEmailVerified) {
+                        clearPendingCredentials()
+                        syncEmailVerified(user)
+                        syncFcmToken(user.uid)
+                        _currentUser.value = user
+                        onVerified()
+                    } else {
+                        auth.signOut()
+                        _currentUser.value = null
+                        onNotYet()
+                    }
                 } else {
-                    onNotYet()
+                    current.reload().await()
+                    android.util.Log.d("AuthVM", "reloadAndCheckVerification: isEmailVerified=${current.isEmailVerified} (email=${current.email})")
+                    if (current.isEmailVerified) {
+                        clearPendingCredentials()
+                        syncEmailVerified(current)
+                        _currentUser.value = current
+                        onVerified()
+                    } else {
+                        onNotYet()
+                    }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("AuthVM", "reloadAndCheckVerification HATA: ${e.javaClass.simpleName} - ${e.message}", e)
@@ -649,13 +688,30 @@ class AuthViewModel @Inject constructor(
 
     fun resendVerificationEmail() {
         viewModelScope.launch {
+            _loading.value = true
             try {
-                auth.currentUser?.sendEmailVerification()?.await()
-                android.util.Log.d("AuthVM", "resendVerificationEmail: BAŞARILI -> ${auth.currentUser?.email}")
-                _verificationSent.value = true
+                val user = auth.currentUser
+                    ?: if (pendingEmail.isNotBlank() && pendingPassword.isNotBlank()) {
+                        val r = auth.signInWithEmailAndPassword(pendingEmail, pendingPassword).await()
+                        val u = r.user
+                        // Sadece mail göndermek için giriş yaptık — hemen signOut
+                        auth.signOut()
+                        _currentUser.value = null
+                        u
+                    } else null
+
+                if (user != null) {
+                    user.sendEmailVerification().await()
+                    android.util.Log.d("AuthVM", "resendVerificationEmail: BAŞARILI -> ${user.email}")
+                    _verificationSent.value = true
+                } else {
+                    _error.value = "E-posta tekrar gönderilemedi, lütfen giriş yapın."
+                }
             } catch (e: Exception) {
                 android.util.Log.e("AuthVM", "resendVerificationEmail HATA: ${e.javaClass.simpleName} - ${e.message}", e)
                 _error.value = e.message
+            } finally {
+                _loading.value = false
             }
         }
     }

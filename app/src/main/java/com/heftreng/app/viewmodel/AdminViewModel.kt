@@ -268,14 +268,28 @@ class AdminViewModel @Inject constructor(
                 } else {
                     // Arama: text, author_name veya book_title içinde geçiyorsa getir
                     // postgrest or() filter: "text.ilike.%q%,author_name.ilike.%q%,book_title.ilike.%q%"
-                    supabase.postgrest["book_quotes"]
-                        .select {
-                            filter {
-                                or("text.ilike.%$query%,author_name.ilike.%$query%,book_title.ilike.%$query%")
-                            }
-                            order("likes_count", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
-                            limit(30)
-                        }.decodeList<com.heftreng.app.data.repository.BookQuoteRow>()
+                    // Supabase postgrest-kt v3: or() yerine ayrı ilike sorguları + client merge
+                    val byText = supabase.postgrest["book_quotes"].select {
+                        filter { ilike("text", "%$query%") }
+                        order("likes_count", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                        limit(15)
+                    }.decodeList<com.heftreng.app.data.repository.BookQuoteRow>()
+
+                    val byAuthor = supabase.postgrest["book_quotes"].select {
+                        filter { ilike("author_name", "%$query%") }
+                        order("likes_count", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                        limit(15)
+                    }.decodeList<com.heftreng.app.data.repository.BookQuoteRow>()
+
+                    val byBook = supabase.postgrest["book_quotes"].select {
+                        filter { ilike("book_title", "%$query%") }
+                        order("likes_count", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                        limit(15)
+                    }.decodeList<com.heftreng.app.data.repository.BookQuoteRow>()
+
+                    (byText + byAuthor + byBook)
+                        .distinctBy { it.id }
+                        .sortedByDescending { it.likesCount }
                 }
                 _quoteSearchResults.value = rows.map { row ->
                     com.heftreng.app.data.model.BookQuote(
