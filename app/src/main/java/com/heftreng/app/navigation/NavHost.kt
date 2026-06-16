@@ -129,6 +129,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val msgsVm         : MessagesViewModel      = hiltViewModel()
     val blogVm         : BlogViewModel          = hiltViewModel()
     val appConfigVm    : AppConfigViewModel     = hiltViewModel()
+    val adsVm          : com.heftreng.app.viewmodel.AdsViewModel = hiltViewModel()
 
     val currentUser by authVm.currentUser.collectAsState()
     val isDark         by settingsVm.darkMode.collectAsState()
@@ -138,6 +139,31 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     var showVerifyBanner by remember { mutableStateOf(false) }
     var showAccountSwitch by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    // ── Ekran izleme + interstitial zamanlama ──────────────────────────────
+    val application = context.applicationContext as android.app.Application
+    val screenTracker = remember {
+        dagger.hilt.android.EntryPointAccessors
+            .fromApplication(application, com.heftreng.app.ads.ScreenTrackerEntryPoint::class.java)
+            .screenTracker()
+    }
+
+    val navBackStack by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStack?.destination?.route
+
+    LaunchedEffect(currentRoute, currentUser) {
+        if (currentUser != null) {
+            screenTracker.onRouteChanged(currentRoute)
+        }
+    }
+
+    // Interstitial config gelir gelmez anlık yükle
+    val interstitialConfig by adsVm.interstitialConfig.collectAsState()
+    LaunchedEffect(interstitialConfig) {
+        if (interstitialConfig?.enabled == true) {
+            adsVm.loadInterstitial(context)
+        }
+    }
 
     // Email doğrulama soft banner — sadece kullanıcı zaten authenticated iken göster.
     // AuthScreen kendi verificationPending state'ini yönetir; burada clearVerificationPending()
@@ -423,6 +449,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                             NavigationBarItem(
                                 selected = selected,
                                 onClick  = {
+                                    screenTracker.tryShowInterstitial()
                                     navController.navigate(item.route) {
                                         popUpTo(navController.graph.findStartDestination().id) {
                                             saveState = true

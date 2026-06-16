@@ -336,19 +336,28 @@ class AdsViewModel @Inject constructor(
     }
 
     // ── Interstitial yükle ────────────────────────────────────────────────────
+    private var isLoadingInterstitial = false
+
     fun loadInterstitial(context: Context) {
         val config = _interstitialConfig.value ?: return
         if (!config.enabled || !_adsEnabled.value) return
-        if (interstitialAd != null) return
+        if (interstitialAd != null || isLoadingInterstitial) return
+        isLoadingInterstitial = true
 
         val unitId = if (config.testMode) AdMobTestIds.INTERSTITIAL else AdMobProdIds.INTERSTITIAL
-        if (unitId.isBlank()) return
+        if (unitId.isBlank()) { isLoadingInterstitial = false; return }
 
         InterstitialAd.load(
             context, unitId, AdRequest.Builder().build(),
             object : InterstitialAdLoadCallback() {
-                override fun onAdLoaded(ad: InterstitialAd) { interstitialAd = ad }
-                override fun onAdFailedToLoad(error: LoadAdError) { interstitialAd = null }
+                override fun onAdLoaded(ad: InterstitialAd) {
+                    interstitialAd = ad
+                    isLoadingInterstitial = false
+                }
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    interstitialAd = null
+                    isLoadingInterstitial = false
+                }
             }
         )
     }
@@ -371,7 +380,7 @@ class AdsViewModel @Inject constructor(
             ad.show(activity)
         } else {
             onDismiss()
-            loadInterstitial(activity)
+            if (!isLoadingInterstitial) loadInterstitial(activity)
         }
     }
 

@@ -41,6 +41,10 @@ class MainActivity : ComponentActivity() {
     // SettingsViewModel — darkMode tercihi için
     private val settingsVm: SettingsViewModel by viewModels()
     private val authVm: AuthViewModel by viewModels()
+    private val adsVm: com.heftreng.app.viewmodel.AdsViewModel by viewModels()
+
+    // ScreenTracker — Hilt singleton, lifecycle callbacks için kayıt edilecek
+    @javax.inject.Inject lateinit var screenTracker: com.heftreng.app.ads.ScreenTracker
 
     // ── In-App Update ──────────────────────────────────────────────────────────
     private val appUpdateManager by lazy { AppUpdateManagerFactory.create(this) }
@@ -83,10 +87,13 @@ class MainActivity : ComponentActivity() {
         // enableEdgeToEdge() zaten bunu yapıyor (Android 15 uyumlu)
 
         // AdMob SDK başlatma — reklam yüklenmeden önce mutlaka çağrılmalı
-        // Bu satır yoksa banner/interstitial/rewarded hiç yüklenmez
         com.google.android.gms.ads.MobileAds.initialize(this) { initStatus ->
             android.util.Log.d("AdMob", "SDK hazır: ${initStatus.adapterStatusMap}")
         }
+
+        // ScreenTracker — activity lifecycle dinleyicisi + adsVm bağla
+        application.registerActivityLifecycleCallbacks(screenTracker)
+        screenTracker.bind(adsVm, this)
 
         // Bildirimden gelen intent'i al
         pendingNavTarget = intent?.getStringExtra("navigate_to")
