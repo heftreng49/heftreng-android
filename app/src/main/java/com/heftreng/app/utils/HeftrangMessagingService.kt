@@ -118,7 +118,16 @@ class HeftrangMessagingService : FirebaseMessagingService() {
 
         ensureChannels()
 
-        val notification = NotificationCompat.Builder(this, channelId)
+        // Mesaj bildirimleri: aynı konuşmadan gelen yeni mesaj eskisinin
+        // üzerine yazılsın (convId bazlı sabit ID). Diğer bildirimler benzersiz ID alır.
+        val notifId = when {
+            type == "message" && convId.isNotBlank() -> convId.hashCode()
+            type == "follow"  && fromUid.isNotBlank() -> ("follow_$fromUid").hashCode()
+            else -> System.currentTimeMillis().toInt()
+        }
+
+        // Mesaj bildirimleri için kaç mesaj var sayacı — BigText yerine özet göster
+        val notificationBuilder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_notif)
             .setContentTitle(title)
             .setContentText(body)
@@ -129,10 +138,17 @@ class HeftrangMessagingService : FirebaseMessagingService() {
             .setColor(0xFF8B5CF6.toInt())
             .setLights(0xFF8B5CF6.toInt(), 500, 500)
             .setVibrate(longArrayOf(0, 250, 100, 250))
-            .build()
 
+        // Mesaj bildirimleri aynı konuşma için gruplanır
+        if (type == "message" && convId.isNotBlank()) {
+            notificationBuilder
+                .setGroup("conv_$convId")
+                .setOnlyAlertOnce(true) // sadece ilk bildirimde ses/titreşim
+        }
+
+        val notification = notificationBuilder.build()
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(System.currentTimeMillis().toInt(), notification)
+        manager.notify(notifId, notification)
     }
 
     // ── Bildirim kanallarını oluştur ──────────────────────────────────────────
