@@ -6,6 +6,7 @@
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore }        = require('firebase-admin/firestore');
 const { createClient }        = require('@supabase/supabase-js');
+const ws                      = require('ws');
 
 const DRY_RUN      = process.env.DRY_RUN === 'true';
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -15,7 +16,7 @@ const BATCH_SIZE   = 100;
 
 initializeApp({ credential: cert(FB_SA) });
 const db       = getFirestore();
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { realtime: { transport: ws } });
 
 function chunk(arr, size) {
   const out = [];
