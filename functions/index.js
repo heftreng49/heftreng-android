@@ -15,11 +15,18 @@ initializeApp();
 
 // ─── Supabase Admin client — service_role key ile, sadece Cloud Functions içinde ─
 // Android tarafı anon key ile sadece okuma yapar; yazma buradan geçer.
+// Lazy başlatılıyor: modül yüklenirken değil, fonksiyon çalışırken oluşturuluyor.
 // Secrets: Firebase Secret Manager → SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL            || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-);
+let _supabaseAdmin = null;
+function getSupabaseAdmin() {
+  if (!_supabaseAdmin) {
+    const url = process.env.SUPABASE_URL || "";
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+    if (!url || !key) throw new Error("SUPABASE_URL veya SUPABASE_SERVICE_ROLE_KEY eksik");
+    _supabaseAdmin = createClient(url, key);
+  }
+  return _supabaseAdmin;
+}
 
 // ─── Admin secret — env variable olarak saklanır ─────────────────────────────
 // Firebase Console → Functions → Config ya da Secret Manager'dan okunur.
@@ -877,7 +884,7 @@ exports.onUserCreated = functions
       const photoUrl = snap?.data()?.photoURL || user.photoURL || "";
       const bio      = snap?.data()?.bio || "";
 
-      const { error } = await supabaseAdmin.from("users").upsert({
+      const { error } = await getSupabaseAdmin().from("users").upsert({
         uid          : user.uid,
         display_name : displayName,
         photo_url    : photoUrl,
@@ -912,7 +919,7 @@ exports.onUserDeleted = functions
       console.error(`[onUserDeleted] Firestore hata: ${e.message}`);
     }
     try {
-      const { error } = await supabaseAdmin
+      const { error } = await getSupabaseAdmin()
         .from("users")
         .delete()
         .eq("uid", user.uid);
