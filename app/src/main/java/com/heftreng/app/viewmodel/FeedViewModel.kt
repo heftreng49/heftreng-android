@@ -1163,40 +1163,37 @@ class FeedViewModel @Inject constructor(
     }
 
     // Supabase users tablosundan sayfalı sorgu.
-    // Takip edilenler NOT IN filtresi Supabase tarafında yapılıyor — client-side
-    // filtrelemeye gerek yok, her sayfa tam SUGGEST_PAGE_SIZE (10) kullanıcı içerir.
+    // Takip edilenler client-side filtreleniyor — postgrest-kt'de NOT IN
+    // güvenilir çalışmadığı için, daha geniş bir set çekip filtreliyoruz.
     private suspend fun fetchSuggestedUsersPage(page: Int) {
         val myUid = auth.currentUser?.uid ?: return
-        val followingUids = _followingUids.value.toList()
+        val excludeUids = (_followingUids.value + myUid).toSet()
         val offset = (page * SUGGEST_PAGE_SIZE).toLong()
 
-        // Takip edilen UID'ler + kendi UID'i hariç tut
-        // Supabase postgrest-kt filter: neq, not.in gibi operatörler
-        val excludeUids = (followingUids + myUid).distinct()
+        // Fazladan çekiyoruz: takip edilenler filtrelenince yeterli sayı kalsın.
+        // excludeUids sayısı kadar ekstra çek, minimum SUGGEST_PAGE_SIZE * 3.
+        val fetchSize = (SUGGEST_PAGE_SIZE + excludeUids.size).coerceAtLeast(SUGGEST_PAGE_SIZE * 3).toLong()
 
         val rows = supabase.postgrest["users"].select {
-            filter {
-                excludeUids.forEach { uid -> neq("uid", uid) }
-                eq("banned", false)
-            }
+            filter { eq("banned", false) }
             order("created_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
-            limit(SUGGEST_PAGE_SIZE.toLong())
-            range(offset, offset + SUGGEST_PAGE_SIZE - 1)
+            range(offset, offset + fetchSize - 1)
         }.decodeList<com.heftreng.app.data.model.UserRow>()
 
         val pageUsers = rows
-            .filter { it.displayName.isNotBlank() }
+            .filter { it.uid !in excludeUids && it.displayName.isNotBlank() }
+            .take(SUGGEST_PAGE_SIZE)
             .map { row ->
                 SuggestedUser(
                     uid         = row.uid,
                     name        = row.displayName,
                     photoURL    = row.photoUrl,
                     bio         = row.bio,
-                    isFollowing = false, // hepsi takip edilmeyen
+                    isFollowing = false,
                 )
             }
 
-        _hasMoreSuggestions.value = rows.size >= SUGGEST_PAGE_SIZE
+        _hasMoreSuggestions.value = rows.size >= fetchSize
         _suggestedUsers.value = pageUsers
         _suggestCurrentPage.value = page
     }
