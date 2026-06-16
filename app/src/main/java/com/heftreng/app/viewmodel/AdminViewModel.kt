@@ -248,6 +248,55 @@ class AdminViewModel @Inject constructor(
 
     fun clearDailyResult() { _dailyResult.value = "" }
 
+    // ── Supabase book_quotes'tan alıntı arama — Admin "Alıntılar'dan Seç" için ──
+    private val _quoteSearchResults = MutableStateFlow<List<com.heftreng.app.data.model.BookQuote>>(emptyList())
+    val quoteSearchResults = _quoteSearchResults.asStateFlow()
+    private val _quoteSearchLoading = MutableStateFlow(false)
+    val quoteSearchLoading = _quoteSearchLoading.asStateFlow()
+
+    fun searchBookQuotes(query: String) {
+        viewModelScope.launch {
+            _quoteSearchLoading.value = true
+            try {
+                val rows = if (query.isBlank()) {
+                    supabase.postgrest["book_quotes"]
+                        .select {
+                            order("likes_count", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                            limit(30)
+                        }.decodeList<com.heftreng.app.data.model.SupabaseBookQuoteRow>()
+                } else {
+                    supabase.postgrest["book_quotes"]
+                        .select {
+                            filter {
+                                or {
+                                    ilike("text", "%$query%")
+                                    ilike("author_name", "%$query%")
+                                    ilike("book_title", "%$query%")
+                                }
+                            }
+                            order("likes_count", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                            limit(30)
+                        }.decodeList<com.heftreng.app.data.model.SupabaseBookQuoteRow>()
+                }
+                _quoteSearchResults.value = rows.map { row ->
+                    com.heftreng.app.data.model.BookQuote(
+                        id         = row.id.toString(),
+                        text       = row.text,
+                        authorName = row.authorName,
+                        bookTitle  = row.bookTitle,
+                        likesCount = row.likesCount,
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _quoteSearchResults.value = emptyList()
+            } finally {
+                _quoteSearchLoading.value = false
+            }
+        }
+    }
+
+    fun clearQuoteSearch() { _quoteSearchResults.value = emptyList() }
 
     data class PlatformStats(
         val totalUsers    : Int  = 0, val androidUsers  : Int  = 0, val webUsers      : Int  = 0,

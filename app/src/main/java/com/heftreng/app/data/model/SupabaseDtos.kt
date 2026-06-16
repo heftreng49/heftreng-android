@@ -110,3 +110,13 @@ data class UserBadgeRow(
     @SerialName("badge_id") val badgeId : String = "",
     @SerialName("earned_at") val earnedAt: String? = null,
 )
+
+// ── book_quotes tablosu — Admin "Alıntılar'dan Seç" için ──────────────────────
+@Serializable
+data class SupabaseBookQuoteRow(
+    val id          : Long   = 0,
+    val text        : String = "",
+    @SerialName("author_name") val authorName: String = "",
+    @SerialName("book_title")  val bookTitle : String = "",
+    @SerialName("likes_count") val likesCount: Int    = 0,
+)

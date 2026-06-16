@@ -2,12 +2,14 @@ package com.heftreng.app.ui.screens.admin
 
 
 import androidx.compose.foundation.background
-
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -18,6 +20,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -76,7 +79,13 @@ fun AdminScreen(
     var userSearch  by remember { mutableStateOf("") }
 
     // Günlük bildirimler — Günün Alıntısı / Günün Kelimesi
-    val dailyQuote   by vm.dailyQuote.collectAsState()
+    val dailyQuote       by vm.dailyQuote.collectAsState()
+    val quoteSearchResults by vm.quoteSearchResults.collectAsState()
+    val quoteSearchLoading by vm.quoteSearchLoading.collectAsState()
+    var showQuotePicker  by remember { mutableStateOf(false) }
+    var quotePickerQuery by remember { mutableStateOf("") }
+    val sheetState       = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope            = rememberCoroutineScope()
     val dailyWord    by vm.dailyWord.collectAsState()
     val dailyResult  by vm.dailyResult.collectAsState()
     var dqTextTr by remember(dailyQuote) { mutableStateOf(dailyQuote.textTr) }
@@ -467,10 +476,26 @@ fun AdminScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Outlined.FormatQuote, null, tint = Amber, modifier = Modifier.size(18.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Günün Alıntısı", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Outlined.FormatQuote, null, tint = Amber, modifier = Modifier.size(18.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Günün Alıntısı", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                        }
+                                        TextButton(
+                                            onClick = {
+                                                showQuotePicker = true
+                                                vm.searchBookQuotes("")
+                                            },
+                                        ) {
+                                            Icon(Icons.Default.LibraryBooks, null, tint = Amber, modifier = Modifier.size(14.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("Alıntılardan Seç", color = Amber, fontSize = 12.sp)
+                                        }
                                     }
                                     Spacer(Modifier.height(8.dp))
                                     adminTextField(dqTextTr, { dqTextTr = it }, "Alıntı metni (TR) *", minLines = 2)
@@ -1480,7 +1505,132 @@ fun AdminScreen(
             },
         )
     }
+
+    // ── Alıntılar'dan Seç — Bottom Sheet ──────────────────────────────────────
+    if (showQuotePicker) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                showQuotePicker = false
+                quotePickerQuery = ""
+                vm.clearQuoteSearch()
+            },
+            sheetState     = sheetState,
+            containerColor = Color(0xFF1E1B2E),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 32.dp),
+            ) {
+                Text(
+                    "Alıntılardan Seç",
+                    color      = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 16.sp,
+                    modifier   = Modifier.padding(bottom = 12.dp),
+                )
+
+                // Arama kutusu
+                OutlinedTextField(
+                    value         = quotePickerQuery,
+                    onValueChange = {
+                        quotePickerQuery = it
+                        vm.searchBookQuotes(it)
+                    },
+                    placeholder   = { Text("Alıntı, yazar veya kitap ara...", color = Muted, fontSize = 13.sp) },
+                    leadingIcon   = { Icon(Icons.Default.Search, null, tint = Muted) },
+                    trailingIcon  = if (quotePickerQuery.isNotBlank()) {{
+                        IconButton(onClick = { quotePickerQuery = ""; vm.searchBookQuotes("") }) {
+                            Icon(Icons.Default.Clear, null, tint = Muted)
+                        }
+                    }} else null,
+                    modifier      = Modifier.fillMaxWidth(),
+                    singleLine    = true,
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor   = Amber,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                        focusedTextColor     = Color.White,
+                        unfocusedTextColor   = Color.White,
+                        cursorColor          = Amber,
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                if (quoteSearchLoading) {
+                    Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Amber, modifier = Modifier.size(28.dp))
+                    }
+                } else if (quoteSearchResults.isEmpty()) {
+                    Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            if (quotePickerQuery.isBlank()) "En çok beğenilen alıntılar yükleniyor..."
+                            else "Sonuç bulunamadı",
+                            color = Muted, fontSize = 13.sp,
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier       = Modifier.fillMaxWidth().heightIn(max = 460.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(quoteSearchResults) { quote ->
+                            Surface(
+                                onClick = {
+                                    dqTextTr = quote.text
+                                    dqAuthor = quote.authorName
+                                    dqBook   = quote.bookTitle
+                                    scope.launch {
+                                        sheetState.hide()
+                                        showQuotePicker = false
+                                        quotePickerQuery = ""
+                                        vm.clearQuoteSearch()
+                                    }
+                                },
+                                color  = Color.White.copy(alpha = 0.06f),
+                                shape  = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        "\u201C${quote.text}\u201D",
+                                        color      = Color.White,
+                                        fontSize   = 13.sp,
+                                        lineHeight = 19.sp,
+                                        maxLines   = 3,
+                                        overflow   = TextOverflow.Ellipsis,
+                                        fontStyle  = androidx.compose.ui.text.font.FontStyle.Italic,
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        if (quote.authorName.isNotBlank()) {
+                                            Text(quote.authorName, color = Amber, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        }
+                                        if (quote.bookTitle.isNotBlank()) {
+                                            Text("·", color = Muted, fontSize = 11.sp)
+                                            Text(quote.bookTitle, color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
+                                        if (quote.likesCount > 0) {
+                                            Spacer(Modifier.weight(1f))
+                                            Icon(Icons.Default.Favorite, null, tint = Error, modifier = Modifier.size(12.dp))
+                                            Text("${quote.likesCount}", color = Muted, fontSize = 10.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
+
 @Composable
 private fun adminTextField(
     value   : String,
