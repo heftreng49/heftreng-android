@@ -21,6 +21,11 @@ class HeftrangMessagingService : FirebaseMessagingService() {
         const val CHANNEL_ID_DEFAULT  = "heftreng_default"
         const val CHANNEL_ID_MESSAGES = "heftreng_messages"
         const val CHANNEL_ID_LIKES    = "heftreng_likes"
+        const val CHANNEL_ID_DAILY    = "heftreng_daily"   // Günün Alıntısı / Kelimesi
+
+        // Sabit ID'ler — her gün tek bildirim, üst üste yazar
+        const val NOTIF_ID_DAILY_QUOTE = 9001
+        const val NOTIF_ID_DAILY_WORD  = 9002
 
         // ── Aktif ekran takibi ─────────────────────────────────────
         // MessagesScreen açıkken "true" set eder → mesaj bildirimi bastırılır
@@ -111,27 +116,27 @@ class HeftrangMessagingService : FirebaseMessagingService() {
         )
 
         val channelId = data["channelId"]?.takeIf { it.isNotBlank() } ?: when (type) {
-            "message"            -> CHANNEL_ID_MESSAGES
-            "like", "repost"     -> CHANNEL_ID_LIKES
-            else                 -> CHANNEL_ID_DEFAULT
+            "message"                    -> CHANNEL_ID_MESSAGES
+            "like", "repost"             -> CHANNEL_ID_LIKES
+            "daily_quote", "daily_word"  -> CHANNEL_ID_DAILY
+            else                         -> CHANNEL_ID_DEFAULT
         }
 
         ensureChannels()
 
-        // Mesaj bildirimleri: aynı konuşmadan gelen yeni mesaj eskisinin
-        // üzerine yazılsın (convId bazlı sabit ID). Diğer bildirimler benzersiz ID alır.
+        // Bildirim ID — mesaj ve takip aynı kişiden gelirse üst üste yaz
         val notifId = when {
-            type == "message" && convId.isNotBlank() -> convId.hashCode()
-            type == "follow"  && fromUid.isNotBlank() -> ("follow_$fromUid").hashCode()
+            type == "message"   && convId.isNotBlank()   -> convId.hashCode()
+            type == "follow"    && fromUid.isNotBlank()  -> ("follow_$fromUid").hashCode()
+            type == "daily_quote"                        -> NOTIF_ID_DAILY_QUOTE
+            type == "daily_word"                         -> NOTIF_ID_DAILY_WORD
             else -> System.currentTimeMillis().toInt()
         }
 
-        // Mesaj bildirimleri için kaç mesaj var sayacı — BigText yerine özet göster
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_notif)
             .setContentTitle(title)
             .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -139,25 +144,51 @@ class HeftrangMessagingService : FirebaseMessagingService() {
             .setLights(0xFF8B5CF6.toInt(), 500, 500)
             .setVibrate(longArrayOf(0, 250, 100, 250))
 
-        // Mesaj bildirimleri aynı konuşma için gruplanır
-        if (type == "message" && convId.isNotBlank()) {
-            notificationBuilder
-                .setGroup("conv_$convId")
-                .setOnlyAlertOnce(true) // sadece ilk bildirimde ses/titreşim
+        when (type) {
+            "daily_quote" -> {
+                // Alıntı tam metin olarak büyük kutuda göster
+                notificationBuilder
+                    .setColor(0xFF8B5CF6.toInt())
+                    .setStyle(
+                        NotificationCompat.BigTextStyle()
+                            .bigText(body)
+                            .setSummaryText("📖 Günün Alıntısı")
+                    )
+            }
+            "daily_word" -> {
+                notificationBuilder
+                    .setColor(0xFF0EA5E9.toInt())
+                    .setStyle(
+                        NotificationCompat.BigTextStyle()
+                            .bigText(body)
+                            .setSummaryText("📝 Günün Kelimesi")
+                    )
+            }
+            "message" -> {
+                // Aynı konuşma gruplanır, sadece ilk bildirimde ses
+                notificationBuilder
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                    .setGroup("conv_$convId")
+                    .setOnlyAlertOnce(true)
+            }
+            else -> {
+                notificationBuilder
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            }
         }
 
-        val notification = notificationBuilder.build()
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(notifId, notification)
+        manager.notify(notifId, notificationBuilder.build())
     }
 
     // ── Bildirim kanallarını oluştur ──────────────────────────────────────────
     private fun ensureChannels() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         listOf(
-            Triple(CHANNEL_ID_DEFAULT,  "Genel Bildirimler",  NotificationManager.IMPORTANCE_HIGH),
-            Triple(CHANNEL_ID_MESSAGES, "Mesajlar",           NotificationManager.IMPORTANCE_HIGH),
-            Triple(CHANNEL_ID_LIKES,    "Beğeni & Repost",    NotificationManager.IMPORTANCE_DEFAULT),
+            Triple(CHANNEL_ID_DEFAULT,  "Genel Bildirimler",           NotificationManager.IMPORTANCE_HIGH),
+            Triple(CHANNEL_ID_MESSAGES, "Mesajlar",                    NotificationManager.IMPORTANCE_HIGH),
+            Triple(CHANNEL_ID_LIKES,    "Beğeni & Repost",             NotificationManager.IMPORTANCE_DEFAULT),
+            Triple(CHANNEL_ID_DAILY,    "Günün Alıntısı & Kelimesi",   NotificationManager.IMPORTANCE_DEFAULT),
         ).forEach { (id, name, importance) ->
             val channel = NotificationChannel(id, name, importance).apply {
                 enableLights(true)

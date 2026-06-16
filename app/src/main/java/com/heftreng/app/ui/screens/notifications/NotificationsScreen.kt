@@ -363,6 +363,110 @@ private fun NotifGroupHeader(label: String) {
     )
 }
 
+// ── Günün Alıntısı / Kelimesi özel kart ───────────────────────────────────────
+@Composable
+fun DailyNotifCard(
+    notif    : Notification,
+    onClick  : () -> Unit = {},
+    language : String     = "tr",
+) {
+    val ku         = language == "ku"
+    val isQuote    = notif.type == "daily_quote"
+    val accentColor = if (isQuote) Color(0xFF8B5CF6) else Color(0xFF0EA5E9)
+    val bgColor     = if (isQuote) Color(0xFF8B5CF6).copy(alpha = 0.08f) else Color(0xFF0EA5E9).copy(alpha = 0.08f)
+    val icon        = if (isQuote) Icons.Default.FormatQuote else Icons.Default.Translate
+    val timeText    = relativeTime(notif.ts, language)
+    val isUnread    = !notif.read
+
+    Surface(
+        onClick   = onClick,
+        modifier  = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        shape     = RoundedCornerShape(16.dp),
+        color     = bgColor,
+        tonalElevation = if (isUnread) 2.dp else 0.dp,
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Üst satır: ikon + başlık + zaman
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(accentColor),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(icon, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        notif.message.ifBlank {
+                            if (isQuote)
+                                if (ku) "Gotina Rojê" else "Günün Alıntısı"
+                            else
+                                if (ku) "Peyvа Rojê" else "Günün Kelimesi"
+                        },
+                        fontWeight = FontWeight.Bold,
+                        color      = accentColor,
+                        fontSize   = 13.sp,
+                        maxLines   = 1,
+                        overflow   = TextOverflow.Ellipsis,
+                    )
+                    if (timeText.isNotBlank()) {
+                        Text(timeText, color = Muted, fontSize = 11.sp)
+                    }
+                }
+                if (isUnread) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(accentColor),
+                    )
+                }
+            }
+
+            // Alıntı / Kelime içeriği
+            if (notif.sub.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        if (isQuote) {
+                            Icon(
+                                Icons.Default.FormatQuote,
+                                null,
+                                tint     = accentColor.copy(alpha = 0.4f),
+                                modifier = Modifier.size(20.dp).padding(top = 2.dp),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Text(
+                            notif.sub,
+                            color      = OnBackground,
+                            fontSize   = 14.sp,
+                            lineHeight = 21.sp,
+                            fontStyle  = if (isQuote) androidx.compose.ui.text.font.FontStyle.Italic
+                                         else         androidx.compose.ui.text.font.FontStyle.Normal,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ── Bildirim Öğesi ─────────────────────────────────────────────────────────────
 @Composable
 fun NotifItem(
@@ -372,6 +476,12 @@ fun NotifItem(
     onAcceptFollowRequest : (() -> Unit)? = null,
     onDeclineFollowRequest: (() -> Unit)? = null,
 ) {
+    // Günün Alıntısı ve Günün Kelimesi → özel kart
+    if (notif.type == "daily_quote" || notif.type == "daily_word") {
+        DailyNotifCard(notif = notif, onClick = onClick, language = language)
+        return
+    }
+
     val ku = language == "ku"
     var requestHandled by remember { mutableStateOf(false) }
 
