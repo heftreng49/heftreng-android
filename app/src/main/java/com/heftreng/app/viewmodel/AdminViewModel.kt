@@ -259,28 +259,27 @@ class AdminViewModel @Inject constructor(
             _quoteSearchLoading.value = true
             try {
                 val rows = if (query.isBlank()) {
+                    // Boş sorgu → en çok beğenilen 30 alıntı
                     supabase.postgrest["book_quotes"]
                         .select {
                             order("likes_count", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
                             limit(30)
-                        }.decodeList<com.heftreng.app.data.model.SupabaseBookQuoteRow>()
+                        }.decodeList<com.heftreng.app.data.repository.BookQuoteRow>()
                 } else {
+                    // Arama: text, author_name veya book_title içinde geçiyorsa getir
+                    // postgrest or() filter: "text.ilike.%q%,author_name.ilike.%q%,book_title.ilike.%q%"
                     supabase.postgrest["book_quotes"]
                         .select {
                             filter {
-                                or {
-                                    ilike("text", "%$query%")
-                                    ilike("author_name", "%$query%")
-                                    ilike("book_title", "%$query%")
-                                }
+                                or("text.ilike.%$query%,author_name.ilike.%$query%,book_title.ilike.%$query%")
                             }
                             order("likes_count", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
                             limit(30)
-                        }.decodeList<com.heftreng.app.data.model.SupabaseBookQuoteRow>()
+                        }.decodeList<com.heftreng.app.data.repository.BookQuoteRow>()
                 }
                 _quoteSearchResults.value = rows.map { row ->
                     com.heftreng.app.data.model.BookQuote(
-                        id         = row.id.toString(),
+                        id         = row.id,
                         text       = row.text,
                         authorName = row.authorName,
                         bookTitle  = row.bookTitle,

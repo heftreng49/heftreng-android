@@ -112,11 +112,5 @@ data class UserBadgeRow(
 )
 
 // ── book_quotes tablosu — Admin "Alıntılar'dan Seç" için ──────────────────────
-@Serializable
-data class SupabaseBookQuoteRow(
-    val id          : Long   = 0,
-    val text        : String = "",
-    @SerialName("author_name") val authorName: String = "",
-    @SerialName("book_title")  val bookTitle : String = "",
-    @SerialName("likes_count") val likesCount: Int    = 0,
-)
+// Not: BookQuoteRow zaten LibraryRepository.kt'de tanımlı, burada duplicate yok.
+// AdminViewModel.searchBookQuotes() LibraryRepository.BookQuoteRow kullanır.
