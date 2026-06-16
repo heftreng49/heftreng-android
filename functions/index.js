@@ -9,8 +9,17 @@ const functions                         = require("firebase-functions");
 const { initializeApp }                 = require("firebase-admin/app");
 const { getFirestore }                  = require("firebase-admin/firestore");
 const { getMessaging }                  = require("firebase-admin/messaging");
+const { createClient }                  = require("@supabase/supabase-js");
 
 initializeApp();
+
+// ─── Supabase Admin client — service_role key ile, sadece Cloud Functions içinde ─
+// Android tarafı anon key ile sadece okuma yapar; yazma buradan geçer.
+// Secrets: Firebase Secret Manager → SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL            || "",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+);
 
 // ─── Admin secret — env variable olarak saklanır ─────────────────────────────
 // Firebase Console → Functions → Config ya da Secret Manager'dan okunur.
@@ -840,7 +849,55 @@ exports.mergeLibraryBooks = onRequest({ region: "europe-west1" }, async (req, re
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  onUserDeleted — Auth kullanıcısı silinince Firestore'daki users dokümanını da sil
+// ─────────────────────────────────────────────────────────────────────────────
+//  onUserCreated — Firebase Auth'a yeni kullanıcı eklenince:
+//    1. Firestore users dokümanından profil bilgilerini al (createUserDoc zaten yazmış)
+//    2. Supabase users tablosuna service_role ile upsert yap
+// ─────────────────────────────────────────────────────────────────────────────
+exports.onUserCreated = functions
+  .runWith({})
+  .region("europe-west1")
+  .auth.user()
+  .onCreate(async (user) => {
+    const db = getFirestore();
+    try {
+      // Firestore'daki users dokümanı createUserDoc tarafından yazılmış olmalı.
+      // Kısa bir bekleme — Android tarafındaki createUserDoc async olduğu için
+      // auth trigger ile yarışabilir; Firestore'u birkaç kez yoklayabiliriz.
+      let snap = null;
+      for (let i = 0; i < 5; i++) {
+        snap = await db.collection("users").doc(user.uid).get();
+        if (snap.exists) break;
+        await new Promise((r) => setTimeout(r, 1000)); // 1s bekle
+      }
+
+      const displayName = snap?.data()?.displayName
+        || snap?.data()?.name
+        || deriveName(user);
+      const photoUrl = snap?.data()?.photoURL || user.photoURL || "";
+      const bio      = snap?.data()?.bio || "";
+
+      const { error } = await supabaseAdmin.from("users").upsert({
+        uid          : user.uid,
+        display_name : displayName,
+        photo_url    : photoUrl,
+        bio          : bio,
+        banned       : false,
+        created_at   : new Date().toISOString(),
+      }, { onConflict: "uid" });
+
+      if (error) {
+        console.error(`[onUserCreated] Supabase upsert hata (uid=${user.uid}):`, error.message);
+      } else {
+        console.log(`[onUserCreated] Supabase users kaydı oluşturuldu: uid=${user.uid}, name=${displayName}`);
+      }
+    } catch (e) {
+      console.error(`[onUserCreated] Hata (uid=${user.uid}): ${e.message}`);
+    }
+  });
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  onUserDeleted — Auth kullanıcısı silinince Firestore + Supabase'den de sil
 // ─────────────────────────────────────────────────────────────────────────────
 exports.onUserDeleted = functions
   .runWith({})
@@ -850,9 +907,22 @@ exports.onUserDeleted = functions
     const db = getFirestore();
     try {
       await db.collection("users").doc(user.uid).delete();
-      console.log(`[onUserDeleted] users/${user.uid} silindi`);
+      console.log(`[onUserDeleted] Firestore users/${user.uid} silindi`);
     } catch (e) {
-      console.error(`[onUserDeleted] Hata: ${e.message}`);
+      console.error(`[onUserDeleted] Firestore hata: ${e.message}`);
+    }
+    try {
+      const { error } = await supabaseAdmin
+        .from("users")
+        .delete()
+        .eq("uid", user.uid);
+      if (error) {
+        console.error(`[onUserDeleted] Supabase hata (uid=${user.uid}): ${error.message}`);
+      } else {
+        console.log(`[onUserDeleted] Supabase users/${user.uid} silindi`);
+      }
+    } catch (e) {
+      console.error(`[onUserDeleted] Supabase hata: ${e.message}`);
     }
   });
 

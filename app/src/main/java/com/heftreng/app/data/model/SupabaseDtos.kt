@@ -7,6 +7,20 @@ import kotlinx.serialization.Serializable
 //  Supabase DTO'ları — tüm ViewModel'ler buradan import eder
 // ══════════════════════════════════════════════════════════════
 
+// ── Kayıtlı kullanıcılar — öneri listesi ve takip sistemi için ─────────────────
+// Supabase'deki tablo: users (uid, display_name, photo_url, bio, banned, created_at)
+// Firebase Firestore'daki users koleksiyonunun ayna kaydı (temel alanlar).
+// Kayıt sırasında createUserDoc() tarafından yazılır, profil güncellemelerinde senkronize edilir.
+@Serializable
+data class UserRow(
+    val uid          : String  = "",
+    @SerialName("display_name") val displayName: String  = "",
+    @SerialName("photo_url")    val photoUrl   : String  = "",
+    val bio          : String  = "",
+    val banned       : Boolean = false,
+    @SerialName("created_at")   val createdAt  : String  = "",
+)
+
 @Serializable
 data class FollowRow(
     val id           : String = "",

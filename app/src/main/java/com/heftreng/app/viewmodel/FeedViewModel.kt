@@ -1107,106 +1107,98 @@ class FeedViewModel @Inject constructor(
     //   - Yeni kullanıcıların da görünmesi için karışık sıra (shuffled)
     //   - banned == false filtresi client-side (Rules'da zaten kısıtlı)
 
-    private var _suggestLastDoc    : com.google.firebase.firestore.DocumentSnapshot? = null
     private var _suggestLastLoadMs : Long = 0L
     private val _hasMoreSuggestions = MutableStateFlow(false)
     val hasMoreSuggestions = _hasMoreSuggestions.asStateFlow()
 
-    // Session cache: öneriler zaten yüklendiyse tekrar Firestore'a gitme
+    // Sayfalama: her sayfada en fazla 10 kullanıcı (OFFSET tabanlı, Supabase)
+    private val _suggestCurrentPage = MutableStateFlow(0)
+    val suggestCurrentPage = _suggestCurrentPage.asStateFlow()
+    val SUGGEST_PAGE_SIZE = 10
+
     private var suggestionsLoaded = false
 
     fun loadSuggestedUsers(forceReload: Boolean = false) {
         val myUid = auth.currentUser?.uid ?: return
         val now = System.currentTimeMillis()
-        // 1 saat içinde yüklendiyse ve zorlamadıysa tekrar okuma yapma
         val cacheValid = suggestionsLoaded
             && _suggestedUsers.value.isNotEmpty()
-            && (now - _suggestLastLoadMs) < 3_600_000L // 1 saat
+            && (now - _suggestLastLoadMs) < 3_600_000L
         if (cacheValid && !forceReload) return
-        _suggestLastDoc    = null
         _suggestLastLoadMs = now
+        _suggestCurrentPage.value = 0
         viewModelScope.launch {
             try {
-                // 1. Takip ettiğim TÜM UID'leri Supabase'den çek — tek sorgu
+                // Takip listesini Supabase'den çek — _followingUids'i güncelle
                 val followingUids = mutableSetOf<String>()
                 followingUids.add(myUid)
                 val followRows = supabase.postgrest["follows"]
                     .select { filter { eq("from_uid", myUid) }; limit(500) }
                     .decodeList<FollowRow>()
                 followRows.forEach { followingUids.add(it.targetUid) }
-
-                // 2. Kullanıcı havuzu — limit 50 (200 yerine, okuma maliyeti düşürüldü)
-                val usersSnap = firestore.collection("users")
-                    .orderBy("followersCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(50)
-                    .get().await()
-
-                _suggestLastDoc = usersSnap.documents.lastOrNull()
-                _hasMoreSuggestions.value = usersSnap.documents.size >= 50
-
-                val suggestions = usersSnap.documents
-                    .mapNotNull { doc ->
-                        val sUid = doc.id
-                        // Zaten takip edilenler ve banlanmışlar çıkarılır
-                        if (sUid in followingUids) return@mapNotNull null
-                        if (doc.getBoolean("banned") == true) return@mapNotNull null
-                        val name = doc.getString("displayName") ?: doc.getString("name") ?: ""
-                        if (name.isBlank()) return@mapNotNull null
-                        SuggestedUser(
-                            uid         = sUid,
-                            name        = name,
-                            photoURL    = doc.getString("photoURL") ?: "",
-                            bio         = doc.getString("bio") ?: "",
-                            isFollowing = sUid in _followingUids.value,
-                        )
-                    }
-                    .shuffled().take(20)
-
                 _followingUids.value = followingUids
-                _suggestedUsers.value = suggestions
+
+                fetchSuggestedUsersPage(page = 0)
                 suggestionsLoaded = true
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
-    // Daha fazla öneri yükle (scroll ile)
-    fun loadMoreSuggestedUsers() {
-        val myUid   = auth.currentUser?.uid ?: return
-        val lastDoc = _suggestLastDoc ?: return
-        if (!_hasMoreSuggestions.value) return
+    fun loadSuggestedUsersPage(page: Int) {
+        if (page < 0) return
         viewModelScope.launch {
-            try {
-                val snap = firestore.collection("users")
-                    .orderBy("followersCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .startAfter(lastDoc)
-                    .limit(30)          // 200 → 30
-                    .get().await()
-
-                _suggestLastDoc = snap.documents.lastOrNull()
-                _hasMoreSuggestions.value = snap.documents.size >= 30
-
-                val more = snap.documents
-                    .mapNotNull { doc ->
-                        val sUid = doc.id
-                        if (sUid in _followingUids.value) return@mapNotNull null
-                        if (sUid == myUid) return@mapNotNull null
-                        if (doc.getBoolean("banned") == true) return@mapNotNull null
-                        val name = doc.getString("displayName") ?: doc.getString("name") ?: ""
-                        if (name.isBlank()) return@mapNotNull null
-                        SuggestedUser(
-                            uid         = sUid,
-                            name        = name,
-                            photoURL    = doc.getString("photoURL") ?: "",
-                            bio         = doc.getString("bio") ?: "",
-                            isFollowing = sUid in _followingUids.value,
-                        )
-                    }
-                    .shuffled()
-                    .take(20)
-
-                _suggestedUsers.value = _suggestedUsers.value + more
-            } catch (e: Exception) { e.printStackTrace() }
+            try { fetchSuggestedUsersPage(page) }
+            catch (e: Exception) { e.printStackTrace() }
         }
+    }
+
+    fun loadNextSuggestedUsersPage() {
+        val next = _suggestCurrentPage.value + 1
+        if (_hasMoreSuggestions.value) loadSuggestedUsersPage(next)
+    }
+
+    fun loadPrevSuggestedUsersPage() {
+        val prev = _suggestCurrentPage.value - 1
+        if (prev >= 0) loadSuggestedUsersPage(prev)
+    }
+
+    // Supabase users tablosundan sayfalı sorgu.
+    // Takip edilenler NOT IN filtresi Supabase tarafında yapılıyor — client-side
+    // filtrelemeye gerek yok, her sayfa tam SUGGEST_PAGE_SIZE (10) kullanıcı içerir.
+    private suspend fun fetchSuggestedUsersPage(page: Int) {
+        val myUid = auth.currentUser?.uid ?: return
+        val followingUids = _followingUids.value.toList()
+        val offset = (page * SUGGEST_PAGE_SIZE).toLong()
+
+        // Takip edilen UID'ler + kendi UID'i hariç tut
+        // Supabase postgrest-kt filter: neq, not.in gibi operatörler
+        val excludeUids = (followingUids + myUid).distinct()
+
+        val rows = supabase.postgrest["users"].select {
+            filter {
+                excludeUids.forEach { uid -> neq("uid", uid) }
+                eq("banned", false)
+            }
+            order("created_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+            limit(SUGGEST_PAGE_SIZE.toLong())
+            range(offset, offset + SUGGEST_PAGE_SIZE - 1)
+        }.decodeList<com.heftreng.app.data.model.UserRow>()
+
+        val pageUsers = rows
+            .filter { it.displayName.isNotBlank() }
+            .map { row ->
+                SuggestedUser(
+                    uid         = row.uid,
+                    name        = row.displayName,
+                    photoURL    = row.photoUrl,
+                    bio         = row.bio,
+                    isFollowing = false, // hepsi takip edilmeyen
+                )
+            }
+
+        _hasMoreSuggestions.value = rows.size >= SUGGEST_PAGE_SIZE
+        _suggestedUsers.value = pageUsers
+        _suggestCurrentPage.value = page
     }
 
     fun followSuggestedUser(targetUid: String) {

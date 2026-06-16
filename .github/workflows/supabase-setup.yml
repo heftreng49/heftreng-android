@@ -21,5 +21,6 @@ jobs:
         run: |
           psql "$SUPABASE_DB_URL" -f scripts/supabase_schema.sql --set ON_ERROR_STOP=1
           psql "$SUPABASE_DB_URL" -f scripts/supabase_social_schema.sql --set ON_ERROR_STOP=1
+          psql "$SUPABASE_DB_URL" -f scripts/supabase_users_schema.sql --set ON_ERROR_STOP=1
           psql "$SUPABASE_DB_URL" -f scripts/feed_comments.sql --set ON_ERROR_STOP=1
           echo "✅ Tüm tablolar oluşturuldu"

@@ -474,6 +474,10 @@ class AuthViewModel @Inject constructor(
         firestore.collection("usernames").document(username).set(
             mapOf("uid" to user.uid)
         ).await()
+
+        // NOT: Supabase users tablosuna yazma Cloud Function (onUserCreated) tarafından
+        // yapılıyor — Firebase Auth trigger'ı ile service_role key kullanarak.
+        // Android tarafından Supabase'e yazma yapılmıyor (güvenlik).
     }
 
     private suspend fun generateUniqueUsername(displayName: String): String {

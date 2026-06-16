@@ -34,6 +34,15 @@ jobs:
           DRY_RUN:                  ${{ github.event.inputs.dry_run }}
         run: node migrate_to_supabase.js
 
+      - name: Mevcut kullanıcıları Supabase users tablosuna taşı
+        working-directory: scripts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SUPABASE_URL:             ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY:     ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DRY_RUN:                  ${{ github.event.inputs.dry_run }}
+        run: node migrate_users_to_supabase.js
+
       - name: Like/Save sayaçlarını senkronize et
         working-directory: scripts
         env:

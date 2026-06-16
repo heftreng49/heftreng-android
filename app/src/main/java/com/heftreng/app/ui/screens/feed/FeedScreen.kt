@@ -16,6 +16,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -87,7 +89,7 @@ fun FeedScreen(
 ) {
     val posts       by vm.posts.collectAsState()
     val suggestedUsers by vm.suggestedUsers.collectAsState()
-    var showAllSuggestions by remember { mutableStateOf(false) }
+    val suggestPage by vm.suggestCurrentPage.collectAsState()
     val hasMoreSuggestions by vm.hasMoreSuggestions.collectAsState()
     val loading     by vm.loading.collectAsState()
     val hasMore     by vm.hasMore.collectAsState()
@@ -361,21 +363,6 @@ fun FeedScreen(
                     )
                 }
                 // ── Gönderi listesi ───────────────────────────────────
-                // Önce takip önerilerini göster (eğer varsa ve başlangıç tabındaysa)
-                if (selectedFeedTab == 0 && suggestedUsers.isNotEmpty()) {
-                    item(key = "suggestions") {
-                        SuggestedUsersCard(
-                            users            = if (showAllSuggestions) suggestedUsers else suggestedUsers.take(3),
-                            showAll          = showAllSuggestions,
-                            hasMore          = hasMoreSuggestions,
-                            onShowAll        = { showAllSuggestions = true },
-                            onLoadMore       = { vm.loadMoreSuggestedUsers() },
-                            onFollow         = { uid -> vm.followSuggestedUser(uid) },
-                            onNavigate       = { uid -> navController.navigate(Screen.Profile.go(uid)) },
-                            language         = language,
-                        )
-                    }
-                }
 
                 // ── Blog Yazıları — heft-reng.blogspot.com içeriği ─────────
                 if (selectedFeedTab == 0 && blogState.posts.isNotEmpty()) {
@@ -501,6 +488,22 @@ fun FeedScreen(
                                 }
                             }
                         }
+                    }
+                }
+
+                // ── Feed Sonu: Takip Edilmeyen Kullanıcılar (10'lu sayfalama) ──
+                if (selectedFeedTab == 0 && suggestedUsers.isNotEmpty()) {
+                    item(key = "suggestions_bottom") {
+                        SuggestedUsersCard(
+                            users      = suggestedUsers,
+                            page       = suggestPage,
+                            hasMore    = hasMoreSuggestions,
+                            onPrevPage = { vm.loadPrevSuggestedUsersPage() },
+                            onNextPage = { vm.loadNextSuggestedUsersPage() },
+                            onFollow   = { uid -> vm.followSuggestedUser(uid) },
+                            onNavigate = { uid -> navController.navigate(Screen.Profile.go(uid)) },
+                            language   = language,
+                        )
                     }
                 }
             }
@@ -1523,10 +1526,10 @@ fun postTimeAgo(seconds: Long, ku: Boolean = false): String {
 @Composable
 private fun SuggestedUsersCard(
     users     : List<FeedViewModel.SuggestedUser>,
-    showAll   : Boolean,
+    page      : Int,
     hasMore   : Boolean = false,
-    onShowAll : () -> Unit,
-    onLoadMore: () -> Unit = {},
+    onPrevPage: () -> Unit = {},
+    onNextPage: () -> Unit = {},
     onFollow  : (uid: String) -> Unit,
     onNavigate: (uid: String) -> Unit,
     language  : String = "tr",
@@ -1561,7 +1564,7 @@ private fun SuggestedUsersCard(
             }
             HorizontalDivider(color = Divider, thickness = 0.5.dp)
 
-            // Kullanıcı listesi
+            // Kullanıcı listesi (sayfa başına en fazla 10)
             users.forEach { user ->
                 SuggestedUserRow(
                     user       = user,
@@ -1572,36 +1575,44 @@ private fun SuggestedUsersCard(
                 HorizontalDivider(color = Divider, thickness = 0.5.dp)
             }
 
-            // Daha fazla göster (ilk 3 gösteriliyorsa)
-            if (!showAll) {
+            // ── Sayfalama: Önceki / Sayfa No / Sonraki ───────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.CenterVertically,
+            ) {
                 TextButton(
-                    onClick  = onShowAll,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                    onClick = onPrevPage,
+                    enabled = page > 0,
                 ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = if (page > 0) Primary else Muted, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
                     Text(
-                        if (ku) "Zêdetir nîşan bide" else "Daha fazla göster",
-                        color    = Primary,
+                        if (ku) "Berê" else "Önceki",
+                        color    = if (page > 0) Primary else Muted,
                         fontSize = 13.sp,
                     )
-                    Spacer(Modifier.width(4.dp))
-                    Icon(Icons.Default.ExpandMore, null, tint = Primary, modifier = Modifier.size(16.dp))
                 }
-            } else if (hasMore) {
+
+                Text(
+                    (if (ku) "Rûpel " else "Sayfa ") + "${page + 1}",
+                    color    = Muted,
+                    fontSize = 12.sp,
+                )
+
                 TextButton(
-                    onClick  = onLoadMore,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                    onClick = onNextPage,
+                    enabled = hasMore,
                 ) {
                     Text(
-                        if (ku) "Zêdetir pêşniyar bar bike" else "Daha Fazla Öneri",
-                        color    = Primary,
+                        if (ku) "Pêş" else "Sonraki",
+                        color    = if (hasMore) Primary else Muted,
                         fontSize = 13.sp,
                     )
                     Spacer(Modifier.width(4.dp))
-                    Icon(Icons.Default.ExpandMore, null, tint = Primary, modifier = Modifier.size(16.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = if (hasMore) Primary else Muted, modifier = Modifier.size(16.dp))
                 }
             }
         }
