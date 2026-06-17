@@ -165,10 +165,36 @@ class ProfileViewModel @Inject constructor(
                     else                                     -> "none"
                 }
 
-                // followersCount / followingCount users doc'undan okundu — COUNT() sorgusu yok.
-                // follow/unfollow anında ViewModel'de +1/-1 güncelleniyor, tutarlılık korunuyor.
-                _followersCount.value = _user.value?.followersCount ?: 0
-                _followingCount.value = _user.value?.followingCount ?: 0
+                // followersCount / followingCount — Supabase follows tablosundan gerçek sayı çek.
+                // Firestore'daki followersCount alanı stale olabilir (eski takip sisteminden kalma).
+                viewModelScope.launch {
+                    try {
+                        val followersRows = supabase.postgrest["follows"].select {
+                            filter { eq("target_uid", targetUid) }
+                        }.decodeList<FollowRow>()
+                        _followersCount.value = followersRows.size
+
+                        val followingRows = supabase.postgrest["follows"].select {
+                            filter { eq("from_uid", targetUid) }
+                        }.decodeList<FollowRow>()
+                        _followingCount.value = followingRows.size
+
+                        // Firestore'u da güncelle — bir sonraki açılışta stale olmasın
+                        if (_followersCount.value != (_user.value?.followersCount ?: -1) ||
+                            _followingCount.value != (_user.value?.followingCount ?: -1)) {
+                            firestore.collection("users").document(targetUid).update(
+                                mapOf(
+                                    "followersCount" to _followersCount.value,
+                                    "followingCount" to _followingCount.value,
+                                )
+                            ).await()
+                        }
+                    } catch (e: Exception) {
+                        // Supabase başarısız → Firestore değerlerini kullan
+                        _followersCount.value = _user.value?.followersCount ?: 0
+                        _followingCount.value = _user.value?.followingCount ?: 0
+                    }
+                }
 
                 val isOwnProfile  = (targetUid == myUid)
                 val isPrivate     = _user.value?.isPrivate ?: false
