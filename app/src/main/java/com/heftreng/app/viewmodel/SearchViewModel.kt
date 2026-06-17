@@ -94,30 +94,39 @@ class SearchViewModel @Inject constructor(
 
     fun setTab(tab: Int) { _activeTab.value = tab }
 
-    private var searchJob: Job? = null
+
+    private val searchFlow = MutableStateFlow("")
 
     // ── Arama girişi — 300ms debounce ────────────────────────────────────────
+    init {
+        viewModelScope.launch {
+            searchFlow
+                .debounce(300L) // 300ms gecikme
+                .filter { it.isNotBlank() }
+                .onEach { q ->
+                    _loading.value = true
+                    try {
+                        searchAll(q.trim())
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    } finally {
+                        _loading.value = false
+                    }
+                }
+                .launchIn(viewModelScope)
+        }
+    }
+
     fun search(query: String) {
         val q = query.trim()
         if (q.isEmpty()) {
-            searchJob?.cancel()
             _results.value      = emptyList()
             _searchResults.value = emptyList()
             _loading.value      = false
+            searchFlow.value = "" // Arama boşsa akışı da sıfırla
             return
         }
-        searchJob?.cancel()
-        searchJob = viewModelScope.launch {
-            _loading.value = true
-            delay(300)
-            try {
-                searchAll(q)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                _loading.value = false
-            }
-        }
+        searchFlow.value = q
     }
 
     // ── Ana arama — Firebase ve Supabase paralel çalışır ─────────────────────

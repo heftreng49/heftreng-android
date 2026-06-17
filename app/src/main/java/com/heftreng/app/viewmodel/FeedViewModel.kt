@@ -198,7 +198,7 @@ class FeedViewModel @Inject constructor(
                 val rows = supabase.postgrest["follows"]
                     .select {
                         filter { eq("from_uid", uid) }
-                        limit(300)
+                        limit(PAGE_SIZE)
                     }
                     .decodeList<FollowRow>()
                 _followingUids.value = rows.map { it.targetUid }.toSet()
@@ -1163,7 +1163,7 @@ class FeedViewModel @Inject constructor(
                 val followingUids = mutableSetOf<String>()
                 followingUids.add(myUid)
                 val followRows = supabase.postgrest["follows"]
-                    .select { filter { eq("from_uid", myUid) }; limit(500) }
+                    .select { filter { eq("from_uid", myUid) }; limit(PAGE_SIZE) }
                     .decodeList<FollowRow>()
                 followRows.forEach { followingUids.add(it.targetUid) }
                 _followingUids.value = followingUids
@@ -1470,7 +1470,7 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val followRows = supabase.postgrest["follows"]
-                    .select { filter { eq("from_uid", myUid) }; limit(300) }
+                    .select { filter { eq("from_uid", myUid) }; limit(PAGE_SIZE) }
                     .decodeList<FollowRow>()
                 if (followRows.isEmpty()) { _friendsReading.value = emptyList(); return@launch }
 
