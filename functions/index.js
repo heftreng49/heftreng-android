@@ -1152,3 +1152,36 @@ exports.scheduledDailyQuote = functions.pubsub
     console.log(`[scheduledDailyQuote] ✓ ${count} kullanıcıya gönderildi`);
     return null;
   });
+
+// ── adminSetBan — HTTPS Callable (admin yetki kontrolü ile) ──────────────────
+// Firestore staff/{uid} kaydı olan kullanıcılar çağırabilir.
+// Supabase users.banned'i service_role key ile günceller.
+exports.adminSetBan = onCall(
+  { region: "europe-west1", cors: true },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+
+    const callerUid = request.auth.uid;
+    const db = getFirestore();
+
+    // Yetki kontrolü — Firestore staff kaydına bak
+    const staffSnap = await db.collection("staff").doc(callerUid).get();
+    if (!staffSnap.exists) throw new HttpsError("permission-denied", "Yetki yok.");
+    const perms = staffSnap.data()?.permissions || [];
+    if (!perms.includes("users") && !perms.includes("*")) {
+      throw new HttpsError("permission-denied", "users yetkisi gerekli.");
+    }
+
+    const { uid, banned } = request.data || {};
+    if (!uid) throw new HttpsError("invalid-argument", "uid gerekli.");
+
+    const { error } = await getSupabaseAdmin()
+      .from("users")
+      .update({ banned: !!banned })
+      .eq("uid", uid);
+
+    if (error) throw new HttpsError("internal", `Supabase hata: ${error.message}`);
+    console.log(`[adminSetBan] uid=${uid} banned=${banned} caller=${callerUid}`);
+    return { success: true };
+  }
+);

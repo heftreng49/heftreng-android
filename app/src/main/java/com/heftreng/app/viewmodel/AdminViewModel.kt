@@ -596,7 +596,20 @@ class AdminViewModel @Inject constructor(
         if (uid.isBlank() || _perms.value?.can("users") != true) return
         viewModelScope.launch {
             try {
+                // 1. Firestore
                 firestore.collection("users").document(uid).update("banned", ban).await()
+                // 2. Supabase users — service_role gerektirir (anon key yazamaz).
+                //    Cloud Function üzerinden yaparız; yoksa Firestore kaynak of truth.
+                try {
+                    com.google.firebase.functions.FirebaseFunctions
+                        .getInstance("europe-west1")
+                        .getHttpsCallable("adminSetBan")
+                        .call(mapOf("uid" to uid, "banned" to ban))
+                        .await()
+                } catch (_: Exception) {
+                    // Function deploy edilmemişse sessizce geç —
+                    // Firestore kaydı yeterli, Supabase sonraki sync'te düzelir.
+                }
                 _users.value = _users.value.map { if (it.uid == uid) it.copy(banned = ban) else it }
                 _unverifiedUsers.value = _unverifiedUsers.value.map { if (it.uid == uid) it.copy(banned = ban) else it }
             } catch (e: Exception) { e.printStackTrace() }
@@ -843,6 +856,13 @@ class AdminViewModel @Inject constructor(
                 try {
                     supabase.postgrest["feed_likes"].delete { filter { eq("uid", uid) } }
                     supabase.postgrest["feed_saves"].delete { filter { eq("uid", uid) } }
+                    supabase.postgrest["book_quotes"].delete { filter { eq("uid", uid) } }
+                    supabase.postgrest["book_reviews"].delete { filter { eq("uid", uid) } }
+                    supabase.postgrest["reading_status"].delete { filter { eq("uid", uid) } }
+                    supabase.postgrest["user_badges"].delete { filter { eq("uid", uid) } }
+                    supabase.postgrest["daily_activity"].delete { filter { eq("uid", uid) } }
+                    // Supabase users kaydı — en son sil (referans bütünlüğü)
+                    supabase.postgrest["users"].delete { filter { eq("uid", uid) } }
                 } catch (_: Exception) {}
                 // 6. Firebase Auth kullanıcısını sil (Cloud Function üzerinden)
                 try {
@@ -884,7 +904,20 @@ class AdminViewModel @Inject constructor(
         if (postId.isBlank() || _perms.value?.can("edit") != true) return
         viewModelScope.launch {
             try {
+                // 1. Firestore feed
                 firestore.collection("feed").document(postId).delete().await()
+                // 2. Supabase — book_quotes (feed_post_id eşleşmesi)
+                try {
+                    supabase.postgrest["book_quotes"].delete {
+                        filter { eq("feed_post_id", postId) }
+                    }
+                } catch (_: Exception) {}
+                // 3. Supabase — feed_likes, feed_comments, feed_saves
+                try {
+                    supabase.postgrest["feed_likes"].delete { filter { eq("post_id", postId) } }
+                    supabase.postgrest["feed_comments"].delete { filter { eq("post_id", postId) } }
+                    supabase.postgrest["feed_saves"].delete { filter { eq("post_id", postId) } }
+                } catch (_: Exception) {}
                 _feedPosts.value = _feedPosts.value.filter { it["id"] != postId }
                 _editResult.value = "✓ Gönderi silindi"
             } catch (e: Exception) { _editResult.value = "✗ ${e.message}" }
