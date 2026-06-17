@@ -111,12 +111,41 @@ class FeedViewModel @Inject constructor(
             d
         } catch (_: Exception) { null }
     }
+
     // Kendi profilimiz için auth'tan oku — Firestore okuması yapmaz
     private fun myUserData(): Map<String, Any> = mapOf(
         "displayName" to (auth.currentUser?.displayName ?: ""),
         "photoURL"    to (auth.currentUser?.photoUrl?.toString() ?: ""),
         "uid"         to uid,
     )
+
+    // Session'da bir kez çalıştır — migration'dan kaçan kullanıcıları Supabase'e yazar.
+    // Cloud Function (onUserCreated) yapması gereken işi yapar, sadece güvenlik ağı olarak.
+    private var _supabaseUserEnsured = false
+    private fun ensureUserInSupabase() {
+        if (_supabaseUserEnsured || uid.isEmpty()) return
+        _supabaseUserEnsured = true
+        viewModelScope.launch {
+            try {
+                val d           = cachedUserDoc(uid) ?: return@launch
+                val displayName = (d["displayName"] as? String ?: d["name"] as? String ?: "").trim()
+                if (displayName.isBlank()) return@launch
+                supabase.postgrest["users"].upsert(
+                    mapOf(
+                        "uid"          to uid,
+                        "display_name" to displayName,
+                        "photo_url"    to (d["photoURL"] as? String ?: ""),
+                        "bio"          to (d["bio"] as? String ?: ""),
+                        "banned"       to (d["banned"] as? Boolean ?: false),
+                    )
+                )
+                android.util.Log.d("FeedVM", "ensureUserInSupabase: OK (uid=$uid)")
+            } catch (e: Exception) {
+                // Sessizce geç — bu sadece güvenlik ağı, kritik değil
+                android.util.Log.w("FeedVM", "ensureUserInSupabase: ${e.message}")
+            }
+        }
+    }
 
     // liked/saved/repost → get() ile yükleniyor, listener yok
 
@@ -125,6 +154,7 @@ class FeedViewModel @Inject constructor(
             val currentUid = firebaseAuth.currentUser?.uid ?: ""
             if (currentUid.isNotEmpty()) {
                 startLiveInteractions(currentUid)
+                ensureUserInSupabase()
             }
         }
         refresh()
