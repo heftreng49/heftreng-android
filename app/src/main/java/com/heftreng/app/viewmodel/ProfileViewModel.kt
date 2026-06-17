@@ -48,6 +48,9 @@ class ProfileViewModel @Inject constructor(
     private val _userNotFound = MutableStateFlow(false)
     val userNotFound = _userNotFound.asStateFlow()
 
+    private val _followersCount = MutableStateFlow(0)
+    val followersCount = _followersCount.asStateFlow()
+
     private val _followingCount = MutableStateFlow(0)
     val followingCount = _followingCount.asStateFlow()
 
