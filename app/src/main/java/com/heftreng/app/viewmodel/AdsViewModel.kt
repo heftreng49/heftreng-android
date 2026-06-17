@@ -54,7 +54,8 @@ class AdsViewModel @Inject constructor(
     private var libRetryCount = 0
     private var kurdiRetryCount = 0
     private var blogRetryCount  = 0
-    private val MAX_RETRY_ATTEMPTS = 3
+    private val MAX_RETRY_ATTEMPTS = 5 // Daha fazla deneme
+    private val RETRY_DELAY_MS = 10_000L // 10 saniye bekleme
 
     fun preloadBanner(unitId: String, slot: BannerSlot, bannerSize: String = "adaptive") {
         if (unitId.isBlank()) return
@@ -109,35 +110,19 @@ class AdsViewModel @Inject constructor(
                     android.util.Log.w("AdsVM", "Preload failed [${slot}]: ${e.message}")
                     
                     viewModelScope.launch {
-                        when (slot) {
-                            BannerSlot.FEED -> {
-                                if (feedRetryCount < MAX_RETRY_ATTEMPTS) {
-                                    feedRetryCount++
-                                    delay(feedRetryCount * 5000L)
-                                    preloadBanner(unitId, slot)
-                                }
-                            }
-                            BannerSlot.LIB -> {
-                                if (libRetryCount < MAX_RETRY_ATTEMPTS) {
-                                    libRetryCount++
-                                    delay(libRetryCount * 5000L)
-                                    preloadBanner(unitId, slot)
-                                }
-                            }
-                            BannerSlot.KURDI -> {
-                                if (kurdiRetryCount < MAX_RETRY_ATTEMPTS) {
-                                    kurdiRetryCount++
-                                    delay(kurdiRetryCount * 5000L)
-                                    preloadBanner(unitId, slot)
-                                }
-                            }
-                            BannerSlot.BLOG -> {
-                                if (blogRetryCount < MAX_RETRY_ATTEMPTS) {
-                                    blogRetryCount++
-                                    delay(blogRetryCount * 5000L)
-                                    preloadBanner(unitId, slot)
-                                }
-                            }
+                        val retryCount = when (slot) {
+                            BannerSlot.FEED -> ++feedRetryCount
+                            BannerSlot.LIB -> ++libRetryCount
+                            BannerSlot.KURDI -> ++kurdiRetryCount
+                            BannerSlot.BLOG -> ++blogRetryCount
+                        }
+                        
+                        if (retryCount <= MAX_RETRY_ATTEMPTS) {
+                            // Üstel bekleme (Exponential Backoff): 10s, 20s, 40s...
+                            val delayMs = RETRY_DELAY_MS * Math.pow(2.0, (retryCount - 1).toDouble()).toLong()
+                            android.util.Log.d("AdsVM", "Retrying preload [${slot}] in ${delayMs/1000}s (Attempt $retryCount)")
+                            delay(delayMs)
+                            preloadBanner(unitId, slot, bannerSize)
                         }
                     }
                 }
@@ -287,7 +272,7 @@ class AdsViewModel @Inject constructor(
                                 preloadBanner(uid, BannerSlot.FEED, config.bannerSize)
                             }
                         }
-                        doc.id == "banner_library" -> {
+                        doc.id == "banner_library" || doc.id == "banner_lib" -> {
                             _bannerLibraryConfig.value = config
                             if (config.enabled && _adsEnabled.value) {
                                 val uid = if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
