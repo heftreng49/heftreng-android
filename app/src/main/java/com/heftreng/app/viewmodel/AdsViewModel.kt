@@ -281,6 +281,14 @@ class AdsViewModel @Inject constructor(
         })
     }
 
+    // Alias — NavHost kısa adı kullanıyor
+    fun loadInterstitial(context: android.content.Context) {
+        val config = _interstitialConfig.value ?: return
+        if (!config.enabled) return
+        val unitId = if (config.testMode) AdMobTestIds.INTERSTITIAL else AdMobProdIds.INTERSTITIAL
+        loadInterstitialAd(unitId)
+    }
+
     fun showInterstitialAd(activity: Activity, onAdDismissed: () -> Unit) {
         if (interstitialAd == null) { onAdDismissed(); return }
         interstitialAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
@@ -289,6 +297,10 @@ class AdsViewModel @Inject constructor(
         }
         interstitialAd?.show(activity)
     }
+
+    // Alias — ScreenTracker kısa adı kullanıyor
+    fun showInterstitial(activity: Activity, onAdDismissed: () -> Unit) =
+        showInterstitialAd(activity, onAdDismissed)
 
     // ── Rewarded Ad ────────────────────────────────────────────────────────────
     fun preloadRewardedAd(unitId: String) {
