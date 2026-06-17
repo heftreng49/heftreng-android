@@ -31,7 +31,7 @@ function getSupabaseAdmin() {
 // ─── Admin secret — env variable olarak saklanır ─────────────────────────────
 // Firebase Console → Functions → Config ya da Secret Manager'dan okunur.
 // Fallback: hf2024 (eski default — deploy'dan sonra env'e geçin)
-const ADMIN_SECRET = process.env.HEFTRENG_ADMIN_SECRET;
+const ADMIN_SECRET = process.env.HEFTRENG_ADMIN_SECRET; // Must be set in production
 
 // ─── Yardımcı: request IP bazlı in-memory rate limiter ──────────────────────
 // Cloud Functions her instance'ı warm-up'ta sıfırlar, production için
@@ -331,7 +331,7 @@ exports.fixNewUserDisplayName = functions
 exports.repairAllUsers = onRequest(
   { region: "europe-west1", cors: true },
   async (req, res) => {
-    if (req.query.secret !== ADMIN_SECRET) {
+    if (!ADMIN_SECRET || req.query.secret !== ADMIN_SECRET) {
       res.status(403).json({ error: "Yetkisiz" }); return;
     }
     const ip = req.headers["x-forwarded-for"] || req.ip || "unknown";
@@ -611,7 +611,7 @@ exports.cleanBlockedSignups = functions.pubsub
 exports.repairAuthorQuotes = onRequest(
   { region: "europe-west1", cors: true }, 
   async (req, res) => {
-    if (req.query.secret !== ADMIN_SECRET) {
+    if (!ADMIN_SECRET || req.query.secret !== ADMIN_SECRET) {
       return res.status(403).send("Forbidden: Yetkisiz Erişim");
     }
     const ip2 = req.headers["x-forwarded-for"] || req.ip || "unknown";

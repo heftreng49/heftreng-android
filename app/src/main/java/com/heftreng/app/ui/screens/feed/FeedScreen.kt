@@ -47,6 +47,7 @@ import com.heftreng.app.data.model.Comment
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.component.AdBannerView
+import com.heftreng.app.ui.component.NativeAdViewCompose
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.viewmodel.AdsViewModel
 import com.heftreng.app.viewmodel.BlogViewModel
@@ -137,6 +138,7 @@ fun FeedScreen(
     val followingUids by vm.followingUids.collectAsState()
     val friendsReading by vm.friendsReading.collectAsState()
     val blogState by blogVm.state.collectAsState()
+    val nativeFeedAd by adsVm.nativeFeedAd.collectAsState()
 
     val displayedPosts = remember(posts, selectedFeedTab, followingUids, blockedUsers) {
         val blockedUids = blockedUsers.map { it.uid }.toSet()
@@ -445,6 +447,14 @@ fun FeedScreen(
                         },
                         language = language,
                     )
+
+                    // Her 5 gönderide bir Native Ad göster
+                    if (postIndex > 0 && postIndex % 5 == 0) {
+                        nativeFeedAd?.let { ad ->
+                            NativeAdViewCompose(nativeAd = ad)
+                        }
+                    }
+
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     // ── AdMob Banner — her bannerPos. kartta bir ─────────
                     if (bannerUnitId != null &&

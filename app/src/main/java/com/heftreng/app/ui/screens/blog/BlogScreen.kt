@@ -23,6 +23,7 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.component.AdBannerView
+import com.heftreng.app.ui.component.NativeAdViewCompose
 import com.heftreng.app.viewmodel.AdsViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.heftreng.app.viewmodel.BlogPost
@@ -50,7 +51,8 @@ fun BlogScreen(
     val bannerUnitId  by adsVm.bannerBlogUnitId.collectAsState()
     val bannerCfg     by adsVm.bannerBlogConfig.collectAsState()
     val blogBannerSize = bannerCfg?.bannerSize ?: "adaptive"
-    val bannerPos      = bannerCfg?.position ?: 4  // her 4 yazıda bir reklam
+    val bannerPos      = bannerCfg?.position ?: 4
+    val nativeBlogAd  by adsVm.nativeBlogAd.collectAsState()
     var selLabel by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) { adsVm.loadAdConfigs() }
@@ -143,6 +145,13 @@ fun BlogScreen(
                                     slot       = AdsViewModel.BannerSlot.BLOG,
                                     bannerSize = blogBannerSize,
                                 )
+                            }
+
+                            // Her 5 yazıda bir Native Ad göster
+                            if (index > 0 && index % 5 == 0) {
+                                nativeBlogAd?.let { ad ->
+                                    NativeAdViewCompose(nativeAd = ad)
+                                }
                             }
                         }
 
