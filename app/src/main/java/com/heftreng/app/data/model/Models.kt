@@ -495,12 +495,14 @@ object AdMobTestIds {
     const val BANNER        = "ca-app-pub-3940256099942544/6300978111"
     const val INTERSTITIAL  = "ca-app-pub-3940256099942544/1033173712"
     const val REWARDED      = "ca-app-pub-3940256099942544/5224354917"
+    const val NATIVE        = "ca-app-pub-3940256099942544/2247696110"  // Google test native ad unit
 }
 
 object AdMobProdIds {
     const val BANNER        = "ca-app-pub-6463746824939277/7866834575"
     const val INTERSTITIAL  = "ca-app-pub-6463746824939277/4989839500"
     const val REWARDED      = "ca-app-pub-6463746824939277/9693325673"
+    const val NATIVE        = "ca-app-pub-6463746824939277/0000000000"  // TODO: AdMob konsolundan gerçek Native unit ID ile değiştir
 }
 
 // ─── KÜTÜPHANE YAPISI ──────────────────────────────────────────────────

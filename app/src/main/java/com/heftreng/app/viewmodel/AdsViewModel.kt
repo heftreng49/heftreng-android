@@ -356,8 +356,42 @@ class AdsViewModel @Inject constructor(
     }
 
     // ── Rewarded Ads Stats (KurdiScreen için) ──────────────────────────────────
+    enum class RewardType { DOUBLE_XP, UNLOCK_LESSON, SAVE_STREAK }
+
     fun initPrefs(context: android.content.Context) {}
-    val canWatchRewardedAd = MutableStateFlow(true).asStateFlow()
-    val remainingRewardedAds = MutableStateFlow(3).asStateFlow()
-    fun canShowScenario(scenario: String): Boolean = true
+
+    private val _remainingRewardedAds = MutableStateFlow(3)
+    val canWatchRewardedAd  = MutableStateFlow(true).asStateFlow()
+    val remainingRewardedAds = _remainingRewardedAds.asStateFlow()
+
+    fun canShowScenario(rewardType: RewardType): Boolean =
+        _remainingRewardedAds.value > 0
+
+    fun showRewarded(
+        activity      : android.app.Activity,
+        rewardType    : RewardType,
+        onRewarded    : (com.google.android.gms.ads.rewarded.RewardItem, RewardType) -> Unit,
+        onDismiss     : () -> Unit = {},
+        onLimitReached: () -> Unit = {},
+    ) {
+        if (_remainingRewardedAds.value <= 0) { onLimitReached(); return }
+        if (rewardedAd != null) {
+            rewardedAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
+                override fun onAdDismissedFullScreenContent() {
+                    rewardedAd = null
+                    onDismiss()
+                }
+                override fun onAdFailedToShowFullScreenContent(adError: AdError) {
+                    rewardedAd = null
+                    onDismiss()
+                }
+            }
+            rewardedAd?.show(activity) { rewardItem ->
+                _remainingRewardedAds.value = (_remainingRewardedAds.value - 1).coerceAtLeast(0)
+                onRewarded(rewardItem, rewardType)
+            }
+        } else {
+            onDismiss()
+        }
+    }
 }

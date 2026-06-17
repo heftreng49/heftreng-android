@@ -69,7 +69,7 @@ fun KurdiScreen(
     val canDoubleXp             = adsVm.canShowScenario(AdsViewModel.RewardType.DOUBLE_XP)
     val canUnlockLesson         = adsVm.canShowScenario(AdsViewModel.RewardType.UNLOCK_LESSON)
     val canSaveStreak           = adsVm.canShowScenario(AdsViewModel.RewardType.SAVE_STREAK)
-    val remainingAds            = adsVm.remainingRewardedAds
+    val remainingAds            = adsVm.remainingRewardedAds.collectAsState().value
     val bannerUnitId    by adsVm.bannerKurdiUnitId.collectAsState()
     val bannerKurdiCfg  by adsVm.bannerKurdiConfig.collectAsState()
     val kurdiBannerSize = bannerKurdiCfg?.bannerSize ?: "adaptive"
