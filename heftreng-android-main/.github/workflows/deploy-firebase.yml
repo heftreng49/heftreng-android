@@ -1,0 +1,48 @@
+name: Firebase Deploy
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'functions/**'
+      - 'public/**'
+      - 'firebase.json'
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
+      - '.github/workflows/deploy-firebase.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Install Functions dependencies
+        run: |
+          cd functions
+          rm -rf node_modules package-lock.json
+          npm install
+
+      - name: Configure Supabase env (2nd gen functions)
+        # Firebase Functions v2, deploy sırasında functions/.env.<project-id>
+        # dosyasını otomatik yükler ve process.env'e koyar.
+        run: |
+          cat <<EOF > functions/.env.bloggerheftreng
+          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
+          EOF
+
+      - name: Deploy to Firebase
+        run: firebase deploy --only functions,firestore:rules,firestore:indexes --force --project bloggerheftreng --token "$FIREBASE_TOKEN"
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
