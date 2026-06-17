@@ -148,15 +148,6 @@ fun HeftrangNavHost(initialRoute: String? = null) {
             .screenTracker()
     }
 
-    val navBackStack by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStack?.destination?.route
-
-    LaunchedEffect(currentRoute, currentUser) {
-        if (currentUser != null) {
-            screenTracker.onRouteChanged(currentRoute)
-        }
-    }
-
     // Interstitial config gelir gelmez anlık yükle
     val interstitialConfig by adsVm.interstitialConfig.collectAsState()
     LaunchedEffect(interstitialConfig) {
@@ -330,6 +321,11 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val navBackStack  by navController.currentBackStackEntryAsState()
     val currentRoute  = navBackStack?.destination?.route
     val showBottom    = currentRoute in bottomNavRoutes
+
+    // ── Ekran izleme: route değişince ScreenTracker'a bildir ──────────────
+    LaunchedEffect(currentRoute) {
+        if (currentUser != null) screenTracker.onRouteChanged(currentRoute)
+    }
     val perms         by adminVm.perms.collectAsState()
     val isAdmin        = perms?.isStaff() == true
     val staffPerms     = perms ?: StaffPermissions()

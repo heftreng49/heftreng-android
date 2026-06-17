@@ -53,7 +53,11 @@ class AuthViewModel @Inject constructor(
     private var registrationInProgress = false
 
     private val authStateListener = FirebaseAuth.AuthStateListener {
-        if (!registrationInProgress) {
+        // registrationInProgress: kayıt akışı bitmeden listener'ın _currentUser'ı
+        // güncellemesini engelle (race condition önlemi).
+        // verificationSent/Pending: doğrulama ekranı açıkken currentUser null olsa bile
+        // listener bunu sıfırlamamalı.
+        if (!registrationInProgress && !_verificationSent.value && !_verificationPending.value) {
             _currentUser.value = it.currentUser
         }
     }
@@ -140,8 +144,15 @@ class AuthViewModel @Inject constructor(
     val verificationSent = _verificationSent.asStateFlow()
     private val _verificationPending = MutableStateFlow(false)
     val verificationPending = _verificationPending.asStateFlow()
-    fun clearVerificationPending() { _verificationPending.value = false }
-    fun clearVerificationSent()    { _verificationSent.value    = false }
+    fun clearVerificationPending() {
+        _verificationPending.value = false
+        // Listener artık currentUser'ı normal güncelleyebilir
+        _currentUser.value = auth.currentUser
+    }
+    fun clearVerificationSent() {
+        _verificationSent.value = false
+        _currentUser.value = auth.currentUser
+    }
 
     // ── Doğrulama bekleyen hesabın bilgileri (bellekte, diske yazılmaz) ──────
     // signOut sonrası auth.currentUser=null olduğu için reload/resend için gerekiyor.
@@ -346,7 +357,7 @@ class AuthViewModel @Inject constructor(
                 pendingPassword = password
                 auth.signOut()
                 _currentUser.value = null
-                // signOut tamamlandıktan SONRA verificationSent set et
+                // verificationSent ÖNCE set et, SONRA registrationInProgress kapat
                 _verificationSent.value = true
                 android.util.Log.d("AuthVM", "verificationSent = true set edildi")
             } catch (e: com.google.firebase.functions.FirebaseFunctionsException) {
@@ -369,6 +380,8 @@ class AuthViewModel @Inject constructor(
                     } catch (e3: Exception) {
                         android.util.Log.e("AuthVM", "Fallback: sendEmailVerification HATA: ${e3.javaClass.simpleName} - ${e3.message}", e3)
                     }
+                    pendingEmail    = email
+                    pendingPassword = password
                     auth.signOut()
                     _currentUser.value = null
                     _verificationSent.value = true
@@ -381,6 +394,8 @@ class AuthViewModel @Inject constructor(
                 android.util.Log.e("AuthVM", "registerWithEmail genel HATA: ${e.javaClass.simpleName} - ${e.message}", e)
                 _error.value = e.message
             } finally {
+                // registrationInProgress, _verificationSent set edildikten SONRA kapatılmalı.
+                // Yoksa authStateListener erken tetiklenip currentUser'ı günceller.
                 registrationInProgress = false
                 _loading.value = false
             }
