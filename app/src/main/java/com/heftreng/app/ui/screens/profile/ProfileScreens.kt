@@ -78,6 +78,7 @@ fun ProfileScreen(
     val followersCountRaw by vm.followersCount.collectAsState()
     val followingCountRaw by vm.followingCount.collectAsState()
     val loading        by vm.loading.collectAsState()
+    val userNotFound   by vm.userNotFound.collectAsState()
     val allMyBooks     by bookVm.myBooks.collectAsState()
     val mySerials      = allMyBooks.filter { it.type == "serial" }
     val myBooks        = allMyBooks.filter { it.type == "book" }
@@ -140,6 +141,59 @@ fun ProfileScreen(
         }
     )
     LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
+
+    // Silinmiş / bulunamayan hesap
+    if (userNotFound) {
+        Scaffold(
+            containerColor = Background,
+            topBar = {
+                TopAppBar(
+                    title = { Text(if (ku) "Profîl" else "Profil", color = OnBackground) },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                )
+            }
+        ) { pad ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(pad),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.PersonOff,
+                        null,
+                        tint     = Muted,
+                        modifier = Modifier.size(64.dp),
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        if (ku) "Ev hesab tune" else "Bu hesap mevcut değil",
+                        color    = OnBackground,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        if (ku) "Dibe ku hatibe rakirin." else "Silinmiş veya askıya alınmış olabilir.",
+                        color    = Muted,
+                        fontSize = 13.sp,
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    TextButton(onClick = { navController.popBackStack() }) {
+                        Text(if (ku) "Vegere" else "Geri Dön", color = Primary)
+                    }
+                }
+            }
+        }
+        return
+    }
+
     Scaffold(
         modifier       = Modifier.imePadding(),
         containerColor = Background,

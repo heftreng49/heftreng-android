@@ -45,8 +45,8 @@ class ProfileViewModel @Inject constructor(
     private val _followRequestStatus = MutableStateFlow("none")
     val followRequestStatus = _followRequestStatus.asStateFlow()
 
-    private val _followersCount = MutableStateFlow(0)
-    val followersCount = _followersCount.asStateFlow()
+    private val _userNotFound = MutableStateFlow(false)
+    val userNotFound = _userNotFound.asStateFlow()
 
     private val _followingCount = MutableStateFlow(0)
     val followingCount = _followingCount.asStateFlow()
@@ -136,7 +136,11 @@ class ProfileViewModel @Inject constructor(
                 val isFollowingResult = followDocDeferred.await()
                 val followRequestDoc  = followRequestDeferred.await()
 
-                val d = userDoc.data ?: return@launch
+                val d = userDoc.data ?: run {
+                    _userNotFound.value = true
+                    _loading.value = false
+                    return@launch
+                }
                 _user.value = User(
                     uid         = d["uid"] as? String ?: targetUid,
                     displayName = d["displayName"] as? String ?: d["name"] as? String ?: "",
