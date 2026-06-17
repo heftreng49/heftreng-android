@@ -189,6 +189,16 @@ class AdsViewModel @Inject constructor(
         else if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    val nativeFeedUnitId: StateFlow<String?> = combine(_nativeFeedConfig, _adsEnabled) { config, enabled ->
+        if (config == null || !config.enabled || !enabled) null
+        else if (config.testMode) AdMobTestIds.NATIVE else AdMobProdIds.NATIVE
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val nativeBlogUnitId: StateFlow<String?> = combine(_nativeBlogConfig, _adsEnabled) { config, enabled ->
+        if (config == null || !config.enabled || !enabled) null
+        else if (config.testMode) AdMobTestIds.NATIVE else AdMobProdIds.NATIVE
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     val bannerPosition: StateFlow<Int> = _bannerConfig.map { it?.position ?: 5 }.stateIn(viewModelScope, SharingStarted.Eagerly, 5)
 
     fun getAdSize(bannerSize: String): com.google.android.gms.ads.AdSize {
@@ -249,11 +259,11 @@ class AdsViewModel @Inject constructor(
                         }
                         "native_feed" -> {
                             _nativeFeedConfig.value = config
-                            if (config.enabled && _adsEnabled.value) preloadNativeAd(if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER, NativeAdSlot.FEED)
+                            if (config.enabled && _adsEnabled.value) preloadNativeAd(if (config.testMode) AdMobTestIds.NATIVE else AdMobProdIds.NATIVE, NativeAdSlot.FEED, config.bannerSize)
                         }
                         "native_blog" -> {
                             _nativeBlogConfig.value = config
-                            if (config.enabled && _adsEnabled.value) preloadNativeAd(if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER, NativeAdSlot.BLOG)
+                            if (config.enabled && _adsEnabled.value) preloadNativeAd(if (config.testMode) AdMobTestIds.NATIVE else AdMobProdIds.NATIVE, NativeAdSlot.BLOG, config.bannerSize)
                         }
                     }
                     _allAdConfigs.value = _allAdConfigs.value.toMutableMap().apply { put(doc.id, config) }
@@ -310,8 +320,20 @@ class AdsViewModel @Inject constructor(
     private var nativeBlogRetryCount = 0
     enum class NativeAdSlot { FEED, BLOG }
 
-    fun preloadNativeAd(unitId: String, slot: NativeAdSlot) {
+    private var nativeFeedAdSize: String = "small"
+    private var nativeBlogAdSize: String = "small"
+
+    fun preloadNativeAd(unitId: String, slot: NativeAdSlot, adSize: String = "small") {
         if (unitId.isBlank()) return
+        
+        // Boyut değiştiyse veya henüz yüklenmediyse yükle
+        val currentSize = if (slot == NativeAdSlot.FEED) nativeFeedAdSize else nativeBlogAdSize
+        val isLoaded = if (slot == NativeAdSlot.FEED) _nativeFeedAd.value != null else _nativeBlogAd.value != null
+        
+        if (isLoaded && currentSize == adSize) return
+        
+        if (slot == NativeAdSlot.FEED) nativeFeedAdSize = adSize else nativeBlogAdSize = adSize
+
         AdLoader.Builder(appContext, unitId)
             .forNativeAd { nativeAd ->
                 when (slot) {
@@ -325,7 +347,7 @@ class AdsViewModel @Inject constructor(
                         val retryCount = if (slot == NativeAdSlot.FEED) ++nativeFeedRetryCount else ++nativeBlogRetryCount
                         if (retryCount <= MAX_RETRY_ATTEMPTS) {
                             delay(RETRY_DELAY_MS * Math.pow(2.0, (retryCount - 1).toDouble()).toLong())
-                            preloadNativeAd(unitId, slot)
+                            preloadNativeAd(unitId, slot, adSize)
                         }
                     }
                 }

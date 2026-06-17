@@ -150,7 +150,11 @@ fun BlogScreen(
                             // Her 5 yazıda bir Native Ad göster
                             if (index > 0 && index % 5 == 0) {
                                 nativeBlogAd?.let { ad ->
-                                    NativeAdViewCompose(nativeAd = ad)
+                                    NativeAdViewCompose(
+                                        nativeAd = ad,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        adSize   = adsVm.nativeBlogConfig.collectAsState().value?.bannerSize ?: "small"
+                                    )
                                 }
                             }
                         }

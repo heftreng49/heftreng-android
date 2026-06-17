@@ -21,8 +21,14 @@ import com.heftreng.app.R
 fun NativeAdViewCompose(
     nativeAd: NativeAd,
     modifier: Modifier = Modifier,
-    layoutId: Int = R.layout.ad_small_template
+    adSize: String = "small" // CMS'den gelen boyut bilgisi
 ) {
+    val layoutId = when (adSize) {
+        "medium" -> R.layout.ad_medium_template
+        "large"  -> R.layout.ad_large_template
+        else     -> R.layout.ad_small_template
+    }
+
     AndroidView(
         factory = { context ->
             val view = LayoutInflater.from(context).inflate(layoutId, null) as NativeAdView

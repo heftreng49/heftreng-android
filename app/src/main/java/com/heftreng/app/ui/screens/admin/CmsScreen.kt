@@ -933,8 +933,10 @@ private fun AdsTab(adsVm: AdsViewModel) {
     val bannerConfig       by adsVm.bannerConfig.collectAsState()
     val interstitialConfig by adsVm.interstitialConfig.collectAsState()
     val rewardedConfig     by adsVm.rewardedConfig.collectAsState()
+    val nativeFeedConfig   by adsVm.nativeFeedConfig.collectAsState()
+    val nativeBlogConfig   by adsVm.nativeBlogConfig.collectAsState()
     val adsEnabled         by adsVm.adsEnabled.collectAsState()
-    val allBanners         by adsVm.allBannerConfigs.collectAsState()
+    val allAdConfigs       by adsVm.allAdConfigs.collectAsState()
     val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
     val scope     = androidx.compose.runtime.rememberCoroutineScope()
 
@@ -1036,8 +1038,30 @@ private fun AdsTab(adsVm: AdsViewModel) {
             )
         }
 
+        // ── Native Ad — Feed ────────────────────────────────────────────────
+        item {
+            AdConfigCard(
+                title      = "Native Ad — Feed",
+                docId      = "native_feed",
+                config     = nativeFeedConfig,
+                onSaved    = { adsVm.loadAdConfigs() },
+                onDeleted  = null,
+            )
+        }
+
+        // ── Native Ad — Blog ────────────────────────────────────────────────
+        item {
+            AdConfigCard(
+                title      = "Native Ad — Blog",
+                docId      = "native_blog",
+                config     = nativeBlogConfig,
+                onSaved    = { adsVm.loadAdConfigs() },
+                onDeleted  = null,
+            )
+        }
+
         // ── Dinamik Slotlar (CMS'den eklenenler) ──────────────────────────
-        items(allBanners.entries.toList(), key = { it.key }) { (docId, config) ->
+        items(allAdConfigs.entries.toList(), key = { it.key }) { (docId, config) ->
             AdConfigCard(
                 title     = config.label.ifBlank { docId },
                 docId     = docId,

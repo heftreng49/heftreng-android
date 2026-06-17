@@ -451,7 +451,11 @@ fun FeedScreen(
                     // Her 5 gönderide bir Native Ad göster
                     if (postIndex > 0 && postIndex % 5 == 0) {
                         nativeFeedAd?.let { ad ->
-                            NativeAdViewCompose(nativeAd = ad)
+                            NativeAdViewCompose(
+                                nativeAd = ad,
+                                modifier = Modifier.fillMaxWidth(),
+                                adSize   = adsVm.nativeFeedConfig.collectAsState().value?.bannerSize ?: "small"
+                            )
                         }
                     }
 
