@@ -49,7 +49,15 @@ private fun populateNativeAdView(nativeAd: NativeAd, adView: NativeAdView) {
     adView.bodyView = adView.findViewById(R.id.ad_body)
     adView.callToActionView = adView.findViewById(R.id.ad_call_to_action)
     adView.iconView = adView.findViewById(R.id.ad_app_icon)
-    adView.mediaView = adView.findViewById(R.id.ad_media)
+    adView.mediaView = adView.findViewById<com.google.android.gms.ads.nativead.MediaView>(R.id.ad_media).also { mv ->
+        // MediaView en az 120x120dp olmalı — video içerik varsa göster, yoksa gizle
+        if (nativeAd.mediaContent != null) {
+            mv.visibility = View.VISIBLE
+            mv.mediaContent = nativeAd.mediaContent!!
+        } else {
+            mv.visibility = View.GONE
+        }
+    }
 
     (adView.headlineView as? TextView)?.text = nativeAd.headline
 
