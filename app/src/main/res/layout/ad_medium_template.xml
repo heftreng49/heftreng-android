@@ -13,7 +13,6 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- Header: ikon + başlık + Sponsorlu rozeti -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -62,7 +61,6 @@
 
         </LinearLayout>
 
-        <!-- Açıklama -->
         <TextView
             android:id="@+id/ad_body"
             android:layout_width="match_parent"
@@ -73,14 +71,12 @@
             android:ellipsize="end"
             android:layout_marginBottom="8dp"/>
 
-        <!-- MediaView — 160dp sabit yükseklik, köşeleri yuvarlak -->
         <com.google.android.gms.ads.nativead.MediaView
             android:id="@+id/ad_media"
             android:layout_width="match_parent"
             android:layout_height="160dp"
             android:layout_marginBottom="8dp"/>
 
-        <!-- CTA butonu — daha ince -->
         <Button
             android:id="@+id/ad_call_to_action"
             android:layout_width="match_parent"

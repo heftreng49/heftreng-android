@@ -1,19 +1,24 @@
 package com.heftreng.app.ui.component
 
+import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
 import com.heftreng.app.R
+import com.heftreng.app.ui.theme.HeftCard
+import com.heftreng.app.ui.theme.Divider
 
 @Composable
 fun NativeAdViewCompose(
@@ -27,19 +32,39 @@ fun NativeAdViewCompose(
         else     -> R.layout.ad_small_template
     }
 
+    // Compose tema renklerini al — LocalHeftrangColors'tan geliyor, light/dark otomatik
+    val cardBg     = HeftCard
+    val cardBorder = Divider
+
     AndroidView(
         factory = { context ->
             val view = LayoutInflater.from(context).inflate(layoutId, null) as NativeAdView
+            applyThemeBackground(view, cardBg, cardBorder)
             populateNativeAdView(nativeAd, view)
             view
         },
-        update  = { view -> populateNativeAdView(nativeAd, view) },
+        update = { view ->
+            applyThemeBackground(view, cardBg, cardBorder)
+            populateNativeAdView(nativeAd, view)
+        },
         modifier = modifier.fillMaxWidth(),
     )
 }
 
+private fun applyThemeBackground(view: NativeAdView, cardBg: Color, cardBorder: Color) {
+    val drawable = GradientDrawable().apply {
+        shape         = GradientDrawable.RECTANGLE
+        cornerRadius  = 16f * view.resources.displayMetrics.density
+        setColor(cardBg.toArgb())
+        setStroke(
+            (1f * view.resources.displayMetrics.density).toInt(),
+            cardBorder.toArgb(),
+        )
+    }
+    view.background = drawable
+}
+
 private fun populateNativeAdView(nativeAd: NativeAd, adView: NativeAdView) {
-    // 1. MediaView — sabit 200dp yükseklikte, içerik yoksa GONE
     val mediaView = adView.findViewById<MediaView>(R.id.ad_media)
     adView.mediaView = mediaView
     if (nativeAd.mediaContent != null) {
@@ -49,12 +74,10 @@ private fun populateNativeAdView(nativeAd: NativeAd, adView: NativeAdView) {
         mediaView.visibility = View.GONE
     }
 
-    // 2. Headline
     adView.headlineView = adView.findViewById<TextView>(R.id.ad_headline).also {
         it.text = nativeAd.headline ?: ""
     }
 
-    // 3. Body
     adView.bodyView = adView.findViewById<TextView>(R.id.ad_body).also {
         if (nativeAd.body.isNullOrBlank()) {
             it.visibility = View.GONE
@@ -64,7 +87,6 @@ private fun populateNativeAdView(nativeAd: NativeAd, adView: NativeAdView) {
         }
     }
 
-    // 4. CTA
     adView.callToActionView = adView.findViewById<Button>(R.id.ad_call_to_action).also {
         if (nativeAd.callToAction.isNullOrBlank()) {
             it.visibility = View.GONE
@@ -74,7 +96,6 @@ private fun populateNativeAdView(nativeAd: NativeAd, adView: NativeAdView) {
         }
     }
 
-    // 5. Icon
     adView.iconView = adView.findViewById<ImageView>(R.id.ad_app_icon).also {
         val icon = nativeAd.icon
         if (icon?.drawable != null) {
@@ -85,6 +106,5 @@ private fun populateNativeAdView(nativeAd: NativeAd, adView: NativeAdView) {
         }
     }
 
-    // En son setNativeAd — tüm view'lar set edildikten sonra
     adView.setNativeAd(nativeAd)
 }
