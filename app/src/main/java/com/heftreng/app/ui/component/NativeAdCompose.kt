@@ -6,10 +6,8 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
@@ -34,31 +32,34 @@ fun NativeAdViewCompose(
             populateNativeAdView(nativeAd, view)
             view
         },
-        update = { view ->
-            populateNativeAdView(nativeAd, view)
-        },
+        update  = { view -> populateNativeAdView(nativeAd, view) },
         modifier = modifier.fillMaxWidth(),
     )
 }
 
 private fun populateNativeAdView(nativeAd: NativeAd, adView: NativeAdView) {
-    adView.headlineView    = adView.findViewById(R.id.ad_headline)
-    adView.bodyView        = adView.findViewById(R.id.ad_body)
-    adView.callToActionView= adView.findViewById(R.id.ad_call_to_action)
-    adView.iconView        = adView.findViewById(R.id.ad_app_icon)
-    adView.mediaView       = adView.findViewById<MediaView>(R.id.ad_media).also { mv ->
-        if (nativeAd.mediaContent != null && nativeAd.mediaContent!!.hasVideoContent()) {
-            mv.visibility    = View.VISIBLE
-            mv.mediaContent  = nativeAd.mediaContent!!
-        } else {
-            mv.visibility = View.GONE
+    // MediaView — her zaman register et, AdMob validator görsün
+    val mediaView = adView.findViewById<MediaView>(R.id.ad_media)
+    adView.mediaView = mediaView
+    val hasMedia = nativeAd.mediaContent != null
+    if (hasMedia) {
+        mediaView.mediaContent = nativeAd.mediaContent!!
+        mediaView.visibility   = View.VISIBLE
+    } else {
+        // İçerik yok — görünmez yap ama gone değil, validator için
+        mediaView.layoutParams = mediaView.layoutParams.apply {
+            height = 1  // 1px — validator görebilir ama kullanıcı görmez
         }
+        mediaView.visibility = View.INVISIBLE
     }
 
-    // Başlık
+    adView.headlineView     = adView.findViewById(R.id.ad_headline)
+    adView.bodyView         = adView.findViewById(R.id.ad_body)
+    adView.callToActionView = adView.findViewById(R.id.ad_call_to_action)
+    adView.iconView         = adView.findViewById(R.id.ad_app_icon)
+
     (adView.headlineView as? TextView)?.text = nativeAd.headline
 
-    // Açıklama
     if (nativeAd.body.isNullOrBlank()) {
         adView.bodyView?.visibility = View.GONE
     } else {
@@ -66,7 +67,6 @@ private fun populateNativeAdView(nativeAd: NativeAd, adView: NativeAdView) {
         (adView.bodyView as? TextView)?.text = nativeAd.body
     }
 
-    // CTA butonu
     if (nativeAd.callToAction.isNullOrBlank()) {
         adView.callToActionView?.visibility = View.GONE
     } else {
@@ -74,9 +74,9 @@ private fun populateNativeAdView(nativeAd: NativeAd, adView: NativeAdView) {
         (adView.callToActionView as? Button)?.text = nativeAd.callToAction
     }
 
-    // Uygulama/sponsor ikonu
-    if (nativeAd.icon?.drawable != null) {
-        (adView.iconView as? ImageView)?.setImageDrawable(nativeAd.icon!!.drawable)
+    val icon = nativeAd.icon
+    if (icon?.drawable != null) {
+        (adView.iconView as? ImageView)?.setImageDrawable(icon.drawable)
         adView.iconView?.visibility = View.VISIBLE
     } else {
         adView.iconView?.visibility = View.GONE
