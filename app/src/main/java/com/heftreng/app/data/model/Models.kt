@@ -502,7 +502,7 @@ object AdMobProdIds {
     const val BANNER        = "ca-app-pub-6463746824939277/7866834575"
     const val INTERSTITIAL  = "ca-app-pub-6463746824939277/4989839500"
     const val REWARDED      = "ca-app-pub-6463746824939277/9693325673"
-    const val NATIVE        = "ca-app-pub-6463746824939277/0000000000"  // TODO: AdMob konsolundan gerçek Native unit ID ile değiştir
+    const val NATIVE        = "ca-app-pub-6463746824939277/9038907874"
 }
 
 // ─── KÜTÜPHANE YAPISI ──────────────────────────────────────────────────
