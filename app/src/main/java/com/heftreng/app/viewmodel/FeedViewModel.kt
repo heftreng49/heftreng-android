@@ -1160,10 +1160,12 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 // Takip listesini Supabase'den çek — _followingUids'i güncelle
+                // limit(PAGE_SIZE) vardı (30) — 30+ kişi takip edince geri kalanlar
+                // filtrelenmiyordu. Tüm takipleri çekmek için limit kaldırıldı.
                 val followingUids = mutableSetOf<String>()
                 followingUids.add(myUid)
                 val followRows = supabase.postgrest["follows"]
-                    .select { filter { eq("from_uid", myUid) }; limit(PAGE_SIZE) }
+                    .select { filter { eq("from_uid", myUid) }; limit(1000) }
                     .decodeList<FollowRow>()
                 followRows.forEach { followingUids.add(it.targetUid) }
                 _followingUids.value = followingUids
@@ -1231,12 +1233,9 @@ class FeedViewModel @Inject constructor(
     fun followSuggestedUser(targetUid: String) {
         val myUid = auth.currentUser?.uid ?: return
 
-        // 1. Optimistic update — UI anında güncellenir
-        _suggestedUsers.value = _suggestedUsers.value.map {
-            if (it.uid == targetUid) it.copy(isFollowing = true) else it
-        }
-        // _followingUids'e ekle — loadSuggestedUsers tekrar çalışsa da filtreler
-        _followingUids.value = _followingUids.value + targetUid
+        // Optimistic update — takip edilen kullanıcıyı listeden hemen çıkar
+        _suggestedUsers.value = _suggestedUsers.value.filter { it.uid != targetUid }
+        _followingUids.value  = _followingUids.value + targetUid
 
         viewModelScope.launch {
             try {
@@ -1262,12 +1261,12 @@ class FeedViewModel @Inject constructor(
                 firestore.collection("users").document(targetUid)
                     .update("followersCount", com.google.firebase.firestore.FieldValue.increment(1))
                 sendNotif(targetUid, "follow", "$myName sizi takip etmeye başladı", "", "")
+                // Cache'i geçersiz kıl — bir sonraki loadSuggestedUsers güncel listeyi çeker
+                suggestionsLoaded = false
             } catch (e: Exception) {
-                // Hata: geri al
-                _followingUids.value = _followingUids.value - targetUid
-                _suggestedUsers.value = _suggestedUsers.value.map {
-                    if (it.uid == targetUid) it.copy(isFollowing = false) else it
-                }
+                // Hata: geri al — kişiyi listeye tekrar ekle
+                _followingUids.value  = _followingUids.value - targetUid
+                loadSuggestedUsers(forceReload = true)
                 e.printStackTrace()
             }
         }
