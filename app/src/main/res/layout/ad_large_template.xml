@@ -13,7 +13,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- Header: ikon + başlık + reklam rozeti -->
+        <!-- Header: ikon + başlık + sponsorlu rozeti -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -23,10 +23,9 @@
 
             <ImageView
                 android:id="@+id/ad_app_icon"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:scaleType="centerCrop"
-                android:background="@drawable/bg_ad_icon"
                 android:layout_marginEnd="10dp"/>
 
             <LinearLayout
@@ -73,12 +72,11 @@
             android:ellipsize="end"
             android:layout_marginBottom="10dp"/>
 
-        <!-- MediaView — her zaman görünür, içerik yoksa 0dp olur -->
+        <!-- MediaView — max 200dp, video/görsel için -->
         <com.google.android.gms.ads.nativead.MediaView
             android:id="@+id/ad_media"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="0dp"
+            android:layout_height="200dp"
             android:layout_marginBottom="10dp"/>
 
         <!-- CTA butonu -->

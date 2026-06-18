@@ -2,6 +2,7 @@ package com.heftreng.app.ui.component
 
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
@@ -38,49 +39,52 @@ fun NativeAdViewCompose(
 }
 
 private fun populateNativeAdView(nativeAd: NativeAd, adView: NativeAdView) {
-    // MediaView — her zaman register et, AdMob validator görsün
+    // 1. MediaView — sabit 200dp yükseklikte, içerik yoksa GONE
     val mediaView = adView.findViewById<MediaView>(R.id.ad_media)
     adView.mediaView = mediaView
-    val hasMedia = nativeAd.mediaContent != null
-    if (hasMedia) {
+    if (nativeAd.mediaContent != null) {
         mediaView.mediaContent = nativeAd.mediaContent!!
         mediaView.visibility   = View.VISIBLE
     } else {
-        // İçerik yok — görünmez yap ama gone değil, validator için
-        mediaView.layoutParams = mediaView.layoutParams.apply {
-            height = 1  // 1px — validator görebilir ama kullanıcı görmez
+        mediaView.visibility = View.GONE
+    }
+
+    // 2. Headline
+    adView.headlineView = adView.findViewById<TextView>(R.id.ad_headline).also {
+        it.text = nativeAd.headline ?: ""
+    }
+
+    // 3. Body
+    adView.bodyView = adView.findViewById<TextView>(R.id.ad_body).also {
+        if (nativeAd.body.isNullOrBlank()) {
+            it.visibility = View.GONE
+        } else {
+            it.visibility = View.VISIBLE
+            it.text = nativeAd.body
         }
-        mediaView.visibility = View.INVISIBLE
     }
 
-    adView.headlineView     = adView.findViewById(R.id.ad_headline)
-    adView.bodyView         = adView.findViewById(R.id.ad_body)
-    adView.callToActionView = adView.findViewById(R.id.ad_call_to_action)
-    adView.iconView         = adView.findViewById(R.id.ad_app_icon)
-
-    (adView.headlineView as? TextView)?.text = nativeAd.headline
-
-    if (nativeAd.body.isNullOrBlank()) {
-        adView.bodyView?.visibility = View.GONE
-    } else {
-        adView.bodyView?.visibility = View.VISIBLE
-        (adView.bodyView as? TextView)?.text = nativeAd.body
+    // 4. CTA
+    adView.callToActionView = adView.findViewById<Button>(R.id.ad_call_to_action).also {
+        if (nativeAd.callToAction.isNullOrBlank()) {
+            it.visibility = View.GONE
+        } else {
+            it.visibility = View.VISIBLE
+            it.text = nativeAd.callToAction
+        }
     }
 
-    if (nativeAd.callToAction.isNullOrBlank()) {
-        adView.callToActionView?.visibility = View.GONE
-    } else {
-        adView.callToActionView?.visibility = View.VISIBLE
-        (adView.callToActionView as? Button)?.text = nativeAd.callToAction
+    // 5. Icon
+    adView.iconView = adView.findViewById<ImageView>(R.id.ad_app_icon).also {
+        val icon = nativeAd.icon
+        if (icon?.drawable != null) {
+            it.setImageDrawable(icon.drawable)
+            it.visibility = View.VISIBLE
+        } else {
+            it.visibility = View.GONE
+        }
     }
 
-    val icon = nativeAd.icon
-    if (icon?.drawable != null) {
-        (adView.iconView as? ImageView)?.setImageDrawable(icon.drawable)
-        adView.iconView?.visibility = View.VISIBLE
-    } else {
-        adView.iconView?.visibility = View.GONE
-    }
-
+    // En son setNativeAd — tüm view'lar set edildikten sonra
     adView.setNativeAd(nativeAd)
 }
