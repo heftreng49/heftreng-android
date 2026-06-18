@@ -259,11 +259,28 @@ class AdsViewModel @Inject constructor(
                         }
                         "native_feed" -> {
                             _nativeFeedConfig.value = config
-                            if (config.enabled && _adsEnabled.value) preloadNativeAd(if (config.testMode) AdMobTestIds.NATIVE else AdMobProdIds.NATIVE, NativeAdSlot.FEED, config.bannerSize)
+                            android.util.Log.d("AdsVM", "native_feed config geldi: enabled=${config.enabled}, testMode=${config.testMode}, size=${config.bannerSize}, unitId=${config.unitId}")
+                            if (config.enabled && _adsEnabled.value) {
+                                val unitId = when {
+                                    config.testMode          -> AdMobTestIds.NATIVE
+                                    config.unitId.isNotBlank() -> config.unitId
+                                    else                     -> AdMobProdIds.NATIVE
+                                }
+                                android.util.Log.d("AdsVM", "native_feed preload başlıyor: unitId=$unitId")
+                                preloadNativeAd(unitId, NativeAdSlot.FEED, config.bannerSize)
+                            }
                         }
                         "native_blog" -> {
                             _nativeBlogConfig.value = config
-                            if (config.enabled && _adsEnabled.value) preloadNativeAd(if (config.testMode) AdMobTestIds.NATIVE else AdMobProdIds.NATIVE, NativeAdSlot.BLOG, config.bannerSize)
+                            android.util.Log.d("AdsVM", "native_blog config geldi: enabled=${config.enabled}, testMode=${config.testMode}, unitId=${config.unitId}")
+                            if (config.enabled && _adsEnabled.value) {
+                                val unitId = when {
+                                    config.testMode            -> AdMobTestIds.NATIVE
+                                    config.unitId.isNotBlank() -> config.unitId
+                                    else                       -> AdMobProdIds.NATIVE
+                                }
+                                preloadNativeAd(unitId, NativeAdSlot.BLOG, config.bannerSize)
+                            }
                         }
                     }
                     _allAdConfigs.value = _allAdConfigs.value.toMutableMap().apply { put(doc.id, config) }
@@ -348,6 +365,7 @@ class AdsViewModel @Inject constructor(
 
         AdLoader.Builder(appContext, unitId)
             .forNativeAd { nativeAd ->
+                android.util.Log.d("AdsVM", "Native ad yüklendi: slot=$slot")
                 when (slot) {
                     NativeAdSlot.FEED -> { cachedNativeFeedAd?.destroy(); cachedNativeFeedAd = nativeAd; _nativeFeedAd.value = nativeAd; nativeFeedRetryCount = 0 }
                     NativeAdSlot.BLOG -> { cachedNativeBlogAd?.destroy(); cachedNativeBlogAd = nativeAd; _nativeBlogAd.value = nativeAd; nativeBlogRetryCount = 0 }
@@ -355,6 +373,7 @@ class AdsViewModel @Inject constructor(
             }
             .withAdListener(object : AdListener() {
                 override fun onAdFailedToLoad(adError: LoadAdError) {
+                    android.util.Log.e("AdsVM", "Native ad HATA: slot=$slot code=${adError.code} msg=${adError.message}")
                     viewModelScope.launch {
                         val retryCount = if (slot == NativeAdSlot.FEED) ++nativeFeedRetryCount else ++nativeBlogRetryCount
                         if (retryCount <= MAX_RETRY_ATTEMPTS) {
