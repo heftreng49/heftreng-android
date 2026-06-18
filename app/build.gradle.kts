@@ -148,7 +148,7 @@ dependencies {
 
     // AdMob
     implementation(libs.admob)
-    implementation(libs.meta.ads.mediation)
+    implementation(libs.metaAdsMediation)
 
     // Room — Offline cache (Öncelik 4: alıntılar)
     implementation(libs.room.runtime)
