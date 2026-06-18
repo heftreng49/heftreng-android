@@ -238,19 +238,47 @@ class AdsViewModel @Inject constructor(
                     when (doc.id) {
                         "banner_feed" -> {
                             _bannerConfig.value = config
-                            if (config.enabled && _adsEnabled.value) preloadBanner(if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER, BannerSlot.FEED, config.bannerSize)
+                            if (config.enabled && _adsEnabled.value) {
+                                val unitId = when {
+                                    config.testMode            -> AdMobTestIds.BANNER
+                                    config.unitId.isNotBlank() -> config.unitId
+                                    else                       -> AdMobProdIds.BANNER
+                                }
+                                preloadBanner(unitId, BannerSlot.FEED, config.bannerSize)
+                            }
                         }
                         "banner_library", "banner_lib" -> {
                             _bannerLibraryConfig.value = config
-                            if (config.enabled && _adsEnabled.value) preloadBanner(if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER, BannerSlot.LIB, config.bannerSize)
+                            if (config.enabled && _adsEnabled.value) {
+                                val unitId = when {
+                                    config.testMode            -> AdMobTestIds.BANNER
+                                    config.unitId.isNotBlank() -> config.unitId
+                                    else                       -> AdMobProdIds.BANNER
+                                }
+                                preloadBanner(unitId, BannerSlot.LIB, config.bannerSize)
+                            }
                         }
                         "banner_kurdi" -> {
                             _bannerKurdiConfig.value = config
-                            if (config.enabled && _adsEnabled.value) preloadBanner(if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER, BannerSlot.KURDI, config.bannerSize)
+                            if (config.enabled && _adsEnabled.value) {
+                                val unitId = when {
+                                    config.testMode            -> AdMobTestIds.BANNER
+                                    config.unitId.isNotBlank() -> config.unitId
+                                    else                       -> AdMobProdIds.BANNER
+                                }
+                                preloadBanner(unitId, BannerSlot.KURDI, config.bannerSize)
+                            }
                         }
                         "banner_blog" -> {
                             _bannerBlogConfig.value = config
-                            if (config.enabled && _adsEnabled.value) preloadBanner(if (config.testMode) AdMobTestIds.BANNER else AdMobProdIds.BANNER, BannerSlot.BLOG, config.bannerSize)
+                            if (config.enabled && _adsEnabled.value) {
+                                val unitId = when {
+                                    config.testMode            -> AdMobTestIds.BANNER
+                                    config.unitId.isNotBlank() -> config.unitId
+                                    else                       -> AdMobProdIds.BANNER
+                                }
+                                preloadBanner(unitId, BannerSlot.BLOG, config.bannerSize)
+                            }
                         }
                         "interstitial_serial" -> _interstitialConfig.value = config
                         "rewarded_xp" -> {
