@@ -20,6 +20,16 @@ on:
           - alpha
           - beta
           - production
+      release_notes_tr:
+        description: 'Sürüm notu — Türkçe'
+        required: false
+        type: string
+        default: ''
+      release_notes_ku:
+        description: 'Sürüm notu — Kurdî'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   build:
@@ -91,6 +101,12 @@ jobs:
           name: heftreng-release.aab
           path: aab/
 
+      - name: Write release notes
+        run: |
+          mkdir -p release-notes
+          echo "${{ inputs.release_notes_tr }}" > release-notes/tr-TR.txt
+          echo "${{ inputs.release_notes_ku }}" > release-notes/ku.txt
+
       - name: Upload to Play Store
         uses: r0adkll/upload-google-play@v1
         with:
@@ -99,3 +115,4 @@ jobs:
           releaseFiles: aab/*.aab
           track: ${{ inputs.track }}
           status: completed
+          whatsNewDirectory: release-notes/
