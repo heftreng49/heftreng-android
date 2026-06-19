@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -307,7 +309,31 @@ fun FeedScreen(
             }
         } else {
             Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
+            val feedListState = rememberLazyListState()
+
+            // ── Reklam önden-ısıtma: gerçek scroll pozisyonuna göre ──────────
+            // LazyColumn yalnızca görünür + birkaç tampon item'ı compose eder;
+            // "bir sonraki pozisyonu" item compose anında ısıtmak, hızlı kaydırmada
+            // reklamın yüklenme süresini (1-3sn) karşılamaya yetmiyordu. Bunun yerine
+            // mevcut scroll konumundan ileriye doğru 3 banner pozisyonunu sürekli
+            // önceden ısıtıyoruz (firstVisibleItemIndex değiştikçe tetiklenir).
+            if (bannerUnitId != null) {
+                LaunchedEffect(feedListState, bannerPos, feedBannerSize) {
+                    snapshotFlow { feedListState.firstVisibleItemIndex }
+                        .collect { firstVisible ->
+                            val nextBannerPostIndex = ((firstVisible / bannerPos) + 1) * bannerPos - 1
+                            (0 until 3).forEach { step ->
+                                val idx = nextBannerPostIndex + step * bannerPos
+                                if (idx >= 0) {
+                                    adsVm.preloadPositionedBanner("feed_banner_$idx", bannerUnitId!!, feedBannerSize)
+                                }
+                            }
+                        }
+                }
+            }
+
             LazyColumn(
+                state          = feedListState,
                 modifier       = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = 6.dp, bottom = 100.dp),
             ) {
