@@ -265,8 +265,8 @@ fun PositionedNativeAdView(
     positionKey    : String,
     unitId         : String?,
     adsVm          : AdsViewModel,
-    nativeAdContent: @Composable (com.google.android.gms.ads.nativead.NativeAd) -> Unit,
     modifier       : Modifier = Modifier,
+    nativeAdContent: @Composable (com.google.android.gms.ads.nativead.NativeAd) -> Unit,
 ) {
     if (unitId.isNullOrBlank()) return
 
