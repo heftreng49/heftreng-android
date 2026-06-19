@@ -1,0 +1,518 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════
+//  HEFTRENG — Firestore Security Rules  v13
+//
+//  Rol sistemi (admins/{uid} → { role: "admin|moderator|editor|kutuphaneci" }):
+//
+//  admin        → Her şey
+//  moderator    → Kullanıcı ban, gönderi/yorum sil, bekleyenler, şikayetler, itirazlar
+//  editor       → CMS, düzenle, push bildirimi, bekleyenler, istatistik
+//  kutuphaneci  → Kütüphane, yazar, kitap yönetimi
+//
+//  v13 — BOT / SPAM ÖNLEME:
+//  isVerified() eklendi: write işlemleri artık e-posta doğrulaması gerektiriyor.
+//  Google ile girişler otomatik doğrulanmış sayılır (token.firebase.sign_in_provider).
+//  Sadece read, session ve doğrulama sürecine özgü hafif işlemler muaf tutuldu.
+// ═══════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Temel yardımcılar ─────────────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+    // E-posta doğrulanmış veya Google/Apple ile giriş yapılmış
+    function isVerified() {
+      return isAuth() && (
+        request.auth.token.email_verified == true
+        || request.auth.token.firebase.sign_in_provider == 'google.com'
+        || request.auth.token.firebase.sign_in_provider == 'apple.com'
+      );
+    }
+    function onlyChanging(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+    function maxLen(field, n) {
+      return request.resource.data[field] is string
+          && request.resource.data[field].size() <= n;
+    }
+
+    // FATURA OPTİMİZASYONU: notBanned() sadece write işlemlerinde kullanılır.
+    // Read işlemlerinde çağrılmaz → gereksiz get() maliyeti sıfırlanır.
+    function notBanned() {
+      return !exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('banned', false) == false;
+    }
+
+    // ── Rol fonksiyonları ──────────────────────────────────────
+    // FATURA OPTİMİZASYONU: getRole() tek get() çağrısı yapar.
+    // isAdmin/isModerator/isEditor/isLibrarian/isStaff → hepsi getRole()'u çağırır,
+    // Firestore Rules motoru aynı istek içinde get() sonuçlarını önbellekler.
+    function getRole() {
+      return isAuth() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('role', 'none')
+        : 'none';
+    }
+    function isAdmin()     { return getRole() == 'admin'; }
+    function isModerator() { return getRole() in ['admin', 'moderator']; }
+    function isEditor()    { return getRole() in ['admin', 'editor']; }
+    function isLibrarian() { return getRole() in ['admin', 'kutuphaneci']; }
+    function isStaff()     { return getRole() in ['admin', 'moderator', 'editor', 'kutuphaneci']; }
+
+    // ── İzin tabanlı kontrol ───────────────────────────────────
+    function hasPermission(perm) {
+      return isAuth()
+          && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+          && perm in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('permissions', []);
+    }
+
+    // ── Gizli hesap yardımcıları ──────────────────────────────
+    // FATURA OPTİMİZASYONU: isPrivateUser() + isFollowing() = 2 okuma.
+    // canViewContent() sadece gerçekten gizli içerik söz konusuysa çağrılmalı.
+    function isPrivateUser(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid))
+          && get(/databases/$(database)/documents/users/$(uid)).data.get('isPrivate', false) == true;
+    }
+    function isFollowing(targetUid) {
+      return isAuth() &&
+          exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + targetUid));
+    }
+    function canViewContent(ownerUid) {
+      return isOwner(ownerUid)
+          || isStaff()
+          || !isPrivateUser(ownerUid)
+          || isFollowing(ownerUid);
+    }
+
+    // ─── ADMINS ───────────────────────────────────────────────
+    match /admins/{uid} {
+      allow get:    if isAuth() && request.auth.uid == uid;
+      allow list:   if isAdmin();
+      allow create: if isAuth() && (isAdmin() || request.auth.uid == uid);
+      allow update: if isAdmin();
+      allow delete: if isAdmin() && request.auth.uid != uid;
+    }
+
+    // ─── USERS ────────────────────────────────────────────────
+    // FATURA OPTİMİZASYONU: read: true — profil görüntülemede notBanned get() YOK
+    match /users/{uid} {
+      allow read: if true;
+      allow create: if isOwner(uid) && isVerified();
+      allow update: if (isOwner(uid) && isVerified()) || isModerator();
+      allow delete: if isOwner(uid) || isAdmin();
+
+      match /kf_progress/{doc} {
+        allow read:  if isOwner(uid) || isAdmin();
+        allow write: if isOwner(uid) || isAdmin();
+      }
+      match /readProgress/{doc} {
+        allow read:  if isOwner(uid) || isAdmin();
+        allow write: if isOwner(uid);
+      }
+    }
+
+    // ─── FEED ─────────────────────────────────────────────────
+    function postVisible(data) {
+      return data.get('visibility', 'public') == 'only_me'
+          ? (isOwner(data.uid) || isStaff())
+          : data.get('visibility', 'public') == 'friends'
+          ? (isOwner(data.uid) || isFollowing(data.uid) || isStaff())
+          : canViewContent(data.uid);
+    }
+
+    match /feed/{postId} {
+      allow get:  if postVisible(resource.data);
+      // FATURA OPTİMİZASYONU: list tamamen açık — web sitesi ve arama için,
+      // notBanned kontrolü write tarafında yapılıyor
+      allow list: if true;
+
+      allow create: if isVerified() && notBanned()
+          && request.resource.data.uid == request.auth.uid
+          // Client-state alanları Firestore'a yazılmamalı
+          && !('isLikedByMe'    in request.resource.data)
+          && !('isSavedByMe'    in request.resource.data)
+          && !('isRepostedByMe' in request.resource.data)
+          && !('myRepostId'     in request.resource.data);
+
+      allow update:
+          if isAdmin()
+          || (isAuth() && notBanned() && resource.data.uid == request.auth.uid && onlyChanging(['text']))
+          || (isAuth() && onlyChanging(['likesCount']))
+          || (isAuth() && onlyChanging(['saves']))
+          || (isAuth() && onlyChanging(['commentsCount']))
+          || (isAuth() && onlyChanging(['repostsCount']))
+          || ((isModerator() || hasPermission("edit")) && onlyChanging(['moderationStatus','moderationReason','moderationNote','moderatedBy','moderatedAt']));
+
+      allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
+
+      match /comments/{cmtId} {
+        allow read: if canViewContent(get(/databases/$(database)/documents/feed/$(postId)).data.uid);
+        allow create: if isVerified() && notBanned()
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.text is string
+            && request.resource.data.text.size() >= 1
+            && request.resource.data.text.size() <= 500
+            // isLikedByMe client-state — Firestore'a yazılmamalı
+            && !('isLikedByMe' in request.resource.data);
+        allow update: if isAuth() && onlyChanging(['likesCount']);
+        allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
+
+        // Yorum beğenileri — her kullanıcı kendi beğeni belgesini yazar/okur
+        match /likes/{likeUid} {
+          allow read: if isAuth();
+          allow create: if isAuth() && likeUid == request.auth.uid;
+          allow delete: if isAuth() && likeUid == request.auth.uid;
+        }
+      }
+    }
+
+    // ─── BLOG YORUMLARI ───────────────────────────────────────
+    match /comments/{postId} {
+      allow read:  if true;
+      allow write: if false;
+      match /msgs/{msgId} {
+        allow read: if true;
+        allow create: if isVerified() && notBanned()
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.text is string
+            && request.resource.data.text.size() >= 1
+            && request.resource.data.text.size() <= 1000
+            && request.resource.data.likes == 0;
+        allow update: if isAuth() && onlyChanging(['likes']);
+        allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
+      }
+    }
+
+    // ─── LIKES & SAVES ────────────────────────────────────────
+    match /commentLikes/{likeId} {
+      allow read:   if isAuth();
+      allow create: if isVerified() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+    }
+    match /chapterLikes/{likeId} {
+      allow read:   if isAuth();
+      allow create: if isVerified() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+    }
+    match /feedLikes/{likeId} {
+      allow read:   if isAuth();
+      allow create: if isVerified() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+    }
+    match /feedSaves/{saveId} {
+      allow read:   if isAuth();
+      allow create: if isVerified() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+    }
+    match /likes/{likeId} {
+      allow read:   if isAuth();
+      allow create: if isVerified() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+    }
+
+    // ─── FOLLOWS ──────────────────────────────────────────────
+    // FATURA OPTİMİZASYONU: read tamamen açık — takip durumu client-side kontrol edilir,
+    // her profil sayfasında exists() çağrısı yapılmaz
+    match /follows/{followId} {
+      allow read: if true;
+      allow create: if isVerified() && notBanned()
+          && request.resource.data.fromUid == request.auth.uid
+          && request.resource.data.fromUid != request.resource.data.targetUid;
+      allow delete: if isAuth()
+          && resource.data.fromUid == request.auth.uid;
+    }
+
+    // ─── FOLLOW REQUESTS (gizli hesap takip istekleri) ────────
+    match /followRequests/{targetUid} {
+      allow read:  if false;
+      allow write: if false;
+
+      match /pending/{fromUid} {
+        allow read: if isAuth()
+            && (request.auth.uid == targetUid || request.auth.uid == fromUid);
+        allow create: if isVerified() && notBanned()
+            && request.auth.uid == fromUid
+            && fromUid != targetUid
+            && request.resource.data.fromUid == fromUid
+            && request.resource.data.targetUid == targetUid;
+        allow delete: if isAuth()
+            && (request.auth.uid == targetUid || request.auth.uid == fromUid);
+      }
+    }
+
+    // ─── POSTS ────────────────────────────────────────────────
+    match /posts/{postId} {
+      allow read:   if canViewContent(resource.data.uid);
+      allow create: if isVerified() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAdmin()
+          || (isVerified() && notBanned() && resource.data.uid == request.auth.uid)
+          || (isAuth() && onlyChanging(['likes']));
+      allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
+    }
+
+    // ─── SERIALS & CHAPTERS ───────────────────────────────────
+    match /serials/{serialId} {
+      allow read: if canViewContent(resource.data.uid);
+      allow create: if isVerified() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if (isVerified() && resource.data.uid == request.auth.uid) || isModerator();
+
+      match /chapters/{chapterId} {
+        allow read: if canViewContent(get(/databases/$(database)/documents/serials/$(serialId)).data.uid);
+        allow create: if isVerified() && notBanned() && request.resource.data.uid == request.auth.uid;
+        allow update: if (isVerified() && resource.data.uid == request.auth.uid) || isModerator()
+            || (isAuth() && onlyChanging(['likes']))
+            || (isAuth() && onlyChanging(['cmtCount']));
+        allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
+
+        match /comments/{cmtId} {
+          allow read: if canViewContent(get(/databases/$(database)/documents/serials/$(serialId)).data.uid);
+          allow create: if isVerified() && notBanned()
+              && request.resource.data.uid == request.auth.uid
+              && request.resource.data.text is string
+              && request.resource.data.text.size() >= 1
+              && request.resource.data.text.size() <= 1000;
+          allow update:
+              if (isAuth() && resource.data.uid == request.auth.uid && onlyChanging(['text','edited']))
+              || (isAuth() && onlyChanging(['likes']));
+          allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
+        }
+      }
+    }
+
+    // ─── KİTAPLAR (kullanıcı kitapları) ──────────────────────
+    match /books/{bookId} {
+      allow read: if canViewContent(resource.data.uid);
+      allow create: if isVerified() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow update: if (isVerified() && notBanned() && resource.data.uid == request.auth.uid) || isModerator();
+      allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
+
+      match /chapters/{chapterId} {
+        allow read: if canViewContent(get(/databases/$(database)/documents/books/$(bookId)).data.uid);
+        allow create: if isVerified() && notBanned() && request.resource.data.uid == request.auth.uid;
+        allow update, delete: if (isVerified() && resource.data.uid == request.auth.uid) || isModerator();
+      }
+    }
+
+    // ─── SERİ BEĞENİLERİ ──────────────────────────────────────
+    match /serialLikes/{likeId} {
+      allow read:   if isAuth();
+      allow create: if isVerified() && notBanned() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAuth() && resource.data.uid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+    }
+
+    // ─── NOTIFICATIONS ────────────────────────────────────────
+    match /notifications/{notifId} {
+      allow read:   if isAuth() && (resource.data.toUid == request.auth.uid || isAdmin());
+      allow create: if isVerified() && notBanned() && request.resource.data.fromUid == request.auth.uid;
+      allow update: if isAuth() && resource.data.toUid == request.auth.uid && onlyChanging(['read']);
+      allow delete: if (isAuth() && resource.data.toUid == request.auth.uid) || isAdmin();
+    }
+    match /userNotifs/{uid} {
+      allow read:  if isOwner(uid) || isStaff();
+      allow write: if isStaff();
+      match /msgs/{notifId} {
+        allow read:   if isOwner(uid) || isStaff();
+        // FATURA OPTİMİZASYONU: notBanned kaldırıldı — bildirim yazmak düşük riskli, 1 get() tasarruf
+        allow create: if isAuth();
+        allow update: if isOwner(uid) && onlyChanging(['read']);
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+    }
+
+    // ─── SESSIONS ─────────────────────────────────────────────
+    match /sessions/{sessionId} {
+      allow read, delete: if isAdmin();
+      allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAuth() && resource.data.uid == request.auth.uid;
+    }
+
+    // ─── BEKLEYEN GÖNDERİLER ──────────────────────────────────
+    match /pendingPosts/{postId} {
+      allow read:   if isModerator() || isEditor() || hasPermission("pending") || (isAuth() && resource.data.authorId == request.auth.uid);
+      allow create: if isVerified() && request.resource.data.authorId == request.auth.uid;
+      allow update: if isModerator() || isEditor() || hasPermission("pending");
+      allow delete: if isModerator() || isEditor() || hasPermission("pending") || (isAuth() && resource.data.authorId == request.auth.uid);
+    }
+
+    // ─── ŞİKAYETLER ───────────────────────────────────────────
+    match /reports/{reportId} {
+      allow read, update: if isModerator() || hasPermission("reports");
+      allow delete:       if isAdmin() || hasPermission("staff");
+      allow create:       if isVerified() && maxLen('reason', 500);
+    }
+
+    // ─── İTİRAZLAR ────────────────────────────────────────────
+    match /appeals/{appealId} {
+      allow read, update: if isModerator() || hasPermission("appeals");
+      allow delete:       if isAdmin() || hasPermission("staff");
+      allow create:       if isVerified();
+    }
+
+    // ─── CONVERSATIONS ────────────────────────────────────────
+    match /conversations/{convId} {
+      allow read:   if isAuth() && request.auth.uid in resource.data.participants;
+      allow create: if isAuth() && request.auth.uid in request.resource.data.participants;
+      allow update: if isAuth() && (
+          request.auth.uid in resource.data.participants
+          || (request.auth.uid in resource.data.participants
+              && !(request.auth.uid in request.resource.data.participants))
+      );
+      allow delete: if isAdmin();
+
+      match /msgs/{msgId} {
+        allow read, write: if isAuth()
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants;
+      }
+      match /typing/{uid} {
+        allow read:  if isAuth();
+        allow write: if isOwner(uid);
+      }
+    }
+
+    match /convMessages/{convId} {
+      allow read, write: if false;
+      match /msgs/{msgId} {
+        allow read: if isAuth()
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants;
+        allow create: if isAuth()
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants
+            && request.resource.data.senderUid == request.auth.uid;
+        allow update: if isAuth()
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants
+            && onlyChanging(['seen','seenAt','seenByPhoto','seenByName',
+                             'read_at','readAt','deleted','deletedAt',
+                             'read','liked_by','edited','text']);
+        allow delete: if isAdmin();
+      }
+    }
+
+    // ─── PRESENCE & TYPING ────────────────────────────────────
+    match /presence/{uid} {
+      allow read:   if isAuth();
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid)
+          && onlyChanging(['online','lastSeen','uid','appVersion','platform']);
+      allow delete: if isOwner(uid) || isAdmin();
+    }
+    match /typing/{docId} {
+      allow read:   if isAuth();
+      allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAuth() && resource.data.uid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+    }
+
+    // ─── OKUMA LİSTESİ ────────────────────────────────────────
+    match /readingLists/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
+      match /books/{sid} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow create: if isOwner(uid)
+            && request.resource.data.sid is string
+            && request.resource.data.status in ['okuyorum','okumak_istiyorum','okudum','biraktim'];
+        allow update: if isOwner(uid)
+            && onlyChanging(['status','updatedAt','title','coverImg','bg']);
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+    }
+
+    // ─── KURDİ FÊRBIBE ────────────────────────────────────────
+    match /kf_units/{id}      { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
+    match /kf_lessons/{id}    { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
+    match /kf_words/{id}      { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
+    match /kf_vocab/{id}      { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
+    match /kf_sentences/{id}  { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
+    match /kf_exercises/{id}  { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
+    match /kf_verbs/{id}      { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
+    match /kf_grammar/{id}    { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
+    match /kf_cats/{id}       { allow read: if true; allow write: if isAdmin() || hasPermission("kurdi"); }
+    match /kf_reports/{reportId} {
+      allow read, update: if isModerator();
+      allow delete:       if isAdmin();
+      allow create:       if isVerified() && maxLen('reason', 500);
+    }
+
+    // ─── USERNAMES ────────────────────────────────────────────
+    match /usernames/{handle} {
+      allow read: if true;
+      allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAuth()
+          && resource.data.uid == request.auth.uid
+          && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+    }
+
+    // ─── CMS ──────────────────────────────────────────────────
+    match /cms/{docId}               { allow read: if isAuth();  allow write: if isEditor() || hasPermission("edit"); }
+    match /cms_pages/{docId}         { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
+    match /cms_banners/{docId}       { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
+    match /cms_announcements/{docId} { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
+    match /cms_categories/{docId}    { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
+    // FATURA OPTİMİZASYONU: cms_ads → reklam config public okunabilir (isAuth() kaldırıldı),
+    // böylece reklam göstermek için ekstra auth kontrolü yapılmaz
+    match /cms_ads/{docId}           { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
+
+    // ─── APP CONFIG ───────────────────────────────────────────
+    match /appConfig/{docId} {
+      allow read:  if true;
+      allow write: if isAdmin();
+    }
+
+    // ─── YAZAR / KİTAP KÜTÜPHANESİ ──────────────────────────
+    match /authors/{authorId} {
+      allow read: if true;
+      allow create: if isLibrarian() || hasPermission("library");
+      allow update: if isLibrarian()
+          || (isAuth() && onlyChanging(['bookCount','quoteCount','reviewCount','followerCount']));
+      allow delete: if isLibrarian() || hasPermission("library");
+
+      match /follows/{uid} {
+        allow read:   if true;
+        allow create: if isOwner(uid) && isVerified() && notBanned();
+        allow delete: if isOwner(uid);
+      }
+    }
+
+    match /library_books/{bookId} {
+      allow read: if true;
+      allow create: if isLibrarian() || hasPermission("library") || (isVerified() && notBanned());
+      allow update: if isLibrarian() || hasPermission("library")
+          || (isAuth() && onlyChanging(['quoteCount','reviewCount','avgRating']));
+      allow delete: if isLibrarian() || hasPermission("library");
+
+      match /quotes/{quoteId} {
+        allow read: if true;
+        allow create: if isVerified() && notBanned()
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.text is string
+            && request.resource.data.text.size() >= 1
+            && request.resource.data.text.size() <= 2000;
+        allow update: if isAuth() && resource.data.uid == request.auth.uid
+            && onlyChanging(['feedPostId','likesCount']);
+        allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isLibrarian();
+      }
+
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if isVerified() && notBanned()
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.text is string
+            && request.resource.data.text.size() >= 1
+            && request.resource.data.text.size() <= 3000
+            && request.resource.data.rating is number
+            && request.resource.data.rating >= 1
+            && request.resource.data.rating <= 5;
+        allow update: if isAuth() && resource.data.uid == request.auth.uid
+            && onlyChanging(['feedPostId','text','rating']);
+        allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isLibrarian();
+      }
+    }
+
+  }
+}

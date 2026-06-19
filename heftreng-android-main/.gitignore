@@ -1,0 +1,63 @@
+# Android Gradle
+.gradle/
+build/
+.idea/
+*.iml
+*.apk
+*.ap_
+*.dex
+*.class
+
+# Firebase & Functions
+node_modules/
+functions/node_modules/
+npm-debug.log
+npm-debug.log.*
+yarn-error.log
+.firebase/
+.firebaserc
+
+# Local development
+local.properties
+*.jks
+*.keystore
+*.bak
+setup_chat.sh
+heftreng-android-fixed/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Gradle
+.gradle/
+gradlew.local.properties
+
+# Build artifacts
+bin/
+gen/
+out/
+
+# Environment files
+.env
+.env.local
+*.pem
+google-services.json
+app/google-services.json
+
+# Firebase debug
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Miscellaneous
+*.zip
+*.log
+*.iws
+*.orig
+.gradle/
