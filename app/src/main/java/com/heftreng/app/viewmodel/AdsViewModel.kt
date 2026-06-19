@@ -127,6 +127,75 @@ class AdsViewModel @Inject constructor(
 
     enum class BannerSlot { FEED, LIB, KURDI, BLOG }
 
+    // ── Liste içinde tekrarlanan banner'lar için pozisyon bazlı cache ───────────
+    // Tek bir AdView'ı birden fazla liste konumunda paylaşmak (eski mimari)
+    // View'ın sürekli söküp-takılmasına ve impression'ın sayılmamasına yol açıyordu.
+    // Bunun yerine her liste konumu (key ile) kendi bağımsız AdView'ını yükler ve tutar.
+    private val _positionedBanners = mutableMapOf<String, AdView>()
+    private val _positionedBannerLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
+    private val _positionedBannerRetryCount = mutableMapOf<String, Int>()
+    private val _positionedBannerSize = mutableMapOf<String, String>()
+
+    fun positionedBannerLoadedFlow(key: String): StateFlow<Boolean> =
+        _positionedBannerLoaded.getOrPut(key) { MutableStateFlow(false) }.asStateFlow()
+
+    fun cachedPositionedBanner(key: String): AdView? = _positionedBanners[key]
+
+    /**
+     * Liste içinde belirli bir pozisyonda (key) gösterilecek banner'ı yükler.
+     * Her key kendi AdView nesnesine sahiptir; aynı View birden fazla konumda
+     * paylaşılmaz, böylece viewability/impression sorunları önlenir.
+     */
+    fun preloadPositionedBanner(key: String, unitId: String, bannerSize: String = "adaptive") {
+        if (unitId.isBlank()) return
+        val loadedFlow = _positionedBannerLoaded.getOrPut(key) { MutableStateFlow(false) }
+        val currentSize = _positionedBannerSize[key]
+        if (loadedFlow.value && currentSize == bannerSize) return
+        if (loadedFlow.value && currentSize != bannerSize) {
+            loadedFlow.value = false
+            _positionedBanners[key]?.destroy()
+            _positionedBanners.remove(key)
+        }
+        _positionedBannerSize[key] = bannerSize
+        val adView = AdView(appContext).apply {
+            setAdSize(getAdSize(bannerSize))
+            adUnitId = unitId
+            adListener = object : AdListener() {
+                override fun onAdLoaded() {
+                    _positionedBannerRetryCount[key] = 0
+                    loadedFlow.value = true
+                }
+                override fun onAdFailedToLoad(e: LoadAdError) {
+                    viewModelScope.launch {
+                        val retryCount = (_positionedBannerRetryCount[key] ?: 0) + 1
+                        _positionedBannerRetryCount[key] = retryCount
+                        if (retryCount <= MAX_RETRY_ATTEMPTS) {
+                            val delayMs = RETRY_DELAY_MS * Math.pow(2.0, (retryCount - 1).toDouble()).toLong()
+                            delay(delayMs)
+                            preloadPositionedBanner(key, unitId, bannerSize)
+                        }
+                    }
+                }
+            }
+            loadAd(AdRequest.Builder().build())
+        }
+        _positionedBanners[key]?.destroy()
+        _positionedBanners[key] = adView
+    }
+
+    /** Liste yeniden çekildiğinde / ekrandan çıkıldığında artık kullanılmayan banner'ları temizler. */
+    fun releasePositionedBanners(keyPrefix: String? = null) {
+        val keysToRemove = if (keyPrefix == null) _positionedBanners.keys.toList()
+            else _positionedBanners.keys.filter { it.startsWith(keyPrefix) }
+        keysToRemove.forEach { k ->
+            _positionedBanners[k]?.destroy()
+            _positionedBanners.remove(k)
+            _positionedBannerLoaded.remove(k)
+            _positionedBannerSize.remove(k)
+            _positionedBannerRetryCount.remove(k)
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         cachedFeedBanner?.destroy()
@@ -135,6 +204,8 @@ class AdsViewModel @Inject constructor(
         cachedBlogBanner?.destroy()
         cachedNativeFeedAd?.destroy()
         cachedNativeBlogAd?.destroy()
+        releasePositionedBanners()
+        releasePositionedNatives()
     }
 
     // ── Konfigürasyonlar (Public API - CmsScreen/KurdiScreen için gerekli) ────────────────
@@ -414,7 +485,57 @@ class AdsViewModel @Inject constructor(
             .build().loadAd(AdRequest.Builder().build())
     }
 
-    // ── Rewarded Ads Stats (KurdiScreen için) ──────────────────────────────────
+    // ── Liste içinde tekrarlanan native reklamlar için pozisyon bazlı cache ─────
+    private val _positionedNativeAds = mutableMapOf<String, NativeAd>()
+    private val _positionedNativeLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
+    private val _positionedNativeRetryCount = mutableMapOf<String, Int>()
+
+    fun positionedNativeLoadedFlow(key: String): StateFlow<Boolean> =
+        _positionedNativeLoaded.getOrPut(key) { MutableStateFlow(false) }.asStateFlow()
+
+    fun cachedPositionedNative(key: String): NativeAd? = _positionedNativeAds[key]
+
+    /**
+     * Liste içinde belirli bir pozisyonda (key) gösterilecek native reklamı yükler.
+     * Her key kendi NativeAd nesnesine sahiptir — aynı NativeAd birden fazla
+     * NativeAdView'a bağlanamaz (AdMob politikası), bu yapı bunu önler.
+     */
+    fun preloadPositionedNative(key: String, unitId: String) {
+        if (unitId.isBlank()) return
+        val loadedFlow = _positionedNativeLoaded.getOrPut(key) { MutableStateFlow(false) }
+        if (loadedFlow.value) return
+        AdLoader.Builder(appContext, unitId)
+            .forNativeAd { nativeAd ->
+                _positionedNativeRetryCount[key] = 0
+                _positionedNativeAds[key]?.destroy()
+                _positionedNativeAds[key] = nativeAd
+                loadedFlow.value = true
+            }
+            .withAdListener(object : AdListener() {
+                override fun onAdFailedToLoad(adError: LoadAdError) {
+                    viewModelScope.launch {
+                        val retryCount = (_positionedNativeRetryCount[key] ?: 0) + 1
+                        _positionedNativeRetryCount[key] = retryCount
+                        if (retryCount <= MAX_RETRY_ATTEMPTS) {
+                            delay(RETRY_DELAY_MS * Math.pow(2.0, (retryCount - 1).toDouble()).toLong())
+                            preloadPositionedNative(key, unitId)
+                        }
+                    }
+                }
+            })
+            .build().loadAd(AdRequest.Builder().build())
+    }
+
+    fun releasePositionedNatives(keyPrefix: String? = null) {
+        val keysToRemove = if (keyPrefix == null) _positionedNativeAds.keys.toList()
+            else _positionedNativeAds.keys.filter { it.startsWith(keyPrefix) }
+        keysToRemove.forEach { k ->
+            _positionedNativeAds[k]?.destroy()
+            _positionedNativeAds.remove(k)
+            _positionedNativeLoaded.remove(k)
+            _positionedNativeRetryCount.remove(k)
+        }
+    }
     enum class RewardType { DOUBLE_XP, UNLOCK_LESSON, SAVE_STREAK }
 
     fun initPrefs(context: android.content.Context) {}

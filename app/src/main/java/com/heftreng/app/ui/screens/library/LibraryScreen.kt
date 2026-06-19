@@ -61,6 +61,7 @@ import com.heftreng.app.ui.component.LibraryBookGridCard
 import com.heftreng.app.ui.component.AddReviewDialog
 import com.heftreng.app.ui.component.BookPickerDialog
 import com.heftreng.app.ui.component.AdBannerView
+import com.heftreng.app.ui.component.PositionedAdBannerView
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
@@ -410,14 +411,8 @@ private fun LibraryQuotesTab(
                 },
             )
             if (bannerUnitId != null && (index + 1) % 5 == 0) {
-                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB, bannerSize = bannerSize)
+                PositionedAdBannerView(positionKey = "lib_quotes_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize)
             }
-        }
-    }
-}
-
-@Composable
-private fun LibraryReviewsTab(
     reviews      : List<BookReview>,
     language     : String,
     navController: NavController,
@@ -435,14 +430,8 @@ private fun LibraryReviewsTab(
         itemsIndexed(reviews, key = { _, r -> r.id }) { index, review ->
             BookReviewCard(review = review, actions = actions, language = language)
             if (bannerUnitId != null && (index + 1) % 5 == 0) {
-                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB, bannerSize = bannerSize)
+                PositionedAdBannerView(positionKey = "lib_reviews_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize)
             }
-        }
-    }
-}
-
-@Composable
-private fun LibraryAuthorsTab(
     authors      : List<Author>,
     language     : String,
     navController: NavController,
@@ -461,7 +450,7 @@ private fun LibraryAuthorsTab(
         itemsIndexed(authors, key = { _, a -> a.id }) { index, author ->
             LibraryAuthorRow(author = author, navController = navController)
             if (bannerUnitId != null && (index + 1) % 6 == 0) {
-                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB, bannerSize = bannerSize)
+                PositionedAdBannerView(positionKey = "lib_authors_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize)
             }
         }
     }
@@ -494,7 +483,7 @@ private fun LibraryBooksTab(
         }
         if (bannerUnitId != null) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                AdBannerView(unitId = bannerUnitId, modifier = Modifier.padding(vertical = 4.dp), adsVm = adsVm, slot = com.heftreng.app.viewmodel.AdsViewModel.BannerSlot.LIB, bannerSize = bannerSize)
+                PositionedAdBannerView(positionKey = "lib_books_banner_0", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize)
             }
         }
     }

@@ -167,6 +167,132 @@ Gördüğünüz içerik, Google tarafından belirlenen bir reklamdır.""") },
     }
 }
 
+// ── Pozisyon bazlı banner — liste içinde her konuma özel AdView ───────────────
+// Kullanım: LazyColumn items { } içinde her banner satırı için
+//   PositionedAdBannerView(positionKey = "feed_banner_$index", unitId = unitId, adsVm = adsVm)
+@Composable
+fun PositionedAdBannerView(
+    positionKey : String,
+    unitId      : String?,
+    adsVm       : AdsViewModel,
+    modifier    : Modifier = Modifier,
+    bannerSize  : String   = "adaptive",
+) {
+    if (unitId.isNullOrBlank()) return
+
+    // İlk göründüğünde yükle
+    LaunchedEffect(positionKey, unitId, bannerSize) {
+        adsVm.preloadPositionedBanner(positionKey, unitId, bannerSize)
+    }
+
+    val isLoaded by adsVm.positionedBannerLoadedFlow(positionKey).collectAsState()
+    var showDialog by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .background(
+                color  = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                shape  = RoundedCornerShape(10.dp),
+            )
+            .padding(bottom = 6.dp),
+    ) {
+        Row(
+            modifier              = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment     = Alignment.CenterVertically,
+        ) {
+            Text(
+                text     = "Reklam",
+                fontSize = 10.sp,
+                color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                style    = androidx.compose.ui.text.TextStyle(letterSpacing = 0.6.sp),
+            )
+            IconButton(onClick = { showDialog = true }, modifier = Modifier.size(20.dp)) {
+                Icon(
+                    imageVector        = Icons.Default.Info,
+                    contentDescription = "Reklam hakkında",
+                    tint               = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    modifier           = Modifier.size(14.dp),
+                )
+            }
+        }
+
+        if (isLoaded) {
+            val adView = adsVm.cachedPositionedBanner(positionKey)
+            if (adView != null) {
+                AndroidView(
+                    factory  = { _ ->
+                        // Bu View yalnızca bu key'e ait — başka hiçbir konumla paylaşılmıyor.
+                        // removeView gerekmez; parent zaten bu tek Composable.
+                        adView
+                    },
+                    modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                )
+            }
+        } else {
+            // Yüklenene kadar yer tutucu
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(60.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(8.dp),
+                    )
+            )
+        }
+    }
+
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title            = { Text("Bu bir reklamdır") },
+            text             = { Text("Heftreng tamamen ücretsiz bir uygulamadır. Uygulamayı sürdürebilmek ve sunucu maliyetlerini karşılayabilmek için Google AdMob aracılığıyla reklam gösteriyoruz.\n\nGördüğünüz içerik, Google tarafından belirlenen bir reklamdır.") },
+            confirmButton    = { TextButton(onClick = { showDialog = false }) { Text("Tamam") } },
+        )
+    }
+}
+
+// ── Pozisyon bazlı native reklam — liste içinde her konuma özel NativeAd ──────
+// Kullanım: LazyColumn items { } içinde her native satırı için
+//   PositionedNativeAdView(positionKey = "feed_native_$index", unitId = unitId, adsVm = adsVm)
+@Composable
+fun PositionedNativeAdView(
+    positionKey    : String,
+    unitId         : String?,
+    adsVm          : AdsViewModel,
+    nativeAdContent: @Composable (com.google.android.gms.ads.nativead.NativeAd) -> Unit,
+    modifier       : Modifier = Modifier,
+) {
+    if (unitId.isNullOrBlank()) return
+
+    LaunchedEffect(positionKey, unitId) {
+        adsVm.preloadPositionedNative(positionKey, unitId)
+    }
+
+    val isLoaded by adsVm.positionedNativeLoadedFlow(positionKey).collectAsState()
+    val nativeAd = if (isLoaded) adsVm.cachedPositionedNative(positionKey) else null
+
+    if (nativeAd != null) {
+        nativeAdContent(nativeAd)
+    } else {
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(120.dp)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(10.dp),
+                )
+        )
+    }
+}
+
 // ── Shimmer animasyonu ────────────────────────────────────────────────────────
 @Composable
 private fun AdShimmer() {

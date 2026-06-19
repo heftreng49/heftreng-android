@@ -24,6 +24,8 @@ import coil.compose.AsyncImage
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.component.AdBannerView
 import com.heftreng.app.ui.component.NativeAdViewCompose
+import com.heftreng.app.ui.component.PositionedAdBannerView
+import com.heftreng.app.ui.component.PositionedNativeAdView
 import com.heftreng.app.viewmodel.AdsViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.heftreng.app.viewmodel.BlogPost
@@ -52,7 +54,7 @@ fun BlogScreen(
     val bannerCfg     by adsVm.bannerBlogConfig.collectAsState()
     val blogBannerSize = bannerCfg?.bannerSize ?: "adaptive"
     val bannerPos      = bannerCfg?.position ?: 4
-    val nativeBlogAd  by adsVm.nativeBlogAd.collectAsState()
+    // nativeBlogAd artık pozisyon bazlı yükleniyor (PositionedNativeAdView), tekil collect kaldırıldı.
     var selLabel by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) { adsVm.loadAdConfigs() }
@@ -137,23 +139,35 @@ fun BlogScreen(
                                 post     = post,
                                 onClick  = { navController.navigate("blog_post/${post.id}") },
                             )
-                            // Her bannerPos. yazıdan sonra reklam göster
+                            // Her bannerPos. yazıdan sonra reklam göster — her pozisyon kendi AdView'ını yükler
                             if (bannerUnitId != null && (index + 1) % bannerPos == 0) {
-                                AdBannerView(
-                                    unitId     = bannerUnitId,
-                                    adsVm      = adsVm,
-                                    slot       = AdsViewModel.BannerSlot.BLOG,
-                                    bannerSize = blogBannerSize,
+                                PositionedAdBannerView(
+                                    positionKey = "blog_banner_$index",
+                                    unitId      = bannerUnitId,
+                                    adsVm       = adsVm,
+                                    bannerSize  = blogBannerSize,
                                 )
                             }
 
-                            // Her 5 yazıda bir Native Ad göster
+                            // Her 5 yazıda bir Native Ad göster — her pozisyon kendi NativeAd nesnesini yükler
+                            val nativeBlogCfg by adsVm.nativeBlogConfig.collectAsState()
                             if (index > 0 && index % 5 == 0) {
-                                nativeBlogAd?.let { ad ->
+                                val nativeUnitId = nativeBlogCfg?.let { cfg ->
+                                    if (!cfg.enabled) null
+                                    else if (cfg.testMode) com.heftreng.app.data.model.AdMobTestIds.NATIVE
+                                    else if (cfg.unitId.isNotBlank()) cfg.unitId
+                                    else com.heftreng.app.data.model.AdMobProdIds.NATIVE
+                                }
+                                PositionedNativeAdView(
+                                    positionKey = "blog_native_$index",
+                                    unitId      = nativeUnitId,
+                                    adsVm       = adsVm,
+                                    modifier    = Modifier.fillMaxWidth(),
+                                ) { ad ->
                                     NativeAdViewCompose(
                                         nativeAd = ad,
                                         modifier = Modifier.fillMaxWidth(),
-                                        adSize   = adsVm.nativeBlogConfig.collectAsState().value?.bannerSize ?: "small"
+                                        adSize   = nativeBlogCfg?.bannerSize ?: "small"
                                     )
                                 }
                             }

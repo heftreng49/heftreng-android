@@ -48,6 +48,8 @@ import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.component.AdBannerView
 import com.heftreng.app.ui.component.NativeAdViewCompose
+import com.heftreng.app.ui.component.PositionedAdBannerView
+import com.heftreng.app.ui.component.PositionedNativeAdView
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.viewmodel.AdsViewModel
 import com.heftreng.app.viewmodel.BlogViewModel
@@ -138,8 +140,6 @@ fun FeedScreen(
     val followingUids by vm.followingUids.collectAsState()
     val friendsReading by vm.friendsReading.collectAsState()
     val blogState by blogVm.state.collectAsState()
-    val nativeFeedAd by adsVm.nativeFeedAd.collectAsState()
-
     val displayedPosts = remember(posts, selectedFeedTab, followingUids, blockedUsers) {
         val blockedUids = blockedUsers.map { it.uid }.toSet()
         val filtered = posts.filter { it.uid !in blockedUids }
@@ -448,22 +448,38 @@ fun FeedScreen(
                         language = language,
                     )
 
-                    // Her 5 gönderide bir Native Ad göster
+                    // Her 5 gönderide bir Native Ad göster — her pozisyon kendi NativeAd nesnesini yükler
+                    val nativeFeedCfg by adsVm.nativeFeedConfig.collectAsState()
                     if (postIndex > 0 && postIndex % 5 == 0) {
-                        nativeFeedAd?.let { ad ->
+                        val nativeUnitId = nativeFeedCfg?.let { cfg ->
+                            if (!cfg.enabled) null
+                            else if (cfg.testMode) com.heftreng.app.data.model.AdMobTestIds.NATIVE
+                            else if (cfg.unitId.isNotBlank()) cfg.unitId
+                            else com.heftreng.app.data.model.AdMobProdIds.NATIVE
+                        }
+                        PositionedNativeAdView(
+                            positionKey    = "feed_native_$postIndex",
+                            unitId         = nativeUnitId,
+                            adsVm          = adsVm,
+                            modifier       = Modifier.fillMaxWidth(),
+                        ) { ad ->
                             NativeAdViewCompose(
                                 nativeAd = ad,
                                 modifier = Modifier.fillMaxWidth(),
-                                adSize   = adsVm.nativeFeedConfig.collectAsState().value?.bannerSize ?: "small"
+                                adSize   = nativeFeedCfg?.bannerSize ?: "small"
                             )
                         }
                     }
 
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
-                    // ── AdMob Banner — her bannerPos. kartta bir ─────────
-                    if (bannerUnitId != null &&
-                        (postIndex + 1) % bannerPos == 0) {
-                        AdBannerView(unitId = bannerUnitId, adsVm = adsVm, slot = AdsViewModel.BannerSlot.FEED, bannerSize = feedBannerSize)
+                    // ── AdMob Banner — her bannerPos. kartta bir — her pozisyon kendi AdView'ını yükler
+                    if (bannerUnitId != null && (postIndex + 1) % bannerPos == 0) {
+                        PositionedAdBannerView(
+                            positionKey = "feed_banner_$postIndex",
+                            unitId      = bannerUnitId,
+                            adsVm       = adsVm,
+                            bannerSize  = feedBannerSize,
+                        )
                     }
                     // ── Arkadaşlar ne okuyor? — gönderi kartlarının arasına ────
                     if (selectedFeedTab == 0 && postIndex == 2 && friendsReading.isNotEmpty()) {
