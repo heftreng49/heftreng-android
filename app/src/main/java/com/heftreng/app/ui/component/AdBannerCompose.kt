@@ -172,17 +172,23 @@ Gördüğünüz içerik, Google tarafından belirlenen bir reklamdır.""") },
 //   PositionedAdBannerView(positionKey = "feed_banner_$index", unitId = unitId, adsVm = adsVm)
 @Composable
 fun PositionedAdBannerView(
-    positionKey : String,
-    unitId      : String?,
-    adsVm       : AdsViewModel,
-    modifier    : Modifier = Modifier,
-    bannerSize  : String   = "adaptive",
+    positionKey  : String,
+    unitId       : String?,
+    adsVm        : AdsViewModel,
+    modifier     : Modifier = Modifier,
+    bannerSize   : String   = "adaptive",
+    // Sıradaki 1-2 banner pozisyonu (key, unitId) — kullanıcı henüz oraya
+    // kaydırmadan reklamları önceden ısıtmak için. Boş liste verilirse etkisiz.
+    prefetchKeys : List<Pair<String, String>> = emptyList(),
 ) {
     if (unitId.isNullOrBlank()) return
 
-    // İlk göründüğünde yükle
-    LaunchedEffect(positionKey, unitId, bannerSize) {
+    // İlk göründüğünde yükle + sıradaki pozisyonları önceden ısıt
+    LaunchedEffect(positionKey, unitId, bannerSize, prefetchKeys) {
         adsVm.preloadPositionedBanner(positionKey, unitId, bannerSize)
+        prefetchKeys.forEach { (key, nextUnitId) ->
+            if (nextUnitId.isNotBlank()) adsVm.preloadPositionedBanner(key, nextUnitId, bannerSize)
+        }
     }
 
     val isLoaded by adsVm.positionedBannerLoadedFlow(positionKey).collectAsState()
@@ -266,12 +272,17 @@ fun PositionedNativeAdView(
     unitId         : String?,
     adsVm          : AdsViewModel,
     modifier       : Modifier = Modifier,
+    // Sıradaki 1-2 native pozisyonu (key, unitId) — önceden ısıtmak için.
+    prefetchKeys   : List<Pair<String, String>> = emptyList(),
     nativeAdContent: @Composable (com.google.android.gms.ads.nativead.NativeAd) -> Unit,
 ) {
     if (unitId.isNullOrBlank()) return
 
-    LaunchedEffect(positionKey, unitId) {
+    LaunchedEffect(positionKey, unitId, prefetchKeys) {
         adsVm.preloadPositionedNative(positionKey, unitId)
+        prefetchKeys.forEach { (key, nextUnitId) ->
+            if (nextUnitId.isNotBlank()) adsVm.preloadPositionedNative(key, nextUnitId)
+        }
     }
 
     val isLoaded by adsVm.positionedNativeLoadedFlow(positionKey).collectAsState()

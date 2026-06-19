@@ -142,10 +142,11 @@ fun BlogScreen(
                             // Her bannerPos. yazıdan sonra reklam göster — her pozisyon kendi AdView'ını yükler
                             if (bannerUnitId != null && (index + 1) % bannerPos == 0) {
                                 PositionedAdBannerView(
-                                    positionKey = "blog_banner_$index",
-                                    unitId      = bannerUnitId,
-                                    adsVm       = adsVm,
-                                    bannerSize  = blogBannerSize,
+                                    positionKey  = "blog_banner_$index",
+                                    unitId       = bannerUnitId,
+                                    adsVm        = adsVm,
+                                    bannerSize   = blogBannerSize,
+                                    prefetchKeys = listOf("blog_banner_${index + bannerPos}" to bannerUnitId),
                                 )
                             }
 
@@ -159,10 +160,13 @@ fun BlogScreen(
                                     else com.heftreng.app.data.model.AdMobProdIds.NATIVE
                                 }
                                 PositionedNativeAdView(
-                                    positionKey = "blog_native_$index",
-                                    unitId      = nativeUnitId,
-                                    adsVm       = adsVm,
-                                    modifier    = Modifier.fillMaxWidth(),
+                                    positionKey  = "blog_native_$index",
+                                    unitId       = nativeUnitId,
+                                    adsVm        = adsVm,
+                                    modifier     = Modifier.fillMaxWidth(),
+                                    prefetchKeys = if (nativeUnitId != null)
+                                        listOf("blog_native_${index + 5}" to nativeUnitId)
+                                    else emptyList(),
                                 ) { ad ->
                                     NativeAdViewCompose(
                                         nativeAd = ad,

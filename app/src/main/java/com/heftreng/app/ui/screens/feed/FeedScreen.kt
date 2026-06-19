@@ -462,6 +462,9 @@ fun FeedScreen(
                             unitId         = nativeUnitId,
                             adsVm          = adsVm,
                             modifier       = Modifier.fillMaxWidth(),
+                            prefetchKeys   = if (nativeUnitId != null)
+                                listOf("feed_native_${postIndex + 5}" to nativeUnitId)
+                            else emptyList(),
                         ) { ad ->
                             NativeAdViewCompose(
                                 nativeAd = ad,
@@ -475,9 +478,10 @@ fun FeedScreen(
                     // ── AdMob Banner — her bannerPos. kartta bir — her pozisyon kendi AdView'ını yükler
                     if (bannerUnitId != null && (postIndex + 1) % bannerPos == 0) {
                         PositionedAdBannerView(
-                            positionKey = "feed_banner_$postIndex",
-                            unitId      = bannerUnitId,
-                            adsVm       = adsVm,
+                            positionKey  = "feed_banner_$postIndex",
+                            unitId       = bannerUnitId,
+                            adsVm        = adsVm,
+                            prefetchKeys = listOf("feed_banner_${postIndex + bannerPos}" to bannerUnitId),
                             bannerSize  = feedBannerSize,
                         )
                     }
