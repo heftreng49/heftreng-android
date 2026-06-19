@@ -413,6 +413,12 @@ private fun LibraryQuotesTab(
             if (bannerUnitId != null && (index + 1) % 5 == 0) {
                 PositionedAdBannerView(positionKey = "lib_quotes_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize)
             }
+        }
+    }
+}
+
+@Composable
+private fun LibraryReviewsTab(
     reviews      : List<BookReview>,
     language     : String,
     navController: NavController,
@@ -432,6 +438,12 @@ private fun LibraryQuotesTab(
             if (bannerUnitId != null && (index + 1) % 5 == 0) {
                 PositionedAdBannerView(positionKey = "lib_reviews_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize)
             }
+        }
+    }
+}
+
+@Composable
+private fun LibraryAuthorsTab(
     authors      : List<Author>,
     language     : String,
     navController: NavController,
