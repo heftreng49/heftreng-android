@@ -146,7 +146,7 @@ fun BlogScreen(
                                     unitId       = bannerUnitId,
                                     adsVm        = adsVm,
                                     bannerSize   = blogBannerSize,
-                                    prefetchKeys = listOf("blog_banner_${index + bannerPos}" to bannerUnitId),
+                                    prefetchKeys = listOf("blog_banner_${index + bannerPos}" to bannerUnitId!!),
                                 )
                             }
 
