@@ -95,7 +95,7 @@ class KurdiReminderWorker(
         val (ku, tr) = messages[day % messages.size]
 
         val notif = NotificationCompat.Builder(ctx, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.drawable.ic_notif)
             .setContentTitle(tr)
             .setContentText(ku)
             .setStyle(NotificationCompat.BigTextStyle().bigText(ku).setSummaryText("Kurdî Fêrbibe"))
