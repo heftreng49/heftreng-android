@@ -112,6 +112,10 @@ fun FeedScreen(
         onRefresh  = {
             isRefreshing = true
             vm.refresh(forceRefresh = true)
+            // ÖNCEKİ HATA: Aşağı çekip yenileme sadece feed gönderilerini
+            // tazeliyordu — "Önerilen Kullanıcılar" listesi 1 saatlik cache'i
+            // yüzünden hiç yenilenmiyordu. Artık o da birlikte tazeleniyor.
+            vm.loadSuggestedUsers(forceReload = true)
         }
     )
     // isRefreshing'i server refresh bitince kapat

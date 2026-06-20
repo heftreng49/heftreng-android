@@ -183,7 +183,7 @@ fun AuthScreen(
                     modifier = Modifier.fillMaxWidth(),
                     border   = androidx.compose.foundation.BorderStroke(1.dp, Amber.copy(alpha = 0.5f)),
                 ) { Text(if (ku) "Dîsa Bişîne" else "Tekrar Gönder", color = Amber) }
-                TextButton(onClick = { showVerifyPending = false; vm.clearVerificationPending(); vm.signOut() }) {
+                TextButton(onClick = { showVerifyPending = false; vm.clearVerificationPending(); vm.clearError(); vm.signOut() }) {
                     Text(if (ku) "Vegere" else "Geri Dön / Çıkış", color = Muted)
                 }
             }
@@ -262,7 +262,7 @@ fun AuthScreen(
                     modifier = Modifier.fillMaxWidth(),
                     border   = androidx.compose.foundation.BorderStroke(1.dp, Amber.copy(alpha = 0.5f)),
                 ) { Text("Tekrar Gönder", color = Amber) }
-                TextButton(onClick = { showVerifySent = false; vm.clearVerificationSent(); vm.signOut() }) {
+                TextButton(onClick = { showVerifySent = false; vm.clearVerificationSent(); vm.clearError(); vm.signOut() }) {
                     Text("Geri Dön", color = Muted)
                 }
             }
@@ -434,7 +434,7 @@ fun AuthScreen(
             AnimatedVisibility(visible = isRegister) {
                 OutlinedTextField(
                     value         = displayName,
-                    onValueChange = { displayName = it },
+                    onValueChange = { displayName = it; if (error != null) vm.clearError() },
                     label         = { Text(Strings.yourName(language)) },
                     modifier      = Modifier.fillMaxWidth(),
                     shape         = RoundedCornerShape(12.dp),
@@ -445,7 +445,7 @@ fun AuthScreen(
 
             OutlinedTextField(
                 value           = email,
-                onValueChange   = { email = it },
+                onValueChange   = { email = it; if (error != null) vm.clearError() },
                 label           = { Text("E-posta") },
                 modifier        = Modifier.fillMaxWidth(),
                 shape           = RoundedCornerShape(12.dp),
@@ -456,7 +456,7 @@ fun AuthScreen(
 
             OutlinedTextField(
                 value         = password,
-                onValueChange = { password = it },
+                onValueChange = { password = it; if (error != null) vm.clearError() },
                 label         = { Text(Strings.password(language)) },
                 modifier      = Modifier.fillMaxWidth(),
                 shape         = RoundedCornerShape(12.dp),
@@ -538,7 +538,12 @@ fun AuthScreen(
                 } else {
                     Text(errCode, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
                 }
-                LaunchedEffect(errCode) { vm.clearError() }
+                // ÖNCEKİ HATA: Burada "LaunchedEffect(errCode) { vm.clearError() }" vardı —
+                // hata mesajı ekrana DÜŞER DÜŞMEZ (aynı anda) otomatik olarak siliniyordu.
+                // Kullanıcı "e-posta zaten kayıtlı", "şifre çok kısa", oran-sınırı mesajı gibi
+                // ÇOK ÖNEMLİ hata mesajlarını okuyamadan kayboluyordu — kayıt/giriş sırasında
+                // "hiçbir şey olmuyor" gibi görünüyordu. Artık hata, kullanıcı alanlardan
+                // birini düzenlemeye (yeniden yazmaya) başlayana kadar ekranda kalıyor.
             }
 
             Box(
