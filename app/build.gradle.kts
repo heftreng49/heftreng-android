@@ -155,4 +155,7 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
+
+    // WorkManager — Günlük Kurdî ders hatırlatıcısı
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 }
