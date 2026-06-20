@@ -2262,7 +2262,7 @@ private fun GrammarTab(language: String, isAdmin: Boolean = false, vm: KurdiView
             }
             else -> {
                 LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 16.dp, top = 16.dp, bottom = 100.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     // Üst bilgi kartı
