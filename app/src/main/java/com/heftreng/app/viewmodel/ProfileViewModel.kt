@@ -244,17 +244,47 @@ class ProfileViewModel @Inject constructor(
                     val repostOf   = fd["repostOf"] as? String ?: fd["repostType"] as? String ?: ""
                     if (postText.isBlank() && imageURL.isBlank() && quoteText.isBlank() && repostOf.isBlank()) return@mapNotNull null
 
+                    @Suppress("UNCHECKED_CAST")
+                    val badges = (fd["badges"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
                     Post(
                         id            = doc.id,
                         uid           = fd["uid"]         as? String ?: "",
                         displayName   = (fd["displayName"] as? String)?.takeIf { it.isNotBlank() } ?: fd["name"] as? String ?: "",
+                        name          = fd["name"]        as? String ?: "",
                         username      = fd["username"]    as? String ?: "",
                         photoURL      = fd["photoURL"]    as? String ?: "",
                         text          = postText,
                         imageURL      = imageURL,
+                        ytVid         = fd["ytVid"]        as? String ?: "",
+                        badges        = badges,
                         quoteText     = quoteText,
                         bookName      = bookName,
                         authorName    = authorName,
+                        repostOf            = repostOf,
+                        repostUid           = fd["repostUid"]   as? String ?: "",
+                        repostType          = fd["repostType"]  as? String ?: "",
+                        repostId            = fd["repostId"]    as? String ?: "",
+                        repostTitle         = fd["repostTitle"] as? String ?: "",
+                        repostUrl           = fd["repostUrl"]   as? String ?: "",
+                        repostImg           = fd["repostImg"]   as? String ?: "",
+                        repostText          = fd["repostText"]        as? String ?: "",
+                        repostAuthor        = fd["repostAuthor"]      as? String ?: "",
+                        repostAuthorPhoto   = fd["repostAuthorPhoto"] as? String ?: "",
+                        repostAuthorUid     = fd["repostAuthorUid"]   as? String ?: "",
+                        repostSerialId         = fd["repostSerialId"]         as? String ?: "",
+                        repostSerialTitle      = fd["repostSerialTitle"]      as? String ?: "",
+                        repostSerialDesc       = fd["repostSerialDesc"]       as? String ?: "",
+                        repostSerialCover      = fd["repostSerialCover"]      as? String ?: "",
+                        repostSerialAuthorName = fd["repostSerialAuthorName"] as? String ?: "",
+                        repostSerialAuthorUid  = fd["repostSerialAuthorUid"]  as? String ?: "",
+                        repostSerialBg         = fd["repostSerialBg"]         as? String ?: "",
+                        repostSerialChCount    = (fd["repostSerialChCount"]   as? Long)?.toInt() ?: 0,
+                        serialId      = fd["serialId"]      as? String ?: "",
+                        serialTitle   = fd["serialTitle"]   as? String ?: "",
+                        serialCover   = fd["serialCover"]   as? String ?: fd["serialBg"] as? String ?: "",
+                        chapterId     = fd["chapterId"]     as? String ?: "",
+                        chapterTitle  = fd["chapterTitle"]  as? String ?: "",
+                        chapterOrder  = (fd["chapterOrder"] as? Long)?.toInt() ?: 0,
                         likesCount    = (fd["likesCount"]    as? Long)?.toInt() ?: 0,
                         commentsCount = (fd["commentsCount"] as? Long)?.toInt() ?: 0,
                         repostsCount  = (fd["reposts"]  as? Long)?.toInt() ?: 0,
@@ -462,6 +492,15 @@ class ProfileViewModel @Inject constructor(
                     .limit(POST_PAGE).get().await()
                 if (snap.documents.isNotEmpty()) lastPostDoc = snap.documents.last()
                 _hasMorePosts.value = snap.documents.size >= POST_PAGE.toInt()
+                val morePostIds = snap.documents.map { it.id }
+                val moreLikedIds = if (myUid.isNotEmpty() && morePostIds.isNotEmpty()) {
+                    try {
+                        supabase.postgrest["feed_likes"].select {
+                            filter { eq("uid", myUid); isIn("post_id", morePostIds) }
+                        }.decodeList<com.heftreng.app.data.model.FeedLikeRow>()
+                            .mapNotNull { it.postId.takeIf { id -> id.isNotBlank() } }.toSet()
+                    } catch (_: Exception) { emptySet() }
+                } else emptySet()
                 // Yeni postları mevcut listeye ekle (tam parse için mevcut rawPost mantığını tekrar ederiz)
                 val newPosts = snap.documents.mapNotNull { doc ->
                     val fd = doc.data ?: return@mapNotNull null
@@ -469,17 +508,52 @@ class ProfileViewModel @Inject constructor(
                     val quoteText  = (quoteObj?.get("text")   as? String)?.takeIf { it.isNotBlank() } ?: fd["quoteText"]  as? String ?: ""
                     val bookName   = (quoteObj?.get("book")   as? String)?.takeIf { it.isNotBlank() } ?: fd["bookName"]   as? String ?: ""
                     val authorName = (quoteObj?.get("author") as? String)?.takeIf { it.isNotBlank() } ?: fd["authorName"] as? String ?: ""
+                    val repostOf   = fd["repostOf"] as? String ?: fd["repostType"] as? String ?: ""
+                    @Suppress("UNCHECKED_CAST")
+                    val badges = (fd["badges"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
                     com.heftreng.app.data.model.Post(
                         id          = doc.id,
                         uid         = fd["uid"]         as? String ?: "",
                         displayName = fd["displayName"] as? String ?: fd["name"] as? String ?: "",
                         name        = fd["name"]        as? String ?: "",
+                        username    = fd["username"]    as? String ?: "",
                         photoURL    = fd["photoURL"]    as? String ?: "",
                         text        = fd["text"]        as? String ?: "",
                         imageURL    = fd["imageURL"]    as? String ?: fd["imgUrl"] as? String ?: "",
+                        ytVid       = fd["ytVid"]        as? String ?: "",
+                        badges      = badges,
                         quoteText   = quoteText,
                         bookName    = bookName,
                         authorName  = authorName,
+                        repostOf            = repostOf,
+                        repostUid           = fd["repostUid"]   as? String ?: "",
+                        repostType          = fd["repostType"]  as? String ?: "",
+                        repostId            = fd["repostId"]    as? String ?: "",
+                        repostTitle         = fd["repostTitle"] as? String ?: "",
+                        repostUrl           = fd["repostUrl"]   as? String ?: "",
+                        repostImg           = fd["repostImg"]   as? String ?: "",
+                        repostText          = fd["repostText"]        as? String ?: "",
+                        repostAuthor        = fd["repostAuthor"]      as? String ?: "",
+                        repostAuthorPhoto   = fd["repostAuthorPhoto"] as? String ?: "",
+                        repostAuthorUid     = fd["repostAuthorUid"]   as? String ?: "",
+                        repostSerialId         = fd["repostSerialId"]         as? String ?: "",
+                        repostSerialTitle      = fd["repostSerialTitle"]      as? String ?: "",
+                        repostSerialDesc       = fd["repostSerialDesc"]       as? String ?: "",
+                        repostSerialCover      = fd["repostSerialCover"]      as? String ?: "",
+                        repostSerialAuthorName = fd["repostSerialAuthorName"] as? String ?: "",
+                        repostSerialAuthorUid  = fd["repostSerialAuthorUid"]  as? String ?: "",
+                        repostSerialBg         = fd["repostSerialBg"]         as? String ?: "",
+                        repostSerialChCount    = (fd["repostSerialChCount"]   as? Long)?.toInt() ?: 0,
+                        serialId      = fd["serialId"]      as? String ?: "",
+                        serialTitle   = fd["serialTitle"]   as? String ?: "",
+                        serialCover   = fd["serialCover"]   as? String ?: fd["serialBg"] as? String ?: "",
+                        chapterId     = fd["chapterId"]     as? String ?: "",
+                        chapterTitle  = fd["chapterTitle"]  as? String ?: "",
+                        chapterOrder  = (fd["chapterOrder"] as? Long)?.toInt() ?: 0,
+                        likesCount    = (fd["likesCount"]    as? Long)?.toInt() ?: 0,
+                        commentsCount = (fd["commentsCount"] as? Long)?.toInt() ?: 0,
+                        repostsCount  = (fd["reposts"]  as? Long)?.toInt() ?: 0,
+                        isLikedByMe   = doc.id in moreLikedIds,
                         ts          = fd["ts"]          as? com.google.firebase.Timestamp,
                     )
                 }
@@ -685,17 +759,48 @@ class ProfileViewModel @Inject constructor(
                     snap.documents.forEach { doc ->
                         val fd = doc.data ?: return@forEach
                         val quoteObj   = fd["quote"] as? Map<*, *>
+                        val repostOf   = fd["repostOf"] as? String ?: fd["repostType"] as? String ?: ""
+                        @Suppress("UNCHECKED_CAST")
+                        val badges = (fd["badges"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
                         posts.add(Post(
                             id            = doc.id,
                             uid           = fd["uid"]      as? String ?: "",
                             displayName   = (fd["name"]    as? String)?.takeIf { it.isNotBlank() } ?: "",
+                            name          = fd["name"]     as? String ?: "",
                             username      = fd["username"] as? String ?: "",
                             photoURL      = fd["photoURL"] as? String ?: "",
                             text          = fd["text"]     as? String ?: "",
                             imageURL      = fd["imgUrl"]   as? String ?: fd["imageURL"] as? String ?: "",
+                            ytVid         = fd["ytVid"]     as? String ?: "",
+                            badges        = badges,
                             quoteText     = (quoteObj?.get("text")   as? String) ?: fd["quoteText"]  as? String ?: "",
                             bookName      = (quoteObj?.get("book")   as? String) ?: fd["bookName"]   as? String ?: "",
                             authorName    = (quoteObj?.get("author") as? String) ?: fd["authorName"] as? String ?: "",
+                            repostOf            = repostOf,
+                            repostUid           = fd["repostUid"]   as? String ?: "",
+                            repostType          = fd["repostType"]  as? String ?: "",
+                            repostId            = fd["repostId"]    as? String ?: "",
+                            repostTitle         = fd["repostTitle"] as? String ?: "",
+                            repostUrl           = fd["repostUrl"]   as? String ?: "",
+                            repostImg           = fd["repostImg"]   as? String ?: "",
+                            repostText          = fd["repostText"]        as? String ?: "",
+                            repostAuthor        = fd["repostAuthor"]      as? String ?: "",
+                            repostAuthorPhoto   = fd["repostAuthorPhoto"] as? String ?: "",
+                            repostAuthorUid     = fd["repostAuthorUid"]   as? String ?: "",
+                            repostSerialId         = fd["repostSerialId"]         as? String ?: "",
+                            repostSerialTitle      = fd["repostSerialTitle"]      as? String ?: "",
+                            repostSerialDesc       = fd["repostSerialDesc"]       as? String ?: "",
+                            repostSerialCover      = fd["repostSerialCover"]      as? String ?: "",
+                            repostSerialAuthorName = fd["repostSerialAuthorName"] as? String ?: "",
+                            repostSerialAuthorUid  = fd["repostSerialAuthorUid"]  as? String ?: "",
+                            repostSerialBg         = fd["repostSerialBg"]         as? String ?: "",
+                            repostSerialChCount    = (fd["repostSerialChCount"]   as? Long)?.toInt() ?: 0,
+                            serialId      = fd["serialId"]      as? String ?: "",
+                            serialTitle   = fd["serialTitle"]   as? String ?: "",
+                            serialCover   = fd["serialCover"]   as? String ?: fd["serialBg"] as? String ?: "",
+                            chapterId     = fd["chapterId"]     as? String ?: "",
+                            chapterTitle  = fd["chapterTitle"]  as? String ?: "",
+                            chapterOrder  = (fd["chapterOrder"] as? Long)?.toInt() ?: 0,
                             likesCount    = (fd["likes"]    as? Long)?.toInt() ?: 0,
                             commentsCount = (fd["cmtCount"] as? Long)?.toInt() ?: 0,
                             repostsCount  = (fd["reposts"]  as? Long)?.toInt() ?: 0,
