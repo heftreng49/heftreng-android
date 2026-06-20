@@ -104,7 +104,17 @@ fun AdBannerView(
             AndroidView(
                 factory  = { _ ->
                     (cachedView.parent as? ViewGroup)?.removeView(cachedView)
+                    cachedView.layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    )
                     cachedView
+                },
+                update = { view ->
+                    view.layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    )
                 },
                 modifier = Modifier.fillMaxWidth().wrapContentHeight(),
             )
@@ -232,9 +242,20 @@ fun PositionedAdBannerView(
             if (adView != null) {
                 AndroidView(
                     factory  = { _ ->
-                        // Bu View yalnızca bu key'e ait — başka hiçbir konumla paylaşılmıyor.
-                        // removeView gerekmez; parent zaten bu tek Composable.
+                        // AdMob'un kendi LayoutParams'ı bazen Compose'un ölçümünü
+                        // bozuyor (yükseklik 0 veya devasa kalabiliyor) — açıkça
+                        // WRAP_CONTENT zorluyoruz ki AdView kendi gerçek boyutunda kalsın.
+                        adView.layoutParams = android.view.ViewGroup.LayoutParams(
+                            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                        )
                         adView
+                    },
+                    update = { view ->
+                        view.layoutParams = android.view.ViewGroup.LayoutParams(
+                            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                        )
                     },
                     modifier = Modifier.fillMaxWidth().wrapContentHeight(),
                 )

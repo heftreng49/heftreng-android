@@ -154,7 +154,7 @@ class AdEngine(
 
     fun resolveAdSize(bannerSize: String): AdSize {
         val dm = appContext.resources.displayMetrics
-        val width = (dm.widthPixels / dm.density).toInt()
+        val width = (dm.widthPixels / dm.density).toInt().coerceAtLeast(320) // min güvenli genişlik
         return when (bannerSize) {
             "banner"           -> AdSize.BANNER
             "medium_rectangle" -> AdSize.MEDIUM_RECTANGLE
