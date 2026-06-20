@@ -14,11 +14,14 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install firebase-admin
-        run: npm install firebase-admin
+      - name: Install dependencies
+        run: npm install firebase-admin @supabase/supabase-js
 
       - name: Create service account file
         run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > serviceAccount.json
 
       - name: Run delete script
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node delete-anonymous-users.js
