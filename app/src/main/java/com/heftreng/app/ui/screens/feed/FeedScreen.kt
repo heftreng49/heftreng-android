@@ -474,9 +474,10 @@ fun FeedScreen(
                         language = language,
                     )
 
-                    // Her 5 gönderide bir Native Ad göster — her pozisyon kendi NativeAd nesnesini yükler
+                    // CMS'deki position alanına göre N gönderide bir Native Ad göster
                     val nativeFeedCfg by adsVm.nativeFeedConfig.collectAsState()
-                    if (postIndex > 0 && postIndex % 5 == 0) {
+                    val nativeFreq = (nativeFeedCfg?.position ?: 5).coerceAtLeast(1)
+                    if (postIndex > 0 && postIndex % nativeFreq == 0) {
                         val nativeUnitId = nativeFeedCfg?.let { cfg ->
                             if (!cfg.enabled) null
                             else if (cfg.testMode) com.heftreng.app.data.model.AdMobTestIds.NATIVE

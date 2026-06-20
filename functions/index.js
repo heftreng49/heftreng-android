@@ -72,9 +72,11 @@ exports.onNewNotif = onDocumentCreated(
     const convId   = data.convId  || "";
     const imageUrl = data.imageUrl || "";
 
-    let url = "https://heft-reng.blogspot.com/";
-    if (type === "message") url = "https://heft-reng.blogspot.com/p/mesajlar.html";
-    else if (postId)        url = "https://heft-reng.blogspot.com/p/akis_01024829108.html";
+    let url = data.url || "https://heft-reng.blogspot.com/";
+    if (!data.url) {
+      if (type === "message") url = "https://heft-reng.blogspot.com/p/mesajlar.html";
+      else if (postId)        url = "https://heft-reng.blogspot.com/p/akis_01024829108.html";
+    }
 
     const db = getFirestore();
     let fcmToken = null;
@@ -89,8 +91,9 @@ exports.onNewNotif = onDocumentCreated(
     }
 
     const channelId =
-      type === "message"                   ? "heftreng_messages" :
-      type === "like" || type === "repost" ? "heftreng_likes"    :
+      type === "message"                    ? "heftreng_messages" :
+      type === "like" || type === "repost"  ? "heftreng_likes"    :
+      type === "daily_quote" || type === "daily_word" ? "heftreng_daily" :
       "heftreng_default";
 
     const msg = {
@@ -203,7 +206,7 @@ exports.sendBroadcastPush = onCall(
     if (!isAdmin) throw new HttpsError("permission-denied", "Admin yetkisi gerekli.");
 
     const { title = "Heftreng", body = "", url = "https://heft-reng.blogspot.com/",
-            postId = "", imageUrl = "" } = request.data || {};
+            postId = "", imageUrl = "", type = "admin", ico = "campaign" } = request.data || {};
 
     if (!title || !body) return { success: false, reason: "missing_fields", count: 0 };
 
@@ -226,13 +229,13 @@ exports.sendBroadcastPush = onCall(
           fromUid:   "",
           fromName:  "Heftreng",
           fromPhoto: "",
-          type:      "admin",
+          type:      type,
           feedId:    postId,
           postId:    postId,
           title:     title,
           sub:       body,
           message:   title,
-          ico:       "campaign",
+          ico:       ico,
           url:       url,
           imageUrl:  imageUrl,
           read:      false,

@@ -345,6 +345,20 @@ private fun handleNotifClick(
             }
             // url varsa ve harici linkse açma — sadece in-app navigasyon
         }
+        "daily_quote", "daily_word" -> {
+            // Orijinal alıntı/kelime paylaşımına git — postId varsa
+            val pid = notif.postId
+            when {
+                !pid.isNullOrBlank() -> navController.navigate(Screen.PostDetail.go(pid))
+                notif.url.isNotBlank() -> {
+                    val fromUrl =
+                        Regex("""post/([\w-]+)""").find(notif.url)?.groupValues?.get(1)
+                        ?: Regex("""[?&]postId=([\w-]+)""").find(notif.url)?.groupValues?.get(1)
+                    if (!fromUrl.isNullOrBlank()) navController.navigate(Screen.PostDetail.go(fromUrl))
+                    // postId/url yoksa zaten bildirim ekranındayız, ek navigasyon gerekmiyor
+                }
+            }
+        }
     }
 }
 
@@ -373,8 +387,6 @@ fun DailyNotifCard(
     val ku         = language == "ku"
     val isQuote    = notif.type == "daily_quote"
     val accentColor = if (isQuote) Color(0xFF8B5CF6) else Color(0xFF0EA5E9)
-    val bgColor     = if (isQuote) Color(0xFF8B5CF6).copy(alpha = 0.08f) else Color(0xFF0EA5E9).copy(alpha = 0.08f)
-    val icon        = if (isQuote) Icons.Default.FormatQuote else Icons.Default.Translate
     val timeText    = relativeTime(notif.ts, language)
     val isUnread    = !notif.read
 
@@ -384,10 +396,14 @@ fun DailyNotifCard(
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp),
         shape     = RoundedCornerShape(16.dp),
-        color     = bgColor,
-        tonalElevation = if (isUnread) 2.dp else 0.dp,
+        color     = HeftCard,
+        border    = androidx.compose.foundation.BorderStroke(
+            width = if (isUnread) 1.5.dp else 0.75.dp,
+            color = accentColor.copy(alpha = if (isUnread) 0.35f else 0.15f),
+        ),
+        tonalElevation = if (isUnread) 1.dp else 0.dp,
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             // Üst satır: ikon + başlık + zaman
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -395,12 +411,17 @@ fun DailyNotifCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(34.dp)
                         .clip(CircleShape)
-                        .background(accentColor),
+                        .background(accentColor.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(icon, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                    Icon(
+                        if (isQuote) Icons.Default.FormatQuote else Icons.Default.Translate,
+                        null,
+                        tint     = accentColor,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -431,12 +452,12 @@ fun DailyNotifCard(
                 }
             }
 
-            // Alıntı / Kelime içeriği
+            // Alıntı / Kelime içeriği — tüm metin gösterilir, kesilmez
             if (notif.sub.isNotBlank()) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = accentColor.copy(alpha = 0.06f),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
@@ -447,10 +468,10 @@ fun DailyNotifCard(
                             Icon(
                                 Icons.Default.FormatQuote,
                                 null,
-                                tint     = accentColor.copy(alpha = 0.4f),
-                                modifier = Modifier.size(20.dp).padding(top = 2.dp),
+                                tint     = accentColor.copy(alpha = 0.5f),
+                                modifier = Modifier.size(18.dp).padding(top = 2.dp),
                             )
-                            Spacer(Modifier.width(4.dp))
+                            Spacer(Modifier.width(6.dp))
                         }
                         Text(
                             notif.sub,

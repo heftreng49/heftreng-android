@@ -92,6 +92,7 @@ fun AdminScreen(
     var dqTextKu by remember(dailyQuote) { mutableStateOf(dailyQuote.textKu) }
     var dqAuthor by remember(dailyQuote) { mutableStateOf(dailyQuote.author) }
     var dqBook   by remember(dailyQuote) { mutableStateOf(dailyQuote.book) }
+    var dqFeedPostId by remember(dailyQuote) { mutableStateOf(dailyQuote.feedPostId) }
     var dwWord      by remember(dailyWord) { mutableStateOf(dailyWord.word) }
     var dwMeaningTr by remember(dailyWord) { mutableStateOf(dailyWord.meaningTr) }
     var dwMeaningKu by remember(dailyWord) { mutableStateOf(dailyWord.meaningKu) }
@@ -511,7 +512,7 @@ fun AdminScreen(
                                         OutlinedButton(
                                             onClick = {
                                                 vm.saveDailyQuote(
-                                                    AdminViewModel.DailyQuoteContent(dqTextTr, dqTextKu, dqAuthor, dqBook)
+                                                    AdminViewModel.DailyQuoteContent(dqTextTr, dqTextKu, dqAuthor, dqBook, dqFeedPostId)
                                                 )
                                             },
                                             enabled  = dqTextTr.isNotBlank(),
@@ -525,7 +526,7 @@ fun AdminScreen(
                                         Button(
                                             onClick = {
                                                 vm.saveDailyQuoteAndNotify(
-                                                    AdminViewModel.DailyQuoteContent(dqTextTr, dqTextKu, dqAuthor, dqBook)
+                                                    AdminViewModel.DailyQuoteContent(dqTextTr, dqTextKu, dqAuthor, dqBook, dqFeedPostId)
                                                 )
                                             },
                                             enabled  = dqTextTr.isNotBlank(),
@@ -1582,6 +1583,7 @@ fun AdminScreen(
                                     dqTextTr = quote.text
                                     dqAuthor = quote.authorName
                                     dqBook   = quote.bookTitle
+                                    dqFeedPostId = quote.feedPostId
                                     scope.launch {
                                         sheetState.hide()
                                         showQuotePicker = false

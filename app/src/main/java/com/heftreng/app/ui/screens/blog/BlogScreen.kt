@@ -150,9 +150,10 @@ fun BlogScreen(
                                 )
                             }
 
-                            // Her 5 yazıda bir Native Ad göster — her pozisyon kendi NativeAd nesnesini yükler
+                            // CMS'deki position alanına göre N yazıda bir Native Ad göster
                             val nativeBlogCfg by adsVm.nativeBlogConfig.collectAsState()
-                            if (index > 0 && index % 5 == 0) {
+                            val nativeBlogFreq = (nativeBlogCfg?.position ?: 5).coerceAtLeast(1)
+                            if (index > 0 && index % nativeBlogFreq == 0) {
                                 val nativeUnitId = nativeBlogCfg?.let { cfg ->
                                     if (!cfg.enabled) null
                                     else if (cfg.testMode) com.heftreng.app.data.model.AdMobTestIds.NATIVE
@@ -165,7 +166,7 @@ fun BlogScreen(
                                     adsVm        = adsVm,
                                     modifier     = Modifier.fillMaxWidth(),
                                     prefetchKeys = if (nativeUnitId != null)
-                                        listOf("blog_native_${index + 5}" to nativeUnitId)
+                                        listOf("blog_native_${index + nativeBlogFreq}" to nativeUnitId)
                                     else emptyList(),
                                 ) { ad ->
                                     NativeAdViewCompose(

@@ -104,6 +104,11 @@ class HeftrangMessagingService : FirebaseMessagingService() {
                     if (convId.isNotBlank()) putExtra("navigate_to", "message/$convId")
                     else putExtra("navigate_to", "messages")
                 }
+                "daily_quote", "daily_word" -> {
+                    // postId varsa orijinal alıntı/kelime paylaşımına git, yoksa bildirimler
+                    if (postId.isNotBlank()) putExtra("navigate_to", "post/$postId")
+                    else putExtra("navigate_to", "notifications")
+                }
                 else -> putExtra("navigate_to", "notifications")
             }
         }

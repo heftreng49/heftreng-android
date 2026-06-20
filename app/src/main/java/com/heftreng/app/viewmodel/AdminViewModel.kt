@@ -131,6 +131,7 @@ class AdminViewModel @Inject constructor(
         val textKu  : String = "",
         val author  : String = "",
         val book    : String = "",
+        val feedPostId: String = "",
     )
     data class DailyWordContent(
         val word     : String = "",
@@ -166,6 +167,7 @@ class AdminViewModel @Inject constructor(
                         textKu = qDoc.getString("text_ku") ?: "",
                         author = qDoc.getString("author_name") ?: "",
                         book   = qDoc.getString("book_name") ?: "",
+                        feedPostId = qDoc.getString("feed_post_id") ?: "",
                     )
                 }
             } catch (e: Exception) { e.printStackTrace() }
@@ -193,6 +195,7 @@ class AdminViewModel @Inject constructor(
                     "text_ku"     to content.textKu,
                     "author_name" to content.author,
                     "book_name"   to content.book,
+                    "feed_post_id" to content.feedPostId,
                     "updatedBy"   to (auth.currentUser?.email ?: "admin"),
                     "updatedAt"   to FieldValue.serverTimestamp(),
                 )).await()
@@ -224,25 +227,46 @@ class AdminViewModel @Inject constructor(
     /** Günün Alıntısı'nı kaydet + herkese push gönder ("Tetikle") */
     fun saveDailyQuoteAndNotify(content: DailyQuoteContent, date: String = todayKey()) {
         saveDailyQuote(content, date)
+        // Tam alıntı metni — kesilme yok. Kitap adı da dahil.
         val body = buildString {
             append("\u201C${content.textTr}\u201D")
-            if (content.author.isNotBlank()) append(" — ${content.author}")
+            val meta = listOfNotNull(
+                content.author.takeIf { it.isNotBlank() },
+                content.book.takeIf { it.isNotBlank() },
+            ).joinToString(" · ")
+            if (meta.isNotBlank()) append("\n— $meta")
         }
+        // Orijinal alıntı paylaşımına yönlendir — feedPostId varsa gerçek posta,
+        // yoksa genel akış sayfasına düşer.
+        val url = if (content.feedPostId.isNotBlank())
+            "https://heft-reng.blogspot.com/p/akis_01024829108.html?postId=${content.feedPostId}"
+        else
+            "heftreng://daily_quote"
         sendPush(
-            title = "\uD83D\uDCD6 Îro Peyvek — Günün Alıntısı",
-            body  = body,
-            url   = "heftreng://daily_quote",
+            title  = "\uD83D\uDCD6 Îro Peyvek — Günün Alıntısı",
+            body   = body,
+            url    = url,
+            postId = content.feedPostId,
+            type   = "daily_quote",
+            ico    = "format_quote",
         )
     }
 
     /** Günün Kelimesi'ni kaydet + herkese push gönder ("Tetikle") */
     fun saveDailyWordAndNotify(content: DailyWordContent, date: String = todayKey()) {
         saveDailyWord(content, date)
-        val body = "${content.word} — ${content.meaningTr}"
+        // Tüm alanlar dahil — kelime, TR anlam, KU anlam, örnek cümle
+        val body = buildString {
+            append("${content.word} — ${content.meaningTr}")
+            if (content.meaningKu.isNotBlank()) append("\n(Kurdî: ${content.meaningKu})")
+            if (content.exampleKu.isNotBlank()) append("\n\"${content.exampleKu}\"")
+        }
         sendPush(
             title = "\uD83D\uDD24 Îro peyveke nû — Günün Kelimesi",
             body  = body,
             url   = "heftreng://daily_word",
+            type  = "daily_word",
+            ico   = "translate",
         )
     }
 
@@ -298,6 +322,7 @@ class AdminViewModel @Inject constructor(
                         authorName = row.authorName,
                         bookTitle  = row.bookTitle,
                         likesCount = row.likesCount,
+                        feedPostId = row.feedPostId,
                     )
                 }
             } catch (e: Exception) {
@@ -699,6 +724,8 @@ class AdminViewModel @Inject constructor(
         postId   : String = "",
         topic    : String = "",
         imageUrl : String = "",
+        type     : String = "admin",
+        ico      : String = "campaign",
     ) {
         if (_perms.value?.can("push") != true) return
         viewModelScope.launch {
@@ -709,7 +736,8 @@ class AdminViewModel @Inject constructor(
                     val data = hashMapOf<String, Any>(
                         "title" to title, "body" to body,
                         "url"   to url.ifBlank { "https://heft-reng.blogspot.com/" },
-                        "type"  to "default",
+                        "type"  to type,
+                        "ico"   to ico,
                     )
                     if (postId.isNotBlank()) data["postId"] = postId
                     if (imageUrl.isNotBlank()) data["imageUrl"] = imageUrl
@@ -725,12 +753,12 @@ class AdminViewModel @Inject constructor(
                         "fromUid"   to (auth.currentUser?.uid ?: ""),
                         "fromName"  to "Heftreng",
                         "fromPhoto" to "",
-                        "type"      to "admin",
+                        "type"      to type,
                         "feedId"    to postId,
                         "postId"    to postId,
                         "title"     to title,
                         "sub"       to body,
-                        "ico"       to "campaign",
+                        "ico"       to ico,
                         "message"   to title,
                         "url"       to url.ifBlank { "" },
                         "imageUrl"  to imageUrl,
