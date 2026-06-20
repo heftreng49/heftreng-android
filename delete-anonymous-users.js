@@ -10,7 +10,11 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 let supabase = null;
 if (SUPABASE_URL && SUPABASE_KEY) {
   const { createClient } = require('@supabase/supabase-js');
-  supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  const ws = require('ws');
+  // Node.js 20'de native WebSocket desteği yok — @supabase/realtime-js bunu
+  // gerektiriyor (sadece client oluşturulurken bile), bu yüzden "ws" paketini
+  // transport olarak vermemiz lazım (diğer scripts/*.js dosyalarındaki pattern).
+  supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { realtime: { transport: ws } });
 } else {
   console.warn('⚠️  SUPABASE_URL / SUPABASE_SERVICE_KEY tanımlı değil — Supabase temizliği ATLANACAK.');
   console.warn('   (Sadece Firebase tarafı silinecek, Supabase\'de hayalet kayıtlar kalabilir.)');
@@ -99,29 +103,60 @@ async function deleteAnonymousUsers() {
       } while (pageToken);
       console.log(`  Firebase Auth'ta ${existingUids.size} aktif kullanıcı bulundu.`);
 
+      // ── GÜVENLİK KİLİDİ #1 ──────────────────────────────────────────────
+      // listUsers() yanlış proje/izin sorunu yüzünden boş veya anormal derecede
+      // az dönerse, aşağıdaki adım Supabase'deki TÜM gerçek kullanıcıları
+      // "hayalet" sanıp silebilir. 0 (veya neredeyse 0) kullanıcı dönerse
+      // reconciliation'ı tamamen durduruyoruz — silmek yerine uyarıyoruz.
+      if (existingUids.size === 0) {
+        console.error('  ⚠️  Firebase Auth\'tan 0 kullanıcı döndü — bu büyük ihtimalle bir hata');
+        console.error('     (yanlış proje, izin sorunu, vs). Güvenlik için reconciliation İPTAL EDİLDİ,');
+        console.error('     hiçbir Supabase satırı silinmedi.');
+        return;
+      }
+
+      // Önce TÜM Supabase uid'lerini ve toplam satır sayısını topla (silme yapmadan).
+      const allRows = [];
       let from = 0;
       const PAGE = 1000;
-      let orphansDeleted = 0;
       while (true) {
         const { data: rows, error } = await supabase
           .from('users')
           .select('uid')
           .range(from, from + PAGE - 1);
-        if (error) { console.error('  Supabase select HATA:', error.message); break; }
+        if (error) { console.error('  Supabase select HATA:', error.message); return; }
         if (!rows || rows.length === 0) break;
-
-        const orphanUids = rows.map(r => r.uid).filter(uid => !existingUids.has(uid));
-        if (orphanUids.length > 0) {
-          const { error: delErr } = await supabase.from('users').delete().in('uid', orphanUids);
-          if (delErr) {
-            console.error(`  Supabase orphan silme HATA: ${delErr.message}`);
-          } else {
-            orphansDeleted += orphanUids.length;
-            console.log(`  ${orphanUids.length} hayalet kayıt silindi (sayfa offset ${from})`);
-          }
-        }
+        allRows.push(...rows);
         if (rows.length < PAGE) break;
         from += PAGE;
+      }
+
+      const orphanUids = allRows.map(r => r.uid).filter(uid => !existingUids.has(uid));
+
+      // ── GÜVENLİK KİLİDİ #2 ──────────────────────────────────────────────
+      // Hayalet oranı anormal yüksekse (örn. uid alanı/tipi uyuşmazlığı gibi bir
+      // bug yüzünden hiçbir eşleşme bulunamıyorsa) TÜM tablo "hayalet" görünebilir.
+      // Toplamın yarısından fazlası (ve en az 5 satır) siliniyormuş gibi görünüyorsa
+      // otomatik silme YAPMIYORUZ — manuel kontrol için durup raporluyoruz.
+      const total = allRows.length;
+      const suspiciouslyHigh = total >= 5 && orphanUids.length / total > 0.5;
+      console.log(`  Toplam Supabase users: ${total}, hayalet adayı: ${orphanUids.length}`);
+      if (suspiciouslyHigh) {
+        console.error('  ⚠️  Hayalet oranı %50\'den fazla — bu anormal görünüyor (muhtemelen bir');
+        console.error('     eşleşme/bug sorunu, gerçek bir kitlesel silme durumu değil). Güvenlik için');
+        console.error('     OTOMATİK SİLME YAPILMADI. Lütfen manuel kontrol edin.');
+        return;
+      }
+
+      let orphansDeleted = 0;
+      for (let i = 0; i < orphanUids.length; i += 100) {
+        const chunk = orphanUids.slice(i, i + 100);
+        const { error: delErr } = await supabase.from('users').delete().in('uid', chunk);
+        if (delErr) {
+          console.error(`  Supabase orphan silme HATA: ${delErr.message}`);
+        } else {
+          orphansDeleted += chunk.length;
+        }
       }
       console.log(`✅ Reconciliation tamamlandı: ${orphansDeleted} hayalet Supabase kaydı silindi.`);
     } catch (e) {
