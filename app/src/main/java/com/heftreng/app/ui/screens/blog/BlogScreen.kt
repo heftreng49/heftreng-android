@@ -96,28 +96,16 @@ fun BlogScreen(
                 title = {
                     Text("Blog", fontWeight = FontWeight.ExtraBold, color = Primary, fontSize = 20.sp)
                 },
-                actions = {
-                    var menuExpanded by remember { mutableStateOf(false) }
-                    Box {
-                        IconButton(onClick = { menuExpanded = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = null, tint = OnBackground)
-                        }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(Strings.yazarTitle(language)) },
-                                leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
-                                onClick = {
-                                    menuExpanded = false
-                                    navController.navigate(Screen.Yazar.route)
-                                },
-                            )
-                        }
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+            )
+        },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = { navController.navigate(Screen.Yazar.route) },
+                containerColor = Amber,
+                contentColor   = Color.Black,
+                icon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                text = { Text(Strings.yazarTitle(language), fontWeight = FontWeight.Bold) },
             )
         },
     ) { pad ->

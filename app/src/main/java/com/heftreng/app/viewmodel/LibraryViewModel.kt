@@ -752,12 +752,9 @@ class LibraryViewModel @Inject constructor(
 
     suspend fun loadReviewsForScreen(): List<BookReview> =
         try {
-            // Tüm kitapların reviews'larını paralel çek
-            val books = library.getBooks(100)
-            books.flatMap { book ->
-                try { library.getReviewsByBook(book.id, 20).map { it.toDomain() } }
-                catch (_: Exception) { emptyList() }
-            }.sortedByDescending { it.ts?.seconds ?: 0L }
+            // ÖNCEKİ: 100 kitap çekip her biri için sıralı (N+1) inceleme sorgusu atılıyordu.
+            // Bu, kütüphane sekmesinin çok yavaş açılmasının asıl sebebiydi. Artık tek sorgu.
+            library.getRecentReviews(50).map { it.toDomain() }
         } catch (e: Exception) {
             android.util.Log.e("LibraryVM", "loadReviewsForScreen: ${e.message}")
             emptyList()

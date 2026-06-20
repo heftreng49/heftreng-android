@@ -304,6 +304,16 @@ class LibraryRepository @Inject constructor(
             limit(limit.toLong())
         }.decodeList()
 
+    /** Kütüphane → İncelemeler sekmesi — en son eklenen tüm incelemeler.
+     *  ÖNCEKİ: önce 100 kitap çekilip, her biri için ayrı ayrı (sıralı/N+1) inceleme sorgusu
+     *  atılıyordu → kütüphane sekmesinin çok yavaş açılmasına sebep oluyordu.
+     *  ŞİMDİ: 1 sorgu, doğrudan en son incelemeler. */
+    suspend fun getRecentReviews(limit: Int = 50): List<BookReviewRow> =
+        db["book_reviews"].select {
+            order("created_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList()
+
     suspend fun insertReview(row: BookReviewRow) {
         db["book_reviews"].insert(row)
     }
