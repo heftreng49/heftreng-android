@@ -52,8 +52,8 @@ jobs:
             }
 
             const anon  = env.unauthenticatedContext();
-            const user1 = env.authenticatedContext("user1", { email: "user1@test.com" });
-            const user2 = env.authenticatedContext("user2", { email: "user2@test.com" });
+            const user1 = env.authenticatedContext("user1", { email: "user1@test.com", email_verified: true });
+            const user2 = env.authenticatedContext("user2", { email: "user2@test.com", email_verified: true });
 
             // ── Test verilerini emülatöre yaz (Rules bypass) ─────────────────
             await env.withSecurityRulesDisabled(async (ctx) => {
