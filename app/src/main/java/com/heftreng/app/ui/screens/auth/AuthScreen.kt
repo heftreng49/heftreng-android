@@ -5,6 +5,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -275,20 +277,29 @@ fun AuthScreen(
             .fillMaxSize()
             .background(Background)
             .imePadding(),
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.TopCenter,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 28.dp),
+                // ÖNCEKİ HATA: bu Column kaydırılamıyordu — klavye açılınca (özellikle
+                // kayıt modunda, alan sayısı fazla olduğu için) email/şifre alanları
+                // klavyenin altında kalıp tamamen erişilemez oluyordu. verticalScroll
+                // eklenince klavye açıkken de kullanıcı aşağı kaydırıp alanlara ulaşabiliyor.
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 28.dp)
+                .padding(top = 20.dp, bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            // Logo
+            // Logo — kayıt modunda alan fazla olduğundan logo küçültülüp gereksiz
+            // boşluk azaltılıyor; giriş modunda normal boyutunda kalıyor.
+            val logoSize = if (isRegister) 48.dp else 72.dp
+            val logoFontSize = if (isRegister) 22.sp else 36.sp
             Box(
                 modifier = Modifier
-                    .size(72.dp)
-                    .clip(RoundedCornerShape(20.dp))
+                    .size(logoSize)
+                    .clip(RoundedCornerShape(if (isRegister) 14.dp else 20.dp))
                     .background(
                         brush = androidx.compose.ui.graphics.Brush.linearGradient(
                             listOf(Color(0xFF8B5CF6), Color(0xFFEC4899))
@@ -296,12 +307,12 @@ fun AuthScreen(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("H", fontSize = 36.sp, fontWeight = FontWeight.Black, color = Color.White)
+                Text("H", fontSize = logoFontSize, fontWeight = FontWeight.Black, color = Color.White)
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(if (isRegister) 2.dp else 4.dp))
             Text(
                 text          = "heftreng",
-                fontSize      = 32.sp,
+                fontSize      = if (isRegister) 26.sp else 32.sp,
                 fontWeight    = FontWeight.Black,
                 color         = OnBackground,
                 letterSpacing = (-1.5).sp,
