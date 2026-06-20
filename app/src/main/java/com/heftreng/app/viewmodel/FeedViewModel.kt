@@ -334,6 +334,7 @@ class FeedViewModel @Inject constructor(
                     _posts.value = mapInteractions(filtered)
                     _loading.value = false // Önbellekten veri geldiği an yükleme çemberi biter!
                     enrichPostsInBackground(filtered)
+                    refreshInteractionsForPage(filtered)
                 }
             } catch (e: Exception) {
                 // Önbellek boşsa veya ilk yüklemeyse burası sessizce pas geçilir
@@ -355,6 +356,7 @@ class FeedViewModel @Inject constructor(
                         val filtered = rawPosts.filter { it.moderationStatus != "removed" }
                         _posts.value = mapInteractions(filtered)
                         enrichPostsInBackground(filtered)
+                        refreshInteractionsForPage(filtered)
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -886,6 +888,11 @@ class FeedViewModel @Inject constructor(
     fun repost(post: Post) {
         if (uid.isEmpty()) return
         if (post.isRepostedByMe || post.id in myRepostMap) return
+        // Optimistic — çift tıklamayı önler, coroutine başlamadan map'e ekle
+        myRepostMap = myRepostMap + (post.id to "__pending__")
+        _posts.value = _posts.value.map {
+            if (it.id == post.id) it.copy(isRepostedByMe = true, repostsCount = it.repostsCount + 1) else it
+        }
         viewModelScope.launch {
             try {
                 val d       = cachedUserDoc(uid) ?: myUserData()
@@ -917,14 +924,17 @@ class FeedViewModel @Inject constructor(
                 
                 myRepostMap = myRepostMap + (post.id to newRef.id)
                 _posts.value = _posts.value.map {
-                    if (it.id == post.id) it.copy(
-                        repostsCount   = it.repostsCount + 1,
-                        isRepostedByMe = true,
-                        myRepostId     = newRef.id,
-                    ) else it
+                    if (it.id == post.id) it.copy(myRepostId = newRef.id) else it
                 }
                 if (post.uid != uid) sendNotif(post.uid, "repost", "$myName gönderini paylaştı", post.text.take(60), post.id)
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // Hata → optimistic güncellemeyi geri al
+                myRepostMap = myRepostMap - post.id
+                _posts.value = _posts.value.map {
+                    if (it.id == post.id) it.copy(isRepostedByMe = false, repostsCount = maxOf(0, it.repostsCount - 1), myRepostId = "") else it
+                }
+            }
         }
     }
 
