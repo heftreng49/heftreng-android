@@ -1253,7 +1253,7 @@ class FeedViewModel @Inject constructor(
     fun followSuggestedUser(targetUid: String) {
         val myUid = auth.currentUser?.uid ?: return
 
-        // Optimistic update — takip edilen kullanıcıyı listeden hemen çıkar
+        // Optimistic update — kullanıcıyı listeden hemen çıkar (takip / istek her iki durumda da "halloldu")
         _suggestedUsers.value = _suggestedUsers.value.filter { it.uid != targetUid }
         _followingUids.value  = _followingUids.value + targetUid
 
@@ -1262,25 +1262,44 @@ class FeedViewModel @Inject constructor(
                 ensureMyProfileCached()
                 val myName  = _cachedMyName
                 val myPhoto = _cachedMyPhoto
-                val tDoc    = firestore.collection("users").document(targetUid).get().await()
-                val tName   = tDoc.getString("displayName") ?: tDoc.getString("name") ?: ""
-                val tPhoto  = tDoc.getString("photoURL") ?: ""
-                supabase.postgrest["follows"].upsert(
-                    FollowRow(
-                        id          = "${myUid}_${targetUid}",
-                        fromUid     = myUid,
-                        fromName    = myName,
-                        fromPhoto   = myPhoto,
-                        targetUid   = targetUid,
-                        targetName  = tName,
-                        targetPhoto = tPhoto,
+                val tDoc      = firestore.collection("users").document(targetUid).get().await()
+                val tName     = tDoc.getString("displayName") ?: tDoc.getString("name") ?: ""
+                val tPhoto    = tDoc.getString("photoURL") ?: ""
+                val tIsPrivate = tDoc.getBoolean("private") ?: false
+
+                // ÖNCEKİ HATA: Bu fonksiyon hesap gizli olsun olmasın HER ZAMAN
+                // doğrudan "follows" tablosuna yazıyordu — yani Önerilerden takip
+                // edince gizli hesaplar onay beklemeden anında takip ediliyordu
+                // (Profil ekranındaki "İstek Gönder" akışı tamamen bypass ediliyordu).
+                // Artık Profil ekranıyla aynı mantık: gizliyse istek gönder.
+                if (tIsPrivate) {
+                    firestore.collection("followRequests").document(targetUid)
+                        .collection("pending").document(myUid).set(mapOf(
+                            "fromUid"   to myUid,
+                            "fromName"  to myName,
+                            "fromPhoto" to myPhoto,
+                            "targetUid" to targetUid,
+                            "ts"        to com.google.firebase.Timestamp.now(),
+                        )).await()
+                    sendNotif(targetUid, "follow_request", "$myName seni takip etmek istiyor", "", "")
+                } else {
+                    supabase.postgrest["follows"].upsert(
+                        FollowRow(
+                            id          = "${myUid}_${targetUid}",
+                            fromUid     = myUid,
+                            fromName    = myName,
+                            fromPhoto   = myPhoto,
+                            targetUid   = targetUid,
+                            targetName  = tName,
+                            targetPhoto = tPhoto,
+                        )
                     )
-                )
-                firestore.collection("users").document(myUid)
-                    .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
-                firestore.collection("users").document(targetUid)
-                    .update("followersCount", com.google.firebase.firestore.FieldValue.increment(1))
-                sendNotif(targetUid, "follow", "$myName sizi takip etmeye başladı", "", "")
+                    firestore.collection("users").document(myUid)
+                        .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
+                    firestore.collection("users").document(targetUid)
+                        .update("followersCount", com.google.firebase.firestore.FieldValue.increment(1))
+                    sendNotif(targetUid, "follow", "$myName sizi takip etmeye başladı", "", "")
+                }
                 // Cache'i geçersiz kıl — bir sonraki loadSuggestedUsers güncel listeyi çeker
                 suggestionsLoaded = false
             } catch (e: Exception) {

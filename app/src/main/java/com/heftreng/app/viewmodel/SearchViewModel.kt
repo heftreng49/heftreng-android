@@ -411,7 +411,14 @@ class SearchViewModel @Inject constructor(
     // ── Takip et / bırak ─────────────────────────────────────────────────────
     fun toggleFollow(targetUid: String) {
         val isFollowing = targetUid in _followingUids
-        if (isFollowing) _followingUids.remove(targetUid) else _followingUids.add(targetUid)
+        // ÖNCEKİ HATA: Hesap gizli olsa da olmasa da direkt "follows" tablosuna
+        // yazılıyordu — yani arama sonuçlarından takip edince gizli hesaplar
+        // onay beklemeden anında takip ediliyordu (Profil ekranındaki
+        // "İstek Gönder" akışı bypass ediliyordu). targetIsPrivate de eskiden
+        // hep false geliyordu çünkü toUser() "private" alanını hiç okumuyordu.
+        val targetIsPrivate = !isFollowing && (_suggestions.value.find { it.uid == targetUid }?.isPrivate == true)
+
+        if (isFollowing) _followingUids.remove(targetUid) else if (!targetIsPrivate) _followingUids.add(targetUid)
         if (!isFollowing) _suggestions.value = _suggestions.value.filter { it.uid != targetUid }
 
         viewModelScope.launch {
@@ -424,6 +431,26 @@ class SearchViewModel @Inject constructor(
                         .update("followingCount", com.google.firebase.firestore.FieldValue.increment(-1))
                     firestore.collection("users").document(targetUid)
                         .update("followersCount", com.google.firebase.firestore.FieldValue.increment(-1))
+                } else if (targetIsPrivate) {
+                    val myDoc = try { firestore.collection("users").document(uid).get().await() }
+                                catch (_: Exception) { null }
+                    val myName  = myDoc?.getString("displayName") ?: myDoc?.getString("name") ?: ""
+                    val myPhoto = myDoc?.getString("photoURL") ?: ""
+                    firestore.collection("followRequests").document(targetUid)
+                        .collection("pending").document(uid).set(mapOf(
+                            "fromUid"   to uid,
+                            "fromName"  to myName,
+                            "fromPhoto" to myPhoto,
+                            "targetUid" to targetUid,
+                            "ts"        to com.google.firebase.Timestamp.now(),
+                        )).await()
+                    firestore.collection("userNotifs").document(targetUid).collection("msgs").add(mapOf(
+                        "fromUid" to uid, "fromName" to myName, "fromPhoto" to myPhoto,
+                        "type" to "follow_request", "feedId" to "", "postId" to "",
+                        "title" to "$myName seni takip etmek istiyor", "sub" to "",
+                        "ico" to "person_add", "message" to "$myName seni takip etmek istiyor",
+                        "url" to "", "read" to false, "ts" to com.google.firebase.Timestamp.now(),
+                    )).await()
                 } else {
                     val myDoc = try { firestore.collection("users").document(uid).get().await() }
                                 catch (_: Exception) { null }
@@ -464,6 +491,7 @@ class SearchViewModel @Inject constructor(
             photoURL       = d["photoURL"]      as? String ?: "",
             bio            = d["bio"]           as? String ?: "",
             followersCount = (d["followersCount"] as? Long)?.toInt() ?: 0,
+            isPrivate      = d["private"]        as? Boolean ?: false,
         )
     }
 }

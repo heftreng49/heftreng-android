@@ -506,27 +506,50 @@ class AuthViewModel @Inject constructor(
     }
 
     private suspend fun generateUniqueUsername(displayName: String): String {
+        val uid = auth.currentUser?.uid ?: ""
         val existing = try {
-            val uid = auth.currentUser?.uid ?: ""
             if (uid.isNotBlank())
                 firestore.collection("users").document(uid).get().await().getString("username")
             else null
         } catch (e: Exception) { null }
         if (!existing.isNullOrBlank()) return existing
 
-        var handle = displayName.lowercase()
+        val base = displayName.lowercase()
             .replace(Regex("[^a-z0-9_]"), "")
             .take(20)
             .ifBlank { "user" }
+
+        var handle = base
         var attempt = 0
-        while (attempt < 5) {
-            val taken = firestore.collection("usernames").document(handle).get().await().exists()
-            if (!taken) break
-            handle = handle.take(16) + (1000..9999).random()
+        while (attempt < 8) {
+            // ÖNCEKİ: önce "var mı?" diye get() ile bakılıp SONRA ayrı bir adımda
+            // set() ile yazılıyordu (createUserDoc içinde) — bu iki adım arasında
+            // (TOCTOU / yarış durumu) iki kullanıcı aynı anda aynı isimle kayıt
+            // olursa, ikisi de "boş" görüp aynı username'i alabiliyordu, ikinci
+            // set() birinciyi sessizce eziyordu. Artık tek bir transaction içinde
+            // "boşsa hemen rezerve et" yapılıyor — atomik, çakışma imkansız.
+            if (claimUsername(handle, uid)) return handle
+            handle = base.take(16) + (1000..9999).random()
             attempt++
         }
-        return handle
+        // Son çare: uid'in bir kısmını ekleyip garanti benzersiz yap
+        val fallback = base.take(12) + "_" + uid.takeLast(6)
+        claimUsername(fallback, uid)
+        return fallback
     }
+
+    /** [handle] dolu değilse transaction içinde anında rezerve eder. Başarılıysa true. */
+    private suspend fun claimUsername(handle: String, uid: String): Boolean = try {
+        firestore.runTransaction { tx ->
+            val ref  = firestore.collection("usernames").document(handle)
+            val snap = tx.get(ref)
+            if (snap.exists() && snap.getString("uid") != uid) {
+                throw IllegalStateException("username_taken")
+            }
+            tx.set(ref, mapOf("uid" to uid))
+        }.await()
+        true
+    } catch (e: Exception) { false }
 
     fun signOut() {
         auth.signOut()
