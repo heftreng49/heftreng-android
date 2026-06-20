@@ -893,6 +893,16 @@ class FeedViewModel @Inject constructor(
         _posts.value = _posts.value.map {
             if (it.id == post.id) it.copy(isRepostedByMe = true, repostsCount = it.repostsCount + 1) else it
         }
+        // Repostlanan gönderi kendisi bir repost ise (örn. zincirleme repost) veya
+        // sadece alıntı/quote içeriyorsa (düz metin boş) — orijinal içerik kaybolmasın diye
+        // sıralı fallback uygula: düz metin → alıntı metni → (zincirde) önceki repost metni.
+        val chainedRepost  = post.repostType == "feed" && post.repostId.isNotBlank()
+        val previewText    = post.text.ifBlank { post.quoteText }.ifBlank { post.repostText }
+        val previewImg     = post.imageURL.ifBlank { post.repostImg }
+        val origId         = if (chainedRepost) post.repostId else post.id
+        val origAuthorName = if (chainedRepost) post.repostAuthor.ifBlank { post.displayName } else post.displayName
+        val origAuthorPhoto = if (chainedRepost) post.repostAuthorPhoto.ifBlank { post.photoURL } else post.photoURL
+        val origAuthorUid  = if (chainedRepost) post.repostAuthorUid.ifBlank { post.uid } else post.uid
         viewModelScope.launch {
             try {
                 val d       = cachedUserDoc(uid) ?: myUserData()
@@ -908,13 +918,13 @@ class FeedViewModel @Inject constructor(
                     "imageURL"          to "",
                     "imgUrl"            to "",
                     "repostType"        to "feed",
-                    "repostId"          to post.id,
-                    "repostUid"         to post.uid,
-                    "repostText"        to post.text.take(200),
-                    "repostAuthor"      to post.displayName,
-                    "repostAuthorPhoto" to post.photoURL,
-                    "repostAuthorUid"   to post.uid,
-                    "repostImg"         to post.imageURL,
+                    "repostId"          to origId,
+                    "repostUid"         to origAuthorUid,
+                    "repostText"        to previewText.take(200),
+                    "repostAuthor"      to origAuthorName,
+                    "repostAuthorPhoto" to origAuthorPhoto,
+                    "repostAuthorUid"   to origAuthorUid,
+                    "repostImg"         to previewImg,
                     "likesCount" to 0, "saves" to 0, "commentsCount" to 0, "reposts" to 0,
                     "ts"    to Timestamp.now(),
                 )).await()
@@ -926,7 +936,7 @@ class FeedViewModel @Inject constructor(
                 _posts.value = _posts.value.map {
                     if (it.id == post.id) it.copy(myRepostId = newRef.id) else it
                 }
-                if (post.uid != uid) sendNotif(post.uid, "repost", "$myName gönderini paylaştı", post.text.take(60), post.id)
+                if (post.uid != uid) sendNotif(post.uid, "repost", "$myName gönderini paylaştı", previewText.take(60), post.id)
             } catch (e: Exception) {
                 e.printStackTrace()
                 // Hata → optimistic güncellemeyi geri al
