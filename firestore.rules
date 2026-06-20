@@ -28,10 +28,16 @@ service cloud.firestore {
     }
     // E-posta doğrulanmış veya Google/Apple ile giriş yapılmış
     function isVerified() {
+      // NOT: request.auth.token.email_verified / .firebase.sign_in_provider alanlarına
+      // DOĞRUDAN (".") erişmek, bu alanlar token'da hiç yoksa (örn. test/emulator
+      // ortamındaki authenticatedContext() ile oluşturulan custom claim'lerde olduğu gibi)
+      // "Property X is undefined on object" hatasıyla PERMISSION_DENIED'e sebep oluyordu.
+      // Gerçek Firebase Auth token'larında bu alanlar her zaman bulunur; ama güvenli
+      // tarafta kalmak için .get(key, default) kullanıyoruz — davranış değişmiyor.
       return isAuth() && (
-        request.auth.token.email_verified == true
-        || request.auth.token.firebase.sign_in_provider == 'google.com'
-        || request.auth.token.firebase.sign_in_provider == 'apple.com'
+        request.auth.token.get('email_verified', false) == true
+        || request.auth.token.get('firebase', {}).get('sign_in_provider', '') == 'google.com'
+        || request.auth.token.get('firebase', {}).get('sign_in_provider', '') == 'apple.com'
       );
     }
     function onlyChanging(fields) {
