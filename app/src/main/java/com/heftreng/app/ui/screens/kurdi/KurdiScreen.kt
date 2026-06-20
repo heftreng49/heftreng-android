@@ -148,7 +148,7 @@ fun KurdiScreen(
     // YZ Ders sekmesi sadece admin'e görünür
     val tabs = buildList {
         add(Strings.kurdiUnits(language))
-        add(Strings.kurdiDict(language))
+        // add(Strings.kurdiDict(language))  // Ferheng — geçici olarak gizlendi
         add(Strings.kurdiGrammar(language))
         add(Strings.kurdiLeaderboard(language))
         if (isAdmin) add(Strings.kurdiAi(language))
@@ -304,9 +304,10 @@ fun KurdiScreen(
                     }
                 },
             )
-            1 -> DictionaryTab(language, isAdmin = isAdmin, vm = vm)
-            2 -> GrammarTab(language, isAdmin = isAdmin, vm = vm)
-            3 -> {
+            // 1 -> DictionaryTab — Ferheng geçici olarak gizlendi
+            1 -> GrammarTab(language, isAdmin = isAdmin, vm = vm)
+
+            2 -> {
                 val leaderboard        by vm.leaderboard.collectAsState()
                 val leaderboardLoading by vm.leaderboardLoading.collectAsState()
                 LaunchedEffect(Unit) { vm.loadLeaderboard() }
@@ -316,7 +317,7 @@ fun KurdiScreen(
                     language = language,
                 )
             }
-            4 -> if (isAdmin) AiLessonTab(language, vm)
+            3 -> if (isAdmin) AiLessonTab(language, vm)
         }
     }
 
@@ -2235,50 +2236,98 @@ private fun GrammarTab(language: String, isAdmin: Boolean = false, vm: KurdiView
 
     LaunchedEffect(Unit) { vm.loadGrammar() }
 
-    Column(Modifier.fillMaxSize()) {
-        if (isAdmin) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(Strings.kurdiGrammar(language), fontWeight = FontWeight.Bold,
-                    color = OnBackground, fontSize = 15.sp)
-                Button(
-                    onClick = { showAdd = true },
-                    colors  = ButtonDefaults.buttonColors(containerColor = Primary),
-                    shape   = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+    // Kural sayısını banner olarak göster
+    val ruleCount = rules.size
+
+    Box(Modifier.fillMaxSize()) {
+        when {
+            loading -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Primary, strokeWidth = 2.dp)
+                }
+            }
+            rules.isEmpty() -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("📖", fontSize = 48.sp)
+                        Text(
+                            if (isAdmin) "Henüz kural eklenmemiş" else Strings.comingSoon(language),
+                            color = Muted, fontSize = 14.sp,
+                        )
+                    }
+                }
+            }
+            else -> {
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 16.dp, top = 16.dp, bottom = 100.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Icon(Icons.Default.Add, null, modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Ekle", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    // Üst bilgi kartı
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Primary.copy(alpha = 0.10f),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Text("📚", fontSize = 28.sp)
+                                Column {
+                                    Text(
+                                        if (language == "ku") "Rêziman" else "Dilbilgisi",
+                                        fontWeight = FontWeight.Bold,
+                                        color = Primary,
+                                        fontSize = 15.sp,
+                                    )
+                                    Text(
+                                        "$ruleCount ${if (language == "ku") "rêziman" else "kural"}",
+                                        color = Muted,
+                                        fontSize = 12.sp,
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                    }
+
+                    items(rules, key = { it.id }) { rule ->
+                        GrammarRuleCard(
+                            rule     = rule,
+                            language = language,
+                            isAdmin  = isAdmin,
+                            index    = rules.indexOf(rule),
+                            onDelete = { vm.deleteGrammarRule(rule.id) },
+                        )
+                    }
                 }
             }
         }
 
-        if (loading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Primary)
-            }
-        } else if (rules.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("🎓", fontSize = 40.sp)
-                    Text(if (isAdmin) "Henüz kural eklenmemiş" else Strings.comingSoon(language),
-                        color = Muted, fontSize = 14.sp)
-                }
-            }
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+        // Admin ekle butonu — sağ alt köşe FAB
+        if (isAdmin) {
+            androidx.compose.material3.FloatingActionButton(
+                onClick          = { showAdd = true },
+                containerColor   = Primary,
+                contentColor     = Color.White,
+                shape            = RoundedCornerShape(16.dp),
+                modifier         = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 20.dp),
             ) {
-                items(rules, key = { it.id }) { rule ->
-                    GrammarRuleCard(rule = rule, language = language, isAdmin = isAdmin,
-                        onDelete = { vm.deleteGrammarRule(rule.id) })
+                Row(
+                    verticalAlignment    = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier             = Modifier.padding(horizontal = 16.dp),
+                ) {
+                    Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                    Text("Ekle", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 }
-                item { Spacer(Modifier.height(80.dp)) }
             }
         }
     }
@@ -2293,44 +2342,124 @@ private fun GrammarTab(language: String, isAdmin: Boolean = false, vm: KurdiView
     }
 }
 
+// Kural sırasına göre tekrarlayan renk paleti (Primary tonları)
+private val grammarCardAccents = listOf(
+    0xFF7C3AED, // mor
+    0xFF6D28D9, // koyu mor
+    0xFF8B5CF6, // açık mor
+    0xFF5B21B6, // derin mor
+    0xFF9333EA, // parlak mor
+)
+
 @Composable
-private fun GrammarRuleCard(rule: GrammarRule, language: String, isAdmin: Boolean, onDelete: () -> Unit) {
+private fun GrammarRuleCard(
+    rule: GrammarRule,
+    language: String,
+    isAdmin: Boolean,
+    index: Int,
+    onDelete: () -> Unit,
+) {
     var expanded    by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf(false) }
 
+    val accentColor = Color(grammarCardAccents[index % grammarCardAccents.size])
+    val displayTitle   = if (language == "ku") rule.title else rule.titleTr.ifBlank { rule.title }
+    val displayContent = if (language == "ku") rule.content else rule.contentTr.ifBlank { rule.content }
+    val hasKuSubtitle  = language != "ku" && rule.title.isNotBlank() && rule.title != rule.titleTr
+
     Surface(
-        shape    = RoundedCornerShape(14.dp),
+        shape    = RoundedCornerShape(16.dp),
         color    = HeftSurface,
-        modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth(),
+        shadowElevation = 0.dp,
     ) {
-        Column(Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
+        Column {
+            // ── Başlık satırı ────────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(start = 0.dp, end = 12.dp, top = 0.dp, bottom = 0.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Sol renkli şerit + numara
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(64.dp)
+                        .background(
+                            color = accentColor,
+                            shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
+                        )
+                )
+                // Numara balonu
+                Box(
+                    modifier = Modifier
+                        .padding(start = 12.dp)
+                        .size(32.dp)
+                        .background(accentColor.copy(alpha = 0.12f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Text(
-                        if (language == "ku") rule.title else rule.titleTr.ifBlank { rule.title },
-                        fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 14.sp,
+                        "${index + 1}",
+                        color      = accentColor,
+                        fontSize   = 13.sp,
+                        fontWeight = FontWeight.Bold,
                     )
-                    if (language != "ku" && rule.title.isNotBlank() && rule.title != rule.titleTr)
-                        Text(rule.title, color = Primary, fontSize = 11.sp)
                 }
-                if (isAdmin) {
-                    IconButton(onClick = { showConfirm = true }, modifier = Modifier.size(30.dp)) {
-                        Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(10.dp))
+                // Başlık ve Kürtçe alt başlık
+                Column(modifier = Modifier.weight(1f).padding(vertical = 14.dp)) {
+                    Text(
+                        displayTitle,
+                        fontWeight = FontWeight.Bold,
+                        color      = OnBackground,
+                        fontSize   = 14.sp,
+                        lineHeight = 18.sp,
+                    )
+                    if (hasKuSubtitle) {
+                        Text(
+                            rule.title,
+                            color    = accentColor,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
                     }
                 }
+                // Admin sil butonu
+                if (isAdmin) {
+                    IconButton(onClick = { showConfirm = true }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(16.dp))
+                    }
+                }
+                // Aç/kapat ikonu
                 Icon(
                     if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    null, tint = Muted, modifier = Modifier.size(20.dp),
+                    contentDescription = null,
+                    tint     = if (expanded) accentColor else Muted,
+                    modifier = Modifier.size(22.dp),
                 )
             }
+
+            // ── Açılan içerik ────────────────────────────────────────────────
             AnimatedVisibility(visible = expanded) {
-                Column(modifier = Modifier.padding(top = 10.dp)) {
-                    HorizontalDivider(color = SurfaceVar, thickness = 1.dp)
-                    Spacer(Modifier.height(8.dp))
-                    val displayContent = if (language == "ku") rule.content
-                    else rule.contentTr.ifBlank { rule.content }
-                    Text(displayContent, color = OnBackground.copy(alpha = 0.85f), fontSize = 13.sp,
-                        lineHeight = 20.sp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(accentColor.copy(alpha = 0.04f))
+                        .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
+                ) {
+                    HorizontalDivider(
+                        color     = accentColor.copy(alpha = 0.20f),
+                        thickness = 1.dp,
+                        modifier  = Modifier.padding(bottom = 12.dp),
+                    )
+                    Text(
+                        displayContent,
+                        color      = OnBackground.copy(alpha = 0.88f),
+                        fontSize   = 13.5.sp,
+                        lineHeight = 22.sp,
+                    )
                 }
             }
         }
@@ -2341,8 +2470,14 @@ private fun GrammarRuleCard(rule: GrammarRule, language: String, isAdmin: Boolea
             onDismissRequest = { showConfirm = false },
             title = { Text("Sil?", color = OnBackground) },
             text  = { Text("«${rule.titleTr.ifBlank { rule.title }}» silinsin mi?", color = Muted) },
-            confirmButton = { TextButton(onClick = { onDelete(); showConfirm = false }) { Text("Sil", color = MaterialTheme.colorScheme.error) } },
-            dismissButton = { TextButton(onClick = { showConfirm = false }) { Text("İptal", color = Muted) } },
+            confirmButton = {
+                TextButton(onClick = { onDelete(); showConfirm = false }) {
+                    Text("Sil", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirm = false }) { Text("İptal", color = Muted) }
+            },
             containerColor = HeftSurface,
         )
     }
