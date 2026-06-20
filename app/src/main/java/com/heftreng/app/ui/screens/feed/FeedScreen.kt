@@ -130,6 +130,20 @@ fun FeedScreen(
         blogVm.loadPosts()
     }
 
+    // Native ad havuzunu önceden doldur — config gelir gelmez tetiklenir.
+    // Kullanıcı feed'i scroll ettiğinde reklamlar zaten hazır, bekleme olmaz.
+    val nativeFeedCfgForWarmup by adsVm.nativeFeedConfig.collectAsState()
+    LaunchedEffect(nativeFeedCfgForWarmup) {
+        val cfg = nativeFeedCfgForWarmup ?: return@LaunchedEffect
+        if (!cfg.enabled) return@LaunchedEffect
+        val unitId = when {
+            cfg.testMode            -> com.heftreng.app.data.model.AdMobTestIds.NATIVE
+            cfg.unitId.isNotBlank() -> cfg.unitId
+            else                    -> com.heftreng.app.data.model.AdMobProdIds.NATIVE
+        }
+        adsVm.warmUpNativePool(unitId)
+    }
+
     // ── Feed sekme (Herkes / Takip edilenler) ────────────────────────────────
     val ku = language == "ku"
     val feedTabs = listOf(

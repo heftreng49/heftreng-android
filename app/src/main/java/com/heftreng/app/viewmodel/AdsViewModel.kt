@@ -485,10 +485,22 @@ class AdsViewModel @Inject constructor(
             .build().loadAd(AdRequest.Builder().build())
     }
 
-    // ── Liste içinde tekrarlanan native reklamlar için pozisyon bazlı cache ─────
+    // ══════════════════════════════════════════════════════════════════════
+    //  NATIVE AD HAVUZU (POOL) — yavaş yüklenme sorununu çözer
+    //  Mantık: pozisyon ekrana gelince sıfırdan yüklemek yerine, önceden
+    //  doldurulmuş bir kuyruktan ANINDA çekilir. Kuyruk arka planda sürekli
+    //  doldurulur (hedef boyutun altına düşünce otomatik yeniden doldurma).
+    // ══════════════════════════════════════════════════════════════════════
+    private val POOL_TARGET_SIZE = 3       // havuzda hep hazır bekleyecek reklam sayısı
+    private val POOL_MAX_SIZE    = 6       // bellek/limit koruması
+
+    // unitId bazlı ayrı havuzlar — feed ve blog farklı unit kullanabilir
+    private val _adPools       = mutableMapOf<String, ArrayDeque<NativeAd>>()
+    private val _adPoolFilling = mutableMapOf<String, Boolean>()
+
+    // Pozisyon → havuzdan çekilmiş NativeAd eşlemesi (ekranda kalıcı referans)
     private val _positionedNativeAds = mutableMapOf<String, NativeAd>()
     private val _positionedNativeLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
-    private val _positionedNativeRetryCount = mutableMapOf<String, Int>()
 
     fun positionedNativeLoadedFlow(key: String): StateFlow<Boolean> =
         _positionedNativeLoaded.getOrPut(key) { MutableStateFlow(false) }.asStateFlow()
@@ -496,17 +508,74 @@ class AdsViewModel @Inject constructor(
     fun cachedPositionedNative(key: String): NativeAd? = _positionedNativeAds[key]
 
     /**
-     * Liste içinde belirli bir pozisyonda (key) gösterilecek native reklamı yükler.
-     * Her key kendi NativeAd nesnesine sahiptir — aynı NativeAd birden fazla
-     * NativeAdView'a bağlanamaz (AdMob politikası), bu yapı bunu önler.
+     * Havuzu önceden doldurur — feed/blog ekranı açılır açılmaz çağrılmalı.
+     * Arka planda POOL_TARGET_SIZE kadar reklam yükler, kullanıcı scroll
+     * ettiğinde reklamlar zaten hazır olur, bekleme olmaz.
+     */
+    fun warmUpNativePool(unitId: String) {
+        if (unitId.isBlank()) return
+        val pool = _adPools.getOrPut(unitId) { ArrayDeque() }
+        val needed = POOL_TARGET_SIZE - pool.size
+        if (needed <= 0) return
+        if (_adPoolFilling[unitId] == true) return
+        _adPoolFilling[unitId] = true
+        repeat(needed) { fillPoolOnce(unitId) }
+    }
+
+    private fun fillPoolOnce(unitId: String) {
+        AdLoader.Builder(appContext, unitId)
+            .forNativeAd { nativeAd ->
+                val pool = _adPools.getOrPut(unitId) { ArrayDeque() }
+                if (pool.size < POOL_MAX_SIZE) {
+                    pool.addLast(nativeAd)
+                } else {
+                    nativeAd.destroy() // havuz dolu — fazlalığı serbest bırak
+                }
+                _adPoolFilling[unitId] = pool.size < POOL_TARGET_SIZE
+                // Havuz hâlâ hedefin altındaysa devam et
+                if (pool.size < POOL_TARGET_SIZE) fillPoolOnce(unitId)
+            }
+            .withAdListener(object : AdListener() {
+                override fun onAdFailedToLoad(adError: LoadAdError) {
+                    viewModelScope.launch {
+                        delay(RETRY_DELAY_MS)
+                        val pool = _adPools[unitId]
+                        if (pool != null && pool.size < POOL_TARGET_SIZE) fillPoolOnce(unitId)
+                        else _adPoolFilling[unitId] = false
+                    }
+                }
+            })
+            .build().loadAd(AdRequest.Builder().build())
+    }
+
+    /**
+     * Belirli bir pozisyon (key) için havuzdan ANINDA bir reklam çeker.
+     * Havuz boşsa eski (yavaş) yola düşer — kullanıcı asla boş kalmaz.
+     * Havuzdan bir reklam çekildikçe arka planda otomatik yeniden doldurulur.
      */
     fun preloadPositionedNative(key: String, unitId: String) {
         if (unitId.isBlank()) return
         val loadedFlow = _positionedNativeLoaded.getOrPut(key) { MutableStateFlow(false) }
         if (loadedFlow.value) return
+
+        val pool = _adPools.getOrPut(unitId) { ArrayDeque() }
+        val fromPool = pool.removeFirstOrNull()
+        if (fromPool != null) {
+            // Havuzdan anında çekildi — sıfır bekleme
+            _positionedNativeAds[key]?.destroy()
+            _positionedNativeAds[key] = fromPool
+            loadedFlow.value = true
+            // Havuzu otomatik yeniden doldur (arka planda, kullanıcı beklemez)
+            warmUpNativePool(unitId)
+            return
+        }
+
+        // Havuz boş — ilk açılışta veya hızlı ardışık pozisyonlarda olabilir.
+        // Doğrudan yükle, aynı zamanda havuzu da ısıt ki bir sonraki sefer
+        // havuzdan gelsin.
+        warmUpNativePool(unitId)
         AdLoader.Builder(appContext, unitId)
             .forNativeAd { nativeAd ->
-                _positionedNativeRetryCount[key] = 0
                 _positionedNativeAds[key]?.destroy()
                 _positionedNativeAds[key] = nativeAd
                 loadedFlow.value = true
@@ -514,12 +583,8 @@ class AdsViewModel @Inject constructor(
             .withAdListener(object : AdListener() {
                 override fun onAdFailedToLoad(adError: LoadAdError) {
                     viewModelScope.launch {
-                        val retryCount = (_positionedNativeRetryCount[key] ?: 0) + 1
-                        _positionedNativeRetryCount[key] = retryCount
-                        if (retryCount <= MAX_RETRY_ATTEMPTS) {
-                            delay(RETRY_DELAY_MS * Math.pow(2.0, (retryCount - 1).toDouble()).toLong())
-                            preloadPositionedNative(key, unitId)
-                        }
+                        delay(RETRY_DELAY_MS)
+                        preloadPositionedNative(key, unitId)
                     }
                 }
             })
@@ -533,9 +598,18 @@ class AdsViewModel @Inject constructor(
             _positionedNativeAds[k]?.destroy()
             _positionedNativeAds.remove(k)
             _positionedNativeLoaded.remove(k)
-            _positionedNativeRetryCount.remove(k)
         }
     }
+
+    /** Ekran kapanırken havuzdaki kullanılmayan reklamları da temizle (memory leak önler) */
+    fun releaseAdPool(unitId: String? = null) {
+        val pools = if (unitId == null) _adPools.values else listOfNotNull(_adPools[unitId])
+        pools.forEach { pool ->
+            while (pool.isNotEmpty()) pool.removeFirst().destroy()
+        }
+        if (unitId != null) _adPools.remove(unitId) else _adPools.clear()
+    }
+
     enum class RewardType { DOUBLE_XP, UNLOCK_LESSON, SAVE_STREAK }
 
     fun initPrefs(context: android.content.Context) {}

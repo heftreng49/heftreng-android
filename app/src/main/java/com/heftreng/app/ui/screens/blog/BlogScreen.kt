@@ -59,6 +59,19 @@ fun BlogScreen(
 
     LaunchedEffect(Unit) { adsVm.loadAdConfigs() }
 
+    // Native ad havuzunu önceden doldur — config gelir gelmez tetiklenir.
+    val nativeBlogCfgForWarmup by adsVm.nativeBlogConfig.collectAsState()
+    LaunchedEffect(nativeBlogCfgForWarmup) {
+        val cfg = nativeBlogCfgForWarmup ?: return@LaunchedEffect
+        if (!cfg.enabled) return@LaunchedEffect
+        val unitId = when {
+            cfg.testMode            -> com.heftreng.app.data.model.AdMobTestIds.NATIVE
+            cfg.unitId.isNotBlank() -> cfg.unitId
+            else                    -> com.heftreng.app.data.model.AdMobProdIds.NATIVE
+        }
+        adsVm.warmUpNativePool(unitId)
+    }
+
     // Tüm etiketleri topla
     val allLabels = remember(state.posts) {
         state.posts.flatMap { it.labels }.distinct().sorted()
