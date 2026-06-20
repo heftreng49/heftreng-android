@@ -86,9 +86,11 @@ class MainActivity : ComponentActivity() {
         // NOT: WindowCompat.setDecorFitsSystemWindows kaldırıldı,
         // enableEdgeToEdge() zaten bunu yapıyor (Android 15 uyumlu)
 
-        // AdMob SDK başlatma — reklam yüklenmeden önce mutlaka çağrılmalı
+        // AdMob SDK başlatma — SDK hazır olur olmaz config + preload başlasın
         com.google.android.gms.ads.MobileAds.initialize(this) { initStatus ->
             android.util.Log.d("AdMob", "SDK hazır: ${initStatus.adapterStatusMap}")
+            // SDK hazır → reklam config'ini hemen yükle (cache'den anlık, server'dan arka planda)
+            adsVm.loadAdConfigs()
         }
 
         // ScreenTracker — activity lifecycle dinleyicisi + adsVm bağla
