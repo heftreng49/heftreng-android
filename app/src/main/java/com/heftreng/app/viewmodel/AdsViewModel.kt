@@ -12,6 +12,7 @@ import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.rewarded.RewardItem
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
 import com.heftreng.app.data.model.AdMobTestIds
 import com.heftreng.app.data.model.AdMobProdIds
 import com.heftreng.app.data.model.CmsAdConfig
@@ -27,6 +28,10 @@ class AdsViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
 ) : ViewModel() {
+
+    // ── Cache TTL — cms_ads nadiren değişir, 30 dakikada bir server'a git ──────
+    private val ADS_CONFIG_TTL_MS = 30L * 60L * 1000L
+    private var lastServerFetchMs = 0L
 
     // ── Preloaded banner cache ─────────────────────────────────────────────────
     private val _bannerFeedLoaded    = MutableStateFlow(false)
@@ -128,9 +133,6 @@ class AdsViewModel @Inject constructor(
     enum class BannerSlot { FEED, LIB, KURDI, BLOG }
 
     // ── Liste içinde tekrarlanan banner'lar için pozisyon bazlı cache ───────────
-    // Tek bir AdView'ı birden fazla liste konumunda paylaşmak (eski mimari)
-    // View'ın sürekli söküp-takılmasına ve impression'ın sayılmamasına yol açıyordu.
-    // Bunun yerine her liste konumu (key ile) kendi bağımsız AdView'ını yükler ve tutar.
     private val _positionedBanners = mutableMapOf<String, AdView>()
     private val _positionedBannerLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
     private val _positionedBannerRetryCount = mutableMapOf<String, Int>()
@@ -141,11 +143,6 @@ class AdsViewModel @Inject constructor(
 
     fun cachedPositionedBanner(key: String): AdView? = _positionedBanners[key]
 
-    /**
-     * Liste içinde belirli bir pozisyonda (key) gösterilecek banner'ı yükler.
-     * Her key kendi AdView nesnesine sahiptir; aynı View birden fazla konumda
-     * paylaşılmaz, böylece viewability/impression sorunları önlenir.
-     */
     fun preloadPositionedBanner(key: String, unitId: String, bannerSize: String = "adaptive") {
         if (unitId.isBlank()) return
         val loadedFlow = _positionedBannerLoaded.getOrPut(key) { MutableStateFlow(false) }
@@ -183,7 +180,6 @@ class AdsViewModel @Inject constructor(
         _positionedBanners[key] = adView
     }
 
-    /** Liste yeniden çekildiğinde / ekrandan çıkıldığında artık kullanılmayan banner'ları temizler. */
     fun releasePositionedBanners(keyPrefix: String? = null) {
         val keysToRemove = if (keyPrefix == null) _positionedBanners.keys.toList()
             else _positionedBanners.keys.filter { it.startsWith(keyPrefix) }
@@ -208,7 +204,7 @@ class AdsViewModel @Inject constructor(
         releasePositionedNatives()
     }
 
-    // ── Konfigürasyonlar (Public API - CmsScreen/KurdiScreen için gerekli) ────────────────
+    // ── Konfigürasyonlar ──────────────────────────────────────────────────────
     private val _bannerConfig       = MutableStateFlow<CmsAdConfig?>(null)
     val bannerConfig = _bannerConfig.asStateFlow()
 
@@ -232,7 +228,7 @@ class AdsViewModel @Inject constructor(
 
     private val _nativeBlogConfig   = MutableStateFlow<CmsAdConfig?>(null)
     val nativeBlogConfig = _nativeBlogConfig.asStateFlow()
-    
+
     private val _allAdConfigs = MutableStateFlow<Map<String, CmsAdConfig>>(emptyMap())
     val allAdConfigs = _allAdConfigs.asStateFlow()
 
@@ -286,106 +282,135 @@ class AdsViewModel @Inject constructor(
     private var interstitialAd: InterstitialAd? = null
     private var rewardedAd:     RewardedAd?     = null
 
-    fun loadAdConfigs() {
+    // ── loadAdConfigs: Hibrit Cache + Server ──────────────────────────────────
+    // Strateji:
+    //   1. Önce Firestore CACHE'den yükle → AdMob preload anında başlar (0 gecikme)
+    //   2. TTL dolmuşsa arka planda SERVER'dan güncelle → fark varsa reklamı yenile
+    //   3. Cache boşsa (ilk kurulum) doğrudan SERVER'a git
+    fun loadAdConfigs(forceServer: Boolean = false) {
         viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val ttlExpired = (now - lastServerFetchMs) > ADS_CONFIG_TTL_MS
+
+            // ── ADIM 1: Cache'den anlık yükle ──────────────────────────────────
             try {
-                val snap = firestore.collection("cms_ads").get().await()
-                val global = snap.documents.find { it.id == "global" }
-                _adsEnabled.value = global?.getBoolean("enabled") ?: true
-                snap.documents.forEach { doc ->
-                    if (doc.id == "global") return@forEach
-                    val d = doc.data ?: return@forEach
-                    val config = CmsAdConfig(
-                        id                   = doc.id,
-                        unitId               = d["unitId"]    as? String  ?: "",
-                        enabled              = d["enabled"]   as? Boolean ?: false,
-                        testMode             = d["testMode"]  as? Boolean ?: true,
-                        position             = (d["position"]  as? Long)?.toInt() ?: 5,
-                        frequency            = (d["frequency"] as? Long)?.toInt() ?: 3,
-                        adType               = d["adType"]      as? String ?: "banner",
-                        bannerSize           = (d["bannerSize"] as? String ?: "adaptive").trim().lowercase(),
-                        screens              = (d["screens"] as? String ?: "feed").trim().lowercase()
-                    )
-                    when (doc.id) {
-                        "banner_feed" -> {
-                            _bannerConfig.value = config
-                            if (config.enabled && _adsEnabled.value) {
-                                val unitId = when {
-                                    config.testMode            -> AdMobTestIds.BANNER
-                                    config.unitId.isNotBlank() -> config.unitId
-                                    else                       -> AdMobProdIds.BANNER
-                                }
-                                preloadBanner(unitId, BannerSlot.FEED, config.bannerSize)
-                            }
-                        }
-                        "banner_library", "banner_lib" -> {
-                            _bannerLibraryConfig.value = config
-                            if (config.enabled && _adsEnabled.value) {
-                                val unitId = when {
-                                    config.testMode            -> AdMobTestIds.BANNER
-                                    config.unitId.isNotBlank() -> config.unitId
-                                    else                       -> AdMobProdIds.BANNER
-                                }
-                                preloadBanner(unitId, BannerSlot.LIB, config.bannerSize)
-                            }
-                        }
-                        "banner_kurdi" -> {
-                            _bannerKurdiConfig.value = config
-                            if (config.enabled && _adsEnabled.value) {
-                                val unitId = when {
-                                    config.testMode            -> AdMobTestIds.BANNER
-                                    config.unitId.isNotBlank() -> config.unitId
-                                    else                       -> AdMobProdIds.BANNER
-                                }
-                                preloadBanner(unitId, BannerSlot.KURDI, config.bannerSize)
-                            }
-                        }
-                        "banner_blog" -> {
-                            _bannerBlogConfig.value = config
-                            if (config.enabled && _adsEnabled.value) {
-                                val unitId = when {
-                                    config.testMode            -> AdMobTestIds.BANNER
-                                    config.unitId.isNotBlank() -> config.unitId
-                                    else                       -> AdMobProdIds.BANNER
-                                }
-                                preloadBanner(unitId, BannerSlot.BLOG, config.bannerSize)
-                            }
-                        }
-                        "interstitial_serial" -> _interstitialConfig.value = config
-                        "rewarded_xp" -> {
-                            _rewardedConfig.value = config
-                            if (config.enabled && _adsEnabled.value) preloadRewardedAd(if (config.testMode) AdMobTestIds.REWARDED else AdMobProdIds.REWARDED)
-                        }
-                        "native_feed" -> {
-                            _nativeFeedConfig.value = config
-                            android.util.Log.d("AdsVM", "native_feed config geldi: enabled=${config.enabled}, testMode=${config.testMode}, size=${config.bannerSize}, unitId=${config.unitId}")
-                            if (config.enabled && _adsEnabled.value) {
-                                val unitId = when {
-                                    config.testMode          -> AdMobTestIds.NATIVE
-                                    config.unitId.isNotBlank() -> config.unitId
-                                    else                     -> AdMobProdIds.NATIVE
-                                }
-                                android.util.Log.d("AdsVM", "native_feed preload başlıyor: unitId=$unitId")
-                                preloadNativeAd(unitId, NativeAdSlot.FEED, config.bannerSize)
-                            }
-                        }
-                        "native_blog" -> {
-                            _nativeBlogConfig.value = config
-                            android.util.Log.d("AdsVM", "native_blog config geldi: enabled=${config.enabled}, testMode=${config.testMode}, unitId=${config.unitId}")
-                            if (config.enabled && _adsEnabled.value) {
-                                val unitId = when {
-                                    config.testMode            -> AdMobTestIds.NATIVE
-                                    config.unitId.isNotBlank() -> config.unitId
-                                    else                       -> AdMobProdIds.NATIVE
-                                }
-                                preloadNativeAd(unitId, NativeAdSlot.BLOG, config.bannerSize)
-                            }
-                        }
-                    }
-                    _allAdConfigs.value = _allAdConfigs.value.toMutableMap().apply { put(doc.id, config) }
+                val cacheSnap = firestore.collection("cms_ads").get(Source.CACHE).await()
+                applyAdConfigs(cacheSnap, preloadAds = true)
+                android.util.Log.d("AdsVM", "Cache'den yüklendi: ${cacheSnap.documents.size} doküman")
+            } catch (e: Exception) {
+                // Cache yok (ilk kurulum) — hata normal, server'a geçilecek
+                android.util.Log.d("AdsVM", "Cache boş, server'a geçiliyor")
+            }
+
+            // ── ADIM 2: TTL dolmuşsa veya cache yoksa server'dan güncelle ──────
+            if (forceServer || ttlExpired || lastServerFetchMs == 0L) {
+                try {
+                    val serverSnap = firestore.collection("cms_ads").get(Source.SERVER).await()
+                    lastServerFetchMs = now
+                    applyAdConfigs(serverSnap, preloadAds = true)
+                    android.util.Log.d("AdsVM", "Server'dan güncellendi: ${serverSnap.documents.size} doküman")
+                } catch (e: Exception) {
+                    android.util.Log.w("AdsVM", "Server fetch başarısız (cache kullanılıyor): ${e.message}")
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            }
         }
+    }
+
+    // ── Ortak config uygulama mantığı (cache veya server fark etmez) ─────────
+    private fun applyAdConfigs(
+        snap: com.google.firebase.firestore.QuerySnapshot,
+        preloadAds: Boolean,
+    ) {
+        val global = snap.documents.find { it.id == "global" }
+        _adsEnabled.value = global?.getBoolean("enabled") ?: true
+
+        val newAllConfigs = _allAdConfigs.value.toMutableMap()
+
+        snap.documents.forEach { doc ->
+            if (doc.id == "global") return@forEach
+            val d = doc.data ?: return@forEach
+            val config = CmsAdConfig(
+                id          = doc.id,
+                unitId      = d["unitId"]    as? String  ?: "",
+                enabled     = d["enabled"]   as? Boolean ?: false,
+                testMode    = d["testMode"]  as? Boolean ?: true,
+                position    = (d["position"]  as? Long)?.toInt() ?: 5,
+                frequency   = (d["frequency"] as? Long)?.toInt() ?: 3,
+                adType      = d["adType"]      as? String ?: "banner",
+                bannerSize  = (d["bannerSize"] as? String ?: "adaptive").trim().lowercase(),
+                screens     = (d["screens"] as? String ?: "feed").trim().lowercase()
+            )
+
+            when (doc.id) {
+                "banner_feed" -> {
+                    val changed = _bannerConfig.value != config
+                    _bannerConfig.value = config
+                    if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+                        val unitId = resolveUnitId(config, AdMobTestIds.BANNER, AdMobProdIds.BANNER)
+                        preloadBanner(unitId, BannerSlot.FEED, config.bannerSize)
+                    }
+                }
+                "banner_library", "banner_lib" -> {
+                    val changed = _bannerLibraryConfig.value != config
+                    _bannerLibraryConfig.value = config
+                    if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+                        val unitId = resolveUnitId(config, AdMobTestIds.BANNER, AdMobProdIds.BANNER)
+                        preloadBanner(unitId, BannerSlot.LIB, config.bannerSize)
+                    }
+                }
+                "banner_kurdi" -> {
+                    val changed = _bannerKurdiConfig.value != config
+                    _bannerKurdiConfig.value = config
+                    if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+                        val unitId = resolveUnitId(config, AdMobTestIds.BANNER, AdMobProdIds.BANNER)
+                        preloadBanner(unitId, BannerSlot.KURDI, config.bannerSize)
+                    }
+                }
+                "banner_blog" -> {
+                    val changed = _bannerBlogConfig.value != config
+                    _bannerBlogConfig.value = config
+                    if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+                        val unitId = resolveUnitId(config, AdMobTestIds.BANNER, AdMobProdIds.BANNER)
+                        preloadBanner(unitId, BannerSlot.BLOG, config.bannerSize)
+                    }
+                }
+                "interstitial_serial" -> _interstitialConfig.value = config
+                "rewarded_xp" -> {
+                    val changed = _rewardedConfig.value != config
+                    _rewardedConfig.value = config
+                    if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+                        preloadRewardedAd(resolveUnitId(config, AdMobTestIds.REWARDED, AdMobProdIds.REWARDED))
+                    }
+                }
+                "native_feed" -> {
+                    val changed = _nativeFeedConfig.value != config
+                    _nativeFeedConfig.value = config
+                    android.util.Log.d("AdsVM", "native_feed config: enabled=${config.enabled}, testMode=${config.testMode}")
+                    if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+                        val unitId = resolveUnitId(config, AdMobTestIds.NATIVE, AdMobProdIds.NATIVE)
+                        preloadNativeAd(unitId, NativeAdSlot.FEED, config.bannerSize)
+                    }
+                }
+                "native_blog" -> {
+                    val changed = _nativeBlogConfig.value != config
+                    _nativeBlogConfig.value = config
+                    android.util.Log.d("AdsVM", "native_blog config: enabled=${config.enabled}, testMode=${config.testMode}")
+                    if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+                        val unitId = resolveUnitId(config, AdMobTestIds.NATIVE, AdMobProdIds.NATIVE)
+                        preloadNativeAd(unitId, NativeAdSlot.BLOG, config.bannerSize)
+                    }
+                }
+            }
+            newAllConfigs[doc.id] = config
+        }
+        _allAdConfigs.value = newAllConfigs
+    }
+
+    /** testMode / unitId / fallback öncelik sırası */
+    private fun resolveUnitId(config: CmsAdConfig, testId: String, prodId: String): String = when {
+        config.testMode            -> testId
+        config.unitId.isNotBlank() -> config.unitId
+        else                       -> prodId
     }
 
     // ── Interstitial Ad ────────────────────────────────────────────────────────
@@ -397,7 +422,6 @@ class AdsViewModel @Inject constructor(
         })
     }
 
-    // Alias — NavHost kısa adı kullanıyor
     fun loadInterstitial(context: android.content.Context) {
         val config = _interstitialConfig.value ?: return
         if (!config.enabled) return
@@ -414,7 +438,6 @@ class AdsViewModel @Inject constructor(
         interstitialAd?.show(activity)
     }
 
-    // Alias — ScreenTracker kısa adı kullanıyor
     fun showInterstitial(activity: Activity, onAdDismissed: () -> Unit) =
         showInterstitialAd(activity, onAdDismissed)
 
@@ -453,13 +476,9 @@ class AdsViewModel @Inject constructor(
 
     fun preloadNativeAd(unitId: String, slot: NativeAdSlot, adSize: String = "small") {
         if (unitId.isBlank()) return
-        
-        // Boyut değiştiyse veya henüz yüklenmediyse yükle
         val currentSize = if (slot == NativeAdSlot.FEED) nativeFeedAdSize else nativeBlogAdSize
         val isLoaded = if (slot == NativeAdSlot.FEED) _nativeFeedAd.value != null else _nativeBlogAd.value != null
-        
         if (isLoaded && currentSize == adSize) return
-        
         if (slot == NativeAdSlot.FEED) nativeFeedAdSize = adSize else nativeBlogAdSize = adSize
 
         AdLoader.Builder(appContext, unitId)
@@ -485,21 +504,14 @@ class AdsViewModel @Inject constructor(
             .build().loadAd(AdRequest.Builder().build())
     }
 
-    // ══════════════════════════════════════════════════════════════════════
-    //  NATIVE AD HAVUZU (POOL) — yavaş yüklenme sorununu çözer
-    //  Mantık: pozisyon ekrana gelince sıfırdan yüklemek yerine, önceden
-    //  doldurulmuş bir kuyruktan ANINDA çekilir. Kuyruk arka planda sürekli
-    //  doldurulur (hedef boyutun altına düşünce otomatik yeniden doldurma).
-    // ══════════════════════════════════════════════════════════════════════
-    private val POOL_TARGET_SIZE = 3       // havuzda hep hazır bekleyecek reklam sayısı
-    private val POOL_MAX_SIZE    = 6       // bellek/limit koruması
+    // ── Native Ad Havuzu (Pool) ────────────────────────────────────────────────
+    private val POOL_TARGET_SIZE = 3
+    private val POOL_MAX_SIZE    = 6
 
-    // unitId bazlı ayrı havuzlar — feed ve blog farklı unit kullanabilir
     private val _adPools       = mutableMapOf<String, ArrayDeque<NativeAd>>()
     private val _adPoolFilling = mutableMapOf<String, Boolean>()
 
-    // Pozisyon → havuzdan çekilmiş NativeAd eşlemesi (ekranda kalıcı referans)
-    private val _positionedNativeAds = mutableMapOf<String, NativeAd>()
+    private val _positionedNativeAds    = mutableMapOf<String, NativeAd>()
     private val _positionedNativeLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
 
     fun positionedNativeLoadedFlow(key: String): StateFlow<Boolean> =
@@ -507,11 +519,6 @@ class AdsViewModel @Inject constructor(
 
     fun cachedPositionedNative(key: String): NativeAd? = _positionedNativeAds[key]
 
-    /**
-     * Havuzu önceden doldurur — feed/blog ekranı açılır açılmaz çağrılmalı.
-     * Arka planda POOL_TARGET_SIZE kadar reklam yükler, kullanıcı scroll
-     * ettiğinde reklamlar zaten hazır olur, bekleme olmaz.
-     */
     fun warmUpNativePool(unitId: String) {
         if (unitId.isBlank()) return
         val pool = _adPools.getOrPut(unitId) { ArrayDeque() }
@@ -529,10 +536,9 @@ class AdsViewModel @Inject constructor(
                 if (pool.size < POOL_MAX_SIZE) {
                     pool.addLast(nativeAd)
                 } else {
-                    nativeAd.destroy() // havuz dolu — fazlalığı serbest bırak
+                    nativeAd.destroy()
                 }
                 _adPoolFilling[unitId] = pool.size < POOL_TARGET_SIZE
-                // Havuz hâlâ hedefin altındaysa devam et
                 if (pool.size < POOL_TARGET_SIZE) fillPoolOnce(unitId)
             }
             .withAdListener(object : AdListener() {
@@ -548,11 +554,6 @@ class AdsViewModel @Inject constructor(
             .build().loadAd(AdRequest.Builder().build())
     }
 
-    /**
-     * Belirli bir pozisyon (key) için havuzdan ANINDA bir reklam çeker.
-     * Havuz boşsa eski (yavaş) yola düşer — kullanıcı asla boş kalmaz.
-     * Havuzdan bir reklam çekildikçe arka planda otomatik yeniden doldurulur.
-     */
     fun preloadPositionedNative(key: String, unitId: String) {
         if (unitId.isBlank()) return
         val loadedFlow = _positionedNativeLoaded.getOrPut(key) { MutableStateFlow(false) }
@@ -561,18 +562,13 @@ class AdsViewModel @Inject constructor(
         val pool = _adPools.getOrPut(unitId) { ArrayDeque() }
         val fromPool = pool.removeFirstOrNull()
         if (fromPool != null) {
-            // Havuzdan anında çekildi — sıfır bekleme
             _positionedNativeAds[key]?.destroy()
             _positionedNativeAds[key] = fromPool
             loadedFlow.value = true
-            // Havuzu otomatik yeniden doldur (arka planda, kullanıcı beklemez)
             warmUpNativePool(unitId)
             return
         }
 
-        // Havuz boş — ilk açılışta veya hızlı ardışık pozisyonlarda olabilir.
-        // Doğrudan yükle, aynı zamanda havuzu da ısıt ki bir sonraki sefer
-        // havuzdan gelsin.
         warmUpNativePool(unitId)
         AdLoader.Builder(appContext, unitId)
             .forNativeAd { nativeAd ->
@@ -601,7 +597,6 @@ class AdsViewModel @Inject constructor(
         }
     }
 
-    /** Ekran kapanırken havuzdaki kullanılmayan reklamları da temizle (memory leak önler) */
     fun releaseAdPool(unitId: String? = null) {
         val pools = if (unitId == null) _adPools.values else listOfNotNull(_adPools[unitId])
         pools.forEach { pool ->
