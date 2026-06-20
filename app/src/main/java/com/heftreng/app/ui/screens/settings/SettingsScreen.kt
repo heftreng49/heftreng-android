@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -33,6 +34,7 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.i18n.Strings
+
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
 import android.app.Activity
@@ -41,6 +43,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
 import com.heftreng.app.viewmodel.SettingsViewModel
+
+private fun android.content.Context.findActivity(): android.app.Activity? {
+    var ctx = this
+    while (ctx is android.content.ContextWrapper) {
+        if (ctx is android.app.Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return ctx as? android.app.Activity
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -263,7 +274,18 @@ fun SettingsScreen(
 
             // ── Diğer ────────────────────────────────────────────────────
             item {
+                val context = LocalContext.current
                 SettingsSection(title = Strings.settingsOther(language)) {
+                    SettingsRow(
+                        Icons.Outlined.StarRate,
+                        Strings.rateApp(language),
+                        Strings.rateAppSub(language),
+                    ) {
+                        context.findActivity()?.let {
+                            com.heftreng.app.util.InAppReviewHelper.requestReviewNow(it)
+                        }
+                    }
+                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsRow(
                         Icons.Outlined.Info,
                         Strings.settingsAbout(language),

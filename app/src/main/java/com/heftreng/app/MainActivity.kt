@@ -112,6 +112,9 @@ class MainActivity : ComponentActivity() {
 
         // Güncelleme kontrolü
         checkForUpdate()
+
+        // Play Store puan/yorum kutusu — fırsatçı, kendi kotamızla (spam olmasın)
+        com.heftreng.app.util.InAppReviewHelper.maybeRequestReview(this)
     }
 
     // ── Güncelleme kontrolü ────────────────────────────────────────────────────

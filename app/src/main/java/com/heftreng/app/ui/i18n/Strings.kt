@@ -281,6 +281,8 @@ object Strings {
     fun settingsOther(l: String)         = t(l, "Diğer",                            "Yên Din")
     fun settingsAbout(l: String)         = t(l, "Heftreng Hakkında",               "Derbarê Heftreng")
     fun settingsAboutSub(l: String)      = t(l, "Uygulama hakkında bilgi",          "Serîlêdanê nas bike")
+    fun rateApp(l: String)               = t(l, "Bizi Değerlendir",                 "Me binirxîne")
+    fun rateAppSub(l: String)            = t(l, "Play Store'da puan ver, yorum yaz", "Li Play Store dengê xwe bide")
     fun settingsTermsSub(l: String)      = t(l, "Kullanım şartlarını görüntüle",    "Peymanname bixwîne")
     fun settingsPrivacySub(l: String)    = t(l, "Gizlilik politikasını görüntüle", "Siyaseta nepeniyê bixwîne")
     fun settingsAdminPanel(l: String)    = t(l, "Admin Paneli",                     "Panela Admin")
