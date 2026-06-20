@@ -308,6 +308,50 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    // ── Hesap Firebase Auth'ta oluşturulduktan SONRA çalışan adımlar ─────────
+    // KRİTİK: Firestore'a profil yazma işlemi (createUserDoc) artık doğrulama
+    // mailinin gönderilmesini ASLA engelleyemez. Eskiden bu yazım (security rules,
+    // ağ hatası, vs. herhangi bir sebepten) başarısız olduğunda hata dışarıdaki
+    // catch'e düşüyor; sendEmailVerification(), signOut() ve verificationSent=true
+    // satırlarına hiç ulaşılmıyordu — kullanıcı kayıt ekranında donup kalıyor,
+    // doğrulama onay ekranı hiç açılmıyordu. Artık profil yazımı ayrı try/catch
+    // içinde — başarısız olsa bile loglanır ve akış doğrulama adımına devam eder.
+    private suspend fun finishRegistrationAfterAccountCreated(
+        user: FirebaseUser,
+        displayName: String,
+        email: String,
+        password: String,
+        tag: String = "AuthVM",
+    ) {
+        try {
+            createUserDoc(user, displayName)
+            syncFcmToken(user.uid)
+            acceptTerms(method = "email_register")
+            android.util.Log.d(tag, "Profil oluşturma adımları BAŞARILI -> uid=${user.uid}")
+        } catch (e: Exception) {
+            // Profil yazımı başarısız olsa bile kullanıcı doğrulama mailini almalı;
+            // profil daha sonra (giriş/doğrulama sonrası) tekrar denenebilir.
+            android.util.Log.e(tag, "Profil oluşturma HATA (yine de devam ediliyor): ${e.javaClass.simpleName} - ${e.message}", e)
+        }
+
+        try {
+            user.sendEmailVerification().await()
+            android.util.Log.d(tag, "sendEmailVerification BAŞARILI -> ${user.email}")
+        } catch (e: Exception) {
+            android.util.Log.e(tag, "sendEmailVerification HATA: ${e.javaClass.simpleName} - ${e.message}", e)
+        }
+
+        // signOut ÖNCE yapılmalı — authStateListener currentUser=null görür,
+        // LaunchedEffect tetiklenmez, kullanıcı doğrudan içeri giremez.
+        pendingEmail    = email
+        pendingPassword = password
+        auth.signOut()
+        _currentUser.value = null
+        // verificationSent ÖNCE set et, SONRA registrationInProgress kapat
+        _verificationSent.value = true
+        android.util.Log.d(tag, "verificationSent = true set edildi")
+    }
+
     fun registerWithEmail(email: String, password: String, displayName: String) {
         viewModelScope.launch {
             _loading.value = true
@@ -339,27 +383,11 @@ class AuthViewModel @Inject constructor(
                 val result = auth.createUserWithEmailAndPassword(email, password).await()
                 val user   = result.user ?: run {
                     android.util.Log.e("AuthVM", "createUserWithEmailAndPassword: user null döndü")
+                    _error.value = "Hesap oluşturulamadı, lütfen tekrar deneyin."
                     return@launch
                 }
                 android.util.Log.d("AuthVM", "Kullanıcı oluşturuldu: uid=${user.uid}")
-                createUserDoc(user, displayName)
-                syncFcmToken(user.uid)
-                acceptTerms(method = "email_register")
-                try {
-                    user.sendEmailVerification().await()
-                    android.util.Log.d("AuthVM", "sendEmailVerification BAŞARILI -> ${user.email}")
-                } catch (e: Exception) {
-                    android.util.Log.e("AuthVM", "sendEmailVerification HATA: ${e.javaClass.simpleName} - ${e.message}", e)
-                }
-                // signOut ÖNCE yapılmalı — authStateListener currentUser=null görür,
-                // LaunchedEffect tetiklenmez, kullanıcı doğrudan içeri giremez.
-                pendingEmail    = email
-                pendingPassword = password
-                auth.signOut()
-                _currentUser.value = null
-                // verificationSent ÖNCE set et, SONRA registrationInProgress kapat
-                _verificationSent.value = true
-                android.util.Log.d("AuthVM", "verificationSent = true set edildi")
+                finishRegistrationAfterAccountCreated(user, displayName, email, password)
             } catch (e: com.google.firebase.functions.FirebaseFunctionsException) {
                 // Function çalışmazsa (offline, cold start) devam et — açık kalmasın
                 android.util.Log.w("AuthVM", "verifyRegistration unavailable: code=${e.code}, message=${e.message}", e)
@@ -368,24 +396,11 @@ class AuthViewModel @Inject constructor(
                     val result = auth.createUserWithEmailAndPassword(email, password).await()
                     val user   = result.user ?: run {
                         android.util.Log.e("AuthVM", "Fallback: createUserWithEmailAndPassword user null döndü")
+                        _error.value = "Hesap oluşturulamadı, lütfen tekrar deneyin."
                         return@launch
                     }
                     android.util.Log.d("AuthVM", "Fallback: Kullanıcı oluşturuldu: uid=${user.uid}")
-                    createUserDoc(user, displayName)
-                    syncFcmToken(user.uid)
-                    acceptTerms(method = "email_register")
-                    try {
-                        user.sendEmailVerification().await()
-                        android.util.Log.d("AuthVM", "Fallback: sendEmailVerification BAŞARILI -> ${user.email}")
-                    } catch (e3: Exception) {
-                        android.util.Log.e("AuthVM", "Fallback: sendEmailVerification HATA: ${e3.javaClass.simpleName} - ${e3.message}", e3)
-                    }
-                    pendingEmail    = email
-                    pendingPassword = password
-                    auth.signOut()
-                    _currentUser.value = null
-                    _verificationSent.value = true
-                    android.util.Log.d("AuthVM", "Fallback: verificationSent = true set edildi")
+                    finishRegistrationAfterAccountCreated(user, displayName, email, password, tag = "AuthVM-Fallback")
                 } catch (e2: Exception) {
                     android.util.Log.e("AuthVM", "Fallback HATA: ${e2.javaClass.simpleName} - ${e2.message}", e2)
                     _error.value = e2.message

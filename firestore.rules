@@ -102,7 +102,12 @@ service cloud.firestore {
     // FATURA OPTİMİZASYONU: read: true — profil görüntülemede notBanned get() YOK
     match /users/{uid} {
       allow read: if true;
-      allow create: if isOwner(uid) && isVerified();
+      // NOT: create işleminde isVerified() ARANMAZ — kayıt anında (createUserWithEmailAndPassword
+      // sonrası) kullanıcı henüz e-postasını doğrulamamış olur; doğrulama maili gönderilip
+      // kullanıcı profili oluşturulurken bu yazma işlemi başarısız oluyordu ve kayıt akışı
+      // (doğrulama ekranı) hiç açılmıyordu. Hesap zaten bot/spam katmanından
+      // (verifyRegistration Cloud Function) geçiyor, bu yüzden create için sahiplik yeterli.
+      allow create: if isOwner(uid);
       allow update: if (isOwner(uid) && isVerified()) || isModerator();
       allow delete: if isOwner(uid) || isAdmin();
 
