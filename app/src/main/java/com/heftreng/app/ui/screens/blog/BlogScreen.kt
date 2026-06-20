@@ -30,6 +30,8 @@ import com.heftreng.app.viewmodel.AdsViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.heftreng.app.viewmodel.BlogPost
 import com.heftreng.app.viewmodel.BlogViewModel
+import com.heftreng.app.navigation.Screen
+import com.heftreng.app.ui.i18n.Strings
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.material.ExperimentalMaterialApi
@@ -93,6 +95,27 @@ fun BlogScreen(
             TopAppBar(
                 title = {
                     Text("Blog", fontWeight = FontWeight.ExtraBold, color = Primary, fontSize = 20.sp)
+                },
+                actions = {
+                    var menuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = null, tint = OnBackground)
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(Strings.yazarTitle(language)) },
+                                leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    navController.navigate(Screen.Yazar.route)
+                                },
+                            )
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
             )

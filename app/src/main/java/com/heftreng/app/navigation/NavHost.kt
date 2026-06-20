@@ -815,7 +815,6 @@ fun DrawerContent(
                 Triple(Icons.Outlined.NotificationsNone, notifLabel,                    Screen.Notifications.route),
                 Triple(Icons.Outlined.ChatBubbleOutline, msgLabel,                      Screen.Messages.route),
                 Triple(Icons.Outlined.Settings,          Strings.navSettings(language), Screen.Settings.route),
-                Triple(Icons.Outlined.Edit,              Strings.yazarTitle(language),  Screen.Yazar.route),
                 Triple(Icons.Outlined.Bookmarks,         Strings.savedPosts(language),  Screen.SavedPosts.route),
             )
 
