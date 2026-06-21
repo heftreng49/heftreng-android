@@ -191,15 +191,26 @@ class AdsViewModel @Inject constructor(
             if (doc.id == "global") return@forEach
             val d = doc.data ?: return@forEach
             val config = CmsAdConfig(
-                id         = doc.id,
-                unitId     = d["unitId"]    as? String  ?: "",
-                enabled    = d["enabled"]   as? Boolean ?: false,
-                testMode   = d["testMode"]  as? Boolean ?: true,
-                position   = (d["position"]  as? Long)?.toInt() ?: 5,
-                frequency  = (d["frequency"] as? Long)?.toInt() ?: 3,
-                adType     = d["adType"]      as? String ?: "banner",
-                bannerSize = (d["bannerSize"] as? String ?: "adaptive").trim().lowercase(),
-                screens    = (d["screens"] as? String ?: "feed").trim().lowercase()
+                id          = doc.id,
+                unitId      = d["unitId"]    as? String  ?: "",
+                enabled     = d["enabled"]   as? Boolean ?: false,
+                testMode    = d["testMode"]  as? Boolean ?: true,
+                position    = (d["position"]  as? Long)?.toInt() ?: 5,
+                frequency   = (d["frequency"] as? Long)?.toInt() ?: 3,
+                xpReward    = (d["xpReward"]   as? Long)?.toInt() ?: 50,
+                dailyLimit  = (d["dailyLimit"] as? Long)?.toInt() ?: 3,
+                scenarioDoubleXp     = d["scenarioDoubleXp"]     as? Boolean ?: true,
+                scenarioUnlockLesson = d["scenarioUnlockLesson"] as? Boolean ?: true,
+                scenarioSaveStreak   = d["scenarioSaveStreak"]   as? Boolean ?: true,
+                adType      = d["adType"]      as? String ?: "banner",
+                bannerSize  = (d["bannerSize"] as? String ?: "adaptive").trim().lowercase(),
+                placement   = d["placement"]   as? String ?: "in_list",
+                screens     = (d["screens"] as? String ?: "feed").trim().lowercase(),
+                label       = d["label"]       as? String ?: "",
+                bgColor     = d["bgColor"]     as? String ?: "",
+                cornerRadius  = (d["cornerRadius"]  as? Long)?.toInt() ?: 0,
+                paddingTop    = (d["paddingTop"]    as? Long)?.toInt() ?: 0,
+                paddingBottom = (d["paddingBottom"] as? Long)?.toInt() ?: 0,
             )
 
             when (doc.id) {

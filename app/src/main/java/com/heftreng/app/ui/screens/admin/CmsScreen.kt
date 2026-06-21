@@ -1060,8 +1060,19 @@ private fun AdsTab(adsVm: AdsViewModel) {
             )
         }
 
-        // ── Dinamik Slotlar (CMS'den eklenenler) ──────────────────────────
-        items(allAdConfigs.entries.toList(), key = { it.key }) { (docId, config) ->
+        // ── Dinamik Slotlar (CMS'den admin tarafından sonradan eklenenler) ────
+        // Sabit slotlar (banner_feed, native_feed, vb.) yukarıda zaten ayrı
+        // kartlarla render ediliyor — allAdConfigs TÜM dokümanları içerir,
+        // bu yüzden burada onları HARİÇ TUTMAK gerekir, aksi halde aynı
+        // slot ekranda iki kez görünür (biri sabit kart, biri burada).
+        val FIXED_SLOT_IDS = setOf(
+            "banner_feed", "banner_library", "banner_lib", "banner_kurdi", "banner_blog",
+            "native_feed", "native_blog", "interstitial_serial", "rewarded_xp", "global",
+        )
+        items(
+            allAdConfigs.entries.filter { it.key !in FIXED_SLOT_IDS }.toList(),
+            key = { it.key },
+        ) { (docId, config) ->
             AdConfigCard(
                 title     = config.label.ifBlank { docId },
                 docId     = docId,
@@ -1466,11 +1477,19 @@ private fun AdConfigCard(
             onClick = {
                 saving = true
                 val extraInt = extra.toIntOrNull() ?: 5
+                // ÖNEMLİ: set() merge olmadan tüm dokümanın üzerine yazar.
+                // adType/screens gibi bu kartta düzenlenmeyen alanları korumak için
+                // mevcut config'ten devralıyoruz — aksi halde her "Kaydet" basışında
+                // bu alanlar sessizce silinir ve doküman default değerlere döner.
                 val data = mutableMapOf<String, Any>(
                     "unitId"     to unitId.trim(),
                     "enabled"    to enabled,
                     "testMode"   to testMode,
                     "bannerSize" to bannerSize,
+                    "adType"     to (config?.adType ?: "banner"),
+                    "screens"    to (config?.screens ?: "feed"),
+                    "placement"  to (config?.placement ?: "in_list"),
+                    "label"      to (config?.label ?: ""),
                     extraKey      to extraInt,
                 )
                 firestore.collection("cms_ads").document(docId)

@@ -598,22 +598,23 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 modifier         = Modifier.padding(innerPadding),
             ) {
                 composable(Screen.Blog.route) {
-                    BlogScreen(navController = navController, vm = blogVm, language = language)
+                    BlogScreen(navController = navController, vm = blogVm, adsVm = adsVm, language = language)
                 }
                 composable("blog_post/{postId}") { back ->
                     BlogPostScreen(
                         postId        = back.arguments?.getString("postId") ?: "",
                         navController = navController,
                         vm            = blogVm,
+                        adsVm         = adsVm,
                     )
                 }
                 composable(Screen.Feed.route) {
-                    FeedScreen(navController = navController, language = language)
+                    FeedScreen(navController = navController, adsVm = adsVm, language = language)
                 }
                 composable(Screen.Search.route) { SearchScreen(navController, language = language) }
                 composable(Screen.Serials.route) { BooksScreen(navController, language) }
-                composable(Screen.Library.route) { LibraryScreen(navController, language) }
-                composable(Screen.Kurdi.route)   { KurdiScreen(language = language, adminVm = adminVm) }
+                composable(Screen.Library.route) { LibraryScreen(navController, language, adsVm = adsVm) }
+                composable(Screen.Kurdi.route)   { KurdiScreen(language = language, adminVm = adminVm, adsVm = adsVm) }
                 composable("profile/{uid}") { back ->
                     ProfileScreen(
                         uid           = back.arguments?.getString("uid") ?: "me",
