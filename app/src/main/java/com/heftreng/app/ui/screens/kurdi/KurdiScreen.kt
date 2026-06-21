@@ -54,6 +54,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.graphics.graphicsLayer
@@ -1300,7 +1301,7 @@ private fun LessonPathNode(
     val pulseAlpha by infiniteTransition.animateFloat(
         initialValue  = 0.5f,
         targetValue   = 1f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(tween<Float>(900), RepeatMode.Reverse),
         label         = "pulseAlpha",
     )
 
