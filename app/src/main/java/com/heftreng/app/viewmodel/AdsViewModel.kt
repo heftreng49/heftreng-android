@@ -20,7 +20,6 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
 import com.heftreng.app.ads.AdEngine
 import com.heftreng.app.ads.AdFrequencyManager
-import com.heftreng.app.ads.AdsRemoteConfig
 import com.heftreng.app.data.model.AdMobProdIds
 import com.heftreng.app.data.model.CmsAdConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -55,16 +54,8 @@ class AdsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val engine           = AdEngine(appContext, viewModelScope)
-    private val frequencyManager = AdFrequencyManager(firestore)
+    private val frequencyManager = AdFrequencyManager(appContext, firestore, viewModelScope)
 
-    // Remote Config + frekans başlatma
-    init {
-        viewModelScope.launch {
-            AdsRemoteConfig.initialize()
-            // Remote Config aktif olduktan sonra config'i yükle
-            loadAdConfigs()
-        }
-    }
 
     // ── Cache TTL — cms_ads nadiren değişir, 30 dakikada bir server'a git ──────
     private val ADS_CONFIG_TTL_MS = 30L * 60L * 1000L
@@ -195,10 +186,9 @@ class AdsViewModel @Inject constructor(
         _bannerConfig.combine(_adsEnabled) { c, _ -> c?.position ?: 5 }
             .stateIn(viewModelScope, SharingStarted.Eagerly, 5)
 
-    // ── Remote Config'ten gelen global durum ─────────────────────────────────
-    // applyAdConfigs() çağrıldığında hem Firestore cms_ads hem RC kontrol edilir.
-    private fun isSlotEnabled(firestoreEnabled: Boolean, rcEnabled: Boolean): Boolean =
-        firestoreEnabled && rcEnabled && AdsRemoteConfig.adsEnabled
+    // ── (Eskiden burada Remote Config'ten gelen ikinci bir "açık/kapalı"
+    //    katmanı vardı — kaldırıldı. Tek doğruluk kaynağı: config.enabled,
+    //    Firestore cms_ads'ten gelir, admin panelinden anında düzenlenebilir.)
 
     // ── loadAdConfigs: Hibrit Cache + Server ──────────────────────────────────
     // 1. Cache'den anlık yükle (0 gecikme), 2. TTL dolduysa server'dan tazele.
@@ -263,12 +253,12 @@ class AdsViewModel @Inject constructor(
                 "rewarded_xp" -> {
                     val changed = _rewardedConfig.value != config
                     _rewardedConfig.value = config
+                    syncRemainingRewardedAds(config.dailyLimit)
                     if (preloadAds && changed && config.enabled && _adsEnabled.value) {
                         engine.resolveUnitId(config, AdMobProdIds.REWARDED)
                             ?.let { preloadRewardedAd(it) }
                     }
-                }
-                "native_feed" -> applyNativeConfig(_nativeFeedConfig, config, NativeAdSlot.FEED, preloadAds)
+                }                "native_feed" -> applyNativeConfig(_nativeFeedConfig, config, NativeAdSlot.FEED, preloadAds)
                 "native_blog" -> applyNativeConfig(_nativeBlogConfig, config, NativeAdSlot.BLOG, preloadAds)
             }
             newAllConfigs[doc.id] = config
@@ -279,13 +269,7 @@ class AdsViewModel @Inject constructor(
     private fun applyBannerConfig(target: MutableStateFlow<CmsAdConfig?>, config: CmsAdConfig, slot: BannerSlot, preloadAds: Boolean) {
         val changed = target.value != config
         target.value = config
-        val rcEnabled = when (slot) {
-            BannerSlot.FEED  -> AdsRemoteConfig.bannerFeedEnabled
-            BannerSlot.BLOG  -> AdsRemoteConfig.bannerBlogEnabled
-            BannerSlot.LIB   -> AdsRemoteConfig.bannerLibEnabled
-            BannerSlot.KURDI -> AdsRemoteConfig.bannerKurdiEnabled
-        }
-        if (preloadAds && changed && isSlotEnabled(config.enabled, rcEnabled)) {
+        if (preloadAds && changed && config.enabled && _adsEnabled.value) {
             engine.resolveUnitId(config, AdMobProdIds.BANNER)
                 ?.let { engine.loadBanner(slot.key(), it, config.bannerSize) }
         }
@@ -294,11 +278,7 @@ class AdsViewModel @Inject constructor(
     private fun applyNativeConfig(target: MutableStateFlow<CmsAdConfig?>, config: CmsAdConfig, slot: NativeAdSlot, preloadAds: Boolean) {
         val changed = target.value != config
         target.value = config
-        val rcEnabled = when (slot) {
-            NativeAdSlot.FEED -> AdsRemoteConfig.nativeFeedEnabled
-            NativeAdSlot.BLOG -> AdsRemoteConfig.nativeBlogEnabled
-        }
-        if (preloadAds && changed && isSlotEnabled(config.enabled, rcEnabled)) {
+        if (preloadAds && changed && config.enabled && _adsEnabled.value) {
             engine.resolveUnitId(config, AdMobProdIds.NATIVE)
                 ?.let { engine.warmUpNativePool(it) }
         }
@@ -363,6 +343,13 @@ class AdsViewModel @Inject constructor(
 
     fun canShowScenario(rewardType: RewardType): Boolean = _remainingRewardedAds.value > 0
 
+    /** Yerelden anlık okuma — gün içinde uygulama yeniden açılsa bile doğru kalan hakkı gösterir. */
+    private fun syncRemainingRewardedAds(dailyLimit: Int) {
+        val uid = auth.currentUser?.uid ?: return
+        val used = frequencyManager.getCount(uid, "rewarded")
+        _remainingRewardedAds.value = (dailyLimit - used).coerceAtLeast(0)
+    }
+
     fun showRewarded(
         activity      : Activity,
         rewardType    : RewardType,
@@ -371,34 +358,48 @@ class AdsViewModel @Inject constructor(
         onLimitReached: () -> Unit = {},
     ) {
         val uid = auth.currentUser?.uid ?: ""
-        viewModelScope.launch {
-            // Remote Config'ten günlük limit al
-            val dailyLimit = AdsRemoteConfig.rewardedDailyLimit
-            // Firestore'dan bugünkü sayacı kontrol et
-            if (uid.isNotEmpty() && frequencyManager.isLimitReached(uid, "rewarded", dailyLimit)) {
-                _remainingRewardedAds.value = 0
-                onLimitReached()
-                return@launch
-            }
-            if (rewardedAd != null) {
-                rewardedAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
-                    override fun onAdDismissedFullScreenContent() { rewardedAd = null; onDismiss() }
-                    override fun onAdFailedToShowFullScreenContent(adError: AdError) { rewardedAd = null; onDismiss() }
-                }
-                rewardedAd?.show(activity) { rewardItem ->
-                    // Firestore'a kaydet
-                    if (uid.isNotEmpty()) {
-                        viewModelScope.launch { frequencyManager.increment(uid, "rewarded") }
-                    }
-                    _remainingRewardedAds.value = (_remainingRewardedAds.value - 1).coerceAtLeast(0)
-                    onRewarded(rewardItem, rewardType)
-                }
-            } else onDismiss()
+        // TEK KATMAN, ANINDA: limit kontrolü artık YEREL (SharedPreferences) —
+        // ağ beklenmiyor. Eskiden burada Firestore'a SENKRON gidip kontrol
+        // ediliyordu, kullanıcı butona her bastığında reklam gösterilmeden
+        // önce bir ağ gecikmesi yaşanıyordu. Günlük limit CMS'ten (cms_ads/
+        // rewarded_xp.dailyLimit) geliyor — tek doğruluk kaynağı.
+        val dailyLimit = _rewardedConfig.value?.dailyLimit ?: 3
+        if (uid.isNotEmpty() && frequencyManager.isLimitReached(uid, "rewarded", dailyLimit)) {
+            _remainingRewardedAds.value = 0
+            onLimitReached()
+            return
         }
+        if (rewardedAd != null) {
+            rewardedAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
+                override fun onAdDismissedFullScreenContent() { rewardedAd = null; onDismiss() }
+                override fun onAdFailedToShowFullScreenContent(adError: AdError) { rewardedAd = null; onDismiss() }
+            }
+            rewardedAd?.show(activity) { rewardItem ->
+                if (uid.isNotEmpty()) frequencyManager.increment(uid, "rewarded") // anında yerel + arka planda Firestore
+                _remainingRewardedAds.value = (_remainingRewardedAds.value - 1).coerceAtLeast(0)
+                onRewarded(rewardItem, rewardType)
+            }
+        } else onDismiss()
     }
 
     override fun onCleared() {
         super.onCleared()
         engine.destroyAll()
+    }
+
+    // TEK KATMAN, ANINDA: artık Remote Config beklenmiyor — config yükleme
+    // ViewModel oluşur oluşmaz başlar (Firestore cache-first zaten kendi içinde
+    // anlık). Eskiden burada Remote Config fetchAndActivate() (ağ round-trip)
+    // bitene kadar bekleniyordu; bu hem gereksiz bir gecikme hem de bir yarış
+    // durumu (race condition) yaratıyordu: ekranlar kendi loadAdConfigs()
+    // çağrılarını RC'nin setDefaultsAsync()'i bitmeden yapabiliyordu, bu da
+    // bazı slotların yanlışlıkla "kapalı" sanılmasına yol açabiliyordu. Artık
+    // tek doğruluk kaynağı: Firestore cms_ads. NOT: init bloğu bilinçli olarak
+    // sınıfın EN SONUNA konuldu — loadAdConfigs() yukarıdaki tüm StateFlow'lara
+    // (_bannerConfig, _adsEnabled, lastServerFetchMs...) erişiyor; init bloğu
+    // bunlardan ÖNCE olsaydı (Main.immediate dispatcher senkron çalıştığı için)
+    // henüz initialize edilmemiş property'lere erişme riski olurdu.
+    init {
+        loadAdConfigs()
     }
 }

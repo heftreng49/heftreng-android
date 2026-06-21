@@ -86,12 +86,12 @@ class MainActivity : ComponentActivity() {
         // NOT: WindowCompat.setDecorFitsSystemWindows kaldırıldı,
         // enableEdgeToEdge() zaten bunu yapıyor (Android 15 uyumlu)
 
-        // AdMob SDK başlatma — SDK hazır olur olmaz config + preload başlasın
-        com.google.android.gms.ads.MobileAds.initialize(this) { initStatus ->
-            android.util.Log.d("AdMob", "SDK hazır: ${initStatus.adapterStatusMap}")
-            // SDK hazır → reklam config'ini hemen yükle (cache'den anlık, server'dan arka planda)
-            adsVm.loadAdConfigs()
-        }
+        // AdMob SDK zaten HeftrangApp.onCreate() içinde (Application seviyesinde,
+        // en erken nokta) başlatıldı. Burada tekrar initialize() çağırıp config
+        // yüklemeyi ona bağlamaya gerek yok — config yükleme zaten her ekranın
+        // kendi LaunchedEffect'inde ANINDA tetikleniyor (bkz. FeedScreen, BlogScreen
+        // vb.). Bu da ekstra, gereksiz bir bekleme adımıydı.
+        adsVm.loadAdConfigs()
 
         // ScreenTracker — activity lifecycle dinleyicisi + adsVm bağla
         application.registerActivityLifecycleCallbacks(screenTracker)
