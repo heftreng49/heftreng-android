@@ -46,6 +46,17 @@ import com.heftreng.app.ui.component.AdBannerView
 import com.heftreng.app.ui.component.PositionedNativeAdView
 import com.heftreng.app.ui.component.NativeAdViewCompose
 import com.heftreng.app.viewmodel.*
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
 
 // -- Ana ekran ----------------------------------------------------------------
 @OptIn(ExperimentalMaterial3Api::class)
