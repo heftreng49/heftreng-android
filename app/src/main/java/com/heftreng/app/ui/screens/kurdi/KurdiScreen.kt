@@ -38,6 +38,8 @@ import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.clickable
+import androidx.navigation.NavController
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.component.AdBannerView
@@ -51,6 +53,7 @@ fun KurdiScreen(
     vm       : KurdiViewModel = hiltViewModel(),
     adminVm  : AdminViewModel,
     adsVm    : AdsViewModel = hiltViewModel(),
+    navController : NavController? = null,
 ) {
     val units       by vm.units.collectAsState()
     val lessons     by vm.lessons.collectAsState()
@@ -312,9 +315,10 @@ fun KurdiScreen(
                 val leaderboardLoading by vm.leaderboardLoading.collectAsState()
                 LaunchedEffect(Unit) { vm.loadLeaderboard() }
                 LeaderboardTab(
-                    entries  = leaderboard,
-                    loading  = leaderboardLoading,
-                    language = language,
+                    entries       = leaderboard,
+                    loading       = leaderboardLoading,
+                    language      = language,
+                    navController = navController,
                 )
             }
             3 -> if (isAdmin) AiLessonTab(language, vm)
@@ -349,11 +353,12 @@ private fun PodiumBlock(
     medalColor : Color,
     heightDp   : Int,
     ku         : Boolean,
+    onClick    : () -> Unit = {},
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Bottom,
-        modifier = Modifier.width(90.dp),
+        modifier = Modifier.width(90.dp).clickable(onClick = onClick),
     ) {
         // İsim
         Text(
@@ -438,6 +443,7 @@ private fun LeaderboardTab(
     entries  : List<KurdiViewModel.LeaderEntry>,
     loading  : Boolean,
     language : String,
+    navController : NavController? = null,
 ) {
     val ku     = language == "ku"
     val gold   = Color(0xFFFFD700)
@@ -484,15 +490,18 @@ private fun LeaderboardTab(
                     ) {
                         // 2. sıra
                         entries.getOrNull(1)?.let { e ->
-                            PodiumBlock(entry = e, medalColor = silver, heightDp = 70, ku = ku)
+                            PodiumBlock(entry = e, medalColor = silver, heightDp = 70, ku = ku,
+                                onClick = { navController?.navigate("profile/${e.uid}") })
                         }
                         // 1. sıra (ortada + daha yüksek)
                         entries.getOrNull(0)?.let { e ->
-                            PodiumBlock(entry = e, medalColor = gold, heightDp = 90, ku = ku)
+                            PodiumBlock(entry = e, medalColor = gold, heightDp = 90, ku = ku,
+                                onClick = { navController?.navigate("profile/${e.uid}") })
                         }
                         // 3. sıra
                         entries.getOrNull(2)?.let { e ->
-                            PodiumBlock(entry = e, medalColor = bronze, heightDp = 58, ku = ku)
+                            PodiumBlock(entry = e, medalColor = bronze, heightDp = 58, ku = ku,
+                                onClick = { navController?.navigate("profile/${e.uid}") })
                         }
                     }
                 }
@@ -532,6 +541,7 @@ private fun LeaderboardTab(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(rowBg)
+                            .clickable { navController?.navigate("profile/${entry.uid}") }
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
