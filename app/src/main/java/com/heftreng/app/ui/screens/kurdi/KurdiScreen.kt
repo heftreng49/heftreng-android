@@ -938,38 +938,44 @@ private fun DailyNudgeCard(
     val doneTodayCount = doneIds.size
     val totalCount     = lessons.size
 
+    val nudgeScale by animateFloatAsState(1f, spring(Spring.DampingRatioMediumBouncy), label = "nudge")
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .clip(RoundedCornerShape(20.dp))
             .background(
-                Brush.linearGradient(listOf(Color(0xFF1A1333), Color(0xFF0F1E2E)))
+                Brush.linearGradient(
+                    listOf(
+                        Primary.copy(alpha = 0.22f),
+                        GradientEnd.copy(alpha = 0.10f),
+                    )
+                )
             )
-            .border(1.dp, Primary.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
-            .clickable { onClick() },
+            .border(1.dp, Primary.copy(alpha = 0.30f), RoundedCornerShape(20.dp))
+            .clickable { onClick() }
+            .padding(16.dp),
     ) {
-        Row(
-            modifier          = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // İkon kutusu
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // İkon
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Primary.copy(alpha = 0.2f)),
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Primary.copy(alpha = 0.18f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("🎯", fontSize = 24.sp)
+                Text("🎯", fontSize = 26.sp)
             }
             Spacer(Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     Strings.dailyGoal(language),
-                    fontWeight = FontWeight.Bold,
-                    color      = OnBackground,
-                    fontSize   = 14.sp,
+                    fontWeight    = FontWeight.Bold,
+                    color         = OnBackground,
+                    fontSize      = 15.sp,
+                    letterSpacing = (-0.3).sp,
                 )
                 Text(
                     Strings.dailyGoalDesc(language),
@@ -977,28 +983,52 @@ private fun DailyNudgeCard(
                     fontSize = 12.sp,
                 )
                 if (doneTodayCount > 0) {
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(6.dp))
+                    // Mini progress
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(SurfaceVar)
+                    ) {
+                        val pct = (doneTodayCount.toFloat() / totalCount.toFloat()).coerceIn(0f, 1f)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(pct)
+                                .height(4.dp)
+                                .background(
+                                    Brush.horizontalGradient(listOf(Primary, GradientEnd)),
+                                    RoundedCornerShape(2.dp),
+                                )
+                        )
+                    }
+                    Spacer(Modifier.height(2.dp))
                     Text(
-                        if (language == "ku") "$doneTodayCount / $totalCount ders qediya"
-                        else "$doneTodayCount / $totalCount ders tamamlandı",
-                        color    = Primary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
+                        if (language == "ku") "$doneTodayCount / $totalCount qediya"
+                        else "$doneTodayCount / $totalCount tamamlandı",
+                        color      = Primary,
+                        fontSize   = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
             }
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(12.dp))
+            // Başla butonu
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(Primary)
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        Brush.linearGradient(listOf(Primary, GradientEnd))
+                    )
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
                 Text(
                     Strings.startLesson(language),
-                    color      = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize   = 12.sp,
+                    color         = Color.White,
+                    fontWeight    = FontWeight.Bold,
+                    fontSize      = 12.sp,
+                    letterSpacing = 0.2.sp,
                 )
             }
         }
@@ -1072,31 +1102,39 @@ private fun UnitHeader(
                     )
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            // Progress bar + ders sayısı
+            Spacer(Modifier.height(12.dp))
+            // Progress bar animasyonlu + ders sayısı
+            val animatedPct by animateFloatAsState(
+                targetValue   = pct / 100f,
+                animationSpec = tween(600, easing = FastOutSlowInEasing),
+                label         = "unitProgress",
+            )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(7.dp)
+                        .height(8.dp)
                         .clip(RoundedCornerShape(4.dp))
                         .background(SurfaceVar)
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(pct / 100f)
-                            .height(7.dp)
-                            .background(color, RoundedCornerShape(4.dp))
+                            .fillMaxWidth(animatedPct)
+                            .height(8.dp)
+                            .background(
+                                Brush.horizontalGradient(listOf(color, color.copy(alpha = 0.7f))),
+                                RoundedCornerShape(4.dp),
+                            )
                     )
                 }
                 Text(
                     "$done/$total",
-                    color      = Muted,
-                    fontSize   = 11.sp,
-                    fontWeight = FontWeight.Medium,
+                    color      = if (pct == 100) color else Muted,
+                    fontSize   = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
         }
@@ -1233,105 +1271,170 @@ private fun LessonPathNode(
             },
         )
     }
-    // Zigzag offset — site temasındaki gibi sola-ortaya-sağa sıralanır
-    val offsets = listOf(0.3f, 0.5f, 0.7f, 0.5f)
+    // Zigzag: sol (0.15) → orta (0.42) → sağ (0.67) → orta (0.42)
+    val offsets = listOf(0.13f, 0.40f, 0.65f, 0.40f)
     val hAlign  = offsets[index % offsets.size]
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Start,
-    ) {
-        Spacer(Modifier.fillMaxWidth(hAlign - 0.1f))
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            // Üstten bağlantı çizgisi
-            if (index > 0) {
-                Box(
-                    Modifier
-                        .width(2.dp)
-                        .height(20.dp)
-                        .background(if (isDone) color else Divider)
-                )
-            }
+    // Basış animasyonu
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val nodeScale by animateFloatAsState(
+        targetValue   = if (pressed) 0.90f else 1f,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy),
+        label         = "nodeScale",
+    )
 
-            // Ders dairesi butonu
-            Box(
-                modifier = Modifier
-                    .size(68.dp)
-                    .clip(CircleShape)
-                    .background(
-                        when {
-                            isDone || isActive -> color
-                            isLocked           -> SurfaceVar
-                            else               -> SurfaceVar
-                        }
-                    )
-                    .border(
-                        width = if (isActive) 3.dp else 2.dp,
-                        color = if (isLocked) Divider else color.copy(alpha = 0.7f),
-                        shape = CircleShape,
-                    )
-                    .shadow(if (isDone || isActive) 6.dp else 0.dp, CircleShape)
-                    .clickable {
-                        if (isLocked) showUnlockDialog = true
-                        else onClick()
-                    },
-                contentAlignment = Alignment.Center,
+    // Aktif ders için nabız animasyonu
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue  = 0.5f,
+        targetValue   = 1f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label         = "pulseAlpha",
+    )
+
+    Column(
+        modifier            = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.Start,
+    ) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Spacer(Modifier.fillMaxWidth(hAlign))
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.graphicsLayer { scaleX = nodeScale; scaleY = nodeScale },
             ) {
-                when {
-                    isDone   -> Text("⭐", fontSize = 26.sp)
-                    isLocked -> Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Icon(Icons.Default.Lock, null, tint = Muted, modifier = Modifier.size(16.dp))
-                        Text(
-                            if (canWatchAd) "▶️" else "🔒",
-                            fontSize = 12.sp,
+                // Üst bağlantı
+                if (index > 0) {
+                    Box(
+                        Modifier
+                            .width(2.5.dp)
+                            .height(24.dp)
+                            .background(
+                                if (isDone)
+                                    Brush.verticalGradient(listOf(color, color.copy(alpha = 0.4f)))
+                                else
+                                    Brush.verticalGradient(listOf(Divider, Divider)),
+                                RoundedCornerShape(1.dp),
+                            )
+                    )
+                }
+
+                // Ders düğmesi
+                Box(
+                    modifier = Modifier
+                        .size(62.dp)
+                        .then(
+                            if (isActive) Modifier
+                                .shadow(12.dp, CircleShape, spotColor = color.copy(alpha = 0.6f))
+                            else Modifier
+                        )
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                isDone   -> Brush.linearGradient(listOf(color, color.copy(alpha = 0.8f)))
+                                isActive -> Brush.linearGradient(listOf(color, GradientEnd.copy(alpha = 0.8f)))
+                                isLocked -> Brush.linearGradient(listOf(SurfaceVar, SurfaceVar))
+                                else     -> Brush.linearGradient(listOf(SurfaceVar, SurfaceVar))
+                            }
+                        )
+                        .border(
+                            width = when {
+                                isActive -> 2.5.dp
+                                isDone   -> 0.dp
+                                else     -> 1.5.dp
+                            },
+                            brush = if (isActive)
+                                Brush.linearGradient(listOf(color, GradientEnd))
+                            else if (isLocked)
+                                Brush.linearGradient(listOf(Divider, Divider))
+                            else
+                                Brush.linearGradient(listOf(color.copy(alpha = 0.5f), color.copy(alpha = 0.3f))),
+                            shape = CircleShape,
+                        )
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication        = null,
+                        ) {
+                            if (isLocked) showUnlockDialog = true
+                            else onClick()
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when {
+                        isDone   -> Text("⭐", fontSize = 24.sp)
+                        isLocked -> Icon(
+                            Icons.Default.Lock,
+                            null,
+                            tint     = Muted,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        isActive -> Text(lesson.emoji, fontSize = 24.sp)
+                        else     -> Text(
+                            lesson.emoji,
+                            fontSize = 22.sp,
+                            modifier = Modifier.graphicsLayer { alpha = 0.55f },
                         )
                     }
-                    isActive -> Text(lesson.emoji, fontSize = 26.sp)
-                    else     -> Text(lesson.emoji, fontSize = 26.sp)
                 }
-            }
 
-            // "BAŞLA!" chip — sadece aktif derse
-            if (isActive) {
-                Spacer(Modifier.height(4.dp))
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = color,
-                ) {
-                    Text(
-                        Strings.startLesson(language),
-                        color      = Color.White,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize   = 10.sp,
-                        modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                Spacer(Modifier.height(6.dp))
+
+                // Ders adı
+                Text(
+                    lesson.nameTr,
+                    color         = when {
+                        isActive -> OnBackground
+                        isLocked -> Muted.copy(alpha = 0.6f)
+                        isDone   -> OnSurface
+                        else     -> Muted
+                    },
+                    fontSize      = 10.sp,
+                    fontWeight    = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                    textAlign     = TextAlign.Center,
+                    maxLines      = 2,
+                    overflow      = TextOverflow.Ellipsis,
+                    letterSpacing = 0.1.sp,
+                    modifier      = Modifier.width(72.dp),
+                )
+
+                // "BAŞLA" pill — sadece aktif ders
+                if (isActive) {
+                    Spacer(Modifier.height(5.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(
+                                Brush.horizontalGradient(listOf(color, GradientEnd)),
+                            )
+                            .graphicsLayer { alpha = pulseAlpha }
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            Strings.startLesson(language),
+                            color         = Color.White,
+                            fontWeight    = FontWeight.ExtraBold,
+                            fontSize      = 9.sp,
+                            letterSpacing = 0.5.sp,
+                        )
+                    }
+                }
+
+                // Alt bağlantı
+                if (index < total - 1) {
+                    Spacer(Modifier.height(2.dp))
+                    Box(
+                        Modifier
+                            .width(2.5.dp)
+                            .height(24.dp)
+                            .background(
+                                if (isDone)
+                                    Brush.verticalGradient(listOf(color.copy(alpha = 0.4f), color))
+                                else
+                                    Brush.verticalGradient(listOf(Divider, Divider)),
+                                RoundedCornerShape(1.dp),
+                            )
                     )
                 }
-            }
-
-            // Ders adı
-            Spacer(Modifier.height(if (isActive) 4.dp else 6.dp))
-            Text(
-                lesson.nameTr,
-                color      = if (isLocked) Muted else OnBackground,
-                fontSize   = 11.sp,
-                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                textAlign  = TextAlign.Center,
-                maxLines   = 2,
-                overflow   = TextOverflow.Ellipsis,
-                modifier   = Modifier.width(80.dp),
-            )
-
-            // Altta bağlantı çizgisi
-            if (index < total - 1) {
-                Box(
-                    Modifier
-                        .width(2.dp)
-                        .height(20.dp)
-                        .background(if (isDone) color else Divider)
-                )
             }
         }
     }
