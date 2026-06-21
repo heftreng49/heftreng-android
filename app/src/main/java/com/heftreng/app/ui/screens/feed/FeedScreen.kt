@@ -127,7 +127,6 @@ fun FeedScreen(
 
     val currentUserUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     LaunchedEffect(Unit) {
-        adsVm.loadAdConfigs()
         settingsVm.loadBlockedUsers()
         // vm.refresh() — ViewModel init{} zaten çağırıyor; burada çift server read olurdu.
         // Pull-to-refresh veya manual tetik için vm.refresh(forceRefresh=true) kullanılır.

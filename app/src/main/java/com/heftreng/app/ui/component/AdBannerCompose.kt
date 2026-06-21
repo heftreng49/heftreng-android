@@ -1,6 +1,5 @@
 package com.heftreng.app.ui.component
 
-import android.util.Log
 import android.view.ViewGroup
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -8,10 +7,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,18 +22,21 @@ import com.google.android.gms.ads.*
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AdsViewModel
 
-// ── Preloaded banner'ı kullanan ana bileşen ───────────────────────────────────
-// adsVm null ise factory'den yeni AdView üretir (fallback)
+// ── Tekil (sabit) banner bileşeni ─────────────────────────────────────────────
+// Sadece preloaded cache kullanır. Cache yoksa AdEngine'e yükleme tetikler ve
+// yüklenene kadar shimmer placeholder gösterir — inline loadAd() ÇAĞRILMAZ
+// (Compose recomposition'da birden fazla kez çağrılma tehlikesi vardır).
 @Composable
 fun AdBannerView(
     unitId     : String?,
     modifier   : Modifier = Modifier,
     adsVm      : AdsViewModel? = null,
     slot       : AdsViewModel.BannerSlot = AdsViewModel.BannerSlot.FEED,
-    bannerSize : String = "adaptive",   // CMS'den gelen boyut: adaptive/banner/medium_rectangle/large_banner
+    bannerSize : String = "adaptive",
 ) {
     if (unitId.isNullOrBlank()) return
 
+    // Yükleme durumu ve cache
     val isLoaded = when (slot) {
         AdsViewModel.BannerSlot.FEED  -> adsVm?.bannerFeedLoaded?.collectAsState()?.value  ?: false
         AdsViewModel.BannerSlot.LIB   -> adsVm?.bannerLibLoaded?.collectAsState()?.value   ?: false
@@ -53,6 +51,24 @@ fun AdBannerView(
         AdsViewModel.BannerSlot.BLOG  -> adsVm?.cachedBlogBanner
     }
 
+    // Cache yoksa (ilk açılış) AdEngine'e yüklemeyi tetikle — BİR KEZ.
+    LaunchedEffect(unitId, slot, bannerSize) {
+        if (adsVm != null && !isLoaded) {
+            adsVm.preloadBanner(unitId, slot, bannerSize)
+        }
+    }
+
+    // Boyut değişimini algıla → yeniden yükle
+    LaunchedEffect(bannerSize) {
+        val ctx = cachedView
+        if (ctx != null && adsVm != null) {
+            val expected = adsVm.getAdSize(bannerSize)
+            if (cachedView.adSize != expected) {
+                adsVm.preloadBanner(unitId, slot, bannerSize)
+            }
+        }
+    }
+
     var showDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -60,49 +76,16 @@ fun AdBannerView(
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp)
             .background(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                color  = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                shape  = RoundedCornerShape(10.dp),
             )
             .padding(bottom = 6.dp),
     ) {
-        // Reklam etiketi + bilgi butonu
-        Row(
-            modifier              = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment     = Alignment.CenterVertically,
-        ) {
-            Text(
-                text  = "Reklam",
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                style = androidx.compose.ui.text.TextStyle(letterSpacing = 0.6.sp),
-            )
-            IconButton(
-                onClick  = { showDialog = true },
-                modifier = Modifier.size(20.dp),
-            ) {
-                Icon(
-                    imageVector        = Icons.Default.Info,
-                    contentDescription = "Reklam hakkında",
-                    tint               = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                    modifier           = Modifier.size(14.dp),
-                )
-            }
-        }
+        AdLabel(onInfoClick = { showDialog = true })
 
-        // Preloaded cache varsa ve boyut uyuşuyorsa kullan, yoksa inline yükle
-        // Boyut uyuşmazsa adsVm'e haber ver → yeniden preload başlatılır
-        val cachedSizeMatches = cachedView?.adSize?.let { adSize ->
-            val ctx = LocalContext.current
-            val expected = adsVm?.getAdSize(bannerSize)
-            expected == null || adSize == expected
-        } ?: false
-
-        if (cachedView != null && cachedSizeMatches) {
+        if (isLoaded && cachedView != null) {
             AndroidView(
-                factory  = { _ ->
+                factory = { _ ->
                     (cachedView.parent as? ViewGroup)?.removeView(cachedView)
                     cachedView.layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -119,67 +102,20 @@ fun AdBannerView(
                 modifier = Modifier.fillMaxWidth().wrapContentHeight(),
             )
         } else {
-            // Boyut değiştiyse önbelleği temizle ve yeni boyutla yükle
-            LaunchedEffect(bannerSize) {
-                if (cachedView != null && !cachedSizeMatches) {
-                    val uid = unitId
-                    adsVm?.preloadBanner(uid, slot, bannerSize)
-                }
-            }
-            AndroidView(
-                factory = { ctx ->
-                    val dm    = ctx.resources.displayMetrics
-                    val width = (dm.widthPixels / dm.density).toInt()
-                    val size  = when (bannerSize) {
-                        "banner"           -> AdSize.BANNER
-                        "medium_rectangle" -> AdSize.MEDIUM_RECTANGLE
-                        "large_banner"     -> AdSize.LARGE_BANNER
-                        else               -> AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(ctx, width)
-                    }
-                    AdView(ctx).apply {
-                        setAdSize(size)
-                        adUnitId = unitId
-                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                        adListener = object : AdListener() {
-                            override fun onAdLoaded() {
-                                Log.d("AdBanner", "Yüklendi: slot=$slot size=$bannerSize")
-                            }
-                            override fun onAdFailedToLoad(e: LoadAdError) {
-                                Log.e("AdBanner", "Hata: ${e.code} ${e.message}")
-                            }
-                        }
-                        loadAd(AdRequest.Builder()
-                            .setContentUrl("https://heftreng.app")
-                            .build())
-                    }
-                },
-                update = { adView ->
-                    if (adView.adUnitId != unitId) {
-                        adView.adUnitId = unitId
-                        adView.loadAd(AdRequest.Builder()
-                            .setContentUrl("https://heftreng.app").build())
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+            AdShimmer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(60.dp),
             )
         }
     }
 
     if (showDialog) {
-        AlertDialog(
-            onDismissRequest = { showDialog = false },
-            title            = { Text("Bu bir reklamdır") },
-            text             = { Text("""Heftreng tamamen ücretsiz bir uygulamadır. Uygulamayı sürdürebilmek ve sunucu maliyetlerini karşılayabilmek için Google AdMob aracılığıyla reklam gösteriyoruz.
-
-Gördüğünüz içerik, Google tarafından belirlenen bir reklamdır.""") },
-            confirmButton    = { TextButton(onClick = { showDialog = false }) { Text("Tamam") } },
-        )
+        AdInfoDialog(onDismiss = { showDialog = false })
     }
 }
 
 // ── Pozisyon bazlı banner — liste içinde her konuma özel AdView ───────────────
-// Kullanım: LazyColumn items { } içinde her banner satırı için
-//   PositionedAdBannerView(positionKey = "feed_banner_$index", unitId = unitId, adsVm = adsVm)
 @Composable
 fun PositionedAdBannerView(
     positionKey  : String,
@@ -187,14 +123,11 @@ fun PositionedAdBannerView(
     adsVm        : AdsViewModel,
     modifier     : Modifier = Modifier,
     bannerSize   : String   = "adaptive",
-    // Sıradaki 1-2 banner pozisyonu (key, unitId) — kullanıcı henüz oraya
-    // kaydırmadan reklamları önceden ısıtmak için. Boş liste verilirse etkisiz.
     prefetchKeys : List<Pair<String, String>> = emptyList(),
 ) {
     if (unitId.isNullOrBlank()) return
 
-    // İlk göründüğünde yükle + sıradaki pozisyonları önceden ısıt
-    LaunchedEffect(positionKey, unitId, bannerSize, prefetchKeys) {
+    LaunchedEffect(positionKey, unitId, bannerSize) {
         adsVm.preloadPositionedBanner(positionKey, unitId, bannerSize)
         prefetchKeys.forEach { (key, nextUnitId) ->
             if (nextUnitId.isNotBlank()) adsVm.preloadPositionedBanner(key, nextUnitId, bannerSize)
@@ -214,92 +147,55 @@ fun PositionedAdBannerView(
             )
             .padding(bottom = 6.dp),
     ) {
-        Row(
-            modifier              = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment     = Alignment.CenterVertically,
-        ) {
-            Text(
-                text     = "Reklam",
-                fontSize = 10.sp,
-                color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                style    = androidx.compose.ui.text.TextStyle(letterSpacing = 0.6.sp),
-            )
-            IconButton(onClick = { showDialog = true }, modifier = Modifier.size(20.dp)) {
-                Icon(
-                    imageVector        = Icons.Default.Info,
-                    contentDescription = "Reklam hakkında",
-                    tint               = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                    modifier           = Modifier.size(14.dp),
-                )
-            }
-        }
+        AdLabel(onInfoClick = { showDialog = true })
 
         if (isLoaded) {
             val adView = adsVm.cachedPositionedBanner(positionKey)
             if (adView != null) {
                 AndroidView(
-                    factory  = { _ ->
-                        // AdMob'un kendi LayoutParams'ı bazen Compose'un ölçümünü
-                        // bozuyor (yükseklik 0 veya devasa kalabiliyor) — açıkça
-                        // WRAP_CONTENT zorluyoruz ki AdView kendi gerçek boyutunda kalsın.
-                        adView.layoutParams = android.view.ViewGroup.LayoutParams(
-                            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                    factory = { _ ->
+                        adView.layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
                         )
                         adView
                     },
                     update = { view ->
-                        view.layoutParams = android.view.ViewGroup.LayoutParams(
-                            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                        view.layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
                         )
                     },
                     modifier = Modifier.fillMaxWidth().wrapContentHeight(),
                 )
             }
         } else {
-            // Yüklenene kadar yer tutucu
-            Box(
+            AdShimmer(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(60.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(8.dp),
-                    )
+                    .height(60.dp),
             )
         }
     }
 
     if (showDialog) {
-        AlertDialog(
-            onDismissRequest = { showDialog = false },
-            title            = { Text("Bu bir reklamdır") },
-            text             = { Text("Heftreng tamamen ücretsiz bir uygulamadır. Uygulamayı sürdürebilmek ve sunucu maliyetlerini karşılayabilmek için Google AdMob aracılığıyla reklam gösteriyoruz.\n\nGördüğünüz içerik, Google tarafından belirlenen bir reklamdır.") },
-            confirmButton    = { TextButton(onClick = { showDialog = false }) { Text("Tamam") } },
-        )
+        AdInfoDialog(onDismiss = { showDialog = false })
     }
 }
 
-// ── Pozisyon bazlı native reklam — liste içinde her konuma özel NativeAd ──────
-// Kullanım: LazyColumn items { } içinde her native satırı için
-//   PositionedNativeAdView(positionKey = "feed_native_$index", unitId = unitId, adsVm = adsVm)
+// ── Pozisyon bazlı native reklam ──────────────────────────────────────────────
 @Composable
 fun PositionedNativeAdView(
     positionKey    : String,
     unitId         : String?,
     adsVm          : AdsViewModel,
     modifier       : Modifier = Modifier,
-    // Sıradaki 1-2 native pozisyonu (key, unitId) — önceden ısıtmak için.
     prefetchKeys   : List<Pair<String, String>> = emptyList(),
     nativeAdContent: @Composable (com.google.android.gms.ads.nativead.NativeAd) -> Unit,
 ) {
     if (unitId.isNullOrBlank()) return
 
-    LaunchedEffect(positionKey, unitId, prefetchKeys) {
+    LaunchedEffect(positionKey, unitId) {
         adsVm.preloadPositionedNative(positionKey, unitId)
         prefetchKeys.forEach { (key, nextUnitId) ->
             if (nextUnitId.isNotBlank()) adsVm.preloadPositionedNative(key, nextUnitId)
@@ -312,45 +208,85 @@ fun PositionedNativeAdView(
     if (nativeAd != null) {
         nativeAdContent(nativeAd)
     } else {
-        Box(
+        AdShimmer(
             modifier = modifier
                 .fillMaxWidth()
                 .height(120.dp)
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-                .background(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(10.dp),
-                )
+                .padding(horizontal = 12.dp, vertical = 6.dp),
         )
     }
 }
 
-// ── Shimmer animasyonu ────────────────────────────────────────────────────────
+// ── Ortak yardımcı bileşenler ─────────────────────────────────────────────────
+
 @Composable
-private fun AdShimmer() {
-    val transition = rememberInfiniteTransition(label = "shimmer")
+private fun AdLabel(onInfoClick: () -> Unit) {
+    Row(
+        modifier              = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment     = Alignment.CenterVertically,
+    ) {
+        Text(
+            text     = "Reklam",
+            fontSize = 10.sp,
+            color    = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            style    = androidx.compose.ui.text.TextStyle(letterSpacing = 0.6.sp),
+        )
+        IconButton(onClick = onInfoClick, modifier = Modifier.size(20.dp)) {
+            Icon(
+                imageVector        = Icons.Default.Info,
+                contentDescription = "Reklam hakkında",
+                tint               = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                modifier           = Modifier.size(14.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AdInfoDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title            = { Text("Bu bir reklamdır") },
+        text             = {
+            Text(
+                "Heftreng tamamen ücretsiz bir uygulamadır. Uygulamayı " +
+                "sürdürebilmek için Google AdMob aracılığıyla reklam " +
+                "gösteriyoruz.\n\nGördüğünüz içerik Google tarafından " +
+                "belirlenmektedir."
+            )
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tamam") } },
+    )
+}
+
+@Composable
+fun AdShimmer(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "adShimmer")
     val translateX by transition.animateFloat(
-        initialValue   = -300f,
-        targetValue    = 600f,
-        animationSpec  = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
+        initialValue  = -300f,
+        targetValue   = 600f,
+        animationSpec = infiniteRepeatable(
+            animation  = tween(1200, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "shimmerX",
     )
     Box(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = modifier
             .background(
-                Brush.linearGradient(
+                brush = Brush.linearGradient(
                     colors = listOf(
-                        SurfaceVar,
-                        SurfaceVar.copy(alpha = 0.4f),
-                        SurfaceVar,
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                     ),
                     start = Offset(translateX, 0f),
                     end   = Offset(translateX + 300f, 300f),
-                )
+                ),
+                shape = RoundedCornerShape(8.dp),
             ),
     )
 }

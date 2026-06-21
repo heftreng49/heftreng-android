@@ -124,7 +124,6 @@ fun LibraryScreen(
 
     LaunchedEffect(Unit) {
         loading = true
-        adsVm.loadAdConfigs()
         // Tüm sorgular paralel — N+1 yerine collectionGroup tek sorguda
         val quotesJob  = launch { feedVm.loadLibraryQuotesAsync() }
         val authorsJob = launch {

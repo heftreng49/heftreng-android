@@ -59,7 +59,6 @@ fun BlogScreen(
     // nativeBlogAd artık pozisyon bazlı yükleniyor (PositionedNativeAdView), tekil collect kaldırıldı.
     var selLabel by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) { adsVm.loadAdConfigs() }
 
     // Native ad havuzunu önceden doldur — artık CMS config beklemeden ANINDA tetiklenir.
     val nativeBlogUnitIdForWarmup by adsVm.nativeBlogUnitId.collectAsState()

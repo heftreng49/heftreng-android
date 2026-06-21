@@ -35,15 +35,18 @@ import javax.inject.Inject
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  AdsViewModel — Heftreng'in reklam yönetim katmanı.
+ *  AdsViewModel — Heftreng reklam yönetim katmanı.
  *
- *  Bu sınıf artık tüm yükleme/retry/havuz mantığını [AdEngine]'e devreder.
- *  Burada sadece şunlar var:
- *   1. CMS'den (Firestore cms_ads) config okuma — cache-first, TTL'li
+ *  Sorumluluklar:
+ *   1. CMS'den (Firestore cms_ads) config okuma — cache-first, 30dk TTL
  *   2. Config'i StateFlow olarak ekranlara sunma
- *   3. Ekranların kullandığı ince bir "slot adı" sözlüğü (geriye dönük
- *      uyumluluk için BannerSlot/NativeAdSlot enum'ları korunuyor, ama
- *      içeride hepsi tek bir String key'e çevrilip AdEngine'e gidiyor)
+ *   3. AdEngine ve AdFrequencyManager'a delege etme
+ *
+ *  Önemli kural: loadAdConfigs() sadece init{} bloğunda çağrılır.
+ *  Ekranlar (FeedScreen vb.) ARTIK kendi LaunchedEffect'lerinde bu fonksiyonu
+ *  çağırmamalı — çift Firestore isteği ve gereksiz yeniden yükleme olur.
+ *  Pull-to-refresh veya "zorla güncelle" için loadAdConfigs(forceServer=true)
+ *  kullanılır.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 @HiltViewModel
@@ -56,21 +59,13 @@ class AdsViewModel @Inject constructor(
     private val engine           = AdEngine(appContext, viewModelScope)
     private val frequencyManager = AdFrequencyManager(appContext, firestore, viewModelScope)
 
-    // ═════════════════════════ KALICI CONFIG CACHE'İ ═══════════════════════════
-    // SORU: "Reklamları geç yükleyen şey cache mekanizması olabilir mi?" — CEVAP: evet, kısmen.
-    // Eskiden her uygulama açılışında "varsayılan/sabit prod ID ile anında yükle, CMS gelince
-    // gerekirse swap et" yapıyorduk. CMS'te o slot için ÖZEL bir unitId tanımlıysa (ki admin
-    // panelindeki unitId alanı tam olarak bunun için var), HER açılışta şu olur:
-    //   1) Sabit varsayılan ID ile bir AdMob isteği başlar (anında)
-    //   2) Firestore'dan gerçek config gelir (çoğu zaman saniyenin altında ama 0 değil)
-    //   3) Gerçek unitId farklıysa: 1.'deki istek iptal edilip YENİDEN istek atılır
-    // Yani kullanıcı ilk reklamı değil, İKİNCİ (gerçek) reklamı görür — "geç/sonradan geliyor"
-    // hissi tam olarak budur. Çözüm: son bilinen GERÇEK config'i SharedPreferences'a kalıcı
-    // olarak yaz, bir sonraki açılışta sabit varsayılan yerine BUNU kullan. Admin bir şey
-    // değiştirmediği sürece (en yaygın durum) ilk istek = gerçek istek olur, swap hiç olmaz.
-    // Sadece UYGULAMANIN İLK AÇILIŞINDA (hem prefs hem Firestore cache'i boşken) sabit
-    // varsayılana düşülür — bu kaçınılmaz, tek seferlik bir maliyettir.
-    private val adPrefs = appContext.getSharedPreferences("heftreng_ad_config_cache", android.content.Context.MODE_PRIVATE)
+    // ── SharedPreferences kalıcı config cache'i ────────────────────────────
+    // Bir sonraki açılışta Firestore round-trip'i beklemeden doğru unit ID ile
+    // hemen yüklemeye başlamak için son bilinen config buraya yazılır.
+    private val adPrefs = appContext.getSharedPreferences(
+        "heftreng_ad_config_cache",
+        android.content.Context.MODE_PRIVATE,
+    )
     private val PREF_SEP = "\u0001"
 
     private fun persistConfig(docId: String, c: CmsAdConfig) {
@@ -84,7 +79,7 @@ class AdsViewModel @Inject constructor(
 
     private fun loadPersistedConfig(docId: String): CmsAdConfig? {
         val raw = adPrefs.getString(docId, null) ?: return null
-        val p = raw.split(PREF_SEP)
+        val p   = raw.split(PREF_SEP)
         if (p.size < 19) return null
         return try {
             CmsAdConfig(
@@ -97,15 +92,12 @@ class AdsViewModel @Inject constructor(
         } catch (_: Exception) { null }
     }
 
-
-    // ── Cache TTL — cms_ads nadiren değişir, 30 dakikada bir server'a git ──────
+    // ── Cache TTL — cms_ads nadiren değişir, 30 dakikada bir server'a git ──
     private val ADS_CONFIG_TTL_MS = 30L * 60L * 1000L
     private var lastServerFetchMs = 0L
 
-    // ═════════════════════════ SLOT TANIMLARI ════════════════════════════════
-    // Eski enum'lar korunuyor (ekranlar bunu kullanıyor) — içeride sadece
-    // birer String key'e çevriliyor, AdEngine bunları hiç bilmiyor.
-    enum class BannerSlot { FEED, LIB, KURDI, BLOG }
+    // ── Slot tanımları ─────────────────────────────────────────────────────
+    enum class BannerSlot  { FEED, LIB, KURDI, BLOG }
     enum class NativeAdSlot { FEED, BLOG, LIBRARY, KURDI, PROFILE, SEARCH }
 
     private fun BannerSlot.key() = when (this) {
@@ -124,31 +116,30 @@ class AdsViewModel @Inject constructor(
         NativeAdSlot.SEARCH  -> "native_search"
     }
 
-    // ═════════════════════════ BANNER — public API ═══════════════════════════
-    // Tek satırlık delegasyon — gerçek iş AdEngine'de.
-    val bannerFeedLoaded    get() = engine.bannerLoadedFlow(BannerSlot.FEED.key())
-    val bannerLibLoaded     get() = engine.bannerLoadedFlow(BannerSlot.LIB.key())
-    val bannerKurdiLoaded   get() = engine.bannerLoadedFlow(BannerSlot.KURDI.key())
-    val bannerBlogLoaded    get() = engine.bannerLoadedFlow(BannerSlot.BLOG.key())
+    // ── Banner public API ──────────────────────────────────────────────────
+    val bannerFeedLoaded  get() = engine.bannerLoadedFlow(BannerSlot.FEED.key())
+    val bannerLibLoaded   get() = engine.bannerLoadedFlow(BannerSlot.LIB.key())
+    val bannerKurdiLoaded get() = engine.bannerLoadedFlow(BannerSlot.KURDI.key())
+    val bannerBlogLoaded  get() = engine.bannerLoadedFlow(BannerSlot.BLOG.key())
 
-    val cachedFeedBanner    : AdView? get() = engine.cachedBanner(BannerSlot.FEED.key())
-    val cachedLibBanner     : AdView? get() = engine.cachedBanner(BannerSlot.LIB.key())
-    val cachedKurdiBanner   : AdView? get() = engine.cachedBanner(BannerSlot.KURDI.key())
-    val cachedBlogBanner    : AdView? get() = engine.cachedBanner(BannerSlot.BLOG.key())
+    val cachedFeedBanner  : AdView? get() = engine.cachedBanner(BannerSlot.FEED.key())
+    val cachedLibBanner   : AdView? get() = engine.cachedBanner(BannerSlot.LIB.key())
+    val cachedKurdiBanner : AdView? get() = engine.cachedBanner(BannerSlot.KURDI.key())
+    val cachedBlogBanner  : AdView? get() = engine.cachedBanner(BannerSlot.BLOG.key())
 
     fun preloadBanner(unitId: String, slot: BannerSlot, bannerSize: String = "adaptive") =
         engine.loadBanner(slot.key(), unitId, bannerSize)
 
     fun getAdSize(bannerSize: String): AdSize = engine.resolveAdSize(bannerSize)
 
-    // ── Pozisyon bazlı (liste içi tekrarlanan) banner ─────────────────────────
+    // ── Pozisyon bazlı banner API ─────────────────────────────────────────
     fun positionedBannerLoadedFlow(key: String): StateFlow<Boolean> = engine.positionedBannerLoadedFlow(key)
     fun cachedPositionedBanner(key: String): AdView? = engine.cachedPositionedBanner(key)
     fun preloadPositionedBanner(key: String, unitId: String, bannerSize: String = "adaptive") =
         engine.loadPositionedBanner(key, unitId, bannerSize)
     fun releasePositionedBanners(keyPrefix: String? = null) = engine.releasePositionedBanners(keyPrefix)
 
-    // ═════════════════════════ NATIVE — public API ════════════════════════════
+    // ── Native API ────────────────────────────────────────────────────────
     fun positionedNativeLoadedFlow(key: String): StateFlow<Boolean> = engine.positionedNativeLoadedFlow(key)
     fun cachedPositionedNative(key: String): NativeAd? = engine.cachedPositionedNative(key)
     fun preloadPositionedNative(key: String, unitId: String) = engine.preloadPositionedNative(key, unitId)
@@ -156,129 +147,102 @@ class AdsViewModel @Inject constructor(
     fun warmUpNativePool(unitId: String) = engine.warmUpNativePool(unitId)
     fun releaseAdPool(unitId: String? = null) = engine.releaseAdPool(unitId)
 
-    // ═════════════════════════ KONFİGÜRASYONLAR (CMS) ═════════════════════════
-    private val _bannerConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("banner_feed"))
-    val bannerConfig = _bannerConfig.asStateFlow()
-    private val _bannerLibraryConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("banner_library"))
-    val bannerLibraryConfig = _bannerLibraryConfig.asStateFlow()
-    private val _bannerKurdiConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("banner_kurdi"))
-    val bannerKurdiConfig = _bannerKurdiConfig.asStateFlow()
-    private val _bannerBlogConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("banner_blog"))
-    val bannerBlogConfig = _bannerBlogConfig.asStateFlow()
-    private val _interstitialConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("interstitial_serial"))
-    val interstitialConfig = _interstitialConfig.asStateFlow()
-    private val _rewardedConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("rewarded_xp"))
-    val rewardedConfig = _rewardedConfig.asStateFlow()
-    private val _nativeFeedConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("native_feed"))
-    val nativeFeedConfig = _nativeFeedConfig.asStateFlow()
-    private val _nativeBlogConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("native_blog"))
-    val nativeBlogConfig = _nativeBlogConfig.asStateFlow()
-    private val _nativeLibraryConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("native_library"))
-    val nativeLibraryConfig = _nativeLibraryConfig.asStateFlow()
-    private val _nativeKurdiConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("native_kurdi"))
-    val nativeKurdiConfig = _nativeKurdiConfig.asStateFlow()
-    private val _nativeProfileConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("native_profile"))
-    val nativeProfileConfig = _nativeProfileConfig.asStateFlow()
-    private val _nativeSearchConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("native_search"))
-    val nativeSearchConfig = _nativeSearchConfig.asStateFlow()
+    // ── Config StateFlow'ları — başlangıç değeri = kalıcı cache ───────────
+    // Bu sayede uygulama açılır açılmaz doğru unit ID ile yükleme başlar,
+    // Firestore round-trip'i beklenmez.
+    private val _bannerConfig         = MutableStateFlow(loadPersistedConfig("banner_feed"))
+    val bannerConfig                  = _bannerConfig.asStateFlow()
+    private val _bannerLibraryConfig  = MutableStateFlow(loadPersistedConfig("banner_library"))
+    val bannerLibraryConfig           = _bannerLibraryConfig.asStateFlow()
+    private val _bannerKurdiConfig    = MutableStateFlow(loadPersistedConfig("banner_kurdi"))
+    val bannerKurdiConfig             = _bannerKurdiConfig.asStateFlow()
+    private val _bannerBlogConfig     = MutableStateFlow(loadPersistedConfig("banner_blog"))
+    val bannerBlogConfig              = _bannerBlogConfig.asStateFlow()
+    private val _interstitialConfig   = MutableStateFlow(loadPersistedConfig("interstitial_serial"))
+    val interstitialConfig            = _interstitialConfig.asStateFlow()
+    private val _rewardedConfig       = MutableStateFlow(loadPersistedConfig("rewarded_xp"))
+    val rewardedConfig                = _rewardedConfig.asStateFlow()
+    private val _nativeFeedConfig     = MutableStateFlow(loadPersistedConfig("native_feed"))
+    val nativeFeedConfig              = _nativeFeedConfig.asStateFlow()
+    private val _nativeBlogConfig     = MutableStateFlow(loadPersistedConfig("native_blog"))
+    val nativeBlogConfig              = _nativeBlogConfig.asStateFlow()
+    private val _nativeLibraryConfig  = MutableStateFlow(loadPersistedConfig("native_library"))
+    val nativeLibraryConfig           = _nativeLibraryConfig.asStateFlow()
+    private val _nativeKurdiConfig    = MutableStateFlow(loadPersistedConfig("native_kurdi"))
+    val nativeKurdiConfig             = _nativeKurdiConfig.asStateFlow()
+    private val _nativeProfileConfig  = MutableStateFlow(loadPersistedConfig("native_profile"))
+    val nativeProfileConfig           = _nativeProfileConfig.asStateFlow()
+    private val _nativeSearchConfig   = MutableStateFlow(loadPersistedConfig("native_search"))
+    val nativeSearchConfig            = _nativeSearchConfig.asStateFlow()
 
     private val _allAdConfigs = MutableStateFlow<Map<String, CmsAdConfig>>(emptyMap())
-    val allAdConfigs = _allAdConfigs.asStateFlow()
+    val allAdConfigs          = _allAdConfigs.asStateFlow()
 
     private val _adsEnabled = MutableStateFlow(true)
-    val adsEnabled = _adsEnabled.asStateFlow()
+    val adsEnabled          = _adsEnabled.asStateFlow()
 
-    // ÖNEMLİ — "Reklamlar yüklenmiyor / çok geç geliyor" sorununun asıl kaynağı:
-    // Eskiden bu Flow'lar CMS config (Firestore) gelene kadar hep `null` dönüyordu,
-    // ekranlar da `if (unitId != null)` diye kontrol ettiği için reklam yükleme
-    // İSTEĞİ bile atılmıyordu. Yani her açılışta: Firestore round-trip + AdMob
-    // round-trip art arda (paralel değil!) bekleniyordu. Artık config gelene kadar
-    // ANINDA prod unit ID ile yükleme başlıyor; CMS gelince (disabled/özel unitId)
-    // varsa kararını uygular — AdEngine artık unit ID değişimini de algılayıp
-    // gerekirse swap ediyor (bkz. AdEngine.loadBanner/preloadPositionedNative).
-    // NOT: Google'ın paylaşılan test ID'leri kaldırıldı — cihaz zaten AdMob'da
-    // test cihazı olarak kayıtlı (HeftrangApp.kt), prod ID'ler bu cihazda otomatik
-    // test reklamı gösterir; CMS'teki "testMode" anahtarı artık etkisizdir.
+    // ── Unit ID StateFlow'ları — başlangıç = prod varsayılanı ─────────────
+    // Ekranlar bu StateFlow'lardan unit ID'yi okur. Config gelmeden önce prod
+    // ID'nin kendisi gelir → reklam yükleme anında başlar, swap olmaz.
     val bannerUnitId: StateFlow<String?> = combine(_bannerConfig, _adsEnabled) { c, e ->
-        if (!e) null
-        else if (c == null) AdMobProdIds.BANNER
-        else engine.resolveUnitId(c, AdMobProdIds.BANNER)
+        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.BANNER) ?: AdMobProdIds.BANNER
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val bannerLibraryUnitId: StateFlow<String?> = combine(_bannerLibraryConfig, _adsEnabled) { c, e ->
-        if (!e) null
-        else if (c == null) AdMobProdIds.BANNER
-        else engine.resolveUnitId(c, AdMobProdIds.BANNER)
+        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.BANNER) ?: AdMobProdIds.BANNER
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val bannerKurdiUnitId: StateFlow<String?> = combine(_bannerKurdiConfig, _adsEnabled) { c, e ->
-        if (!e) null
-        else if (c == null) AdMobProdIds.BANNER
-        else engine.resolveUnitId(c, AdMobProdIds.BANNER)
+        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.BANNER) ?: AdMobProdIds.BANNER
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val bannerBlogUnitId: StateFlow<String?> = combine(_bannerBlogConfig, _adsEnabled) { c, e ->
-        if (!e) null
-        else if (c == null) AdMobProdIds.BANNER
-        else engine.resolveUnitId(c, AdMobProdIds.BANNER)
+        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.BANNER) ?: AdMobProdIds.BANNER
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val nativeFeedUnitId: StateFlow<String?> = combine(_nativeFeedConfig, _adsEnabled) { c, e ->
-        if (!e) null
-        else if (c == null) AdMobProdIds.NATIVE
-        else engine.resolveUnitId(c, AdMobProdIds.NATIVE)
+        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.NATIVE) ?: AdMobProdIds.NATIVE
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val nativeBlogUnitId: StateFlow<String?> = combine(_nativeBlogConfig, _adsEnabled) { c, e ->
-        if (!e) null
-        else if (c == null) AdMobProdIds.NATIVE
-        else engine.resolveUnitId(c, AdMobProdIds.NATIVE)
+        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.NATIVE) ?: AdMobProdIds.NATIVE
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val nativeLibraryUnitId: StateFlow<String?> = combine(_nativeLibraryConfig, _adsEnabled) { c, e ->
-        if (!e) null
-        else if (c == null) AdMobProdIds.NATIVE
-        else engine.resolveUnitId(c, AdMobProdIds.NATIVE)
+        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.NATIVE) ?: AdMobProdIds.NATIVE
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val nativeKurdiUnitId: StateFlow<String?> = combine(_nativeKurdiConfig, _adsEnabled) { c, e ->
-        if (!e) null
-        else if (c == null) AdMobProdIds.NATIVE
-        else engine.resolveUnitId(c, AdMobProdIds.NATIVE)
+        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.NATIVE) ?: AdMobProdIds.NATIVE
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val nativeProfileUnitId: StateFlow<String?> = combine(_nativeProfileConfig, _adsEnabled) { c, e ->
-        if (!e) null
-        else if (c == null) AdMobProdIds.NATIVE
-        else engine.resolveUnitId(c, AdMobProdIds.NATIVE)
+        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.NATIVE) ?: AdMobProdIds.NATIVE
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val nativeSearchUnitId: StateFlow<String?> = combine(_nativeSearchConfig, _adsEnabled) { c, e ->
-        if (!e) null
-        else if (c == null) AdMobProdIds.NATIVE
-        else engine.resolveUnitId(c, AdMobProdIds.NATIVE)
+        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.NATIVE) ?: AdMobProdIds.NATIVE
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val bannerPosition: StateFlow<Int> =
         _bannerConfig.combine(_adsEnabled) { c, _ -> c?.position ?: 5 }
             .stateIn(viewModelScope, SharingStarted.Eagerly, 5)
 
-    // ── (Eskiden burada Remote Config'ten gelen ikinci bir "açık/kapalı"
-    //    katmanı vardı — kaldırıldı. Tek doğruluk kaynağı: config.enabled,
-    //    Firestore cms_ads'ten gelir, admin panelinden anında düzenlenebilir.)
-
-    // ── loadAdConfigs: Hibrit Cache + Server ──────────────────────────────────
-    // 1. Cache'den anlık yükle (0 gecikme), 2. TTL dolduysa server'dan tazele.
+    // ── loadAdConfigs: Hibrit Cache + Server ──────────────────────────────
+    // Tek çağrı noktası: init{} bloğu. Ekranlar bu fonksiyonu çağırmamalı.
+    // Pull-to-refresh veya admin "zorla güncelle" için forceServer=true kullanılır.
     fun loadAdConfigs(forceServer: Boolean = false) {
         viewModelScope.launch {
-            val now = System.currentTimeMillis()
+            val now        = System.currentTimeMillis()
             val ttlExpired = (now - lastServerFetchMs) > ADS_CONFIG_TTL_MS
 
+            // 1) Cache'den anlık yükle (0 gecikme)
             try {
                 val cacheSnap = firestore.collection("cms_ads").get(Source.CACHE).await()
                 applyAdConfigs(cacheSnap, preloadAds = true)
-            } catch (_: Exception) { /* cache yok — ilk kurulum, server'a geçilecek */ }
+            } catch (_: Exception) { /* cache yok — ilk kurulum */ }
 
+            // 2) TTL dolduysa veya zorla istendiyse server'dan tazele
             if (forceServer || ttlExpired || lastServerFetchMs == 0L) {
                 try {
                     val serverSnap = firestore.collection("cms_ads").get(Source.SERVER).await()
@@ -289,7 +253,10 @@ class AdsViewModel @Inject constructor(
         }
     }
 
-    private fun applyAdConfigs(snap: com.google.firebase.firestore.QuerySnapshot, preloadAds: Boolean) {
+    private fun applyAdConfigs(
+        snap: com.google.firebase.firestore.QuerySnapshot,
+        preloadAds: Boolean,
+    ) {
         val global = snap.documents.find { it.id == "global" }
         _adsEnabled.value = global?.getBoolean("enabled") ?: true
 
@@ -321,15 +288,22 @@ class AdsViewModel @Inject constructor(
                 paddingBottom = (d["paddingBottom"] as? Long)?.toInt() ?: 0,
             )
 
-            // Kalıcı cache — bir sonraki açılışta sabit varsayılan yerine BU kullanılacak.
             persistConfig(doc.id, config)
 
             when (doc.id) {
-                "banner_feed" -> applyBannerConfig(_bannerConfig, config, BannerSlot.FEED, preloadAds)
+                "banner_feed"                  -> applyBannerConfig(_bannerConfig, config, BannerSlot.FEED, preloadAds)
                 "banner_library", "banner_lib" -> applyBannerConfig(_bannerLibraryConfig, config, BannerSlot.LIB, preloadAds)
-                "banner_kurdi" -> applyBannerConfig(_bannerKurdiConfig, config, BannerSlot.KURDI, preloadAds)
-                "banner_blog"  -> applyBannerConfig(_bannerBlogConfig, config, BannerSlot.BLOG, preloadAds)
-                "interstitial_serial" -> _interstitialConfig.value = config
+                "banner_kurdi"                 -> applyBannerConfig(_bannerKurdiConfig, config, BannerSlot.KURDI, preloadAds)
+                "banner_blog"                  -> applyBannerConfig(_bannerBlogConfig, config, BannerSlot.BLOG, preloadAds)
+                "interstitial_serial" -> {
+                    val changed = _interstitialConfig.value != config
+                    _interstitialConfig.value = config
+                    // Interstitial'ı burada önceden yükle — ScreenTracker istediği an hazır olsun
+                    if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+                        engine.resolveUnitId(config, AdMobProdIds.INTERSTITIAL)
+                            ?.let { loadInterstitialAd(it) }
+                    }
+                }
                 "rewarded_xp" -> {
                     val changed = _rewardedConfig.value != config
                     _rewardedConfig.value = config
@@ -338,19 +312,25 @@ class AdsViewModel @Inject constructor(
                         engine.resolveUnitId(config, AdMobProdIds.REWARDED)
                             ?.let { preloadRewardedAd(it) }
                     }
-                }                "native_feed" -> applyNativeConfig(_nativeFeedConfig, config, NativeAdSlot.FEED, preloadAds)
-                "native_blog" -> applyNativeConfig(_nativeBlogConfig, config, NativeAdSlot.BLOG, preloadAds)
+                }
+                "native_feed"    -> applyNativeConfig(_nativeFeedConfig,    config, NativeAdSlot.FEED,    preloadAds)
+                "native_blog"    -> applyNativeConfig(_nativeBlogConfig,    config, NativeAdSlot.BLOG,    preloadAds)
                 "native_library" -> applyNativeConfig(_nativeLibraryConfig, config, NativeAdSlot.LIBRARY, preloadAds)
-                "native_kurdi"   -> applyNativeConfig(_nativeKurdiConfig, config, NativeAdSlot.KURDI, preloadAds)
+                "native_kurdi"   -> applyNativeConfig(_nativeKurdiConfig,   config, NativeAdSlot.KURDI,   preloadAds)
                 "native_profile" -> applyNativeConfig(_nativeProfileConfig, config, NativeAdSlot.PROFILE, preloadAds)
-                "native_search"  -> applyNativeConfig(_nativeSearchConfig, config, NativeAdSlot.SEARCH, preloadAds)
+                "native_search"  -> applyNativeConfig(_nativeSearchConfig,  config, NativeAdSlot.SEARCH,  preloadAds)
             }
             newAllConfigs[doc.id] = config
         }
         _allAdConfigs.value = newAllConfigs
     }
 
-    private fun applyBannerConfig(target: MutableStateFlow<CmsAdConfig?>, config: CmsAdConfig, slot: BannerSlot, preloadAds: Boolean) {
+    private fun applyBannerConfig(
+        target: MutableStateFlow<CmsAdConfig?>,
+        config: CmsAdConfig,
+        slot: BannerSlot,
+        preloadAds: Boolean,
+    ) {
         val changed = target.value != config
         target.value = config
         if (preloadAds && changed && config.enabled && _adsEnabled.value) {
@@ -359,7 +339,12 @@ class AdsViewModel @Inject constructor(
         }
     }
 
-    private fun applyNativeConfig(target: MutableStateFlow<CmsAdConfig?>, config: CmsAdConfig, slot: NativeAdSlot, preloadAds: Boolean) {
+    private fun applyNativeConfig(
+        target: MutableStateFlow<CmsAdConfig?>,
+        config: CmsAdConfig,
+        slot: NativeAdSlot,
+        preloadAds: Boolean,
+    ) {
         val changed = target.value != config
         target.value = config
         if (preloadAds && changed && config.enabled && _adsEnabled.value) {
@@ -368,53 +353,65 @@ class AdsViewModel @Inject constructor(
         }
     }
 
-    // ═════════════════════════ INTERSTITIAL ════════════════════════════════
+    // ── Interstitial ──────────────────────────────────────────────────────
     private var interstitialAd: InterstitialAd? = null
 
     fun loadInterstitialAd(unitId: String) {
         if (unitId.isBlank()) return
-        InterstitialAd.load(appContext, unitId, AdRequest.Builder().build(), object : InterstitialAdLoadCallback() {
-            override fun onAdFailedToLoad(adError: LoadAdError) { interstitialAd = null }
-            override fun onAdLoaded(ad: InterstitialAd) { interstitialAd = ad }
-        })
+        InterstitialAd.load(
+            appContext, unitId, AdRequest.Builder().build(),
+            object : InterstitialAdLoadCallback() {
+                override fun onAdFailedToLoad(adError: LoadAdError) { interstitialAd = null }
+                override fun onAdLoaded(ad: InterstitialAd)         { interstitialAd = ad }
+            },
+        )
     }
 
     fun loadInterstitial(context: android.content.Context) {
         val config = _interstitialConfig.value ?: return
         if (!config.enabled) return
-        loadInterstitialAd(AdMobProdIds.INTERSTITIAL) // testMode artık ayrı test ID kullanmıyor — cihaz zaten test cihazı
+        engine.resolveUnitId(config, AdMobProdIds.INTERSTITIAL)?.let { loadInterstitialAd(it) }
     }
 
     fun showInterstitialAd(activity: Activity, onAdDismissed: () -> Unit) {
-        if (interstitialAd == null) { onAdDismissed(); return }
-        interstitialAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
-            override fun onAdDismissedFullScreenContent() { interstitialAd = null; onAdDismissed() }
-            override fun onAdFailedToShowFullScreenContent(adError: AdError) { interstitialAd = null; onAdDismissed() }
+        val ad = interstitialAd
+        if (ad == null) { onAdDismissed(); return }
+        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+            override fun onAdDismissedFullScreenContent()             { interstitialAd = null; onAdDismissed() }
+            override fun onAdFailedToShowFullScreenContent(e: AdError) { interstitialAd = null; onAdDismissed() }
         }
-        interstitialAd?.show(activity)
+        ad.show(activity)
     }
 
-    fun showInterstitial(activity: Activity, onAdDismissed: () -> Unit) = showInterstitialAd(activity, onAdDismissed)
+    fun showInterstitial(activity: Activity, onAdDismissed: () -> Unit) =
+        showInterstitialAd(activity, onAdDismissed)
 
-    // ═════════════════════════ REWARDED ═════════════════════════════════════
+    // ── Rewarded ──────────────────────────────────────────────────────────
     private var rewardedAd: RewardedAd? = null
 
     fun preloadRewardedAd(unitId: String) {
         if (unitId.isBlank()) return
-        RewardedAd.load(appContext, unitId, AdRequest.Builder().build(), object : RewardedAdLoadCallback() {
-            override fun onAdFailedToLoad(adError: LoadAdError) { rewardedAd = null }
-            override fun onAdLoaded(ad: RewardedAd) { rewardedAd = ad }
-        })
+        RewardedAd.load(
+            appContext, unitId, AdRequest.Builder().build(),
+            object : RewardedAdLoadCallback() {
+                override fun onAdFailedToLoad(adError: LoadAdError) { rewardedAd = null }
+                override fun onAdLoaded(ad: RewardedAd)             { rewardedAd = ad }
+            },
+        )
     }
 
-    fun showRewardedAd(activity: Activity, onUserEarnedReward: (RewardItem) -> Unit, onAdDismissed: () -> Unit) {
-        if (rewardedAd != null) {
-            rewardedAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
-                override fun onAdDismissedFullScreenContent() { rewardedAd = null; onAdDismissed() }
-                override fun onAdFailedToShowFullScreenContent(adError: AdError) { rewardedAd = null; onAdDismissed() }
-            }
-            rewardedAd?.show(activity) { onUserEarnedReward(it) }
-        } else onAdDismissed()
+    fun showRewardedAd(
+        activity: Activity,
+        onUserEarnedReward: (RewardItem) -> Unit,
+        onAdDismissed: () -> Unit,
+    ) {
+        val ad = rewardedAd
+        if (ad == null) { onAdDismissed(); return }
+        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+            override fun onAdDismissedFullScreenContent()              { rewardedAd = null; onAdDismissed() }
+            override fun onAdFailedToShowFullScreenContent(e: AdError) { rewardedAd = null; onAdDismissed() }
+        }
+        ad.show(activity) { onUserEarnedReward(it) }
     }
 
     enum class RewardType { DOUBLE_XP, UNLOCK_LESSON, SAVE_STREAK }
@@ -427,7 +424,6 @@ class AdsViewModel @Inject constructor(
 
     fun canShowScenario(rewardType: RewardType): Boolean = _remainingRewardedAds.value > 0
 
-    /** Yerelden anlık okuma — gün içinde uygulama yeniden açılsa bile doğru kalan hakkı gösterir. */
     private fun syncRemainingRewardedAds(dailyLimit: Int) {
         val uid = auth.currentUser?.uid ?: return
         val used = frequencyManager.getCount(uid, "rewarded")
@@ -441,29 +437,29 @@ class AdsViewModel @Inject constructor(
         onDismiss     : () -> Unit = {},
         onLimitReached: () -> Unit = {},
     ) {
-        val uid = auth.currentUser?.uid ?: ""
-        // TEK KATMAN, ANINDA: limit kontrolü artık YEREL (SharedPreferences) —
-        // ağ beklenmiyor. Eskiden burada Firestore'a SENKRON gidip kontrol
-        // ediliyordu, kullanıcı butona her bastığında reklam gösterilmeden
-        // önce bir ağ gecikmesi yaşanıyordu. Günlük limit CMS'ten (cms_ads/
-        // rewarded_xp.dailyLimit) geliyor — tek doğruluk kaynağı.
+        val uid        = auth.currentUser?.uid ?: ""
         val dailyLimit = _rewardedConfig.value?.dailyLimit ?: 3
+
         if (uid.isNotEmpty() && frequencyManager.isLimitReached(uid, "rewarded", dailyLimit)) {
             _remainingRewardedAds.value = 0
             onLimitReached()
             return
         }
-        if (rewardedAd != null) {
-            rewardedAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
-                override fun onAdDismissedFullScreenContent() { rewardedAd = null; onDismiss() }
-                override fun onAdFailedToShowFullScreenContent(adError: AdError) { rewardedAd = null; onDismiss() }
+
+        val ad = rewardedAd
+        if (ad != null) {
+            ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+                override fun onAdDismissedFullScreenContent()              { rewardedAd = null; onDismiss() }
+                override fun onAdFailedToShowFullScreenContent(e: AdError) { rewardedAd = null; onDismiss() }
             }
-            rewardedAd?.show(activity) { rewardItem ->
-                if (uid.isNotEmpty()) frequencyManager.increment(uid, "rewarded") // anında yerel + arka planda Firestore
+            ad.show(activity) { rewardItem ->
+                if (uid.isNotEmpty()) frequencyManager.increment(uid, "rewarded")
                 _remainingRewardedAds.value = (_remainingRewardedAds.value - 1).coerceAtLeast(0)
                 onRewarded(rewardItem, rewardType)
             }
-        } else onDismiss()
+        } else {
+            onDismiss()
+        }
     }
 
     override fun onCleared() {
@@ -471,18 +467,8 @@ class AdsViewModel @Inject constructor(
         engine.destroyAll()
     }
 
-    // TEK KATMAN, ANINDA: artık Remote Config beklenmiyor — config yükleme
-    // ViewModel oluşur oluşmaz başlar (Firestore cache-first zaten kendi içinde
-    // anlık). Eskiden burada Remote Config fetchAndActivate() (ağ round-trip)
-    // bitene kadar bekleniyordu; bu hem gereksiz bir gecikme hem de bir yarış
-    // durumu (race condition) yaratıyordu: ekranlar kendi loadAdConfigs()
-    // çağrılarını RC'nin setDefaultsAsync()'i bitmeden yapabiliyordu, bu da
-    // bazı slotların yanlışlıkla "kapalı" sanılmasına yol açabiliyordu. Artık
-    // tek doğruluk kaynağı: Firestore cms_ads. NOT: init bloğu bilinçli olarak
-    // sınıfın EN SONUNA konuldu — loadAdConfigs() yukarıdaki tüm StateFlow'lara
-    // (_bannerConfig, _adsEnabled, lastServerFetchMs...) erişiyor; init bloğu
-    // bunlardan ÖNCE olsaydı (Main.immediate dispatcher senkron çalıştığı için)
-    // henüz initialize edilmemiş property'lere erişme riski olurdu.
+    // NOT: init bloğu en sona konuldu — yukarıdaki tüm property'ler
+    // hazır olduktan sonra çalışması garanti altında.
     init {
         loadAdConfigs()
     }

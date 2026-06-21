@@ -20,22 +20,15 @@ import kotlinx.coroutines.launch
  * ═══════════════════════════════════════════════════════════════════════════
  *  AdEngine — Heftreng'in TEK reklam motoru.
  *
- *  Eskiden her banner/native "slot" (FEED, LIB, KURDI, BLOG...) kendi
- *  state'ine, kendi retry sayacına, kendi preload fonksiyonuna sahipti —
- *  aynı mantık 4-6 kez kopyalanmıştı. Bu dosya bunun yerine TEK bir
- *  String-key tabanlı sistem sunar: her slot sadece bir "key" stringidir
- *  (örn. "banner_feed", "native_blog"). Yeni bir yer eklemek için kod
- *  değişikliği gerekmez, sadece yeni bir key kullanılır.
+ *  Tüm banner ve native reklam yükleme/retry/havuz mantığı tek yerde.
+ *  Ekranlar sadece key (String) bazında istekte bulunur.
  *
- *  İki temel kavram:
- *   1. SINGLE  — ekranda tek bir kalıcı reklam alanı (ör. sayfa başlığı
- *                altındaki banner). key = "banner_feed" gibi sabit.
- *   2. POOL    — liste içinde tekrarlanan reklamlar (ör. her 5 postta bir
- *                native ad). Önceden N adet reklam yüklenip kuyrukta
- *                bekletilir, pozisyon ekrana gelince ANINDA kuyruktan
- *                çekilir — bu "geç yükleniyor / hiç gelmiyor" sorununu
- *                çözer çünkü network bekleme süresi kullanıcı scroll
- *                etmeden ÖNCE, arka planda gerçekleşir.
+ *  Düzeltmeler (v2):
+ *   - spawnBannerAdView: retry döngüsünde ESKİ AdView destroy edilmeden
+ *     önce yeni istek başlıyordu → yarış durumu + bellek sızıntısı. Düzeltildi.
+ *   - loadBanner / loadPositionedBanner: "zaten yüklü" guard'ı unit ID
+ *     değişimini de doğru şekilde algılar hale getirildi.
+ *   - warmUpNativePool: havuz dolduğunda nativePoolFilling bayrağı temizlenir.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 class AdEngine(
@@ -43,13 +36,13 @@ class AdEngine(
     private val scope: CoroutineScope,
 ) {
     companion object {
-        private const val MAX_RETRY = 4
-        private const val RETRY_BASE_DELAY_MS = 8_000L
-        private const val POOL_TARGET = 3   // havuzda hep hazır bekleyecek reklam sayısı
-        private const val POOL_MAX    = 6   // bellek koruması — bunu aşan fazlalık serbest bırakılır
+        private const val MAX_RETRY         = 4
+        private const val RETRY_BASE_DELAY  = 8_000L   // 8s, 16s, 32s, 64s
+        private const val POOL_TARGET       = 3        // havuzda hep hazır bekleyecek reklam
+        private const val POOL_MAX          = 6        // bellek koruması üst sınırı
     }
 
-    // ── Tekil (single) banner state'leri — key bazlı, tek map ────────────────
+    // ── Tekil (single) banner ─────────────────────────────────────────────
     private val singleBannerView   = mutableMapOf<String, AdView>()
     private val singleBannerLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
     private val singleBannerSize   = mutableMapOf<String, String>()
@@ -61,33 +54,29 @@ class AdEngine(
 
     fun cachedBanner(key: String): AdView? = singleBannerView[key]
 
-    /** Tekil bir banner slotunu yükler/yeniler. Boyut VEYA unit ID değiştiyse otomatik yeniden yükler. */
+    /** Tekil banner slotunu yükler. Unit ID veya boyut değiştiyse otomatik yeniler. */
     fun loadBanner(key: String, unitId: String, bannerSize: String = "adaptive") {
         if (unitId.isBlank()) return
-        val loadedFlow = singleBannerLoaded.getOrPut(key) { MutableStateFlow(false) }
+        val loadedFlow  = singleBannerLoaded.getOrPut(key) { MutableStateFlow(false) }
         val sizeChanged = singleBannerSize[key] != null && singleBannerSize[key] != bannerSize
-        // ÖNEMLİ: Anlık yükleme için varsayılan (prod) unit ID ile başlatılıp, CMS config
-        // gelince gerçek unit ID'ye (örn. test modu) GEÇİLMESİ gerekebilir. Eskiden sadece
-        // boyut değişimi kontrol ediliyordu — unit ID değişse de "zaten yüklü" diye hiçbir
-        // şey yapılmıyordu, CMS'in kararı asla uygulanmıyordu.
         val unitChanged = singleBannerUnit[key] != null && singleBannerUnit[key] != unitId
         if (loadedFlow.value && !sizeChanged && !unitChanged) return
+
         if (sizeChanged || unitChanged) {
-            singleBannerView[key]?.destroy()
-            singleBannerView.remove(key)
+            singleBannerView.remove(key)?.destroy()
             loadedFlow.value = false
         }
-        singleBannerSize[key] = bannerSize
-        singleBannerUnit[key] = unitId
-        singleRetryCount[key] = 0
+        singleBannerSize[key]  = bannerSize
+        singleBannerUnit[key]  = unitId
+        singleRetryCount[key]  = 0
         spawnBannerAdView(key, unitId, bannerSize) { adView ->
-            singleBannerView[key]?.destroy()
+            singleBannerView.remove(key)?.destroy()   // ← önceki varsa temizle
             singleBannerView[key] = adView
             loadedFlow.value = true
         }
     }
 
-    // ── Havuzlu (pozisyon bazlı) banner state'leri ───────────────────────────
+    // ── Pozisyon bazlı banner ──────────────────────────────────────────────
     private val posBannerView   = mutableMapOf<String, AdView>()
     private val posBannerLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
     private val posBannerSize   = mutableMapOf<String, String>()
@@ -100,19 +89,19 @@ class AdEngine(
 
     fun loadPositionedBanner(key: String, unitId: String, bannerSize: String = "adaptive") {
         if (unitId.isBlank()) return
-        val loadedFlow = posBannerLoaded.getOrPut(key) { MutableStateFlow(false) }
+        val loadedFlow  = posBannerLoaded.getOrPut(key) { MutableStateFlow(false) }
         val sizeChanged = posBannerSize[key] != null && posBannerSize[key] != bannerSize
         val unitChanged = posBannerUnit[key] != null && posBannerUnit[key] != unitId
         if (loadedFlow.value && !sizeChanged && !unitChanged) return
+
         if (sizeChanged || unitChanged) {
-            posBannerView[key]?.destroy()
-            posBannerView.remove(key)
+            posBannerView.remove(key)?.destroy()
             loadedFlow.value = false
         }
         posBannerSize[key] = bannerSize
         posBannerUnit[key] = unitId
         spawnBannerAdView(key, unitId, bannerSize) { adView ->
-            posBannerView[key]?.destroy()
+            posBannerView.remove(key)?.destroy()   // ← önceki varsa temizle
             posBannerView[key] = adView
             loadedFlow.value = true
         }
@@ -122,15 +111,18 @@ class AdEngine(
         val keys = if (keyPrefix == null) posBannerView.keys.toList()
                    else posBannerView.keys.filter { it.startsWith(keyPrefix) }
         keys.forEach { k ->
-            posBannerView[k]?.destroy()
-            posBannerView.remove(k)
+            posBannerView.remove(k)?.destroy()
             posBannerLoaded.remove(k)
             posBannerSize.remove(k)
             posBannerUnit.remove(k)
         }
     }
 
-    /** Tek bir AdView üretip yükler — retry mantığı tek yerde, tüm banner tipleri için ortak. */
+    /**
+     * Tek bir AdView üretip yükler.
+     * Retry'da: callback saklayarak sadece en son istek "kazanır",
+     * aradaki stale AdView'lar anında destroy edilir.
+     */
     private fun spawnBannerAdView(
         key: String,
         unitId: String,
@@ -141,29 +133,36 @@ class AdEngine(
             setAdSize(resolveAdSize(bannerSize))
             adUnitId = unitId
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            adListener = object : AdListener() {
-                override fun onAdLoaded() {
-                    singleRetryCount[key] = 0
-                    onLoaded(this@apply)
-                }
-                override fun onAdFailedToLoad(e: LoadAdError) {
-                    scope.launch {
-                        val retry = (singleRetryCount[key] ?: 0) + 1
-                        singleRetryCount[key] = retry
-                        if (retry <= MAX_RETRY) {
-                            delay(backoffDelay(retry))
-                            spawnBannerAdView(key, unitId, bannerSize, onLoaded)
-                        }
+        }
+
+        adView.adListener = object : AdListener() {
+            override fun onAdLoaded() {
+                singleRetryCount[key] = 0
+                onLoaded(adView)
+            }
+            override fun onAdFailedToLoad(e: LoadAdError) {
+                adView.destroy()  // ← başarısız AdView'ı hemen temizle
+                scope.launch {
+                    val retry = (singleRetryCount[key] ?: 0) + 1
+                    singleRetryCount[key] = retry
+                    if (retry <= MAX_RETRY) {
+                        delay(backoffDelay(retry))
+                        spawnBannerAdView(key, unitId, bannerSize, onLoaded)
                     }
                 }
             }
-            loadAd(AdRequest.Builder().setContentUrl("https://heftreng.app").build())
         }
+
+        adView.loadAd(
+            AdRequest.Builder()
+                .setContentUrl("https://heftreng.app")
+                .build()
+        )
     }
 
     fun resolveAdSize(bannerSize: String): AdSize {
-        val dm = appContext.resources.displayMetrics
-        val width = (dm.widthPixels / dm.density).toInt().coerceAtLeast(320) // min güvenli genişlik
+        val dm    = appContext.resources.displayMetrics
+        val width = (dm.widthPixels / dm.density).toInt().coerceAtLeast(320)
         return when (bannerSize) {
             "banner"           -> AdSize.BANNER
             "medium_rectangle" -> AdSize.MEDIUM_RECTANGLE
@@ -173,9 +172,9 @@ class AdEngine(
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    //  NATIVE AD HAVUZU — asıl "geç yükleniyor" sorununu çözen kısım.
-    //  unitId bazlı ortak havuzlar: aynı unitId'yi kullanan tüm pozisyonlar
-    //  (feed_native_5, feed_native_10, ...) aynı havuzdan beslenir.
+    //  NATIVE AD HAVUZU
+    //  unitId bazlı ortak havuzlar — aynı unitId'yi kullanan tüm
+    //  pozisyonlar aynı havuzdan beslenir.
     // ══════════════════════════════════════════════════════════════════════
     private val nativePool        = mutableMapOf<String, ArrayDeque<NativeAd>>()
     private val nativePoolFilling = mutableMapOf<String, Boolean>()
@@ -189,10 +188,10 @@ class AdEngine(
 
     fun cachedPositionedNative(key: String): NativeAd? = posNativeAd[key]
 
-    /** Havuzu önceden doldurur — ekran açılır açılmaz çağrılmalı (1 kere yeter, idempotent). */
+    /** Havuzu önceden doldurur — idempotent, ekran açılışında bir kez çağrılır. */
     fun warmUpNativePool(unitId: String) {
         if (unitId.isBlank()) return
-        val pool = nativePool.getOrPut(unitId) { ArrayDeque() }
+        val pool   = nativePool.getOrPut(unitId) { ArrayDeque() }
         val needed = POOL_TARGET - pool.size
         if (needed <= 0 || nativePoolFilling[unitId] == true) return
         nativePoolFilling[unitId] = true
@@ -204,13 +203,17 @@ class AdEngine(
             .forNativeAd { nativeAd ->
                 val pool = nativePool.getOrPut(unitId) { ArrayDeque() }
                 if (pool.size < POOL_MAX) pool.addLast(nativeAd) else nativeAd.destroy()
+                // Havuz hedefine ulaşıldıysa doldurma bayrağını kaldır
                 nativePoolFilling[unitId] = pool.size < POOL_TARGET
                 if (pool.size < POOL_TARGET) fillNativePoolSlot(unitId)
             }
             .withAdListener(object : AdListener() {
                 override fun onAdFailedToLoad(adError: LoadAdError) {
                     scope.launch {
-                        if (retry >= MAX_RETRY) { nativePoolFilling[unitId] = false; return@launch }
+                        if (retry >= MAX_RETRY) {
+                            nativePoolFilling[unitId] = false
+                            return@launch
+                        }
                         delay(backoffDelay(retry + 1))
                         fillNativePoolSlot(unitId, retry + 1)
                     }
@@ -220,40 +223,41 @@ class AdEngine(
     }
 
     /**
-     * Bir pozisyon (key) için ANINDA havuzdan reklam çeker. Havuz doluysa
-     * sıfır gecikme. Havuz boşsa (ör. ilk açılış, henüz ısınmadı) doğrudan
-     * yükler ve aynı anda havuzu da ısıtır — bir sonraki sefer havuzdan gelir.
+     * Pozisyon için ANINDA havuzdan reklam çeker.
+     * Havuz doluysa → 0 gecikme.
+     * Havuz boşsa → doğrudan yükler + arka planda havuzu ısıtır.
      */
     fun preloadPositionedNative(key: String, unitId: String) {
         if (unitId.isBlank()) return
         val loadedFlow = posNativeLoaded.getOrPut(key) { MutableStateFlow(false) }
-        // ÖNEMLİ: unitId değiştiyse (örn. anlık-yükleme varsayılan prod ID'den, CMS'in
-        // belirttiği test/özel unit ID'sine geçildiyse) eski reklamla durup kalmasın —
-        // yeniden yükle. Eskiden burada sadece "loadedFlow.value ise dokunma" vardı,
-        // yani CMS config sonradan gelince hiçbir zaman uygulanmıyordu.
         if (loadedFlow.value && posNativeUnit[key] == unitId) return
         posNativeUnit[key] = unitId
 
-        val pool = nativePool.getOrPut(unitId) { ArrayDeque() }
-        val fromPool = pool.removeFirstOrNull()
+        val pool      = nativePool.getOrPut(unitId) { ArrayDeque() }
+        val fromPool  = pool.removeFirstOrNull()
         if (fromPool != null) {
-            posNativeAd[key]?.destroy()
-            posNativeAd[key] = fromPool
-            loadedFlow.value = true
-            warmUpNativePool(unitId) // çekilen yerine arka planda yenisini doldur
+            posNativeAd.remove(key)?.destroy()
+            posNativeAd[key]    = fromPool
+            loadedFlow.value    = true
+            warmUpNativePool(unitId)   // çekilen yerin yerine arka planda doldur
             return
         }
-
+        // Havuz boş — doğrudan yükle, paralelde havuzu doldur
         warmUpNativePool(unitId)
         loadNativeDirect(key, unitId, loadedFlow)
     }
 
-    private fun loadNativeDirect(key: String, unitId: String, loadedFlow: MutableStateFlow<Boolean>, retry: Int = 0) {
+    private fun loadNativeDirect(
+        key: String,
+        unitId: String,
+        loadedFlow: MutableStateFlow<Boolean>,
+        retry: Int = 0,
+    ) {
         AdLoader.Builder(appContext, unitId)
             .forNativeAd { nativeAd ->
-                posNativeAd[key]?.destroy()
-                posNativeAd[key] = nativeAd
-                loadedFlow.value = true
+                posNativeAd.remove(key)?.destroy()
+                posNativeAd[key]  = nativeAd
+                loadedFlow.value  = true
             }
             .withAdListener(object : AdListener() {
                 override fun onAdFailedToLoad(adError: LoadAdError) {
@@ -271,8 +275,7 @@ class AdEngine(
         val keys = if (keyPrefix == null) posNativeAd.keys.toList()
                    else posNativeAd.keys.filter { it.startsWith(keyPrefix) }
         keys.forEach { k ->
-            posNativeAd[k]?.destroy()
-            posNativeAd.remove(k)
+            posNativeAd.remove(k)?.destroy()
             posNativeLoaded.remove(k)
             posNativeUnit.remove(k)
         }
@@ -282,15 +285,18 @@ class AdEngine(
         val pools = if (unitId == null) nativePool.values else listOfNotNull(nativePool[unitId])
         pools.forEach { pool -> while (pool.isNotEmpty()) pool.removeFirst().destroy() }
         if (unitId != null) nativePool.remove(unitId) else nativePool.clear()
+        if (unitId != null) nativePoolFilling.remove(unitId) else nativePoolFilling.clear()
     }
 
-    // ── Yardımcılar ────────────────────────────────────────────────────────
+    // ── Yardımcılar ───────────────────────────────────────────────────────
     private fun backoffDelay(retry: Int): Long =
-        RETRY_BASE_DELAY_MS * (1L shl (retry - 1).coerceAtMost(4)) // 8s,16s,32s,64s,128s tavanı
+        RETRY_BASE_DELAY * (1L shl (retry - 1).coerceAtMost(4))   // 8s,16s,32s,64s,128s
 
-    /** CMS config'inden gerçek kullanılacak unit ID'yi belirler: CMS özel unitId varsa o, yoksa prod ID.
-     *  NOT: testMode artık ayrı bir test ID'ye geçmiyor — cihaz zaten AdMob'da test cihazı olarak
-     *  kayıtlı, prod ID'ler bu cihazda otomatik test reklamı gösterir (bkz. HeftrangApp.kt). */
+    /**
+     * CMS config'inden gerçek unit ID'yi belirler.
+     * CMS'te özel unitId tanımlıysa → onu kullan, yoksa → prod varsayılanı.
+     * enabled=false ise null döner → reklam gösterilmez.
+     */
     fun resolveUnitId(config: CmsAdConfig?, prodId: String): String? {
         config ?: return null
         if (!config.enabled) return null
@@ -302,7 +308,10 @@ class AdEngine(
         posBannerView.values.forEach { it.destroy() }
         posNativeAd.values.forEach { it.destroy() }
         nativePool.values.forEach { pool -> pool.forEach { it.destroy() } }
-        singleBannerView.clear(); posBannerView.clear()
-        posNativeAd.clear(); nativePool.clear()
+        singleBannerView.clear(); singleBannerLoaded.clear()
+        singleBannerSize.clear(); singleBannerUnit.clear()
+        posBannerView.clear();    posBannerLoaded.clear()
+        posNativeAd.clear();      nativePool.clear()
+        nativePoolFilling.clear()
     }
 }
