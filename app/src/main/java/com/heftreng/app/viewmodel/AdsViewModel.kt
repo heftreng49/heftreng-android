@@ -15,9 +15,12 @@ import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import com.google.android.gms.ads.rewarded.RewardItem
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
 import com.heftreng.app.ads.AdEngine
+import com.heftreng.app.ads.AdFrequencyManager
+import com.heftreng.app.ads.AdsRemoteConfig
 import com.heftreng.app.data.model.AdMobProdIds
 import com.heftreng.app.data.model.CmsAdConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -47,10 +50,21 @@ import javax.inject.Inject
 @HiltViewModel
 class AdsViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
+    private val auth: FirebaseAuth,
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
 ) : ViewModel() {
 
-    private val engine = AdEngine(appContext, viewModelScope)
+    private val engine           = AdEngine(appContext, viewModelScope)
+    private val frequencyManager = AdFrequencyManager(firestore)
+
+    // Remote Config + frekans başlatma
+    init {
+        viewModelScope.launch {
+            AdsRemoteConfig.initialize()
+            // Remote Config aktif olduktan sonra config'i yükle
+            loadAdConfigs()
+        }
+    }
 
     // ── Cache TTL — cms_ads nadiren değişir, 30 dakikada bir server'a git ──────
     private val ADS_CONFIG_TTL_MS = 30L * 60L * 1000L
@@ -181,6 +195,11 @@ class AdsViewModel @Inject constructor(
         _bannerConfig.combine(_adsEnabled) { c, _ -> c?.position ?: 5 }
             .stateIn(viewModelScope, SharingStarted.Eagerly, 5)
 
+    // ── Remote Config'ten gelen global durum ─────────────────────────────────
+    // applyAdConfigs() çağrıldığında hem Firestore cms_ads hem RC kontrol edilir.
+    private fun isSlotEnabled(firestoreEnabled: Boolean, rcEnabled: Boolean): Boolean =
+        firestoreEnabled && rcEnabled && AdsRemoteConfig.adsEnabled
+
     // ── loadAdConfigs: Hibrit Cache + Server ──────────────────────────────────
     // 1. Cache'den anlık yükle (0 gecikme), 2. TTL dolduysa server'dan tazele.
     fun loadAdConfigs(forceServer: Boolean = false) {
@@ -260,7 +279,13 @@ class AdsViewModel @Inject constructor(
     private fun applyBannerConfig(target: MutableStateFlow<CmsAdConfig?>, config: CmsAdConfig, slot: BannerSlot, preloadAds: Boolean) {
         val changed = target.value != config
         target.value = config
-        if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+        val rcEnabled = when (slot) {
+            BannerSlot.FEED  -> AdsRemoteConfig.bannerFeedEnabled
+            BannerSlot.BLOG  -> AdsRemoteConfig.bannerBlogEnabled
+            BannerSlot.LIB   -> AdsRemoteConfig.bannerLibEnabled
+            BannerSlot.KURDI -> AdsRemoteConfig.bannerKurdiEnabled
+        }
+        if (preloadAds && changed && isSlotEnabled(config.enabled, rcEnabled)) {
             engine.resolveUnitId(config, AdMobProdIds.BANNER)
                 ?.let { engine.loadBanner(slot.key(), it, config.bannerSize) }
         }
@@ -269,7 +294,11 @@ class AdsViewModel @Inject constructor(
     private fun applyNativeConfig(target: MutableStateFlow<CmsAdConfig?>, config: CmsAdConfig, slot: NativeAdSlot, preloadAds: Boolean) {
         val changed = target.value != config
         target.value = config
-        if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+        val rcEnabled = when (slot) {
+            NativeAdSlot.FEED -> AdsRemoteConfig.nativeFeedEnabled
+            NativeAdSlot.BLOG -> AdsRemoteConfig.nativeBlogEnabled
+        }
+        if (preloadAds && changed && isSlotEnabled(config.enabled, rcEnabled)) {
             engine.resolveUnitId(config, AdMobProdIds.NATIVE)
                 ?.let { engine.warmUpNativePool(it) }
         }
@@ -341,17 +370,31 @@ class AdsViewModel @Inject constructor(
         onDismiss     : () -> Unit = {},
         onLimitReached: () -> Unit = {},
     ) {
-        if (_remainingRewardedAds.value <= 0) { onLimitReached(); return }
-        if (rewardedAd != null) {
-            rewardedAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
-                override fun onAdDismissedFullScreenContent() { rewardedAd = null; onDismiss() }
-                override fun onAdFailedToShowFullScreenContent(adError: AdError) { rewardedAd = null; onDismiss() }
+        val uid = auth.currentUser?.uid ?: ""
+        viewModelScope.launch {
+            // Remote Config'ten günlük limit al
+            val dailyLimit = AdsRemoteConfig.rewardedDailyLimit
+            // Firestore'dan bugünkü sayacı kontrol et
+            if (uid.isNotEmpty() && frequencyManager.isLimitReached(uid, "rewarded", dailyLimit)) {
+                _remainingRewardedAds.value = 0
+                onLimitReached()
+                return@launch
             }
-            rewardedAd?.show(activity) { rewardItem ->
-                _remainingRewardedAds.value = (_remainingRewardedAds.value - 1).coerceAtLeast(0)
-                onRewarded(rewardItem, rewardType)
-            }
-        } else onDismiss()
+            if (rewardedAd != null) {
+                rewardedAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
+                    override fun onAdDismissedFullScreenContent() { rewardedAd = null; onDismiss() }
+                    override fun onAdFailedToShowFullScreenContent(adError: AdError) { rewardedAd = null; onDismiss() }
+                }
+                rewardedAd?.show(activity) { rewardItem ->
+                    // Firestore'a kaydet
+                    if (uid.isNotEmpty()) {
+                        viewModelScope.launch { frequencyManager.increment(uid, "rewarded") }
+                    }
+                    _remainingRewardedAds.value = (_remainingRewardedAds.value - 1).coerceAtLeast(0)
+                    onRewarded(rewardItem, rewardType)
+                }
+            } else onDismiss()
+        }
     }
 
     override fun onCleared() {
