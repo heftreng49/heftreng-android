@@ -83,23 +83,12 @@ class MainActivity : ComponentActivity() {
 
         // EdgeToEdge modunu aktifleştiriyoruz — sistem çubuklarını şeffaf yapar
         enableEdgeToEdge()
+        // NOT: WindowCompat.setDecorFitsSystemWindows kaldırıldı,
+        // enableEdgeToEdge() zaten bunu yapıyor (Android 15 uyumlu)
 
-        // Android 15 uyumluluğu: LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES deprecated.
-        // Bazı SDK'lar (AdMob, Firebase) kendi içlerinde shortEdges kullanabiliyor.
-        // Runtime'da ALWAYS ile override ederek Play Console uyarısını gideriyoruz.
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            window.attributes = window.attributes.also { attrs ->
-                attrs.layoutInDisplayCutoutMode =
-                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
-            }
-        }
-
-        // AdMob SDK zaten HeftrangApp.onCreate() içinde (Application seviyesinde,
-        // en erken nokta) başlatıldı. Burada tekrar initialize() çağırıp config
-        // yüklemeyi ona bağlamaya gerek yok — config yükleme zaten her ekranın
-        // kendi LaunchedEffect'inde ANINDA tetikleniyor (bkz. FeedScreen, BlogScreen
-        // vb.). Bu da ekstra, gereksiz bir bekleme adımıydı.
-        adsVm.loadAdConfigs()
+        // MobileAds.initialize() HeftrangApp.onCreate()'da zaten çağrılıyor.
+        // Burada tekrar çağırmak gereksiz (AdMob tolere ediyor ama 2. callback hiç gelmeyebilir).
+        // AdsViewModel.init{} bloğu loadAdConfigs()'i otomatik tetikliyor.
 
         // ScreenTracker — activity lifecycle dinleyicisi + adsVm bağla
         application.registerActivityLifecycleCallbacks(screenTracker)
