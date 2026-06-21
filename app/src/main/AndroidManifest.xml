@@ -31,6 +31,47 @@
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"
         android:minSdkVersion="33" />
 
+    <!-- ═══════════════════════════════════════════════════════════════════
+         CİHAZ UYUMLULUĞU — "Bu cihaz desteklenmiyor" sorununu önler.
+         Bağımlılıklar (AdMob, Meta Audience Network, Firebase, CameraX vb.)
+         kendi manifest'lerinde donanım feature'larını "required=true" ile
+         deklare edebilir. Manifest merge sırasında bu sessizce ana manifest'e
+         eklenir ve Play Store o donanıma sahip olmayan cihazları (bazı bütçe/
+         orta segment telefonlar) otomatik olarak listeden çıkarır — ama APK
+         doğrudan kurulduğunda bu kontrol uygulanmaz, bu yüzden "APK ile
+         çalışıyor ama Play Store'da görünmüyor" şikayeti ortaya çıkar.
+         Aşağıdaki override'lar bu donanımların ZORUNLU olmadığını garanti eder.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-feature android:name="android.hardware.location.network" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.faketouch" android:required="false" />
+    <!-- Adaptive icon / launcher gerektirmeyen eski cihazlar için -->
+    <uses-feature android:glEsVersion="0x00020000" android:required="false" />
+
+    <!-- Tüm ekran boyutları/yoğunlukları desteklensin — bazı bütçe telefonların
+         ekran çözünürlüğü yüzünden listeden düşmesini önler. -->
+    <supports-screens
+        android:smallScreens="true"
+        android:normalScreens="true"
+        android:largeScreens="true"
+        android:xlargeScreens="true"
+        android:anyDensity="true" />
+
     <application
         android:name=".HeftrangApp"
         android:allowBackup="false"
