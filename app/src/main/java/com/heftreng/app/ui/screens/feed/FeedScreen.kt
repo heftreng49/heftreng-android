@@ -134,17 +134,12 @@ fun FeedScreen(
         blogVm.loadPosts()
     }
 
-    // Native ad havuzunu önceden doldur — config gelir gelmez tetiklenir.
+    // Native ad havuzunu önceden doldur — artık CMS config beklemeden ANINDA
+    // (varsayılan prod unit ID ile) tetiklenir; CMS gelince gerekirse swap olur.
     // Kullanıcı feed'i scroll ettiğinde reklamlar zaten hazır, bekleme olmaz.
-    val nativeFeedCfgForWarmup by adsVm.nativeFeedConfig.collectAsState()
-    LaunchedEffect(nativeFeedCfgForWarmup) {
-        val cfg = nativeFeedCfgForWarmup ?: return@LaunchedEffect
-        if (!cfg.enabled) return@LaunchedEffect
-        val unitId = when {
-            cfg.testMode            -> com.heftreng.app.data.model.AdMobTestIds.NATIVE
-            cfg.unitId.isNotBlank() -> cfg.unitId
-            else                    -> com.heftreng.app.data.model.AdMobProdIds.NATIVE
-        }
+    val nativeFeedUnitIdForWarmup by adsVm.nativeFeedUnitId.collectAsState()
+    LaunchedEffect(nativeFeedUnitIdForWarmup) {
+        val unitId = nativeFeedUnitIdForWarmup ?: return@LaunchedEffect
         adsVm.warmUpNativePool(unitId)
     }
 
@@ -496,12 +491,10 @@ fun FeedScreen(
                     val nativeFeedCfg by adsVm.nativeFeedConfig.collectAsState()
                     val nativeFreq = (nativeFeedCfg?.position ?: 5).coerceAtLeast(1)
                     if (postIndex > 0 && postIndex % nativeFreq == 0) {
-                        val nativeUnitId = nativeFeedCfg?.let { cfg ->
-                            if (!cfg.enabled) null
-                            else if (cfg.testMode) com.heftreng.app.data.model.AdMobTestIds.NATIVE
-                            else if (cfg.unitId.isNotBlank()) cfg.unitId
-                            else com.heftreng.app.data.model.AdMobProdIds.NATIVE
-                        }
+                        // ÖNEMLİ: nativeFeedCfg CMS'den gelene kadar null'dur — eskiden bu
+                        // yüzden unitId de null kalıyor, reklam hiç istenmiyordu. Artık
+                        // adsVm.nativeFeedUnitId (anlık varsayılan prod ID'li) kullanılıyor.
+                        val nativeUnitId by adsVm.nativeFeedUnitId.collectAsState()
                         PositionedNativeAdView(
                             positionKey    = "feed_native_$postIndex",
                             unitId         = nativeUnitId,

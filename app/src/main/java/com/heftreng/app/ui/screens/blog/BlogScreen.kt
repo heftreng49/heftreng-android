@@ -61,16 +61,10 @@ fun BlogScreen(
 
     LaunchedEffect(Unit) { adsVm.loadAdConfigs() }
 
-    // Native ad havuzunu önceden doldur — config gelir gelmez tetiklenir.
-    val nativeBlogCfgForWarmup by adsVm.nativeBlogConfig.collectAsState()
-    LaunchedEffect(nativeBlogCfgForWarmup) {
-        val cfg = nativeBlogCfgForWarmup ?: return@LaunchedEffect
-        if (!cfg.enabled) return@LaunchedEffect
-        val unitId = when {
-            cfg.testMode            -> com.heftreng.app.data.model.AdMobTestIds.NATIVE
-            cfg.unitId.isNotBlank() -> cfg.unitId
-            else                    -> com.heftreng.app.data.model.AdMobProdIds.NATIVE
-        }
+    // Native ad havuzunu önceden doldur — artık CMS config beklemeden ANINDA tetiklenir.
+    val nativeBlogUnitIdForWarmup by adsVm.nativeBlogUnitId.collectAsState()
+    LaunchedEffect(nativeBlogUnitIdForWarmup) {
+        val unitId = nativeBlogUnitIdForWarmup ?: return@LaunchedEffect
         adsVm.warmUpNativePool(unitId)
     }
 
@@ -178,12 +172,10 @@ fun BlogScreen(
                             val nativeBlogCfg by adsVm.nativeBlogConfig.collectAsState()
                             val nativeBlogFreq = (nativeBlogCfg?.position ?: 5).coerceAtLeast(1)
                             if (index > 0 && index % nativeBlogFreq == 0) {
-                                val nativeUnitId = nativeBlogCfg?.let { cfg ->
-                                    if (!cfg.enabled) null
-                                    else if (cfg.testMode) com.heftreng.app.data.model.AdMobTestIds.NATIVE
-                                    else if (cfg.unitId.isNotBlank()) cfg.unitId
-                                    else com.heftreng.app.data.model.AdMobProdIds.NATIVE
-                                }
+                                // ÖNEMLİ: nativeBlogCfg CMS'den gelene kadar null'dur — eskiden bu
+                                // yüzden unitId de null kalıyor, reklam hiç istenmiyordu. Artık
+                                // adsVm.nativeBlogUnitId (anlık varsayılan prod ID'li) kullanılıyor.
+                                val nativeUnitId by adsVm.nativeBlogUnitId.collectAsState()
                                 PositionedNativeAdView(
                                     positionKey  = "blog_native_$index",
                                     unitId       = nativeUnitId,

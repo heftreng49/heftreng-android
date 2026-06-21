@@ -131,29 +131,49 @@ class AdsViewModel @Inject constructor(
     private val _adsEnabled = MutableStateFlow(true)
     val adsEnabled = _adsEnabled.asStateFlow()
 
+    // ÖNEMLİ — "Reklamlar yüklenmiyor / çok geç geliyor" sorununun asıl kaynağı:
+    // Eskiden bu Flow'lar CMS config (Firestore) gelene kadar hep `null` dönüyordu,
+    // ekranlar da `if (unitId != null)` diye kontrol ettiği için reklam yükleme
+    // İSTEĞİ bile atılmıyordu. Yani her açılışta: Firestore round-trip + AdMob
+    // round-trip art arda (paralel değil!) bekleniyordu. Artık config gelene kadar
+    // ANINDA prod unit ID ile yükleme başlıyor; CMS gelince (testMode/disabled/özel
+    // unitId) varsa kararını uygular — AdEngine artık unit ID değişimini de
+    // algılayıp gerekirse swap ediyor (bkz. AdEngine.loadBanner/preloadPositionedNative).
     val bannerUnitId: StateFlow<String?> = combine(_bannerConfig, _adsEnabled) { c, e ->
-        if (e) engine.resolveUnitId(c, AdMobTestIds.BANNER, AdMobProdIds.BANNER) else null
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        if (!e) null
+        else if (c == null) AdMobProdIds.BANNER
+        else engine.resolveUnitId(c, AdMobTestIds.BANNER, AdMobProdIds.BANNER)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val bannerLibraryUnitId: StateFlow<String?> = combine(_bannerLibraryConfig, _adsEnabled) { c, e ->
-        if (e) engine.resolveUnitId(c, AdMobTestIds.BANNER, AdMobProdIds.BANNER) else null
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        if (!e) null
+        else if (c == null) AdMobProdIds.BANNER
+        else engine.resolveUnitId(c, AdMobTestIds.BANNER, AdMobProdIds.BANNER)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val bannerKurdiUnitId: StateFlow<String?> = combine(_bannerKurdiConfig, _adsEnabled) { c, e ->
-        if (e) engine.resolveUnitId(c, AdMobTestIds.BANNER, AdMobProdIds.BANNER) else null
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        if (!e) null
+        else if (c == null) AdMobProdIds.BANNER
+        else engine.resolveUnitId(c, AdMobTestIds.BANNER, AdMobProdIds.BANNER)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val bannerBlogUnitId: StateFlow<String?> = combine(_bannerBlogConfig, _adsEnabled) { c, e ->
-        if (e) engine.resolveUnitId(c, AdMobTestIds.BANNER, AdMobProdIds.BANNER) else null
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        if (!e) null
+        else if (c == null) AdMobProdIds.BANNER
+        else engine.resolveUnitId(c, AdMobTestIds.BANNER, AdMobProdIds.BANNER)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val nativeFeedUnitId: StateFlow<String?> = combine(_nativeFeedConfig, _adsEnabled) { c, e ->
-        if (e) engine.resolveUnitId(c, AdMobTestIds.NATIVE, AdMobProdIds.NATIVE) else null
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        if (!e) null
+        else if (c == null) AdMobProdIds.NATIVE
+        else engine.resolveUnitId(c, AdMobTestIds.NATIVE, AdMobProdIds.NATIVE)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val nativeBlogUnitId: StateFlow<String?> = combine(_nativeBlogConfig, _adsEnabled) { c, e ->
-        if (e) engine.resolveUnitId(c, AdMobTestIds.NATIVE, AdMobProdIds.NATIVE) else null
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        if (!e) null
+        else if (c == null) AdMobProdIds.NATIVE
+        else engine.resolveUnitId(c, AdMobTestIds.NATIVE, AdMobProdIds.NATIVE)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val bannerPosition: StateFlow<Int> =
         _bannerConfig.combine(_adsEnabled) { c, _ -> c?.position ?: 5 }

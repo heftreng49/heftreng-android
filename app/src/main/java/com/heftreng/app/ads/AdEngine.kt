@@ -55,6 +55,7 @@ class AdEngine(
     private val singleBannerView   = mutableMapOf<String, AdView>()
     private val singleBannerLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
     private val singleBannerSize   = mutableMapOf<String, String>()
+    private val singleBannerUnit   = mutableMapOf<String, String>()
     private val singleRetryCount   = mutableMapOf<String, Int>()
 
     fun bannerLoadedFlow(key: String): StateFlow<Boolean> =
@@ -62,18 +63,24 @@ class AdEngine(
 
     fun cachedBanner(key: String): AdView? = singleBannerView[key]
 
-    /** Tekil bir banner slotunu yükler/yeniler. Boyut değiştiyse otomatik yeniden yükler. */
+    /** Tekil bir banner slotunu yükler/yeniler. Boyut VEYA unit ID değiştiyse otomatik yeniden yükler. */
     fun loadBanner(key: String, unitId: String, bannerSize: String = "adaptive") {
         if (unitId.isBlank()) return
         val loadedFlow = singleBannerLoaded.getOrPut(key) { MutableStateFlow(false) }
         val sizeChanged = singleBannerSize[key] != null && singleBannerSize[key] != bannerSize
-        if (loadedFlow.value && !sizeChanged) return
-        if (sizeChanged) {
+        // ÖNEMLİ: Anlık yükleme için varsayılan (prod) unit ID ile başlatılıp, CMS config
+        // gelince gerçek unit ID'ye (örn. test modu) GEÇİLMESİ gerekebilir. Eskiden sadece
+        // boyut değişimi kontrol ediliyordu — unit ID değişse de "zaten yüklü" diye hiçbir
+        // şey yapılmıyordu, CMS'in kararı asla uygulanmıyordu.
+        val unitChanged = singleBannerUnit[key] != null && singleBannerUnit[key] != unitId
+        if (loadedFlow.value && !sizeChanged && !unitChanged) return
+        if (sizeChanged || unitChanged) {
             singleBannerView[key]?.destroy()
             singleBannerView.remove(key)
             loadedFlow.value = false
         }
         singleBannerSize[key] = bannerSize
+        singleBannerUnit[key] = unitId
         singleRetryCount[key] = 0
         spawnBannerAdView(key, unitId, bannerSize) { adView ->
             singleBannerView[key]?.destroy()
@@ -86,6 +93,7 @@ class AdEngine(
     private val posBannerView   = mutableMapOf<String, AdView>()
     private val posBannerLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
     private val posBannerSize   = mutableMapOf<String, String>()
+    private val posBannerUnit   = mutableMapOf<String, String>()
 
     fun positionedBannerLoadedFlow(key: String): StateFlow<Boolean> =
         posBannerLoaded.getOrPut(key) { MutableStateFlow(false) }.asStateFlow()
@@ -96,13 +104,15 @@ class AdEngine(
         if (unitId.isBlank()) return
         val loadedFlow = posBannerLoaded.getOrPut(key) { MutableStateFlow(false) }
         val sizeChanged = posBannerSize[key] != null && posBannerSize[key] != bannerSize
-        if (loadedFlow.value && !sizeChanged) return
-        if (sizeChanged) {
+        val unitChanged = posBannerUnit[key] != null && posBannerUnit[key] != unitId
+        if (loadedFlow.value && !sizeChanged && !unitChanged) return
+        if (sizeChanged || unitChanged) {
             posBannerView[key]?.destroy()
             posBannerView.remove(key)
             loadedFlow.value = false
         }
         posBannerSize[key] = bannerSize
+        posBannerUnit[key] = unitId
         spawnBannerAdView(key, unitId, bannerSize) { adView ->
             posBannerView[key]?.destroy()
             posBannerView[key] = adView
@@ -118,6 +128,7 @@ class AdEngine(
             posBannerView.remove(k)
             posBannerLoaded.remove(k)
             posBannerSize.remove(k)
+            posBannerUnit.remove(k)
         }
     }
 
@@ -173,6 +184,7 @@ class AdEngine(
 
     private val posNativeAd     = mutableMapOf<String, NativeAd>()
     private val posNativeLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
+    private val posNativeUnit   = mutableMapOf<String, String>()
 
     fun positionedNativeLoadedFlow(key: String): StateFlow<Boolean> =
         posNativeLoaded.getOrPut(key) { MutableStateFlow(false) }.asStateFlow()
@@ -217,7 +229,12 @@ class AdEngine(
     fun preloadPositionedNative(key: String, unitId: String) {
         if (unitId.isBlank()) return
         val loadedFlow = posNativeLoaded.getOrPut(key) { MutableStateFlow(false) }
-        if (loadedFlow.value) return
+        // ÖNEMLİ: unitId değiştiyse (örn. anlık-yükleme varsayılan prod ID'den, CMS'in
+        // belirttiği test/özel unit ID'sine geçildiyse) eski reklamla durup kalmasın —
+        // yeniden yükle. Eskiden burada sadece "loadedFlow.value ise dokunma" vardı,
+        // yani CMS config sonradan gelince hiçbir zaman uygulanmıyordu.
+        if (loadedFlow.value && posNativeUnit[key] == unitId) return
+        posNativeUnit[key] = unitId
 
         val pool = nativePool.getOrPut(unitId) { ArrayDeque() }
         val fromPool = pool.removeFirstOrNull()
@@ -259,6 +276,7 @@ class AdEngine(
             posNativeAd[k]?.destroy()
             posNativeAd.remove(k)
             posNativeLoaded.remove(k)
+            posNativeUnit.remove(k)
         }
     }
 
