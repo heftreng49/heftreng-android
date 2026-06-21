@@ -181,9 +181,9 @@ fun BlogScreen(
                                     unitId       = nativeUnitId,
                                     adsVm        = adsVm,
                                     modifier     = Modifier.fillMaxWidth(),
-                                    prefetchKeys = if (nativeUnitId != null)
-                                        listOf("blog_native_${index + nativeBlogFreq}" to nativeUnitId)
-                                    else emptyList(),
+                                    prefetchKeys = nativeUnitId?.let { uid ->
+                                        listOf("blog_native_${index + nativeBlogFreq}" to uid)
+                                    } ?: emptyList(),
                                 ) { ad ->
                                     NativeAdViewCompose(
                                         nativeAd = ad,

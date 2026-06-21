@@ -500,9 +500,9 @@ fun FeedScreen(
                             unitId         = nativeUnitId,
                             adsVm          = adsVm,
                             modifier       = Modifier.fillMaxWidth(),
-                            prefetchKeys   = if (nativeUnitId != null)
-                                listOf("feed_native_${postIndex + 5}" to nativeUnitId)
-                            else emptyList(),
+                            prefetchKeys   = nativeUnitId?.let { uid ->
+                                listOf("feed_native_${postIndex + 5}" to uid)
+                            } ?: emptyList(),
                         ) { ad ->
                             NativeAdViewCompose(
                                 nativeAd = ad,
