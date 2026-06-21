@@ -19,7 +19,6 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
 import com.heftreng.app.ads.AdEngine
 import com.heftreng.app.data.model.AdMobProdIds
-import com.heftreng.app.data.model.AdMobTestIds
 import com.heftreng.app.data.model.CmsAdConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -136,43 +135,46 @@ class AdsViewModel @Inject constructor(
     // ekranlar da `if (unitId != null)` diye kontrol ettiği için reklam yükleme
     // İSTEĞİ bile atılmıyordu. Yani her açılışta: Firestore round-trip + AdMob
     // round-trip art arda (paralel değil!) bekleniyordu. Artık config gelene kadar
-    // ANINDA prod unit ID ile yükleme başlıyor; CMS gelince (testMode/disabled/özel
-    // unitId) varsa kararını uygular — AdEngine artık unit ID değişimini de
-    // algılayıp gerekirse swap ediyor (bkz. AdEngine.loadBanner/preloadPositionedNative).
+    // ANINDA prod unit ID ile yükleme başlıyor; CMS gelince (disabled/özel unitId)
+    // varsa kararını uygular — AdEngine artık unit ID değişimini de algılayıp
+    // gerekirse swap ediyor (bkz. AdEngine.loadBanner/preloadPositionedNative).
+    // NOT: Google'ın paylaşılan test ID'leri kaldırıldı — cihaz zaten AdMob'da
+    // test cihazı olarak kayıtlı (HeftrangApp.kt), prod ID'ler bu cihazda otomatik
+    // test reklamı gösterir; CMS'teki "testMode" anahtarı artık etkisizdir.
     val bannerUnitId: StateFlow<String?> = combine(_bannerConfig, _adsEnabled) { c, e ->
         if (!e) null
         else if (c == null) AdMobProdIds.BANNER
-        else engine.resolveUnitId(c, AdMobTestIds.BANNER, AdMobProdIds.BANNER)
+        else engine.resolveUnitId(c, AdMobProdIds.BANNER)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val bannerLibraryUnitId: StateFlow<String?> = combine(_bannerLibraryConfig, _adsEnabled) { c, e ->
         if (!e) null
         else if (c == null) AdMobProdIds.BANNER
-        else engine.resolveUnitId(c, AdMobTestIds.BANNER, AdMobProdIds.BANNER)
+        else engine.resolveUnitId(c, AdMobProdIds.BANNER)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val bannerKurdiUnitId: StateFlow<String?> = combine(_bannerKurdiConfig, _adsEnabled) { c, e ->
         if (!e) null
         else if (c == null) AdMobProdIds.BANNER
-        else engine.resolveUnitId(c, AdMobTestIds.BANNER, AdMobProdIds.BANNER)
+        else engine.resolveUnitId(c, AdMobProdIds.BANNER)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val bannerBlogUnitId: StateFlow<String?> = combine(_bannerBlogConfig, _adsEnabled) { c, e ->
         if (!e) null
         else if (c == null) AdMobProdIds.BANNER
-        else engine.resolveUnitId(c, AdMobTestIds.BANNER, AdMobProdIds.BANNER)
+        else engine.resolveUnitId(c, AdMobProdIds.BANNER)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val nativeFeedUnitId: StateFlow<String?> = combine(_nativeFeedConfig, _adsEnabled) { c, e ->
         if (!e) null
         else if (c == null) AdMobProdIds.NATIVE
-        else engine.resolveUnitId(c, AdMobTestIds.NATIVE, AdMobProdIds.NATIVE)
+        else engine.resolveUnitId(c, AdMobProdIds.NATIVE)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val nativeBlogUnitId: StateFlow<String?> = combine(_nativeBlogConfig, _adsEnabled) { c, e ->
         if (!e) null
         else if (c == null) AdMobProdIds.NATIVE
-        else engine.resolveUnitId(c, AdMobTestIds.NATIVE, AdMobProdIds.NATIVE)
+        else engine.resolveUnitId(c, AdMobProdIds.NATIVE)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val bannerPosition: StateFlow<Int> =
@@ -243,7 +245,7 @@ class AdsViewModel @Inject constructor(
                     val changed = _rewardedConfig.value != config
                     _rewardedConfig.value = config
                     if (preloadAds && changed && config.enabled && _adsEnabled.value) {
-                        engine.resolveUnitId(config, AdMobTestIds.REWARDED, AdMobProdIds.REWARDED)
+                        engine.resolveUnitId(config, AdMobProdIds.REWARDED)
                             ?.let { preloadRewardedAd(it) }
                     }
                 }
@@ -259,7 +261,7 @@ class AdsViewModel @Inject constructor(
         val changed = target.value != config
         target.value = config
         if (preloadAds && changed && config.enabled && _adsEnabled.value) {
-            engine.resolveUnitId(config, AdMobTestIds.BANNER, AdMobProdIds.BANNER)
+            engine.resolveUnitId(config, AdMobProdIds.BANNER)
                 ?.let { engine.loadBanner(slot.key(), it, config.bannerSize) }
         }
     }
@@ -268,7 +270,7 @@ class AdsViewModel @Inject constructor(
         val changed = target.value != config
         target.value = config
         if (preloadAds && changed && config.enabled && _adsEnabled.value) {
-            engine.resolveUnitId(config, AdMobTestIds.NATIVE, AdMobProdIds.NATIVE)
+            engine.resolveUnitId(config, AdMobProdIds.NATIVE)
                 ?.let { engine.warmUpNativePool(it) }
         }
     }
@@ -287,7 +289,7 @@ class AdsViewModel @Inject constructor(
     fun loadInterstitial(context: android.content.Context) {
         val config = _interstitialConfig.value ?: return
         if (!config.enabled) return
-        loadInterstitialAd(if (config.testMode) AdMobTestIds.INTERSTITIAL else AdMobProdIds.INTERSTITIAL)
+        loadInterstitialAd(AdMobProdIds.INTERSTITIAL) // testMode artık ayrı test ID kullanmıyor — cihaz zaten test cihazı
     }
 
     fun showInterstitialAd(activity: Activity, onAdDismissed: () -> Unit) {

@@ -44,8 +44,8 @@ import javax.inject.Singleton
 //    - Fakat reklam gösterimi AdMob SDK'sına bırakılmıştır;
 //      Firestore cache reklam requestini, impression'ı veya tıklamayı
 //      etkilemez — bunlar AdMob kendi ağ katmanında işler.
-//    - AdMob test/prod ID seçimi Models.kt'daki AdMobTestIds / AdMobProdIds
-//      üzerinden yapılır; Firestore'dan CmsAdConfig.testMode okunur.
+//    - AdMob prod ID seçimi Models.kt'daki AdMobProdIds üzerinden yapılır.
+//      Cihaz zaten AdMob test cihazı olarak kayıtlı, ayrı test ID gerekmez.
 //
 //  SUPABASE:
 //    - URL ve ANON_KEY build zamanında BuildConfig'e gömülür.

@@ -8,8 +8,6 @@ import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.nativead.NativeAd
-import com.heftreng.app.data.model.AdMobProdIds
-import com.heftreng.app.data.model.AdMobTestIds
 import com.heftreng.app.data.model.CmsAdConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -290,15 +288,13 @@ class AdEngine(
     private fun backoffDelay(retry: Int): Long =
         RETRY_BASE_DELAY_MS * (1L shl (retry - 1).coerceAtMost(4)) // 8s,16s,32s,64s,128s tavanı
 
-    /** CMS config'inden gerçek kullanılacak unit ID'yi belirler: testMode > CMS unitId > hardcoded prod. */
-    fun resolveUnitId(config: CmsAdConfig?, testId: String, prodId: String): String? {
+    /** CMS config'inden gerçek kullanılacak unit ID'yi belirler: CMS özel unitId varsa o, yoksa prod ID.
+     *  NOT: testMode artık ayrı bir test ID'ye geçmiyor — cihaz zaten AdMob'da test cihazı olarak
+     *  kayıtlı, prod ID'ler bu cihazda otomatik test reklamı gösterir (bkz. HeftrangApp.kt). */
+    fun resolveUnitId(config: CmsAdConfig?, prodId: String): String? {
         config ?: return null
         if (!config.enabled) return null
-        return when {
-            config.testMode            -> testId
-            config.unitId.isNotBlank() -> config.unitId
-            else                       -> prodId
-        }
+        return config.unitId.ifBlank { prodId }
     }
 
     fun destroyAll() {

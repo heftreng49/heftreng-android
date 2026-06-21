@@ -491,13 +491,12 @@ data class AppConfig(
     val kurdiTitle          : String  = ""
 )
 
-object AdMobTestIds {
-    const val BANNER        = "ca-app-pub-3940256099942544/6300978111"
-    const val INTERSTITIAL  = "ca-app-pub-3940256099942544/1033173712"
-    const val REWARDED      = "ca-app-pub-3940256099942544/5224354917"
-    const val NATIVE        = "ca-app-pub-3940256099942544/2247696110"  // Google test native ad unit
-}
-
+// ÖNCEKİ: AdMobTestIds (Google'ın paylaşılan örnek reklam birimleri) burada
+// duruyordu. Cihaz zaten MobileAds.setRequestConfiguration(...) ile test
+// cihazı olarak kayıtlı (bkz. HeftrangApp.kt) — yani PROD unit ID'lere istek
+// atılsa da bu cihazda otomatik olarak test reklamı gösterilir. Ayrı bir test
+// ID setine hiç gerek yok; kaldırıldı (CMS'teki "testMode" anahtarı artık
+// devre dışı/etkisiz — her zaman prod ID kullanılıyor, bkz. AdEngine.resolveUnitId).
 object AdMobProdIds {
     const val BANNER        = "ca-app-pub-6463746824939277/7866834575"
     const val INTERSTITIAL  = "ca-app-pub-6463746824939277/4989839500"
