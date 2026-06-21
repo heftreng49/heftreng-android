@@ -56,6 +56,47 @@ class AdsViewModel @Inject constructor(
     private val engine           = AdEngine(appContext, viewModelScope)
     private val frequencyManager = AdFrequencyManager(appContext, firestore, viewModelScope)
 
+    // ═════════════════════════ KALICI CONFIG CACHE'İ ═══════════════════════════
+    // SORU: "Reklamları geç yükleyen şey cache mekanizması olabilir mi?" — CEVAP: evet, kısmen.
+    // Eskiden her uygulama açılışında "varsayılan/sabit prod ID ile anında yükle, CMS gelince
+    // gerekirse swap et" yapıyorduk. CMS'te o slot için ÖZEL bir unitId tanımlıysa (ki admin
+    // panelindeki unitId alanı tam olarak bunun için var), HER açılışta şu olur:
+    //   1) Sabit varsayılan ID ile bir AdMob isteği başlar (anında)
+    //   2) Firestore'dan gerçek config gelir (çoğu zaman saniyenin altında ama 0 değil)
+    //   3) Gerçek unitId farklıysa: 1.'deki istek iptal edilip YENİDEN istek atılır
+    // Yani kullanıcı ilk reklamı değil, İKİNCİ (gerçek) reklamı görür — "geç/sonradan geliyor"
+    // hissi tam olarak budur. Çözüm: son bilinen GERÇEK config'i SharedPreferences'a kalıcı
+    // olarak yaz, bir sonraki açılışta sabit varsayılan yerine BUNU kullan. Admin bir şey
+    // değiştirmediği sürece (en yaygın durum) ilk istek = gerçek istek olur, swap hiç olmaz.
+    // Sadece UYGULAMANIN İLK AÇILIŞINDA (hem prefs hem Firestore cache'i boşken) sabit
+    // varsayılana düşülür — bu kaçınılmaz, tek seferlik bir maliyettir.
+    private val adPrefs = appContext.getSharedPreferences("heftreng_ad_config_cache", android.content.Context.MODE_PRIVATE)
+    private val PREF_SEP = "\u0001"
+
+    private fun persistConfig(docId: String, c: CmsAdConfig) {
+        val raw = listOf(
+            c.unitId, c.enabled, c.testMode, c.position, c.frequency, c.xpReward, c.dailyLimit,
+            c.scenarioDoubleXp, c.scenarioUnlockLesson, c.scenarioSaveStreak, c.adType, c.bannerSize,
+            c.placement, c.screens, c.label, c.bgColor, c.cornerRadius, c.paddingTop, c.paddingBottom,
+        ).joinToString(PREF_SEP)
+        adPrefs.edit().putString(docId, raw).apply()
+    }
+
+    private fun loadPersistedConfig(docId: String): CmsAdConfig? {
+        val raw = adPrefs.getString(docId, null) ?: return null
+        val p = raw.split(PREF_SEP)
+        if (p.size < 19) return null
+        return try {
+            CmsAdConfig(
+                id = docId, unitId = p[0], enabled = p[1].toBoolean(), testMode = p[2].toBoolean(),
+                position = p[3].toInt(), frequency = p[4].toInt(), xpReward = p[5].toInt(), dailyLimit = p[6].toInt(),
+                scenarioDoubleXp = p[7].toBoolean(), scenarioUnlockLesson = p[8].toBoolean(), scenarioSaveStreak = p[9].toBoolean(),
+                adType = p[10], bannerSize = p[11], placement = p[12], screens = p[13],
+                label = p[14], bgColor = p[15], cornerRadius = p[16].toInt(), paddingTop = p[17].toInt(), paddingBottom = p[18].toInt(),
+            )
+        } catch (_: Exception) { null }
+    }
+
 
     // ── Cache TTL — cms_ads nadiren değişir, 30 dakikada bir server'a git ──────
     private val ADS_CONFIG_TTL_MS = 30L * 60L * 1000L
@@ -116,29 +157,29 @@ class AdsViewModel @Inject constructor(
     fun releaseAdPool(unitId: String? = null) = engine.releaseAdPool(unitId)
 
     // ═════════════════════════ KONFİGÜRASYONLAR (CMS) ═════════════════════════
-    private val _bannerConfig        = MutableStateFlow<CmsAdConfig?>(null)
+    private val _bannerConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("banner_feed"))
     val bannerConfig = _bannerConfig.asStateFlow()
-    private val _bannerLibraryConfig = MutableStateFlow<CmsAdConfig?>(null)
+    private val _bannerLibraryConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("banner_library"))
     val bannerLibraryConfig = _bannerLibraryConfig.asStateFlow()
-    private val _bannerKurdiConfig   = MutableStateFlow<CmsAdConfig?>(null)
+    private val _bannerKurdiConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("banner_kurdi"))
     val bannerKurdiConfig = _bannerKurdiConfig.asStateFlow()
-    private val _bannerBlogConfig    = MutableStateFlow<CmsAdConfig?>(null)
+    private val _bannerBlogConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("banner_blog"))
     val bannerBlogConfig = _bannerBlogConfig.asStateFlow()
-    private val _interstitialConfig  = MutableStateFlow<CmsAdConfig?>(null)
+    private val _interstitialConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("interstitial_serial"))
     val interstitialConfig = _interstitialConfig.asStateFlow()
-    private val _rewardedConfig      = MutableStateFlow<CmsAdConfig?>(null)
+    private val _rewardedConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("rewarded_xp"))
     val rewardedConfig = _rewardedConfig.asStateFlow()
-    private val _nativeFeedConfig    = MutableStateFlow<CmsAdConfig?>(null)
+    private val _nativeFeedConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("native_feed"))
     val nativeFeedConfig = _nativeFeedConfig.asStateFlow()
-    private val _nativeBlogConfig    = MutableStateFlow<CmsAdConfig?>(null)
+    private val _nativeBlogConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("native_blog"))
     val nativeBlogConfig = _nativeBlogConfig.asStateFlow()
-    private val _nativeLibraryConfig = MutableStateFlow<CmsAdConfig?>(null)
+    private val _nativeLibraryConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("native_library"))
     val nativeLibraryConfig = _nativeLibraryConfig.asStateFlow()
-    private val _nativeKurdiConfig   = MutableStateFlow<CmsAdConfig?>(null)
+    private val _nativeKurdiConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("native_kurdi"))
     val nativeKurdiConfig = _nativeKurdiConfig.asStateFlow()
-    private val _nativeProfileConfig = MutableStateFlow<CmsAdConfig?>(null)
+    private val _nativeProfileConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("native_profile"))
     val nativeProfileConfig = _nativeProfileConfig.asStateFlow()
-    private val _nativeSearchConfig  = MutableStateFlow<CmsAdConfig?>(null)
+    private val _nativeSearchConfig = MutableStateFlow<CmsAdConfig?>(loadPersistedConfig("native_search"))
     val nativeSearchConfig = _nativeSearchConfig.asStateFlow()
 
     private val _allAdConfigs = MutableStateFlow<Map<String, CmsAdConfig>>(emptyMap())
@@ -279,6 +320,9 @@ class AdsViewModel @Inject constructor(
                 paddingTop    = (d["paddingTop"]    as? Long)?.toInt() ?: 0,
                 paddingBottom = (d["paddingBottom"] as? Long)?.toInt() ?: 0,
             )
+
+            // Kalıcı cache — bir sonraki açılışta sabit varsayılan yerine BU kullanılacak.
+            persistConfig(doc.id, config)
 
             when (doc.id) {
                 "banner_feed" -> applyBannerConfig(_bannerConfig, config, BannerSlot.FEED, preloadAds)
