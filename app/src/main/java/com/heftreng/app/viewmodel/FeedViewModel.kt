@@ -1220,22 +1220,27 @@ class FeedViewModel @Inject constructor(
     private suspend fun fetchSuggestedUsersPage(page: Int) {
         val myUid = auth.currentUser?.uid ?: return
         val excludeUids = (_followingUids.value + myUid).toSet()
-        val offset = (page * SUGGEST_PAGE_SIZE).toLong()
 
-        // Fazladan çekiyoruz: takip edilenler filtrelenince yeterli sayı kalsın.
-        // excludeUids sayısı kadar ekstra çek, minimum SUGGEST_PAGE_SIZE * 3.
-        val fetchSize = (SUGGEST_PAGE_SIZE + excludeUids.size).coerceAtLeast(SUGGEST_PAGE_SIZE * 3).toLong()
+        // ÖNCEKİ HATA: sorgu her zaman created_at DESC + offset=0 ile aynı "en yeni
+        // kullanıcılar" kümesini deterministik döndürüyordu. Pull-to-refresh teknik
+        // olarak yeni bir ağ isteği atıyordu ama sonuç birebir aynı olduğu için liste
+        // hiç değişmiyormuş gibi görünüyordu. Artık page 0'da (taze yükleme / refresh)
+        // daha geniş bir havuz çekilip karıştırılıyor — her refresh'te liste gerçekten
+        // değişiyor. Sayfalama (Berê/Pêş, page > 0) ise atlama/tekrar olmasın diye
+        // deterministik offset ile devam ediyor.
+        val pageUsers: List<SuggestedUser>
+        val hasMore: Boolean
 
-        val rows = supabase.postgrest["users"].select {
-            filter { eq("banned", false) }
-            order("created_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
-            range(offset, offset + fetchSize - 1)
-        }.decodeList<com.heftreng.app.data.model.UserRow>()
+        if (page == 0) {
+            val poolSize = (SUGGEST_PAGE_SIZE * 10 + excludeUids.size).coerceAtLeast(100).toLong()
+            val rows = supabase.postgrest["users"].select {
+                filter { eq("banned", false) }
+                order("created_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                range(0, poolSize - 1)
+            }.decodeList<com.heftreng.app.data.model.UserRow>()
 
-        val pageUsers = rows
-            .filter { it.uid !in excludeUids && it.displayName.isNotBlank() }
-            .take(SUGGEST_PAGE_SIZE)
-            .map { row ->
+            val candidates = rows.filter { it.uid !in excludeUids && it.displayName.isNotBlank() }
+            pageUsers = candidates.shuffled().take(SUGGEST_PAGE_SIZE).map { row ->
                 SuggestedUser(
                     uid         = row.uid,
                     name        = row.displayName,
@@ -1244,8 +1249,34 @@ class FeedViewModel @Inject constructor(
                     isFollowing = false,
                 )
             }
+            hasMore = candidates.size > SUGGEST_PAGE_SIZE
+        } else {
+            val offset = (page * SUGGEST_PAGE_SIZE).toLong()
+            // Fazladan çekiyoruz: takip edilenler filtrelenince yeterli sayı kalsın.
+            val fetchSize = (SUGGEST_PAGE_SIZE + excludeUids.size).coerceAtLeast(SUGGEST_PAGE_SIZE * 3).toLong()
 
-        _hasMoreSuggestions.value = rows.size >= fetchSize
+            val rows = supabase.postgrest["users"].select {
+                filter { eq("banned", false) }
+                order("created_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                range(offset, offset + fetchSize - 1)
+            }.decodeList<com.heftreng.app.data.model.UserRow>()
+
+            pageUsers = rows
+                .filter { it.uid !in excludeUids && it.displayName.isNotBlank() }
+                .take(SUGGEST_PAGE_SIZE)
+                .map { row ->
+                    SuggestedUser(
+                        uid         = row.uid,
+                        name        = row.displayName,
+                        photoURL    = row.photoUrl,
+                        bio         = row.bio,
+                        isFollowing = false,
+                    )
+                }
+            hasMore = rows.size >= fetchSize
+        }
+
+        _hasMoreSuggestions.value = hasMore
         _suggestedUsers.value = pageUsers
         _suggestCurrentPage.value = page
     }
