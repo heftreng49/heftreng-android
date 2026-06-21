@@ -2,7 +2,4 @@
 <resources>
     <string name="app_name">Heftreng</string>
     <string name="default_web_client_id">854520441903-c8n3ugstsv6pgk6getrqo543nd0lv7qc.apps.googleusercontent.com</string>
-    <!-- Meta Audience Network — AdMob Console → Mediation → Meta → App ID ve Client Token buraya -->
-    <string name="facebook_app_id">975460002023693</string>
-    <string name="facebook_client_token">f9433ab9ee9d1eee92f691850a56fb76</string>
 </resources>

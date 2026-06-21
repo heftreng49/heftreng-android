@@ -150,7 +150,6 @@ dependencies {
 
     // AdMob
     implementation(libs.admob)
-    implementation("com.google.ads.mediation:facebook:6.17.0.0")
 
     // Room — Offline cache (Öncelik 4: alıntılar)
     implementation(libs.room.runtime)

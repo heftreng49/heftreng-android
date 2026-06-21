@@ -134,19 +134,6 @@
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-6463746824939277~5046669508" />
 
-        <!-- Meta Audience Network — AdMob Mediation -->
-        <meta-data
-            android:name="com.facebook.sdk.ApplicationId"
-            android:value="@string/facebook_app_id" />
-        <meta-data
-            android:name="com.facebook.sdk.ClientToken"
-            android:value="@string/facebook_client_token" />
-
-        <activity
-            android:name="com.facebook.ads.AudienceNetworkActivity"
-            android:exported="false"
-            android:hardwareAccelerated="true" />
-
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"
