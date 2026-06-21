@@ -83,8 +83,16 @@ class MainActivity : ComponentActivity() {
 
         // EdgeToEdge modunu aktifleştiriyoruz — sistem çubuklarını şeffaf yapar
         enableEdgeToEdge()
-        // NOT: WindowCompat.setDecorFitsSystemWindows kaldırıldı,
-        // enableEdgeToEdge() zaten bunu yapıyor (Android 15 uyumlu)
+
+        // Android 15 uyumluluğu: LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES deprecated.
+        // Bazı SDK'lar (AdMob, Firebase) kendi içlerinde shortEdges kullanabiliyor.
+        // Runtime'da ALWAYS ile override ederek Play Console uyarısını gideriyoruz.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.also { attrs ->
+                attrs.layoutInDisplayCutoutMode =
+                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            }
+        }
 
         // AdMob SDK zaten HeftrangApp.onCreate() içinde (Application seviyesinde,
         // en erken nokta) başlatıldı. Burada tekrar initialize() çağırıp config

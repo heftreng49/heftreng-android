@@ -87,6 +87,13 @@ jobs:
           name: heftreng-release.aab
           path: app/build/outputs/bundle/release/*.aab
 
+      - name: Upload Native Debug Symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: heftreng-native-symbols
+          path: app/build/outputs/native-debug-symbols/release/native-debug-symbols.zip
+          if-no-files-found: ignore
+
   # ── Play Store'a gönderme — SADECE elle "Run workflow" ile tetiklenip ──────
   # "publish_to_play" kutusu işaretlenirse çalışır. Normal push'larda bu job
   # hiç çalışmaz, yani hiçbir otomatik sürüm Play Store'a gitmez.
@@ -100,6 +107,13 @@ jobs:
         with:
           name: heftreng-release.aab
           path: aab/
+
+      - name: Download Native Debug Symbols
+        uses: actions/download-artifact@v4
+        with:
+          name: heftreng-native-symbols
+          path: symbols/
+        continue-on-error: true
 
       - name: Write release notes
         run: |
@@ -116,3 +130,4 @@ jobs:
           track: ${{ inputs.track }}
           status: completed
           whatsNewDirectory: release-notes/
+          debugSymbols: symbols/native-debug-symbols.zip
