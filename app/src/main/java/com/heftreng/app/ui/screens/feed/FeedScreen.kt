@@ -79,6 +79,10 @@ import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import com.heftreng.app.data.model.AppConfig
 import androidx.core.content.ContextCompat
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.graphics.graphicsLayer
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable

@@ -38,6 +38,13 @@ import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.LibraryViewModel
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Aksiyon paketi — isteğe bağlı olarak ekranlardan geçirilir
