@@ -937,6 +937,8 @@ private fun AdsTab(adsVm: AdsViewModel) {
     val nativeBlogConfig   by adsVm.nativeBlogConfig.collectAsState()
     val nativeLibraryConfig by adsVm.nativeLibraryConfig.collectAsState()
     val nativeKurdiConfig   by adsVm.nativeKurdiConfig.collectAsState()
+    val nativeProfileConfig by adsVm.nativeProfileConfig.collectAsState()
+    val nativeSearchConfig  by adsVm.nativeSearchConfig.collectAsState()
     val adsEnabled         by adsVm.adsEnabled.collectAsState()
     val allAdConfigs       by adsVm.allAdConfigs.collectAsState()
     val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
@@ -1084,6 +1086,28 @@ private fun AdsTab(adsVm: AdsViewModel) {
             )
         }
 
+        // ── Native Ad — Profil (ÖNCEDEN HİÇ YOKTU) ──────────────────────────
+        item {
+            AdConfigCard(
+                title      = "Native Ad — Profil",
+                docId      = "native_profile",
+                config     = nativeProfileConfig,
+                onSaved    = { adsVm.loadAdConfigs() },
+                onDeleted  = null,
+            )
+        }
+
+        // ── Native Ad — Arama Sonuçları (ÖNCEDEN HİÇ YOKTU) ─────────────────
+        item {
+            AdConfigCard(
+                title      = "Native Ad — Arama Sonuçları",
+                docId      = "native_search",
+                config     = nativeSearchConfig,
+                onSaved    = { adsVm.loadAdConfigs() },
+                onDeleted  = null,
+            )
+        }
+
         // ── Dinamik Slotlar (CMS'den admin tarafından sonradan eklenenler) ────
         // Sabit slotlar (banner_feed, native_feed, vb.) yukarıda zaten ayrı
         // kartlarla render ediliyor — allAdConfigs TÜM dokümanları içerir,
@@ -1092,6 +1116,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
         val FIXED_SLOT_IDS = setOf(
             "banner_feed", "banner_library", "banner_lib", "banner_kurdi", "banner_blog",
             "native_feed", "native_blog", "native_library", "native_kurdi",
+            "native_profile", "native_search",
             "interstitial_serial", "rewarded_xp", "global",
         )
         items(

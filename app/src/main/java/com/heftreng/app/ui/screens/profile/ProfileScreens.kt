@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,6 +45,8 @@ import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.screens.auth.heftrangTextFieldColors
 import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.ui.component.FullScreenImageViewer
+import com.heftreng.app.ui.component.PositionedNativeAdView
+import com.heftreng.app.ui.component.NativeAdViewCompose
 import com.heftreng.app.ui.screens.books.BookCard
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.FollowListSheet
@@ -67,6 +70,7 @@ fun ProfileScreen(
     msgsVm       : MessagesViewModel    = hiltViewModel(),
     socialVm     : SocialViewModel      = hiltViewModel(),
     settingsVm   : SettingsViewModel    = hiltViewModel(),
+    adsVm        : com.heftreng.app.viewmodel.AdsViewModel = hiltViewModel(),
 ) {
     val user           by vm.user.collectAsState()
     val badgeIds       by vm.badgeIds.collectAsState()
@@ -85,6 +89,13 @@ fun ProfileScreen(
     val mySerials      = allMyBooks.filter { it.type == "serial" }
     val myBooks        = allMyBooks.filter { it.type == "book" }
     val rlEntries      by rlVm.entries.collectAsState()
+
+    // Native ad havuzunu önceden doldur — Profil ekranında hiç reklam yoktu.
+    val nativeProfileUnitIdForWarmup by adsVm.nativeProfileUnitId.collectAsState()
+    LaunchedEffect(nativeProfileUnitIdForWarmup) {
+        val unitId = nativeProfileUnitIdForWarmup ?: return@LaunchedEffect
+        adsVm.warmUpNativePool(unitId)
+    }
 
     val followers     by socialVm.followers.collectAsState()
     val following     by socialVm.following.collectAsState()
@@ -451,7 +462,7 @@ fun ProfileScreen(
                             }
                         }
                     } else {
-                        items(posts, key = { "post_${it.id}" }) { post ->
+                        itemsIndexed(posts, key = { _, p -> "post_${p.id}" }) { index, post ->
                             PostCard(
                                 post      = post,
                                 onLike    = { vm.toggleLikePost(post) },
@@ -475,6 +486,20 @@ fun ProfileScreen(
                                 language = language,
                             )
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                            // ÖNCEDEN: Profil ekranında hiç native reklam yoktu.
+                            if (index > 0 && index % 6 == 0) {
+                                val nativeProfileCfg by adsVm.nativeProfileConfig.collectAsState()
+                                val nativeUnitId      by adsVm.nativeProfileUnitId.collectAsState()
+                                PositionedNativeAdView(
+                                    positionKey  = "profile_native_${targetUid}_$index",
+                                    unitId       = nativeUnitId,
+                                    adsVm        = adsVm,
+                                    modifier     = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    prefetchKeys = nativeUnitId?.let { uid -> listOf("profile_native_${targetUid}_${index + 6}" to uid) } ?: emptyList(),
+                                ) { ad ->
+                                    NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = nativeProfileCfg?.bannerSize ?: "small")
+                                }
+                            }
                         }
                         // ── Daha Fazla Yükle ──────────────────────────────
                         if (hasMorePosts) {

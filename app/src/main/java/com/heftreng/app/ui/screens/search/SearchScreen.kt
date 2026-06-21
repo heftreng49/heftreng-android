@@ -7,6 +7,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import com.heftreng.app.ui.component.PositionedNativeAdView
+import com.heftreng.app.ui.component.NativeAdViewCompose
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -45,12 +48,20 @@ fun SearchScreen(
     navController: NavController,
     language     : String = "tr",
     vm           : SearchViewModel = hiltViewModel(),
+    adsVm        : com.heftreng.app.viewmodel.AdsViewModel = hiltViewModel(),
 ) {
     val results        by vm.results.collectAsState()
     val searchResults  by vm.searchResults.collectAsState()
     val suggestions    by vm.suggestions.collectAsState()
     val loading        by vm.loading.collectAsState()
     val activeTab      by vm.activeTab.collectAsState()
+
+    // Native ad havuzunu önceden doldur — Arama ekranında hiç reklam yoktu.
+    val nativeSearchUnitIdForWarmup by adsVm.nativeSearchUnitId.collectAsState()
+    LaunchedEffect(nativeSearchUnitIdForWarmup) {
+        val unitId = nativeSearchUnitIdForWarmup ?: return@LaunchedEffect
+        adsVm.warmUpNativePool(unitId)
+    }
 
     var query          by remember { mutableStateOf("") }
     val focusManager   = LocalFocusManager.current
@@ -173,7 +184,7 @@ fun SearchScreen(
                             }
                         }
                     } else {
-                        items(filtered, key = { it.type + it.id }) { result ->
+                        itemsIndexed(filtered, key = { _, r -> r.type + r.id }) { index, result ->
                             SearchResultRow(result, language = language, onClick = {
                                 when (result.type) {
                                     "user"           -> navController.navigate("profile/${result.uid}")
@@ -186,6 +197,20 @@ fun SearchScreen(
                                 }
                             })
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                            // ÖNCEDEN: Arama sonuçlarında hiç native reklam yoktu.
+                            if (index > 0 && index % 8 == 0) {
+                                val nativeSearchCfg by adsVm.nativeSearchConfig.collectAsState()
+                                val nativeUnitId     by adsVm.nativeSearchUnitId.collectAsState()
+                                PositionedNativeAdView(
+                                    positionKey  = "search_native_$index",
+                                    unitId       = nativeUnitId,
+                                    adsVm        = adsVm,
+                                    modifier     = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    prefetchKeys = nativeUnitId?.let { uid -> listOf("search_native_${index + 8}" to uid) } ?: emptyList(),
+                                ) { ad ->
+                                    NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = nativeSearchCfg?.bannerSize ?: "small")
+                                }
+                            }
                         }
                     }
                 } else {
