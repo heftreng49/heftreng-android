@@ -511,8 +511,12 @@ class AdminViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
             try {
+                // ÖNCEKİ HATA: orderBy("displayName") kullanılıyordu — admin panelindeki
+                // kullanıcı listesi alfabetik sıralanıyordu, en son kayıt olanlar listenin
+                // ortasına/sonuna düşüyordu (hatta limit(100) yüzünden hiç görünmeyebiliyordu).
+                // Artık createdAt'e göre AZALAN sırada çekiliyor — en son kayıt olan en üstte.
                 val snap = firestore.collection("users")
-                    .orderBy("displayName")
+                    .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
                     .limit(100).get().await()
                 _users.value = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
@@ -523,10 +527,12 @@ class AdminViewModel @Inject constructor(
                         photoURL      = d["photoURL"] as? String ?: "",
                         banned        = d["banned"]   as? Boolean ?: false,
                         emailVerified = d["emailVerified"] as? Boolean ?: false,
+                        createdAt     = (d["createdAt"] as? com.google.firebase.Timestamp)?.toDate()?.time ?: 0L,
                     )
                 }
             } catch (e: Exception) {
-                // orderBy index yoksa sıralamasız çek
+                // orderBy index yoksa (veya createdAt alanı eski kayıtlarda yoksa) sıralamasız
+                // çekip client-side'da createdAt'e göre sırala — yine de en yeni en üstte olsun.
                 try {
                     val snap = firestore.collection("users").limit(100).get().await()
                     _users.value = snap.documents.mapNotNull { doc ->
@@ -538,8 +544,9 @@ class AdminViewModel @Inject constructor(
                             photoURL      = d["photoURL"] as? String ?: "",
                             banned        = d["banned"]   as? Boolean ?: false,
                             emailVerified = d["emailVerified"] as? Boolean ?: false,
+                            createdAt     = (d["createdAt"] as? com.google.firebase.Timestamp)?.toDate()?.time ?: 0L,
                         )
-                    }
+                    }.sortedByDescending { it.createdAt }
                 } catch (e2: Exception) { e2.printStackTrace() }
             } finally { _loading.value = false }
         }

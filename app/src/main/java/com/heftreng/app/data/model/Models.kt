@@ -26,6 +26,7 @@ data class User(
     val emailVerified      : Boolean= false,
     val isPrivate          : Boolean= false,
     val messagePermission  : String = "everyone", // "everyone" | "followers" | "nobody"
+    val createdAt          : Long   = 0L, // epoch millis — admin panelinde "en yeni kayıt" sıralaması için
     // FATURA: usernameLower — öneride index için, Firestore'a yazılır, client günceller
     // NOT: Bu alan AuthScreen/SettingsScreen'de kullanıcı adı kaydedilirken set edilmeli
 )

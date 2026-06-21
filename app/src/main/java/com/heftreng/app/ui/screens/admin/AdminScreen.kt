@@ -735,6 +735,20 @@ fun AdminScreen(
                                         user        = user,
                                         onToggleBan = { vm.toggleBan(user.uid, !user.banned) },
                                         onVerify    = if (!user.emailVerified) {{ vm.verifyUser(user.uid) }} else null,
+                                        onClickName = { navController.navigate("profile/${user.uid}") },
+                                        onEdit      = {
+                                            editUser  = user
+                                            editName  = user.displayName
+                                            editPhoto = user.photoURL
+                                        },
+                                        onDelete          = { deleteUserConfirm = user.uid },
+                                        isEditing         = editUser?.uid == user.uid,
+                                        editName          = editName,
+                                        editPhoto         = editPhoto,
+                                        onEditNameChange  = { editName = it },
+                                        onEditPhotoChange = { editPhoto = it },
+                                        onSaveEdit        = { vm.updateUserProfile(user.uid, editName, editPhoto); editUser = null },
+                                        onCancelEdit      = { editUser = null },
                                     )
                                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                                 }
@@ -1319,9 +1333,10 @@ fun AdminScreen(
                             )
                             Spacer(Modifier.height(8.dp))
 
-                            // Arama varsa Firestore sonuçları, yoksa yerel ilk 200
+                            // Arama varsa Firestore sonuçları, yoksa yerel liste — zaten
+                            // loadUsers() içinde createdAt'e göre (en yeni en üstte) sıralı geliyor.
                             val displayUsers = if (userSearch.isBlank()) {
-                                users.sortedBy { it.displayName }
+                                users
                             } else {
                                 searchResults
                             }
@@ -1340,7 +1355,12 @@ fun AdminScreen(
                                     Column(Modifier.padding(12.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Column(Modifier.weight(1f)) {
-                                                Text(user.displayName.ifBlank { "—" }, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                                Text(
+                                                    user.displayName.ifBlank { "—" },
+                                                    color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                                                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                                                    modifier = Modifier.clickable { navController.navigate("profile/${user.uid}") },
+                                                )
                                                 Text(user.email, color = Muted, fontSize = 11.sp)
                                                 Text(user.uid, color = Muted, fontSize = 9.sp)
                                                 if (user.banned) Text("BANLANDI", color = Error, fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -2646,7 +2666,18 @@ private fun AdminUserRow(
     user        : com.heftreng.app.data.model.User,
     onToggleBan : () -> Unit,
     onVerify    : (() -> Unit)? = null,
+    onClickName : (() -> Unit)? = null,
+    onEdit      : (() -> Unit)? = null,
+    onDelete    : (() -> Unit)? = null,
+    isEditing         : Boolean = false,
+    editName          : String = "",
+    editPhoto         : String = "",
+    onEditNameChange  : (String) -> Unit = {},
+    onEditPhotoChange : (String) -> Unit = {},
+    onSaveEdit        : () -> Unit = {},
+    onCancelEdit      : () -> Unit = {},
 ) {
+  Column(Modifier.fillMaxWidth()) {
     Row(
         modifier          = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -2661,6 +2692,10 @@ private fun AdminUserRow(
                     color      = com.heftreng.app.ui.theme.OnBackground,
                     fontWeight = FontWeight.SemiBold,
                     fontSize   = 13.sp,
+                    textDecoration = if (onClickName != null) androidx.compose.ui.text.style.TextDecoration.Underline else null,
+                    modifier   = if (onClickName != null)
+                        Modifier.clickable(onClick = onClickName)
+                    else Modifier,
                 )
                 if (user.emailVerified) {
                     Surface(
@@ -2706,6 +2741,12 @@ private fun AdminUserRow(
                 )
             }
         }
+        // Düzenle
+        if (onEdit != null) {
+            IconButton(onClick = onEdit) {
+                Icon(Icons.Default.Edit, contentDescription = "Düzenle", tint = com.heftreng.app.ui.theme.Amber, modifier = Modifier.size(20.dp))
+            }
+        }
         // Ban / Unban
         IconButton(onClick = onToggleBan) {
             Icon(
@@ -2714,5 +2755,37 @@ private fun AdminUserRow(
                 tint = if (user.banned) com.heftreng.app.ui.theme.Success else com.heftreng.app.ui.theme.Error,
             )
         }
+        // Sil
+        if (onDelete != null) {
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.DeleteForever, contentDescription = "Sil", tint = com.heftreng.app.ui.theme.Error, modifier = Modifier.size(20.dp))
+            }
+        }
     }
+
+    // Satır-içi düzenleme formu — onEdit ile açılır
+    if (isEditing) {
+        Column(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 8.dp)) {
+            HorizontalDivider(color = com.heftreng.app.ui.theme.Divider)
+            Spacer(Modifier.height(8.dp))
+            adminTextField(editName,  onEditNameChange,  "Yeni isim")
+            Spacer(Modifier.height(6.dp))
+            adminTextField(editPhoto, onEditPhotoChange, "Yeni fotoğraf URL")
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick  = onSaveEdit,
+                    shape    = RoundedCornerShape(8.dp),
+                    colors   = ButtonDefaults.buttonColors(containerColor = com.heftreng.app.ui.theme.Amber, contentColor = Color.Black),
+                    modifier = Modifier.weight(1f),
+                ) { Text("Kaydet", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                OutlinedButton(
+                    onClick  = onCancelEdit,
+                    shape    = RoundedCornerShape(8.dp),
+                    modifier = Modifier.weight(1f),
+                ) { Text("İptal", fontSize = 12.sp, color = com.heftreng.app.ui.theme.Muted) }
+            }
+        }
+    }
+  }
 }
