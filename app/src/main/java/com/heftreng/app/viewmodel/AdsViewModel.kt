@@ -65,7 +65,7 @@ class AdsViewModel @Inject constructor(
     // Eski enum'lar korunuyor (ekranlar bunu kullanıyor) — içeride sadece
     // birer String key'e çevriliyor, AdEngine bunları hiç bilmiyor.
     enum class BannerSlot { FEED, LIB, KURDI, BLOG }
-    enum class NativeAdSlot { FEED, BLOG }
+    enum class NativeAdSlot { FEED, BLOG, LIBRARY, KURDI }
 
     private fun BannerSlot.key() = when (this) {
         BannerSlot.FEED  -> "banner_feed"
@@ -75,8 +75,10 @@ class AdsViewModel @Inject constructor(
     }
 
     private fun NativeAdSlot.key() = when (this) {
-        NativeAdSlot.FEED -> "native_feed"
-        NativeAdSlot.BLOG -> "native_blog"
+        NativeAdSlot.FEED    -> "native_feed"
+        NativeAdSlot.BLOG    -> "native_blog"
+        NativeAdSlot.LIBRARY -> "native_library"
+        NativeAdSlot.KURDI   -> "native_kurdi"
     }
 
     // ═════════════════════════ BANNER — public API ═══════════════════════════
@@ -128,6 +130,10 @@ class AdsViewModel @Inject constructor(
     val nativeFeedConfig = _nativeFeedConfig.asStateFlow()
     private val _nativeBlogConfig    = MutableStateFlow<CmsAdConfig?>(null)
     val nativeBlogConfig = _nativeBlogConfig.asStateFlow()
+    private val _nativeLibraryConfig = MutableStateFlow<CmsAdConfig?>(null)
+    val nativeLibraryConfig = _nativeLibraryConfig.asStateFlow()
+    private val _nativeKurdiConfig   = MutableStateFlow<CmsAdConfig?>(null)
+    val nativeKurdiConfig = _nativeKurdiConfig.asStateFlow()
 
     private val _allAdConfigs = MutableStateFlow<Map<String, CmsAdConfig>>(emptyMap())
     val allAdConfigs = _allAdConfigs.asStateFlow()
@@ -177,6 +183,18 @@ class AdsViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val nativeBlogUnitId: StateFlow<String?> = combine(_nativeBlogConfig, _adsEnabled) { c, e ->
+        if (!e) null
+        else if (c == null) AdMobProdIds.NATIVE
+        else engine.resolveUnitId(c, AdMobProdIds.NATIVE)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
+
+    val nativeLibraryUnitId: StateFlow<String?> = combine(_nativeLibraryConfig, _adsEnabled) { c, e ->
+        if (!e) null
+        else if (c == null) AdMobProdIds.NATIVE
+        else engine.resolveUnitId(c, AdMobProdIds.NATIVE)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
+
+    val nativeKurdiUnitId: StateFlow<String?> = combine(_nativeKurdiConfig, _adsEnabled) { c, e ->
         if (!e) null
         else if (c == null) AdMobProdIds.NATIVE
         else engine.resolveUnitId(c, AdMobProdIds.NATIVE)
@@ -260,6 +278,8 @@ class AdsViewModel @Inject constructor(
                     }
                 }                "native_feed" -> applyNativeConfig(_nativeFeedConfig, config, NativeAdSlot.FEED, preloadAds)
                 "native_blog" -> applyNativeConfig(_nativeBlogConfig, config, NativeAdSlot.BLOG, preloadAds)
+                "native_library" -> applyNativeConfig(_nativeLibraryConfig, config, NativeAdSlot.LIBRARY, preloadAds)
+                "native_kurdi"   -> applyNativeConfig(_nativeKurdiConfig, config, NativeAdSlot.KURDI, preloadAds)
             }
             newAllConfigs[doc.id] = config
         }

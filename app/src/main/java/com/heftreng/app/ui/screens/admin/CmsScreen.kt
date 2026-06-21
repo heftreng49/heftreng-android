@@ -935,6 +935,8 @@ private fun AdsTab(adsVm: AdsViewModel) {
     val rewardedConfig     by adsVm.rewardedConfig.collectAsState()
     val nativeFeedConfig   by adsVm.nativeFeedConfig.collectAsState()
     val nativeBlogConfig   by adsVm.nativeBlogConfig.collectAsState()
+    val nativeLibraryConfig by adsVm.nativeLibraryConfig.collectAsState()
+    val nativeKurdiConfig   by adsVm.nativeKurdiConfig.collectAsState()
     val adsEnabled         by adsVm.adsEnabled.collectAsState()
     val allAdConfigs       by adsVm.allAdConfigs.collectAsState()
     val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
@@ -1060,6 +1062,28 @@ private fun AdsTab(adsVm: AdsViewModel) {
             )
         }
 
+        // ── Native Ad — Kütüphane (ÖNCEDEN HİÇ YOKTU — eksik ekranlardan biri) ──
+        item {
+            AdConfigCard(
+                title      = "Native Ad — Kütüphane",
+                docId      = "native_library",
+                config     = nativeLibraryConfig,
+                onSaved    = { adsVm.loadAdConfigs() },
+                onDeleted  = null,
+            )
+        }
+
+        // ── Native Ad — Kürtçe Dersler (ÖNCEDEN HİÇ YOKTU — eksik ekranlardan biri) ──
+        item {
+            AdConfigCard(
+                title      = "Native Ad — Kürtçe Dersler",
+                docId      = "native_kurdi",
+                config     = nativeKurdiConfig,
+                onSaved    = { adsVm.loadAdConfigs() },
+                onDeleted  = null,
+            )
+        }
+
         // ── Dinamik Slotlar (CMS'den admin tarafından sonradan eklenenler) ────
         // Sabit slotlar (banner_feed, native_feed, vb.) yukarıda zaten ayrı
         // kartlarla render ediliyor — allAdConfigs TÜM dokümanları içerir,
@@ -1067,7 +1091,8 @@ private fun AdsTab(adsVm: AdsViewModel) {
         // slot ekranda iki kez görünür (biri sabit kart, biri burada).
         val FIXED_SLOT_IDS = setOf(
             "banner_feed", "banner_library", "banner_lib", "banner_kurdi", "banner_blog",
-            "native_feed", "native_blog", "interstitial_serial", "rewarded_xp", "global",
+            "native_feed", "native_blog", "native_library", "native_kurdi",
+            "interstitial_serial", "rewarded_xp", "global",
         )
         items(
             allAdConfigs.entries.filter { it.key !in FIXED_SLOT_IDS }.toList(),

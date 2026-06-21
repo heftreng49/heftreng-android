@@ -43,6 +43,8 @@ import androidx.navigation.NavController
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.component.AdBannerView
+import com.heftreng.app.ui.component.PositionedNativeAdView
+import com.heftreng.app.ui.component.NativeAdViewCompose
 import com.heftreng.app.viewmodel.*
 
 // -- Ana ekran ----------------------------------------------------------------
@@ -76,6 +78,14 @@ fun KurdiScreen(
     val bannerUnitId    by adsVm.bannerKurdiUnitId.collectAsState()
     val bannerKurdiCfg  by adsVm.bannerKurdiConfig.collectAsState()
     val kurdiBannerSize = bannerKurdiCfg?.bannerSize ?: "adaptive"
+
+    // Native ad havuzunu önceden doldur — CMS config beklemeden ANINDA tetiklenir.
+    // ÖNCEDEN: Kürtçe Dersler ekranında hiç native reklam yoktu.
+    val nativeKurdiUnitIdForWarmup by adsVm.nativeKurdiUnitId.collectAsState()
+    LaunchedEffect(nativeKurdiUnitIdForWarmup) {
+        val unitId = nativeKurdiUnitIdForWarmup ?: return@LaunchedEffect
+        adsVm.warmUpNativePool(unitId)
+    }
 
     val context  = androidx.compose.ui.platform.LocalContext.current
     val activity = context as? android.app.Activity
@@ -870,6 +880,24 @@ private fun UnitsTab(
                             adsVm    = adsVm,
                             slot     = AdsViewModel.BannerSlot.KURDI,
                         )
+                    }
+                }
+
+                // ÖNCEDEN: Kürtçe Dersler ekranında hiç native reklam yoktu —
+                // "native reklamlar birçok ekranda eksik" sorununun kaynaklarından biri.
+                // Banner ile aynı üniteye denk gelmesin diye 3'ün katlarında gösteriliyor.
+                if (adsVm != null && unitIndex > 0 && unitIndex % 3 == 0) {
+                    item(key = "native_${unit.id}") {
+                        val nativeKurdiCfg by adsVm.nativeKurdiConfig.collectAsState()
+                        val nativeUnitId   by adsVm.nativeKurdiUnitId.collectAsState()
+                        PositionedNativeAdView(
+                            positionKey  = "kurdi_native_${unit.id}",
+                            unitId       = nativeUnitId,
+                            adsVm        = adsVm,
+                            modifier     = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        ) { ad ->
+                            NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = nativeKurdiCfg?.bannerSize ?: "small")
+                        }
                     }
                 }
 

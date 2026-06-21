@@ -62,6 +62,8 @@ import com.heftreng.app.ui.component.AddReviewDialog
 import com.heftreng.app.ui.component.BookPickerDialog
 import com.heftreng.app.ui.component.AdBannerView
 import com.heftreng.app.ui.component.PositionedAdBannerView
+import com.heftreng.app.ui.component.PositionedNativeAdView
+import com.heftreng.app.ui.component.NativeAdViewCompose
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
@@ -112,6 +114,13 @@ fun LibraryScreen(
     val bannerUnitId    by adsVm.bannerLibraryUnitId.collectAsState()
     val bannerLibCfg    by adsVm.bannerLibraryConfig.collectAsState()
     val libBannerSize   = bannerLibCfg?.bannerSize ?: "adaptive"
+
+    // Native ad havuzunu önceden doldur — CMS config beklemeden ANINDA tetiklenir.
+    val nativeLibUnitIdForWarmup by adsVm.nativeLibraryUnitId.collectAsState()
+    LaunchedEffect(nativeLibUnitIdForWarmup) {
+        val unitId = nativeLibUnitIdForWarmup ?: return@LaunchedEffect
+        adsVm.warmUpNativePool(unitId)
+    }
 
     LaunchedEffect(Unit) {
         loading = true
@@ -412,6 +421,21 @@ private fun LibraryQuotesTab(
             )
             if (bannerUnitId != null && (index + 1) % 5 == 0) {
                 PositionedAdBannerView(positionKey = "lib_quotes_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize, prefetchKeys = listOf("lib_quotes_banner_${index + 5}" to bannerUnitId))
+            }
+            // ÖNCEDEN: Kütüphane'de hiç native reklam yoktu (sadece banner vardı) —
+            // "native reklamlar birçok ekranda eksik" sorununun kaynaklarından biri.
+            if (adsVm != null && index > 0 && index % 6 == 0) {
+                val nativeLibCfg by adsVm.nativeLibraryConfig.collectAsState()
+                val nativeUnitId by adsVm.nativeLibraryUnitId.collectAsState()
+                PositionedNativeAdView(
+                    positionKey  = "lib_quotes_native_$index",
+                    unitId       = nativeUnitId,
+                    adsVm        = adsVm,
+                    modifier     = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    prefetchKeys = nativeUnitId?.let { uid -> listOf("lib_quotes_native_${index + 6}" to uid) } ?: emptyList(),
+                ) { ad ->
+                    NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = nativeLibCfg?.bannerSize ?: "small")
+                }
             }
         }
     }
