@@ -292,7 +292,7 @@ fun FeedScreen(
                             .clip(RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
                             .background(
                                 brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                                    listOf(Color(0xFF8B5CF6), Color(0xFFEC4899))
+                                    listOf(Color(0xFF6C8EFF), Color(0xFF38BDF8))
                                 )
                             )
                     )
@@ -974,11 +974,11 @@ fun PostCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 5.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+            .clip(RoundedCornerShape(18.dp))
             .background(HeftCard)
-            .border(0.5.dp, Divider, RoundedCornerShape(16.dp))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .border(0.7.dp, Divider, RoundedCornerShape(18.dp))
+            .padding(horizontal = 15.dp, vertical = 13.dp),
     ) {
         // Header
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1231,12 +1231,17 @@ fun PostCard(
 
         // Aksiyonlar
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            val likeScale by animateFloatAsState(
+                targetValue   = if (post.isLikedByMe) 1.25f else 1f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium),
+                label         = "likeScale",
+            )
             IconButton(onClick = onLike) {
                 Icon(
                     if (post.isLikedByMe) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = Strings.likeAction(language),
-                    tint               = if (post.isLikedByMe) Color(0xFFEF4444) else Muted,
-                    modifier           = Modifier.size(20.dp),
+                    tint               = if (post.isLikedByMe) Color(0xFFFF4060) else Muted,
+                    modifier           = Modifier.size(20.dp).graphicsLayer { scaleX = likeScale; scaleY = likeScale },
                 )
             }
             if (post.likesCount > 0) {

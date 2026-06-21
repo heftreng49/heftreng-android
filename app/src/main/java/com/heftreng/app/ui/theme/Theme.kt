@@ -6,59 +6,62 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 
-// ── Sabit semantik renkler ────────────────────────────────────────────────────
-val Amber   = Color(0xFFFFBF40)
+// ── Semantik renkler ──────────────────────────────────────────────────────────
+val Amber   = Color(0xFFF59E0B)
 val Success = Color(0xFF34D399)
 val Error   = Color(0xFFF87171)
-val Accent  = Color(0xFFE879F9)
 
-// ── Gradient çift ─────────────────────────────────────────────────────────────
-val GradientStart = Color(0xFF8B5CF6)
-val GradientEnd   = Color(0xFFEC4899)
+// ─────────────────────────────────────────────────────────────────────────────
+//  YENİ KOYU TEMA: Siyah-gri arası, "Charcoal Ink"
+//  Eski mor (#08071A) → Yeni sıcak antrasit (#0D0D0F, #131316, #1A1A1F)
+//  Accent: keskin beyaz + ince mavi-gümüş vurgu
+// ─────────────────────────────────────────────────────────────────────────────
+val Accent       = Color(0xFF6C8EFF)   // indigo-mavi vurgu (eski pembe-mor yerine)
+val GradientStart = Color(0xFF6C8EFF)
+val GradientEnd   = Color(0xFF38BDF8)  // gökyüzü mavisi
 
-// ── Tema renk seti ────────────────────────────────────────────────────────────
 data class HeftrangColors(
     val background  : Color,
     val surface     : Color,
     val surfaceVar  : Color,
-    val card        : Color,   // post kartı arka planı
+    val card        : Color,
     val onBackground: Color,
     val onSurface   : Color,
     val primary     : Color,
     val primaryLight: Color,
     val muted       : Color,
     val divider     : Color,
-    val shimmer     : Color,   // skeleton loader rengi
+    val shimmer     : Color,
     val isDark      : Boolean,
 )
 
 private val darkColors = HeftrangColors(
-    background   = Color(0xFF08071A),
-    surface      = Color(0xFF100F26),
-    surfaceVar   = Color(0xFF1C1A35),
-    card         = Color(0xFF141228),
-    onBackground = Color(0xFFF2EEFF),
-    onSurface    = Color(0xFFD8D0F0),
-    primary      = Color(0xFF9B72F5),
-    primaryLight = Color(0xFFB49BFA),
-    muted        = Color(0xFF7B6FA8),
-    divider      = Color(0xFF23204A),
-    shimmer      = Color(0xFF1E1C3A),
+    background   = Color(0xFF0D0D0F),   // neredeyse siyah, hafif gri ton
+    surface      = Color(0xFF131316),   // kart arkaplanı — siyahtan biraz açık
+    surfaceVar   = Color(0xFF1A1A1F),   // hover / vurgulu yüzey
+    card         = Color(0xFF17171C),   // post kartı — surface'ten hafif farklı
+    onBackground = Color(0xFFF0F0F5),   // kırık beyaz — göze daha az batar
+    onSurface    = Color(0xFFBDBDC8),   // ikincil metin
+    primary      = Color(0xFF6C8EFF),   // indigo-mavi
+    primaryLight = Color(0xFF8FAAFF),
+    muted        = Color(0xFF5C5C6E),   // placeholder, ikon
+    divider      = Color(0xFF222228),   // çok ince ayırıcı
+    shimmer      = Color(0xFF1C1C22),
     isDark       = true,
 )
 
 private val lightColors = HeftrangColors(
-    background   = Color(0xFFF6F4FC),
+    background   = Color(0xFFF5F5F7),
     surface      = Color(0xFFFFFFFF),
-    surfaceVar   = Color(0xFFEEEAF8),
+    surfaceVar   = Color(0xFFEEEEF3),
     card         = Color(0xFFFFFFFF),
-    onBackground = Color(0xFF0E0B22),
-    onSurface    = Color(0xFF1A1535),
-    primary      = Color(0xFF7C3AED),
-    primaryLight = Color(0xFF9B72F5),
-    muted        = Color(0xFF9181B8),
-    divider      = Color(0xFFE4DFF5),
-    shimmer      = Color(0xFFEDE9F8),
+    onBackground = Color(0xFF111114),
+    onSurface    = Color(0xFF3A3A45),
+    primary      = Color(0xFF4A6FFF),
+    primaryLight = Color(0xFF6C8EFF),
+    muted        = Color(0xFF8E8E9E),
+    divider      = Color(0xFFE5E5EA),
+    shimmer      = Color(0xFFEEEEF3),
     isDark       = false,
 )
 
@@ -109,7 +112,7 @@ private fun lightScheme() = lightColorScheme(
 @Composable
 fun HeftrangTheme(
     darkMode: Boolean = true,
-    content: @Composable () -> Unit,
+    content : @Composable () -> Unit,
 ) {
     val colors      = if (darkMode) darkColors else lightColors
     val colorScheme = if (darkMode) darkScheme() else lightScheme()

@@ -687,17 +687,28 @@ fun LibraryBookGridCard(
     onClick : () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Basış animasyonu
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.96f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "bookCardScale",
+    )
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clickable(interactionSource = interactionSource, indication = null) { onClick() },
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(SurfaceVar),
+                .clip(RoundedCornerShape(14.dp))
+                .background(SurfaceVar)
+                .border(0.5.dp, Divider, RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center,
         ) {
             if (book.coverImg.isNotBlank()) {
@@ -707,13 +718,40 @@ fun LibraryBookGridCard(
                     contentScale       = ContentScale.Crop,
                     modifier           = Modifier.fillMaxSize(),
                 )
-            } else {
-                Icon(
-                    Icons.Default.AutoStories,
-                    contentDescription = null,
-                    tint     = Muted,
-                    modifier = Modifier.size(40.dp),
+                // Alt gradient — başlık okunabilirliği için
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .height(60.dp)
+                        .background(
+                            brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))
+                            )
+                        )
                 )
+            } else {
+                // Kapak yoksa kitap ikonu + degrade arkaplan
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                colors = listOf(
+                                    Primary.copy(alpha = 0.15f),
+                                    SurfaceVar,
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Outlined.MenuBook,
+                        contentDescription = null,
+                        tint     = Primary.copy(alpha = 0.6f),
+                        modifier = Modifier.size(44.dp),
+                    )
+                }
             }
 
             // Puan rozeti
@@ -721,26 +759,25 @@ fun LibraryBookGridCard(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.Black.copy(alpha = 0.55f))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                        .padding(7.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Star, null, tint = Amber, modifier = Modifier.size(11.dp))
-                        Spacer(Modifier.width(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Icon(Icons.Filled.Star, null, tint = Amber, modifier = Modifier.size(10.dp))
                         Text(
                             "%.1f".format(book.avgRating),
-                            color    = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            color      = Color.White,
+                            fontSize   = 10.sp,
+                            fontWeight = FontWeight.Bold,
                         )
                     }
                 }
             }
         }
 
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
 
         Text(
             book.title,
@@ -749,15 +786,18 @@ fun LibraryBookGridCard(
             fontWeight = FontWeight.SemiBold,
             maxLines   = 2,
             overflow   = TextOverflow.Ellipsis,
-            lineHeight = 16.sp,
+            lineHeight = 17.sp,
+            letterSpacing = (-0.1).sp,
         )
         if (book.authorName.isNotBlank()) {
+            Spacer(Modifier.height(2.dp))
             Text(
                 book.authorName,
                 color    = Primary,
                 fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                letterSpacing = 0.1.sp,
             )
         }
     }
