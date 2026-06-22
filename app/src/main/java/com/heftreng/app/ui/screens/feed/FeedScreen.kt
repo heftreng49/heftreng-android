@@ -137,15 +137,6 @@ fun FeedScreen(
         blogVm.loadPosts()
     }
 
-    // Native ad havuzunu önceden doldur — artık CMS config beklemeden ANINDA
-    // (varsayılan prod unit ID ile) tetiklenir; CMS gelince gerekirse swap olur.
-    // Kullanıcı feed'i scroll ettiğinde reklamlar zaten hazır, bekleme olmaz.
-    val nativeFeedUnitIdForWarmup by adsVm.nativeFeedUnitId.collectAsState()
-    LaunchedEffect(nativeFeedUnitIdForWarmup) {
-        val unitId = nativeFeedUnitIdForWarmup ?: return@LaunchedEffect
-        adsVm.warmUpNativePool(unitId)
-    }
-
     // DÜZELTME: Ekran kompozisyondan çıkınca pozisyon bazlı banner ve native
     // AdView'ları serbest bırak. Bunu yapmamak; her geri dönüşte hafızada
     // erişilmez durumda yüzlerce stale AdView bırakıyordu (bellek sızıntısı).

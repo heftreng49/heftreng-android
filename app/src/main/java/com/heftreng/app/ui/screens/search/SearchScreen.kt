@@ -56,13 +56,6 @@ fun SearchScreen(
     val loading        by vm.loading.collectAsState()
     val activeTab      by vm.activeTab.collectAsState()
 
-    // Native ad havuzunu önceden doldur — Arama ekranında hiç reklam yoktu.
-    val nativeSearchUnitIdForWarmup by adsVm.nativeSearchUnitId.collectAsState()
-    LaunchedEffect(nativeSearchUnitIdForWarmup) {
-        val unitId = nativeSearchUnitIdForWarmup ?: return@LaunchedEffect
-        adsVm.warmUpNativePool(unitId)
-    }
-
     DisposableEffect(Unit) {
         onDispose { adsVm.releasePositionedNatives("search_native_") }
     }

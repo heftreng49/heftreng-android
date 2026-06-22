@@ -60,13 +60,6 @@ fun BlogScreen(
     var selLabel by remember { mutableStateOf<String?>(null) }
 
 
-    // Native ad havuzunu önceden doldur — artık CMS config beklemeden ANINDA tetiklenir.
-    val nativeBlogUnitIdForWarmup by adsVm.nativeBlogUnitId.collectAsState()
-    LaunchedEffect(nativeBlogUnitIdForWarmup) {
-        val unitId = nativeBlogUnitIdForWarmup ?: return@LaunchedEffect
-        adsVm.warmUpNativePool(unitId)
-    }
-
     DisposableEffect(Unit) {
         onDispose {
             adsVm.releasePositionedBanners("blog_banner_")

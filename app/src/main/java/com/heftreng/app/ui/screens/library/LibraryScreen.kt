@@ -115,12 +115,6 @@ fun LibraryScreen(
     val bannerLibCfg    by adsVm.bannerLibraryConfig.collectAsState()
     val libBannerSize   = bannerLibCfg?.bannerSize ?: "adaptive"
 
-    // Native ad havuzunu önceden doldur — CMS config beklemeden ANINDA tetiklenir.
-    val nativeLibUnitIdForWarmup by adsVm.nativeLibraryUnitId.collectAsState()
-    LaunchedEffect(nativeLibUnitIdForWarmup) {
-        val unitId = nativeLibUnitIdForWarmup ?: return@LaunchedEffect
-        adsVm.warmUpNativePool(unitId)
-    }
 
     DisposableEffect(Unit) {
         onDispose {

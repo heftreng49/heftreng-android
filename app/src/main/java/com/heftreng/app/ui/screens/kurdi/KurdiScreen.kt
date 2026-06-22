@@ -91,13 +91,6 @@ fun KurdiScreen(
     val kurdiBannerSize = bannerKurdiCfg?.bannerSize ?: "adaptive"
 
     // Native ad havuzunu önceden doldur — CMS config beklemeden ANINDA tetiklenir.
-    // ÖNCEDEN: Kürtçe Dersler ekranında hiç native reklam yoktu.
-    val nativeKurdiUnitIdForWarmup by adsVm.nativeKurdiUnitId.collectAsState()
-    LaunchedEffect(nativeKurdiUnitIdForWarmup) {
-        val unitId = nativeKurdiUnitIdForWarmup ?: return@LaunchedEffect
-        adsVm.warmUpNativePool(unitId)
-    }
-
     val context  = androidx.compose.ui.platform.LocalContext.current
     val activity = context as? android.app.Activity
 

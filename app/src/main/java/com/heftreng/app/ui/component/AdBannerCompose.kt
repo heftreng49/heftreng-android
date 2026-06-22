@@ -14,7 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -184,6 +183,10 @@ fun PositionedAdBannerView(
 }
 
 // ── Pozisyon bazlı native reklam ──────────────────────────────────────────────
+// CACHE-FIRST: PositionedBannerAdView ile aynı desen.
+// DisposableEffect içinde doğrudan AdLoader ÇAĞRILMAZ — her scroll'da yeni
+// istek atılmasını engeller. Yükleme ViewModel'deki cache üzerinden yapılır;
+// composable sadece cache'i okur. Bu sayede istek sayısı = gerçek gösterim sayısı.
 @Composable
 fun PositionedNativeAdView(
     positionKey    : String,
@@ -195,36 +198,19 @@ fun PositionedNativeAdView(
 ) {
     if (unitId.isNullOrBlank()) return
 
-    val context = LocalContext.current
-    // Banner'daki gibi: state doğrudan composable'da, dış zincire bağımlılık yok.
-    // Önceki yaklaşım (AdEngine pool → ViewModel → StateFlow → remember → collectAsState)
-    // zincirinin herhangi bir halkasında sessiz başarısızlık olunca native hiç
-    // gösterilmiyordu ve nerede koptuğunu tespit etmek çok zordu. Artık banner ile
-    // birebir aynı desen: DisposableEffect + AdLoader, sonuç mutableStateOf'a yazılır.
-    var nativeAd by remember(positionKey, unitId) { mutableStateOf<com.google.android.gms.ads.nativead.NativeAd?>(null) }
-
-    DisposableEffect(positionKey, unitId) {
-        val loader = com.google.android.gms.ads.AdLoader.Builder(context, unitId)
-            .forNativeAd { ad ->
-                nativeAd?.destroy()
-                nativeAd = ad
-            }
-            .withAdListener(object : com.google.android.gms.ads.AdListener() {
-                override fun onAdFailedToLoad(e: com.google.android.gms.ads.LoadAdError) {
-                    android.util.Log.w("NativeAd", "[$positionKey] yüklenemedi: ${e.code} ${e.message}")
-                }
-            })
-            .build()
-        loader.loadAd(com.google.android.gms.ads.AdRequest.Builder().build())
-
-        onDispose {
-            nativeAd?.destroy()
-            nativeAd = null
+    // Sadece bir kez yükle — ViewModel cache'i zaten tekrar yüklemeyi engeller
+    LaunchedEffect(positionKey, unitId) {
+        adsVm.preloadPositionedNative(positionKey, unitId)
+        prefetchKeys.forEach { (key, nextUnitId) ->
+            if (nextUnitId.isNotBlank()) adsVm.preloadPositionedNative(key, nextUnitId)
         }
     }
 
+    val isLoaded by adsVm.positionedNativeLoadedFlow(positionKey).collectAsState()
+    val nativeAd = if (isLoaded) adsVm.cachedPositionedNative(positionKey) else null
+
     if (nativeAd != null) {
-        nativeAdContent(nativeAd!!)
+        nativeAdContent(nativeAd)
     } else {
         AdShimmer(
             modifier = modifier

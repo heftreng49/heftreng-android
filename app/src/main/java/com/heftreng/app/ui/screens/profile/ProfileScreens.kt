@@ -90,13 +90,6 @@ fun ProfileScreen(
     val myBooks        = allMyBooks.filter { it.type == "book" }
     val rlEntries      by rlVm.entries.collectAsState()
 
-    // Native ad havuzunu önceden doldur — Profil ekranında hiç reklam yoktu.
-    val nativeProfileUnitIdForWarmup by adsVm.nativeProfileUnitId.collectAsState()
-    LaunchedEffect(nativeProfileUnitIdForWarmup) {
-        val unitId = nativeProfileUnitIdForWarmup ?: return@LaunchedEffect
-        adsVm.warmUpNativePool(unitId)
-    }
-
     DisposableEffect(Unit) {
         onDispose { adsVm.releasePositionedNatives("profile_native_") }
     }
