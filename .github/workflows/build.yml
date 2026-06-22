@@ -127,7 +127,6 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: com.heftreng.app
           releaseFiles: aab/*.aab
-          track: ${{ inputs.track }}
+          tracks: ${{ inputs.track }}
           status: completed
           whatsNewDirectory: release-notes/
-          debugSymbols: symbols/native-debug-symbols.zip
