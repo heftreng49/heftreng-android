@@ -198,12 +198,16 @@ fun PositionedNativeAdView(
 ) {
     if (unitId.isNullOrBlank()) return
 
-    // Sadece bir kez yükle — ViewModel cache'i zaten tekrar yüklemeyi engeller
     LaunchedEffect(positionKey, unitId) {
+        // 1) Bu slotu yükle — havuzda reklam varsa 0ms gecikme
         adsVm.preloadPositionedNative(positionKey, unitId)
+        // 2) Sonraki slotları önceden yükle
         prefetchKeys.forEach { (key, nextUnitId) ->
             if (nextUnitId.isNotBlank()) adsVm.preloadPositionedNative(key, nextUnitId)
         }
+        // 3) Havuzu yeniden doldur — çekilen yer boş kalmasın.
+        //    warmUpNativePool idempotent: havuz zaten doluysa istek atmaz.
+        adsVm.warmUpNativePool(unitId)
     }
 
     val isLoaded by adsVm.positionedNativeLoadedFlow(positionKey).collectAsState()
