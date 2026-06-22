@@ -23,6 +23,7 @@ import com.heftreng.app.ads.AdFrequencyManager
 import com.heftreng.app.data.model.AdMobProdIds
 import com.heftreng.app.data.model.CmsAdConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -181,47 +182,62 @@ class AdsViewModel @Inject constructor(
     private val _adsEnabled = MutableStateFlow(true)
     val adsEnabled          = _adsEnabled.asStateFlow()
 
-    // ── Unit ID StateFlow'ları — başlangıç = prod varsayılanı ─────────────
-    // Ekranlar bu StateFlow'lardan unit ID'yi okur. Config gelmeden önce prod
-    // ID'nin kendisi gelir → reklam yükleme anında başlar, swap olmaz.
+    // ── Unit ID StateFlow'ları ─────────────────────────────────────────────
+    // ÖNCEKİ HATA: `engine.resolveUnitId(c, prodId) ?: prodId` ifadesi hem
+    // "config henüz gelmedi" hem de "admin bu slotu kapattı (enabled=false)"
+    // durumunda null dönüyordu — `?:` fallback ikisini ayırt edemediği için
+    // admin CMS'den bir slotu kapattığında bile reklam gösterilmeye devam
+    // ediyordu (null görüp prod ID'ye geri dönüyordu).
+    //
+    // YENİ MANTIK:
+    //   c == null → config henüz Firestore'dan gelmedi → prod ID kullan (anlık başlasın)
+    //   c != null && !c.enabled → admin kapattı → null döndür (reklam gösterme)
+    //   c != null && c.enabled  → resolveUnitId: custom ID varsa onu, yoksa prod ID
+    private fun resolveOrDefault(c: CmsAdConfig?, e: Boolean, prodId: String): String? {
+        if (!e) return null                   // global "ads_enabled = false"
+        if (c == null) return prodId          // config henüz gelmedi → prod ID ile başla
+        if (!c.enabled) return null           // admin bu slotu kapattı
+        return c.unitId.ifBlank { prodId }    // custom ID yoksa prod ID
+    }
+
     val bannerUnitId: StateFlow<String?> = combine(_bannerConfig, _adsEnabled) { c, e ->
-        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.BANNER) ?: AdMobProdIds.BANNER
+        resolveOrDefault(c, e, AdMobProdIds.BANNER)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val bannerLibraryUnitId: StateFlow<String?> = combine(_bannerLibraryConfig, _adsEnabled) { c, e ->
-        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.BANNER) ?: AdMobProdIds.BANNER
+        resolveOrDefault(c, e, AdMobProdIds.BANNER)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val bannerKurdiUnitId: StateFlow<String?> = combine(_bannerKurdiConfig, _adsEnabled) { c, e ->
-        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.BANNER) ?: AdMobProdIds.BANNER
+        resolveOrDefault(c, e, AdMobProdIds.BANNER)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val bannerBlogUnitId: StateFlow<String?> = combine(_bannerBlogConfig, _adsEnabled) { c, e ->
-        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.BANNER) ?: AdMobProdIds.BANNER
+        resolveOrDefault(c, e, AdMobProdIds.BANNER)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
 
     val nativeFeedUnitId: StateFlow<String?> = combine(_nativeFeedConfig, _adsEnabled) { c, e ->
-        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.NATIVE) ?: AdMobProdIds.NATIVE
+        resolveOrDefault(c, e, AdMobProdIds.NATIVE)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val nativeBlogUnitId: StateFlow<String?> = combine(_nativeBlogConfig, _adsEnabled) { c, e ->
-        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.NATIVE) ?: AdMobProdIds.NATIVE
+        resolveOrDefault(c, e, AdMobProdIds.NATIVE)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val nativeLibraryUnitId: StateFlow<String?> = combine(_nativeLibraryConfig, _adsEnabled) { c, e ->
-        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.NATIVE) ?: AdMobProdIds.NATIVE
+        resolveOrDefault(c, e, AdMobProdIds.NATIVE)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val nativeKurdiUnitId: StateFlow<String?> = combine(_nativeKurdiConfig, _adsEnabled) { c, e ->
-        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.NATIVE) ?: AdMobProdIds.NATIVE
+        resolveOrDefault(c, e, AdMobProdIds.NATIVE)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val nativeProfileUnitId: StateFlow<String?> = combine(_nativeProfileConfig, _adsEnabled) { c, e ->
-        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.NATIVE) ?: AdMobProdIds.NATIVE
+        resolveOrDefault(c, e, AdMobProdIds.NATIVE)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val nativeSearchUnitId: StateFlow<String?> = combine(_nativeSearchConfig, _adsEnabled) { c, e ->
-        if (!e) null else engine.resolveUnitId(c, AdMobProdIds.NATIVE) ?: AdMobProdIds.NATIVE
+        resolveOrDefault(c, e, AdMobProdIds.NATIVE)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
 
     val bannerPosition: StateFlow<Int> =
@@ -413,19 +429,42 @@ class AdsViewModel @Inject constructor(
     }
 
     // ── Rewarded ──────────────────────────────────────────────────────────
-    // Aynı düzeltme: show sonrası otomatik yeniden yükleme yok ise kullanıcı
-    // ikinci ödüllü reklamı her zaman "yükleniyor" boş ekranında bekliyordu.
-    private var rewardedAd: RewardedAd? = null
-    private var rewardedUnitId: String = ""
+    private var rewardedAd       : RewardedAd? = null
+    private var rewardedUnitId   : String = ""
+    private var rewardedLoading  : Boolean = false   // aynı anda tek istek koruması
+    private var rewardedRetry    : Int = 0
 
     fun preloadRewardedAd(unitId: String) {
         if (unitId.isBlank()) return
         rewardedUnitId = unitId
+        if (rewardedAd != null || rewardedLoading) return  // zaten hazır veya yükleniyor
+        rewardedLoading = true
         RewardedAd.load(
             appContext, unitId, AdRequest.Builder().build(),
             object : RewardedAdLoadCallback() {
-                override fun onAdFailedToLoad(adError: LoadAdError) { rewardedAd = null }
-                override fun onAdLoaded(ad: RewardedAd)             { rewardedAd = ad }
+                override fun onAdLoaded(ad: RewardedAd) {
+                    rewardedAd      = ad
+                    rewardedLoading = false
+                    rewardedRetry   = 0
+                }
+                override fun onAdFailedToLoad(adError: LoadAdError) {
+                    rewardedAd      = null
+                    rewardedLoading = false
+                    // Retry: üstel geri çekilme (8s → 16s → 32s), max 4 deneme.
+                    // Başarısız olursa sessizce bırakmak yerine kısa süre sonra
+                    // tekrar dener — geçici ağ sorunu olsa bile sonraki attempt'ta hazır olur.
+                    if (rewardedRetry < 4) {
+                        rewardedRetry++
+                        val delayMs = 8_000L * (1L shl (rewardedRetry - 1).coerceAtMost(2))
+                        viewModelScope.launch {
+                            kotlinx.coroutines.delay(delayMs)
+                            rewardedLoading = false
+                            preloadRewardedAd(unitId)
+                        }
+                    } else {
+                        rewardedRetry = 0  // bir sonraki tetiklemede sıfırdan başlasın
+                    }
+                }
             },
         )
     }
