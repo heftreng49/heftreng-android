@@ -173,11 +173,9 @@ class AdEngine(
 
     // ══════════════════════════════════════════════════════════════════════
     //  NATIVE AD HAVUZU
-    //  unitId bazlı ortak havuzlar — aynı unitId'yi kullanan tüm
-    //  pozisyonlar aynı havuzdan beslenir.
     // ══════════════════════════════════════════════════════════════════════
     private val nativePool        = mutableMapOf<String, ArrayDeque<NativeAd>>()
-    private val nativePoolFilling = mutableMapOf<String, Boolean>()
+    private val nativePoolFilling = mutableMapOf<String, Int>()  // kaç slot doldurulmakta
 
     private val posNativeAd     = mutableMapOf<String, NativeAd>()
     private val posNativeLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
@@ -188,87 +186,108 @@ class AdEngine(
 
     fun cachedPositionedNative(key: String): NativeAd? = posNativeAd[key]
 
-    /** Havuzu önceden doldurur — idempotent, ekran açılışında bir kez çağrılır. */
+    /** Havuzu önceden doldurur. İdempotent — fazladan çağrılsa da israf etmez. */
     fun warmUpNativePool(unitId: String) {
         if (unitId.isBlank()) return
-        val pool   = nativePool.getOrPut(unitId) { ArrayDeque() }
-        val needed = POOL_TARGET - pool.size
-        if (needed <= 0 || nativePoolFilling[unitId] == true) return
-        nativePoolFilling[unitId] = true
-        repeat(needed) { fillNativePoolSlot(unitId) }
-    }
-
-    private fun fillNativePoolSlot(unitId: String, retry: Int = 0) {
-        AdLoader.Builder(appContext, unitId)
-            .forNativeAd { nativeAd ->
-                val pool = nativePool.getOrPut(unitId) { ArrayDeque() }
-                if (pool.size < POOL_MAX) pool.addLast(nativeAd) else nativeAd.destroy()
-                // Havuz hedefine ulaşıldıysa doldurma bayrağını kaldır
-                nativePoolFilling[unitId] = pool.size < POOL_TARGET
-                if (pool.size < POOL_TARGET) fillNativePoolSlot(unitId)
-            }
-            .withAdListener(object : AdListener() {
-                override fun onAdFailedToLoad(adError: LoadAdError) {
-                    scope.launch {
-                        if (retry >= MAX_RETRY) {
-                            nativePoolFilling[unitId] = false
-                            return@launch
-                        }
-                        delay(backoffDelay(retry + 1))
-                        fillNativePoolSlot(unitId, retry + 1)
-                    }
-                }
-            })
-            .build().loadAd(AdRequest.Builder().build())
+        val pool    = nativePool.getOrPut(unitId) { ArrayDeque() }
+        val filling = nativePoolFilling[unitId] ?: 0
+        val needed  = POOL_TARGET - pool.size - filling
+        if (needed <= 0) return
+        repeat(needed) {
+            nativePoolFilling[unitId] = (nativePoolFilling[unitId] ?: 0) + 1
+            loadOneNative(
+                unitId    = unitId,
+                onSuccess = { ad ->
+                    nativePoolFilling[unitId] = ((nativePoolFilling[unitId] ?: 1) - 1).coerceAtLeast(0)
+                    val p = nativePool.getOrPut(unitId) { ArrayDeque() }
+                    if (p.size < POOL_MAX) p.addLast(ad) else ad.destroy()
+                },
+                onFail = {
+                    nativePoolFilling[unitId] = ((nativePoolFilling[unitId] ?: 1) - 1).coerceAtLeast(0)
+                },
+            )
+        }
     }
 
     /**
-     * Pozisyon için ANINDA havuzdan reklam çeker.
-     * Havuz doluysa → 0 gecikme.
-     * Havuz boşsa → doğrudan yükler + arka planda havuzu ısıtır.
+     * Pozisyon için reklam hazırlar.
+     * Havuzda reklam varsa → anında (0 gecikme).
+     * Yoksa → doğrudan yükler, arka planda havuzu doldurur.
      */
     fun preloadPositionedNative(key: String, unitId: String) {
         if (unitId.isBlank()) return
         val loadedFlow = posNativeLoaded.getOrPut(key) { MutableStateFlow(false) }
-        if (loadedFlow.value && posNativeUnit[key] == unitId) return
+
+        // Zaten bu unitId için yüklü ve geçerli bir reklam varsa tekrar istek atma
+        if (loadedFlow.value && posNativeUnit[key] == unitId && posNativeAd[key] != null) return
         posNativeUnit[key] = unitId
 
-        val pool      = nativePool.getOrPut(unitId) { ArrayDeque() }
-        val fromPool  = pool.removeFirstOrNull()
+        // Havuzdan çek
+        val pool     = nativePool.getOrPut(unitId) { ArrayDeque() }
+        val fromPool = pool.removeFirstOrNull()
         if (fromPool != null) {
             posNativeAd.remove(key)?.destroy()
-            posNativeAd[key]    = fromPool
-            loadedFlow.value    = true
-            warmUpNativePool(unitId)   // çekilen yerin yerine arka planda doldur
+            posNativeAd[key] = fromPool
+            loadedFlow.value = true
+            warmUpNativePool(unitId)  // boşalan havuz slotunu arka planda doldur
             return
         }
-        // Havuz boş — doğrudan yükle, paralelde havuzu doldur
+
+        // Havuz boş — doğrudan yükle
         warmUpNativePool(unitId)
-        loadNativeDirect(key, unitId, loadedFlow)
+        loadedFlow.value = false
+        loadOneNative(
+            unitId    = unitId,
+            retry     = 0,
+            onSuccess = { ad ->
+                posNativeAd.remove(key)?.destroy()
+                posNativeAd[key] = ad
+                loadedFlow.value = true   // ← Compose bunu algılayıp reklamı gösterir
+            },
+            onFail = { /* MAX_RETRY doldu, sessizce bırak */ },
+        )
     }
 
-    private fun loadNativeDirect(
-        key: String,
-        unitId: String,
-        loadedFlow: MutableStateFlow<Boolean>,
-        retry: Int = 0,
+    /**
+     * TEK native ad yükleme primitifi.
+     * forNativeAd ile withAdListener AYRI zincirde — ikisi aynı builder'da
+     * olduğunda AdMob SDK başarılı yüklemede withAdListener.onAdLoaded()'ı
+     * çağırmaz (beklenen davranış); ama bazen forNativeAd callback'i de
+     * güvenilir şekilde çalışmaz. Çözüm: her şeyi TEK bir AdListener'a topla
+     * ve NativeAdOptions ile forNativeAd'i ayrı tanımla.
+     */
+    private fun loadOneNative(
+        unitId   : String,
+        retry    : Int = 0,
+        onSuccess: (NativeAd) -> Unit,
+        onFail   : () -> Unit,
     ) {
-        AdLoader.Builder(appContext, unitId)
+        var received = false  // callback'in iki kez çalışmasını engelle
+
+        val adLoader = AdLoader.Builder(appContext, unitId)
             .forNativeAd { nativeAd ->
-                posNativeAd.remove(key)?.destroy()
-                posNativeAd[key]  = nativeAd
-                loadedFlow.value  = true
+                if (!received) {
+                    received = true
+                    onSuccess(nativeAd)
+                } else {
+                    nativeAd.destroy()
+                }
             }
             .withAdListener(object : AdListener() {
-                override fun onAdFailedToLoad(adError: LoadAdError) {
-                    scope.launch {
-                        if (retry >= MAX_RETRY) return@launch
-                        delay(backoffDelay(retry + 1))
-                        loadNativeDirect(key, unitId, loadedFlow, retry + 1)
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    if (retry < MAX_RETRY) {
+                        scope.launch {
+                            delay(backoffDelay(retry + 1))
+                            loadOneNative(unitId, retry + 1, onSuccess, onFail)
+                        }
+                    } else {
+                        onFail()
                     }
                 }
             })
-            .build().loadAd(AdRequest.Builder().build())
+            .build()
+
+        adLoader.loadAd(AdRequest.Builder().build())
     }
 
     fun releasePositionedNatives(keyPrefix: String? = null) {
@@ -311,7 +330,7 @@ class AdEngine(
         singleBannerView.clear(); singleBannerLoaded.clear()
         singleBannerSize.clear(); singleBannerUnit.clear()
         posBannerView.clear();    posBannerLoaded.clear()
-        posNativeAd.clear();      nativePool.clear()
-        nativePoolFilling.clear()
+        posNativeAd.clear();      posNativeLoaded.clear(); posNativeUnit.clear()
+        nativePool.clear();       nativePoolFilling.clear()
     }
 }
