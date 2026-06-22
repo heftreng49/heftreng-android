@@ -11,46 +11,49 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 @HiltAndroidApp
 class HeftrangApp : Application() {
 
+    companion object {
+        private val _sdkReady = MutableStateFlow(false)
+        val sdkReady = _sdkReady.asStateFlow()
+    }
+
     override fun onCreate() {
         super.onCreate()
 
-        // Firebase App Check — Play Integrity
         FirebaseApp.initializeApp(this)
+        FirebaseAppCheck.getInstance().installAppCheckProviderFactory(
+            PlayIntegrityAppCheckProviderFactory.getInstance()
+        )
 
-        // Coil — disk + memory cache yapılandırması (68 AsyncImage için kritik)
         Coil.setImageLoader(
             ImageLoader.Builder(this)
                 .memoryCache {
                     MemoryCache.Builder(this)
-                        .maxSizePercent(0.20) // RAM'in %20'si
+                        .maxSizePercent(0.20)
                         .build()
                 }
                 .diskCache {
                     DiskCache.Builder()
                         .directory(cacheDir.resolve("image_cache"))
-                        .maxSizeBytes(150L * 1024 * 1024) // 150 MB
+                        .maxSizeBytes(150L * 1024 * 1024)
                         .build()
                 }
                 .crossfade(true)
                 .build()
         )
-        val appCheck = FirebaseAppCheck.getInstance()
 
-        // Release build: sadece gerçek Play Store APK'ları geçer
-        // Debug build için ayrı provider gerekmez — enforce açılmadan test edilebilir
-        appCheck.installAppCheckProviderFactory(
-            PlayIntegrityAppCheckProviderFactory.getInstance()
-        )
-
-        // AdMob SDK başlatma
+        // Test cihaz ID'leri kaldırıldı — prod gelir için
         MobileAds.initialize(this) { initStatus ->
-            val statusMap = initStatus.adapterStatusMap
-            for ((adapter, status) in statusMap) {
-                Log.d("AdMob", "Adapter: $adapter, Status: ${status.initializationState}")
+            _sdkReady.value = true
+            if (Log.isLoggable("AdMob", Log.DEBUG)) {
+                initStatus.adapterStatusMap.forEach { (adapter, status) ->
+                    Log.d("AdMob", "Adapter: $adapter → ${status.initializationState}")
+                }
             }
         }
     }
