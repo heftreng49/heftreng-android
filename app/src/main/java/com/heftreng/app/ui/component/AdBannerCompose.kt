@@ -195,26 +195,36 @@ fun PositionedNativeAdView(
 ) {
     if (unitId.isNullOrBlank()) return
 
-    LaunchedEffect(positionKey, unitId) {
-        adsVm.preloadPositionedNative(positionKey, unitId)
-        prefetchKeys.forEach { (key, nextUnitId) ->
-            if (nextUnitId.isNotBlank()) adsVm.preloadPositionedNative(key, nextUnitId)
+    val context = LocalContext.current
+    // Banner'daki gibi: state doğrudan composable'da, dış zincire bağımlılık yok.
+    // Önceki yaklaşım (AdEngine pool → ViewModel → StateFlow → remember → collectAsState)
+    // zincirinin herhangi bir halkasında sessiz başarısızlık olunca native hiç
+    // gösterilmiyordu ve nerede koptuğunu tespit etmek çok zordu. Artık banner ile
+    // birebir aynı desen: DisposableEffect + AdLoader, sonuç mutableStateOf'a yazılır.
+    var nativeAd by remember(positionKey, unitId) { mutableStateOf<com.google.android.gms.ads.nativead.NativeAd?>(null) }
+
+    DisposableEffect(positionKey, unitId) {
+        val loader = com.google.android.gms.ads.AdLoader.Builder(context, unitId)
+            .forNativeAd { ad ->
+                nativeAd?.destroy()
+                nativeAd = ad
+            }
+            .withAdListener(object : com.google.android.gms.ads.AdListener() {
+                override fun onAdFailedToLoad(e: com.google.android.gms.ads.LoadAdError) {
+                    android.util.Log.w("NativeAd", "[$positionKey] yüklenemedi: ${e.code} ${e.message}")
+                }
+            })
+            .build()
+        loader.loadAd(com.google.android.gms.ads.AdRequest.Builder().build())
+
+        onDispose {
+            nativeAd?.destroy()
+            nativeAd = null
         }
     }
 
-    // ÖNCEKİ HATA: `adsVm.positionedNativeLoadedFlow(positionKey)` her
-    // recomposition'da fonksiyon çağrısı yapıyordu. Compose bu flow nesnesinin
-    // kimliğini iki recomposition arasında takip edemediği için collectAsState()
-    // her seferinde yeni bir subscription başlatıp eskisini bırakıyordu. AdLoader
-    // callback'inde loadedFlow.value = true yapılıyordu ama Compose bunu
-    // yakalamıyordu — native reklam yüklenmiş olsa bile UI'da boş (shimmer) kalıyordu.
-    // `remember(positionKey)` ile flow referansı sabitlenince sorun tamamen çözülüyor.
-    val loadedFlow = remember(positionKey) { adsVm.positionedNativeLoadedFlow(positionKey) }
-    val isLoaded   by loadedFlow.collectAsState()
-    val nativeAd   = if (isLoaded) adsVm.cachedPositionedNative(positionKey) else null
-
     if (nativeAd != null) {
-        nativeAdContent(nativeAd)
+        nativeAdContent(nativeAd!!)
     } else {
         AdShimmer(
             modifier = modifier
