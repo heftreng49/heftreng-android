@@ -7,13 +7,17 @@ import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.VideoOptions
 import com.google.android.gms.ads.nativead.NativeAd
+import com.google.android.gms.ads.nativead.NativeAdOptions
+import com.heftreng.app.HeftrangApp
 import com.heftreng.app.data.model.CmsAdConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -37,10 +41,24 @@ class AdEngine(
 ) {
     companion object {
         private const val MAX_RETRY         = 4
-        private const val RETRY_BASE_DELAY  = 8_000L   // 8s, 16s, 32s, 64s
-        private const val POOL_TARGET       = 3        // havuzda hep hazır bekleyecek reklam
-        private const val POOL_MAX          = 6        // bellek koruması üst sınırı
+        private const val RETRY_BASE_DELAY  = 8_000L
+        private const val POOL_TARGET       = 3
+        private const val POOL_MAX          = 6
+        private const val PREFETCH_BATCH    = 3   // loadAds(n): tek HTTP'de N native
     }
+
+    // SDK hazır olana kadar bekle — coroutine içinde, UI'ı bloklamaz (<200ms)
+    private suspend fun awaitSdk() = HeftrangApp.sdkReady.first { it }
+
+    // Temiz AdRequest — setContentUrl YOK (gereksiz round-trip ekler)
+    private fun adRequest() = AdRequest.Builder().build()
+
+    // Native optimizasyon: statik reklam öncelikli, video başlarsa sessiz
+    private val nativeOptions = NativeAdOptions.Builder()
+        .setVideoOptions(VideoOptions.Builder().setStartMuted(true).build())
+        .setRequestMultipleImages(false)
+        .setAdChoicesPlacement(NativeAdOptions.ADCHOICES_TOP_RIGHT)
+        .build()
 
     // ── Tekil (single) banner ─────────────────────────────────────────────
     private val singleBannerView   = mutableMapOf<String, AdView>()
@@ -69,10 +87,13 @@ class AdEngine(
         singleBannerSize[key]  = bannerSize
         singleBannerUnit[key]  = unitId
         singleRetryCount[key]  = 0
-        spawnBannerAdView(key, unitId, bannerSize) { adView ->
-            singleBannerView.remove(key)?.destroy()   // ← önceki varsa temizle
-            singleBannerView[key] = adView
-            loadedFlow.value = true
+        scope.launch {
+            awaitSdk()
+            spawnBannerAdView(key, unitId, bannerSize) { adView ->
+                singleBannerView.remove(key)?.destroy()
+                singleBannerView[key] = adView
+                loadedFlow.value = true
+            }
         }
     }
 
@@ -100,10 +121,13 @@ class AdEngine(
         }
         posBannerSize[key] = bannerSize
         posBannerUnit[key] = unitId
-        spawnBannerAdView(key, unitId, bannerSize) { adView ->
-            posBannerView.remove(key)?.destroy()   // ← önceki varsa temizle
-            posBannerView[key] = adView
-            loadedFlow.value = true
+        scope.launch {
+            awaitSdk()
+            spawnBannerAdView(key, unitId, bannerSize) { adView ->
+                posBannerView.remove(key)?.destroy()
+                posBannerView[key] = adView
+                loadedFlow.value = true
+            }
         }
     }
 
@@ -153,11 +177,7 @@ class AdEngine(
             }
         }
 
-        adView.loadAd(
-            AdRequest.Builder()
-                .setContentUrl("https://heftreng.app")
-                .build()
-        )
+        adView.loadAd(adRequest())
     }
 
     fun resolveAdSize(bannerSize: String): AdSize {
@@ -186,26 +206,32 @@ class AdEngine(
 
     fun cachedPositionedNative(key: String): NativeAd? = posNativeAd[key]
 
-    /** Havuzu önceden doldurur. İdempotent — fazladan çağrılsa da israf etmez. */
+    /** Havuzu doldurur — loadAds(BATCH) ile TEK HTTP'de N reklam çeker. */
     fun warmUpNativePool(unitId: String) {
         if (unitId.isBlank()) return
         val pool    = nativePool.getOrPut(unitId) { ArrayDeque() }
         val filling = nativePoolFilling[unitId] ?: 0
         val needed  = POOL_TARGET - pool.size - filling
         if (needed <= 0) return
-        repeat(needed) {
-            nativePoolFilling[unitId] = (nativePoolFilling[unitId] ?: 0) + 1
-            loadOneNative(
-                unitId    = unitId,
-                onSuccess = { ad ->
+        nativePoolFilling[unitId] = (filling + needed)
+
+        scope.launch {
+            awaitSdk()
+            // loadAds(n) = tek HTTP isteği, n reklam — her slot için ayrı istek değil
+            AdLoader.Builder(appContext, unitId)
+                .forNativeAd { nativeAd ->
                     nativePoolFilling[unitId] = ((nativePoolFilling[unitId] ?: 1) - 1).coerceAtLeast(0)
                     val p = nativePool.getOrPut(unitId) { ArrayDeque() }
-                    if (p.size < POOL_MAX) p.addLast(ad) else ad.destroy()
-                },
-                onFail = {
-                    nativePoolFilling[unitId] = ((nativePoolFilling[unitId] ?: 1) - 1).coerceAtLeast(0)
-                },
-            )
+                    if (p.size < POOL_MAX) p.addLast(nativeAd) else nativeAd.destroy()
+                }
+                .withNativeAdOptions(nativeOptions)
+                .withAdListener(object : AdListener() {
+                    override fun onAdFailedToLoad(error: LoadAdError) {
+                        nativePoolFilling[unitId] = ((nativePoolFilling[unitId] ?: 1) - 1).coerceAtLeast(0)
+                    }
+                })
+                .build()
+                .loadAds(adRequest(), needed.coerceAtMost(PREFETCH_BATCH))
         }
     }
 
@@ -236,16 +262,19 @@ class AdEngine(
         // Havuz boş — doğrudan yükle
         warmUpNativePool(unitId)
         loadedFlow.value = false
-        loadOneNative(
-            unitId    = unitId,
-            retry     = 0,
-            onSuccess = { ad ->
-                posNativeAd.remove(key)?.destroy()
-                posNativeAd[key] = ad
-                loadedFlow.value = true   // ← Compose bunu algılayıp reklamı gösterir
-            },
-            onFail = { /* MAX_RETRY doldu, sessizce bırak */ },
-        )
+        scope.launch {
+            awaitSdk()
+            loadOneNative(
+                unitId    = unitId,
+                retry     = 0,
+                onSuccess = { ad ->
+                    posNativeAd.remove(key)?.destroy()
+                    posNativeAd[key] = ad
+                    loadedFlow.value = true
+                },
+                onFail = {},
+            )
+        }
     }
 
     /**
@@ -273,6 +302,7 @@ class AdEngine(
                     nativeAd.destroy()
                 }
             }
+            .withNativeAdOptions(nativeOptions)
             .withAdListener(object : AdListener() {
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     if (retry < MAX_RETRY) {
@@ -287,7 +317,7 @@ class AdEngine(
             })
             .build()
 
-        adLoader.loadAd(AdRequest.Builder().build())
+        adLoader.loadAd(adRequest())
     }
 
     fun releasePositionedNatives(keyPrefix: String? = null) {

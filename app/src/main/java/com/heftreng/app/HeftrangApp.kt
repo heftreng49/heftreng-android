@@ -12,9 +12,21 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 @HiltAndroidApp
 class HeftrangApp : Application() {
+
+    companion object {
+        /**
+         * MobileAds.initialize() tamamlanmadan reklam isteği gönderilmemeli.
+         * Erken istek → AdMob sessiz red → istek sayılır ama gösterim olmaz → fill rate düşer.
+         * AdEngine her istekten önce bu flag true olana kadar bekler (genellikle <200ms).
+         */
+        private val _sdkReady = MutableStateFlow(false)
+        val sdkReady = _sdkReady.asStateFlow()
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -57,11 +69,13 @@ class HeftrangApp : Application() {
                 .build()
         )
 
-        // AdMob SDK başlatma
+        // AdMob SDK başlatma — callback'te sdkReady flag SET edilir
         MobileAds.initialize(this) { initStatus ->
-            val statusMap = initStatus.adapterStatusMap
-            for ((adapter, status) in statusMap) {
-                Log.d("AdMob", "Adapter: $adapter, Status: ${status.initializationState}")
+            _sdkReady.value = true   // ← AdEngine artık istek atabilir
+            if (Log.isLoggable("AdMob", Log.DEBUG)) {
+                initStatus.adapterStatusMap.forEach { (adapter, status) ->
+                    Log.d("AdMob", "Adapter: $adapter → ${status.initializationState}")
+                }
             }
         }
     }
