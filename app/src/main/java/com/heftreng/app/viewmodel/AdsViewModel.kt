@@ -228,27 +228,38 @@ class AdsViewModel @Inject constructor(
         _bannerConfig.combine(_adsEnabled) { c, _ -> c?.position ?: 5 }
             .stateIn(viewModelScope, SharingStarted.Eagerly, 5)
 
-    // ── loadAdConfigs: Hibrit Cache + Server ──────────────────────────────
-    // Tek çağrı noktası: init{} bloğu. Ekranlar bu fonksiyonu çağırmamalı.
-    // Pull-to-refresh veya admin "zorla güncelle" için forceServer=true kullanılır.
+    // ── loadAdConfigs: Kendi bağımsız cache'imiz + TTL'li sunucu tazeleme ─────
+    // Tek otomatik çağrı noktası: init{} bloğu. Admin paneli kendi kaydetme
+    // işlemlerinden sonra forceServer=true ile çağırır (anında doğruluk istiyor).
+    //
+    // ÖNCEDEN burada önce Firestore'un Source.CACHE'i okunuyordu. SORUN: O cache
+    // uygulamanın TÜM Firestore koleksiyonları (feed, library, profil, vb.) ile
+    // PAYLAŞILAN, sabit boyutlu (50MB), LRU mantığıyla çalışan TEK bir havuzdur
+    // (bkz. AppModule.kt cacheSizeBytes). cms_ads çok küçük ve nadiren dokunulan
+    // bir koleksiyon olduğu için, feed/library gibi çok daha yoğun kullanılan
+    // koleksiyonlar yer açmak için onu kolayca tahliye (evict) edebiliyordu — yani
+    // reklamların "cache'i" uygulamanın genel cache'i altında ezilebiliyordu.
+    //
+    // ŞİMDİ: reklamlar SADECE kendi ayrı, asla tahliye edilmeyen SharedPreferences
+    // cache'ine (adPrefs, dosyanın başında tanımlı) güveniyor — bu zaten ViewModel
+    // oluşturulduğu anda her config'i anında dolduruyor (bkz. loadPersistedConfig).
+    // Firestore'a sadece TAZELEME için, TTL'e bağlı olarak gidiyoruz; başarısız
+    // olsa da sorun değil, ekranlar zaten adPrefs'ten gelen son bilinen değerle
+    // çalışıyor — uygulamanın genel cache sisteminden tamamen bağımsız.
     fun loadAdConfigs(forceServer: Boolean = false) {
         viewModelScope.launch {
             val now        = System.currentTimeMillis()
             val ttlExpired = (now - lastServerFetchMs) > ADS_CONFIG_TTL_MS
+            if (!forceServer && !ttlExpired && lastServerFetchMs != 0L) return@launch // hâlâ taze, tekrar sorma
 
-            // 1) Cache'den anlık yükle (0 gecikme)
             try {
-                val cacheSnap = firestore.collection("cms_ads").get(Source.CACHE).await()
-                applyAdConfigs(cacheSnap, preloadAds = true)
-            } catch (_: Exception) { /* cache yok — ilk kurulum */ }
-
-            // 2) TTL dolduysa veya zorla istendiyse server'dan tazele
-            if (forceServer || ttlExpired || lastServerFetchMs == 0L) {
-                try {
-                    val serverSnap = firestore.collection("cms_ads").get(Source.SERVER).await()
-                    lastServerFetchMs = now
-                    applyAdConfigs(serverSnap, preloadAds = true)
-                } catch (_: Exception) { /* server'a ulaşılamadı — cache ile devam */ }
+                val serverSnap = firestore.collection("cms_ads").get(Source.SERVER).await()
+                lastServerFetchMs = now
+                applyAdConfigs(serverSnap, preloadAds = true)
+            } catch (_: Exception) {
+                // Sunucuya ulaşılamadı — reklamlar zaten kendi ayrı cache'imizden
+                // (adPrefs) anında yüklenmiş durumda, Firestore'un paylaşımlı
+                // cache'ine hiç bağımlı değiliz.
             }
         }
     }

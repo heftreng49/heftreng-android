@@ -71,7 +71,7 @@ fun CmsScreen(
         vm.loadBanners()
         vm.loadAnnouncements()
         vm.loadCategories()
-        adsVm.loadAdConfigs()
+        adsVm.loadAdConfigs(forceServer = true)
         configVm.load()
         yazarVm.loadAllPendingPosts()
     }
@@ -969,7 +969,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                                 try {
                                     firestore.collection("cms_ads").document("global")
                                         .set(mapOf("enabled" to enabled)).await()
-                                    adsVm.loadAdConfigs()
+                                    adsVm.loadAdConfigs(forceServer = true)
                                 } catch (e: Exception) { e.printStackTrace() }
                             }
                         },
@@ -1004,7 +1004,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title      = "Banner — Feed",
                 docId      = "banner_feed",
                 config     = bannerConfig,
-                onSaved    = { adsVm.loadAdConfigs() },
+                onSaved    = { adsVm.loadAdConfigs(forceServer = true) },
                 onDeleted  = null, // varsayılan slot — silinemez
             )
         }
@@ -1015,7 +1015,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title     = "Banner — Kütüphane",
                 docId     = "banner_library",
                 config    = adsVm.bannerLibraryConfig.collectAsState().value,
-                onSaved   = { adsVm.loadAdConfigs() },
+                onSaved   = { adsVm.loadAdConfigs(forceServer = true) },
                 onDeleted = null,
             )
         }
@@ -1026,7 +1026,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title     = "Banner — Kürtçe Dersler",
                 docId     = "banner_kurdi",
                 config    = adsVm.bannerKurdiConfig.collectAsState().value,
-                onSaved   = { adsVm.loadAdConfigs() },
+                onSaved   = { adsVm.loadAdConfigs(forceServer = true) },
                 onDeleted = null,
             )
         }
@@ -1037,7 +1037,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title     = "Banner — Blog",
                 docId     = "banner_blog",
                 config    = adsVm.bannerBlogConfig.collectAsState().value,
-                onSaved   = { adsVm.loadAdConfigs() },
+                onSaved   = { adsVm.loadAdConfigs(forceServer = true) },
                 onDeleted = null,
             )
         }
@@ -1048,7 +1048,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title      = "Native Ad — Feed",
                 docId      = "native_feed",
                 config     = nativeFeedConfig,
-                onSaved    = { adsVm.loadAdConfigs() },
+                onSaved    = { adsVm.loadAdConfigs(forceServer = true) },
                 onDeleted  = null,
             )
         }
@@ -1059,7 +1059,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title      = "Native Ad — Blog",
                 docId      = "native_blog",
                 config     = nativeBlogConfig,
-                onSaved    = { adsVm.loadAdConfigs() },
+                onSaved    = { adsVm.loadAdConfigs(forceServer = true) },
                 onDeleted  = null,
             )
         }
@@ -1070,7 +1070,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title      = "Native Ad — Kütüphane",
                 docId      = "native_library",
                 config     = nativeLibraryConfig,
-                onSaved    = { adsVm.loadAdConfigs() },
+                onSaved    = { adsVm.loadAdConfigs(forceServer = true) },
                 onDeleted  = null,
             )
         }
@@ -1081,7 +1081,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title      = "Native Ad — Kürtçe Dersler",
                 docId      = "native_kurdi",
                 config     = nativeKurdiConfig,
-                onSaved    = { adsVm.loadAdConfigs() },
+                onSaved    = { adsVm.loadAdConfigs(forceServer = true) },
                 onDeleted  = null,
             )
         }
@@ -1092,7 +1092,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title      = "Native Ad — Profil",
                 docId      = "native_profile",
                 config     = nativeProfileConfig,
-                onSaved    = { adsVm.loadAdConfigs() },
+                onSaved    = { adsVm.loadAdConfigs(forceServer = true) },
                 onDeleted  = null,
             )
         }
@@ -1103,7 +1103,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title      = "Native Ad — Arama Sonuçları",
                 docId      = "native_search",
                 config     = nativeSearchConfig,
-                onSaved    = { adsVm.loadAdConfigs() },
+                onSaved    = { adsVm.loadAdConfigs(forceServer = true) },
                 onDeleted  = null,
             )
         }
@@ -1127,12 +1127,12 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title     = config.label.ifBlank { docId },
                 docId     = docId,
                 config    = config,
-                onSaved   = { adsVm.loadAdConfigs() },
+                onSaved   = { adsVm.loadAdConfigs(forceServer = true) },
                 onDeleted = {
                     scope.launch {
                         try {
                             firestore.collection("cms_ads").document(docId).delete().await()
-                            adsVm.loadAdConfigs()
+                            adsVm.loadAdConfigs(forceServer = true)
                         } catch (e: Exception) { e.printStackTrace() }
                     }
                 },
@@ -1145,7 +1145,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title     = "Interstitial — Seri Okuma",
                 docId     = "interstitial_serial",
                 config    = interstitialConfig,
-                onSaved   = { adsVm.loadAdConfigs() },
+                onSaved   = { adsVm.loadAdConfigs(forceServer = true) },
                 onDeleted = null,
             )
         }
@@ -1156,7 +1156,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 config    = rewardedConfig,
                 firestore = firestore,
                 scope     = scope,
-                onSaved   = { adsVm.loadAdConfigs() },
+                onSaved   = { adsVm.loadAdConfigs(forceServer = true) },
             )
         }
     }
@@ -1186,7 +1186,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                                 "paddingBottom" to config.paddingBottom,
                             )
                         ).await()
-                        adsVm.loadAdConfigs()
+                        adsVm.loadAdConfigs(forceServer = true)
                         showAddSlotDialog = false
                     } catch (e: Exception) { e.printStackTrace() }
                 }
@@ -1212,7 +1212,6 @@ private fun AddAdSlotDialog(
     var cornerRadius by remember { mutableStateOf("0") }
     var paddingTop   by remember { mutableStateOf("0") }
     var paddingBottom by remember { mutableStateOf("0") }
-    var testMode     by remember { mutableStateOf(true) }
     var enabled      by remember { mutableStateOf(true) }
 
     // Ekran seçimi
@@ -1374,19 +1373,12 @@ private fun AddAdSlotDialog(
                     }
                 }
 
-                // Aktif / Test
+                // Aktif
                 item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Text("Aktif", color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                            Switch(checked = enabled, onCheckedChange = { enabled = it },
-                                colors = SwitchDefaults.colors(checkedThumbColor = Success, checkedTrackColor = Success.copy(alpha = 0.3f)))
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Text("Test", color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                            Switch(checked = testMode, onCheckedChange = { testMode = it },
-                                colors = SwitchDefaults.colors(checkedThumbColor = Amber, checkedTrackColor = Amber.copy(alpha = 0.3f)))
-                        }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Aktif", color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        Switch(checked = enabled, onCheckedChange = { enabled = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Success, checkedTrackColor = Success.copy(alpha = 0.3f)))
                     }
                 }
             }
@@ -1398,7 +1390,7 @@ private fun AddAdSlotDialog(
                     val config = com.heftreng.app.data.model.CmsAdConfig(
                         unitId        = unitId.trim(),
                         enabled       = enabled,
-                        testMode      = testMode,
+                        testMode      = false, // artık etkisiz — cihaz zaten AdMob test cihazı, prod ID kullanılır
                         adType        = adType,
                         bannerSize    = bannerSize,
                         placement     = placement,
@@ -1437,7 +1429,6 @@ private fun AdConfigCard(
 
     var unitId   by remember(config) { mutableStateOf(config?.unitId   ?: "") }
     var enabled  by remember(config) { mutableStateOf(config?.enabled  ?: false) }
-    var testMode by remember(config) { mutableStateOf(config?.testMode ?: true) }
     var extra    by remember(config) {
         mutableStateOf(when (extraKey) {
             "position"  -> (config?.position  ?: 5).toString()
@@ -1490,35 +1481,13 @@ private fun AdConfigCard(
         }
         Spacer(Modifier.height(6.dp))
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment     = Alignment.CenterVertically,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                Text("Aktif", color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                Switch(
-                    checked = enabled, onCheckedChange = { enabled = it },
-                    colors  = SwitchDefaults.colors(
-                        checkedThumbColor = Success, checkedTrackColor = Success.copy(alpha = 0.3f),
-                    ),
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                Text("Test", color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                Switch(
-                    checked = testMode, onCheckedChange = { testMode = it },
-                    colors  = SwitchDefaults.colors(
-                        checkedThumbColor = Amber, checkedTrackColor = Amber.copy(alpha = 0.3f),
-                    ),
-                )
-            }
-        }
-
-        if (testMode) {
-            Text(
-                "Test ID kullanılıyor — gerçek gelir sayılmaz",
-                color    = Amber,
-                fontSize = 11.sp,
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Aktif", color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            Switch(
+                checked = enabled, onCheckedChange = { enabled = it },
+                colors  = SwitchDefaults.colors(
+                    checkedThumbColor = Success, checkedTrackColor = Success.copy(alpha = 0.3f),
+                ),
             )
         }
 
@@ -1534,7 +1503,7 @@ private fun AdConfigCard(
                 val data = mutableMapOf<String, Any>(
                     "unitId"     to unitId.trim(),
                     "enabled"    to enabled,
-                    "testMode"   to testMode,
+                    "testMode"   to false, // artık etkisiz — cihaz zaten AdMob test cihazı
                     "bannerSize" to bannerSize,
                     "adType"     to (config?.adType ?: "banner"),
                     "screens"    to (config?.screens ?: "feed"),
@@ -2731,7 +2700,6 @@ private fun RewardedConfigCard(
     val cfg = config
     var unitId      by remember(cfg) { mutableStateOf(cfg?.unitId   ?: "") }
     var enabled     by remember(cfg) { mutableStateOf(cfg?.enabled  ?: false) }
-    var testMode    by remember(cfg) { mutableStateOf(cfg?.testMode ?: true) }
     var xpReward    by remember(cfg) { mutableStateOf((cfg?.xpReward   ?: 50).toString()) }
     var dailyLimit  by remember(cfg) { mutableStateOf((cfg?.dailyLimit ?: 3).toString()) }
     var scnDoubleXp by remember(cfg) { mutableStateOf(cfg?.scenarioDoubleXp     ?: true) }
@@ -2750,13 +2718,6 @@ private fun RewardedConfigCard(
         }
         Spacer(Modifier.height(10.dp))
         cmsField(unitId, { unitId = it }, "Unit ID")
-        Spacer(Modifier.height(6.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Test Modu", color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
-            Switch(checked = testMode, onCheckedChange = { testMode = it },
-                colors = SwitchDefaults.colors(checkedThumbColor = Amber, checkedTrackColor = Amber.copy(alpha = 0.3f)))
-        }
-        if (testMode) Text("Test ID kullanılıyor", color = Amber, fontSize = 11.sp)
         Spacer(Modifier.height(10.dp))
         HorizontalDivider(color = com.heftreng.app.ui.theme.Divider, thickness = 0.5.dp)
         Spacer(Modifier.height(10.dp))
@@ -2801,7 +2762,7 @@ private fun RewardedConfigCard(
                 scope.launch {
                     try {
                         firestore.collection("cms_ads").document("rewarded_xp").set(mapOf(
-                            "unitId" to unitId.trim(), "enabled" to enabled, "testMode" to testMode,
+                            "unitId" to unitId.trim(), "enabled" to enabled, "testMode" to false,
                             "xpReward" to (xpReward.toIntOrNull() ?: 50),
                             "dailyLimit" to (dailyLimit.toIntOrNull() ?: 3),
                             "scenarioDoubleXp" to scnDoubleXp,
