@@ -202,8 +202,16 @@ fun PositionedNativeAdView(
         }
     }
 
-    val isLoaded by adsVm.positionedNativeLoadedFlow(positionKey).collectAsState()
-    val nativeAd = if (isLoaded) adsVm.cachedPositionedNative(positionKey) else null
+    // ÖNCEKİ HATA: `adsVm.positionedNativeLoadedFlow(positionKey)` her
+    // recomposition'da fonksiyon çağrısı yapıyordu. Compose bu flow nesnesinin
+    // kimliğini iki recomposition arasında takip edemediği için collectAsState()
+    // her seferinde yeni bir subscription başlatıp eskisini bırakıyordu. AdLoader
+    // callback'inde loadedFlow.value = true yapılıyordu ama Compose bunu
+    // yakalamıyordu — native reklam yüklenmiş olsa bile UI'da boş (shimmer) kalıyordu.
+    // `remember(positionKey)` ile flow referansı sabitlenince sorun tamamen çözülüyor.
+    val loadedFlow = remember(positionKey) { adsVm.positionedNativeLoadedFlow(positionKey) }
+    val isLoaded   by loadedFlow.collectAsState()
+    val nativeAd   = if (isLoaded) adsVm.cachedPositionedNative(positionKey) else null
 
     if (nativeAd != null) {
         nativeAdContent(nativeAd)
