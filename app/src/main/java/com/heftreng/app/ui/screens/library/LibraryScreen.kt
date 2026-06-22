@@ -122,6 +122,13 @@ fun LibraryScreen(
         adsVm.warmUpNativePool(unitId)
     }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            adsVm.releasePositionedBanners("lib_")
+            adsVm.releasePositionedNatives("lib_")
+        }
+    }
+
     LaunchedEffect(Unit) {
         loading = true
         // Tüm sorgular paralel — N+1 yerine collectionGroup tek sorguda

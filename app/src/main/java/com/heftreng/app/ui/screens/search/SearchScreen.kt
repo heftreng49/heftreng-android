@@ -63,6 +63,10 @@ fun SearchScreen(
         adsVm.warmUpNativePool(unitId)
     }
 
+    DisposableEffect(Unit) {
+        onDispose { adsVm.releasePositionedNatives("search_native_") }
+    }
+
     var query          by remember { mutableStateOf("") }
     val focusManager   = LocalFocusManager.current
 

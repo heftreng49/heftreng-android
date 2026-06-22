@@ -67,6 +67,13 @@ fun BlogScreen(
         adsVm.warmUpNativePool(unitId)
     }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            adsVm.releasePositionedBanners("blog_banner_")
+            adsVm.releasePositionedNatives("blog_native_")
+        }
+    }
+
     // Tüm etiketleri topla
     val allLabels = remember(state.posts) {
         state.posts.flatMap { it.labels }.distinct().sorted()

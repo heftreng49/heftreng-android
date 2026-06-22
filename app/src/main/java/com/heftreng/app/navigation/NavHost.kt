@@ -152,7 +152,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val interstitialConfig by adsVm.interstitialConfig.collectAsState()
     LaunchedEffect(interstitialConfig) {
         if (interstitialConfig?.enabled == true) {
-            adsVm.loadInterstitial(context)
+            adsVm.loadInterstitial()
         }
     }
 

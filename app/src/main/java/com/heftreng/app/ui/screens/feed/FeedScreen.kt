@@ -146,6 +146,16 @@ fun FeedScreen(
         adsVm.warmUpNativePool(unitId)
     }
 
+    // DÜZELTME: Ekran kompozisyondan çıkınca pozisyon bazlı banner ve native
+    // AdView'ları serbest bırak. Bunu yapmamak; her geri dönüşte hafızada
+    // erişilmez durumda yüzlerce stale AdView bırakıyordu (bellek sızıntısı).
+    DisposableEffect(Unit) {
+        onDispose {
+            adsVm.releasePositionedBanners("feed_banner_")
+            adsVm.releasePositionedNatives("feed_native_")
+        }
+    }
+
     // ── Feed sekme (Herkes / Takip edilenler) ────────────────────────────────
     val ku = language == "ku"
     val feedTabs = listOf(
@@ -497,6 +507,13 @@ fun FeedScreen(
                         // ÖNEMLİ: nativeFeedCfg CMS'den gelene kadar null'dur — eskiden bu
                         // yüzden unitId de null kalıyor, reklam hiç istenmiyordu. Artık
                         // adsVm.nativeFeedUnitId (anlık varsayılan prod ID'li) kullanılıyor.
+                        //
+                        // DÜZELTME: prefetch hedefi sabit "+5" idi ama gerçek aralık CMS'den
+                        // gelen nativeFreq'e göre değişiyordu (örn. admin 8 yaparsa bir sonraki
+                        // reklam postIndex+8'de çıkar). Sabit +5 hem yanlış pozisyonu önceden
+                        // ısıtıyordu (israf) hem de gerçek bir sonraki pozisyon hiç önceden
+                        // ısıtılmıyordu (kullanıcı oraya geldiğinde shimmer bekliyordu).
+                        // Artık BlogScreen'deki doğru desenle birebir aynı: +nativeFreq.
                         val nativeUnitId by adsVm.nativeFeedUnitId.collectAsState()
                         PositionedNativeAdView(
                             positionKey    = "feed_native_$postIndex",
@@ -504,7 +521,7 @@ fun FeedScreen(
                             adsVm          = adsVm,
                             modifier       = Modifier.fillMaxWidth(),
                             prefetchKeys   = nativeUnitId?.let { uid ->
-                                listOf("feed_native_${postIndex + 5}" to uid)
+                                listOf("feed_native_${postIndex + nativeFreq}" to uid)
                             } ?: emptyList(),
                         ) { ad ->
                             NativeAdViewCompose(

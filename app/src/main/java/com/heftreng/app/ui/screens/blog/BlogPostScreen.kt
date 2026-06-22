@@ -56,7 +56,9 @@ fun BlogPostScreen(
 
     LaunchedEffect(postId) {
         vm.loadPostDetail(postId)
-        adsVm.loadAdConfigs()
+        // adsVm.loadAdConfigs() KALDIRILDI — config zaten AdsViewModel.init{}
+        // içinde bir kez yükleniyor; her blog yazısı açılışında tekrar Firestore'a
+        // gitmek gereksiz gecikme yaratıyordu.
     }
 
     Scaffold(

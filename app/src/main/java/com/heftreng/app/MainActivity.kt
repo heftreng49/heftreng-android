@@ -83,12 +83,22 @@ class MainActivity : ComponentActivity() {
 
         // EdgeToEdge modunu aktifleştiriyoruz — sistem çubuklarını şeffaf yapar
         enableEdgeToEdge()
-        // NOT: WindowCompat.setDecorFitsSystemWindows kaldırıldı,
-        // enableEdgeToEdge() zaten bunu yapıyor (Android 15 uyumlu)
 
-        // MobileAds.initialize() HeftrangApp.onCreate()'da zaten çağrılıyor.
-        // Burada tekrar çağırmak gereksiz (AdMob tolere ediyor ama 2. callback hiç gelmeyebilir).
-        // AdsViewModel.init{} bloğu loadAdConfigs()'i otomatik tetikliyor.
+        // Android 15 uyumluluğu: LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES deprecated.
+        // Bazı SDK'lar (AdMob, Firebase) kendi içlerinde shortEdges kullanabiliyor.
+        // Runtime'da ALWAYS ile override ederek Play Console uyarısını gideriyoruz.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.also { attrs ->
+                attrs.layoutInDisplayCutoutMode =
+                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            }
+        }
+
+        // AdMob SDK zaten HeftrangApp.onCreate() içinde (Application seviyesinde,
+        // en erken nokta) başlatıldı. Config yükleme ise AdsViewModel'in init{}
+        // bloğunda TEK SEFER tetiklenir (bkz. AdsViewModel.kt). Burada tekrar
+        // adsVm.loadAdConfigs() çağırmak aynı Firestore isteğini ikinci kez
+        // atıyordu — gereksiz ağ trafiği ve gecikme yaratan bir hataydı, kaldırıldı.
 
         // ScreenTracker — activity lifecycle dinleyicisi + adsVm bağla
         application.registerActivityLifecycleCallbacks(screenTracker)

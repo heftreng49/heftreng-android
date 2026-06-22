@@ -97,6 +97,10 @@ fun ProfileScreen(
         adsVm.warmUpNativePool(unitId)
     }
 
+    DisposableEffect(Unit) {
+        onDispose { adsVm.releasePositionedNatives("profile_native_") }
+    }
+
     val followers     by socialVm.followers.collectAsState()
     val following     by socialVm.following.collectAsState()
     val followersLoading by socialVm.followersLoading.collectAsState()

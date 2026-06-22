@@ -300,8 +300,10 @@ class AdsViewModel @Inject constructor(
                     _interstitialConfig.value = config
                     // Interstitial'ı burada önceden yükle — ScreenTracker istediği an hazır olsun
                     if (preloadAds && changed && config.enabled && _adsEnabled.value) {
-                        engine.resolveUnitId(config, AdMobProdIds.INTERSTITIAL)
-                            ?.let { loadInterstitialAd(it) }
+                        engine.resolveUnitId(config, AdMobProdIds.INTERSTITIAL)?.let {
+                            interstitialUnitId = it
+                            loadInterstitialAd(it)
+                        }
                     }
                 }
                 "rewarded_xp" -> {
@@ -354,9 +356,14 @@ class AdsViewModel @Inject constructor(
     }
 
     // ── Interstitial ──────────────────────────────────────────────────────
+    // ÖNEMLİ DÜZELTME: eskiden reklam gösterildikten (dismiss/fail) sonra bir
+    // daha ASLA yeniden yüklenmiyordu — bir sonraki gösterim fırsatında 4 ekran
+    // sonra ScreenTracker boş elle kalıyordu. Artık her show sonrası arka planda
+    // hemen yeni reklam istenir; bir sonraki fırsatta 0 gecikmeyle hazırdır.
     private var interstitialAd: InterstitialAd? = null
+    private var interstitialUnitId: String = ""
 
-    fun loadInterstitialAd(unitId: String) {
+    private fun loadInterstitialAd(unitId: String) {
         if (unitId.isBlank()) return
         InterstitialAd.load(
             appContext, unitId, AdRequest.Builder().build(),
@@ -367,30 +374,42 @@ class AdsViewModel @Inject constructor(
         )
     }
 
-    fun loadInterstitial(context: android.content.Context) {
+    /** Tek çağrı noktası: NavHost'taki interstitialConfig LaunchedEffect'i. */
+    fun loadInterstitial() {
         val config = _interstitialConfig.value ?: return
         if (!config.enabled) return
-        engine.resolveUnitId(config, AdMobProdIds.INTERSTITIAL)?.let { loadInterstitialAd(it) }
+        val unitId = engine.resolveUnitId(config, AdMobProdIds.INTERSTITIAL) ?: return
+        interstitialUnitId = unitId
+        loadInterstitialAd(unitId)
     }
 
-    fun showInterstitialAd(activity: Activity, onAdDismissed: () -> Unit) {
+    fun showInterstitial(activity: Activity, onAdDismissed: () -> Unit) {
         val ad = interstitialAd
         if (ad == null) { onAdDismissed(); return }
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
-            override fun onAdDismissedFullScreenContent()             { interstitialAd = null; onAdDismissed() }
-            override fun onAdFailedToShowFullScreenContent(e: AdError) { interstitialAd = null; onAdDismissed() }
+            override fun onAdDismissedFullScreenContent() {
+                interstitialAd = null
+                onAdDismissed()
+                loadInterstitialAd(interstitialUnitId)   // bir sonraki gösterim için hemen ısıt
+            }
+            override fun onAdFailedToShowFullScreenContent(e: AdError) {
+                interstitialAd = null
+                onAdDismissed()
+                loadInterstitialAd(interstitialUnitId)
+            }
         }
         ad.show(activity)
     }
 
-    fun showInterstitial(activity: Activity, onAdDismissed: () -> Unit) =
-        showInterstitialAd(activity, onAdDismissed)
-
     // ── Rewarded ──────────────────────────────────────────────────────────
+    // Aynı düzeltme: show sonrası otomatik yeniden yükleme yok ise kullanıcı
+    // ikinci ödüllü reklamı her zaman "yükleniyor" boş ekranında bekliyordu.
     private var rewardedAd: RewardedAd? = null
+    private var rewardedUnitId: String = ""
 
     fun preloadRewardedAd(unitId: String) {
         if (unitId.isBlank()) return
+        rewardedUnitId = unitId
         RewardedAd.load(
             appContext, unitId, AdRequest.Builder().build(),
             object : RewardedAdLoadCallback() {
@@ -400,29 +419,25 @@ class AdsViewModel @Inject constructor(
         )
     }
 
-    fun showRewardedAd(
-        activity: Activity,
-        onUserEarnedReward: (RewardItem) -> Unit,
-        onAdDismissed: () -> Unit,
-    ) {
-        val ad = rewardedAd
-        if (ad == null) { onAdDismissed(); return }
-        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
-            override fun onAdDismissedFullScreenContent()              { rewardedAd = null; onAdDismissed() }
-            override fun onAdFailedToShowFullScreenContent(e: AdError) { rewardedAd = null; onAdDismissed() }
-        }
-        ad.show(activity) { onUserEarnedReward(it) }
-    }
-
     enum class RewardType { DOUBLE_XP, UNLOCK_LESSON, SAVE_STREAK }
 
-    fun initPrefs(context: android.content.Context) {}
-
     private val _remainingRewardedAds = MutableStateFlow(3)
-    val canWatchRewardedAd   = MutableStateFlow(true).asStateFlow()
     val remainingRewardedAds = _remainingRewardedAds.asStateFlow()
 
-    fun canShowScenario(rewardType: RewardType): Boolean = _remainingRewardedAds.value > 0
+    // DÜZELTME: CMS admin panelinde her senaryo için ayrı bir aç/kapa anahtarı
+    // var (scenarioDoubleXp / scenarioUnlockLesson / scenarioSaveStreak) ama bu
+    // fonksiyon parametreyi (rewardType) tamamen yok sayıp sadece günlük limiti
+    // kontrol ediyordu — admin bir senaryoyu kapatsa bile UI'da görünmeye devam
+    // ediyordu. Artık ilgili CMS bayrağı da kontrol ediliyor.
+    fun canShowScenario(rewardType: RewardType): Boolean {
+        val cfg = _rewardedConfig.value ?: return _remainingRewardedAds.value > 0
+        val scenarioEnabled = when (rewardType) {
+            RewardType.DOUBLE_XP     -> cfg.scenarioDoubleXp
+            RewardType.UNLOCK_LESSON -> cfg.scenarioUnlockLesson
+            RewardType.SAVE_STREAK   -> cfg.scenarioSaveStreak
+        }
+        return scenarioEnabled && _remainingRewardedAds.value > 0
+    }
 
     private fun syncRemainingRewardedAds(dailyLimit: Int) {
         val uid = auth.currentUser?.uid ?: return
@@ -449,8 +464,14 @@ class AdsViewModel @Inject constructor(
         val ad = rewardedAd
         if (ad != null) {
             ad.fullScreenContentCallback = object : FullScreenContentCallback() {
-                override fun onAdDismissedFullScreenContent()              { rewardedAd = null; onDismiss() }
-                override fun onAdFailedToShowFullScreenContent(e: AdError) { rewardedAd = null; onDismiss() }
+                override fun onAdDismissedFullScreenContent() {
+                    rewardedAd = null; onDismiss()
+                    preloadRewardedAd(rewardedUnitId)   // bir sonraki gösterim için hemen ısıt
+                }
+                override fun onAdFailedToShowFullScreenContent(e: AdError) {
+                    rewardedAd = null; onDismiss()
+                    preloadRewardedAd(rewardedUnitId)
+                }
             }
             ad.show(activity) { rewardItem ->
                 if (uid.isNotEmpty()) frequencyManager.increment(uid, "rewarded")

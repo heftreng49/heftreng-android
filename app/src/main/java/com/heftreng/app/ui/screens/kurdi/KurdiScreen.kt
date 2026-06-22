@@ -82,7 +82,6 @@ fun KurdiScreen(
     val lastLessonXp    by vm.lastLessonXp.collectAsState()
     val tempUnlockedIds by vm.tempUnlockedIds.collectAsState()
     val streakBroke     by vm.streakBroke.collectAsState()
-    val canWatchAd              = adsVm.canWatchRewardedAd
     val canDoubleXp             = adsVm.canShowScenario(AdsViewModel.RewardType.DOUBLE_XP)
     val canUnlockLesson         = adsVm.canShowScenario(AdsViewModel.RewardType.UNLOCK_LESSON)
     val canSaveStreak           = adsVm.canShowScenario(AdsViewModel.RewardType.SAVE_STREAK)
@@ -102,10 +101,10 @@ fun KurdiScreen(
     val context  = androidx.compose.ui.platform.LocalContext.current
     val activity = context as? android.app.Activity
 
-    LaunchedEffect(Unit) {
-        adsVm.initPrefs(context)
-        adsVm.loadAdConfigs() // Config önce yüklenmeli; rewarded/banner loadAdConfigs içinden tetiklenir
-    }
+    // adsVm.initPrefs(context) ve adsVm.loadAdConfigs() KALDIRILDI:
+    // initPrefs() boş bir no-op'tu; loadAdConfigs() ise config'i AdsViewModel.init{}
+    // içinde zaten yüklenmişken her Kürtçe Dersler ekranı açılışında tekrar
+    // Firestore'a gidiyordu (gereksiz gecikme + double-read).
 
     // Ödüllü reklam sonrası uygulanan senaryo
     var pendingRewardType by remember { mutableStateOf<AdsViewModel.RewardType?>(null) }
