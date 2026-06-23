@@ -471,6 +471,22 @@ class AdsViewModel @Inject constructor(
 
     enum class RewardType { DOUBLE_XP, UNLOCK_LESSON, SAVE_STREAK }
 
+    // ÖNEMLİ DÜZELTME — "ödüllü reklam hazırda olmuyor" sorununun asıl kaynağı:
+    // Interstitial'ın NavHost'ta `LaunchedEffect(interstitialConfig) { loadInterstitial() }`
+    // gibi KOŞULSUZ bir tetikleyicisi var. Rewarded'ın ise YOKTU — tek preload noktası
+    // applyAdConfigs içindeki "changed" kontrolüydü. Config artık kalıcı cache'den
+    // (adPrefs) anında seed edildiği için, dönen kullanıcılarda (config son oturumdan
+    // değişmediyse — en yaygın durum) "changed" hep FALSE oluyor, yani preloadRewardedAd
+    // o oturumda HİÇ çağrılmıyordu. Kullanıcı "2x XP" veya "kilidi aç" dediğinde elde
+    // hazır reklam olmuyordu. Çözüm: Interstitial ile birebir aynı desen — NavHost'tan
+    // koşulsuz çağrılacak bir giriş noktası.
+    fun loadRewarded() {
+        val config = _rewardedConfig.value ?: return
+        if (!config.enabled) return
+        val unitId = engine.resolveUnitId(config, AdMobProdIds.REWARDED) ?: return
+        preloadRewardedAd(unitId)
+    }
+
     private val _remainingRewardedAds = MutableStateFlow(3)
     val remainingRewardedAds = _remainingRewardedAds.asStateFlow()
 

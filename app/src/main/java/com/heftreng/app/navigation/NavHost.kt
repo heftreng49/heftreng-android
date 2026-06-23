@@ -156,6 +156,16 @@ fun HeftrangNavHost(initialRoute: String? = null) {
         }
     }
 
+    // ÖNCEDEN: Rewarded (ödüllü) reklamlar için bu eşdeğer hiç yoktu — bu yüzden
+    // "2x XP" / "kilidi reklamla aç" gibi senaryolarda reklam hazır olmuyordu.
+    // Interstitial ile birebir aynı desen.
+    val rewardedConfig by adsVm.rewardedConfig.collectAsState()
+    LaunchedEffect(rewardedConfig) {
+        if (rewardedConfig?.enabled == true) {
+            adsVm.loadRewarded()
+        }
+    }
+
     // Email doğrulama soft banner — sadece kullanıcı zaten authenticated iken göster.
     // AuthScreen kendi verificationPending state'ini yönetir; burada clearVerificationPending()
     // ÇAĞIRILMAMALI — aksi hâlde AuthScreen state'i hiç true görmez ve doğrulama ekranı açılmaz.
