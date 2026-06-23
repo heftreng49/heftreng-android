@@ -36,6 +36,14 @@ android {
 
         buildConfigField("String", "SUPABASE_URL",      "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
+
+        ndk {
+            // arm64-v8a  → modern telefonların tamamı (2018+)
+            // armeabi-v7a → eski/bütçe 32-bit ARM cihazlar
+            // x86_64     → emülatör + bazı Intel tabletler
+            // x86 (32-bit) kasıtlı çıkarıldı — 2024+ cihazlarda yok, AAB'yi şişirir
+            abiFilters += setOf("armeabi-v7a", "arm64-v8a", "x86_64")
+        }
     }
 
     signingConfigs {
