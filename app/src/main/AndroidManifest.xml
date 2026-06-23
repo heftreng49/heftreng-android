@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- İnternet erişimi — zorunlu -->
     <uses-permission android:name="android.permission.INTERNET" />
-
-    <!-- Ses kaydı — sesli mesaj -->
 
     <!-- Galeri erişimi — resim gönderme -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
@@ -20,9 +19,6 @@
     <!-- Ağ durumu — FCM WebChannel için -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    
-    <!-- Dosya yazma — eski Android için (API 28 ve altı) -->
-
     <!-- Video okuma — ileride video özelliği için -->
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"
         android:minSdkVersion="33" />
@@ -33,38 +29,36 @@
 
     <!-- ═══════════════════════════════════════════════════════════════════
          CİHAZ UYUMLULUĞU — "Bu cihaz desteklenmiyor" sorununu önler.
-         Bağımlılıklar (AdMob, Meta Audience Network, Firebase, CameraX vb.)
-         kendi manifest'lerinde donanım feature'larını "required=true" ile
-         deklare edebilir. Manifest merge sırasında bu sessizce ana manifest'e
-         eklenir ve Play Store o donanıma sahip olmayan cihazları (bazı bütçe/
-         orta segment telefonlar) otomatik olarak listeden çıkarır — ama APK
-         doğrudan kurulduğunda bu kontrol uygulanmaz, bu yüzden "APK ile
-         çalışıyor ama Play Store'da görünmüyor" şikayeti ortaya çıkar.
-         Aşağıdaki override'lar bu donanımların ZORUNLU olmadığını garanti eder.
-         ═══════════════════════════════════════════════════════════════════ -->
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
-    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
-    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
-    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
-    <uses-feature android:name="android.hardware.microphone" android:required="false" />
-    <uses-feature android:name="android.hardware.location" android:required="false" />
-    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
-    <uses-feature android:name="android.hardware.location.network" android:required="false" />
-    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
-    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
-    <uses-feature android:name="android.hardware.nfc" android:required="false" />
-    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
-    <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
-    <uses-feature android:name="android.hardware.telephony" android:required="false" />
-    <uses-feature android:name="android.hardware.wifi" android:required="false" />
-    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-    <uses-feature android:name="android.hardware.faketouch" android:required="false" />
-    <!-- Adaptive icon / launcher gerektirmeyen eski cihazlar için -->
-    <uses-feature android:glEsVersion="0x00020000" android:required="false" />
 
-    <!-- Tüm ekran boyutları/yoğunlukları desteklensin — bazı bütçe telefonların
-         ekran çözünürlüğü yüzünden listeden düşmesini önler. -->
+         tools:node="replace" kritik: AdMob, Firebase gibi kütüphaneler kendi
+         manifest'lerinde aynı donanımı required="true" tanımlayabilir.
+         Manifest merge sırasında kütüphanenin "true" değeri bizim "false"
+         değerimizi ezebilir. tools:node="replace" bunu engeller:
+         derleyiciye "kütüphanenin ne dediğini sil, sadece bu satırı kullan"
+         der. Bu olmadan Play Store bazı cihazları listeden çıkarır.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <uses-feature android:name="android.hardware.camera"            android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.camera.any"        android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.camera.autofocus"  android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.camera.front"      android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.camera.flash"      android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.microphone"        android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.location"          android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.location.gps"      android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.location.network"  android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.bluetooth"         android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.bluetooth_le"      android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.nfc"               android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.sensor.gyroscope"  android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.telephony"         android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.wifi"              android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.touchscreen"       android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.faketouch"         android:required="false" tools:node="replace" />
+    <!-- OpenGL ES 2.0 satırı kaldırıldı — Play Store bunu bazen yanlış
+         yorumlar; zaten tüm modern cihazlarda standart olarak bulunur -->
+
+    <!-- Tüm ekran boyutları/yoğunlukları desteklensin -->
     <supports-screens
         android:smallScreens="true"
         android:normalScreens="true"
