@@ -62,6 +62,15 @@ android {
             isShrinkResources = true
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            ndk {
+                // ÖNCEDEN bu hiç tanımlı değildi — bu yüzden native-debug-symbols.zip
+                // hiç üretilmiyordu, GitHub Actions'ta "heftreng-native-symbols" artifact'i
+                // hiç oluşmuyordu, ve publish job'ı onu indirmeye çalışınca
+                // "Artifact not found" hatası alıyorduk. FULL: hem Firebase/Supabase gibi
+                // bağımlılıkların native kütüphaneleri hem de gelecekte native kod eklenirse
+                // onun da sembolleri Play Console'da crash raporlarında okunabilir olur.
+                debugSymbolLevel = "FULL"
+            }
         }
         debug {
             applicationIdSuffix = ".debug"
