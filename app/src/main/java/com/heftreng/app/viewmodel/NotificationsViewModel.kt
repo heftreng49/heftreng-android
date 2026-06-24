@@ -250,7 +250,9 @@ class NotificationsViewModel @Inject constructor(
                     "ts"        to com.google.firebase.Timestamp.now(),
                 )).await()
 
-                markRead(notifId)
+                // ✅ Başarı sonrası bildirimi listeden kaldır (butonlar tekrar göstermesin)
+                _notifications.value = _notifications.value.filter { it.id != notifId }
+                _unreadCount.value   = _notifications.value.count { !it.read }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
@@ -266,7 +268,9 @@ class NotificationsViewModel @Inject constructor(
                         .collection("msgs").document(notifId)
                         .update("read", true, "status", "declined").await()
                 }
-                markRead(notifId)
+                // ✅ Reddedince de listeden kaldır
+                _notifications.value = _notifications.value.filter { it.id != notifId }
+                _unreadCount.value   = _notifications.value.count { !it.read }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }

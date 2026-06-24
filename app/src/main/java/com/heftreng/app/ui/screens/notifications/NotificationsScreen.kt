@@ -504,8 +504,6 @@ fun NotifItem(
     }
 
     val ku = language == "ku"
-    var requestHandled by remember { mutableStateOf(false) }
-
     val iconColor  = notifIconColor(notif.type)
     val mainText   = notif.message.ifBlank { notifDefaultMessage(notif.type, ku) }
     val subText    = notif.sub.ifBlank { null }
@@ -635,13 +633,13 @@ fun NotifItem(
             }
 
             // Takip isteği onay/red
-            if (notif.type == "follow_request" && !requestHandled &&
+            if (notif.type == "follow_request" &&
                 onAcceptFollowRequest != null && onDeclineFollowRequest != null
             ) {
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        onClick = { onAcceptFollowRequest(); requestHandled = true },
+                        onClick = { onAcceptFollowRequest() },
                         shape  = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
@@ -649,7 +647,7 @@ fun NotifItem(
                         Text(Strings.followRequestAccept(language), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
                     OutlinedButton(
-                        onClick = { onDeclineFollowRequest(); requestHandled = true },
+                        onClick = { onDeclineFollowRequest() },
                         shape  = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, Divider),
