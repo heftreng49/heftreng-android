@@ -73,6 +73,29 @@ data class KfExercise(
     val tr         : String           = "",      // build'in Türkçe çevirisi
 )
 
+/**
+ * ÖNCEDEN: ders bitince admin'in elle girdiği TEK sabit XP (lesson.xp) veriliyordu —
+ * 15 egzersizli bir derste hepsi yanlış cevaplansa da, hepsi doğru cevaplansa da
+ * AYNI XP veriliyordu, soru tipleri hiç fark etmiyordu. Artık her egzersiz tipi
+ * için ayrı XP değeri var, sadece DOĞRU cevaplanan egzersizler XP katkısı yapıyor,
+ * toplam otomatik hesaplanıyor (bkz. LessonScreen + completeLesson).
+ * Tek doğruluk kaynağı burası — admin panelinde de aynı değerler gösterilir.
+ */
+object KfExerciseXp {
+    const val FILL  = 2  // Boşluk doldurma
+    const val BUILD = 3  // Cümle kurma
+    const val MCQ   = 2  // Çoktan seçmeli
+    const val MATCH = 2  // Eşleştirme
+
+    fun forType(type: String): Int = when (type) {
+        "fill"  -> FILL
+        "build" -> BUILD
+        "mcq"   -> MCQ
+        "match" -> MATCH
+        else    -> MCQ
+    }
+}
+
 data class ActiveLesson(
     val lesson    : KfLesson,
     val vocab     : List<KfVocab>,
@@ -492,12 +515,15 @@ class KurdiViewModel @Inject constructor(
     fun closeLesson() { _activeLesson.value = null }
 
     // ── Ders tamamla — site ile tam uyumlu yazma ──────────────────────────────
-    fun completeLesson(lessonId: String) {
+    // earnedXp: LessonScreen'de her doğru cevaplanan egzersizin tipine göre
+    // (bkz. KfExerciseXp) otomatik toplanan gerçek XP. -1 verilirse (geriye
+    // uyumluluk için) admin'in elle girdiği sabit lesson.xp kullanılır.
+    fun completeLesson(lessonId: String, earnedXp: Int = -1) {
         if (uid.isEmpty()) return
         val lesson = _lessons.value.find { it.id == lessonId } ?: return
         if (lesson.completed) return
 
-        val gained   = lesson.xp
+        val gained   = if (earnedXp >= 0) earnedXp else lesson.xp
         val newXp    = _xp.value + gained
         val newLevel = maxOf(_level.value, newXp / 100 + 1)
 

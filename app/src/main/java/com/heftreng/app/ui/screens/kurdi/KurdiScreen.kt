@@ -239,7 +239,7 @@ fun KurdiScreen(
         LessonScreen(
             activeLesson = activeLesson!!,
             language     = language,
-            onComplete   = { vm.completeLesson(activeLesson!!.lesson.id); vm.closeLesson() },
+            onComplete   = { earned -> vm.completeLesson(activeLesson!!.lesson.id, earned); vm.closeLesson() },
             onClose      = { vm.closeLesson() },
         )
         return
@@ -1475,7 +1475,7 @@ fun LessonScreen(
     activeLesson : ActiveLesson,
     language     : String = "tr",
     vm           : KurdiViewModel = hiltViewModel(),
-    onComplete   : () -> Unit,
+    onComplete   : (Int) -> Unit,
     onClose      : () -> Unit,
 ) {
     val lesson    = activeLesson.lesson
@@ -1486,6 +1486,10 @@ fun LessonScreen(
     // -- TEK state makinesi — step değişince her şey sıfırlanır --------------
     var step         by remember { mutableIntStateOf(0) }
     var correctCount by remember { mutableIntStateOf(0) }
+    // ÖNCEDEN: ders sonunda admin'in elle girdiği TEK sabit XP veriliyordu, soru
+    // tipi/doğru-yanlış hiç fark etmiyordu. Artık her doğru cevaplanan egzersizin
+    // tipine göre (bkz. KfExerciseXp) burada gerçek zamanlı toplanıyor.
+    var earnedXp     by remember { mutableIntStateOf(0) }
 
     // Adım hesapları
     val vocabDone = vocab.isEmpty() || step >= vocab.size
@@ -1623,7 +1627,7 @@ fun LessonScreen(
                 Button(
                     onClick = {
                         when {
-                            allDone    -> onComplete()
+                            allDone    -> onComplete(earnedXp)
                             !vocabDone -> step++
                             canAdvance -> step++
                         }
@@ -1652,13 +1656,13 @@ fun LessonScreen(
                     Text("🎉", fontSize = 72.sp)
                     Text("Ders Tamamlandı!", fontWeight = FontWeight.ExtraBold, color = OnBackground, fontSize = 22.sp)
                     Surface(shape = RoundedCornerShape(20.dp), color = Amber.copy(0.15f)) {
-                        Text("+${lesson.xp} XP kazandın!", color = Amber, fontWeight = FontWeight.Bold,
+                        Text("+$earnedXp XP kazandın!", color = Amber, fontWeight = FontWeight.Bold,
                             fontSize = 16.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
                     }
                     Text("$correctCount doğru cevap ✓", color = Color(0xFF22C55E), fontSize = 14.sp)
                     Spacer(Modifier.height(8.dp))
                     Button(
-                        onClick  = onComplete,
+                        onClick  = { onComplete(earnedXp) },
                         modifier = Modifier.fillMaxWidth(),
                         shape    = RoundedCornerShape(14.dp),
                         colors   = ButtonDefaults.buttonColors(containerColor = Amber),
@@ -1759,7 +1763,10 @@ fun LessonScreen(
                                                     .clickable(enabled = !showResult) {
                                                         selectedAns = opt
                                                         showResult  = true
-                                                        if (opt.trim().equals(ex.answer.trim(), ignoreCase = true)) correctCount++
+                                                        if (opt.trim().equals(ex.answer.trim(), ignoreCase = true)) {
+                                                            correctCount++
+                                                            earnedXp += KfExerciseXp.forType("mcq")
+                                                        }
                                                     },
                                                 shape  = RoundedCornerShape(14.dp),
                                                 color  = when {
@@ -1820,7 +1827,10 @@ fun LessonScreen(
                                     Button(
                                         onClick  = {
                                             showResult = true
-                                            if (fillAnswer.trim().equals(ex.answer.trim(), ignoreCase = true)) correctCount++
+                                            if (fillAnswer.trim().equals(ex.answer.trim(), ignoreCase = true)) {
+                                                correctCount++
+                                                earnedXp += KfExerciseXp.forType("fill")
+                                            }
                                         },
                                         enabled  = fillAnswer.isNotBlank(),
                                         modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -1850,7 +1860,12 @@ fun LessonScreen(
                                 MatchExercise(
                                     pairs     = ex.pairs,
                                     onCorrect = { correctCount++ },
-                                    onAllDone = { showResult = true },
+                                    // ÖNEMLİ: onCorrect her DOĞRU EŞLEŞEN ÇİFT için ayrı ayrı
+                                    // tetikleniyor (4 çiftli bir eşleştirmede 4 kez). XP'yi
+                                    // orada toplarsak bir eşleştirme egzersizi diğer tiplerin
+                                    // kat kat üstünde XP verir. Bu yüzden XP'yi egzersiz TAMAMEN
+                                    // bitince (tüm çiftler eşleşince) bir kez veriyoruz.
+                                    onAllDone = { showResult = true; earnedXp += KfExerciseXp.forType("match") },
                                 )
                             }
 
@@ -1863,7 +1878,10 @@ fun LessonScreen(
                                     language  = language,
                                     onChecked = { isOk ->
                                         buildResult = isOk
-                                        if (isOk) correctCount++
+                                        if (isOk) {
+                                            correctCount++
+                                            earnedXp += KfExerciseXp.forType("build")
+                                        }
                                     },
                                 )
                             }
