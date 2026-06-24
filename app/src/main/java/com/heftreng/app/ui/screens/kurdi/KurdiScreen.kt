@@ -1411,6 +1411,10 @@ private fun LessonPathNode(
                                 Brush.horizontalGradient(listOf(color, GradientEnd)),
                             )
                             .graphicsLayer { alpha = pulseAlpha }
+                            // ÖNCEDEN: bu pilin hiç clickable'ı yoktu — sadece dekorasyondu.
+                            // Kullanıcı sadece üstteki yuvarlak ders düğmesine basınca açabiliyordu.
+                            // Aktif ders zaten kilitli olamayacağı için burada doğrudan onClick().
+                            .clickable { onClick() }
                             .padding(horizontal = 12.dp, vertical = 4.dp),
                     ) {
                         Text(
