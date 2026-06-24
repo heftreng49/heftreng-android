@@ -1316,8 +1316,11 @@ class KurdiViewModel @Inject constructor(
                                     "match" -> { val pairsRaw = d["pairs"] as? List<*>
                                                  val pa = org.json.JSONArray()
                                                  pairsRaw?.forEach { p ->
-                                                     val pair = p as? List<*>
-                                                     if (pair != null) pa.put(org.json.JSONArray().apply { put(pair[0]); put(pair[1]) })
+                                                     when (p) {
+                                                         is List<*>   -> if (p.size >= 2) pa.put(org.json.JSONArray().apply { put(p[0]); put(p[1]) })
+                                                         is Map<*, *> -> { val ku = p["ku"] as? String; val tr = p["tr"] as? String
+                                                                           if (ku != null && tr != null) pa.put(org.json.JSONArray().apply { put(ku); put(tr) }) }
+                                                     }
                                                  }; put("pairs", pa) }
                                     "build" -> { put("tr", d["tr"]); put("answer", d["answer"])
                                                  val wa = org.json.JSONArray()
@@ -1377,8 +1380,9 @@ class KurdiViewModel @Inject constructor(
                                 data["words"]  = ex.words.ifEmpty { ex.tr.split(" ").filter { it.isNotBlank() } }
                             }
                             "match" -> {
+                                // pairs → [[ku, tr], ...] formatında sakla (importFromJson ile tutarlı)
                                 data["pairs"] = ex.pairs.map { (a, b) ->
-                                    mapOf("ku" to a, "tr" to b)
+                                    listOf(a, b)
                                 }
                             }
                             else -> {
