@@ -1730,7 +1730,7 @@ fun LessonScreen(
                         // Soru başlığı
                         item {
                             when (ex.type) {
-                                "build" -> {} // build kendi başlığını gösterir
+                                "build", "match" -> {} // build ve match kendi başlığını gösterir
                                 else -> {
                                     Text(
                                         ex.question,
@@ -1959,20 +1959,25 @@ private fun MatchExercise(
     val wrongLeft     = remember { mutableStateOf<String?>(null) }
     val wrongRight    = remember { mutableStateOf<String?>(null) }
 
+    // Snapshot ile race condition önlenir: l ve r aynı snapshot'ta okunur,
+    // ardından tek seferde sıfırlanır — böylece LaunchedEffect iki kez tetiklenmez.
     LaunchedEffect(selectedLeft, selectedRight) {
-        val l = selectedLeft; val r = selectedRight
-        if (l != null && r != null) {
-            val correct = pairs.find { it.first == l }?.second == r
-            if (correct) {
+        val l = selectedLeft ?: return@LaunchedEffect
+        val r = selectedRight ?: return@LaunchedEffect
+        // İkisi de doluysa işlemi yap, önce state'i sıfırla
+        selectedLeft  = null
+        selectedRight = null
+        val correct = pairs.find { it.first == l }?.second == r
+        if (correct) {
+            if (l !in matched) {
                 matched.add(l)
                 onCorrect()
-                if (matched.size == pairs.size) onAllDone()
-            } else {
-                wrongLeft.value = l; wrongRight.value = r
-                kotlinx.coroutines.delay(500)
-                wrongLeft.value = null; wrongRight.value = null
             }
-            selectedLeft = null; selectedRight = null
+            if (matched.size == pairs.size) onAllDone()
+        } else {
+            wrongLeft.value = l; wrongRight.value = r
+            kotlinx.coroutines.delay(500)
+            wrongLeft.value = null; wrongRight.value = null
         }
     }
 
