@@ -220,6 +220,7 @@ object Strings {
     // ── Kurdi Ekranı (yeni) ───────────────────────────────────────────────────
     fun kurdiTitle(l: String)       = t(l, "Kurdî Öğren",          "Kurdî Fêrbibe")
     fun startLesson(l: String)      = t(l, "Başla!",               "Destpê Bike!")
+    fun unlockWithVideo(l: String)  = t(l, "🎬 İzle, Aç",          "🎬 Temaşe Bike, Veke")
     fun aiLessonTitle(l: String)    = t(l, "AI ile Kurdî Ders",    "Dersê Kurdî bi ZZ")
     fun aiLessonDesc(l: String)     = t(l, "OpenRouter API anahtarını gir, kaydedilir.", "Miftaya OpenRouter API binivîse, tê tomarkirin.")
     fun aiGenerating(l: String)     = t(l, "Üretiliyor…",          "Tê çêkirin…")

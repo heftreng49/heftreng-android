@@ -1425,6 +1425,26 @@ private fun LessonPathNode(
                             letterSpacing = 0.5.sp,
                         )
                     }
+                } else if (isLocked) {
+                    // İSTENEN: kilitli dersin yanında/altında "video izleyerek aç" ipucu —
+                    // önceden bunu öğrenmenin tek yolu kilide tıklayıp dialog'u açmaktı.
+                    Spacer(Modifier.height(5.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Amber.copy(alpha = 0.15f))
+                            .border(1.dp, Amber.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                            .clickable { showUnlockDialog = true }
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            Strings.unlockWithVideo(language),
+                            color         = Amber,
+                            fontWeight    = FontWeight.Bold,
+                            fontSize      = 8.5.sp,
+                            letterSpacing = 0.2.sp,
+                        )
+                    }
                 }
 
                 // Alt bağlantı
