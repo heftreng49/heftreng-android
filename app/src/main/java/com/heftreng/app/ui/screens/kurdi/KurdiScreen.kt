@@ -1490,6 +1490,13 @@ fun LessonScreen(
     // tipi/doğru-yanlış hiç fark etmiyordu. Artık her doğru cevaplanan egzersizin
     // tipine göre (bkz. KfExerciseXp) burada gerçek zamanlı toplanıyor.
     var earnedXp     by remember { mutableIntStateOf(0) }
+    // Ders ortasında üst çubukta gösterilen "+X XP" rozeti — ÖNCEDEN burada
+    // lesson.xp (admin'in elle girdiği sabit değer) gösteriliyordu. XP artık
+    // egzersiz tiplerine göre otomatik hesaplandığı için, o sabit değer gerçek
+    // kazanılabilecek miktarla artık UYUŞMUYOR (yanıltıcı olurdu). Bunun yerine
+    // bu dersteki tüm egzersizlerin azami toplamını ("hepsini doğru yaparsan
+    // kazanacağın XP") gösteriyoruz — gerçek davranışla tutarlı.
+    val maxPossibleXp = remember(exercises) { exercises.sumOf { KfExerciseXp.forType(it.type) } }
 
     // Adım hesapları
     val vocabDone = vocab.isEmpty() || step >= vocab.size
@@ -1556,7 +1563,7 @@ fun LessonScreen(
                             modifier = Modifier.size(20.dp))
                     }
                     Surface(shape = RoundedCornerShape(20.dp), color = Amber.copy(alpha = 0.15f)) {
-                        Text("+${lesson.xp} XP", color = Amber, fontWeight = FontWeight.Bold, fontSize = 11.sp,
+                        Text("+$maxPossibleXp XP", color = Amber, fontWeight = FontWeight.Bold, fontSize = 11.sp,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
                     }
                     Spacer(Modifier.width(8.dp))

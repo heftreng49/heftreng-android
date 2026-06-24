@@ -160,7 +160,7 @@ private fun LessonListTab(
                     Column(Modifier.weight(1f).clickable { onSelect(lesson) }) {
                         Text(lesson.nameTr, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Text(lesson.nameKu, color = Muted, fontSize = 12.sp)
-                        Text("${lesson.id} • ${lesson.unitId} • ${lesson.xp} XP",
+                        Text("${lesson.id} • ${lesson.unitId}",
                             color = Muted, fontSize = 10.sp)
                     }
                     // Düzenle
@@ -297,7 +297,7 @@ private fun LessonEditDialog(
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AdminField(xp,    { xp    = it }, "XP",   keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
+                    AdminField(xp,    { xp    = it }, "XP (yedek — artık egzersizlerden otomatik hesaplanıyor)", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
                     AdminField(order, { order = it }, "Sıra", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
                 }
             }
@@ -407,7 +407,7 @@ private fun NewLessonTab(vm: KurdiViewModel, onCreated: () -> Unit) {
             item { AdminField(emoji, { emoji = it }, "Emoji", hint = "📖") }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    AdminField(xp, { xp = it }, "XP", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
+                    AdminField(xp, { xp = it }, "XP (yedek — artık egzersizlerden otomatik hesaplanıyor)", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
                     AdminField(order, { order = it }, "Sıra", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
                 }
             }
