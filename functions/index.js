@@ -1079,44 +1079,49 @@ exports.notifyAuthorFollowers = onCall(
   }
 );
 
-// ─── scheduledDailyQuote — Günün Alıntısı (pubsub, günlük) ──────────────────
-// Supabase book_quotes'tan rastgele bir alıntı seçer, tüm kullanıcılara
-// userNotifs/{uid}/msgs yazar → onNewNotif otomatik FCM gönderir.
-exports.scheduledDailyQuote = functions.pubsub
-  .schedule("0 9 * * *")
-  .timeZone("Europe/Istanbul")
-  .onRun(async () => {
-    const supabase = getSupabase();
+// ─── manualDailyQuote — Günün Alıntısı (Admin tarafından manuel gönderim) ────
+// Otomatik tetikleyici kaldırıldı. Admin kendi seçtiği alıntıyı bu fonksiyon
+// ile tüm kullanıcılara gönderir.
+//
+// Parametreler (request.data):
+//   text       : string  — alıntı metni (zorunlu)
+//   authorName : string  — yazar adı
+//   bookTitle  : string  — kitap adı
+//
+// Çağrı örneği (Android AdminScreen):
+//   functions.getHttpsCallable("manualDailyQuote").call({
+//     text: "Miriyê mitrî", authorName: "Cahit Sıtkı Tarancı", bookTitle: "Otuz Beş Yaş"
+//   })
+exports.manualDailyQuote = onCall(
+  { region: "europe-west1", cors: true, timeoutSeconds: 540, memory: "512MiB" },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
 
-    let quote;
-    try {
-      const { count } = await supabase
-        .from("book_quotes")
-        .select("id", { count: "exact", head: true });
-      if (!count) { console.log("[scheduledDailyQuote] book_quotes boş"); return null; }
-
-      const offset = Math.floor(Math.random() * count);
-      const { data, error } = await supabase
-        .from("book_quotes")
-        .select("text, author_name, book_title")
-        .range(offset, offset)
-        .limit(1);
-      if (error) throw error;
-      quote = (data || [])[0];
-      if (!quote) { console.log("[scheduledDailyQuote] alıntı bulunamadı"); return null; }
-    } catch (e) {
-      console.error("[scheduledDailyQuote] Supabase hatası:", e.message);
-      return null;
-    }
-
-    const title = quote.author_name
-      ? `📖 Günün Alıntısı — ${quote.author_name}`
-      : "📖 Günün Alıntısı";
-    const sub = quote.book_title
-      ? `"${quote.text}" — ${quote.book_title}`
-      : `"${quote.text}"`;
-
+    // Admin yetkisi kontrolü
     const db = getFirestore();
+    const adminUid = request.auth.uid;
+    let isAdmin = false;
+    try {
+      const adminDoc = await db.collection("admins").doc(adminUid).get();
+      if (adminDoc.exists) {
+        const d = adminDoc.data() || {};
+        const role = d.role || "";
+        const legacyPerms = Array.isArray(d.permissions) ? d.permissions : [];
+        isAdmin = role === "admin" || role === "editor" || legacyPerms.includes("push");
+      }
+    } catch (_) {}
+    if (!isAdmin) throw new HttpsError("permission-denied", "Admin yetkisi gerekli.");
+
+    const { text = "", authorName = "", bookTitle = "" } = request.data || {};
+    if (!text.trim()) throw new HttpsError("invalid-argument", "Alıntı metni boş olamaz.");
+
+    const title = authorName
+      ? `📖 Günün Alıntısı — ${authorName}`
+      : "📖 Günün Alıntısı";
+    const sub = bookTitle
+      ? `"${text}" — ${bookTitle}`
+      : `"${text}"`;
+
     let count = 0;
     let lastDoc = null;
     const BATCH_SIZE = 400;
@@ -1152,9 +1157,10 @@ exports.scheduledDailyQuote = functions.pubsub
       lastDoc = snap.docs[snap.docs.length - 1];
     } while (true);
 
-    console.log(`[scheduledDailyQuote] ✓ ${count} kullanıcıya gönderildi`);
-    return null;
-  });
+    console.log(`[manualDailyQuote] ✓ ${count} kullanıcıya gönderildi — "${text.slice(0,40)}"`);
+    return { success: true, count };
+  }
+);
 
 // ── adminSetBan — HTTPS Callable (admin yetki kontrolü ile) ──────────────────
 // Firestore staff/{uid} kaydı olan kullanıcılar çağırabilir.
