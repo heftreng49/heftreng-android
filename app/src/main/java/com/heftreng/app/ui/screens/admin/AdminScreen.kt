@@ -1293,17 +1293,18 @@ fun AdminScreen(
                                 Text("Supabase Kullanıcı Senkronizasyonu",
                                     color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                                 Spacer(Modifier.height(4.dp))
-                                Text("Tüm Firestore kullanıcılarını Supabase users tablosuna yazar.
-Tekrar çalıştırılabilir (upsert).",
+                                Text("Tum Firestore kullanicilarini Supabase users tablosuna yazar. Tekrar calistirilabiilir (upsert).",
                                     color = Muted, fontSize = 12.sp)
                                 if (migrationState.startsWith("done")) {
                                     Spacer(Modifier.height(6.dp))
-                                    Text("✅ ${migrationState.removePrefix("done:")} kullanıcı yazıldı",
+                                    val doneCount = migrationState.removePrefix("done:")
+                                    Text("✅ $doneCount kullanici yazildi",
                                         color = Amber, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                 }
                                 if (migrationState.startsWith("error")) {
                                     Spacer(Modifier.height(6.dp))
-                                    Text("❌ ${migrationState.removePrefix("error:")}",
+                                    val errMsg = migrationState.removePrefix("error:")
+                                    Text("❌ $errMsg",
                                         color = Error, fontSize = 12.sp)
                                 }
                                 Spacer(Modifier.height(10.dp))
