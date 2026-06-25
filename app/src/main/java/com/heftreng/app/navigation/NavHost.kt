@@ -671,7 +671,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     if (isAdmin) KurdiAdminScreen(navController)
                     else { LaunchedEffect(Unit) { navController.popBackStack() } }
                 }
-                composable(Screen.Settings.route) { SettingsScreen(navController) }
+                composable(Screen.Settings.route) { SettingsScreen(navController, vm = settingsVm) }
                 composable("post/{postId}") { back ->
                     SinglePostScreen(
                         postId        = back.arguments?.getString("postId") ?: "",

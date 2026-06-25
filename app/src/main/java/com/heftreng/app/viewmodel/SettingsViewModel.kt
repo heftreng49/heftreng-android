@@ -166,18 +166,14 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun toggleDarkMode() {
-        viewModelScope.launch {
-            val next = !_darkMode.value
-            _darkMode.value = next
-            prefs.edit().putBoolean("hf_theme_dark", next).apply()
-        }
+        val next = !_darkMode.value
+        _darkMode.value = next
+        prefs.edit().putBoolean("hf_theme_dark", next).apply()
     }
 
     fun setLanguage(lang: String) {
-        viewModelScope.launch {
-            _language.value = lang
-            prefs.edit().putString("hf_lang", lang).apply()
-        }
+        _language.value = lang
+        prefs.edit().putString("hf_lang", lang).apply()
     }
 
     fun togglePush() {
