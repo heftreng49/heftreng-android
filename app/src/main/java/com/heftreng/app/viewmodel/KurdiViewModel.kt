@@ -1234,13 +1234,29 @@ class KurdiViewModel @Inject constructor(
                                              data["optA"]=ex.optString("optA"); data["optB"]=ex.optString("optB")
                                              data["optC"]=ex.optString("optC"); data["optD"]=ex.optString("optD")
                                              data["answer"]=ex.optString("answer") }
-                                "fill"  -> { data["question"]=ex.optString("question"); data["answer"]=ex.optString("answer")
+                                "fill"  -> { data["question"]=ex.optString("question")
+                                             // ✅ questionTr kaydediliyordu eksikti
+                                             val qTr = ex.optString("questionTr","")
+                                             if (qTr.isNotBlank()) data["questionTr"] = qTr
+                                             data["answer"]=ex.optString("answer")
                                              val opts=ex.optJSONArray("options")
                                              if (opts!=null) data["wrong"]=(0 until opts.length())
                                                  .map{opts.getString(it)}.filter{it!=ex.optString("answer")} }
-                                "match" -> { val pairs=ex.optJSONArray("pairs")
-                                             if (pairs!=null) data["pairs"]=(0 until pairs.length())
-                                                 .map{ pi -> val p=pairs.getJSONArray(pi); listOf(p.getString(0),p.getString(1)) } }
+                                "match" -> { val pairsArr=ex.optJSONArray("pairs")
+                                             if (pairsArr!=null) data["pairs"]=(0 until pairsArr.length())
+                                                 .mapNotNull { pi ->
+                                                     // ✅ hem [[ku,tr]] hem [{ku,tr}] formatını destekle
+                                                     val item = pairsArr.opt(pi)
+                                                     when (item) {
+                                                         is org.json.JSONArray -> if (item.length() >= 2) listOf(item.getString(0), item.getString(1)) else null
+                                                         is org.json.JSONObject -> {
+                                                             val k = item.optString("ku").ifBlank { null }
+                                                             val t = item.optString("tr").ifBlank { null }
+                                                             if (k != null && t != null) listOf(k, t) else null
+                                                         }
+                                                         else -> null
+                                                     }
+                                                 }.filterNotNull() }
                                 "build" -> { data["tr"]=ex.optString("tr"); data["answer"]=ex.optString("answer")
                                              val words=ex.optJSONArray("words")
                                              if (words!=null) data["words"]=(0 until words.length()).map{words.getString(it)} }

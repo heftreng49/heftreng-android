@@ -1866,12 +1866,6 @@ fun LessonScreen(
                             "match" -> item {
                                 MatchExercise(
                                     pairs     = ex.pairs,
-                                    onCorrect = { correctCount++ },
-                                    // ÖNEMLİ: onCorrect her DOĞRU EŞLEŞEN ÇİFT için ayrı ayrı
-                                    // tetikleniyor (4 çiftli bir eşleştirmede 4 kez). XP'yi
-                                    // orada toplarsak bir eşleştirme egzersizi diğer tiplerin
-                                    // kat kat üstünde XP verir. Bu yüzden XP'yi egzersiz TAMAMEN
-                                    // bitince (tüm çiftler eşleşince) bir kez veriyoruz.
                                     onAllDone = { showResult = true; earnedXp += KfExerciseXp.forType("match") },
                                 )
                             }
@@ -1948,7 +1942,6 @@ fun LessonScreen(
 @Composable
 private fun MatchExercise(
     pairs    : List<Pair<String, String>>,
-    onCorrect: () -> Unit,
     onAllDone: () -> Unit,
 ) {
     if (pairs.isEmpty()) return
@@ -1971,7 +1964,6 @@ private fun MatchExercise(
         if (correct) {
             if (l !in matched) {
                 matched.add(l)
-                onCorrect()
             }
             if (matched.size == pairs.size) onAllDone()
         } else {

@@ -1114,7 +1114,7 @@ private fun JsonImportTab(vm: KurdiViewModel) {
                                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 // Egzersiz tipleri
                                 listOf(
-                                    "mcq"   to "question, questionTr, optA-D, answer (A/B/C/D)",
+                                    "mcq"   to "question, questionTr, optA-D, answer (seçenek metni — optA ile aynı metin)",
                                     "fill"  to "question, answer, options[doğru+yanlışlar]",
                                     "match" to "pairs[[kürtçe,türkçe], ...]",
                                     "build" to "tr (Türkçe cümle), answer (Kürtçe), words[kelimeler+bozucular]",
