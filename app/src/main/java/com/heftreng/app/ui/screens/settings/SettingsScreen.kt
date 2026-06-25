@@ -38,6 +38,7 @@ import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AuthViewModel
 import android.app.Activity
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -281,8 +282,28 @@ fun SettingsScreen(
                         Strings.rateApp(language),
                         Strings.rateAppSub(language),
                     ) {
-                        context.findActivity()?.let {
-                            com.heftreng.app.util.InAppReviewHelper.requestReviewNow(it)
+                        // findActivity() bazen null döndüğünden doğrudan activity'yi dene,
+                        // bulunamazsa tarayıcıda Play Store sayfasına yönlendir.
+                        val activity = context.findActivity()
+                        if (activity != null) {
+                            com.heftreng.app.util.InAppReviewHelper.requestReviewNow(activity)
+                        } else {
+                            val pkg = context.packageName
+                            try {
+                                context.startActivity(
+                                    android.content.Intent(
+                                        android.content.Intent.ACTION_VIEW,
+                                        android.net.Uri.parse("market://details?id=$pkg")
+                                    ).apply { flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK }
+                                )
+                            } catch (_: android.content.ActivityNotFoundException) {
+                                context.startActivity(
+                                    android.content.Intent(
+                                        android.content.Intent.ACTION_VIEW,
+                                        android.net.Uri.parse("https://play.google.com/store/apps/details?id=$pkg")
+                                    ).apply { flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK }
+                                )
+                            }
                         }
                     }
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
