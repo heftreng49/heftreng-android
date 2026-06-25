@@ -127,21 +127,26 @@ class FeedViewModel @Inject constructor(
         _supabaseUserEnsured = true
         viewModelScope.launch {
             try {
-                val d           = cachedUserDoc(uid) ?: return@launch
-                val displayName = (d["displayName"] as? String ?: d["name"] as? String ?: "").trim()
-                if (displayName.isBlank()) return@launch
+                val d           = cachedUserDoc(uid)
+                val fireUser    = auth.currentUser
+                // displayName boş olsa bile kaydı yaz — en azından uid ile tabloya gir.
+                // Eski kod displayName boşsa return ediyordu, yeni kayıtlar hiç yazılmıyordu.
+                val displayName = (d?.get("displayName") as? String
+                    ?: d?.get("name") as? String
+                    ?: fireUser?.displayName
+                    ?: fireUser?.email?.substringBefore("@")
+                    ?: "").trim()
                 supabase.postgrest["users"].upsert(
                     mapOf(
                         "uid"          to uid,
                         "display_name" to displayName,
-                        "photo_url"    to (d["photoURL"] as? String ?: ""),
-                        "bio"          to (d["bio"] as? String ?: ""),
-                        "banned"       to (d["banned"] as? Boolean ?: false),
+                        "photo_url"    to (d?.get("photoURL") as? String ?: fireUser?.photoUrl?.toString() ?: ""),
+                        "bio"          to (d?.get("bio") as? String ?: ""),
+                        "banned"       to (d?.get("banned") as? Boolean ?: false),
                     )
                 )
-                android.util.Log.d("FeedVM", "ensureUserInSupabase: OK (uid=$uid)")
+                android.util.Log.d("FeedVM", "ensureUserInSupabase: OK (uid=$uid, name='$displayName')")
             } catch (e: Exception) {
-                // Sessizce geç — bu sadece güvenlik ağı, kritik değil
                 android.util.Log.w("FeedVM", "ensureUserInSupabase: ${e.message}")
             }
         }
@@ -1173,7 +1178,7 @@ class FeedViewModel @Inject constructor(
         val now = System.currentTimeMillis()
         val cacheValid = suggestionsLoaded
             && _suggestedUsers.value.isNotEmpty()
-            && (now - _suggestLastLoadMs) < 3_600_000L
+            && (now - _suggestLastLoadMs) < 600_000L   // 10 dk (önceden 1 saat — yeni üyeler geç görünüyordu)
         if (cacheValid && !forceReload) return
         _suggestLastLoadMs = now
         _suggestCurrentPage.value = 0
@@ -1221,29 +1226,27 @@ class FeedViewModel @Inject constructor(
         val myUid = auth.currentUser?.uid ?: return
         val excludeUids = (_followingUids.value + myUid).toSet()
 
-        // ÖNCEKİ HATA: sorgu her zaman created_at DESC + offset=0 ile aynı "en yeni
-        // kullanıcılar" kümesini deterministik döndürüyordu. Pull-to-refresh teknik
-        // olarak yeni bir ağ isteği atıyordu ama sonuç birebir aynı olduğu için liste
-        // hiç değişmiyormuş gibi görünüyordu. Artık page 0'da (taze yükleme / refresh)
-        // daha geniş bir havuz çekilip karıştırılıyor — her refresh'te liste gerçekten
-        // değişiyor. Sayfalama (Berê/Pêş, page > 0) ise atlama/tekrar olmasın diye
-        // deterministik offset ile devam ediyor.
         val pageUsers: List<SuggestedUser>
         val hasMore: Boolean
 
         if (page == 0) {
-            val poolSize = (SUGGEST_PAGE_SIZE * 10 + excludeUids.size).coerceAtLeast(100).toLong()
+            // Havuz büyütüldü (x20): yeni üyelerin dahil olma şansı arttı.
+            // eq("banned", false) → neq("banned", true): banned=null olan yeni
+            // kayıtlar artık dışlanmıyor.
+            val poolSize = (SUGGEST_PAGE_SIZE * 20 + excludeUids.size).coerceAtLeast(200).toLong()
             val rows = supabase.postgrest["users"].select {
-                filter { eq("banned", false) }
+                filter { neq("banned", true) }
                 order("created_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
                 range(0, poolSize - 1)
             }.decodeList<com.heftreng.app.data.model.UserRow>()
 
-            val candidates = rows.filter { it.uid !in excludeUids && it.displayName.isNotBlank() }
+            // displayName.isNotBlank() → uid.isNotBlank(): profil doldurmamış
+            // yeni üyeler de önerilere girebilsin.
+            val candidates = rows.filter { it.uid !in excludeUids && it.uid.isNotBlank() }
             pageUsers = candidates.shuffled().take(SUGGEST_PAGE_SIZE).map { row ->
                 SuggestedUser(
                     uid         = row.uid,
-                    name        = row.displayName,
+                    name        = row.displayName.ifBlank { row.uid.take(8) },
                     photoURL    = row.photoUrl,
                     bio         = row.bio,
                     isFollowing = false,
@@ -1252,22 +1255,21 @@ class FeedViewModel @Inject constructor(
             hasMore = candidates.size > SUGGEST_PAGE_SIZE
         } else {
             val offset = (page * SUGGEST_PAGE_SIZE).toLong()
-            // Fazladan çekiyoruz: takip edilenler filtrelenince yeterli sayı kalsın.
             val fetchSize = (SUGGEST_PAGE_SIZE + excludeUids.size).coerceAtLeast(SUGGEST_PAGE_SIZE * 3).toLong()
 
             val rows = supabase.postgrest["users"].select {
-                filter { eq("banned", false) }
+                filter { neq("banned", true) }
                 order("created_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
                 range(offset, offset + fetchSize - 1)
             }.decodeList<com.heftreng.app.data.model.UserRow>()
 
             pageUsers = rows
-                .filter { it.uid !in excludeUids && it.displayName.isNotBlank() }
+                .filter { it.uid !in excludeUids && it.uid.isNotBlank() }
                 .take(SUGGEST_PAGE_SIZE)
                 .map { row ->
                     SuggestedUser(
                         uid         = row.uid,
-                        name        = row.displayName,
+                        name        = row.displayName.ifBlank { row.uid.take(8) },
                         photoURL    = row.photoUrl,
                         bio         = row.bio,
                         isFollowing = false,

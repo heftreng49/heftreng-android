@@ -574,6 +574,19 @@ class ProfileViewModel @Inject constructor(
                     "website"     to website,
                 )).await()
                 _user.value = _user.value?.copy(displayName = displayName, bio = bio, website = website)
+
+                // Supabase users tablosunu da güncelle — öneri listesi buradan besleniyor.
+                try {
+                    supabase.postgrest["users"].upsert(
+                        mapOf(
+                            "uid"          to myUid,
+                            "display_name" to displayName,
+                            "bio"          to bio,
+                        )
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.w("ProfileVM", "Supabase users sync failed: ${e.message}")
+                }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
