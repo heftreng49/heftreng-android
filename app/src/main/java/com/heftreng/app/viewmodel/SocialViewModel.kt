@@ -219,6 +219,35 @@ class SocialViewModel @Inject constructor(
     fun clearFollowers() { _followers.value = emptyList(); followersTargetUid = ""; followersOffset = 0; _hasMoreFollowers.value = false }
     fun clearFollowing() { _following.value = emptyList(); followingTargetUid = ""; followingOffset = 0; _hasMoreFollowing.value = false }
 
+    // ── Takipçiyi Çıkar ───────────────────────────────────────────────────────
+    // Sadece kendi profilinde görünür. followerUid → beni takip eden kişinin uid'i.
+    fun removeFollower(followerUid: String) {
+        val myUid = auth.currentUser?.uid ?: return
+        // Optimistic: listeden hemen kaldır
+        _followers.value = _followers.value.filter { it.uid != followerUid }
+        followersOffset  = (_followers.value.size)
+        viewModelScope.launch {
+            try {
+                // Supabase follows tablosundan sil: from_uid=followerUid, target_uid=myUid
+                supabase.postgrest["follows"].delete {
+                    filter {
+                        eq("from_uid",   followerUid)
+                        eq("target_uid", myUid)
+                    }
+                }
+                // Firestore sayaçları güncelle
+                try {
+                    firestore.collection("users").document(myUid)
+                        .update("followersCount", com.google.firebase.firestore.FieldValue.increment(-1)).await()
+                    firestore.collection("users").document(followerUid)
+                        .update("followingCount", com.google.firebase.firestore.FieldValue.increment(-1)).await()
+                } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.e("SocialVM", "removeFollower: ${e.message}")
+            }
+        }
+    }
+
     // ── Enrich ───────────────────────────────────────────────────────────────
 
     private suspend fun enrichLikes(entries: List<LikeEntry>): List<LikeEntry> {

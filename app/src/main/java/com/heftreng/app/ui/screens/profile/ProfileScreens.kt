@@ -707,16 +707,18 @@ fun ProfileScreen(
     // ── Takipçi/Takip sheet'leri ─────────────────────────────────────────────
     if (showFollowers) {
         FollowListSheet(
-            title      = Strings.followersTitle(language, followersCount),
-            entries    = followers,
-            loading    = followersLoading,
-            hasMore    = hasMoreFollowers,
-            onLoadMore = { socialVm.loadMoreFollowers() },
-            onDismiss  = { showFollowers = false; socialVm.clearFollowers() },
-            onProfile  = { u ->
+            title            = Strings.followersTitle(language, followersCount),
+            entries          = followers,
+            loading          = followersLoading,
+            hasMore          = hasMoreFollowers,
+            onLoadMore       = { socialVm.loadMoreFollowers() },
+            onDismiss        = { showFollowers = false; socialVm.clearFollowers() },
+            onProfile        = { u ->
                 showFollowers = false
                 navController.navigate("profile/$u")
             },
+            // Sadece kendi profilinde "Çıkar" butonu göster
+            onRemoveFollower = if (isMe) {{ followerUid -> socialVm.removeFollower(followerUid) }} else null,
         )
     }
     if (showFollowing) {

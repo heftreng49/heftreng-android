@@ -43,13 +43,14 @@ enum class FollowSort(val label: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FollowListSheet(
-    title       : String,
-    entries     : List<FollowEntry>,
-    loading     : Boolean,
-    hasMore     : Boolean = false,
-    onLoadMore  : (() -> Unit)? = null,
-    onDismiss   : () -> Unit,
-    onProfile   : (String) -> Unit,
+    title            : String,
+    entries          : List<FollowEntry>,
+    loading          : Boolean,
+    hasMore          : Boolean = false,
+    onLoadMore       : (() -> Unit)? = null,
+    onDismiss        : () -> Unit,
+    onProfile        : (String) -> Unit,
+    onRemoveFollower : ((String) -> Unit)? = null,   // null → başkasının profili, butonu gösterme
 ) {
     var sort by remember { mutableStateOf(FollowSort.NEW) }
 
@@ -131,7 +132,11 @@ fun FollowListSheet(
 
             else -> LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
                 items(sortedEntries, key = { it.uid }) { entry ->
-                    FollowEntryRow(entry = entry, onClick = { onProfile(entry.uid) })
+                    FollowEntryRow(
+                        entry    = entry,
+                        onClick  = { onProfile(entry.uid) },
+                        onRemove = if (onRemoveFollower != null) {{ onRemoveFollower(entry.uid) }} else null,
+                    )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp, modifier = Modifier.padding(start = 64.dp))
                 }
                 if (hasMore && onLoadMore != null) {
@@ -212,12 +217,18 @@ fun LikerListSheet(
 
 // ── Satır bileşenleri ─────────────────────────────────────────────────────────
 @Composable
-fun FollowEntryRow(entry: FollowEntry, onClick: () -> Unit) {
+fun FollowEntryRow(
+    entry    : FollowEntry,
+    onClick  : () -> Unit,
+    onRemove : (() -> Unit)? = null,
+) {
+    var showConfirm by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         UserAvatar(name = entry.name, photoURL = entry.photoURL, size = 42)
@@ -229,6 +240,34 @@ fun FollowEntryRow(entry: FollowEntry, onClick: () -> Unit) {
             fontSize   = 14.sp,
             maxLines   = 1,
             overflow   = TextOverflow.Ellipsis,
+            modifier   = Modifier.weight(1f),
+        )
+        if (onRemove != null) {
+            TextButton(
+                onClick      = { showConfirm = true },
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            ) {
+                Text("Çıkar", color = androidx.compose.ui.graphics.Color(0xFFEF4444), fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+            }
+        }
+    }
+
+    if (showConfirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showConfirm = false },
+            title = { Text("Takipçiyi çıkar", color = OnBackground, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+            text  = { Text("${entry.name.ifBlank { "Bu kullanıcı" }} artık seni takip edemeyecek.", color = Muted) },
+            confirmButton = {
+                TextButton(onClick = { showConfirm = false; onRemove?.invoke() }) {
+                    Text("Çıkar", color = androidx.compose.ui.graphics.Color(0xFFEF4444), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirm = false }) {
+                    Text("İptal", color = Muted)
+                }
+            },
+            containerColor = HeftSurface,
         )
     }
 }
