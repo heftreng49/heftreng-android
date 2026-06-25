@@ -59,6 +59,7 @@ fun AdminScreen(
     val loading     by vm.loading.collectAsState()
     val pushResult  by vm.pushResult.collectAsState()
     val stats       by vm.stats.collectAsState()
+    val migrationState by vm.migrationState
     val activeUsers  by vm.activeUsers.collectAsState()
     val statsLoading by vm.statsLoading.collectAsState()
 
@@ -1275,6 +1276,48 @@ fun AdminScreen(
                                 Column(horizontalAlignment = Alignment.End) {
                                     Text("Lv.${u.level}", color = Amber, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                     Text("${u.postsCount} gönderi", color = Muted, fontSize = 10.sp)
+                                }
+                            }
+                        }
+                    }
+                    // ── Supabase Kullanıcı Migration ──────────────────────────
+                    item {
+                        Spacer(Modifier.height(8.dp))
+                        val isMigRunning = migrationState == "running"
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape    = RoundedCornerShape(12.dp),
+                            colors   = CardDefaults.cardColors(containerColor = HeftSurface),
+                        ) {
+                            Column(Modifier.padding(16.dp)) {
+                                Text("Supabase Kullanıcı Senkronizasyonu",
+                                    color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Spacer(Modifier.height(4.dp))
+                                Text("Tüm Firestore kullanıcılarını Supabase users tablosuna yazar.
+Tekrar çalıştırılabilir (upsert).",
+                                    color = Muted, fontSize = 12.sp)
+                                if (migrationState.startsWith("done")) {
+                                    Spacer(Modifier.height(6.dp))
+                                    Text("✅ ${migrationState.removePrefix("done:")} kullanıcı yazıldı",
+                                        color = Amber, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                                if (migrationState.startsWith("error")) {
+                                    Spacer(Modifier.height(6.dp))
+                                    Text("❌ ${migrationState.removePrefix("error:")}",
+                                        color = Error, fontSize = 12.sp)
+                                }
+                                Spacer(Modifier.height(10.dp))
+                                Button(
+                                    onClick  = { vm.migrateAllUsersToSupabase() },
+                                    enabled  = !isMigRunning,
+                                    colors   = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = androidx.compose.ui.graphics.Color.White),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    if (isMigRunning) {
+                                        CircularProgressIndicator(Modifier.size(16.dp), color = androidx.compose.ui.graphics.Color.White, strokeWidth = 2.dp)
+                                        Spacer(Modifier.width(8.dp))
+                                    }
+                                    Text(if (isMigRunning) "Senkronize ediliyor..." else "Tümünü Supabase'e Yaz")
                                 }
                             }
                         }

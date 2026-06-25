@@ -137,12 +137,12 @@ class FeedViewModel @Inject constructor(
                     ?: fireUser?.email?.substringBefore("@")
                     ?: "").trim()
                 supabase.postgrest["users"].upsert(
-                    com.heftreng.app.data.model.UserRow(
-                        uid         = uid,
-                        displayName = displayName,
-                        photoUrl    = d?.get("photoURL") as? String ?: fireUser?.photoUrl?.toString() ?: "",
-                        bio         = d?.get("bio") as? String ?: "",
-                        banned      = d?.get("banned") as? Boolean ?: false,
+                    mapOf(
+                        "uid"          to uid,
+                        "display_name" to displayName,
+                        "photo_url"    to (d?.get("photoURL") as? String ?: fireUser?.photoUrl?.toString() ?: ""),
+                        "bio"          to (d?.get("bio") as? String ?: ""),
+                        "banned"       to (d?.get("banned") as? Boolean ?: false),
                     )
                 )
                 android.util.Log.d("FeedVM", "ensureUserInSupabase: OK (uid=$uid, name='$displayName')")

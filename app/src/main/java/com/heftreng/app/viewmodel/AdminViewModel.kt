@@ -1299,6 +1299,59 @@ class AdminViewModel @Inject constructor(
         }
     }
 
+
+    // ── Tek seferlik migration: Firestore users → Supabase users ──────────────
+    // Admin panelinden çalıştırılır. Tüm Firestore kullanıcılarını
+    // Supabase users tablosuna toplu yazar (upsert — tekrar çalıştırılabilir).
+    val migrationState = androidx.compose.runtime.mutableStateOf("idle") // idle | running | done | error
+
+    fun migrateAllUsersToSupabase() {
+        if (migrationState.value == "running") return
+        migrationState.value = "running"
+        viewModelScope.launch {
+            try {
+                // Firestore'dan tüm kullanıcıları çek (1000'er chunk)
+                val allDocs = mutableListOf<com.google.firebase.firestore.DocumentSnapshot>()
+                var lastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
+                while (true) {
+                    var q = firestore.collection("users")
+                        .orderBy("__name__")
+                        .limit(1000)
+                    if (lastDoc != null) q = q.startAfter(lastDoc)
+                    val snap = q.get().await()
+                    allDocs.addAll(snap.documents)
+                    if (snap.documents.size < 1000) break
+                    lastDoc = snap.documents.last()
+                }
+
+                // 50'şer chunk olarak Supabase'e upsert et
+                var written = 0
+                allDocs.chunked(50).forEach { chunk ->
+                    val rows = chunk.mapNotNull { doc ->
+                        val uid = doc.id.ifBlank { return@mapNotNull null }
+                        com.heftreng.app.data.model.UserRow(
+                            uid         = uid,
+                            displayName = (doc.getString("displayName")
+                                ?: doc.getString("name") ?: "").trim(),
+                            photoUrl    = doc.getString("photoURL") ?: "",
+                            bio         = doc.getString("bio") ?: "",
+                            banned      = doc.getBoolean("banned") ?: false,
+                        )
+                    }
+                    if (rows.isNotEmpty()) {
+                        supabase.postgrest["users"].upsert(rows)
+                        written += rows.size
+                    }
+                }
+                android.util.Log.d("AdminVM", "Migration OK: $written kullanıcı yazıldı")
+                migrationState.value = "done:$written"
+            } catch (e: Exception) {
+                android.util.Log.e("AdminVM", "Migration FAILED: ${e.message}")
+                migrationState.value = "error:${e.message}"
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         statsRefreshJob?.cancel()

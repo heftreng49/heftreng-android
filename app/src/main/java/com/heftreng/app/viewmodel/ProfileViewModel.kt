@@ -578,10 +578,10 @@ class ProfileViewModel @Inject constructor(
                 // Supabase users tablosunu da güncelle — öneri listesi buradan besleniyor.
                 try {
                     supabase.postgrest["users"].upsert(
-                        com.heftreng.app.data.model.UserRow(
-                            uid         = myUid,
-                            displayName = displayName,
-                            bio         = bio,
+                        mapOf(
+                            "uid"          to myUid,
+                            "display_name" to displayName,
+                            "bio"          to bio,
                         )
                     )
                 } catch (e: Exception) {
