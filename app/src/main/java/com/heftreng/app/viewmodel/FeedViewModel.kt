@@ -136,18 +136,28 @@ class FeedViewModel @Inject constructor(
                     ?: fireUser?.displayName
                     ?: fireUser?.email?.substringBefore("@")
                     ?: "").trim()
-                // onConflict="uid" → uid varsa sadece profil alanlarını güncelle,
-                // created_at değişmesin (yeni üyeler öneri havuzuna girer).
+                // Firebase ID token'ı header'a ekle — RLS "auth.uid() = uid" politikası
+                // anon key ile geçemez, Firebase JWT gerektirir.
+                val idToken = try {
+                    kotlinx.coroutines.tasks.await(
+                        com.google.firebase.auth.FirebaseAuth.getInstance()
+                            .currentUser?.getIdToken(false)
+                    )?.token
+                } catch (_: Exception) { null }
+
                 supabase.postgrest["users"].upsert(
-                    mapOf(
-                        "uid"          to uid,
-                        "display_name" to displayName,
-                        "photo_url"    to (d?.get("photoURL") as? String ?: fireUser?.photoUrl?.toString() ?: ""),
-                        "bio"          to (d?.get("bio") as? String ?: ""),
-                        "banned"       to (d?.get("banned") as? Boolean ?: false),
-                    ),
-                    onConflict = "uid",
-                )
+                    com.heftreng.app.data.model.UserRow(
+                        uid         = uid,
+                        displayName = displayName,
+                        photoUrl    = d?.get("photoURL") as? String ?: fireUser?.photoUrl?.toString() ?: "",
+                        bio         = d?.get("bio") as? String ?: "",
+                        banned      = d?.get("banned") as? Boolean ?: false,
+                    )
+                ) {
+                    if (idToken != null) {
+                        headers { append("Authorization", "Bearer $idToken") }
+                    }
+                }
                 android.util.Log.d("FeedVM", "ensureUserInSupabase: OK (uid=$uid, name='$displayName')")
             } catch (e: Exception) {
                 android.util.Log.w("FeedVM", "ensureUserInSupabase: ${e.message}")
@@ -1181,7 +1191,7 @@ class FeedViewModel @Inject constructor(
         val now = System.currentTimeMillis()
         val cacheValid = suggestionsLoaded
             && _suggestedUsers.value.isNotEmpty()
-            && (now - _suggestLastLoadMs) < 120_000L   // 2 dk — yeni üyeler daha çabuk görünsün
+            && (now - _suggestLastLoadMs) < 600_000L   // 10 dk (önceden 1 saat — yeni üyeler geç görünüyordu)
         if (cacheValid && !forceReload) return
         _suggestLastLoadMs = now
         _suggestCurrentPage.value = 0
@@ -1233,29 +1243,27 @@ class FeedViewModel @Inject constructor(
         val hasMore: Boolean
 
         if (page == 0) {
-            // İki ayrı sorgu: en yeni 100 + random 100 → birleştirilip karıştırılır.
-            // Böylece yeni kayıt olan kullanıcılar her zaman havuzda yer alır.
-            val half = (SUGGEST_PAGE_SIZE * 10).coerceAtLeast(100).toLong()
+            // Çift sorgu: en yeni 100 + en köklü 100 → birleştirilip karıştırılır.
+            // Tek DESC sıralamasında yeni üyeler havuzun dışına çıkabiliyordu.
+            val half = 100L
 
-            // 1) En yeni kayıtlar
             val newestRows = supabase.postgrest["users"].select {
                 filter { neq("banned", true) }
                 order("created_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
                 range(0, half - 1)
             }.decodeList<com.heftreng.app.data.model.UserRow>()
 
-            // 2) En eski kayıtlar (aktif/köklü kullanıcılar)
             val oldestRows = supabase.postgrest["users"].select {
                 filter { neq("banned", true) }
                 order("created_at", io.github.jan.supabase.postgrest.query.Order.ASCENDING)
                 range(0, half - 1)
             }.decodeList<com.heftreng.app.data.model.UserRow>()
 
-            val combinedRows = (newestRows + oldestRows)
-                .distinctBy { it.uid }                          // tekrar edenleri kaldır
+            val candidates = (newestRows + oldestRows)
+                .distinctBy { it.uid }
                 .filter { it.uid !in excludeUids && it.uid.isNotBlank() }
 
-            pageUsers = combinedRows.shuffled().take(SUGGEST_PAGE_SIZE).map { row ->
+            pageUsers = candidates.shuffled().take(SUGGEST_PAGE_SIZE).map { row ->
                 SuggestedUser(
                     uid         = row.uid,
                     name        = row.displayName.ifBlank { row.uid.take(8) },
@@ -1264,7 +1272,7 @@ class FeedViewModel @Inject constructor(
                     isFollowing = false,
                 )
             }
-            hasMore = combinedRows.size > SUGGEST_PAGE_SIZE
+            hasMore = candidates.size > SUGGEST_PAGE_SIZE
         } else {
             val offset = (page * SUGGEST_PAGE_SIZE).toLong()
             val fetchSize = (SUGGEST_PAGE_SIZE + excludeUids.size).coerceAtLeast(SUGGEST_PAGE_SIZE * 3).toLong()
