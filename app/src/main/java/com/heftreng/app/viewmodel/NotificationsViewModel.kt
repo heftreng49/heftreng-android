@@ -32,6 +32,8 @@ class NotificationsViewModel @Inject constructor(
 
     private val _notifications = MutableStateFlow<List<Notification>>(emptyList())
     val notifications = _notifications.asStateFlow()
+    // Optimistic: accept/decline yapılan notifId'ler — snapshot gelince geri getirmesin
+    private val handledIds = mutableSetOf<String>()
 
     private val _unreadCount = MutableStateFlow(0)
     val unreadCount = _unreadCount.asStateFlow()
@@ -125,10 +127,12 @@ class NotificationsViewModel @Inject constructor(
                 }
                 // status "accepted"/"declined" olan follow_request bildirimleri
                 // kabul/red sonrası listener yeniden tetiklenince tekrar belirmemeli.
+                // handledIds: optimistic olarak UI'dan zaten kaldırıldılar, geri gelmesin.
                 val filtered = notifs.filter { n ->
+                    if (n.id in handledIds) return@filter false
                     if (n.type != "follow_request") return@filter true
-                    val status = snap.documents.find { it.id == n.id }?.getString("status") ?: ""
-                    status != "accepted" && status != "declined"
+                    val st = snap.documents.find { it.id == n.id }?.data?.get("status") as? String ?: ""
+                    st != "accepted" && st != "declined"
                 }
                 _notifications.value = filtered.sortedByDescending { it.ts?.seconds ?: 0L }
                 _unreadCount.value   = filtered.count { !it.read }
@@ -199,33 +203,43 @@ class NotificationsViewModel @Inject constructor(
 
     fun acceptFollowRequest(fromUid: String, notifId: String) {
         val myUid = auth.currentUser?.uid ?: return
+        // ✅ Optimistic update — butonu HEMEN kaldır, Firestore snapshot'ı bekleme
+        if (notifId.isNotBlank()) {
+            handledIds.add(notifId)
+            _notifications.value = _notifications.value.filter { it.id != notifId }
+            _unreadCount.value   = _notifications.value.count { !it.read }
+        }
         viewModelScope.launch {
             try {
                 val reqRef = firestore.collection("followRequests").document(myUid)
                     .collection("pending").document(fromUid)
-                if (!reqRef.get().await().exists()) return@launch
 
-                val reqDoc    = reqRef.get().await()
-                val fromName  = reqDoc.getString("fromName")  ?: ""
-                val fromPhoto = reqDoc.getString("fromPhoto") ?: ""
+                // exists() kontrolünü kaldırdık — pending yoksa da UI zaten temizlendi,
+                // Supabase/Firestore işlemleri yine de deneyelim
+                val reqDoc    = try { reqRef.get().await() } catch (_: Exception) { null }
+                val fromName  = reqDoc?.getString("fromName")  ?: ""
+                val fromPhoto = reqDoc?.getString("fromPhoto") ?: ""
 
                 val myDoc   = firestore.collection("users").document(myUid).get().await()
                 val myName  = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
                 val myPhoto = myDoc.getString("photoURL") ?: ""
 
                 // ✅ Supabase follows — tek kaynak
-                supabase.postgrest["follows"].upsert(
-                    com.heftreng.app.data.model.FollowRow(
-                        id          = "${fromUid}_$myUid",
-                        fromUid     = fromUid,
-                        fromName    = fromName,
-                        fromPhoto   = fromPhoto,
-                        targetUid   = myUid,
-                        targetName  = myName,
-                        targetPhoto = myPhoto,
+                try {
+                    supabase.postgrest["follows"].upsert(
+                        com.heftreng.app.data.model.FollowRow(
+                            id          = "${fromUid}_$myUid",
+                            fromUid     = fromUid,
+                            fromName    = fromName,
+                            fromPhoto   = fromPhoto,
+                            targetUid   = myUid,
+                            targetName  = myName,
+                            targetPhoto = myPhoto,
+                        )
                     )
-                )
-                // Firestore: sadece sayaç güncelle
+                } catch (_: Exception) {}
+
+                // Firestore: sayaç güncelle + pending sil
                 try {
                     firestore.collection("users").document(myUid)
                         .update("followersCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
@@ -233,51 +247,59 @@ class NotificationsViewModel @Inject constructor(
                         .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
                 } catch (_: Exception) {}
 
-                reqRef.delete().await()
+                try { reqRef.delete().await() } catch (_: Exception) {}
 
                 if (notifId.isNotBlank()) {
-                    firestore.collection("userNotifs").document(myUid)
-                        .collection("msgs").document(notifId)
-                        .update("read", true, "status", "accepted").await()
+                    try {
+                        firestore.collection("userNotifs").document(myUid)
+                            .collection("msgs").document(notifId)
+                            .update("read", true, "status", "accepted").await()
+                    } catch (_: Exception) {}
                 }
 
-                firestore.collection("userNotifs").document(fromUid).collection("msgs").add(mapOf(
-                    "fromUid"   to myUid,
-                    "fromName"  to myName,
-                    "fromPhoto" to myPhoto,
-                    "type"      to "follow_request_accepted",
-                    "feedId"    to "",
-                    "postId"    to "",
-                    "title"     to "$myName takip isteğini kabul etti",
-                    "sub"       to "",
-                    "ico"       to "person_add",
-                    "message"   to "$myName takip isteğini kabul etti",
-                    "url"       to "",
-                    "read"      to false,
-                    "ts"        to com.google.firebase.Timestamp.now(),
-                )).await()
+                try {
+                    firestore.collection("userNotifs").document(fromUid).collection("msgs").add(mapOf(
+                        "fromUid"   to myUid,
+                        "fromName"  to myName,
+                        "fromPhoto" to myPhoto,
+                        "type"      to "follow_request_accepted",
+                        "feedId"    to "",
+                        "postId"    to "",
+                        "title"     to "$myName takip isteğini kabul etti",
+                        "sub"       to "",
+                        "ico"       to "person_add",
+                        "message"   to "$myName takip isteğini kabul etti",
+                        "url"       to "",
+                        "read"      to false,
+                        "ts"        to com.google.firebase.Timestamp.now(),
+                    )).await()
+                } catch (_: Exception) {}
 
-                // ✅ Başarı sonrası bildirimi listeden kaldır (butonlar tekrar göstermesin)
-                _notifications.value = _notifications.value.filter { it.id != notifId }
-                _unreadCount.value   = _notifications.value.count { !it.read }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
     fun declineFollowRequest(fromUid: String, notifId: String) {
         val myUid = auth.currentUser?.uid ?: return
+        // ✅ Optimistic update — butonu HEMEN kaldır
+        if (notifId.isNotBlank()) {
+            handledIds.add(notifId)
+            _notifications.value = _notifications.value.filter { it.id != notifId }
+            _unreadCount.value   = _notifications.value.count { !it.read }
+        }
         viewModelScope.launch {
             try {
-                firestore.collection("followRequests").document(myUid)
-                    .collection("pending").document(fromUid).delete().await()
+                try {
+                    firestore.collection("followRequests").document(myUid)
+                        .collection("pending").document(fromUid).delete().await()
+                } catch (_: Exception) {}
                 if (notifId.isNotBlank()) {
-                    firestore.collection("userNotifs").document(myUid)
-                        .collection("msgs").document(notifId)
-                        .update("read", true, "status", "declined").await()
+                    try {
+                        firestore.collection("userNotifs").document(myUid)
+                            .collection("msgs").document(notifId)
+                            .update("read", true, "status", "declined").await()
+                    } catch (_: Exception) {}
                 }
-                // ✅ Reddedince de listeden kaldır
-                _notifications.value = _notifications.value.filter { it.id != notifId }
-                _unreadCount.value   = _notifications.value.count { !it.read }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
