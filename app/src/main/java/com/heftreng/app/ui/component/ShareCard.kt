@@ -139,15 +139,15 @@ fun SharePreviewDialog(
 // ── Paylaşım kartı içeriği ────────────────────────────────────────────────────
 @Composable
 fun ShareCardContent(post: Post) {
-    val isDark = LocalHeftrangColors.current.isDark
+    val colors = LocalHeftrangColors.current
 
-    // Moda göre arka plan ve metin renkleri
-    val cardBg      = if (isDark) Color(0xFF0E0E1A) else Color(0xFFF5F3FF)
-    val textColor   = if (isDark) Color(0xFFE0E0F0) else Color(0xFF1A1040)
-    val quoteBoxBg  = if (isDark) Color(0xFF1A1A2E) else Color(0xFFEDE9FE)
-    val quoteText   = if (isDark) Color(0xFFE8E8F0) else Color(0xFF2D2060)
-    val brandingBg  = if (isDark) Color(0xFF1A1A2E) else Color(0xFFEDE9FE)
-    val mutedColor  = if (isDark) Color(0xFF888899) else Color(0xFF8878B8)
+    // Tema renkleriyle uyumlu — hardcoded eski mor tema renkleri kaldırıldı
+    val cardBg     = colors.background
+    val textColor  = colors.onBackground
+    val quoteBoxBg = colors.surfaceVar
+    val quoteText  = colors.onBackground
+    val brandingBg = colors.surfaceVar
+    val mutedColor = colors.muted
 
     Column(
         modifier = Modifier
@@ -197,7 +197,7 @@ fun ShareCardContent(post: Post) {
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .background(quoteBoxBg)
-                    .border(1.dp, Color(0xFFFFB300).copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                    .border(1.dp, Amber.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
                     .padding(14.dp),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -212,7 +212,7 @@ fun ShareCardContent(post: Post) {
                         Text(
                             "📖 ${post.bookName}" +
                                 if (post.authorName.isNotBlank()) " — ${post.authorName}" else "",
-                            color      = Color(0xFFFFB300),
+                            color      = Amber,
                             fontSize   = 12.sp,
                             fontWeight = FontWeight.Medium,
                         )
@@ -259,7 +259,7 @@ fun ShareCardContent(post: Post) {
                 PlayStoreIcon(size = 14.dp)
                 Text(
                     "Heft Reng",
-                    color      = Color(0xFFFFB300),
+                    color      = Amber,
                     fontSize   = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
