@@ -229,6 +229,10 @@ object Strings {
 
     // ── Arama (yeni) ──────────────────────────────────────────────────────────
     fun suggestedPeople(l: String)  = t(l, "Önerilen Kişiler",     "Kesên Pêşniyarkirî")
+    fun seeAll(l: String)           = t(l, "Tümünü Gör",           "Hemûyî Bibîne")
+    fun peopleHubFollowing(l: String) = t(l, "Takip Edilenler",     "Yên Tê Şopandin")
+    fun peopleHubFollowers(l: String) = t(l, "Takipçiler",          "Şopîner")
+    fun peopleHubSuggested(l: String) = t(l, "Önerilenler",         "Pêşniyar")
     fun followAction(l: String)     = follow(l)   // alias → follow()
     fun notifFollowRequest(l: String) = t(l, "Takip isteği gönderdi", "Daxwaza şopînê şand")
     fun notifGroupToday(l: String)    = t(l, "Bugün",     "Îro")

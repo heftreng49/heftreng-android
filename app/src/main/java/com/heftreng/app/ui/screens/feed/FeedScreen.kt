@@ -98,8 +98,6 @@ fun FeedScreen(
 ) {
     val posts       by vm.posts.collectAsState()
     val suggestedUsers by vm.suggestedUsers.collectAsState()
-    val suggestPage by vm.suggestCurrentPage.collectAsState()
-    val hasMoreSuggestions by vm.hasMoreSuggestions.collectAsState()
     val loading     by vm.loading.collectAsState()
     val hasMore     by vm.hasMore.collectAsState()
     val loadingMore by vm.loadingMore.collectAsState()
@@ -574,17 +572,14 @@ fun FeedScreen(
                     }
                 }
 
-                // ── Feed Sonu: Takip Edilmeyen Kullanıcılar (10'lu sayfalama) ──
+                // ── Feed Sonu: Önerilen Kişiler — Instagram tarzı yatay kaydırmalı şerit ──
                 if (selectedFeedTab == 0 && suggestedUsers.isNotEmpty()) {
                     item(key = "suggestions_bottom") {
-                        SuggestedUsersCard(
+                        SuggestedUsersCarousel(
                             users      = suggestedUsers,
-                            page       = suggestPage,
-                            hasMore    = hasMoreSuggestions,
-                            onPrevPage = { vm.loadPrevSuggestedUsersPage() },
-                            onNextPage = { vm.loadNextSuggestedUsersPage() },
                             onFollow   = { uid -> vm.followSuggestedUser(uid) },
                             onNavigate = { uid -> navController.navigate(Screen.Profile.go(uid)) },
+                            onSeeAll   = { navController.navigate(Screen.PeopleHub.go(2)) },
                             language   = language,
                         )
                     }
@@ -1609,17 +1604,16 @@ fun postTimeAgo(seconds: Long, ku: Boolean = false): String {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Takip Önerileri Kartı — Twitter/X tarzı feed arası öneri bloğu
+// Önerilen Kişiler — Instagram tarzı yatay kaydırmalı şerit
+// ÖNCEDEN: dikey, sayfalı (Önceki/Sonraki butonlu) bir kart kullanılıyordu.
+// Artık yatay kaydırmalı, kompakt kartlar + "Tümünü Gör" → PeopleHubScreen.
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-private fun SuggestedUsersCard(
+private fun SuggestedUsersCarousel(
     users     : List<FeedViewModel.SuggestedUser>,
-    page      : Int,
-    hasMore   : Boolean = false,
-    onPrevPage: () -> Unit = {},
-    onNextPage: () -> Unit = {},
     onFollow  : (uid: String) -> Unit,
     onNavigate: (uid: String) -> Unit,
+    onSeeAll  : () -> Unit,
     language  : String = "tr",
 ) {
     val ku = language == "ku"
@@ -1628,19 +1622,13 @@ private fun SuggestedUsersCard(
         color    = HeftSurface,
     ) {
         Column {
-            // Başlık
             Row(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    Icons.Default.PersonAdd,
-                    null,
-                    tint     = Primary,
-                    modifier = Modifier.size(18.dp),
-                )
+                Icon(Icons.Default.PersonAdd, null, tint = Primary, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(
                     Strings.suggestedPeople(language),
@@ -1649,157 +1637,121 @@ private fun SuggestedUsersCard(
                     fontSize   = 15.sp,
                     modifier   = Modifier.weight(1f),
                 )
-            }
-            HorizontalDivider(color = Divider, thickness = 0.5.dp)
-
-            // Kullanıcı listesi (sayfa başına en fazla 10)
-            users.forEach { user ->
-                SuggestedUserRow(
-                    user       = user,
-                    onFollow   = { onFollow(user.uid) },
-                    onNavigate = { onNavigate(user.uid) },
-                    language   = language,
-                )
-                HorizontalDivider(color = Divider, thickness = 0.5.dp)
-            }
-
-            // ── Sayfalama: Önceki / Sayfa No / Sonraki ───────────────────
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.CenterVertically,
-            ) {
-                TextButton(
-                    onClick = onPrevPage,
-                    enabled = page > 0,
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = if (page > 0) Primary else Muted, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        if (ku) "Berê" else "Önceki",
-                        color    = if (page > 0) Primary else Muted,
-                        fontSize = 13.sp,
-                    )
-                }
-
                 Text(
-                    (if (ku) "Rûpel " else "Sayfa ") + "${page + 1}",
-                    color    = Muted,
-                    fontSize = 12.sp,
+                    Strings.seeAll(language),
+                    color      = Primary,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize   = 13.sp,
+                    modifier   = Modifier.clickable { onSeeAll() },
                 )
+            }
 
-                TextButton(
-                    onClick = onNextPage,
-                    enabled = hasMore,
-                ) {
-                    Text(
-                        if (ku) "Pêş" else "Sonraki",
-                        color    = if (hasMore) Primary else Muted,
-                        fontSize = 13.sp,
+            LazyRow(
+                contentPadding        = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(users, key = { it.uid }) { user ->
+                    SuggestedUserCarouselCard(
+                        user       = user,
+                        onFollow   = { onFollow(user.uid) },
+                        onNavigate = { onNavigate(user.uid) },
+                        language   = language,
                     )
-                    Spacer(Modifier.width(4.dp))
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = if (hasMore) Primary else Muted, modifier = Modifier.size(16.dp))
+                }
+                item(key = "see_all_card") {
+                    SeeAllCarouselCard(language = language, onClick = onSeeAll)
                 }
             }
+
+            Spacer(Modifier.height(10.dp))
         }
     }
 }
 
 @Composable
-private fun SuggestedUserRow(
+private fun SuggestedUserCarouselCard(
     user      : FeedViewModel.SuggestedUser,
     onFollow  : () -> Unit,
     onNavigate: () -> Unit,
     language  : String = "tr",
 ) {
     val ku = language == "ku"
-    Row(
+    Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onNavigate() }
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .width(96.dp)
+            .clickable { onNavigate() },
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Avatar
         if (user.photoURL.isNotBlank()) {
             AsyncImage(
-                model            = user.photoURL,
+                model              = user.photoURL,
                 contentDescription = null,
-                contentScale     = ContentScale.Crop,
-                modifier         = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape),
+                contentScale       = ContentScale.Crop,
+                modifier           = Modifier.size(64.dp).clip(CircleShape),
             )
         } else {
             Box(
-                Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(SurfaceVar),
+                Modifier.size(64.dp).clip(CircleShape).background(SurfaceVar),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Default.Person, null, tint = Muted, modifier = Modifier.size(22.dp))
+                Icon(Icons.Default.Person, null, tint = Muted, modifier = Modifier.size(28.dp))
             }
         }
-
-        Spacer(Modifier.width(12.dp))
-
-        // İsim + biyografi
-        Column(Modifier.weight(1f)) {
+        Spacer(Modifier.height(6.dp))
+        Text(
+            user.name.ifBlank { "?" },
+            color      = OnBackground,
+            fontWeight = FontWeight.SemiBold,
+            fontSize   = 12.sp,
+            maxLines   = 1,
+            overflow   = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            textAlign  = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier   = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(4.dp))
+        Button(
+            onClick        = onFollow,
+            shape          = RoundedCornerShape(16.dp),
+            colors         = ButtonDefaults.buttonColors(containerColor = Primary),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+            modifier       = Modifier.height(28.dp).fillMaxWidth(),
+        ) {
             Text(
-                user.name,
-                color      = OnBackground,
+                if (ku) "Bişopîne" else "Takip Et",
+                color      = Color.White,
+                fontSize   = 11.sp,
                 fontWeight = FontWeight.SemiBold,
-                fontSize   = 14.sp,
                 maxLines   = 1,
-                overflow   = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
-            if (user.bio.isNotBlank()) {
-                Text(
-                    user.bio,
-                    color    = Muted,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                )
-            }
         }
+    }
+}
 
-        Spacer(Modifier.width(8.dp))
-
-        // Takip Et / Takip Ediliyor butonu
-        if (user.isFollowing) {
-            OutlinedButton(
-                onClick        = {},
-                shape          = RoundedCornerShape(20.dp),
-                border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                modifier       = Modifier.height(34.dp),
-            ) {
-                Text(
-                    if (ku) "Tê şopandin" else "Takip Ediliyor",
-                    color    = Muted,
-                    fontSize = 12.sp,
-                )
-            }
-        } else {
-            Button(
-                onClick        = onFollow,
-                shape          = RoundedCornerShape(20.dp),
-                colors         = ButtonDefaults.buttonColors(containerColor = Primary),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                modifier       = Modifier.height(34.dp),
-            ) {
-                Text(
-                    if (ku) "Bişopîne" else "Takip Et",
-                    color    = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
+@Composable
+private fun SeeAllCarouselCard(language: String, onClick: () -> Unit) {
+    val ku = language == "ku"
+    Column(
+        modifier = Modifier
+            .width(96.dp)
+            .clickable { onClick() },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier.size(64.dp).clip(CircleShape).background(SurfaceVar),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = Primary, modifier = Modifier.size(26.dp))
         }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            Strings.seeAll(language),
+            color      = Primary,
+            fontWeight = FontWeight.SemiBold,
+            fontSize   = 12.sp,
+            maxLines   = 2,
+            textAlign  = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier   = Modifier.fillMaxWidth(),
+        )
     }
 }
 

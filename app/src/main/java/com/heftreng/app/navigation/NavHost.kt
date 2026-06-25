@@ -94,6 +94,7 @@ sealed class Screen(val route: String) {
     object Cms           : Screen("cms")
     object MessageDetail : Screen("message/{convId}") { fun go(id: String) = "message/$id" }
     object Profile       : Screen("profile/{uid}")    { fun go(uid: String) = "profile/$uid" }
+    object PeopleHub     : Screen("people_hub?tab={tab}") { fun go(tab: Int = 2) = "people_hub?tab=$tab" }
     object EditProfile   : Screen("edit_profile")
     object PostDetail    : Screen("post/{postId}")    { fun go(id: String) = "post/$id" }
     object SerialDetail  : Screen("serial/{id}")      { fun go(id: String) = "serial/$id" }
@@ -630,6 +631,18 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                         uid           = back.arguments?.getString("uid") ?: "me",
                         navController = navController,
                         language      = language,
+                    )
+                }
+                composable(
+                    "people_hub?tab={tab}",
+                    arguments = listOf(
+                        androidx.navigation.navArgument("tab") { type = androidx.navigation.NavType.IntType; defaultValue = 2 },
+                    ),
+                ) { back ->
+                    com.heftreng.app.ui.screens.social.PeopleHubScreen(
+                        navController = navController,
+                        language      = language,
+                        initialTab    = back.arguments?.getInt("tab") ?: 2,
                     )
                 }
                 composable(Screen.Messages.route) {
