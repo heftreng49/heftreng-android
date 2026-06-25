@@ -20,7 +20,7 @@ begin
   for r in select tablename, policyname from pg_policies
            where schemaname = 'public'
            and tablename in (
-             'authors','library_books','book_quotes','book_reviews',
+             'users','authors','library_books','book_quotes','book_reviews',
              'author_follows','follows','feed_likes','feed_saves',
              'comment_likes','serial_likes'
            )
@@ -35,7 +35,7 @@ end $$;
 do $$ declare
   tbl text;
   tables text[] := array[
-    'authors','library_books','book_quotes','book_reviews',
+    'users','authors','library_books','book_quotes','book_reviews',
     'author_follows','follows','feed_likes','feed_saves',
     'comment_likes','serial_likes'
   ];
