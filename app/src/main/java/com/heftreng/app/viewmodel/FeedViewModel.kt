@@ -136,15 +136,6 @@ class FeedViewModel @Inject constructor(
                     ?: fireUser?.displayName
                     ?: fireUser?.email?.substringBefore("@")
                     ?: "").trim()
-                // Firebase ID token'ı header'a ekle — RLS "auth.uid() = uid" politikası
-                // anon key ile geçemez, Firebase JWT gerektirir.
-                val idToken = try {
-                    kotlinx.coroutines.tasks.await(
-                        com.google.firebase.auth.FirebaseAuth.getInstance()
-                            .currentUser?.getIdToken(false)
-                    )?.token
-                } catch (_: Exception) { null }
-
                 supabase.postgrest["users"].upsert(
                     com.heftreng.app.data.model.UserRow(
                         uid         = uid,
@@ -153,11 +144,7 @@ class FeedViewModel @Inject constructor(
                         bio         = d?.get("bio") as? String ?: "",
                         banned      = d?.get("banned") as? Boolean ?: false,
                     )
-                ) {
-                    if (idToken != null) {
-                        headers { append("Authorization", "Bearer $idToken") }
-                    }
-                }
+                )
                 android.util.Log.d("FeedVM", "ensureUserInSupabase: OK (uid=$uid, name='$displayName')")
             } catch (e: Exception) {
                 android.util.Log.w("FeedVM", "ensureUserInSupabase: ${e.message}")
@@ -1243,26 +1230,19 @@ class FeedViewModel @Inject constructor(
         val hasMore: Boolean
 
         if (page == 0) {
-            // Çift sorgu: en yeni 100 + en köklü 100 → birleştirilip karıştırılır.
-            // Tek DESC sıralamasında yeni üyeler havuzun dışına çıkabiliyordu.
-            val half = 100L
-
-            val newestRows = supabase.postgrest["users"].select {
+            // Havuz büyütüldü (x20): yeni üyelerin dahil olma şansı arttı.
+            // eq("banned", false) → neq("banned", true): banned=null olan yeni
+            // kayıtlar artık dışlanmıyor.
+            val poolSize = (SUGGEST_PAGE_SIZE * 20 + excludeUids.size).coerceAtLeast(200).toLong()
+            val rows = supabase.postgrest["users"].select {
                 filter { neq("banned", true) }
                 order("created_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
-                range(0, half - 1)
+                range(0, poolSize - 1)
             }.decodeList<com.heftreng.app.data.model.UserRow>()
 
-            val oldestRows = supabase.postgrest["users"].select {
-                filter { neq("banned", true) }
-                order("created_at", io.github.jan.supabase.postgrest.query.Order.ASCENDING)
-                range(0, half - 1)
-            }.decodeList<com.heftreng.app.data.model.UserRow>()
-
-            val candidates = (newestRows + oldestRows)
-                .distinctBy { it.uid }
-                .filter { it.uid !in excludeUids && it.uid.isNotBlank() }
-
+            // displayName.isNotBlank() → uid.isNotBlank(): profil doldurmamış
+            // yeni üyeler de önerilere girebilsin.
+            val candidates = rows.filter { it.uid !in excludeUids && it.uid.isNotBlank() }
             pageUsers = candidates.shuffled().take(SUGGEST_PAGE_SIZE).map { row ->
                 SuggestedUser(
                     uid         = row.uid,
