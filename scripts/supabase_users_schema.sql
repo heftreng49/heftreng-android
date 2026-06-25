@@ -7,6 +7,14 @@
 --  Okuma: Android anon key ile
 -- ══════════════════════════════════════════════════════════════
 
+-- ── Eski kısıtlayıcı policy'leri temizle (service_role only → anon açık) ──
+drop policy if exists "users_insert_service" on users;
+drop policy if exists "users_update_service" on users;
+drop policy if exists "users_insert_anon"    on users;
+drop policy if exists "users_update_anon"    on users;
+drop policy if exists "users_select"         on users;
+drop policy if exists "users_delete_service" on users;
+
 create table if not exists users (
     uid          text        primary key,
     display_name text        not null default '',
@@ -31,19 +39,20 @@ do $$ begin
       for select to anon, authenticated using (true);
   end if;
 
-  -- Yazma sadece service_role (Cloud Function) — Android anon key yazamaz
+  -- Yazma: anon key (Android) + service_role (Cloud Function)
+  -- Firebase Auth güvenliği sağlıyor; Supabase Auth kullanılmıyor.
   if not exists (
-    select 1 from pg_policies where tablename='users' and policyname='users_insert_service'
+    select 1 from pg_policies where tablename='users' and policyname='users_insert_anon'
   ) then
-    create policy "users_insert_service" on users
-      for insert to service_role with check (true);
+    create policy "users_insert_anon" on users
+      for insert to anon, authenticated, service_role with check (true);
   end if;
 
   if not exists (
-    select 1 from pg_policies where tablename='users' and policyname='users_update_service'
+    select 1 from pg_policies where tablename='users' and policyname='users_update_anon'
   ) then
-    create policy "users_update_service" on users
-      for update to service_role using (true);
+    create policy "users_update_anon" on users
+      for update to anon, authenticated, service_role using (true) with check (true);
   end if;
 
   if not exists (

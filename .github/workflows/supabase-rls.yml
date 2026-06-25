@@ -29,6 +29,15 @@ jobs:
             order by tablename;
           "
 
+      - name: Users tablo policy güncelle
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          psql "$SUPABASE_DB_URL" \
+            -f scripts/supabase_users_schema.sql \
+            --set ON_ERROR_STOP=1
+          echo "✅ users policy güncellendi"
+
       - name: RLS kurallarını uygula
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
