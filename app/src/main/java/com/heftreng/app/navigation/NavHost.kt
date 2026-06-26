@@ -641,7 +641,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     exitTransition  = { fadeOut(tween(140)) },
                     popEnterTransition  = { fadeIn(tween(180)) },
                     popExitTransition   = { fadeOut(tween(140)) },
-                ) { SearchScreen(navController, language = language) }
+                ) { SearchScreen(navController, language = language, adsVm = adsVm) }
                 composable(
                     Screen.Serials.route,
                     enterTransition = { fadeIn(tween(180)) },
@@ -668,6 +668,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                         uid           = back.arguments?.getString("uid") ?: "me",
                         navController = navController,
                         language      = language,
+                        adsVm         = adsVm,
                     )
                 }
                 composable(
@@ -702,7 +703,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     CmsPageScreen(navController = navController, slug = slug)
                 }
                 composable(Screen.Admin.route)    { AdminScreen(navController) }
-                composable(Screen.Cms.route)      { CmsScreen(navController) }
+                composable(Screen.Cms.route)      { CmsScreen(navController, adsVm = adsVm) }
                 composable(Screen.Yazar.route)    { YazarScreen(navController) }
                 composable(Screen.KurdiAdmin.route) {
                     if (isAdmin) KurdiAdminScreen(navController)
