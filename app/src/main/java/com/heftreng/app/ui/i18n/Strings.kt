@@ -286,8 +286,15 @@ object Strings {
     fun settingsOther(l: String)         = t(l, "Diğer",                            "Yên Din")
     fun settingsAbout(l: String)         = t(l, "Heftreng Hakkında",               "Derbarê Heftreng")
     fun settingsAboutSub(l: String)      = t(l, "Uygulama hakkında bilgi",          "Serîlêdanê nas bike")
-    fun rateApp(l: String)               = t(l, "Bizi Değerlendir",                 "Me binirxîne")
-    fun rateAppSub(l: String)            = t(l, "Play Store'da puan ver, yorum yaz", "Li Play Store dengê xwe bide")
+    fun rateApp(l: String)               = t(l, "Bizi Değerlendir",                  "Me binirxîne")
+    fun rateAppSub(l: String)            = t(l, "Play Store'da puan ver, yorum yaz",  "Li Play Store dengê xwe bide")
+    fun shareApp(l: String)              = t(l, "Arkadaşlarına Öner",                 "Ji hevalên xwe re pêşniyar bike")
+    fun shareAppSub(l: String)           = t(l, "Play Store linkini paylaş",           "Lînka Play Store parve bike")
+    fun shareAppChooser(l: String)       = t(l, "Arkadaşlarınla Paylaş",              "Bi hevalên xwe re parve bike")
+    fun shareAppText(l: String)          = t(l,
+        "✨ Heftreng — Kürtçe ve Türkçe sosyal platform!\nHemen indir 👇\nhttps://play.google.com/store/apps/details?id=com.heftreng.app",
+        "✨ Heftreng — Platforma civakî ya Kurdî/Tirkî!\nNiha dakêşin 👇\nhttps://play.google.com/store/apps/details?id=com.heftreng.app"
+    )
     fun settingsTermsSub(l: String)      = t(l, "Kullanım şartlarını görüntüle",    "Peymanname bixwîne")
     fun settingsPrivacySub(l: String)    = t(l, "Gizlilik politikasını görüntüle", "Siyaseta nepeniyê bixwîne")
     fun settingsAdminPanel(l: String)    = t(l, "Admin Paneli",                     "Panela Admin")
