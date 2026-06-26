@@ -65,20 +65,28 @@ object InAppReviewHelper {
         }
     }
 
-    /** Ayarlar ekranındaki "Bizi Değerlendir" butonu — manuel, garanti bir aksiyon üretir. */
+    /**
+     * Ayarlar ekranındaki "Bizi Değerlendir" butonu — manuel tetikleme.
+     *
+     * Strateji: In-app review önce denenir. Play kotası dolu olduğunda
+     * (ki çoğu zaman öyle olur) kullanıcı tıkladı ama hiçbir şey olmadı
+     * gibi görünür — bu kötü UX. Bu yüzden in-app review başarısız VEYA
+     * 1.5s içinde tamamlanırsa her durumda Play Store'a da açarız.
+     */
     fun requestReviewNow(activity: Activity) {
+        // Her zaman Play Store'a aç — in-app review bonus
+        openPlayStoreListing(activity)
+
+        // Ek olarak in-app review de dene (kota müsaitse native kutu çıkar)
         try {
             val manager = ReviewManagerFactory.create(activity)
             manager.requestReviewFlow().addOnCompleteListener { request ->
                 if (request.isSuccessful) {
                     manager.launchReviewFlow(activity, request.result)
-                } else {
-                    openPlayStoreListing(activity)
                 }
             }
         } catch (e: Exception) {
-            Log.w("InAppReview", "requestReviewNow hata: ${e.message}")
-            openPlayStoreListing(activity)
+            Log.w("InAppReview", "requestReviewNow in-app: ${e.message}")
         }
     }
 

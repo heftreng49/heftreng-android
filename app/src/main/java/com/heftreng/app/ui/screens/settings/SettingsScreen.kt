@@ -295,12 +295,12 @@ fun SettingsScreen(
                         Strings.rateApp(language),
                         Strings.rateAppSub(language),
                     ) {
-                        // findActivity() bazen null döndüğünden doğrudan activity'yi dene,
-                        // bulunamazsa tarayıcıda Play Store sayfasına yönlendir.
+                        // Her zaman Play Store'a aç + in-app review bonus olarak dene
                         val activity = context.findActivity()
                         if (activity != null) {
                             com.heftreng.app.util.InAppReviewHelper.requestReviewNow(activity)
                         } else {
+                            // Activity bulunamazsa direkt Play Store
                             val pkg = context.packageName
                             try {
                                 context.startActivity(
@@ -318,6 +318,27 @@ fun SettingsScreen(
                                 )
                             }
                         }
+                    }
+                    HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
+                    // ── Uygulamayı Arkadaşına Öner ───────────────────────
+                    SettingsRow(
+                        icon  = Icons.Outlined.Share,
+                        label = if (language == "ku") "Serîlêdanê ji hevalên xwe re pêşniyar bike" else "Uygulamayı Arkadaşlarına Öner",
+                        sub   = if (language == "ku") "Lînka Play Store parve bike" else "Play Store linkini paylaş",
+                    ) {
+                        val shareText = if (language == "ku")
+                            "Heftreng serîlêdanek civakî ya Kurdî/Tirkî ye. Niha dakêşin: https://play.google.com/store/apps/details?id=com.heftreng.app"
+                        else
+                            "Heftreng'i keşfet! Kürtçe ve Türkçe sosyal platform. Hemen indir: https://play.google.com/store/apps/details?id=com.heftreng.app"
+
+                        context.startActivity(
+                            android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type  = "text/plain"
+                                putExtra(android.content.Intent.EXTRA_TEXT, shareText)
+                                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                            }.let { android.content.Intent.createChooser(it, if (language == "ku") "Bi hevalên xwe re parve bike" else "Arkadaşlarınla Paylaş") }
+                                .apply { flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK }
+                        )
                     }
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsRow(

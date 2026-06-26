@@ -77,6 +77,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.platform.LocalContext
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
 import kotlinx.coroutines.launch
@@ -911,6 +912,40 @@ fun DrawerContent(
             }
 
             Spacer(Modifier.weight(1f))
+
+            // ── Uygulamayı Arkadaşlarına Öner ─────────────────────────
+            val drawerContext = LocalContext.current
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable {
+                        val shareText = if (language == "ku")
+                            "✨ Heftreng — Platforma civakî ya Kurdî/Tirkî!\nNiha dakêşin 👇\nhttps://play.google.com/store/apps/details?id=com.heftreng.app"
+                        else
+                            "✨ Heftreng — Kürtçe ve Türkçe sosyal platform!\nHemen indir 👇\nhttps://play.google.com/store/apps/details?id=com.heftreng.app"
+                        drawerContext.startActivity(
+                            android.content.Intent.createChooser(
+                                android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(android.content.Intent.EXTRA_TEXT, shareText)
+                                },
+                                if (language == "ku") "Bi hevalên xwe re parve bike" else "Arkadaşlarınla Paylaş"
+                            ).apply { flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK }
+                        )
+                    }
+                    .padding(horizontal = 10.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.Share, null, tint = Primary, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    if (language == "ku") "Ji hevalên xwe re pêşniyar bike" else "Arkadaşlarına Öner",
+                    color    = Primary,
+                    fontSize = 14.sp,
+                )
+            }
+
             HorizontalDivider(color = Divider)
             Spacer(Modifier.height(8.dp))
 
