@@ -2,6 +2,8 @@ package com.heftreng.app.util
 
 import android.app.Activity
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.google.android.ump.ConsentDebugSettings
 import com.google.android.ump.ConsentInformation
@@ -27,10 +29,25 @@ import kotlinx.coroutines.flow.asStateFlow
  *    [canRequestAds] hemen true olur.
  *  - AB/Kaliforniya kullanıcıları için form zorunlu.
  *  - Debug modda test cihazı ekleyerek formu her zaman tetikleyebilirsin.
+ *
+ *  ÖNEMLİ — ZAMAN AŞIMI KORUMASI:
+ *  UMP'nin requestConsentInfoUpdate() ve loadAndShowConsentFormIfRequired()
+ *  çağrıları Google'ın sunucularına ağ isteği yapar. Bu istek YAVAŞ veya
+ *  TAKILI bir ağda (zayıf bağlantı, kurumsal/okul ağı, bazı VPN'ler) çok uzun
+ *  sürebilir ya da hiç tamamlanmayabilir — SDK'nın bunun için yerleşik bir
+ *  zaman aşımı YOK. Bu durumda [onCanRequestAds] hiç çağrılmaz, dolayısıyla
+ *  AdsViewModel.loadAdConfigs() de hiç tetiklenmez ve TÜM reklamlar o oturum
+ *  boyunca "hiç yüklenmez" hale gelir. CONSENT_TIMEOUT_MS sonunda hâlâ
+ *  sonuçlanmamışsa, güvenli tarafta kalarak (NPA — kişiselleştirilmemiş
+ *  reklam) akışı zorla ilerletiyoruz; kullanıcı deneyimi reklamsız/boş
+ *  kalmasın diye.
  */
 object ConsentHelper {
 
     private const val TAG = "ConsentHelper"
+
+    // UMP ağ çağrısı bu süre içinde sonuçlanmazsa, NPA-güvenli modda zorla ilerle.
+    private const val CONSENT_TIMEOUT_MS = 4_000L
 
     // ── Consent durumu akışı — AdsViewModel ve NavHost buradan dinler ─────
     private val _canRequestAds = MutableStateFlow(false)
@@ -39,9 +56,14 @@ object ConsentHelper {
     private val _consentStatus = MutableStateFlow(ConsentInformation.ConsentStatus.UNKNOWN)
     val consentStatus = _consentStatus.asStateFlow()
 
+    private val timeoutHandler = Handler(Looper.getMainLooper())
+    private var timeoutRunnable: Runnable? = null
+
     /**
      * Activity.onCreate'da çağır.
      * [onCanRequestAds] reklam yüklemeye başlayabildiğinde tetiklenir.
+     * Bu callback'in EN FAZLA CONSENT_TIMEOUT_MS içinde (başarı, hata veya
+     * zaman aşımı — hangisi önce gelirse) çağrılacağı garanti edilir.
      */
     fun initialize(
         activity: Activity,
@@ -49,6 +71,27 @@ object ConsentHelper {
         testDeviceHashedId: String? = null,   // AdMob test cihaz hash'i (debug için)
         onCanRequestAds: () -> Unit = {},
     ) {
+        // Aynı çağrıyı iki kez tetiklememek için tek seferlik guard
+        var resolved = false
+        val resolveOnce: (Boolean, Int) -> Unit = { canAds, status ->
+            if (!resolved) {
+                resolved = true
+                timeoutRunnable?.let { timeoutHandler.removeCallbacks(it) }
+                _consentStatus.value = status
+                _canRequestAds.value = canAds
+                onCanRequestAds()
+            }
+        }
+
+        // Zaman aşımı koruması — Google sunucusu yanıt vermese/yavaş olsa bile
+        // reklam akışı CONSENT_TIMEOUT_MS sonunda NPA-güvenli modda ilerler.
+        val runnable = Runnable {
+            Log.w(TAG, "UMP zaman aşımı (${CONSENT_TIMEOUT_MS}ms) — NPA-güvenli modda zorla ilerleniyor")
+            resolveOnce(true, ConsentInformation.ConsentStatus.REQUIRED)
+        }
+        timeoutRunnable = runnable
+        timeoutHandler.postDelayed(runnable, CONSENT_TIMEOUT_MS)
+
         val paramsBuilder = ConsentRequestParameters.Builder()
             .setTagForUnderAgeOfConsent(false)
 
@@ -67,28 +110,18 @@ object ConsentHelper {
             paramsBuilder.build(),
             {
                 // Güncelleme başarılı — form gerekli mi kontrol et
-                _consentStatus.value = consentInfo.consentStatus
-
                 if (consentInfo.isConsentFormAvailable) {
-                    loadAndShowConsentForm(activity, consentInfo, onCanRequestAds)
+                    loadAndShowConsentForm(activity, consentInfo, resolveOnce)
                 } else {
                     // Form gerekmiyor (GDPR/CCPA dışı bölge) — hemen izin ver
                     Log.d(TAG, "Form gerekmez — consentStatus=${consentInfo.consentStatus}")
-                    _canRequestAds.value = true
-                    onCanRequestAds()
+                    resolveOnce(true, consentInfo.consentStatus)
                 }
             },
             { formError ->
                 // Güncelleme başarısız — önceki izne bak, yoksa yine de başlat
                 Log.w(TAG, "Consent info update hatası: ${formError.message}")
-                val canAds = consentInfo.canRequestAds()
-                _canRequestAds.value = canAds
-                if (canAds) onCanRequestAds()
-                else {
-                    // Hata durumunda engelleme — reklam gösterme ama uygulamayı kilitleme
-                    _canRequestAds.value = true
-                    onCanRequestAds()
-                }
+                resolveOnce(true, consentInfo.consentStatus)
             },
         )
     }
@@ -96,11 +129,10 @@ object ConsentHelper {
     private fun loadAndShowConsentForm(
         activity: Activity,
         consentInfo: ConsentInformation,
-        onCanRequestAds: () -> Unit,
+        resolveOnce: (Boolean, Int) -> Unit,
     ) {
         if (!consentInfo.isConsentFormAvailable) {
-            _canRequestAds.value = consentInfo.canRequestAds()
-            if (_canRequestAds.value) onCanRequestAds()
+            resolveOnce(consentInfo.canRequestAds(), consentInfo.consentStatus)
             return
         }
 
@@ -110,16 +142,9 @@ object ConsentHelper {
             if (formError != null) {
                 Log.w(TAG, "Form gösterme hatası: ${formError.message}")
             }
-            _consentStatus.value = consentInfo.consentStatus
             val canAds = consentInfo.canRequestAds()
             Log.d(TAG, "Form tamamlandı — canRequestAds=$canAds status=${consentInfo.consentStatus}")
-            _canRequestAds.value = canAds
-            if (canAds) onCanRequestAds()
-            else {
-                // Kullanıcı reddetti — yine de başlat (reklam göstermeyiz, kişisel olmayan gösteririz)
-                _canRequestAds.value = true
-                onCanRequestAds()
-            }
+            resolveOnce(true, consentInfo.consentStatus)
         }
     }
 

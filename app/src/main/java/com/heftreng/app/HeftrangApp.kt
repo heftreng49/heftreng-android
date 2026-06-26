@@ -1,12 +1,10 @@
 package com.heftreng.app
 
 import android.app.Application
-import android.util.Log
 import coil.Coil
 import coil.ImageLoader
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
-import com.google.android.gms.ads.MobileAds
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
@@ -50,18 +48,20 @@ class HeftrangApp : Application() {
                 .build()
         )
 
-        // MobileAds başlatması MainActivity.onCreate'da ConsentHelper sonrasında yapılır.
-        // Application context'te Activity gerekmediği için sadece SDK'yı burada hazırla.
-        // Gerçek initialize() çağrısı MainActivity'de UMP onayından sonra gelir.
-        // Ancak ConsentHelper'sız cihazlar (GDPR/CCPA dışı) için burada da başlatalım —
-        // MainActivity zaten ikinci kez çağırsa sorun olmaz (idempotent).
-        MobileAds.initialize(this) { initStatus ->
-            _sdkReady.value = true
-            if (Log.isLoggable("AdMob", Log.DEBUG)) {
-                initStatus.adapterStatusMap.forEach { (adapter, status) ->
-                    Log.d("AdMob", "Adapter: $adapter → ${status.initializationState}")
-                }
-            }
-        }
+        // MobileAds.initialize() BURADAN KALDIRILDI.
+        //
+        // ÖNCEKİ HALİ BUGGY'DI: Burada şartsız initialize() çağırmak, aşağıda
+        // açıklanan UMP rıza akışını (MainActivity → ConsentHelper) tamamen
+        // ANLAMSIZ kılıyordu — çünkü sdkReady, hangisi önce biterse ondan true
+        // oluyordu, ve Application.onCreate() her zaman MainActivity'den (ve
+        // onun ağ çağrısı gerektiren UMP adımından) önce/aynı anda çalıştığı
+        // için pratikte HER ZAMAN rıza beklenmeden true oluyordu.
+        //
+        // ŞİMDİ: SDK başlatması SADECE MainActivity.onCreate() içinde,
+        // ConsentHelper.initialize() → onCanRequestAds callback'inden sonra
+        // yapılıyor (bkz. MainActivity.kt, notifySdkReady()). ConsentHelper
+        // artık dahili bir zaman aşımı korumasına sahip (CONSENT_TIMEOUT_MS)
+        // — yani bu callback ağ sorunu olsa bile en fazla ~4 saniye içinde
+        // garanti tetiklenir, "reklamlar hiç yüklenmiyor" riski kalmaz.
     }
 }
