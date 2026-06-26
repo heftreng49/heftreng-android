@@ -10,8 +10,10 @@ import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.VideoOptions
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdOptions
+import com.google.ads.mediation.admob.AdMobAdapter
 import com.heftreng.app.HeftrangApp
 import com.heftreng.app.data.model.CmsAdConfig
+import com.heftreng.app.util.ConsentHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,8 +52,27 @@ class AdEngine(
     // SDK hazır olana kadar bekle — coroutine içinde, UI'ı bloklamaz (<200ms)
     private suspend fun awaitSdk() = HeftrangApp.sdkReady.first { it }
 
-    // Temiz AdRequest — setContentUrl YOK (gereksiz round-trip ekler)
-    private fun adRequest() = AdRequest.Builder().build()
+    // AdRequest — consent durumuna göre kişiselleştirilmiş veya NPA modu.
+    //
+    // ConsentHelper.consentStatus:
+    //   OBTAINED  → kullanıcı kabul etti → personalized reklam
+    //   NOT_REQUIRED → GDPR/CCPA dışı bölge (Türkiye vb.) → personalized reklam
+    //   REQUIRED  → form gösterildi ama ret/belirsiz → NPA ("npa"="1")
+    //   UNKNOWN   → henüz bilinmiyor → NPA (güvenli taraf)
+    fun adRequest(): AdRequest {
+        val status = ConsentHelper.consentStatus.value
+        val npa = status == com.google.android.ump.ConsentInformation.ConsentStatus.REQUIRED
+
+        return if (npa) {
+            AdRequest.Builder()
+                .addNetworkExtrasBundle(AdMobAdapter::class.java, android.os.Bundle().apply {
+                    putString("npa", "1")
+                })
+                .build()
+        } else {
+            AdRequest.Builder().build()
+        }
+    }
 
     // Native optimizasyon: statik reklam öncelikli, video başlarsa sessiz
     private val nativeOptions = NativeAdOptions.Builder()

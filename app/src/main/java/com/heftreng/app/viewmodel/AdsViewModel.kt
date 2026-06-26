@@ -399,7 +399,7 @@ class AdsViewModel @Inject constructor(
     private fun loadInterstitialAd(unitId: String) {
         if (unitId.isBlank()) return
         InterstitialAd.load(
-            appContext, unitId, AdRequest.Builder().build(),
+            appContext, unitId, engine.adRequest(),
             object : InterstitialAdLoadCallback() {
                 override fun onAdFailedToLoad(adError: LoadAdError) { interstitialAd = null }
                 override fun onAdLoaded(ad: InterstitialAd)         { interstitialAd = ad }
@@ -446,7 +446,7 @@ class AdsViewModel @Inject constructor(
         if (rewardedAd != null || rewardedLoading) return  // zaten hazır veya yükleniyor
         rewardedLoading = true
         RewardedAd.load(
-            appContext, unitId, AdRequest.Builder().build(),
+            appContext, unitId, engine.adRequest(),
             object : RewardedAdLoadCallback() {
                 override fun onAdLoaded(ad: RewardedAd) {
                     rewardedAd      = ad
