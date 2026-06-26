@@ -90,21 +90,29 @@ object InAppReviewHelper {
         }
     }
 
-    /** In-app review kutusu çıkmazsa ya da hata olursa — doğrudan Play Store sayfası. */
+    /** Doğrudan Play Store sayfası — başka mağaza seçeneği çıkmaz. */
     private fun openPlayStoreListing(context: Context) {
         val pkg = context.packageName
-        try {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-            )
-        } catch (e: ActivityNotFoundException) {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$pkg")).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-            )
+        // Önce market:// şemasını dene (Play Store uygulaması açılır)
+        val marketIntent = android.content.Intent(
+            android.content.Intent.ACTION_VIEW,
+            android.net.Uri.parse("market://details?id=$pkg"),
+        ).apply {
+            // FLAG_ACTIVITY_NEW_TASK + package ile sadece Play Store hedeflenir
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            setPackage("com.android.vending")   // sadece Play Store
         }
+        try {
+            context.startActivity(marketIntent)
+            return
+        } catch (_: android.content.ActivityNotFoundException) {}
+
+        // Play Store uygulaması yoksa tarayıcıda HTTPS aç
+        context.startActivity(
+            android.content.Intent(
+                android.content.Intent.ACTION_VIEW,
+                android.net.Uri.parse("https://play.google.com/store/apps/details?id=$pkg"),
+            ).apply { addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }
+        )
     }
 }

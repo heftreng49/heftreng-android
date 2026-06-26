@@ -292,8 +292,8 @@ object Strings {
     fun shareAppSub(l: String)           = t(l, "Play Store linkini paylaş",           "Lînka Play Store parve bike")
     fun shareAppChooser(l: String)       = t(l, "Arkadaşlarınla Paylaş",              "Bi hevalên xwe re parve bike")
     fun shareAppText(l: String)          = t(l,
-        "✨ Heftreng — Kürtçe ve Türkçe sosyal platform!\nHemen indir 👇\nhttps://play.google.com/store/apps/details?id=com.heftreng.app",
-        "✨ Heftreng — Platforma civakî ya Kurdî/Tirkî!\nNiha dakêşin 👇\nhttps://play.google.com/store/apps/details?id=com.heftreng.app"
+        "Heft Reng Kurdî: Kürtçeyle kültür, edebiyat ve Kürtçe dil öğrenimi 👇\nhttps://play.google.com/store/apps/details?id=com.heftreng.app",
+        "Heft Reng Kurdî: Bi kurdî Çand, wêje û fêrbûna zêmani Kurdî 👇\nhttps://play.google.com/store/apps/details?id=com.heftreng.app"
     )
     fun settingsTermsSub(l: String)      = t(l, "Kullanım şartlarını görüntüle",    "Peymanname bixwîne")
     fun settingsPrivacySub(l: String)    = t(l, "Gizlilik politikasını görüntüle", "Siyaseta nepeniyê bixwîne")
