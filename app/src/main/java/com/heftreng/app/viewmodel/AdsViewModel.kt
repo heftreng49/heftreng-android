@@ -19,6 +19,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
 import com.heftreng.app.ads.AdEngine
+import com.heftreng.app.util.ConsentHelper
 import com.heftreng.app.ads.AdFrequencyManager
 import com.heftreng.app.data.model.AdMobProdIds
 import com.heftreng.app.data.model.CmsAdConfig
@@ -264,6 +265,11 @@ class AdsViewModel @Inject constructor(
     // çalışıyor — uygulamanın genel cache sisteminden tamamen bağımsız.
     fun loadAdConfigs(forceServer: Boolean = false) {
         viewModelScope.launch {
+            // UMP onayı gelmeden reklam yükleme (Google politikası)
+            if (!ConsentHelper.canRequestAds.value) {
+                android.util.Log.d("AdsVM", "loadAdConfigs: UMP onayı bekleniyor")
+                return@launch
+            }
             val now        = System.currentTimeMillis()
             val ttlExpired = (now - lastServerFetchMs) > ADS_CONFIG_TTL_MS
             if (!forceServer && !ttlExpired && lastServerFetchMs != 0L) return@launch // hâlâ taze, tekrar sorma
@@ -573,6 +579,18 @@ class AdsViewModel @Inject constructor(
     // NOT: init bloğu en sona konuldu — yukarıdaki tüm property'ler
     // hazır olduktan sonra çalışması garanti altında.
     init {
-        loadAdConfigs()
+        // Consent zaten hazırsa hemen başlat, yoksa hazır olunca tetikle
+        if (ConsentHelper.canRequestAds.value) {
+            loadAdConfigs()
+        } else {
+            viewModelScope.launch {
+                ConsentHelper.canRequestAds.collect { canAds ->
+                    if (canAds) {
+                        loadAdConfigs()
+                        return@collect
+                    }
+                }
+            }
+        }
     }
 }

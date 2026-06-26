@@ -16,6 +16,7 @@ ktor = "3.0.0"
 accompanist = "0.36.0"
 googleMaterial = "1.11.0"
 admob = "23.2.0"
+ump   = "3.1.0"
 supabase = "3.1.4"
 room = "2.6.1"
 
@@ -37,6 +38,7 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 google-material = { group = "com.google.android.material", name = "material", version.ref = "googleMaterial" }
 
 admob = { group = "com.google.android.gms", name = "play-services-ads", version.ref = "admob" }
+ump   = { group = "com.google.android.ump", name = "user-messaging-platform", version.ref = "ump" }
 
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }

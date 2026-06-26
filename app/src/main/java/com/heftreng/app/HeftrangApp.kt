@@ -20,6 +20,9 @@ class HeftrangApp : Application() {
     companion object {
         private val _sdkReady = MutableStateFlow(false)
         val sdkReady = _sdkReady.asStateFlow()
+
+        /** MainActivity'deki UMP onay callback'inden çağrılır. */
+        fun notifySdkReady() { _sdkReady.value = true }
     }
 
     override fun onCreate() {
@@ -47,7 +50,11 @@ class HeftrangApp : Application() {
                 .build()
         )
 
-        // Test cihaz ID'leri kaldırıldı — prod gelir için
+        // MobileAds başlatması MainActivity.onCreate'da ConsentHelper sonrasında yapılır.
+        // Application context'te Activity gerekmediği için sadece SDK'yı burada hazırla.
+        // Gerçek initialize() çağrısı MainActivity'de UMP onayından sonra gelir.
+        // Ancak ConsentHelper'sız cihazlar (GDPR/CCPA dışı) için burada da başlatalım —
+        // MainActivity zaten ikinci kez çağırsa sorun olmaz (idempotent).
         MobileAds.initialize(this) { initStatus ->
             _sdkReady.value = true
             if (Log.isLoggable("AdMob", Log.DEBUG)) {

@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.heftreng.app.util.ConsentHelper
 import com.heftreng.app.viewmodel.AdminViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
@@ -277,6 +278,18 @@ fun SettingsScreen(
             item {
                 val context = LocalContext.current
                 SettingsSection(title = Strings.settingsOther(language)) {
+                    // Gizlilik Seçenekleri — yalnızca GDPR/CCPA bölgelerinde göster
+                    if (ConsentHelper.isPrivacyOptionsRequired(context)) {
+                        SettingsRow(
+                            Icons.Outlined.PrivacyTip,
+                            if (language == "ku") "Bijartinên Nepeniyê" else "Gizlilik Seçenekleri",
+                            if (language == "ku") "Reklam tercihlerini güncelle" else "Reklam tercihlerini güncelle",
+                        ) {
+                            context.findActivity()?.let { ConsentHelper.showPrivacyOptionsForm(it) }
+                        }
+                        HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                    }
+
                     SettingsRow(
                         Icons.Outlined.StarRate,
                         Strings.rateApp(language),

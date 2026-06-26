@@ -167,6 +167,7 @@ dependencies {
 
     // AdMob
     implementation(libs.admob)
+    implementation(libs.ump)   // UMP — reklam izni (GDPR/CCPA)
 
     // Room — Offline cache (Öncelik 4: alıntılar)
     implementation(libs.room.runtime)

@@ -26,6 +26,8 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.heftreng.app.util.AppLifecycleObserver
+import com.heftreng.app.util.ConsentHelper
+import com.google.android.gms.ads.MobileAds
 import com.heftreng.app.navigation.HeftrangNavHost
 import com.heftreng.app.ui.theme.HeftrangTheme
 import com.heftreng.app.viewmodel.AuthViewModel
@@ -77,6 +79,23 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // ── UMP Onay Akışı ────────────────────────────────────────────────
+        // GDPR/CCPA bölgelerinde kullanıcıya onay formu gösterilir.
+        // Türkiye gibi dışarıdaki bölgelerde form çıkmaz, hemen devam edilir.
+        // MobileAds.initialize() UMP onayından SONRA çağrılmalı (Google zorunluluğu).
+        ConsentHelper.initialize(
+            activity           = this,
+            debugMode          = false,      // prod'da false — test için true yap + testDeviceHashedId ekle
+            testDeviceHashedId = null,
+            onCanRequestAds    = {
+                // UMP tamamlandı → AdMob SDK'yı (yeniden) başlat
+                MobileAds.initialize(this) { initStatus ->
+                    com.heftreng.app.HeftrangApp.notifySdkReady()
+                    android.util.Log.d("AdMob", "SDK hazır (UMP sonrası)")
+                }
+            },
+        )
         
         // Foreground/background durumunu tüm ViewModel'lar için tek noktadan takip et
         AppLifecycleObserver.register()
