@@ -366,9 +366,23 @@ class AdsViewModel @Inject constructor(
         slot: BannerSlot,
         preloadAds: Boolean,
     ) {
-        val changed = target.value != config
+        // ÖNEMLİ DÜZELTME: "changed" kontrolü KALDIRILDI.
+        //
+        // ÖNCEKİ HATA: target.value != config kontrolü, config Firestore'dan
+        // gelen değer SharedPreferences'taki (loadPersistedConfig ile zaten
+        // seed edilmiş) son bilinen değerle AYNI olduğunda engine.loadBanner()
+        // çağrısını TAMAMEN atlıyordu. Admin CMS'de bir şey değiştirmediği
+        // sürece bu HER ZAMAN true'ydu (yani "değişmedi") — yani returning
+        // kullanıcılarda banner_library/banner_kurdi/banner_blog reklamları o
+        // oturumda HİÇ yüklenmiyordu (AdEngine her oturumda sıfırdan kurulduğu
+        // için havuz boş başlıyor, ve bu kontrol onu doldurmasını engelliyordu).
+        //
+        // engine.loadBanner() KENDİ İÇİNDE zaten "zaten yüklüyse tekrar isteme"
+        // korumasına sahip (bkz. AdEngine.kt: loadedFlow.value && !sizeChanged
+        // && !unitChanged → return). Yani burada ayrıca "changed" kontrolü
+        // yapmak gereksiz VE zararlı bir ikinci koruma katmanıydı — kaldırıldı.
         target.value = config
-        if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+        if (preloadAds && config.enabled && _adsEnabled.value) {
             engine.resolveUnitId(config, AdMobProdIds.BANNER)
                 ?.let { engine.loadBanner(slot.key(), it, config.bannerSize) }
         }
@@ -380,9 +394,11 @@ class AdsViewModel @Inject constructor(
         slot: NativeAdSlot,
         preloadAds: Boolean,
     ) {
-        val changed = target.value != config
+        // Aynı düzeltme — bkz. applyBannerConfig yorumu. engine.warmUpNativePool()
+        // de kendi içinde pool doluluk kontrolüne sahip (needed <= 0 → return),
+        // bu yüzden burada "changed" gerekmiyor.
         target.value = config
-        if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+        if (preloadAds && config.enabled && _adsEnabled.value) {
             engine.resolveUnitId(config, AdMobProdIds.NATIVE)
                 ?.let { engine.warmUpNativePool(it) }
         }
