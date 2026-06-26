@@ -293,7 +293,7 @@ object Strings {
     fun shareAppChooser(l: String)       = t(l, "Arkadaşlarınla Paylaş",              "Bi hevalên xwe re parve bike")
     fun shareAppText(l: String)          = t(l,
         "Heft Reng Kurdî: Kürtçeyle kültür, edebiyat ve Kürtçe dil öğrenimi 👇\nhttps://play.google.com/store/apps/details?id=com.heftreng.app",
-        "Heft Reng Kurdî: Bi kurdî Çand, wêje û fêrbûna zêmani Kurdî 👇\nhttps://play.google.com/store/apps/details?id=com.heftreng.app"
+        "Heft Reng Kurdî: Bi kurdî Çand, wêje û fêrbûna zimani Kurdî 👇\nhttps://play.google.com/store/apps/details?id=com.heftreng.app"
     )
     fun settingsTermsSub(l: String)      = t(l, "Kullanım şartlarını görüntüle",    "Peymanname bixwîne")
     fun settingsPrivacySub(l: String)    = t(l, "Gizlilik politikasını görüntüle", "Siyaseta nepeniyê bixwîne")
