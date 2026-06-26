@@ -469,6 +469,18 @@ service cloud.firestore {
     // böylece reklam göstermek için ekstra auth kontrolü yapılmaz
     match /cms_ads/{docId}           { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
 
+    // ad_reward_logs — SADECE Cloud Functions (Admin SDK) yazar/okur (rewardedAdSsv).
+    // İstemci asla doğrudan erişmez; Admin SDK bu kuralları zaten bypass eder,
+    // burada açıkça reddetmek sadece dokümantasyon/güvenlik amaçlıdır.
+    match /ad_reward_logs/{docId}    { allow read, write: if false; }
+
+    // user_ad_frequency — AdFrequencyManager.increment() analitik amaçlı yazar.
+    // Kritik değil (client-side sayaç asıl karardır), sadece kendi uid'ine yazabilir.
+    match /user_ad_frequency/{uid} {
+      allow read:  if isOwner(uid);
+      allow write: if isOwner(uid);
+    }
+
     // ─── APP CONFIG ───────────────────────────────────────────
     match /appConfig/{docId} {
       allow read:  if true;

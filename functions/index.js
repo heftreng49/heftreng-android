@@ -1194,3 +1194,116 @@ exports.adminSetBan = onCall(
     return { success: true };
   }
 );
+
+// ══════════════════════════════════════════════════════════════════════════
+//  rewardedAdSsv — AdMob Server-Side Verification (SSV) callback
+//
+//  AdMob, ödüllü reklam tamamlandığında bu URL'i (AdMob konsolu → Uygulamalar
+//  → Uygulama ayarları → "Ödüllü reklamlar için sunucu tarafı doğrulama"
+//  alanına yazılan adres) imzalı bir GET isteğiyle çağırır. Burada amaç:
+//
+//    1. Google'ın imzasını doğrulamak → bu çağrının GERÇEKTEN AdMob'tan
+//       geldiğini, sahte/bot bir istemcinin uydurma "ödül kazandım" sinyali
+//       göndermediğini garanti eder.
+//    2. Sonucu ad_reward_logs koleksiyonuna kaydetmek → ödül istemci
+//       tarafında (AdsViewModel.showRewarded) ANINDA verilir (kullanıcı
+//       deneyimi için bekletilmez); bu log ise sahtekarlık denetimi/analiz
+//       içindir — "kaç ödül verildi, kaçı gerçekten Google tarafından
+//       doğrulandı" karşılaştırması buradan yapılır.
+//
+//  ÖNEMLİ: Bu fonksiyon HER ZAMAN HTTP 200 döner (imza geçersiz olsa bile) —
+//  aksi halde AdMob isteği tekrar tekrar dener ve gereksiz yük oluşturur.
+//  Geçersiz imzalar `verified:false` olarak loglanır, sessizce yutulmaz.
+// ══════════════════════════════════════════════════════════════════════════
+
+let _ssvKeysCache   = null;
+let _ssvKeysCacheTs = 0;
+const SSV_KEYS_URL  = "https://www.gstatic.com/admob/reward/verifier-keys.json";
+const SSV_KEYS_TTL  = 12 * 60 * 60 * 1000; // 12 saat — Google anahtarları nadiren döner
+
+async function getSsvVerifierKeys() {
+  const now = Date.now();
+  if (_ssvKeysCache && now - _ssvKeysCacheTs < SSV_KEYS_TTL) return _ssvKeysCache;
+  const res = await fetch(SSV_KEYS_URL);
+  if (!res.ok) throw new Error(`verifier-keys.json fetch failed: ${res.status}`);
+  const json = await res.json();
+  _ssvKeysCache   = json.keys || [];
+  _ssvKeysCacheTs = now;
+  return _ssvKeysCache;
+}
+
+function ssvBase64UrlToBuffer(str) {
+  const b64 = String(str).replace(/-/g, "+").replace(/_/g, "/");
+  return Buffer.from(b64, "base64");
+}
+
+exports.rewardedAdSsv = onRequest(
+  { region: "europe-west1" },
+  async (req, res) => {
+    const crypto = require("crypto");
+    try {
+      const rawUrl       = req.originalUrl || req.url || "";
+      const qIndex        = rawUrl.indexOf("?");
+      const queryString   = qIndex >= 0 ? rawUrl.slice(qIndex + 1) : "";
+      const params         = new URLSearchParams(queryString);
+
+      const keyId      = params.get("key_id");
+      const signature  = params.get("signature");
+      const sigParamIdx = queryString.indexOf("&signature=");
+      // İmzalanan veri = "signature" parametresinden ÖNCEKİ tüm query string.
+      const signedData  = sigParamIdx >= 0 ? queryString.slice(0, sigParamIdx) : queryString;
+
+      let verified = false;
+      if (keyId && signature) {
+        try {
+          const keys     = await getSsvVerifierKeys();
+          const keyEntry = keys.find((k) => String(k.keyId) === String(keyId));
+          if (keyEntry && keyEntry.pem) {
+            const pubKey = crypto.createPublicKey(keyEntry.pem);
+            const sigBuf = ssvBase64UrlToBuffer(signature);
+            verified = crypto.verify(
+              "sha256",
+              Buffer.from(signedData, "utf8"),
+              { key: pubKey, dsaEncoding: "der" },
+              sigBuf,
+            );
+          } else {
+            console.warn(`[rewardedAdSsv] Bilinmeyen key_id: ${keyId}`);
+          }
+        } catch (verifyErr) {
+          console.error("[rewardedAdSsv] İmza doğrulama hatası:", verifyErr.message);
+        }
+      }
+
+      const transactionId = params.get("transaction_id") || "";
+      const userId         = params.get("user_id") || "";
+      const customData     = params.get("custom_data") || "";
+
+      const db = getFirestore();
+      const docId = transactionId || db.collection("ad_reward_logs").doc().id;
+      await db.collection("ad_reward_logs").doc(docId).set({
+        uid:           userId,
+        adNetwork:     params.get("ad_network") || "",
+        adUnit:        params.get("ad_unit") || "",
+        rewardAmount:  params.get("reward_amount") || "",
+        rewardItem:    params.get("reward_item") || "",
+        customData,
+        keyId:         keyId || "",
+        clientTs:      Number(params.get("timestamp")) || null,
+        verified,
+        receivedAt:    new Date(),
+      }, { merge: true });
+
+      if (verified) {
+        console.log(`[rewardedAdSsv] ✓ Doğrulandı — uid:${userId} tx:${transactionId} custom:${customData}`);
+      } else {
+        console.warn(`[rewardedAdSsv] ⚠️ İMZA GEÇERSİZ/DOĞRULANAMADI — uid:${userId} tx:${transactionId} qs:${queryString}`);
+      }
+
+      res.status(200).send("OK");
+    } catch (e) {
+      console.error("[rewardedAdSsv] hata:", e.message);
+      res.status(200).send("OK"); // AdMob'un tekrar denemesini önle
+    }
+  },
+);

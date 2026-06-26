@@ -529,6 +529,22 @@ class AdsViewModel @Inject constructor(
 
         val ad = rewardedAd
         if (ad != null) {
+            // ÖDÜLLÜ REKLAM SSV (Server-Side Verification):
+            // AdMob konsolunda tanımlı SSV callback URL'ine (rewardedAdSsv Cloud
+            // Function) bu reklamın kazanıldığı bilgisi, Google'ın imzasıyla
+            // gönderilir. uid + rewardType burada "custom_data" olarak iletilir
+            // ki sunucu tarafında hangi kullanıcının hangi senaryo için ödül
+            // aldığı, AdMob'un kendi imzasıyla doğrulanabilsin (bkz. functions/
+            // index.js → rewardedAdSsv). Ödül kullanıcıya YİNE DE anında verilir
+            // (UX bekletilmez) — SSV logu sadece sahtekarlık denetimi içindir.
+            if (uid.isNotEmpty()) {
+                ad.setServerSideVerificationOptions(
+                    com.google.android.gms.ads.rewarded.ServerSideVerificationOptions.Builder()
+                        .setUserId(uid)
+                        .setCustomData(rewardType.name)
+                        .build(),
+                )
+            }
             ad.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdDismissedFullScreenContent() {
                     rewardedAd = null; onDismiss()
