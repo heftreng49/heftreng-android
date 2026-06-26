@@ -797,7 +797,7 @@ private fun ProfileHeader(
                 .fillMaxWidth()
                 .height(100.dp)
                 .background(SurfaceVar)
-                .clip(androidx.compose.foundation.shape.RectangleShape)
+                .clip(androidx.compose.ui.graphics.RectangleShape)
         ) {
             var showCover by remember { mutableStateOf(false) }
             if (user?.coverPhoto?.isNotEmpty() == true) {

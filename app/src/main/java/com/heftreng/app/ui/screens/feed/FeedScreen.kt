@@ -81,9 +81,9 @@ import com.heftreng.app.data.model.AppConfig
 import androidx.core.content.ContextCompat
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateColorAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.graphics.graphicsLayer
 
@@ -430,12 +430,21 @@ fun FeedScreen(
                     var visible    by remember { mutableStateOf(false) }
                     LaunchedEffect(post.id) { visible = true }
 
-                    AnimatedVisibility(
-                        visible = visible,
-                        enter   = com.heftreng.app.ui.component.itemEnterTransition(
-                            (postIndex * 28).coerceAtMost(160)
+                    val enterAlpha by animateFloatAsState(
+                        targetValue   = if (visible) 1f else 0f,
+                        animationSpec = tween(200, (postIndex * 28).coerceAtMost(160)),
+                        label         = "enterAlpha",
+                    )
+                    val enterTranslation by animateFloatAsState(
+                        targetValue   = if (visible) 0f else 24f,
+                        animationSpec = androidx.compose.animation.core.spring(
+                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                            stiffness    = androidx.compose.animation.core.Spring.StiffnessMediumLow,
                         ),
-                    ) {
+                        label = "enterY",
+                    )
+
+                    Box(Modifier.graphicsLayer { alpha = enterAlpha; translationY = enterTranslation }) {
                     Box {
                     PostCard(
                         post      = post,
@@ -520,8 +529,8 @@ fun FeedScreen(
                         visible = heartBurst,
                         onEnd   = { heartBurst = false },
                     )
-                    } // Box
-                    } // AnimatedVisibility
+                    } // inner Box (heart burst)
+                    } // outer Box (enter animation)
 
                     // CMS'deki position alanına göre N gönderide bir Native Ad göster
                     val nativeFeedCfg by adsVm.nativeFeedConfig.collectAsState()
