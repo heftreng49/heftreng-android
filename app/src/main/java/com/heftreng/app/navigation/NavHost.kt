@@ -2,6 +2,9 @@ package com.heftreng.app.navigation
 
 import com.heftreng.app.ui.i18n.Strings
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -604,9 +607,13 @@ fun HeftrangNavHost(initialRoute: String? = null) {
             }
 
             NavHost(
-                navController    = navController,
-                startDestination = Screen.Feed.route,
-                modifier         = Modifier.padding(innerPadding),
+                navController       = navController,
+                startDestination    = Screen.Feed.route,
+                modifier            = Modifier.padding(innerPadding),
+                enterTransition     = { com.heftreng.app.ui.component.slideInFromRight },
+                exitTransition      = { com.heftreng.app.ui.component.slideOutToLeft },
+                popEnterTransition  = { com.heftreng.app.ui.component.slideInFromLeft },
+                popExitTransition   = { com.heftreng.app.ui.component.slideOutToRight },
             ) {
                 composable(Screen.Blog.route) {
                     BlogScreen(navController = navController, vm = blogVm, adsVm = adsVm, language = language)
@@ -619,13 +626,43 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                         adsVm         = adsVm,
                     )
                 }
-                composable(Screen.Feed.route) {
+                composable(
+                    Screen.Feed.route,
+                    enterTransition = { fadeIn(tween(180)) },
+                    exitTransition  = { fadeOut(tween(140)) },
+                    popEnterTransition  = { fadeIn(tween(180)) },
+                    popExitTransition   = { fadeOut(tween(140)) },
+                ) {
                     FeedScreen(navController = navController, adsVm = adsVm, language = language)
                 }
-                composable(Screen.Search.route) { SearchScreen(navController, language = language) }
-                composable(Screen.Serials.route) { BooksScreen(navController, language) }
-                composable(Screen.Library.route) { LibraryScreen(navController, language, adsVm = adsVm) }
-                composable(Screen.Kurdi.route)   { KurdiScreen(language = language, adminVm = adminVm, adsVm = adsVm, navController = navController) }
+                composable(
+                    Screen.Search.route,
+                    enterTransition = { fadeIn(tween(180)) },
+                    exitTransition  = { fadeOut(tween(140)) },
+                    popEnterTransition  = { fadeIn(tween(180)) },
+                    popExitTransition   = { fadeOut(tween(140)) },
+                ) { SearchScreen(navController, language = language) }
+                composable(
+                    Screen.Serials.route,
+                    enterTransition = { fadeIn(tween(180)) },
+                    exitTransition  = { fadeOut(tween(140)) },
+                    popEnterTransition  = { fadeIn(tween(180)) },
+                    popExitTransition   = { fadeOut(tween(140)) },
+                ) { BooksScreen(navController, language) }
+                composable(
+                    Screen.Library.route,
+                    enterTransition = { fadeIn(tween(180)) },
+                    exitTransition  = { fadeOut(tween(140)) },
+                    popEnterTransition  = { fadeIn(tween(180)) },
+                    popExitTransition   = { fadeOut(tween(140)) },
+                ) { LibraryScreen(navController, language, adsVm = adsVm) }
+                composable(
+                    Screen.Kurdi.route,
+                    enterTransition = { fadeIn(tween(180)) },
+                    exitTransition  = { fadeOut(tween(140)) },
+                    popEnterTransition  = { fadeIn(tween(180)) },
+                    popExitTransition   = { fadeOut(tween(140)) },
+                ) { KurdiScreen(language = language, adminVm = adminVm, adsVm = adsVm, navController = navController) }
                 composable("profile/{uid}") { back ->
                     ProfileScreen(
                         uid           = back.arguments?.getString("uid") ?: "me",

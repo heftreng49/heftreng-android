@@ -56,6 +56,9 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.*
+import androidx.compose.ui.graphics.graphicsLayer
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalMaterialApi::class)
 @Composable
@@ -269,11 +272,11 @@ fun ProfileScreen(
         Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
 
         if (loading && user == null) {
-            Box(
-                Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center,
+            androidx.compose.foundation.lazy.LazyColumn(
+                Modifier.fillMaxSize().padding(padding), userScrollEnabled = false,
             ) {
-                CircularProgressIndicator(color = Amber)
+                item { com.heftreng.app.ui.component.ProfileHeaderSkeleton() }
+                items(4) { com.heftreng.app.ui.component.PostCardSkeleton() }
             }
             return@Scaffold
         }
@@ -327,7 +330,8 @@ fun ProfileScreen(
                             }
                         }
                     },
-                    language = language,
+                    language     = language,
+                    scrollOffset = listState.firstVisibleItemScrollOffset.toFloat().coerceAtLeast(0f),
                 )
             }
 
@@ -430,16 +434,8 @@ fun ProfileScreen(
                 // ─── Gönderiler ───────────────────────────────────────────
                 0 -> {
                     if (loading && posts.isEmpty()) {
-                        item(key = "posts_loading") {
-                            Box(
-                                Modifier.fillMaxWidth().height(200.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                CircularProgressIndicator(
-                                    color    = Amber,
-                                    modifier = Modifier.size(32.dp),
-                                )
-                            }
+                        items(3, key = { "post_skel_$it" }) {
+                            com.heftreng.app.ui.component.PostCardSkeleton()
                         }
                     } else if (posts.isEmpty()) {
                         item(key = "posts_empty") {
@@ -506,11 +502,7 @@ fun ProfileScreen(
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     if (loadingMore) {
-                                        CircularProgressIndicator(
-                                            color = Primary,
-                                            modifier = Modifier.size(24.dp),
-                                            strokeWidth = 2.dp,
-                                        )
+                                        com.heftreng.app.ui.component.PostCardSkeleton()
                                     } else {
                                         OutlinedButton(
                                             onClick = { vm.loadMorePosts(targetUid) },
@@ -795,6 +787,7 @@ private fun ProfileHeader(
     onFollowing   : () -> Unit = {},
     onMessage     : () -> Unit,
     language      : String = "tr",
+    scrollOffset  : Float = 0f,
 ) {
     val ku = language == "ku"
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -804,6 +797,7 @@ private fun ProfileHeader(
                 .fillMaxWidth()
                 .height(100.dp)
                 .background(SurfaceVar)
+                .clip(androidx.compose.foundation.shape.RectangleShape)
         ) {
             var showCover by remember { mutableStateOf(false) }
             if (user?.coverPhoto?.isNotEmpty() == true) {
@@ -811,7 +805,11 @@ private fun ProfileHeader(
                     model              = user.coverPhoto,
                     contentDescription = null,
                     contentScale       = ContentScale.Crop,
-                    modifier           = Modifier.fillMaxSize().clickable { showCover = true },
+                    modifier           = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp)
+                        .offset(y = (-scrollOffset * 0.25f).dp)
+                        .clickable { showCover = true },
                 )
                 if (showCover) FullScreenImageViewer(url = user.coverPhoto) { showCover = false }
             }
@@ -877,27 +875,38 @@ private fun ProfileHeader(
                             Icon(Icons.Outlined.ChatBubbleOutline, null, tint = OnBackground)
                         }
                         // Takip butonu — 3 durum: takip ediliyor / istek bekliyor / takip et
+                        val followBg by animateColorAsState(
+                            targetValue   = when {
+                                isFollowing                      -> SurfaceVar
+                                followRequestStatus == "pending" -> SurfaceVar
+                                else                             -> Amber
+                            },
+                            animationSpec = tween(220),
+                            label         = "followBg",
+                        )
+                        val followScale by animateFloatAsState(
+                            targetValue   = if (isFollowing) 0.94f else 1f,
+                            animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+                            label         = "followScale",
+                        )
                         Button(
-                            onClick = onFollow,
-                            shape   = RoundedCornerShape(10.dp),
-                            colors  = ButtonDefaults.buttonColors(
-                                containerColor = when {
-                                    isFollowing                       -> SurfaceVar
-                                    followRequestStatus == "pending"  -> SurfaceVar
-                                    else                              -> Amber
-                                },
-                                contentColor = when {
-                                    isFollowing                       -> OnBackground
-                                    followRequestStatus == "pending"  -> OnBackground
-                                    else                              -> Color.Black
+                            onClick  = onFollow,
+                            shape    = RoundedCornerShape(10.dp),
+                            colors   = ButtonDefaults.buttonColors(
+                                containerColor = followBg,
+                                contentColor   = when {
+                                    isFollowing                      -> OnBackground
+                                    followRequestStatus == "pending" -> OnBackground
+                                    else                             -> Color.Black
                                 },
                             ),
+                            modifier = Modifier.graphicsLayer { scaleX = followScale; scaleY = followScale },
                         ) {
                             Text(
                                 when {
-                                    isFollowing                       -> Strings.unfollow(language)
-                                    followRequestStatus == "pending"  -> Strings.followRequested(language)
-                                    else                              -> Strings.follow(language)
+                                    isFollowing                      -> Strings.unfollow(language)
+                                    followRequestStatus == "pending" -> Strings.followRequested(language)
+                                    else                             -> Strings.follow(language)
                                 },
                                 fontSize = 13.sp,
                             )

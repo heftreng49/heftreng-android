@@ -81,7 +81,10 @@ import com.heftreng.app.data.model.AppConfig
 import androidx.core.content.ContextCompat
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateColorAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.graphics.graphicsLayer
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
@@ -319,8 +322,10 @@ fun FeedScreen(
             }
 
         if (loading && displayedPosts.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Primary)
+            androidx.compose.foundation.lazy.LazyColumn(
+                Modifier.fillMaxSize(), userScrollEnabled = false,
+            ) {
+                items(5) { com.heftreng.app.ui.component.PostCardSkeleton() }
             }
         } else {
             Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
@@ -420,10 +425,28 @@ fun FeedScreen(
                 }
 
                 itemsIndexed(displayedPosts, key = { _, p -> p.id }) { postIndex, post ->
+                    val context = LocalContext.current
+                    var heartBurst by remember { mutableStateOf(false) }
+                    var visible    by remember { mutableStateOf(false) }
+                    LaunchedEffect(post.id) { visible = true }
+
+                    AnimatedVisibility(
+                        visible = visible,
+                        enter   = com.heftreng.app.ui.component.itemEnterTransition(
+                            (postIndex * 28).coerceAtMost(160)
+                        ),
+                    ) {
+                    Box {
                     PostCard(
                         post      = post,
-                        onLike    = { vm.toggleLike(post) },
-                        onSave    = { vm.toggleSave(post) },
+                        onLike    = {
+                            com.heftreng.app.ui.component.triggerHaptic(context, com.heftreng.app.ui.component.HapticType.LIGHT)
+                            vm.toggleLike(post)
+                        },
+                        onSave    = {
+                            com.heftreng.app.ui.component.triggerHaptic(context, com.heftreng.app.ui.component.HapticType.MEDIUM)
+                            vm.toggleSave(post)
+                        },
                         onProfile = { navController.navigate(Screen.Profile.go(post.uid)) },
                         onComment = { navController.navigate(Screen.PostDetail.go(post.id)) },
                         onShare   = {
@@ -434,6 +457,11 @@ fun FeedScreen(
                         onEdit    = { newText -> vm.editPost(post.id, newText) },
                         onEditQuote = { newQ, newB, newA -> vm.editQuote(post.id, newQ, newB, newA) },
                         onTap        = { navController.navigate(Screen.PostDetail.go(post.id)) },
+                        onDoubleTap  = {
+                            if (!post.isLikedByMe) vm.toggleLike(post)
+                            heartBurst = true
+                            com.heftreng.app.ui.component.triggerHaptic(context, com.heftreng.app.ui.component.HapticType.DOUBLE)
+                        },
                         onShowLikers = {
                             socialVm.loadPostLikers(post.id)
                             likersPostId = post.id
@@ -488,6 +516,12 @@ fun FeedScreen(
                         },
                         language = language,
                     )
+                    com.heftreng.app.ui.component.HeartBurstOverlay(
+                        visible = heartBurst,
+                        onEnd   = { heartBurst = false },
+                    )
+                    } // Box
+                    } // AnimatedVisibility
 
                     // CMS'deki position alanına göre N gönderide bir Native Ad göster
                     val nativeFeedCfg by adsVm.nativeFeedConfig.collectAsState()
@@ -553,7 +587,7 @@ fun FeedScreen(
                     item {
                         Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                             if (loadingMore) {
-                                CircularProgressIndicator(color = Primary, modifier = Modifier.size(28.dp), strokeWidth = 2.dp)
+                                com.heftreng.app.ui.component.PostCardSkeleton()
                             } else {
                                 OutlinedButton(
                                     onClick = { vm.loadMore() },
@@ -945,6 +979,7 @@ private fun ComposeBottomSheet(
 
 // ── PostCard ──────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PostCard(
     post      : Post,
@@ -957,6 +992,7 @@ fun PostCard(
     onEdit       : ((String) -> Unit)? = null,
     onEditQuote  : ((quoteText: String, bookName: String, authorName: String) -> Unit)? = null,
     onTap        : (() -> Unit)? = null,
+    onDoubleTap  : (() -> Unit)? = null,
     onQuote      : (() -> Unit)? = null,
     onStoryShare : (() -> Unit)? = null,
     onShowLikers : (() -> Unit)? = null,
@@ -984,6 +1020,14 @@ fun PostCard(
             .clip(RoundedCornerShape(18.dp))
             .background(HeftCard)
             .border(0.7.dp, Divider, RoundedCornerShape(18.dp))
+            .then(
+                if (onDoubleTap != null)
+                    Modifier.combinedClickable(
+                        onClick       = { onTap?.invoke() },
+                        onDoubleClick = { onDoubleTap() },
+                    )
+                else Modifier
+            )
             .padding(horizontal = 15.dp, vertical = 13.dp),
     ) {
         // Header
@@ -1238,16 +1282,31 @@ fun PostCard(
         // Aksiyonlar
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             val likeScale by animateFloatAsState(
-                targetValue   = if (post.isLikedByMe) 1.25f else 1f,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium),
+                targetValue   = if (post.isLikedByMe) 1.35f else 1f,
+                animationSpec = spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow),
                 label         = "likeScale",
+            )
+            val likeColor by animateColorAsState(
+                targetValue   = if (post.isLikedByMe) Color(0xFFFF3A5C) else Muted,
+                animationSpec = tween(180),
+                label         = "likeColor",
+            )
+            val saveScale by animateFloatAsState(
+                targetValue   = if (post.isSavedByMe) 1.25f else 1f,
+                animationSpec = spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMedium),
+                label         = "saveScale",
+            )
+            val saveColor by animateColorAsState(
+                targetValue   = if (post.isSavedByMe) Amber else Muted,
+                animationSpec = tween(180),
+                label         = "saveColor",
             )
             IconButton(onClick = onLike) {
                 Icon(
                     if (post.isLikedByMe) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = Strings.likeAction(language),
-                    tint               = if (post.isLikedByMe) Color(0xFFFF4060) else Muted,
-                    modifier           = Modifier.size(20.dp).graphicsLayer { scaleX = likeScale; scaleY = likeScale },
+                    tint               = likeColor,
+                    modifier           = Modifier.size(22.dp).graphicsLayer { scaleX = likeScale; scaleY = likeScale },
                 )
             }
             if (post.likesCount > 0) {
@@ -1302,8 +1361,8 @@ fun PostCard(
                 Icon(
                     if (post.isSavedByMe) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                     contentDescription = Strings.save(language),
-                    tint               = if (post.isSavedByMe) Amber else Muted,
-                    modifier           = Modifier.size(20.dp),
+                    tint               = saveColor,
+                    modifier           = Modifier.size(22.dp).graphicsLayer { scaleX = saveScale; scaleY = saveScale },
                 )
             }
         }

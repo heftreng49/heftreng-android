@@ -165,10 +165,9 @@ fun SearchScreen(
                     }
 
                     if (loading) {
-                        item {
-                            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(color = Amber, modifier = Modifier.size(28.dp))
-                            }
+                        items(6, key = { "sk_$it" }) {
+                            com.heftreng.app.ui.component.SearchRowSkeleton()
+                            HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         }
                     } else if (filtered.isEmpty()) {
                         item {
