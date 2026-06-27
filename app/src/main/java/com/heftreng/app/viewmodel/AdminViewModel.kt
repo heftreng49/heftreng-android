@@ -256,6 +256,27 @@ class AdminViewModel @Inject constructor(
             type   = "daily_quote",
             ico    = "format_quote",
         )
+        // Bildirimler ekranında kart tıklanınca orijinal gönderiye gitsin.
+        // sendBroadcastPush sadece FCM push atar, userNotifs yazmaz.
+        // Genel notifications koleksiyonuna da yaz — NotificationsScreen buradan okur.
+        if (content.feedPostId.isNotBlank()) {
+            viewModelScope.launch {
+                try {
+                    firestore.collection("notifications").add(mapOf(
+                        "type"      to "daily_quote",
+                        "feedId"    to content.feedPostId,
+                        "postId"    to content.feedPostId,
+                        "title"     to title,
+                        "sub"       to body,
+                        "message"   to title,
+                        "ico"       to "format_quote",
+                        "url"       to url,
+                        "read"      to false,
+                        "ts"        to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    )).await()
+                } catch (e: Exception) { e.printStackTrace() }
+            }
+        }
     }
 
     /** Günün Kelimesi'ni kaydet + herkese push gönder ("Tetikle") */

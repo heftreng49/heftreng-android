@@ -515,6 +515,28 @@ fun AdminScreen(
                                         adminTextField(dqAuthor, { dqAuthor = it }, "Yazar", modifier = Modifier.weight(1f))
                                         adminTextField(dqBook,   { dqBook   = it }, "Kitap", modifier = Modifier.weight(1f))
                                     }
+                                    Spacer(Modifier.height(8.dp))
+                                    // Gönderi ID — bildirime tıklayınca orjinal posta gitmek için zorunlu
+                                    adminTextField(
+                                        dqFeedPostId, { dqFeedPostId = it },
+                                        "Feed Post ID (bildirimden posta gitmek için)",
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    if (dqFeedPostId.isNotBlank()) {
+                                        Text(
+                                            "✓ Tıklanınca post/$dqFeedPostId adresine gidecek",
+                                            color    = androidx.compose.ui.graphics.Color(0xFF10B981),
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.padding(top = 2.dp),
+                                        )
+                                    } else {
+                                        Text(
+                                            "⚠ Boş bırakılırsa bildirime tıklamak orijinal gönderiye gitmez",
+                                            color    = androidx.compose.ui.graphics.Color(0xFFF59E0B),
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.padding(top = 2.dp),
+                                        )
+                                    }
 
                                     // ── Önizleme kartı ─────────────────────────
                                     if (dqTextTr.isNotBlank()) {
