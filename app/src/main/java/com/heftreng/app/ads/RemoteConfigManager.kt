@@ -1,0 +1,148 @@
+package com.heftreng.app.ads
+
+import com.google.firebase.remoteconfig.FirebaseRemoteConfig
+import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
+import com.heftreng.app.data.model.CmsAdConfig
+import kotlinx.coroutines.tasks.await
+import org.json.JSONObject
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  RemoteConfigManager — Firebase Remote Config tek erişim noktası.
+ *
+ *  NEDEN REMOTE CONFIG? (Firestore cms_ads yerine)
+ *  ─────────────────────────────────────────────────
+ *  • Firestore okuma = para (her kullanıcı açılışı = 1 okuma faturası)
+ *  • Remote Config = ücretsiz, Google CDN'den gelir, built-in offline cache var
+ *  • Minimum fetch interval: 12 saat → günde 1 fetch/kullanıcı, Firestore'da her açılış
+ *  • A/B test ve Conditions Remote Config'de built-in (Firestore'da manuel yapıyorduk)
+ *
+ *  ÇALIŞMA MANTIĞI:
+ *  ─────────────────
+ *  1. App açılır → fetchAndActivate() çağrılır (async, UI'ı bloklamaz)
+ *  2. Cache (12 saat) geçerli ise network'e gitmez → 0ms gecikme
+ *  3. Cache bayatsa arka planda fetch → activate → StateFlow güncellenir
+ *  4. İlk açılış veya network yok → defaultValues devreye girer (reklam hiç durmuyor)
+ *
+ *  DEFAULT VALUES:
+ *  ───────────────
+ *  Remote Config konsolunda henüz değer yok veya offline → buradaki sabitler kullanılır.
+ *  Bu sayede yeni kurulumda bile reklamlar çalışır, "boş config" hatası olmaz.
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+@Singleton
+class RemoteConfigManager @Inject constructor(
+    private val remoteConfig: FirebaseRemoteConfig,
+) {
+    companion object {
+        // ── Fetch interval ───────────────────────────────────────────────
+        // Production: 12 saat → günde max 2 fetch/kullanıcı (ücretsiz limitin çok altında)
+        // Debug: 0 → her çağrıda anında güncelle (Firebase konsolundan test ederken)
+        private const val FETCH_INTERVAL_PROD  = 43_200L  // 12 saat (saniye)
+        private const val FETCH_INTERVAL_DEBUG = 0L
+
+        // ── Remote Config key isimleri ───────────────────────────────────
+        // Firebase konsolunda bu isimlerle değer tanımlanacak.
+        // JSON formatında: {"enabled":true,"unitId":"ca-app-pub-xxx/yyy","bannerSize":"adaptive",...}
+        const val KEY_ADS_GLOBAL        = "ads_global"        // {"enabled": true}
+        const val KEY_BANNER_FEED       = "banner_feed"
+        const val KEY_BANNER_LIBRARY    = "banner_library"
+        const val KEY_BANNER_KURDI      = "banner_kurdi"
+        const val KEY_BANNER_BLOG       = "banner_blog"
+        const val KEY_INTERSTITIAL      = "interstitial_serial"
+        const val KEY_REWARDED          = "rewarded_xp"
+        const val KEY_NATIVE_FEED       = "native_feed"
+        const val KEY_NATIVE_BLOG       = "native_blog"
+        const val KEY_NATIVE_LIBRARY    = "native_library"
+        const val KEY_NATIVE_KURDI      = "native_kurdi"
+        const val KEY_NATIVE_PROFILE    = "native_profile"
+        const val KEY_NATIVE_SEARCH     = "native_search"
+
+        // ── Default JSON değerleri ───────────────────────────────────────
+        // Firebase konsolu henüz yapılandırılmamışsa veya offline iken devreye girer.
+        // Production unit ID'leri buraya yazılır → ilk açılışta reklam zaten çalışır.
+        private val DEFAULTS = mapOf(
+            KEY_ADS_GLOBAL     to """{"enabled":true}""",
+            KEY_BANNER_FEED    to """{"enabled":true,"unitId":"","bannerSize":"adaptive","position":5,"frequency":5}""",
+            KEY_BANNER_LIBRARY to """{"enabled":true,"unitId":"","bannerSize":"adaptive","position":5,"frequency":5}""",
+            KEY_BANNER_KURDI   to """{"enabled":true,"unitId":"","bannerSize":"adaptive","position":5,"frequency":5}""",
+            KEY_BANNER_BLOG    to """{"enabled":true,"unitId":"","bannerSize":"adaptive","position":5,"frequency":5}""",
+            KEY_INTERSTITIAL   to """{"enabled":true,"unitId":"","frequency":4,"screens":"feed,library,kurdi,blog"}""",
+            KEY_REWARDED       to """{"enabled":true,"unitId":"","dailyLimit":3,"xpReward":50,"scenarioDoubleXp":true,"scenarioUnlockLesson":true,"scenarioSaveStreak":true}""",
+            KEY_NATIVE_FEED    to """{"enabled":true,"unitId":"","adType":"native","placement":"in_list"}""",
+            KEY_NATIVE_BLOG    to """{"enabled":true,"unitId":"","adType":"native","placement":"in_list"}""",
+            KEY_NATIVE_LIBRARY to """{"enabled":true,"unitId":"","adType":"native","placement":"in_list"}""",
+            KEY_NATIVE_KURDI   to """{"enabled":true,"unitId":"","adType":"native","placement":"in_list"}""",
+            KEY_NATIVE_PROFILE to """{"enabled":false,"unitId":"","adType":"native","placement":"in_list"}""",
+            KEY_NATIVE_SEARCH  to """{"enabled":false,"unitId":"","adType":"native","placement":"in_list"}""",
+        )
+    }
+
+    init {
+        // Default değerleri SDK'ya kaydet — network öncesi her zaman anında okunabilir
+        remoteConfig.setDefaultsAsync(DEFAULTS)
+    }
+
+    /**
+     * Remote Config'i fetch et ve aktive et.
+     *
+     * • Cache geçerliyse (12h) → anında döner, network yok
+     * • Cache bayatsa → arka planda network fetch → activate
+     * • Başarısız olsa bile default değerler/cache aktif kalır — reklam durmaz
+     *
+     * Bu fonksiyon AdsViewModel.init() içinden bir kez çağrılır.
+     * Hata fırlattırmaz, başarı durumu döner (log için).
+     */
+    suspend fun fetchAndActivate(): Boolean = runCatching {
+        remoteConfig.fetchAndActivate().await()
+    }.getOrDefault(false)
+
+    // ── Config okuma yardımcıları ────────────────────────────────────────
+
+    /** Global reklam açık/kapalı flag'i */
+    fun isAdsEnabled(): Boolean =
+        remoteConfig.getString(KEY_ADS_GLOBAL)
+            .parseJsonBoolean("enabled", default = true)
+
+    /**
+     * Verilen key için CmsAdConfig döner.
+     *
+     * Remote Config'den gelen JSON → CmsAdConfig.
+     * Alan yoksa veya JSON bozuksa → null (reklam gösterilmez, crash olmaz).
+     */
+    fun getAdConfig(key: String): CmsAdConfig? = runCatching {
+        val raw = remoteConfig.getString(key)
+        if (raw.isBlank()) return null
+        val json = JSONObject(raw)
+        CmsAdConfig(
+            id            = key,
+            unitId        = json.optString("unitId", ""),
+            enabled       = json.optBoolean("enabled", false),
+            testMode      = json.optBoolean("testMode", false),
+            position      = json.optInt("position", 5),
+            frequency     = json.optInt("frequency", 3),
+            xpReward      = json.optInt("xpReward", 50),
+            dailyLimit    = json.optInt("dailyLimit", 3),
+            scenarioDoubleXp     = json.optBoolean("scenarioDoubleXp", true),
+            scenarioUnlockLesson = json.optBoolean("scenarioUnlockLesson", true),
+            scenarioSaveStreak   = json.optBoolean("scenarioSaveStreak", true),
+            adType        = json.optString("adType", "banner"),
+            bannerSize    = json.optString("bannerSize", "adaptive").trim().lowercase(),
+            placement     = json.optString("placement", "in_list"),
+            screens       = json.optString("screens", "feed").trim().lowercase(),
+            label         = json.optString("label", ""),
+            bgColor       = json.optString("bgColor", ""),
+            cornerRadius  = json.optInt("cornerRadius", 0),
+            paddingTop    = json.optInt("paddingTop", 0),
+            paddingBottom = json.optInt("paddingBottom", 0),
+        )
+    }.getOrNull()
+
+    // ── Yardımcı uzantılar ───────────────────────────────────────────────
+
+    private fun String.parseJsonBoolean(key: String, default: Boolean): Boolean = runCatching {
+        JSONObject(this).optBoolean(key, default)
+    }.getOrDefault(default)
+}

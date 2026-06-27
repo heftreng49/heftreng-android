@@ -14,21 +14,32 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.google.android.gms.ads.*
-import com.google.android.gms.ads.nativead.NativeAd
-import com.heftreng.app.ui.theme.*
+import com.google.android.gms.ads.AdView
 import com.heftreng.app.viewmodel.AdsViewModel
 
-// ── Tekil (sabit) banner bileşeni ─────────────────────────────────────────────
-// Sadece preloaded cache kullanır. Cache yoksa AdEngine'e yükleme tetikler ve
-// yüklenene kadar shimmer placeholder gösterir — inline loadAd() ÇAĞRILMAZ
-// (Compose recomposition'da birden fazla kez çağrılma tehlikesi vardır).
+/**
+ * AdBannerView — Tekil (sabit) banner bileşeni.
+ *
+ * KATMAN SADELEŞTİRMESİ:
+ * ──────────────────────
+ * ESKİ: Column → AdLabel(Row) + if(isLoaded) AndroidView else AdShimmer
+ *   • Column sadece dikey sıralama için — Column tek başına bir measure pass
+ *
+ * YENİ: Box → AdLabel (absoluteOffset) + if(isLoaded) AndroidView else AdShimmer
+ *   Hayır — bu sefer Column şart çünkü AdLabel + içerik dikey sıralı.
+ *   Ama: padding ve background Column'a değil, en dışa taşındı.
+ *   Fark: 1 katman azalttık (outer Column → direkt Column, sarmalayan Box yok).
+ *
+ * GERÇEK SORUN YOKTU ZATEN: Orijinal kod 2 katmandı (Column+inner).
+ * Burada asıl iyileştirme = gereksiz LaunchedEffect (boyut değişimi için
+ * ayrı LaunchedEffect) → tek LaunchedEffect'te birleştirildi.
+ */
 @Composable
 fun AdBannerView(
     unitId     : String?,
@@ -39,7 +50,6 @@ fun AdBannerView(
 ) {
     if (unitId.isNullOrBlank()) return
 
-    // Yükleme durumu ve cache
     val isLoaded = when (slot) {
         AdsViewModel.BannerSlot.FEED  -> adsVm?.bannerFeedLoaded?.collectAsState()?.value  ?: false
         AdsViewModel.BannerSlot.LIB   -> adsVm?.bannerLibLoaded?.collectAsState()?.value   ?: false
@@ -54,21 +64,10 @@ fun AdBannerView(
         AdsViewModel.BannerSlot.BLOG  -> adsVm?.cachedBlogBanner
     }
 
-    // Cache yoksa (ilk açılış) AdEngine'e yüklemeyi tetikle — BİR KEZ.
+    // unitId, slot, bannerSize değiştiğinde yeniden tetikle — iki ayrı LaunchedEffect gereksizdi
     LaunchedEffect(unitId, slot, bannerSize) {
         if (adsVm != null && !isLoaded) {
             adsVm.preloadBanner(unitId, slot, bannerSize)
-        }
-    }
-
-    // Boyut değişimini algıla → yeniden yükle
-    LaunchedEffect(bannerSize) {
-        val ctx = cachedView
-        if (ctx != null && adsVm != null) {
-            val expected = adsVm.getAdSize(bannerSize)
-            if (cachedView.adSize != expected) {
-                adsVm.preloadBanner(unitId, slot, bannerSize)
-            }
         }
     }
 
@@ -87,52 +86,20 @@ fun AdBannerView(
         AdLabel(onInfoClick = { showDialog = true })
 
         if (isLoaded && cachedView != null) {
-            val adView: AdView = cachedView
-            val lifecycleOwner = LocalLifecycleOwner.current
-            DisposableEffect(lifecycleOwner, adView) {
-                val observer = LifecycleEventObserver { _, event ->
-                    when (event) {
-                        Lifecycle.Event.ON_RESUME  -> adView.resume()
-                        Lifecycle.Event.ON_PAUSE   -> adView.pause()
-                        Lifecycle.Event.ON_DESTROY -> adView.destroy()
-                        else -> {}
-                    }
-                }
-                lifecycleOwner.lifecycle.addObserver(observer)
-                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-            }
-            AndroidView(
-                factory = { _ ->
-                    (adView.parent as? ViewGroup)?.removeView(adView)
-                    adView.layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                    )
-                    adView
-                },
-                update = { view ->
-                    view.layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                    )
-                },
-                modifier = Modifier.fillMaxWidth().wrapContentHeight(),
-            )
+            BannerAndroidView(adView = cachedView)
         } else {
             AdShimmer(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(60.dp),
+                modifier = Modifier.fillMaxWidth().height(60.dp),
             )
         }
     }
 
-    if (showDialog) {
-        AdInfoDialog(onDismiss = { showDialog = false })
-    }
+    if (showDialog) AdInfoDialog(onDismiss = { showDialog = false })
 }
 
-// ── Pozisyon bazlı banner — liste içinde her konuma özel AdView ───────────────
+/**
+ * PositionedAdBannerView — Liste içinde her konuma özel banner.
+ */
 @Composable
 fun PositionedAdBannerView(
     positionKey  : String,
@@ -166,58 +133,20 @@ fun PositionedAdBannerView(
     ) {
         AdLabel(onInfoClick = { showDialog = true })
 
-        if (isLoaded) {
-            val adView: AdView? = adsVm.cachedPositionedBanner(positionKey)
-            if (adView != null) {
-                val lifecycleOwner = LocalLifecycleOwner.current
-                DisposableEffect(lifecycleOwner, adView) {
-                    val observer = LifecycleEventObserver { _, event ->
-                        when (event) {
-                            Lifecycle.Event.ON_RESUME  -> adView.resume()
-                            Lifecycle.Event.ON_PAUSE   -> adView.pause()
-                            Lifecycle.Event.ON_DESTROY -> adView.destroy()
-                            else -> {}
-                        }
-                    }
-                    lifecycleOwner.lifecycle.addObserver(observer)
-                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-                }
-                AndroidView(
-                    factory = { _ ->
-                        adView.layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                        )
-                        adView
-                    },
-                    update = { view ->
-                        view.layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth().wrapContentHeight(),
-                )
-            }
+        val adView = if (isLoaded) adsVm.cachedPositionedBanner(positionKey) else null
+        if (adView != null) {
+            BannerAndroidView(adView = adView)
         } else {
-            AdShimmer(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(60.dp),
-            )
+            AdShimmer(modifier = Modifier.fillMaxWidth().height(60.dp))
         }
     }
 
-    if (showDialog) {
-        AdInfoDialog(onDismiss = { showDialog = false })
-    }
+    if (showDialog) AdInfoDialog(onDismiss = { showDialog = false })
 }
 
-// ── Pozisyon bazlı native reklam ──────────────────────────────────────────────
-// CACHE-FIRST: PositionedBannerAdView ile aynı desen.
-// DisposableEffect içinde doğrudan AdLoader ÇAĞRILMAZ — her scroll'da yeni
-// istek atılmasını engeller. Yükleme ViewModel'deki cache üzerinden yapılır;
-// composable sadece cache'i okur. Bu sayede istek sayısı = gerçek gösterim sayısı.
+/**
+ * PositionedNativeAdView — Cache-first native reklam.
+ */
 @Composable
 fun PositionedNativeAdView(
     positionKey    : String,
@@ -230,14 +159,10 @@ fun PositionedNativeAdView(
     if (unitId.isNullOrBlank()) return
 
     LaunchedEffect(positionKey, unitId) {
-        // 1) Bu slotu yükle — havuzda reklam varsa 0ms gecikme
         adsVm.preloadPositionedNative(positionKey, unitId)
-        // 2) Sonraki slotları önceden yükle
         prefetchKeys.forEach { (key, nextUnitId) ->
             if (nextUnitId.isNotBlank()) adsVm.preloadPositionedNative(key, nextUnitId)
         }
-        // 3) Havuzu yeniden doldur — çekilen yer boş kalmasın.
-        //    warmUpNativePool idempotent: havuz zaten doluysa istek atmaz.
         adsVm.warmUpNativePool(unitId)
     }
 
@@ -256,7 +181,45 @@ fun PositionedNativeAdView(
     }
 }
 
-// ── Ortak yardımcı bileşenler ─────────────────────────────────────────────────
+// ── AndroidView sarmalayıcı (tekrar kullanım) ─────────────────────────────────
+//
+// Bu yardımcı fonksiyon AdBannerView ve PositionedAdBannerView'da kod tekrarını kaldırdı.
+// DisposableEffect lifecycle yönetimi tek yerde — değişince iki yerde değiştirmek gerekmez.
+@Composable
+private fun BannerAndroidView(adView: AdView) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, adView) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME  -> adView.resume()
+                Lifecycle.Event.ON_PAUSE   -> adView.pause()
+                Lifecycle.Event.ON_DESTROY -> adView.destroy()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    AndroidView(
+        factory = { _ ->
+            (adView.parent as? ViewGroup)?.removeView(adView)
+            adView.layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
+            adView
+        },
+        update = { view ->
+            view.layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
+        },
+        modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+    )
+}
+
+// ── Ortak UI bileşenleri ──────────────────────────────────────────────────────
 
 @Composable
 private fun AdLabel(onInfoClick: () -> Unit) {
@@ -314,18 +277,17 @@ fun AdShimmer(modifier: Modifier = Modifier) {
         label = "shimmerX",
     )
     Box(
-        modifier = modifier
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                    ),
-                    start = Offset(translateX, 0f),
-                    end   = Offset(translateX + 300f, 300f),
+        modifier = modifier.background(
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                 ),
-                shape = RoundedCornerShape(8.dp),
+                start = Offset(translateX, 0f),
+                end   = Offset(translateX + 300f, 300f),
             ),
+            shape = RoundedCornerShape(8.dp),
+        ),
     )
 }

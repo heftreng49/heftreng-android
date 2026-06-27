@@ -11,7 +11,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
@@ -20,58 +19,89 @@ import com.heftreng.app.R
 import com.heftreng.app.ui.theme.HeftCard
 import com.heftreng.app.ui.theme.Divider
 
+/**
+ * NativeAdViewCompose — sadeleştirilmiş, tek XML layout kullanan versiyon.
+ *
+ * ESKİ DURUM:
+ *   when (adSize) { "medium" -> R.layout.ad_medium_template; "large" -> R.layout.ad_large_template; else -> R.layout.ad_small_template }
+ *   → 3 ayrı XML dosyası inflate ediliyordu, içerik identikti.
+ *
+ * YENİ DURUM:
+ *   • TEK XML: R.layout.ad_native_template
+ *   • mediaHeightDp parametresi → MediaView yüksekliği compose katmanında ayarlanır
+ *   • adSize → Enum'a çevrildi (String "small"/"medium"/"large" yerine)
+ *     Neden? String hataya açık. Enum → compile-time güvenlik, IDE autocomplete
+ *
+ * BOYUTLAR:
+ *   NativeAdSize.SMALL  → mediaHeightDp=0  → MediaView gizlenir (küçük kart)
+ *   NativeAdSize.MEDIUM → mediaHeightDp=120 → küçük medya önizleme
+ *   NativeAdSize.LARGE  → mediaHeightDp=200 → tam medya görünümü
+ */
+enum class NativeAdSize { SMALL, MEDIUM, LARGE }
+
 @Composable
 fun NativeAdViewCompose(
     nativeAd : NativeAd,
     modifier : Modifier = Modifier,
-    adSize   : String   = "small",
+    adSize   : NativeAdSize = NativeAdSize.SMALL,
 ) {
-    val layoutId = when (adSize) {
-        "medium" -> R.layout.ad_medium_template
-        "large"  -> R.layout.ad_large_template
-        else     -> R.layout.ad_small_template
+    // Boyuta göre MediaView yüksekliği (dp cinsinden). 0 = MediaView GONE.
+    val mediaHeightDp = when (adSize) {
+        NativeAdSize.SMALL  -> 0
+        NativeAdSize.MEDIUM -> 120
+        NativeAdSize.LARGE  -> 200
     }
 
-    // Compose tema renklerini al — LocalHeftrangColors'tan geliyor, light/dark otomatik
     val cardBg     = HeftCard
     val cardBorder = Divider
 
     AndroidView(
         factory = { context ->
-            val view = LayoutInflater.from(context).inflate(layoutId, null) as NativeAdView
-            applyThemeBackground(view, cardBg, cardBorder)
-            populateNativeAdView(nativeAd, view)
+            // TEK layout inflate — boyut farkı mediaHeightDp ile çözülüyor
+            val view = LayoutInflater.from(context)
+                .inflate(R.layout.ad_native_template, null) as NativeAdView
+            applyTheme(view, cardBg, cardBorder)
+            populateAd(nativeAd, view, mediaHeightDp, context)
             view
         },
         update = { view ->
-            applyThemeBackground(view, cardBg, cardBorder)
-            populateNativeAdView(nativeAd, view)
+            // Tema değişiminde (dark/light) arka plan güncelle
+            applyTheme(view, cardBg, cardBorder)
+            populateAd(nativeAd, view, mediaHeightDp, view.context)
         },
         modifier = modifier.fillMaxWidth(),
     )
 }
 
-private fun applyThemeBackground(view: NativeAdView, cardBg: Color, cardBorder: Color) {
-    val drawable = GradientDrawable().apply {
-        shape         = GradientDrawable.RECTANGLE
-        cornerRadius  = 16f * view.resources.displayMetrics.density
-        setColor(cardBg.toArgb())
-        setStroke(
-            (1f * view.resources.displayMetrics.density).toInt(),
-            cardBorder.toArgb(),
-        )
+// ── Private yardımcılar ───────────────────────────────────────────────────────
+
+private fun applyTheme(view: NativeAdView, bg: Color, border: Color) {
+    val dp = view.resources.displayMetrics.density
+    view.background = GradientDrawable().apply {
+        shape        = GradientDrawable.RECTANGLE
+        cornerRadius = 16f * dp
+        setColor(bg.toArgb())
+        setStroke((1f * dp).toInt(), border.toArgb())
     }
-    view.background = drawable
 }
 
-private fun populateNativeAdView(nativeAd: NativeAd, adView: NativeAdView) {
+private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: Int, context: android.content.Context) {
+    val dp = context.resources.displayMetrics.density
+
+    // MediaView: yüksekliği dinamik olarak set et
     val mediaView = adView.findViewById<MediaView>(R.id.ad_media)
     adView.mediaView = mediaView
-    if (nativeAd.mediaContent != null) {
+    if (mediaHeightDp > 0 && nativeAd.mediaContent != null) {
         mediaView.mediaContent = nativeAd.mediaContent!!
-        mediaView.visibility   = View.VISIBLE
+        mediaView.layoutParams = mediaView.layoutParams?.apply {
+            height = (mediaHeightDp * dp).toInt()
+            width  = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+        }
+        mediaView.visibility = View.VISIBLE
     } else {
+        // mediaHeightDp==0 (SMALL) veya medya içerik yok → gizle ve 0dp yap
         mediaView.visibility = View.GONE
+        mediaView.layoutParams = mediaView.layoutParams?.apply { height = 0 }
     }
 
     adView.headlineView = adView.findViewById<TextView>(R.id.ad_headline).also {
@@ -79,31 +109,19 @@ private fun populateNativeAdView(nativeAd: NativeAd, adView: NativeAdView) {
     }
 
     adView.bodyView = adView.findViewById<TextView>(R.id.ad_body).also {
-        if (nativeAd.body.isNullOrBlank()) {
-            it.visibility = View.GONE
-        } else {
-            it.visibility = View.VISIBLE
-            it.text = nativeAd.body
-        }
+        it.visibility = if (nativeAd.body.isNullOrBlank()) View.GONE else View.VISIBLE
+        it.text = nativeAd.body ?: ""
     }
 
     adView.callToActionView = adView.findViewById<Button>(R.id.ad_call_to_action).also {
-        if (nativeAd.callToAction.isNullOrBlank()) {
-            it.visibility = View.GONE
-        } else {
-            it.visibility = View.VISIBLE
-            it.text = nativeAd.callToAction
-        }
+        it.visibility = if (nativeAd.callToAction.isNullOrBlank()) View.GONE else View.VISIBLE
+        it.text = nativeAd.callToAction ?: ""
     }
 
     adView.iconView = adView.findViewById<ImageView>(R.id.ad_app_icon).also {
         val icon = nativeAd.icon
-        if (icon?.drawable != null) {
-            it.setImageDrawable(icon.drawable)
-            it.visibility = View.VISIBLE
-        } else {
-            it.visibility = View.GONE
-        }
+        it.visibility = if (icon?.drawable != null) View.VISIBLE else View.GONE
+        if (icon?.drawable != null) it.setImageDrawable(icon.drawable)
     }
 
     adView.setNativeAd(nativeAd)

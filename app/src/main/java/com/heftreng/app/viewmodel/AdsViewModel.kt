@@ -3,10 +3,9 @@ package com.heftreng.app.viewmodel
 import android.app.Activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
-import com.google.android.gms.ads.AdError
-import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.interstitial.InterstitialAd
@@ -17,14 +16,13 @@ import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import com.google.android.gms.ads.rewarded.RewardItem
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Source
 import com.heftreng.app.ads.AdEngine
-import com.heftreng.app.util.ConsentHelper
 import com.heftreng.app.ads.AdFrequencyManager
+import com.heftreng.app.ads.RemoteConfigManager
 import com.heftreng.app.data.model.AdMobProdIds
 import com.heftreng.app.data.model.CmsAdConfig
+import com.heftreng.app.util.ConsentHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -32,27 +30,41 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  AdsViewModel — Heftreng reklam yönetim katmanı.
+ *  AdsViewModel — Remote Config geçişi sonrası temizlenmiş versiyon.
  *
- *  Sorumluluklar:
- *   1. CMS'den (Firestore cms_ads) config okuma — cache-first, 30dk TTL
- *   2. Config'i StateFlow olarak ekranlara sunma
- *   3. AdEngine ve AdFrequencyManager'a delege etme
+ *  DEĞİŞEN ŞEYLER (Firestore → Remote Config):
+ *  ─────────────────────────────────────────────
+ *  ✗ KALKAN: FirebaseFirestore bağımlılığı (reklam config için)
+ *  ✗ KALKAN: loadAdConfigs() → Firestore get() çağrısı
+ *  ✗ KALKAN: persistConfig() / loadPersistedConfig() → 19 alanlı string serialization
+ *  ✗ KALKAN: adPrefs SharedPreferences → RC kendi cache'ini yönetiyor
+ *  ✗ KALKAN: lastServerFetchMs + ADS_CONFIG_TTL_MS → RC'de built-in (setMinimumFetchInterval)
  *
- *  Önemli kural: loadAdConfigs() sadece init{} bloğunda çağrılır.
- *  Ekranlar (FeedScreen vb.) ARTIK kendi LaunchedEffect'lerinde bu fonksiyonu
- *  çağırmamalı — çift Firestore isteği ve gereksiz yeniden yükleme olur.
- *  Pull-to-refresh veya "zorla güncelle" için loadAdConfigs(forceServer=true)
- *  kullanılır.
+ *  ✓ GELEN: RemoteConfigManager bağımlılığı
+ *  ✓ GELEN: loadAdConfigs() → RC.fetchAndActivate() + applyConfigs()
+ *
+ *  DEĞİŞMEYEN ŞEYLER:
+ *  ──────────────────
+ *  • AdEngine (banner pool, native pool, retry/backoff) — dokunmadık
+ *  • AdFrequencyManager (local-first sayaç) — dokunmadık
+ *  • Interstitial / Rewarded yükleme ve gösterme mantığı — dokunmadık
+ *  • ConsentHelper.canRequestAds kontrolleri — dokunmadık
+ *  • BannerSlot / NativeAdSlot enum'ları — dokunmadık
+ *  • resolveOrDefault() mantığı — dokunmadık
+ *
+ *  NOT: FirebaseFirestore bağımlılığı AdFrequencyManager için hâlâ gerekli
+ *  (analitik yazma). Bu yüzden inject listesinden tamamen kaldırılmadı.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 @HiltViewModel
 class AdsViewModel @Inject constructor(
+    // Remote Config: reklam yapılandırması artık buradan geliyor
+    private val remoteConfigManager: RemoteConfigManager,
+    // Firestore: SADECE AdFrequencyManager analitik yazması için (reklam config için artık değil)
     private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth,
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
@@ -60,43 +72,6 @@ class AdsViewModel @Inject constructor(
 
     private val engine           = AdEngine(appContext, viewModelScope)
     private val frequencyManager = AdFrequencyManager(appContext, firestore, viewModelScope)
-
-    // ── SharedPreferences kalıcı config cache'i ────────────────────────────
-    // Bir sonraki açılışta Firestore round-trip'i beklemeden doğru unit ID ile
-    // hemen yüklemeye başlamak için son bilinen config buraya yazılır.
-    private val adPrefs = appContext.getSharedPreferences(
-        "heftreng_ad_config_cache",
-        android.content.Context.MODE_PRIVATE,
-    )
-    private val PREF_SEP = "\u0001"
-
-    private fun persistConfig(docId: String, c: CmsAdConfig) {
-        val raw = listOf(
-            c.unitId, c.enabled, c.testMode, c.position, c.frequency, c.xpReward, c.dailyLimit,
-            c.scenarioDoubleXp, c.scenarioUnlockLesson, c.scenarioSaveStreak, c.adType, c.bannerSize,
-            c.placement, c.screens, c.label, c.bgColor, c.cornerRadius, c.paddingTop, c.paddingBottom,
-        ).joinToString(PREF_SEP)
-        adPrefs.edit().putString(docId, raw).apply()
-    }
-
-    private fun loadPersistedConfig(docId: String): CmsAdConfig? {
-        val raw = adPrefs.getString(docId, null) ?: return null
-        val p   = raw.split(PREF_SEP)
-        if (p.size < 19) return null
-        return try {
-            CmsAdConfig(
-                id = docId, unitId = p[0], enabled = p[1].toBoolean(), testMode = p[2].toBoolean(),
-                position = p[3].toInt(), frequency = p[4].toInt(), xpReward = p[5].toInt(), dailyLimit = p[6].toInt(),
-                scenarioDoubleXp = p[7].toBoolean(), scenarioUnlockLesson = p[8].toBoolean(), scenarioSaveStreak = p[9].toBoolean(),
-                adType = p[10], bannerSize = p[11], placement = p[12], screens = p[13],
-                label = p[14], bgColor = p[15], cornerRadius = p[16].toInt(), paddingTop = p[17].toInt(), paddingBottom = p[18].toInt(),
-            )
-        } catch (_: Exception) { null }
-    }
-
-    // ── Cache TTL — cms_ads nadiren değişir, 30 dakikada bir server'a git ──
-    private val ADS_CONFIG_TTL_MS = 30L * 60L * 1000L
-    private var lastServerFetchMs = 0L
 
     // ── Slot tanımları ─────────────────────────────────────────────────────
     enum class BannerSlot  { FEED, LIB, KURDI, BLOG }
@@ -149,33 +124,33 @@ class AdsViewModel @Inject constructor(
     fun warmUpNativePool(unitId: String) = engine.warmUpNativePool(unitId)
     fun releaseAdPool(unitId: String? = null) = engine.releaseAdPool(unitId)
 
-    // ── Config StateFlow'ları — başlangıç değeri = kalıcı cache ───────────
-    // Bu sayede uygulama açılır açılmaz doğru unit ID ile yükleme başlar,
-    // Firestore round-trip'i beklenmez.
-    private val _bannerConfig         = MutableStateFlow(loadPersistedConfig("banner_feed"))
-    val bannerConfig                  = _bannerConfig.asStateFlow()
-    private val _bannerLibraryConfig  = MutableStateFlow(loadPersistedConfig("banner_library"))
-    val bannerLibraryConfig           = _bannerLibraryConfig.asStateFlow()
-    private val _bannerKurdiConfig    = MutableStateFlow(loadPersistedConfig("banner_kurdi"))
-    val bannerKurdiConfig             = _bannerKurdiConfig.asStateFlow()
-    private val _bannerBlogConfig     = MutableStateFlow(loadPersistedConfig("banner_blog"))
-    val bannerBlogConfig              = _bannerBlogConfig.asStateFlow()
-    private val _interstitialConfig   = MutableStateFlow(loadPersistedConfig("interstitial_serial"))
-    val interstitialConfig            = _interstitialConfig.asStateFlow()
-    private val _rewardedConfig       = MutableStateFlow(loadPersistedConfig("rewarded_xp"))
-    val rewardedConfig                = _rewardedConfig.asStateFlow()
-    private val _nativeFeedConfig     = MutableStateFlow(loadPersistedConfig("native_feed"))
-    val nativeFeedConfig              = _nativeFeedConfig.asStateFlow()
-    private val _nativeBlogConfig     = MutableStateFlow(loadPersistedConfig("native_blog"))
-    val nativeBlogConfig              = _nativeBlogConfig.asStateFlow()
-    private val _nativeLibraryConfig  = MutableStateFlow(loadPersistedConfig("native_library"))
-    val nativeLibraryConfig           = _nativeLibraryConfig.asStateFlow()
-    private val _nativeKurdiConfig    = MutableStateFlow(loadPersistedConfig("native_kurdi"))
-    val nativeKurdiConfig             = _nativeKurdiConfig.asStateFlow()
-    private val _nativeProfileConfig  = MutableStateFlow(loadPersistedConfig("native_profile"))
-    val nativeProfileConfig           = _nativeProfileConfig.asStateFlow()
-    private val _nativeSearchConfig   = MutableStateFlow(loadPersistedConfig("native_search"))
-    val nativeSearchConfig            = _nativeSearchConfig.asStateFlow()
+    // ── Config StateFlow'ları ─────────────────────────────────────────────
+    // Başlangıç değeri null → Remote Config fetch gelene kadar prod ID ile yüklenir
+    // (resolveOrDefault: c==null → prod ID kullan, hemen başlat)
+    private val _bannerConfig        = MutableStateFlow<CmsAdConfig?>(null)
+    val bannerConfig                 = _bannerConfig.asStateFlow()
+    private val _bannerLibraryConfig = MutableStateFlow<CmsAdConfig?>(null)
+    val bannerLibraryConfig          = _bannerLibraryConfig.asStateFlow()
+    private val _bannerKurdiConfig   = MutableStateFlow<CmsAdConfig?>(null)
+    val bannerKurdiConfig            = _bannerKurdiConfig.asStateFlow()
+    private val _bannerBlogConfig    = MutableStateFlow<CmsAdConfig?>(null)
+    val bannerBlogConfig             = _bannerBlogConfig.asStateFlow()
+    private val _interstitialConfig  = MutableStateFlow<CmsAdConfig?>(null)
+    val interstitialConfig           = _interstitialConfig.asStateFlow()
+    private val _rewardedConfig      = MutableStateFlow<CmsAdConfig?>(null)
+    val rewardedConfig               = _rewardedConfig.asStateFlow()
+    private val _nativeFeedConfig    = MutableStateFlow<CmsAdConfig?>(null)
+    val nativeFeedConfig             = _nativeFeedConfig.asStateFlow()
+    private val _nativeBlogConfig    = MutableStateFlow<CmsAdConfig?>(null)
+    val nativeBlogConfig             = _nativeBlogConfig.asStateFlow()
+    private val _nativeLibraryConfig = MutableStateFlow<CmsAdConfig?>(null)
+    val nativeLibraryConfig          = _nativeLibraryConfig.asStateFlow()
+    private val _nativeKurdiConfig   = MutableStateFlow<CmsAdConfig?>(null)
+    val nativeKurdiConfig            = _nativeKurdiConfig.asStateFlow()
+    private val _nativeProfileConfig = MutableStateFlow<CmsAdConfig?>(null)
+    val nativeProfileConfig          = _nativeProfileConfig.asStateFlow()
+    private val _nativeSearchConfig  = MutableStateFlow<CmsAdConfig?>(null)
+    val nativeSearchConfig           = _nativeSearchConfig.asStateFlow()
 
     private val _allAdConfigs = MutableStateFlow<Map<String, CmsAdConfig>>(emptyMap())
     val allAdConfigs          = _allAdConfigs.asStateFlow()
@@ -184,21 +159,14 @@ class AdsViewModel @Inject constructor(
     val adsEnabled          = _adsEnabled.asStateFlow()
 
     // ── Unit ID StateFlow'ları ─────────────────────────────────────────────
-    // ÖNCEKİ HATA: `engine.resolveUnitId(c, prodId) ?: prodId` ifadesi hem
-    // "config henüz gelmedi" hem de "admin bu slotu kapattı (enabled=false)"
-    // durumunda null dönüyordu — `?:` fallback ikisini ayırt edemediği için
-    // admin CMS'den bir slotu kapattığında bile reklam gösterilmeye devam
-    // ediyordu (null görüp prod ID'ye geri dönüyordu).
-    //
-    // YENİ MANTIK:
-    //   c == null → config henüz Firestore'dan gelmedi → prod ID kullan (anlık başlasın)
-    //   c != null && !c.enabled → admin kapattı → null döndür (reklam gösterme)
-    //   c != null && c.enabled  → resolveUnitId: custom ID varsa onu, yoksa prod ID
+    // resolveOrDefault mantığı: c==null → config henüz gelmedi → prod ID ile başla
+    //                           c!=null && !c.enabled → admin kapattı → null (reklam yok)
+    //                           c!=null && c.enabled  → custom ID varsa onu, yoksa prod ID
     private fun resolveOrDefault(c: CmsAdConfig?, e: Boolean, prodId: String): String? {
-        if (!e) return null                   // global "ads_enabled = false"
-        if (c == null) return prodId          // config henüz gelmedi → prod ID ile başla
-        if (!c.enabled) return null           // admin bu slotu kapattı
-        return c.unitId.ifBlank { prodId }    // custom ID yoksa prod ID
+        if (!e) return null
+        if (c == null) return prodId
+        if (!c.enabled) return null
+        return c.unitId.ifBlank { prodId }
     }
 
     val bannerUnitId: StateFlow<String?> = combine(_bannerConfig, _adsEnabled) { c, e ->
@@ -245,170 +213,104 @@ class AdsViewModel @Inject constructor(
         _bannerConfig.combine(_adsEnabled) { c, _ -> c?.position ?: 5 }
             .stateIn(viewModelScope, SharingStarted.Eagerly, 5)
 
-    // ── loadAdConfigs: Kendi bağımsız cache'imiz + TTL'li sunucu tazeleme ─────
-    // Tek otomatik çağrı noktası: init{} bloğu. Admin paneli kendi kaydetme
-    // işlemlerinden sonra forceServer=true ile çağırır (anında doğruluk istiyor).
+    // ── Remote Config'den config yükleme ──────────────────────────────────
     //
-    // ÖNCEDEN burada önce Firestore'un Source.CACHE'i okunuyordu. SORUN: O cache
-    // uygulamanın TÜM Firestore koleksiyonları (feed, library, profil, vb.) ile
-    // PAYLAŞILAN, sabit boyutlu (50MB), LRU mantığıyla çalışan TEK bir havuzdur
-    // (bkz. AppModule.kt cacheSizeBytes). cms_ads çok küçük ve nadiren dokunulan
-    // bir koleksiyon olduğu için, feed/library gibi çok daha yoğun kullanılan
-    // koleksiyonlar yer açmak için onu kolayca tahliye (evict) edebiliyordu — yani
-    // reklamların "cache'i" uygulamanın genel cache'i altında ezilebiliyordu.
+    // ESKİ (Firestore): firestore.collection("cms_ads").get(Source.SERVER).await()
+    //   → Her açılışta Firestore okuma = fatura
+    //   → Offline'da çalışmıyor
+    //   → 19 alanlı String serialization (kırılgan)
     //
-    // ŞİMDİ: reklamlar SADECE kendi ayrı, asla tahliye edilmeyen SharedPreferences
-    // cache'ine (adPrefs, dosyanın başında tanımlı) güveniyor — bu zaten ViewModel
-    // oluşturulduğu anda her config'i anında dolduruyor (bkz. loadPersistedConfig).
-    // Firestore'a sadece TAZELEME için, TTL'e bağlı olarak gidiyoruz; başarısız
-    // olsa da sorun değil, ekranlar zaten adPrefs'ten gelen son bilinen değerle
-    // çalışıyor — uygulamanın genel cache sisteminden tamamen bağımsız.
-    fun loadAdConfigs(forceServer: Boolean = false) {
+    // YENİ (Remote Config): remoteConfigManager.fetchAndActivate()
+    //   → 12 saatte bir ağ isteği (SDK kendi cache'ini yönetiyor)
+    //   → Offline'da son cached değer — hiç fail olmuyor
+    //   → JSON parse — güvenli, alan ekleyince format bozulmuyor
+    fun loadAdConfigs(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            // UMP onayı gelmeden reklam yükleme (Google politikası)
             if (!ConsentHelper.canRequestAds.value) {
                 android.util.Log.d("AdsVM", "loadAdConfigs: UMP onayı bekleniyor")
                 return@launch
             }
-            val now        = System.currentTimeMillis()
-            val ttlExpired = (now - lastServerFetchMs) > ADS_CONFIG_TTL_MS
-            if (!forceServer && !ttlExpired && lastServerFetchMs != 0L) return@launch // hâlâ taze, tekrar sorma
 
-            try {
-                val serverSnap = firestore.collection("cms_ads").get(Source.SERVER).await()
-                lastServerFetchMs = now
-                applyAdConfigs(serverSnap, preloadAds = true)
-            } catch (_: Exception) {
-                // Sunucuya ulaşılamadı — reklamlar zaten kendi ayrı cache'imizden
-                // (adPrefs) anında yüklenmiş durumda, Firestore'un paylaşımlı
-                // cache'ine hiç bağımlı değiliz.
+            // fetchAndActivate() — cache geçerliyse (12h) anında döner, ağ isteği yok.
+            // forceRefresh=true ise: RC minimum fetch interval 0'a set edilmiş debug builds'de
+            // çalışır. Production'da Firebase konsolundan "force update" kontrolü yoktur —
+            // bunun yerine Remote Config Conditions kullanılır.
+            remoteConfigManager.fetchAndActivate()
+
+            applyRemoteConfigs(preloadAds = true)
+        }
+    }
+
+    /**
+     * Remote Config'den tüm slot değerlerini okur ve StateFlow'ları günceller.
+     * Bu fonksiyon sync'tir (ağ isteği yok) — tüm değerler zaten SDK cache'inde.
+     */
+    private fun applyRemoteConfigs(preloadAds: Boolean) {
+        // Global flag
+        _adsEnabled.value = remoteConfigManager.isAdsEnabled()
+
+        val newAll = mutableMapOf<String, CmsAdConfig>()
+
+        fun applyBanner(flow: MutableStateFlow<CmsAdConfig?>, key: String, slot: BannerSlot) {
+            val config = remoteConfigManager.getAdConfig(key) ?: return
+            flow.value = config
+            newAll[key] = config
+            if (preloadAds && config.enabled && _adsEnabled.value) {
+                engine.resolveUnitId(config, AdMobProdIds.BANNER)
+                    ?.let { engine.loadBanner(slot.key(), it, config.bannerSize) }
             }
         }
-    }
 
-    private fun applyAdConfigs(
-        snap: com.google.firebase.firestore.QuerySnapshot,
-        preloadAds: Boolean,
-    ) {
-        val global = snap.documents.find { it.id == "global" }
-        _adsEnabled.value = global?.getBoolean("enabled") ?: true
-
-        val newAllConfigs = _allAdConfigs.value.toMutableMap()
-
-        snap.documents.forEach { doc ->
-            if (doc.id == "global") return@forEach
-            val d = doc.data ?: return@forEach
-            val config = CmsAdConfig(
-                id          = doc.id,
-                unitId      = d["unitId"]    as? String  ?: "",
-                enabled     = d["enabled"]   as? Boolean ?: false,
-                testMode    = d["testMode"]  as? Boolean ?: true,
-                position    = (d["position"]  as? Long)?.toInt() ?: 5,
-                frequency   = (d["frequency"] as? Long)?.toInt() ?: 3,
-                xpReward    = (d["xpReward"]   as? Long)?.toInt() ?: 50,
-                dailyLimit  = (d["dailyLimit"] as? Long)?.toInt() ?: 3,
-                scenarioDoubleXp     = d["scenarioDoubleXp"]     as? Boolean ?: true,
-                scenarioUnlockLesson = d["scenarioUnlockLesson"] as? Boolean ?: true,
-                scenarioSaveStreak   = d["scenarioSaveStreak"]   as? Boolean ?: true,
-                adType      = d["adType"]      as? String ?: "banner",
-                bannerSize  = (d["bannerSize"] as? String ?: "adaptive").trim().lowercase(),
-                placement   = d["placement"]   as? String ?: "in_list",
-                screens     = (d["screens"] as? String ?: "feed").trim().lowercase(),
-                label       = d["label"]       as? String ?: "",
-                bgColor     = d["bgColor"]     as? String ?: "",
-                cornerRadius  = (d["cornerRadius"]  as? Long)?.toInt() ?: 0,
-                paddingTop    = (d["paddingTop"]    as? Long)?.toInt() ?: 0,
-                paddingBottom = (d["paddingBottom"] as? Long)?.toInt() ?: 0,
-            )
-
-            persistConfig(doc.id, config)
-
-            when (doc.id) {
-                "banner_feed"                  -> applyBannerConfig(_bannerConfig, config, BannerSlot.FEED, preloadAds)
-                "banner_library", "banner_lib" -> applyBannerConfig(_bannerLibraryConfig, config, BannerSlot.LIB, preloadAds)
-                "banner_kurdi"                 -> applyBannerConfig(_bannerKurdiConfig, config, BannerSlot.KURDI, preloadAds)
-                "banner_blog"                  -> applyBannerConfig(_bannerBlogConfig, config, BannerSlot.BLOG, preloadAds)
-                "interstitial_serial" -> {
-                    val changed = _interstitialConfig.value != config
-                    _interstitialConfig.value = config
-                    // Interstitial'ı burada önceden yükle — ScreenTracker istediği an hazır olsun
-                    if (preloadAds && changed && config.enabled && _adsEnabled.value) {
-                        engine.resolveUnitId(config, AdMobProdIds.INTERSTITIAL)?.let {
-                            interstitialUnitId = it
-                            loadInterstitialAd(it)
-                        }
-                    }
-                }
-                "rewarded_xp" -> {
-                    val changed = _rewardedConfig.value != config
-                    _rewardedConfig.value = config
-                    syncRemainingRewardedAds(config.dailyLimit)
-                    if (preloadAds && changed && config.enabled && _adsEnabled.value) {
-                        engine.resolveUnitId(config, AdMobProdIds.REWARDED)
-                            ?.let { preloadRewardedAd(it) }
-                    }
-                }
-                "native_feed"    -> applyNativeConfig(_nativeFeedConfig,    config, NativeAdSlot.FEED,    preloadAds)
-                "native_blog"    -> applyNativeConfig(_nativeBlogConfig,    config, NativeAdSlot.BLOG,    preloadAds)
-                "native_library" -> applyNativeConfig(_nativeLibraryConfig, config, NativeAdSlot.LIBRARY, preloadAds)
-                "native_kurdi"   -> applyNativeConfig(_nativeKurdiConfig,   config, NativeAdSlot.KURDI,   preloadAds)
-                "native_profile" -> applyNativeConfig(_nativeProfileConfig, config, NativeAdSlot.PROFILE, preloadAds)
-                "native_search"  -> applyNativeConfig(_nativeSearchConfig,  config, NativeAdSlot.SEARCH,  preloadAds)
+        fun applyNative(flow: MutableStateFlow<CmsAdConfig?>, key: String, slot: NativeAdSlot) {
+            val config = remoteConfigManager.getAdConfig(key) ?: return
+            flow.value = config
+            newAll[key] = config
+            if (preloadAds && config.enabled && _adsEnabled.value) {
+                engine.resolveUnitId(config, AdMobProdIds.NATIVE)
+                    ?.let { engine.warmUpNativePool(it) }
             }
-            newAllConfigs[doc.id] = config
         }
-        _allAdConfigs.value = newAllConfigs
-    }
 
-    private fun applyBannerConfig(
-        target: MutableStateFlow<CmsAdConfig?>,
-        config: CmsAdConfig,
-        slot: BannerSlot,
-        preloadAds: Boolean,
-    ) {
-        // ÖNEMLİ DÜZELTME: "changed" kontrolü KALDIRILDI.
-        //
-        // ÖNCEKİ HATA: target.value != config kontrolü, config Firestore'dan
-        // gelen değer SharedPreferences'taki (loadPersistedConfig ile zaten
-        // seed edilmiş) son bilinen değerle AYNI olduğunda engine.loadBanner()
-        // çağrısını TAMAMEN atlıyordu. Admin CMS'de bir şey değiştirmediği
-        // sürece bu HER ZAMAN true'ydu (yani "değişmedi") — yani returning
-        // kullanıcılarda banner_library/banner_kurdi/banner_blog reklamları o
-        // oturumda HİÇ yüklenmiyordu (AdEngine her oturumda sıfırdan kurulduğu
-        // için havuz boş başlıyor, ve bu kontrol onu doldurmasını engelliyordu).
-        //
-        // engine.loadBanner() KENDİ İÇİNDE zaten "zaten yüklüyse tekrar isteme"
-        // korumasına sahip (bkz. AdEngine.kt: loadedFlow.value && !sizeChanged
-        // && !unitChanged → return). Yani burada ayrıca "changed" kontrolü
-        // yapmak gereksiz VE zararlı bir ikinci koruma katmanıydı — kaldırıldı.
-        target.value = config
-        if (preloadAds && config.enabled && _adsEnabled.value) {
-            engine.resolveUnitId(config, AdMobProdIds.BANNER)
-                ?.let { engine.loadBanner(slot.key(), it, config.bannerSize) }
-        }
-    }
+        applyBanner(_bannerConfig,        RemoteConfigManager.KEY_BANNER_FEED,    BannerSlot.FEED)
+        applyBanner(_bannerLibraryConfig, RemoteConfigManager.KEY_BANNER_LIBRARY, BannerSlot.LIB)
+        applyBanner(_bannerKurdiConfig,   RemoteConfigManager.KEY_BANNER_KURDI,   BannerSlot.KURDI)
+        applyBanner(_bannerBlogConfig,    RemoteConfigManager.KEY_BANNER_BLOG,    BannerSlot.BLOG)
 
-    private fun applyNativeConfig(
-        target: MutableStateFlow<CmsAdConfig?>,
-        config: CmsAdConfig,
-        slot: NativeAdSlot,
-        preloadAds: Boolean,
-    ) {
-        // Aynı düzeltme — bkz. applyBannerConfig yorumu. engine.warmUpNativePool()
-        // de kendi içinde pool doluluk kontrolüne sahip (needed <= 0 → return),
-        // bu yüzden burada "changed" gerekmiyor.
-        target.value = config
-        if (preloadAds && config.enabled && _adsEnabled.value) {
-            engine.resolveUnitId(config, AdMobProdIds.NATIVE)
-                ?.let { engine.warmUpNativePool(it) }
+        applyNative(_nativeFeedConfig,    RemoteConfigManager.KEY_NATIVE_FEED,    NativeAdSlot.FEED)
+        applyNative(_nativeBlogConfig,    RemoteConfigManager.KEY_NATIVE_BLOG,    NativeAdSlot.BLOG)
+        applyNative(_nativeLibraryConfig, RemoteConfigManager.KEY_NATIVE_LIBRARY, NativeAdSlot.LIBRARY)
+        applyNative(_nativeKurdiConfig,   RemoteConfigManager.KEY_NATIVE_KURDI,   NativeAdSlot.KURDI)
+        applyNative(_nativeProfileConfig, RemoteConfigManager.KEY_NATIVE_PROFILE, NativeAdSlot.PROFILE)
+        applyNative(_nativeSearchConfig,  RemoteConfigManager.KEY_NATIVE_SEARCH,  NativeAdSlot.SEARCH)
+
+        // Interstitial
+        remoteConfigManager.getAdConfig(RemoteConfigManager.KEY_INTERSTITIAL)?.let { config ->
+            val changed = _interstitialConfig.value != config
+            _interstitialConfig.value = config
+            newAll[RemoteConfigManager.KEY_INTERSTITIAL] = config
+            if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+                engine.resolveUnitId(config, AdMobProdIds.INTERSTITIAL)?.let {
+                    interstitialUnitId = it
+                    loadInterstitialAd(it)
+                }
+            }
         }
+
+        // Rewarded
+        remoteConfigManager.getAdConfig(RemoteConfigManager.KEY_REWARDED)?.let { config ->
+            val changed = _rewardedConfig.value != config
+            _rewardedConfig.value = config
+            newAll[RemoteConfigManager.KEY_REWARDED] = config
+            syncRemainingRewardedAds(config.dailyLimit)
+            if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+                engine.resolveUnitId(config, AdMobProdIds.REWARDED)?.let { preloadRewardedAd(it) }
+            }
+        }
+
+        _allAdConfigs.value = newAll
     }
 
     // ── Interstitial ──────────────────────────────────────────────────────
-    // ÖNEMLİ DÜZELTME: eskiden reklam gösterildikten (dismiss/fail) sonra bir
-    // daha ASLA yeniden yüklenmiyordu — bir sonraki gösterim fırsatında 4 ekran
-    // sonra ScreenTracker boş elle kalıyordu. Artık her show sonrası arka planda
-    // hemen yeni reklam istenir; bir sonraki fırsatta 0 gecikmeyle hazırdır.
     private var interstitialAd: InterstitialAd? = null
     private var interstitialUnitId: String = ""
 
@@ -423,7 +325,6 @@ class AdsViewModel @Inject constructor(
         )
     }
 
-    /** Tek çağrı noktası: NavHost'taki interstitialConfig LaunchedEffect'i. */
     fun loadInterstitial() {
         val config = _interstitialConfig.value ?: return
         if (!config.enabled) return
@@ -439,7 +340,7 @@ class AdsViewModel @Inject constructor(
             override fun onAdDismissedFullScreenContent() {
                 interstitialAd = null
                 onAdDismissed()
-                loadInterstitialAd(interstitialUnitId)   // bir sonraki gösterim için hemen ısıt
+                loadInterstitialAd(interstitialUnitId)
             }
             override fun onAdFailedToShowFullScreenContent(e: AdError) {
                 interstitialAd = null
@@ -451,15 +352,15 @@ class AdsViewModel @Inject constructor(
     }
 
     // ── Rewarded ──────────────────────────────────────────────────────────
-    private var rewardedAd       : RewardedAd? = null
-    private var rewardedUnitId   : String = ""
-    private var rewardedLoading  : Boolean = false   // aynı anda tek istek koruması
-    private var rewardedRetry    : Int = 0
+    private var rewardedAd      : RewardedAd? = null
+    private var rewardedUnitId  : String = ""
+    private var rewardedLoading : Boolean = false
+    private var rewardedRetry   : Int = 0
 
     fun preloadRewardedAd(unitId: String) {
         if (unitId.isBlank()) return
         rewardedUnitId = unitId
-        if (rewardedAd != null || rewardedLoading) return  // zaten hazır veya yükleniyor
+        if (rewardedAd != null || rewardedLoading) return
         rewardedLoading = true
         RewardedAd.load(
             appContext, unitId, engine.adRequest(),
@@ -472,9 +373,6 @@ class AdsViewModel @Inject constructor(
                 override fun onAdFailedToLoad(adError: LoadAdError) {
                     rewardedAd      = null
                     rewardedLoading = false
-                    // Retry: üstel geri çekilme (8s → 16s → 32s), max 4 deneme.
-                    // Başarısız olursa sessizce bırakmak yerine kısa süre sonra
-                    // tekrar dener — geçici ağ sorunu olsa bile sonraki attempt'ta hazır olur.
                     if (rewardedRetry < 4) {
                         rewardedRetry++
                         val delayMs = 8_000L * (1L shl (rewardedRetry - 1).coerceAtMost(2))
@@ -484,7 +382,7 @@ class AdsViewModel @Inject constructor(
                             preloadRewardedAd(unitId)
                         }
                     } else {
-                        rewardedRetry = 0  // bir sonraki tetiklemede sıfırdan başlasın
+                        rewardedRetry = 0
                     }
                 }
             },
@@ -493,15 +391,6 @@ class AdsViewModel @Inject constructor(
 
     enum class RewardType { DOUBLE_XP, UNLOCK_LESSON, SAVE_STREAK }
 
-    // ÖNEMLİ DÜZELTME — "ödüllü reklam hazırda olmuyor" sorununun asıl kaynağı:
-    // Interstitial'ın NavHost'ta `LaunchedEffect(interstitialConfig) { loadInterstitial() }`
-    // gibi KOŞULSUZ bir tetikleyicisi var. Rewarded'ın ise YOKTU — tek preload noktası
-    // applyAdConfigs içindeki "changed" kontrolüydü. Config artık kalıcı cache'den
-    // (adPrefs) anında seed edildiği için, dönen kullanıcılarda (config son oturumdan
-    // değişmediyse — en yaygın durum) "changed" hep FALSE oluyor, yani preloadRewardedAd
-    // o oturumda HİÇ çağrılmıyordu. Kullanıcı "2x XP" veya "kilidi aç" dediğinde elde
-    // hazır reklam olmuyordu. Çözüm: Interstitial ile birebir aynı desen — NavHost'tan
-    // koşulsuz çağrılacak bir giriş noktası.
     fun loadRewarded() {
         val config = _rewardedConfig.value ?: return
         if (!config.enabled) return
@@ -512,11 +401,6 @@ class AdsViewModel @Inject constructor(
     private val _remainingRewardedAds = MutableStateFlow(3)
     val remainingRewardedAds = _remainingRewardedAds.asStateFlow()
 
-    // DÜZELTME: CMS admin panelinde her senaryo için ayrı bir aç/kapa anahtarı
-    // var (scenarioDoubleXp / scenarioUnlockLesson / scenarioSaveStreak) ama bu
-    // fonksiyon parametreyi (rewardType) tamamen yok sayıp sadece günlük limiti
-    // kontrol ediyordu — admin bir senaryoyu kapatsa bile UI'da görünmeye devam
-    // ediyordu. Artık ilgili CMS bayrağı da kontrol ediliyor.
     fun canShowScenario(rewardType: RewardType): Boolean {
         val cfg = _rewardedConfig.value ?: return _remainingRewardedAds.value > 0
         val scenarioEnabled = when (rewardType) {
@@ -551,14 +435,6 @@ class AdsViewModel @Inject constructor(
 
         val ad = rewardedAd
         if (ad != null) {
-            // ÖDÜLLÜ REKLAM SSV (Server-Side Verification):
-            // AdMob konsolunda tanımlı SSV callback URL'ine (rewardedAdSsv Cloud
-            // Function) bu reklamın kazanıldığı bilgisi, Google'ın imzasıyla
-            // gönderilir. uid + rewardType burada "custom_data" olarak iletilir
-            // ki sunucu tarafında hangi kullanıcının hangi senaryo için ödül
-            // aldığı, AdMob'un kendi imzasıyla doğrulanabilsin (bkz. functions/
-            // index.js → rewardedAdSsv). Ödül kullanıcıya YİNE DE anında verilir
-            // (UX bekletilmez) — SSV logu sadece sahtekarlık denetimi içindir.
             if (uid.isNotEmpty()) {
                 ad.setServerSideVerificationOptions(
                     com.google.android.gms.ads.rewarded.ServerSideVerificationOptions.Builder()
@@ -570,7 +446,7 @@ class AdsViewModel @Inject constructor(
             ad.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdDismissedFullScreenContent() {
                     rewardedAd = null; onDismiss()
-                    preloadRewardedAd(rewardedUnitId)   // bir sonraki gösterim için hemen ısıt
+                    preloadRewardedAd(rewardedUnitId)
                 }
                 override fun onAdFailedToShowFullScreenContent(e: AdError) {
                     rewardedAd = null; onDismiss()
@@ -587,17 +463,13 @@ class AdsViewModel @Inject constructor(
         }
     }
 
-    /**
-     * MainActivity.onResume()'dan çağrılır.
-     * Arka plandan dönünce:
-     *  - Banner AdView'ları resume() ile yenilenir
-     *  - Native pool eksikse tamamlanır
-     *  - Interstitial/Rewarded sona ermiş olabilir → yeniden yükle
-     */
+    // ── Lifecycle ────────────────────────────────────────────────────────
     fun onAppForeground() {
         viewModelScope.launch {
             if (!ConsentHelper.canRequestAds.value) return@launch
             engine.resumeAllBanners()
+            // Arka plandan dönünce Remote Config'i de yenile (cache geçerliyse 0ms)
+            loadAdConfigs()
             val nativeUnitId = nativeFeedUnitId.value
             if (!nativeUnitId.isNullOrBlank()) engine.warmUpNativePool(nativeUnitId)
             if (interstitialAd == null && interstitialUnitId.isNotBlank()) loadInterstitialAd(interstitialUnitId)
@@ -605,7 +477,6 @@ class AdsViewModel @Inject constructor(
         }
     }
 
-    /** MainActivity.onPause()'dan çağrılır — banner'ları durdur (Google politikası). */
     fun onAppBackground() {
         engine.pauseAllBanners()
     }
@@ -615,10 +486,7 @@ class AdsViewModel @Inject constructor(
         engine.destroyAll()
     }
 
-    // NOT: init bloğu en sona konuldu — yukarıdaki tüm property'ler
-    // hazır olduktan sonra çalışması garanti altında.
     init {
-        // Consent zaten hazırsa hemen başlat, yoksa hazır olunca tetikle
         if (ConsentHelper.canRequestAds.value) {
             loadAdConfigs()
         } else {
