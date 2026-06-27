@@ -144,8 +144,8 @@ class MainActivity : ComponentActivity() {
         // Play Store puan/yorum kutusu — fırsatçı, kendi kotamızla (spam olmasın)
         com.heftreng.app.util.InAppReviewHelper.maybeRequestReview(this)
 
-        // NOT: KurdiReminderWorker otomatik zamanlama kaldırıldı.
-        // Kullanıcı ayarlardan manuel olarak etkinleştirebilir.
+        // Günlük Kurdî ders hatırlatıcısı — her gün saat 20:00
+        com.heftreng.app.worker.KurdiReminderWorker.schedule(this, hourOfDay = 20)
     }
 
     // ── Güncelleme kontrolü ────────────────────────────────────────────────────
@@ -181,12 +181,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Uygulama arka plandan dönünce tekrar kontrol et
+        // Reklam lifecycle — banner resume + native pool yenileme
+        adsVm.onAppForeground()
+        // Uygulama arka plandan dönünce güncelleme kontrol et
         appUpdateManager.appUpdateInfo.addOnSuccessListener { info ->
             if (info.installStatus() == InstallStatus.DOWNLOADED) {
                 appUpdateManager.completeUpdate()
             }
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Banner'ları durdur — Google politikası
+        adsVm.onAppBackground()
     }
 
     override fun onDestroy() {

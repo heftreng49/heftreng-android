@@ -587,6 +587,29 @@ class AdsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * MainActivity.onResume()'dan çağrılır.
+     * Arka plandan dönünce:
+     *  - Banner AdView'ları resume() ile yenilenir
+     *  - Native pool eksikse tamamlanır
+     *  - Interstitial/Rewarded sona ermiş olabilir → yeniden yükle
+     */
+    fun onAppForeground() {
+        viewModelScope.launch {
+            if (!ConsentHelper.canRequestAds.value) return@launch
+            engine.resumeAllBanners()
+            val nativeUnitId = nativeFeedUnitId.value
+            if (!nativeUnitId.isNullOrBlank()) engine.warmUpNativePool(nativeUnitId)
+            if (interstitialAd == null && interstitialUnitId.isNotBlank()) loadInterstitialAd(interstitialUnitId)
+            if (rewardedAd == null && rewardedUnitId.isNotBlank() && !rewardedLoading) preloadRewardedAd(rewardedUnitId)
+        }
+    }
+
+    /** MainActivity.onPause()'dan çağrılır — banner'ları durdur (Google politikası). */
+    fun onAppBackground() {
+        engine.pauseAllBanners()
+    }
+
     override fun onCleared() {
         super.onCleared()
         engine.destroyAll()

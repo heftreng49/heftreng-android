@@ -373,6 +373,18 @@ class AdEngine(
         return config.unitId.ifBlank { prodId }
     }
 
+    /** MainActivity.onResume() → AdsViewModel.onAppForeground() üzerinden çağrılır. */
+    fun resumeAllBanners() {
+        singleBannerView.values.forEach { runCatching { it.resume() } }
+        posBannerView.values.forEach    { runCatching { it.resume() } }
+    }
+
+    /** MainActivity.onPause() → AdsViewModel.onAppBackground() üzerinden çağrılır. */
+    fun pauseAllBanners() {
+        singleBannerView.values.forEach { runCatching { it.pause() } }
+        posBannerView.values.forEach    { runCatching { it.pause() } }
+    }
+
     fun destroyAll() {
         singleBannerView.values.forEach { it.destroy() }
         posBannerView.values.forEach { it.destroy() }

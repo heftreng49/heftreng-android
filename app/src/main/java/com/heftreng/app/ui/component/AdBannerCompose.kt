@@ -16,10 +16,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import com.google.android.gms.ads.*
-import com.heftreng.app.ui.theme.*
-import com.heftreng.app.viewmodel.AdsViewModel
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
 // ── Tekil (sabit) banner bileşeni ─────────────────────────────────────────────
 // Sadece preloaded cache kullanır. Cache yoksa AdEngine'e yükleme tetikler ve
@@ -83,6 +82,19 @@ fun AdBannerView(
         AdLabel(onInfoClick = { showDialog = true })
 
         if (isLoaded && cachedView != null) {
+            val lifecycleOwner = LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner, cachedView) {
+                val observer = LifecycleEventObserver { _, event ->
+                    when (event) {
+                        Lifecycle.Event.ON_RESUME  -> cachedView.resume()
+                        Lifecycle.Event.ON_PAUSE   -> cachedView.pause()
+                        Lifecycle.Event.ON_DESTROY -> cachedView.destroy()
+                        else -> {}
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+            }
             AndroidView(
                 factory = { _ ->
                     (cachedView.parent as? ViewGroup)?.removeView(cachedView)
@@ -151,6 +163,19 @@ fun PositionedAdBannerView(
         if (isLoaded) {
             val adView = adsVm.cachedPositionedBanner(positionKey)
             if (adView != null) {
+                val lifecycleOwner = LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner, adView) {
+                    val observer = LifecycleEventObserver { _, event ->
+                        when (event) {
+                            Lifecycle.Event.ON_RESUME  -> adView.resume()
+                            Lifecycle.Event.ON_PAUSE   -> adView.pause()
+                            Lifecycle.Event.ON_DESTROY -> adView.destroy()
+                            else -> {}
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                }
                 AndroidView(
                     factory = { _ ->
                         adView.layoutParams = ViewGroup.LayoutParams(
