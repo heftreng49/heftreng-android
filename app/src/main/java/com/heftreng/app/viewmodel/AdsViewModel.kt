@@ -487,6 +487,11 @@ class AdsViewModel @Inject constructor(
     }
 
     init {
+        // RC fetch'i consent'ten bağımsız olarak hemen başlat.
+        // Remote Config okumak kişisel veri içermez, consent gerekmez.
+        // Consent geldiğinde config zaten cache'de hazır olur → reklam anında yüklenir.
+        viewModelScope.launch { remoteConfigManager.fetchAndActivate() }
+
         if (ConsentHelper.canRequestAds.value) {
             loadAdConfigs()
         } else {
