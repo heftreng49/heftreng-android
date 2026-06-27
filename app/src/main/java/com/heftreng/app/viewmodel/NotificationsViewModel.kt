@@ -123,16 +123,18 @@ class NotificationsViewModel @Inject constructor(
                         url       = d["url"]   as? String  ?: "",
                         read      = d["read"]  as? Boolean ?: false,
                         ts        = d["ts"]    as? Timestamp,
+                        status    = d["status"] as? String ?: "",
                     )
                 }
-                // status "accepted"/"declined" olan follow_request bildirimleri
-                // kabul/red sonrası listener yeniden tetiklenince tekrar belirmemeli.
-                // handledIds: optimistic olarak UI'dan zaten kaldırıldılar, geri gelmesin.
+                // follow_request bildirimleri: onaylanmış veya reddedilmiş olanlar
+                // (status = "accepted"/"declined") bir daha gösterilmesin.
+                // handledIds: bu oturum içinde optimistic olarak kaldırılanlar.
                 val filtered = notifs.filter { n ->
                     if (n.id in handledIds) return@filter false
-                    if (n.type != "follow_request") return@filter true
-                    val st = snap.documents.find { it.id == n.id }?.data?.get("status") as? String ?: ""
-                    st != "accepted" && st != "declined"
+                    if (n.type == "follow_request" &&
+                        (n.status == "accepted" || n.status == "declined")
+                    ) return@filter false
+                    true
                 }
                 _notifications.value = filtered.sortedByDescending { it.ts?.seconds ?: 0L }
                 _unreadCount.value   = filtered.count { !it.read }

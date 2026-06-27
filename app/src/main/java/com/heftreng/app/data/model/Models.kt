@@ -163,7 +163,8 @@ data class Notification(
     val imageUrl    : String     = "",   // post görseli varsa
     val url         : String     = "",
     val read        : Boolean    = false,
-    val ts          : Timestamp? = null
+    val ts          : Timestamp? = null,
+    val status      : String     = "",   // "accepted" | "declined" | "" — follow_request işlem durumu
 )
 
 // ─── TAKİP ─────────────────────────────────────────────
