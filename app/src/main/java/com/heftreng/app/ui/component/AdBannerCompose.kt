@@ -17,8 +17,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.google.android.gms.ads.*
+import com.google.android.gms.ads.nativead.NativeAd
+import com.heftreng.app.ui.theme.*
+import com.heftreng.app.viewmodel.AdsViewModel
 
 // ── Tekil (sabit) banner bileşeni ─────────────────────────────────────────────
 // Sadece preloaded cache kullanır. Cache yoksa AdEngine'e yükleme tetikler ve
@@ -82,13 +87,14 @@ fun AdBannerView(
         AdLabel(onInfoClick = { showDialog = true })
 
         if (isLoaded && cachedView != null) {
+            val adView: AdView = cachedView
             val lifecycleOwner = LocalLifecycleOwner.current
-            DisposableEffect(lifecycleOwner, cachedView) {
+            DisposableEffect(lifecycleOwner, adView) {
                 val observer = LifecycleEventObserver { _, event ->
                     when (event) {
-                        Lifecycle.Event.ON_RESUME  -> cachedView.resume()
-                        Lifecycle.Event.ON_PAUSE   -> cachedView.pause()
-                        Lifecycle.Event.ON_DESTROY -> cachedView.destroy()
+                        Lifecycle.Event.ON_RESUME  -> adView.resume()
+                        Lifecycle.Event.ON_PAUSE   -> adView.pause()
+                        Lifecycle.Event.ON_DESTROY -> adView.destroy()
                         else -> {}
                     }
                 }
@@ -97,12 +103,12 @@ fun AdBannerView(
             }
             AndroidView(
                 factory = { _ ->
-                    (cachedView.parent as? ViewGroup)?.removeView(cachedView)
-                    cachedView.layoutParams = ViewGroup.LayoutParams(
+                    (adView.parent as? ViewGroup)?.removeView(adView)
+                    adView.layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                     )
-                    cachedView
+                    adView
                 },
                 update = { view ->
                     view.layoutParams = ViewGroup.LayoutParams(
@@ -161,7 +167,7 @@ fun PositionedAdBannerView(
         AdLabel(onInfoClick = { showDialog = true })
 
         if (isLoaded) {
-            val adView = adsVm.cachedPositionedBanner(positionKey)
+            val adView: AdView? = adsVm.cachedPositionedBanner(positionKey)
             if (adView != null) {
                 val lifecycleOwner = LocalLifecycleOwner.current
                 DisposableEffect(lifecycleOwner, adView) {
