@@ -473,14 +473,14 @@ fun AdminScreen(
 
                             // ── Günün Alıntısı ────────────────────────────────
                             Surface(
-                                color  = Color.White.copy(alpha = 0.04f),
-                                shape  = RoundedCornerShape(12.dp),
+                                color    = Color.White.copy(alpha = 0.04f),
+                                shape    = RoundedCornerShape(12.dp),
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
                                     Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment     = Alignment.CenterVertically,
+                                        modifier              = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -488,34 +488,81 @@ fun AdminScreen(
                                             Spacer(Modifier.width(6.dp))
                                             Text("Günün Alıntısı", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                                         }
-                                        TextButton(
-                                            onClick = {
-                                                showQuotePicker = true
-                                                vm.searchBookQuotes("")
-                                            },
-                                        ) {
+                                        TextButton(onClick = { showQuotePicker = true; vm.searchBookQuotes("") }) {
                                             Icon(Icons.Default.LibraryBooks, null, tint = Amber, modifier = Modifier.size(14.dp))
                                             Spacer(Modifier.width(4.dp))
                                             Text("Alıntılardan Seç", color = Amber, fontSize = 12.sp)
                                         }
                                     }
                                     Spacer(Modifier.height(8.dp))
-                                    adminTextField(dqTextTr, { dqTextTr = it }, "Alıntı metni (TR) *", minLines = 2)
+
+                                    // Metin alanları — maxLines kaldırıldı, tam içerik görünür
+                                    adminTextField(
+                                        dqTextTr, { dqTextTr = it },
+                                        "Alıntı metni (TR) *",
+                                        minLines = 3,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
                                     Spacer(Modifier.height(8.dp))
-                                    adminTextField(dqTextKu, { dqTextKu = it }, "Alıntı metni (KU)", minLines = 2)
+                                    adminTextField(
+                                        dqTextKu, { dqTextKu = it },
+                                        "Alıntı metni (KU)",
+                                        minLines = 3,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
                                     Spacer(Modifier.height(8.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         adminTextField(dqAuthor, { dqAuthor = it }, "Yazar", modifier = Modifier.weight(1f))
-                                        adminTextField(dqBook, { dqBook = it }, "Kitap", modifier = Modifier.weight(1f))
+                                        adminTextField(dqBook,   { dqBook   = it }, "Kitap", modifier = Modifier.weight(1f))
                                     }
+
+                                    // ── Önizleme kartı ─────────────────────────
+                                    if (dqTextTr.isNotBlank()) {
+                                        Spacer(Modifier.height(12.dp))
+                                        Text("Önizleme:", color = Muted, fontSize = 11.sp)
+                                        Spacer(Modifier.height(4.dp))
+                                        Surface(
+                                            color    = Color.White.copy(alpha = 0.07f),
+                                            shape    = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Column(Modifier.padding(12.dp)) {
+                                                Text(
+                                                    "\u201C$dqTextTr\u201D",
+                                                    color      = Color.White,
+                                                    fontSize   = 14.sp,
+                                                    lineHeight = 21.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                )
+                                                if (dqTextKu.isNotBlank()) {
+                                                    Spacer(Modifier.height(6.dp))
+                                                    Text(
+                                                        "\u201C$dqTextKu\u201D",
+                                                        color      = Color.White.copy(alpha = 0.7f),
+                                                        fontSize   = 13.sp,
+                                                        lineHeight = 19.sp,
+                                                    )
+                                                }
+                                                val meta = listOfNotNull(
+                                                    dqAuthor.takeIf { it.isNotBlank() },
+                                                    dqBook.takeIf { it.isNotBlank() },
+                                                ).joinToString(" · ")
+                                                if (meta.isNotBlank()) {
+                                                    Spacer(Modifier.height(6.dp))
+                                                    Text(
+                                                        "— $meta",
+                                                        color    = Amber.copy(alpha = 0.8f),
+                                                        fontSize = 12.sp,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     Spacer(Modifier.height(10.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         OutlinedButton(
-                                            onClick = {
-                                                vm.saveDailyQuote(
-                                                    AdminViewModel.DailyQuoteContent(dqTextTr, dqTextKu, dqAuthor, dqBook, dqFeedPostId)
-                                                )
-                                            },
+                                            onClick  = { vm.saveDailyQuote(AdminViewModel.DailyQuoteContent(dqTextTr, dqTextKu, dqAuthor, dqBook, dqFeedPostId)) },
                                             enabled  = dqTextTr.isNotBlank(),
                                             modifier = Modifier.weight(1f),
                                             shape    = RoundedCornerShape(10.dp),
@@ -525,11 +572,7 @@ fun AdminScreen(
                                             Text("Kaydet", fontSize = 13.sp)
                                         }
                                         Button(
-                                            onClick = {
-                                                vm.saveDailyQuoteAndNotify(
-                                                    AdminViewModel.DailyQuoteContent(dqTextTr, dqTextKu, dqAuthor, dqBook, dqFeedPostId)
-                                                )
-                                            },
+                                            onClick  = { vm.saveDailyQuoteAndNotify(AdminViewModel.DailyQuoteContent(dqTextTr, dqTextKu, dqAuthor, dqBook, dqFeedPostId)) },
                                             enabled  = dqTextTr.isNotBlank(),
                                             modifier = Modifier.weight(1f),
                                             shape    = RoundedCornerShape(10.dp),
@@ -547,8 +590,8 @@ fun AdminScreen(
 
                             // ── Günün Kelimesi ────────────────────────────────
                             Surface(
-                                color  = Color.White.copy(alpha = 0.04f),
-                                shape  = RoundedCornerShape(12.dp),
+                                color    = Color.White.copy(alpha = 0.04f),
+                                shape    = RoundedCornerShape(12.dp),
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
@@ -558,22 +601,53 @@ fun AdminScreen(
                                         Text("Günün Kelimesi", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                                     }
                                     Spacer(Modifier.height(8.dp))
-                                    adminTextField(dwWord, { dwWord = it }, "Kelime (Kurdî) *")
+                                    adminTextField(dwWord, { dwWord = it }, "Kelime (Kurdî) *", modifier = Modifier.fillMaxWidth())
                                     Spacer(Modifier.height(8.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        adminTextField(dwMeaningTr, { dwMeaningTr = it }, "Anlam (TR) *", modifier = Modifier.weight(1f))
-                                        adminTextField(dwMeaningKu, { dwMeaningKu = it }, "Anlam (KU)", modifier = Modifier.weight(1f))
+                                        adminTextField(dwMeaningTr, { dwMeaningTr = it }, "Anlam (TR) *",  modifier = Modifier.weight(1f))
+                                        adminTextField(dwMeaningKu, { dwMeaningKu = it }, "Anlam (KU)",   modifier = Modifier.weight(1f))
                                     }
                                     Spacer(Modifier.height(8.dp))
-                                    adminTextField(dwExampleKu, { dwExampleKu = it }, "Örnek cümle (Kurdî)", minLines = 2)
+                                    adminTextField(
+                                        dwExampleKu, { dwExampleKu = it },
+                                        "Örnek cümle (Kurdî)",
+                                        minLines = 2,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+
+                                    // ── Önizleme ───────────────────────────────
+                                    if (dwWord.isNotBlank() && dwMeaningTr.isNotBlank()) {
+                                        Spacer(Modifier.height(12.dp))
+                                        Text("Önizleme:", color = Muted, fontSize = 11.sp)
+                                        Spacer(Modifier.height(4.dp))
+                                        Surface(
+                                            color    = Color.White.copy(alpha = 0.07f),
+                                            shape    = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Column(Modifier.padding(12.dp)) {
+                                                Text(
+                                                    "$dwWord — $dwMeaningTr",
+                                                    color      = Color.White,
+                                                    fontSize   = 15.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                )
+                                                if (dwMeaningKu.isNotBlank()) {
+                                                    Spacer(Modifier.height(4.dp))
+                                                    Text("Kurdî: $dwMeaningKu", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                                                }
+                                                if (dwExampleKu.isNotBlank()) {
+                                                    Spacer(Modifier.height(4.dp))
+                                                    Text("\u201C$dwExampleKu\u201D", color = Primary.copy(alpha = 0.9f), fontSize = 13.sp, lineHeight = 19.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     Spacer(Modifier.height(10.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         OutlinedButton(
-                                            onClick = {
-                                                vm.saveDailyWord(
-                                                    AdminViewModel.DailyWordContent(dwWord, dwMeaningTr, dwMeaningKu, dwExampleKu)
-                                                )
-                                            },
+                                            onClick  = { vm.saveDailyWord(AdminViewModel.DailyWordContent(dwWord, dwMeaningTr, dwMeaningKu, dwExampleKu)) },
                                             enabled  = dwWord.isNotBlank() && dwMeaningTr.isNotBlank(),
                                             modifier = Modifier.weight(1f),
                                             shape    = RoundedCornerShape(10.dp),
@@ -583,11 +657,7 @@ fun AdminScreen(
                                             Text("Kaydet", fontSize = 13.sp)
                                         }
                                         Button(
-                                            onClick = {
-                                                vm.saveDailyWordAndNotify(
-                                                    AdminViewModel.DailyWordContent(dwWord, dwMeaningTr, dwMeaningKu, dwExampleKu)
-                                                )
-                                            },
+                                            onClick  = { vm.saveDailyWordAndNotify(AdminViewModel.DailyWordContent(dwWord, dwMeaningTr, dwMeaningKu, dwExampleKu)) },
                                             enabled  = dwWord.isNotBlank() && dwMeaningTr.isNotBlank(),
                                             modifier = Modifier.weight(1f),
                                             shape    = RoundedCornerShape(10.dp),

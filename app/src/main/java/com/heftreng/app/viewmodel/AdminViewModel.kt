@@ -227,23 +227,29 @@ class AdminViewModel @Inject constructor(
     /** Günün Alıntısı'nı kaydet + herkese push gönder ("Tetikle") */
     fun saveDailyQuoteAndNotify(content: DailyQuoteContent, date: String = todayKey()) {
         saveDailyQuote(content, date)
-        // Tam alıntı metni — kesilme yok. Kitap adı da dahil.
+        // Title: kısa — yazar ve kitap bilgisi
+        val meta = listOfNotNull(
+            content.author.takeIf { it.isNotBlank() },
+            content.book.takeIf { it.isNotBlank() },
+        ).joinToString(" · ")
+        val title = buildString {
+            append("📖 Günün Alıntısı")
+            if (meta.isNotBlank()) append(" — $meta")
+        }
+        // Body: sadece alıntı metni — tam, kesilmeden. data payload'da limit yok.
+        // TR + KU varsa ikisi de, yoksa sadece TR.
         val body = buildString {
             append("\u201C${content.textTr}\u201D")
-            val meta = listOfNotNull(
-                content.author.takeIf { it.isNotBlank() },
-                content.book.takeIf { it.isNotBlank() },
-            ).joinToString(" · ")
-            if (meta.isNotBlank()) append("\n— $meta")
+            if (content.textKu.isNotBlank()) {
+                append("\n\n\u201C${content.textKu}\u201D")
+            }
         }
-        // Orijinal alıntı paylaşımına yönlendir — feedPostId varsa gerçek posta,
-        // yoksa genel akış sayfasına düşer.
         val url = if (content.feedPostId.isNotBlank())
             "https://heft-reng.blogspot.com/p/akis_01024829108.html?postId=${content.feedPostId}"
         else
             "heftreng://daily_quote"
         sendPush(
-            title  = "\uD83D\uDCD6 Îro Peyvek — Günün Alıntısı",
+            title  = title,
             body   = body,
             url    = url,
             postId = content.feedPostId,
@@ -255,14 +261,18 @@ class AdminViewModel @Inject constructor(
     /** Günün Kelimesi'ni kaydet + herkese push gönder ("Tetikle") */
     fun saveDailyWordAndNotify(content: DailyWordContent, date: String = todayKey()) {
         saveDailyWord(content, date)
-        // Tüm alanlar dahil — kelime, TR anlam, KU anlam, örnek cümle
+        // Title: kelime + TR anlam (kısa)
+        val title = "📝 ${content.word} — ${content.meaningTr}"
+        // Body: KU anlam + örnek cümle tam olarak
         val body = buildString {
-            append("${content.word} — ${content.meaningTr}")
-            if (content.meaningKu.isNotBlank()) append("\n(Kurdî: ${content.meaningKu})")
-            if (content.exampleKu.isNotBlank()) append("\n\"${content.exampleKu}\"")
-        }
+            if (content.meaningKu.isNotBlank()) append("Kurdî: ${content.meaningKu}")
+            if (content.exampleKu.isNotBlank()) {
+                if (isNotEmpty()) append("\n")
+                append("\u201C${content.exampleKu}\u201D")
+            }
+        }.ifBlank { "${content.word} — ${content.meaningTr}" }
         sendPush(
-            title = "\uD83D\uDD24 Îro peyveke nû — Günün Kelimesi",
+            title = title,
             body  = body,
             url   = "heftreng://daily_word",
             type  = "daily_word",
