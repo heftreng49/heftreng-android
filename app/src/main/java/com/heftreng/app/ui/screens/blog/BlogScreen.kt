@@ -187,7 +187,7 @@ fun BlogScreen(
                                     NativeAdViewCompose(
                                         nativeAd = ad,
                                         modifier = Modifier.fillMaxWidth(),
-                                        adSize   = nativeBlogCfg?.bannerSize ?: "small"
+                                        adSize   = when (nativeBlogCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL }
                                     )
                                 }
                             }

@@ -900,7 +900,7 @@ private fun UnitsTab(
                             adsVm        = adsVm,
                             modifier     = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                         ) { ad ->
-                            NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = nativeKurdiCfg?.bannerSize ?: "small")
+                            NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = when (nativeKurdiCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL })
                         }
                     }
                 }

@@ -434,7 +434,7 @@ private fun LibraryQuotesTab(
                     modifier     = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     prefetchKeys = nativeUnitId?.let { uid -> listOf("lib_quotes_native_${index + 6}" to uid) } ?: emptyList(),
                 ) { ad ->
-                    NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = nativeLibCfg?.bannerSize ?: "small")
+                    NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = when (nativeLibCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL })
                 }
             }
         }

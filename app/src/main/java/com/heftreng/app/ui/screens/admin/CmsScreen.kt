@@ -71,7 +71,7 @@ fun CmsScreen(
         vm.loadBanners()
         vm.loadAnnouncements()
         vm.loadCategories()
-        adsVm.loadAdConfigs(forceServer = true)
+        adsVm.loadAdConfigs(forceRefresh = true)
         configVm.load()
         yazarVm.loadAllPendingPosts()
     }
@@ -969,7 +969,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                                 try {
                                     firestore.collection("cms_ads").document("global")
                                         .set(mapOf("enabled" to enabled)).await()
-                                    adsVm.loadAdConfigs(forceServer = true)
+                                    adsVm.loadAdConfigs(forceRefresh = true)
                                 } catch (e: Exception) { e.printStackTrace() }
                             }
                         },
@@ -1004,7 +1004,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title      = "Banner — Feed",
                 docId      = "banner_feed",
                 config     = bannerConfig,
-                onSaved    = { adsVm.loadAdConfigs(forceServer = true) },
+                onSaved    = { adsVm.loadAdConfigs(forceRefresh = true) },
                 onDeleted  = null, // varsayılan slot — silinemez
             )
         }
@@ -1015,7 +1015,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title     = "Banner — Kütüphane",
                 docId     = "banner_library",
                 config    = adsVm.bannerLibraryConfig.collectAsState().value,
-                onSaved   = { adsVm.loadAdConfigs(forceServer = true) },
+                onSaved   = { adsVm.loadAdConfigs(forceRefresh = true) },
                 onDeleted = null,
             )
         }
@@ -1026,7 +1026,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title     = "Banner — Kürtçe Dersler",
                 docId     = "banner_kurdi",
                 config    = adsVm.bannerKurdiConfig.collectAsState().value,
-                onSaved   = { adsVm.loadAdConfigs(forceServer = true) },
+                onSaved   = { adsVm.loadAdConfigs(forceRefresh = true) },
                 onDeleted = null,
             )
         }
@@ -1037,7 +1037,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title     = "Banner — Blog",
                 docId     = "banner_blog",
                 config    = adsVm.bannerBlogConfig.collectAsState().value,
-                onSaved   = { adsVm.loadAdConfigs(forceServer = true) },
+                onSaved   = { adsVm.loadAdConfigs(forceRefresh = true) },
                 onDeleted = null,
             )
         }
@@ -1048,7 +1048,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title      = "Native Ad — Feed",
                 docId      = "native_feed",
                 config     = nativeFeedConfig,
-                onSaved    = { adsVm.loadAdConfigs(forceServer = true) },
+                onSaved    = { adsVm.loadAdConfigs(forceRefresh = true) },
                 onDeleted  = null,
             )
         }
@@ -1059,7 +1059,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title      = "Native Ad — Blog",
                 docId      = "native_blog",
                 config     = nativeBlogConfig,
-                onSaved    = { adsVm.loadAdConfigs(forceServer = true) },
+                onSaved    = { adsVm.loadAdConfigs(forceRefresh = true) },
                 onDeleted  = null,
             )
         }
@@ -1070,7 +1070,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title      = "Native Ad — Kütüphane",
                 docId      = "native_library",
                 config     = nativeLibraryConfig,
-                onSaved    = { adsVm.loadAdConfigs(forceServer = true) },
+                onSaved    = { adsVm.loadAdConfigs(forceRefresh = true) },
                 onDeleted  = null,
             )
         }
@@ -1081,7 +1081,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title      = "Native Ad — Kürtçe Dersler",
                 docId      = "native_kurdi",
                 config     = nativeKurdiConfig,
-                onSaved    = { adsVm.loadAdConfigs(forceServer = true) },
+                onSaved    = { adsVm.loadAdConfigs(forceRefresh = true) },
                 onDeleted  = null,
             )
         }
@@ -1092,7 +1092,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title      = "Native Ad — Profil",
                 docId      = "native_profile",
                 config     = nativeProfileConfig,
-                onSaved    = { adsVm.loadAdConfigs(forceServer = true) },
+                onSaved    = { adsVm.loadAdConfigs(forceRefresh = true) },
                 onDeleted  = null,
             )
         }
@@ -1103,7 +1103,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title      = "Native Ad — Arama Sonuçları",
                 docId      = "native_search",
                 config     = nativeSearchConfig,
-                onSaved    = { adsVm.loadAdConfigs(forceServer = true) },
+                onSaved    = { adsVm.loadAdConfigs(forceRefresh = true) },
                 onDeleted  = null,
             )
         }
@@ -1127,12 +1127,12 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title     = config.label.ifBlank { docId },
                 docId     = docId,
                 config    = config,
-                onSaved   = { adsVm.loadAdConfigs(forceServer = true) },
+                onSaved   = { adsVm.loadAdConfigs(forceRefresh = true) },
                 onDeleted = {
                     scope.launch {
                         try {
                             firestore.collection("cms_ads").document(docId).delete().await()
-                            adsVm.loadAdConfigs(forceServer = true)
+                            adsVm.loadAdConfigs(forceRefresh = true)
                         } catch (e: Exception) { e.printStackTrace() }
                     }
                 },
@@ -1145,7 +1145,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 title     = "Interstitial — Seri Okuma",
                 docId     = "interstitial_serial",
                 config    = interstitialConfig,
-                onSaved   = { adsVm.loadAdConfigs(forceServer = true) },
+                onSaved   = { adsVm.loadAdConfigs(forceRefresh = true) },
                 onDeleted = null,
             )
         }
@@ -1156,7 +1156,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                 config    = rewardedConfig,
                 firestore = firestore,
                 scope     = scope,
-                onSaved   = { adsVm.loadAdConfigs(forceServer = true) },
+                onSaved   = { adsVm.loadAdConfigs(forceRefresh = true) },
             )
         }
     }
@@ -1186,7 +1186,7 @@ private fun AdsTab(adsVm: AdsViewModel) {
                                 "paddingBottom" to config.paddingBottom,
                             )
                         ).await()
-                        adsVm.loadAdConfigs(forceServer = true)
+                        adsVm.loadAdConfigs(forceRefresh = true)
                         showAddSlotDialog = false
                     } catch (e: Exception) { e.printStackTrace() }
                 }

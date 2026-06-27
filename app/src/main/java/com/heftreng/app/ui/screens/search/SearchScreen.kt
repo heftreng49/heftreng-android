@@ -204,7 +204,7 @@ fun SearchScreen(
                                     modifier     = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                                     prefetchKeys = nativeUnitId?.let { uid -> listOf("search_native_${index + 8}" to uid) } ?: emptyList(),
                                 ) { ad ->
-                                    NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = nativeSearchCfg?.bannerSize ?: "small")
+                                    NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = when (nativeSearchCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL })
                                 }
                             }
                         }

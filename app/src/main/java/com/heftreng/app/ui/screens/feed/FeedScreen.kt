@@ -559,7 +559,7 @@ fun FeedScreen(
                             NativeAdViewCompose(
                                 nativeAd = ad,
                                 modifier = Modifier.fillMaxWidth(),
-                                adSize   = nativeFeedCfg?.bannerSize ?: "small"
+                                adSize   = when (nativeFeedCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL }
                             )
                         }
                     }
