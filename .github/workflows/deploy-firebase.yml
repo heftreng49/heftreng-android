@@ -9,6 +9,7 @@ on:
       - 'firebase.json'
       - 'firestore.rules'
       - 'firestore.indexes.json'
+      - 'remoteconfig.template.json'
       - '.github/workflows/deploy-firebase.yml'
   workflow_dispatch:
 
@@ -33,8 +34,6 @@ jobs:
           npm install
 
       - name: Configure Supabase env (2nd gen functions)
-        # Firebase Functions v2, deploy sırasında functions/.env.<project-id>
-        # dosyasını otomatik yükler ve process.env'e koyar.
         run: |
           cat <<EOF > functions/.env.bloggerheftreng
           SUPABASE_URL=${{ secrets.SUPABASE_URL }}
@@ -43,6 +42,6 @@ jobs:
           EOF
 
       - name: Deploy to Firebase
-        run: firebase deploy --only functions,firestore:rules,firestore:indexes --force --project bloggerheftreng --token "$FIREBASE_TOKEN"
+        run: firebase deploy --only functions,firestore:rules,firestore:indexes,remoteconfig --force --project bloggerheftreng --token "$FIREBASE_TOKEN"
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
