@@ -18,7 +18,7 @@ object Strings {
     private fun t(lang: String, tr: String, ku: String) = if (lang == "ku") ku else tr
 
     // ── Alt Navigasyon ────────────────────────────────────────────────────────
-    fun navFeed(l: String)         = t(l, "Nivis",       "Nivis")
+    fun navFeed(l: String)         = t(l, "Gönderi",     "Nivis")
     fun navBlog(l: String)         = t(l, "Blog",        "Blog")
     fun navBooks(l: String)        = t(l, "Kitaplar",    "Pirtûk")
     fun navLibrary(l: String)      = t(l, "Kütüphane",   "Pirtûkxane")
@@ -322,7 +322,7 @@ object Strings {
     // ── Feed - PostCard / Dialog metinleri ────────────────────────────────────
     fun showMoreBtn(l: String)           = t(l, "Daha Fazla Göster",          "Zêdetir Nîşan Bide")
     fun postThinkHint(l: String)         = t(l, "Ne düşünüyorsun?",           "Tu çi difikire?")
-    fun addQuote(l: String)              = t(l, "Alıntı ekle",                "Alıntî")
+    fun addQuote(l: String)              = t(l, "Alıntı ekle",                "Girtebêj")
     fun shareAction(l: String)           = t(l, "Paylaş",                     "Parve bike")
     fun cancelAction(l: String)          = t(l, "İptal",                      "Betal bike")
     fun newPostTitle(l: String)          = t(l, "Yeni Gönderi",               "Nivîsek Nû")

@@ -1669,13 +1669,13 @@ fun postTimeAgo(seconds: Long, ku: Boolean = false): String {
     val now  = System.currentTimeMillis() / 1000L
     val diff = now - seconds
     return when {
-        diff < 60          -> if (ku) "niha" else "az önce"
-        diff < 3600        -> if (ku) "${diff / 60}d"   else "${diff / 60}dk"
-        diff < 86400       -> if (ku) "${diff / 3600}s" else "${diff / 3600}sa"
-        diff < 86400 * 7   -> if (ku) "${diff / 86400}r" else "${diff / 86400}g"
-        diff < 86400 * 30  -> if (ku) "${diff / 86400 / 7}hf" else "${diff / 86400 / 7}hf"
-        diff < 86400 * 365 -> if (ku) "${diff / 86400 / 30}m" else "${diff / 86400 / 30}ay"
-        else               -> if (ku) "${diff / 86400 / 365}s" else "${diff / 86400 / 365}y"
+        diff < 60          -> if (ku) "niha"                     else "az önce"
+        diff < 3600        -> if (ku) "${diff / 60}xv"           else "${diff / 60}dk"
+        diff < 86400       -> if (ku) "${diff / 3600}sa"         else "${diff / 3600}sa"
+        diff < 86400 * 7   -> if (ku) "${diff / 86400}rj"        else "${diff / 86400}g"
+        diff < 86400 * 30  -> if (ku) "${diff / 86400 / 7}hf"   else "${diff / 86400 / 7}hf"
+        diff < 86400 * 365 -> if (ku) "${diff / 86400 / 30}mh"  else "${diff / 86400 / 30}ay"
+        else               -> if (ku) "${diff / 86400 / 365}sal" else "${diff / 86400 / 365}y"
     }
 }
 

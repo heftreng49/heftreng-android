@@ -107,7 +107,7 @@ fun BookQuoteCard(
                     fontSize   = 14.sp,
                 )
                 Text(
-                    timeAgo(quote.ts),
+                    timeAgo(quote.ts, language),
                     color    = Muted,
                     fontSize = 12.sp,
                 )
@@ -370,7 +370,7 @@ fun BookReviewCard(
                     verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text(timeAgo(review.ts), color = Muted, fontSize = 12.sp)
+                    Text(timeAgo(review.ts, language), color = Muted, fontSize = 12.sp)
                     if (review.rating > 0) {
                         Text("·", color = Muted, fontSize = 12.sp)
                         StarRow(review.rating, size = 12.dp)
@@ -1025,20 +1025,21 @@ fun StarRow(
 //  Zaman formatı
 // ─────────────────────────────────────────────────────────────────────────────
 
-fun timeAgo(ts: Timestamp?): String {
+fun timeAgo(ts: Timestamp?, lang: String = "tr"): String {
     ts ?: return ""
     val diffMs = System.currentTimeMillis() - ts.toDate().time
     val mins   = TimeUnit.MILLISECONDS.toMinutes(diffMs)
     val hours  = TimeUnit.MILLISECONDS.toHours(diffMs)
     val days   = TimeUnit.MILLISECONDS.toDays(diffMs)
+    val ku = lang == "ku"
     return when {
-        mins  < 1   -> "şimdi"
-        mins  < 60  -> "${mins}d"
-        hours < 24  -> "${hours}s"
-        days  < 7   -> "${days}g"
-        days  < 30  -> "${days / 7}h"
-        days  < 365 -> "${days / 30}ay"
-        else        -> "${days / 365}y"
+        mins  < 1   -> if (ku) "niha"       else "şimdi"
+        mins  < 60  -> if (ku) "${mins}xv"  else "${mins}dk"
+        hours < 24  -> if (ku) "${hours}sa" else "${hours}sa"
+        days  < 7   -> if (ku) "${days}rj"  else "${days}g"
+        days  < 30  -> if (ku) "${days / 7}hf" else "${days / 7}hf"
+        days  < 365 -> if (ku) "${days / 30}mh" else "${days / 30}ay"
+        else        -> if (ku) "${days / 365}sal" else "${days / 365}y"
     }
 }
 
