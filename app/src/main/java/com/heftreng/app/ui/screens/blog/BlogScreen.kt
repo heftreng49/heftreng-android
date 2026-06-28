@@ -167,10 +167,15 @@ fun BlogScreen(
                                 )
                             }
 
-                            // CMS'deki position alanına göre N yazıda bir Native Ad göster
+                            // CMS'deki position/frequency alanlarına göre native ad yerleşimi.
+                            // DÜZELTME: bkz. FeedScreen.kt aynı blok — eskiden sadece "position"
+                            // okunup frekans gibi kullanılıyordu, "frequency" göz ardı ediliyordu.
                             val nativeBlogCfg by adsVm.nativeBlogConfig.collectAsState()
-                            val nativeBlogFreq = (nativeBlogCfg?.position ?: 5).coerceAtLeast(1)
-                            if (index > 0 && index % nativeBlogFreq == 0) {
+                            val nativeBlogStartPos = (nativeBlogCfg?.position ?: 5).coerceAtLeast(1)
+                            val nativeBlogFreq     = (nativeBlogCfg?.frequency ?: 5).coerceAtLeast(1)
+                            val showBlogNativeHere = index >= nativeBlogStartPos &&
+                                (index - nativeBlogStartPos) % nativeBlogFreq == 0
+                            if (showBlogNativeHere) {
                                 // ÖNEMLİ: nativeBlogCfg CMS'den gelene kadar null'dur — eskiden bu
                                 // yüzden unitId de null kalıyor, reklam hiç istenmiyordu. Artık
                                 // adsVm.nativeBlogUnitId (anlık varsayılan prod ID'li) kullanılıyor.

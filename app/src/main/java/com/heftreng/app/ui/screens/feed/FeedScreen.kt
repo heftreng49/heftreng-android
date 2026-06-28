@@ -532,10 +532,18 @@ fun FeedScreen(
                     } // inner Box (heart burst)
                     } // outer Box (enter animation)
 
-                    // CMS'deki position alanına göre N gönderide bir Native Ad göster
+                    // CMS'deki position/frequency alanlarına göre native ad yerleşimi.
+                    // DÜZELTME: Eskiden SADECE "position" okunuyor ve frekans gibi
+                    // kullanılıyordu (position=2 → her 2 kartta bir!), "frequency" alanı
+                    // tamamen göz ardı ediliyordu. Doğru semantik: position = İLK reklamın
+                    // göründüğü kart, frequency = ondan SONRA her kaç kartta bir tekrar
+                    // edeceği. Örn. position=2, frequency=5 → kart 2, 7, 12, 17...
                     val nativeFeedCfg by adsVm.nativeFeedConfig.collectAsState()
-                    val nativeFreq = (nativeFeedCfg?.position ?: 5).coerceAtLeast(1)
-                    if (postIndex > 0 && postIndex % nativeFreq == 0) {
+                    val nativeStartPos = (nativeFeedCfg?.position ?: 5).coerceAtLeast(1)
+                    val nativeFreq     = (nativeFeedCfg?.frequency ?: 5).coerceAtLeast(1)
+                    val showNativeHere = postIndex >= nativeStartPos &&
+                        (postIndex - nativeStartPos) % nativeFreq == 0
+                    if (showNativeHere) {
                         // ÖNEMLİ: nativeFeedCfg CMS'den gelene kadar null'dur — eskiden bu
                         // yüzden unitId de null kalıyor, reklam hiç istenmiyordu. Artık
                         // adsVm.nativeFeedUnitId (anlık varsayılan prod ID'li) kullanılıyor.
