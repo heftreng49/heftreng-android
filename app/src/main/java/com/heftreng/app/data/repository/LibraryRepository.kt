@@ -56,6 +56,8 @@ data class LibraryBookRow(
     val reviewCount  : Int     = 0,
     @SerialName("avg_rating")
     val avgRating    : Float   = 0f,
+    @SerialName("likes_count")
+    val likesCount   : Int     = 0,
     @SerialName("created_at")
     val createdAt    : String  = "",
 )
