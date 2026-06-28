@@ -704,7 +704,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     CmsPageScreen(navController = navController, slug = slug)
                 }
                 composable(Screen.Admin.route)    { AdminScreen(navController) }
-                composable(Screen.Cms.route)      { CmsScreen(navController, adsVm = adsVm) }
+                composable(Screen.Cms.route)      { CmsScreen(navController) }
                 composable(Screen.Yazar.route)    { YazarScreen(navController) }
                 composable(Screen.KurdiAdmin.route) {
                     if (isAdmin) KurdiAdminScreen(navController)
