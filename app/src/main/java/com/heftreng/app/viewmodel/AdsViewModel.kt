@@ -470,8 +470,8 @@ class AdsViewModel @Inject constructor(
             engine.resumeAllBanners()
             // Arka plandan dönünce Remote Config'i de yenile (cache geçerliyse 0ms)
             loadAdConfigs()
-            val nativeUnitId = nativeFeedUnitId.value
-            if (!nativeUnitId.isNullOrBlank()) engine.warmUpNativePool(nativeUnitId)
+            // Native havuz feed ekranında PositionedNativeAdView tarafından zaten dolduruluyor.
+            // Burada tekrar warmUpNativePool çağırmak gereksiz istek üretiyordu.
             if (interstitialAd == null && interstitialUnitId.isNotBlank()) loadInterstitialAd(interstitialUnitId)
             if (rewardedAd == null && rewardedUnitId.isNotBlank() && !rewardedLoading) preloadRewardedAd(rewardedUnitId)
         }
