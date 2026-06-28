@@ -163,7 +163,6 @@ fun PositionedNativeAdView(
         prefetchKeys.forEach { (key, nextUnitId) ->
             if (nextUnitId.isNotBlank()) adsVm.preloadPositionedNative(key, nextUnitId)
         }
-        adsVm.warmUpNativePool(unitId)
     }
 
     val isLoaded by adsVm.positionedNativeLoadedFlow(positionKey).collectAsState()

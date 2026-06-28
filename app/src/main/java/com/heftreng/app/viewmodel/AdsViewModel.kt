@@ -265,10 +265,7 @@ class AdsViewModel @Inject constructor(
             val config = remoteConfigManager.getAdConfig(key) ?: return
             flow.value = config
             newAll[key] = config
-            if (preloadAds && config.enabled && _adsEnabled.value) {
-                engine.resolveUnitId(config, AdMobProdIds.NATIVE)
-                    ?.let { engine.warmUpNativePool(it) }
-            }
+            // warmUpNativePool kaldırıldı — havuz yerine doğrudan yükleme kullanılıyor
         }
 
         applyBanner(_bannerConfig,        RemoteConfigManager.KEY_BANNER_FEED,    BannerSlot.FEED)

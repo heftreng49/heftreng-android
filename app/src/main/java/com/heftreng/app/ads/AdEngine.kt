@@ -291,14 +291,8 @@ class AdEngine(
             posNativeAd.remove(key)?.destroy()
             posNativeAd[key] = fromPool
             loadedFlow.value = true
-            // Havuz yarıya (POOL_TARGET/2) düştüğünde TOPLU doldur — her tüketimde
-            // tek tek doldurmak yerine, daha az ve daha büyük istek atılır.
-            if (pool.size <= POOL_TARGET / 2) warmUpNativePool(unitId)
             return
         }
-
-        // Havuz boş — doğrudan yükle
-        warmUpNativePool(unitId)
         loadedFlow.value = false
         scope.launch {
             awaitSdk()
