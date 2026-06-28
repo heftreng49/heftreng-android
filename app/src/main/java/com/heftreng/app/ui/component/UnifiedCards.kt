@@ -656,8 +656,17 @@ fun LibraryBookCard(
                     )
                 }
                 Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
                     if (book.avgRating > 0f) StarRow(book.avgRating, size = 13.dp)
+                    if (book.likesCount > 0) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Favorite, null, tint = androidx.compose.ui.graphics.Color(0xFFEF4444),
+                                modifier = Modifier.size(11.dp))
+                            Spacer(Modifier.width(3.dp))
+                            Text("${book.likesCount}", color = Muted, fontSize = 11.sp)
+                        }
+                    }
                     if (book.quoteCount > 0) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.FormatQuote, null, tint = Muted, modifier = Modifier.size(12.dp))

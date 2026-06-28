@@ -535,6 +535,7 @@ data class LibraryBook(
     val quoteCount  : Int       = 0,
     val reviewCount : Int       = 0,
     val avgRating   : Float     = 0f,
+    val likesCount  : Int       = 0,
     val ts          : Timestamp? = null
 )
 

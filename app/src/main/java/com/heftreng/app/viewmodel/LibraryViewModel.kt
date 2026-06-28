@@ -57,6 +57,7 @@ private fun LibraryBookRow.toDomain() = LibraryBook(
     quoteCount  = quoteCount,
     reviewCount = reviewCount,
     avgRating   = avgRating,
+    likesCount  = likesCount,
 )
 
 private fun BookQuoteRow.toDomain() = BookQuote(
