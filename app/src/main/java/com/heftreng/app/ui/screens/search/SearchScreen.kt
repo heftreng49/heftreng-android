@@ -193,16 +193,20 @@ fun SearchScreen(
                                 }
                             })
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
-                            // ÖNCEDEN: Arama sonuçlarında hiç native reklam yoktu.
-                            if (index > 0 && index % 8 == 0) {
-                                val nativeSearchCfg by adsVm.nativeSearchConfig.collectAsState()
-                                val nativeUnitId     by adsVm.nativeSearchUnitId.collectAsState()
+                            // CMS/RC'deki position/frequency alanlarına göre native ad yerleşimi.
+                            val nativeSearchCfg by adsVm.nativeSearchConfig.collectAsState()
+                            val nativeSearchStartPos = (nativeSearchCfg?.position ?: 8).coerceAtLeast(1)
+                            val nativeSearchFreq     = (nativeSearchCfg?.frequency ?: 8).coerceAtLeast(1)
+                            val showSearchNativeHere = index >= nativeSearchStartPos &&
+                                (index - nativeSearchStartPos) % nativeSearchFreq == 0
+                            if (showSearchNativeHere) {
+                                val nativeUnitId by adsVm.nativeSearchUnitId.collectAsState()
                                 PositionedNativeAdView(
                                     positionKey  = "search_native_$index",
                                     unitId       = nativeUnitId,
                                     adsVm        = adsVm,
                                     modifier     = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    prefetchKeys = nativeUnitId?.let { uid -> listOf("search_native_${index + 8}" to uid) } ?: emptyList(),
+                                    prefetchKeys = nativeUnitId?.let { uid -> listOf("search_native_${index + nativeSearchFreq}" to uid) } ?: emptyList(),
                                 ) { ad ->
                                     NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = when (nativeSearchCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL })
                                 }

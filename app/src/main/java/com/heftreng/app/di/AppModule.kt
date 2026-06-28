@@ -40,8 +40,9 @@ import javax.inject.Singleton
 //    - Reklam config (CmsAdConfig) → AppConfig ile birlikte tek get()
 //
 //  REKLAM GÜVENLİĞİ:
-//    - cms_ads koleksiyonu cache'den okunabilir (Firestore offline support)
-//    - Fakat reklam gösterimi AdMob SDK'sına bırakılmıştır;
+//    - Reklam config artık Firebase Remote Config'ten (cms_ads KALDIRILDI);
+//      Firestore tamamen devre dışı.
+//    - Reklam gösterimi AdMob SDK'sına bırakılmıştır;
 //      Firestore cache reklam requestini, impression'ı veya tıklamayı
 //      etkilemez — bunlar AdMob kendi ağ katmanında işler.
 //    - AdMob prod ID seçimi Models.kt'daki AdMobProdIds üzerinden yapılır.

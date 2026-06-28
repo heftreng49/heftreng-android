@@ -479,16 +479,20 @@ fun ProfileScreen(
                                 language = language,
                             )
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
-                            // ÖNCEDEN: Profil ekranında hiç native reklam yoktu.
-                            if (index > 0 && index % 6 == 0) {
-                                val nativeProfileCfg by adsVm.nativeProfileConfig.collectAsState()
-                                val nativeUnitId      by adsVm.nativeProfileUnitId.collectAsState()
+                            // CMS/RC'deki position/frequency alanlarına göre native ad yerleşimi.
+                            val nativeProfileCfg by adsVm.nativeProfileConfig.collectAsState()
+                            val nativeProfileStartPos = (nativeProfileCfg?.position ?: 6).coerceAtLeast(1)
+                            val nativeProfileFreq     = (nativeProfileCfg?.frequency ?: 6).coerceAtLeast(1)
+                            val showProfileNativeHere = index >= nativeProfileStartPos &&
+                                (index - nativeProfileStartPos) % nativeProfileFreq == 0
+                            if (showProfileNativeHere) {
+                                val nativeUnitId by adsVm.nativeProfileUnitId.collectAsState()
                                 PositionedNativeAdView(
                                     positionKey  = "profile_native_${targetUid}_$index",
                                     unitId       = nativeUnitId,
                                     adsVm        = adsVm,
                                     modifier     = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    prefetchKeys = nativeUnitId?.let { uid -> listOf("profile_native_${targetUid}_${index + 6}" to uid) } ?: emptyList(),
+                                    prefetchKeys = nativeUnitId?.let { uid -> listOf("profile_native_${targetUid}_${index + nativeProfileFreq}" to uid) } ?: emptyList(),
                                 ) { ad ->
                                     NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = when (nativeProfileCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL })
                                 }

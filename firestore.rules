@@ -465,9 +465,8 @@ service cloud.firestore {
     match /cms_banners/{docId}       { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
     match /cms_announcements/{docId} { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
     match /cms_categories/{docId}    { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
-    // FATURA OPTİMİZASYONU: cms_ads → reklam config public okunabilir (isAuth() kaldırıldı),
-    // böylece reklam göstermek için ekstra auth kontrolü yapılmaz
-    match /cms_ads/{docId}           { allow read: if true;      allow write: if isEditor() || hasPermission("edit"); }
+    // cms_ads — KALDIRILDI (RC'ye geçildi, bkz. RemoteConfigManager.kt). Koleksiyon
+    // artık hiçbir client kodundan okunmuyor/yazılmıyor; kural de kaldırıldı.
 
     // ad_reward_logs — SADECE Cloud Functions (Admin SDK) yazar/okur (rewardedAdSsv).
     // İstemci asla doğrudan erişmez; Admin SDK bu kuralları zaten bypass eder,

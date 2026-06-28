@@ -887,20 +887,29 @@ private fun UnitsTab(
                     }
                 }
 
-                // ÖNCEDEN: Kürtçe Dersler ekranında hiç native reklam yoktu —
-                // "native reklamlar birçok ekranda eksik" sorununun kaynaklarından biri.
-                // Banner ile aynı üniteye denk gelmesin diye 3'ün katlarında gösteriliyor.
-                if (adsVm != null && unitIndex > 0 && unitIndex % 3 == 0) {
+                // CMS/RC'deki position/frequency alanlarına göre native ad yerleşimi.
+                // ÖNEMLİ: collectAsState() composable bir çağrı olduğu için item(){}
+                // bloğu KOŞULSUZ eklenir; gösterilip gösterilmeyeceği içeride, config
+                // okunduktan SONRA karar verilir (forEachIndexed @Composable bir bağlam
+                // değildir, dışarıda collectAsState() çağrılamaz).
+                if (adsVm != null) {
                     item(key = "native_${unit.id}") {
                         val nativeKurdiCfg by adsVm.nativeKurdiConfig.collectAsState()
-                        val nativeUnitId   by adsVm.nativeKurdiUnitId.collectAsState()
-                        PositionedNativeAdView(
-                            positionKey  = "kurdi_native_${unit.id}",
-                            unitId       = nativeUnitId,
-                            adsVm        = adsVm,
-                            modifier     = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                        ) { ad ->
-                            NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = when (nativeKurdiCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL })
+                        val nativeKurdiStartPos = (nativeKurdiCfg?.position ?: 3).coerceAtLeast(1)
+                        val nativeKurdiFreq     = (nativeKurdiCfg?.frequency ?: 3).coerceAtLeast(1)
+                        val showKurdiNativeHere = unitIndex >= nativeKurdiStartPos &&
+                            (unitIndex - nativeKurdiStartPos) % nativeKurdiFreq == 0
+                        if (showKurdiNativeHere) {
+                            val nativeUnitId by adsVm.nativeKurdiUnitId.collectAsState()
+                            PositionedNativeAdView(
+                                positionKey  = "kurdi_native_${unit.id}",
+                                unitId       = nativeUnitId,
+                                adsVm        = adsVm,
+                                modifier     = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                prefetchKeys = nativeUnitId?.let { uid -> listOf("kurdi_native_${units.getOrNull(unitIndex + nativeKurdiFreq)?.id ?: ""}" to uid) }?.filter { it.first.isNotBlank() } ?: emptyList(),
+                            ) { ad ->
+                                NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = when (nativeKurdiCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL })
+                            }
                         }
                     }
                 }

@@ -422,19 +422,25 @@ private fun LibraryQuotesTab(
             if (bannerUnitId != null && (index + 1) % 5 == 0) {
                 PositionedAdBannerView(positionKey = "lib_quotes_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize, prefetchKeys = listOf("lib_quotes_banner_${index + 5}" to bannerUnitId))
             }
-            // ÖNCEDEN: Kütüphane'de hiç native reklam yoktu (sadece banner vardı) —
-            // "native reklamlar birçok ekranda eksik" sorununun kaynaklarından biri.
-            if (adsVm != null && index > 0 && index % 6 == 0) {
+            // CMS/RC'deki position/frequency alanlarına göre native ad yerleşimi
+            // (bkz. FeedScreen.kt aynı düzeltme — position=ilk gösterim, frequency=tekrar aralığı).
+            if (adsVm != null) {
                 val nativeLibCfg by adsVm.nativeLibraryConfig.collectAsState()
-                val nativeUnitId by adsVm.nativeLibraryUnitId.collectAsState()
-                PositionedNativeAdView(
-                    positionKey  = "lib_quotes_native_$index",
-                    unitId       = nativeUnitId,
-                    adsVm        = adsVm,
-                    modifier     = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    prefetchKeys = nativeUnitId?.let { uid -> listOf("lib_quotes_native_${index + 6}" to uid) } ?: emptyList(),
-                ) { ad ->
-                    NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = when (nativeLibCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL })
+                val nativeLibStartPos = (nativeLibCfg?.position ?: 6).coerceAtLeast(1)
+                val nativeLibFreq     = (nativeLibCfg?.frequency ?: 6).coerceAtLeast(1)
+                val showLibNativeHere = index >= nativeLibStartPos &&
+                    (index - nativeLibStartPos) % nativeLibFreq == 0
+                if (showLibNativeHere) {
+                    val nativeUnitId by adsVm.nativeLibraryUnitId.collectAsState()
+                    PositionedNativeAdView(
+                        positionKey  = "lib_quotes_native_$index",
+                        unitId       = nativeUnitId,
+                        adsVm        = adsVm,
+                        modifier     = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        prefetchKeys = nativeUnitId?.let { uid -> listOf("lib_quotes_native_${index + nativeLibFreq}" to uid) } ?: emptyList(),
+                    ) { ad ->
+                        NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = when (nativeLibCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL })
+                    }
                 }
             }
         }
