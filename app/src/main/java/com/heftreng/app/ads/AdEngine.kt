@@ -44,9 +44,9 @@ class AdEngine(
     companion object {
         private const val MAX_RETRY         = 4
         private const val RETRY_BASE_DELAY  = 8_000L
-        private const val POOL_TARGET       = 3
-        private const val POOL_MAX          = 6
-        private const val PREFETCH_BATCH    = 3   // loadAds(n): tek HTTP'de N native
+        private const val POOL_TARGET       = 8   // havuz hep bu sayıda dolu tutulur
+        private const val POOL_MAX          = 10  // taşma toleransı
+        private const val PREFETCH_BATCH    = 5   // AdMob loadAds() limiti: istek başına en fazla 5
     }
 
     // SDK hazır olana kadar bekle — coroutine içinde, UI'ı bloklamaz (<200ms)
@@ -227,7 +227,8 @@ class AdEngine(
 
     fun cachedPositionedNative(key: String): NativeAd? = posNativeAd[key]
 
-    /** Havuzu doldurur — loadAds(BATCH) ile TEK HTTP'de N reklam çeker. */
+    /** Havuzu doldurur — AdMob'un loadAds() limiti (istek başına en fazla 5) nedeniyle
+     *  gerekirse birden çok istekte (5+3 gibi) doldurur. */
     fun warmUpNativePool(unitId: String) {
         if (unitId.isBlank()) return
         val pool    = nativePool.getOrPut(unitId) { ArrayDeque() }
@@ -238,21 +239,26 @@ class AdEngine(
 
         scope.launch {
             awaitSdk()
-            // loadAds(n) = tek HTTP isteği, n reklam — her slot için ayrı istek değil
-            AdLoader.Builder(appContext, unitId)
-                .forNativeAd { nativeAd ->
-                    nativePoolFilling[unitId] = ((nativePoolFilling[unitId] ?: 1) - 1).coerceAtLeast(0)
-                    val p = nativePool.getOrPut(unitId) { ArrayDeque() }
-                    if (p.size < POOL_MAX) p.addLast(nativeAd) else nativeAd.destroy()
-                }
-                .withNativeAdOptions(nativeOptions)
-                .withAdListener(object : AdListener() {
-                    override fun onAdFailedToLoad(error: LoadAdError) {
+            var remaining = needed
+            while (remaining > 0) {
+                val batchSize = remaining.coerceAtMost(PREFETCH_BATCH)
+                remaining -= batchSize
+                AdLoader.Builder(appContext, unitId)
+                    .forNativeAd { nativeAd ->
                         nativePoolFilling[unitId] = ((nativePoolFilling[unitId] ?: 1) - 1).coerceAtLeast(0)
+                        val p = nativePool.getOrPut(unitId) { ArrayDeque() }
+                        if (p.size < POOL_MAX) p.addLast(nativeAd) else nativeAd.destroy()
                     }
-                })
-                .build()
-                .loadAds(adRequest(), needed.coerceAtMost(PREFETCH_BATCH))
+                    .withNativeAdOptions(nativeOptions)
+                    .withAdListener(object : AdListener() {
+                        override fun onAdFailedToLoad(error: LoadAdError) {
+                            nativePoolFilling[unitId] = ((nativePoolFilling[unitId] ?: 1) - 1).coerceAtLeast(0)
+                        }
+                    })
+                    .build()
+                    .loadAds(adRequest(), batchSize)
+                if (remaining > 0) delay(400)  // AdMob'u arka arkaya istekle boğmamak için kısa ara
+            }
         }
     }
 
@@ -276,7 +282,9 @@ class AdEngine(
             posNativeAd.remove(key)?.destroy()
             posNativeAd[key] = fromPool
             loadedFlow.value = true
-            warmUpNativePool(unitId)  // boşalan havuz slotunu arka planda doldur
+            // Havuz yarıya (POOL_TARGET/2) düştüğünde TOPLU doldur — her tüketimde
+            // tek tek doldurmak yerine, daha az ve daha büyük istek atılır.
+            if (pool.size <= POOL_TARGET / 2) warmUpNativePool(unitId)
             return
         }
 

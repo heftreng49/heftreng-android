@@ -47,7 +47,7 @@ object ConsentHelper {
     private const val TAG = "ConsentHelper"
 
     // UMP ağ çağrısı bu süre içinde sonuçlanmazsa, NPA-güvenli modda zorla ilerle.
-    private const val CONSENT_TIMEOUT_MS = 4_000L
+    private const val CONSENT_TIMEOUT_MS = 2_000L
 
     // ── Consent durumu akışı — AdsViewModel ve NavHost buradan dinler ─────
     private val _canRequestAds = MutableStateFlow(false)
