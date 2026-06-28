@@ -209,13 +209,42 @@ fun ShareCardContent(post: Post) {
                         fontStyle  = FontStyle.Italic,
                     )
                     if (post.bookName.isNotBlank()) {
-                        Text(
-                            "📖 ${post.bookName}" +
-                                if (post.authorName.isNotBlank()) " — ${post.authorName}" else "",
-                            color      = Amber,
-                            fontSize   = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
+                        Row(
+                            verticalAlignment     = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            // Kitap kapak avatarı — varsa göster
+                            if (post.coverImg.isNotBlank()) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(28.dp)
+                                        .height(42.dp)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(quoteBoxBg),
+                                ) {
+                                    AsyncImage(
+                                        model              = post.coverImg,
+                                        contentDescription = post.bookName,
+                                        contentScale       = ContentScale.Crop,
+                                        modifier           = Modifier.fillMaxSize(),
+                                    )
+                                }
+                            }
+                            Column {
+                                Text(
+                                    post.bookName,
+                                    color      = Amber,
+                                    fontSize   = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                if (post.authorName.isNotBlank())
+                                    Text(
+                                        post.authorName,
+                                        color    = mutedColor,
+                                        fontSize = 11.sp,
+                                    )
+                            }
+                        }
                     }
                 }
             }
@@ -258,7 +287,7 @@ fun ShareCardContent(post: Post) {
             ) {
                 PlayStoreIcon(size = 14.dp)
                 Text(
-                    "Heft Reng",
+                    "Heft Reng Kurdî",
                     color      = Amber,
                     fontSize   = 11.sp,
                     fontWeight = FontWeight.SemiBold,

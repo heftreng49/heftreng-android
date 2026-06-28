@@ -82,6 +82,7 @@ data class Post(
     val chapterId        : String     = "",
     val libraryBookId    : String     = "",
     val libraryAuthorId  : String     = "",
+    val coverImg         : String     = "",
     val type             : String     = "",
     val moderationStatus : String     = "active",
     val moderationNote   : String     = "",

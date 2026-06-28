@@ -604,6 +604,7 @@ class FeedViewModel @Inject constructor(
             chapterId              = d["chapterId"]              as? String ?: "",
             libraryBookId          = d["libraryBookId"]          as? String ?: "",
             libraryAuthorId        = d["libraryAuthorId"]        as? String ?: "",
+            coverImg               = d["coverImg"]               as? String ?: "",
             type                   = d["type"]                   as? String ?: "",
             visibility             = d["visibility"]             as? String ?: "public",
             moderationStatus       = d["moderationStatus"]       as? String ?: "active",
@@ -1023,6 +1024,7 @@ class FeedViewModel @Inject constructor(
 
                 var resolvedAuthorId = libraryAuthorId
                 var resolvedBookId   = libraryBookId
+                var resolvedCoverImg = ""
                 var libraryLinkFailed = false
                 if (resolvedAuthorId.isBlank() && resolvedBookId.isBlank() &&
                     quoteText.isNotBlank() && (authorName.isNotBlank() || bookName.isNotBlank())) {
@@ -1034,6 +1036,12 @@ class FeedViewModel @Inject constructor(
                         libraryLinkFailed = true
                         e.printStackTrace()
                     }
+                }
+                // Kitap kapak resmini çek — paylaşım kartında göstermek için
+                if (resolvedBookId.isNotBlank() && resolvedCoverImg.isBlank()) {
+                    try {
+                        resolvedCoverImg = library.getBook(resolvedBookId)?.coverImg ?: ""
+                    } catch (_: Exception) {}
                 }
 
                 val feedRef = firestore.collection("feed").add(mapOf(
@@ -1049,6 +1057,7 @@ class FeedViewModel @Inject constructor(
                     "quoteText"       to quoteText,
                     "authorName"      to authorName,
                     "bookName"        to bookName,
+                    "coverImg"        to resolvedCoverImg,
                     "libraryAuthorId" to resolvedAuthorId,
                     "libraryBookId"   to resolvedBookId,
                     "type"            to if (quoteText.isNotBlank() && type.isBlank()) "library_quote" else type,

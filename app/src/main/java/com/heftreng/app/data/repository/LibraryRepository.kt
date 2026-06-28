@@ -83,6 +83,8 @@ data class BookQuoteRow(
     val feedPostId        : String  = "",
     @SerialName("likes_count")
     val likesCount        : Int     = 0,
+    @SerialName("cover_img")
+    val coverImg          : String  = "",
     @SerialName("created_at")
     val createdAt         : String  = "",
 )
