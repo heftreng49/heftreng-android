@@ -832,12 +832,20 @@ private fun ExerciseEditDialog(
     var wordsRaw by remember { mutableStateOf(
         (doc["words"] as? List<*>)?.joinToString(" ") ?: ""
     )}
+    // match tipi: "kürtçe=türkçe" satır satır
+    var pairsRaw by remember { mutableStateOf(
+        (doc["pairs"] as? List<*>)?.joinToString("
+") { row ->
+            val r = row as? List<*>
+            if (r != null && r.size >= 2) "${r[0]}=${r[1]}" else row.toString()
+        } ?: ""
+    )}
     var saving   by remember { mutableStateOf(false) }
     var showDel  by remember { mutableStateOf(false) }
     var error    by remember { mutableStateOf("") }
 
-    val types = listOf("mcq", "fill", "build")
-    val typeLabels = mapOf("mcq" to "Çoktan Seçmeli", "fill" to "Boşluk Doldur", "build" to "Cümle Kur")
+    val types = listOf("mcq", "fill", "build", "match")
+    val typeLabels = mapOf("mcq" to "Çoktan Seçmeli", "fill" to "Boşluk Doldur", "build" to "Cümle Kur", "match" to "Eşleştir")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -891,6 +899,18 @@ private fun ExerciseEditDialog(
                         AdminField(wordsRaw, { wordsRaw = it }, "Kelimeler (boşlukla ayır) *", hint = "Şev baş, xewn xweş!")
                         AdminField(tr, { tr = it }, "Türkçe çeviri *", hint = "İyi akşamlar, sana da.")
                     }
+                    "match" -> {
+                        Text("Her satıra bir çift: kürtçe=türkçe", color = Muted, fontSize = 11.sp)
+                        AdminField(
+                            pairsRaw, { pairsRaw = it },
+                            "Eşleştirme Çiftleri *",
+                            hint    = "rast=sağ
+çep=sol
+nêzîk=yakın",
+                            minLines = 5,
+                        )
+                        Text("💡 En az 3, en fazla 6 çift önerilir", color = Muted, fontSize = 11.sp)
+                    }
                 }
 
                 if (error.isNotBlank()) Text(error, color = Color(0xFFEF4444), fontSize = 11.sp)
@@ -909,6 +929,8 @@ private fun ExerciseEditDialog(
                         if (type == "fill"  && answer.isBlank()) { error = "Cevap zorunlu"; return@Button }
                         if (type == "fill"  && !question.contains("___")) { error = "Soru içinde ___ olmalı"; return@Button }
                         if (type == "build" && wordsRaw.isBlank()) { error = "Kelimeler zorunlu"; return@Button }
+                        if (type == "match" && pairsRaw.isBlank()) { error = "En az bir çift gerekli"; return@Button }
+                        if (type == "match" && pairsRaw.lines().filter { it.contains("=") }.size < 2) { error = "En az 2 çift giriniz"; return@Button }
 
                         scope.launch {
                             saving = true
@@ -933,6 +955,16 @@ private fun ExerciseEditDialog(
                                     "build" -> {
                                         data["words"] = wordsRaw.trim().split("\\s+".toRegex()).filter { it.isNotBlank() }
                                         data["tr"]    = tr.trim()
+                                    }
+                                    "match" -> {
+                                        data["pairs"] = pairsRaw.lines()
+                                            .map { it.trim() }
+                                            .filter { it.contains("=") }
+                                            .map { line ->
+                                                val idx = line.indexOf("=")
+                                                listOf(line.substring(0, idx).trim(), line.substring(idx + 1).trim())
+                                            }
+                                            .filter { it[0].isNotBlank() && it[1].isNotBlank() }
                                     }
                                 }
                                 if (docId.isBlank())
