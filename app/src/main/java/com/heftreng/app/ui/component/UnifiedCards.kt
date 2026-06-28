@@ -175,20 +175,51 @@ fun BookQuoteCard(
                                 navController?.navigate("author_detail/${quote.authorId}")
                         }
                     ) {
-                        Icon(Icons.Default.AutoStories, null, tint = Amber, modifier = Modifier.size(12.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            buildString {
-                                if (quote.bookTitle.isNotBlank()) append(quote.bookTitle)
-                                if (quote.bookTitle.isNotBlank() && quote.authorName.isNotBlank()) append(" — ")
-                                if (quote.authorName.isNotBlank()) append(quote.authorName)
-                            },
-                            color      = Amber,
-                            fontSize   = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
+                        // Kapak resmi avatarı — varsa göster, yoksa AutoStories ikonu
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(SurfaceVar),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (quote.coverImg.isNotBlank()) {
+                                AsyncImage(
+                                    model              = quote.coverImg,
+                                    contentDescription = quote.bookTitle,
+                                    contentScale       = ContentScale.Crop,
+                                    modifier           = Modifier.fillMaxSize(),
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Default.AutoStories,
+                                    contentDescription = null,
+                                    tint     = Amber,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        Column {
+                            if (quote.bookTitle.isNotBlank())
+                                Text(
+                                    quote.bookTitle,
+                                    color      = Amber,
+                                    fontSize   = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines   = 1,
+                                    overflow   = TextOverflow.Ellipsis,
+                                )
+                            if (quote.authorName.isNotBlank())
+                                Text(
+                                    quote.authorName,
+                                    color    = Muted,
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                )
+                        }
                     }
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(6.dp))
                 }
                 Text(
                     "❝ ${quote.text}",

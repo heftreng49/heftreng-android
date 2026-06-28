@@ -66,6 +66,7 @@ private fun BookQuoteRow.toDomain() = BookQuote(
     authorId        = authorId ?: "",
     bookTitle       = bookTitle,
     authorName      = authorName,
+    coverImg        = coverImg,
     text            = text,
     uid             = uid,
     userDisplayName = userDisplayName,

@@ -545,6 +545,7 @@ data class BookQuote(
     val authorId    : String    = "",
     val bookTitle   : String    = "",
     val authorName  : String    = "",
+    val coverImg    : String    = "",
     val text        : String    = "",
     val uid         : String    = "",
     val userDisplayName: String = "",
