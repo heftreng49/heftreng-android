@@ -178,8 +178,9 @@ fun BookQuoteCard(
                         // Kapak resmi avatarı — varsa göster, yoksa AutoStories ikonu
                         Box(
                             modifier = Modifier
-                                .size(28.dp)
-                                .clip(RoundedCornerShape(4.dp))
+                                .width(28.dp)
+                                .height(42.dp)
+                                .clip(RoundedCornerShape(3.dp))
                                 .background(SurfaceVar),
                             contentAlignment = Alignment.Center,
                         ) {
