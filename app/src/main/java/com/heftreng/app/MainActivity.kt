@@ -28,6 +28,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.heftreng.app.util.AppLifecycleObserver
 import com.heftreng.app.util.ConsentHelper
 import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.RequestConfiguration
 import com.heftreng.app.navigation.HeftrangNavHost
 import com.heftreng.app.ui.theme.HeftrangTheme
 import com.heftreng.app.viewmodel.AuthViewModel
@@ -90,6 +91,14 @@ class MainActivity : ComponentActivity() {
             testDeviceHashedId = null,
             onCanRequestAds    = {
                 // UMP tamamlandı → AdMob SDK'yı (yeniden) başlat
+                // Native Ad Validator: debug build'de test device listesi BOŞ bırakılırsa
+                // validator dialog gösterilmez. Emülatör otomatik test cihazı sayılır
+                // ama fiziksel cihazı test listesine eklememişsek dialog çıkmaz.
+                MobileAds.setRequestConfiguration(
+                    RequestConfiguration.Builder()
+                        .setTestDeviceIds(emptyList())
+                        .build()
+                )
                 MobileAds.initialize(this) { initStatus ->
                     com.heftreng.app.HeftrangApp.notifySdkReady()
                     android.util.Log.d("AdMob", "SDK hazır (UMP sonrası)")
