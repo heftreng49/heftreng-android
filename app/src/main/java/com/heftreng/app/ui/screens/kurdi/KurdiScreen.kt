@@ -1821,6 +1821,23 @@ fun LessonScreen(
                             // -- Boşluk doldur ---------------------------------
                             "fill" -> item {
                                 val isCorrectFill = fillAnswer.trim().equals(ex.answer.trim(), ignoreCase = true)
+                                // Türkçe ipucu varsa göster
+                                if (ex.tr.isNotBlank()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Primary.copy(alpha = 0.08f),
+                                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            Text("💡", fontSize = 14.sp)
+                                            Text(ex.tr, color = Primary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                        }
+                                    }
+                                }
                                 OutlinedTextField(
                                     value         = fillAnswer,
                                     onValueChange = { if (!showResult) fillAnswer = it },

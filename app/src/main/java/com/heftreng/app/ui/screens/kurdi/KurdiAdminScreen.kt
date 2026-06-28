@@ -827,8 +827,11 @@ private fun ExerciseEditDialog(
     var optB     by remember { mutableStateOf(doc["optB"]       as? String ?: "") }
     var optC     by remember { mutableStateOf(doc["optC"]       as? String ?: "") }
     var optD     by remember { mutableStateOf(doc["optD"]       as? String ?: "") }
-    var answer   by remember { mutableStateOf(doc["answer"]     as? String ?: "") }
-    var tr       by remember { mutableStateOf(doc["tr"]         as? String ?: "") }
+    var answer     by remember { mutableStateOf(doc["answer"]     as? String ?: "") }
+    var tr         by remember { mutableStateOf(doc["tr"]         as? String ?: "") }
+    var optionsRaw by remember { mutableStateOf(
+        (doc["options"] as? List<*>)?.joinToString(", ") ?: ""
+    )}
     var wordsRaw by remember { mutableStateOf(
         (doc["words"] as? List<*>)?.joinToString(" ") ?: ""
     )}
@@ -881,8 +884,12 @@ private fun ExerciseEditDialog(
                         AdminField(answer, { answer = it }, "Doğru Cevap * (A seçeneğiyle aynı yazılmalı)", hint = "optA değeriyle birebir aynı")
                     }
                     "fill" -> {
-                        AdminField(answer, { answer = it }, "Doğru Cevap *")
+                        AdminField(answer, { answer = it }, "Doğru Cevap *", hint = "Boşluğa gelecek kelime")
+                        AdminField(optionsRaw, { optionsRaw = it }, "Seçenekler (virgülle ayır) *", hint = "doğru, yanlış1, yanlış2")
                         AdminField(tr, { tr = it }, "Türkçe ipucu (opsiyonel)")
+                        if (!question.contains("___")) {
+                            Text("⚠️ Soru içinde ___ (üç alt çizgi) olmalı — boşluğun yeri", color = Color(0xFFEF9A00), fontSize = 11.sp)
+                        }
                     }
                     "build" -> {
                         AdminField(wordsRaw, { wordsRaw = it }, "Kelimeler (boşlukla ayır) *", hint = "Şev baş, xewn xweş!")
@@ -904,6 +911,8 @@ private fun ExerciseEditDialog(
                         if (question.isBlank()) { error = "Soru zorunlu"; return@Button }
                         if (type == "mcq"   && (optA.isBlank() || answer.isBlank())) { error = "Seçenek A ve cevap zorunlu"; return@Button }
                         if (type == "fill"  && answer.isBlank()) { error = "Cevap zorunlu"; return@Button }
+                        if (type == "fill"  && optionsRaw.isBlank()) { error = "Seçenekler zorunlu"; return@Button }
+                        if (type == "fill"  && !question.contains("___")) { error = "Soru içinde ___ olmalı"; return@Button }
                         if (type == "build" && wordsRaw.isBlank()) { error = "Kelimeler zorunlu"; return@Button }
 
                         scope.launch {
@@ -923,8 +932,15 @@ private fun ExerciseEditDialog(
                                         data["answer"] = optA.trim() // web temasıyla aynı: optA her zaman doğru
                                     }
                                     "fill" -> {
-                                        data["answer"] = answer.trim()
-                                        data["tr"]     = tr.trim()
+                                        data["answer"]  = answer.trim()
+                                        data["tr"]      = tr.trim()
+                                        val opts = optionsRaw.split(",")
+                                            .map { it.trim() }
+                                            .filter { it.isNotBlank() }
+                                        // Doğru cevabın listede olduğundan emin ol
+                                        val finalOpts = if (opts.contains(answer.trim())) opts
+                                                        else listOf(answer.trim()) + opts
+                                        data["options"] = finalOpts
                                     }
                                     "build" -> {
                                         data["words"] = wordsRaw.trim().split("\\s+".toRegex()).filter { it.isNotBlank() }
