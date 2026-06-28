@@ -201,14 +201,23 @@ class AdEngine(
         adView.loadAd(adRequest())
     }
 
+    /**
+     * DÜZELTME: "bannerSize" alanı CMS/RC'de hem NATIVE hem BANNER reklamlar için
+     * aynı isimle kullanılıyor. Native tarafı "small"/"medium"/"large" kelimelerini
+     * okuyor (bkz. ekranlardaki NativeAdSize eşlemesi); banner tarafı ise sadece
+     * "banner"/"medium_rectangle"/"large_banner" kelimelerini tanıyordu — yani
+     * bir admin native'de işe yarayan "medium"'u banner'da yazsa sessizce
+     * "adaptive"e düşüyordu. Artık iki kelime seti birbirine eşleniyor; hangisi
+     * yazılırsa yazılsın aynı sonucu verir.
+     */
     fun resolveAdSize(bannerSize: String): AdSize {
         val dm    = appContext.resources.displayMetrics
         val width = (dm.widthPixels / dm.density).toInt().coerceAtLeast(320)
         return when (bannerSize) {
-            "banner"           -> AdSize.BANNER
-            "medium_rectangle" -> AdSize.MEDIUM_RECTANGLE
-            "large_banner"     -> AdSize.LARGE_BANNER
-            else               -> AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(appContext, width)
+            "banner", "small"            -> AdSize.BANNER
+            "medium_rectangle", "medium" -> AdSize.MEDIUM_RECTANGLE
+            "large_banner", "large"      -> AdSize.LARGE_BANNER
+            else                         -> AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(appContext, width)
         }
     }
 
