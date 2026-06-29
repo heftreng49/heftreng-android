@@ -100,16 +100,20 @@ fun QuoteCard(
                 Row(
                     verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = if (onTapBook != null && bookName.isNotBlank())
-                        Modifier.clickable { onTapBook(bookName) } else Modifier,
                 ) {
                     // Kapak resmi avatarı — varsa göster, yoksa AutoStories ikonu
+                    // Kitap adına tıklamayla aynı davranış: kitap sayfasına git
                     Box(
                         modifier = Modifier
                             .width(28.dp)
                             .height(42.dp)
                             .clip(RoundedCornerShape(3.dp))
-                            .background(Amber.copy(alpha = 0.10f)),
+                            .background(Amber.copy(alpha = 0.10f))
+                            .then(
+                                if (onTapBook != null && bookName.isNotBlank())
+                                    Modifier.clickable { onTapBook(bookName) }
+                                else Modifier
+                            ),
                         contentAlignment = Alignment.Center,
                     ) {
                         if (coverImg.isNotBlank()) {
@@ -132,6 +136,7 @@ fun QuoteCard(
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines   = 1,
                                 overflow   = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                modifier   = if (onTapBook != null) Modifier.clickable { onTapBook(bookName) } else Modifier,
                             )
                         }
                         if (authorName.isNotBlank()) {
@@ -174,11 +179,12 @@ fun QuoteButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuoteDialog(
-    initialText  : String = "",
-    initialBook  : String = "",
-    initialAuthor: String = "",
-    onDismiss    : () -> Unit,
-    onConfirm    : (QuotePayload) -> Unit,
+    initialText    : String = "",
+    initialBook    : String = "",
+    initialAuthor  : String = "",
+    onDismiss      : () -> Unit,
+    onConfirm      : (QuotePayload) -> Unit,
+    onLookupCover  : (suspend (String) -> String)? = null,
 ) {
     var text     by remember { mutableStateOf(initialText) }
     var book     by remember { mutableStateOf(initialBook) }
@@ -273,6 +279,14 @@ fun QuoteDialog(
             it.bookName.contains(book, ignoreCase = true)
         }
         showBookDrop = match.isNotEmpty()
+    }
+
+    // Kitap adı sabitlenince ve kapak boşsa Supabase'den kapağı çek
+    LaunchedEffect(book, coverImg) {
+        if (book.isBlank() || coverImg.isNotBlank() || onLookupCover == null) return@LaunchedEffect
+        if (showBookDrop) return@LaunchedEffect  // Kullanıcı hâlâ yazıyor
+        val fetched = onLookupCover(book)
+        if (fetched.isNotBlank()) coverImg = fetched
     }
 
     // Yazar yazınca — yazar + kitabı getir

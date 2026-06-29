@@ -988,6 +988,7 @@ class FeedViewModel @Inject constructor(
         quoteText  : String = "",
         authorName : String = "",
         bookName   : String = "",
+        coverImg   : String = "",
         context    : android.content.Context,
     ) {
         if (uid.isEmpty()) return
@@ -998,7 +999,7 @@ class FeedViewModel @Inject constructor(
                 val ref = storage.reference.child("posts/$uid/${System.currentTimeMillis()}.jpg")
                 ref.putFile(imageUri).await()
                 val url = ref.downloadUrl.await().toString()
-                createPost(text = text, imageURL = url, quoteText = quoteText, authorName = authorName, bookName = bookName, type = if (quoteText.isNotBlank()) "library_quote" else "")
+                createPost(text = text, imageURL = url, quoteText = quoteText, authorName = authorName, bookName = bookName, coverImg = coverImg, type = if (quoteText.isNotBlank()) "library_quote" else "")
             } catch (e: Exception) { e.printStackTrace() }
             finally { _uploading.value = false }
         }
@@ -1095,6 +1096,19 @@ class FeedViewModel @Inject constructor(
                 _createPostLoading.value = false
             }
         }
+    }
+
+
+    /** Kitap adına göre Supabase'den kapak resmini döndürür — QuoteDialog için */
+    suspend fun findCoverImgByTitle(title: String): String {
+        if (title.isBlank()) return ""
+        return try {
+            library.searchBooks(title)
+                .firstOrNull { it.title.equals(title.trim(), ignoreCase = true) }
+                ?.coverImg
+                ?: library.searchBooks(title).firstOrNull()?.coverImg
+                ?: ""
+        } catch (_: Exception) { "" }
     }
 
     fun deletePost(postId: String) {

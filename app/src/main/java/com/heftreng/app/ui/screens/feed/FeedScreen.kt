@@ -217,6 +217,7 @@ fun FeedScreen(
             initialAuthor = inlineQuote?.authorName ?: "",
             onDismiss     = { showInlineQuote = false },
             onConfirm     = { p -> inlineQuote = p; showInlineQuote = false },
+            onLookupCover = { title -> vm.findCoverImgByTitle(title) },
         )
     }
 
@@ -375,6 +376,7 @@ fun FeedScreen(
                                         quoteText  = inlineQuote?.text ?: "",
                                         authorName = inlineQuote?.authorName ?: "",
                                         bookName   = inlineQuote?.bookName ?: "",
+                                        coverImg   = inlineQuote?.coverImg ?: "",
                                         context    = context,
                                     )
                                 } else {
