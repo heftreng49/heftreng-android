@@ -904,7 +904,7 @@ private fun ExerciseEditDialog(
                         AdminField(
                             pairsRaw, { pairsRaw = it },
                             "Eşleştirme Çiftleri *",
-                            hint    = "rast=sağ\nçep=sol\nnêzîk=yakın",
+                            hint    = "rast=sag / cep=sol / nezik=yakin",
                             minLines = 5,
                         )
                         Text("💡 En az 3, en fazla 6 çift önerilir", color = Muted, fontSize = 11.sp)
