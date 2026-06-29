@@ -60,6 +60,7 @@ import com.heftreng.app.ui.component.LibraryBookCard
 import com.heftreng.app.ui.component.LibraryBookGridCard
 import com.heftreng.app.ui.component.AddReviewDialog
 import com.heftreng.app.ui.component.BookPickerDialog
+import com.heftreng.app.ui.component.ConnectedPostCard
 import com.heftreng.app.ui.component.AdBannerView
 import com.heftreng.app.ui.component.PositionedAdBannerView
 import com.heftreng.app.ui.component.PositionedNativeAdView

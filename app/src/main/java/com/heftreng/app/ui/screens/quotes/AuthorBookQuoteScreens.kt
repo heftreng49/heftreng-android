@@ -60,6 +60,7 @@ import com.heftreng.app.ui.component.EmptyState
 import com.heftreng.app.ui.component.LibraryBookCard
 import com.heftreng.app.ui.component.AddReviewDialog
 import com.heftreng.app.ui.component.BookPickerDialog
+import com.heftreng.app.ui.component.ConnectedPostCard
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.LibraryViewModel
 import com.heftreng.app.ui.screens.feed.PostCard
