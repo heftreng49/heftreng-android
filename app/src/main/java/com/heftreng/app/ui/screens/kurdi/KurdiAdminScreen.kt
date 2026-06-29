@@ -834,8 +834,7 @@ private fun ExerciseEditDialog(
     )}
     // match tipi: "kürtçe=türkçe" satır satır
     var pairsRaw by remember { mutableStateOf(
-        (doc["pairs"] as? List<*>)?.joinToString("
-") { row ->
+        (doc["pairs"] as? List<*>)?.joinToString("\n") { row ->
             val r = row as? List<*>
             if (r != null && r.size >= 2) "${r[0]}=${r[1]}" else row.toString()
         } ?: ""
