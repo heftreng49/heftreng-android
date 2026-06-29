@@ -1011,7 +1011,7 @@ class FeedViewModel @Inject constructor(
     private val _createPostLoading = MutableStateFlow(false)
     val createPostLoading = _createPostLoading.asStateFlow()
 
-    fun createPost(text: String, imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "", type: String = "", libraryAuthorId: String = "", libraryBookId: String = "") {
+    fun createPost(text: String, imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "", coverImg: String = "", type: String = "", libraryAuthorId: String = "", libraryBookId: String = "") {
         if (uid.isEmpty()) return
         viewModelScope.launch {
             _createPostLoading.value = true
