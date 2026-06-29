@@ -396,28 +396,13 @@ private fun LibraryQuotesTab(
             }
         }
         itemsIndexed(quotes, key = { _, p -> p.id }) { index, post ->
-            PostCard(
-                post         = post,
-                language     = language,
-                onLike       = { feedVm.toggleLike(post) },
-                onSave       = { feedVm.toggleSave(post) },
-                onProfile    = { navController.navigate("profile/${post.uid}") },
-                onComment    = { navController.navigate("post/${post.id}") },
-                onShare      = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
-                onDelete     = if (post.uid == com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid)
-                                   {{ feedVm.deletePost(post.id) }} else null,
-                onTapAuthor  = { _ ->
-                    if (post.libraryAuthorId.isNotBlank())
-                        navController.navigate("author_detail/${post.libraryAuthorId}")
-                    else if (post.authorName.isNotBlank())
-                        navController.navigate("author_quotes/${URLEncoder.encode(post.authorName, "UTF-8")}")
-                },
-                onTapBook    = { _ ->
-                    if (post.libraryBookId.isNotBlank())
-                        navController.navigate("library_book_detail/${post.libraryBookId}")
-                    else if (post.bookName.isNotBlank())
-                        navController.navigate("book_quotes/${URLEncoder.encode(post.bookName, "UTF-8")}")
-                },
+            ConnectedPostCard(
+                post             = post,
+                navController    = navController,
+                feedVm           = feedVm,
+                language         = language,
+                onDeleteOverride = if (post.uid == com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid)
+                                       {{ feedVm.deletePost(post.id) }} else null,
             )
             if (bannerUnitId != null && (index + 1) % 5 == 0) {
                 PositionedAdBannerView(positionKey = "lib_quotes_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize, prefetchKeys = listOf("lib_quotes_banner_${index + 5}" to bannerUnitId))

@@ -45,6 +45,7 @@ import com.heftreng.app.data.model.User
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.screens.auth.heftrangTextFieldColors
 import com.heftreng.app.ui.screens.feed.PostCard
+import com.heftreng.app.ui.component.ConnectedPostCard
 import com.heftreng.app.ui.component.FullScreenImageViewer
 import com.heftreng.app.ui.component.PositionedNativeAdView
 import com.heftreng.app.ui.component.NativeAdViewCompose
@@ -457,39 +458,13 @@ fun ProfileScreen(
                         }
                     } else {
                         itemsIndexed(posts, key = { _, p -> "post_${p.id}" }) { index, post ->
-                            PostCard(
-                                post      = post,
-                                onLike    = { vm.toggleLikePost(post) },
-                                onSave    = { feedVm.toggleSave(post) },
-                                onProfile = {
-                                    if (!isMe) navController.navigate(Screen.Profile.go(post.uid))
-                                },
-                                onComment = { navController.navigate(Screen.PostDetail.go(post.id)) },
-                                onShare   = { feedVm.repost(post) },
-                                onDelete  = if (isMe) ({ vm.deleteOwnPost(post.id) }) else null,
-                                onEdit    = if (isMe) ({ newText -> vm.editOwnPost(post.id, newText) }) else null,
-                                onTap     = { navController.navigate(Screen.PostDetail.go(post.id)) },
-                                onTapBook = { _ ->
-                                    if (post.libraryBookId.isNotBlank())
-                                        navController.navigate("library_book_detail/${post.libraryBookId}")
-                                    else if (post.bookName.isNotBlank())
-                                        navController.navigate("book_quotes/${URLEncoder.encode(post.bookName, "UTF-8")}")
-                                },
-                                onTapAuthor = { _ ->
-                                    if (post.libraryAuthorId.isNotBlank())
-                                        navController.navigate("author_detail/${post.libraryAuthorId}")
-                                    else if (post.authorName.isNotBlank())
-                                        navController.navigate("author_quotes/${URLEncoder.encode(post.authorName, "UTF-8")}")
-                                },
-                                onTapRepost = { repostId, repostType ->
-                                    when (repostType) {
-                                        "feed"    -> navController.navigate(Screen.PostDetail.go(repostId))
-                                        "serial"  -> navController.navigate("serial/$repostId")
-                                        "chapter" -> navController.navigate("chapter/$repostId")
-                                        else      -> navController.navigate(Screen.PostDetail.go(repostId))
-                                    }
-                                },
-                                language = language,
+                            ConnectedPostCard(
+                                post             = post,
+                                navController    = navController,
+                                feedVm           = feedVm,
+                                language         = language,
+                                onDeleteOverride = if (isMe) ({ vm.deleteOwnPost(post.id) }) else null,
+                                onEditOverride   = if (isMe) ({ newText -> vm.editOwnPost(post.id, newText) }) else null,
                             )
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
                             // CMS/RC'deki position/frequency alanlarına göre native ad yerleşimi.

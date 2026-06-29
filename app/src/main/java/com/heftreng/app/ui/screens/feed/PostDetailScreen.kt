@@ -43,6 +43,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.heftreng.app.navigation.Screen
+import com.heftreng.app.ui.component.ConnectedPostCard
 import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
@@ -309,36 +310,13 @@ fun PostDetailScreen(
                     contentPadding = PaddingValues(bottom = 8.dp),
                 ) {
                     item {
-                        PostCard(
-                            post         = post,
-                            onLike       = { viewModel.toggleLike(post) },
-                            onSave       = { viewModel.toggleSave(post) },
-                            onProfile    = { navController.navigate(Screen.Profile.go(post.uid)) },
-                            onComment    = { openKeyboard = true },
-                            onShare      = { viewModel.repost(post) },
-                            onShowLikers = { socialVm.loadPostLikers(post.id); showLikers = true },
-                            onTapBook    = { _ ->
-                                if (post.libraryBookId.isNotBlank())
-                                    navController.navigate("library_book_detail/${post.libraryBookId}")
-                                else if (post.bookName.isNotBlank())
-                                    navController.navigate("book_quotes/${URLEncoder.encode(post.bookName, "UTF-8")}")
-                            },
-                            onTapAuthor  = { _ ->
-                                if (post.libraryAuthorId.isNotBlank())
-                                    navController.navigate("author_detail/${post.libraryAuthorId}")
-                                else if (post.authorName.isNotBlank())
-                                    navController.navigate("author_quotes/${URLEncoder.encode(post.authorName, "UTF-8")}")
-                            },
-                            onTapRepost  = { repostId, repostType ->
-                                when (repostType) {
-                                    "feed"    -> navController.navigate(Screen.PostDetail.go(repostId))
-                                    "serial"  -> navController.navigate("serial/$repostId")
-                                    "chapter" -> navController.navigate("chapter/$repostId")
-                                    "blog"    -> navController.navigate("blog/$repostId")
-                                    else      -> navController.navigate(Screen.PostDetail.go(repostId))
-                                }
-                            },
-                            language = language,
+                        ConnectedPostCard(
+                            post           = post,
+                            navController  = navController,
+                            feedVm         = viewModel,
+                            socialVm       = socialVm,
+                            language       = language,
+                            isDetailScreen = true,
                         )
                         HorizontalDivider(color = SurfaceVar, thickness = 6.dp)
                     }

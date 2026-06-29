@@ -20,6 +20,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
+import com.heftreng.app.ui.component.ConnectedPostCard
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
@@ -211,51 +212,16 @@ fun SavedPostsScreen(
                     contentPadding = PaddingValues(bottom = 80.dp),
                 ) {
                     items(savedPosts, key = { it.id }) { post ->
-                        PostCard(
-                            post         = post,
-                            onLike       = { feedVm.toggleLike(post) },
-                            onSave       = {
+                        ConnectedPostCard(
+                            post           = post,
+                            navController  = navController,
+                            feedVm         = feedVm,
+                            socialVm       = socialVm,
+                            language       = language,
+                            onSaveOverride = {
                                 feedVm.toggleSave(post)
-                                // Listeden kaldır
                                 savedPosts = savedPosts.filter { it.id != post.id }
                             },
-                            onProfile    = { navController.navigate(Screen.Profile.go(post.uid)) },
-                            onComment    = { navController.navigate(Screen.PostDetail.go(post.id)) },
-                            onShare      = { feedVm.repost(post) },
-                            onShowLikers = { socialVm.loadPostLikers(post.id) },
-                            onTap        = { navController.navigate(Screen.PostDetail.go(post.id)) },
-                            onTapRepost  = { repostId, repostType ->
-                                when (repostType) {
-                                    "feed"         -> navController.navigate(Screen.PostDetail.go(repostId))
-                                    "serial"       -> navController.navigate("serial/$repostId")
-                                    "chapter"      -> {
-                                        val sid = post.serialId.ifBlank { "" }
-                                        val cid = post.chapterId.ifBlank { repostId }
-                                        if (sid.isNotBlank()) navController.navigate("chapter/$sid/$cid")
-                                        else navController.navigate("serial/$repostId")
-                                    }
-                                    "book_chapter" -> {
-                                        val bid = post.serialId.ifBlank { "" }
-                                        val cid = post.chapterId.ifBlank { repostId }
-                                        if (bid.isNotBlank()) navController.navigate("book_chapter/$bid/$cid")
-                                    }
-                                    "blog"         -> navController.navigate("blog/$repostId")
-                                    else           -> navController.navigate(Screen.PostDetail.go(repostId))
-                                }
-                            },
-                            onTapAuthor  = { _ ->
-                                if (post.libraryAuthorId.isNotBlank())
-                                    navController.navigate("author_detail/${post.libraryAuthorId}")
-                                else
-                                    navController.navigate("author_quotes/${URLEncoder.encode(post.authorName, "UTF-8")}")
-                            },
-                            onTapBook    = { _ ->
-                                if (post.libraryBookId.isNotBlank())
-                                    navController.navigate("library_book_detail/${post.libraryBookId}")
-                                else
-                                    navController.navigate("book_quotes/${URLEncoder.encode(post.bookName, "UTF-8")}")
-                            },
-                            language = language,
                         )
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     }

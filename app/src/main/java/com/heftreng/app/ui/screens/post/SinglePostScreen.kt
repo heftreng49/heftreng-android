@@ -48,6 +48,7 @@ import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.screens.feed.PostCard
+import com.heftreng.app.ui.component.ConnectedPostCard
 import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
@@ -325,30 +326,15 @@ fun SinglePostScreen(
                     contentPadding = PaddingValues(bottom = 8.dp),
                 ) {
                     item {
-                        PostCard(
-                            post         = post,
-                            onLike       = { vm.toggleLike(post) },
-                            onSave       = { vm.toggleSave(post) },
-                            onProfile    = { navController.navigate(Screen.Profile.go(post.uid)) },
-                            onComment    = {},
-                            onShare      = { vm.repost(post) },
-                            onDelete     = { vm.deletePost(post.id); navController.popBackStack() },
-                            onEdit       = { newText -> vm.editPost(post.id, newText) },
-                            onTap        = null,
-                            onShowLikers = { socialVm.loadPostLikers(post.id); showLikers = true },
-                            onTapAuthor  = { _ ->
-                                if (post.libraryAuthorId.isNotBlank())
-                                    navController.navigate("author_detail/${post.libraryAuthorId}")
-                                else
-                                    navController.navigate("author_quotes/${java.net.URLEncoder.encode(post.authorName, "UTF-8")}")
-                            },
-                            onTapBook    = { _ ->
-                                if (post.libraryBookId.isNotBlank())
-                                    navController.navigate("library_book_detail/${post.libraryBookId}")
-                                else
-                                    navController.navigate("book_quotes/${java.net.URLEncoder.encode(post.bookName, "UTF-8")}")
-                            },
-                            language = language,
+                        ConnectedPostCard(
+                            post             = post,
+                            navController    = navController,
+                            feedVm           = vm,
+                            socialVm         = socialVm,
+                            language         = language,
+                            isDetailScreen   = true,
+                            onDeleteOverride = { vm.deletePost(post.id); navController.popBackStack() },
+                            onEditOverride   = { newText -> vm.editPost(post.id, newText) },
                         )
                         HorizontalDivider(color = SurfaceVar, thickness = 6.dp)
                     }
