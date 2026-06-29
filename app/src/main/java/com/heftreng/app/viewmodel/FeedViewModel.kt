@@ -416,6 +416,45 @@ class FeedViewModel @Inject constructor(
         )
     }
 
+    /** coverImg boş alıntı postlarını Supabase library_books'tan tamamlar */
+    private fun enrichMissingCovers(posts: List<Post>) {
+        val needsCover = posts.filter {
+            it.coverImg.isBlank() && it.bookName.isNotBlank()
+        }
+        if (needsCover.isEmpty()) return
+
+        viewModelScope.launch {
+            val titles = needsCover.map { it.bookName }.distinct()
+            val coverMap = mutableMapOf<String, String>() // bookName -> coverImg URL
+
+            titles.forEach { title ->
+                try {
+                    val url = library.searchBooks(title)
+                        .firstOrNull { it.title.equals(title.trim(), ignoreCase = true) }
+                        ?.coverImg
+                        ?: library.searchBooks(title).firstOrNull()?.coverImg
+                        ?: ""
+                    if (url.isNotBlank()) coverMap[title] = url
+                } catch (_: Exception) {}
+            }
+
+            if (coverMap.isEmpty()) return@launch
+
+            _posts.value = _posts.value.map { post ->
+                if (post.coverImg.isBlank() && post.bookName.isNotBlank()) {
+                    val url = coverMap[post.bookName] ?: return@map post
+                    post.copy(coverImg = url)
+                } else post
+            }
+            _libraryQuotes.value = _libraryQuotes.value.map { post ->
+                if (post.coverImg.isBlank() && post.bookName.isNotBlank()) {
+                    val url = coverMap[post.bookName] ?: return@map post
+                    post.copy(coverImg = url)
+                } else post
+            }
+        }
+    }
+
     private fun enrichPostsInBackground(posts: List<Post>) {
         if (posts.isEmpty()) return
         val missingUids = posts.map { it.uid }
@@ -424,6 +463,9 @@ class FeedViewModel @Inject constructor(
 
         // Sayaç senkronizasyonu her zaman çalışır — kullanıcı cache'i eksik olsun olmasın
         syncPostCounts(posts.map { it.id })
+
+        // coverImg boş olan alıntı postları için Supabase'den kapak URL'ini çek
+        enrichMissingCovers(posts)
 
         if (missingUids.isEmpty()) return
 
