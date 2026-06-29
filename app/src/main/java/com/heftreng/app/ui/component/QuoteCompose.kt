@@ -49,6 +49,7 @@ fun QuoteCard(
     quoteText   : String,
     bookName    : String = "",
     authorName  : String = "",
+    coverImg    : String = "",
     onTapBook   : ((String) -> Unit)? = null,
     onTapAuthor : ((String) -> Unit)? = null,
     modifier    : Modifier = Modifier,
@@ -94,27 +95,52 @@ fun QuoteCard(
             )
             if (bookName.isNotBlank() || authorName.isNotBlank()) {
                 Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Icon(Icons.Default.AutoStories, null, tint = Amber, modifier = Modifier.size(11.dp))
-                    if (bookName.isNotBlank()) {
-                        Text(
-                            bookName,
-                            color      = Amber,
-                            fontSize   = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier   = if (onTapBook != null) Modifier.clickable { onTapBook(bookName) } else Modifier,
-                        )
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = if (onTapBook != null && bookName.isNotBlank())
+                        Modifier.clickable { onTapBook(bookName) } else Modifier,
+                ) {
+                    // Kapak resmi avatarı — varsa göster, yoksa AutoStories ikonu
+                    Box(
+                        modifier = Modifier
+                            .width(28.dp)
+                            .height(42.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(Amber.copy(alpha = 0.10f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (coverImg.isNotBlank()) {
+                            coil.compose.AsyncImage(
+                                model              = coverImg,
+                                contentDescription = bookName,
+                                contentScale       = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier           = Modifier.fillMaxSize(),
+                            )
+                        } else {
+                            Icon(Icons.Default.AutoStories, null, tint = Amber, modifier = Modifier.size(14.dp))
+                        }
                     }
-                    if (bookName.isNotBlank() && authorName.isNotBlank()) {
-                        Text("·", color = Muted, fontSize = 11.sp)
-                    }
-                    if (authorName.isNotBlank()) {
-                        Text(
-                            authorName,
-                            color    = Muted,
-                            fontSize = 11.sp,
-                            modifier = if (onTapAuthor != null) Modifier.clickable { onTapAuthor(authorName) } else Modifier,
-                        )
+                    Column {
+                        if (bookName.isNotBlank()) {
+                            Text(
+                                bookName,
+                                color      = Amber,
+                                fontSize   = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines   = 1,
+                                overflow   = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                        }
+                        if (authorName.isNotBlank()) {
+                            Text(
+                                authorName,
+                                color    = Muted,
+                                fontSize = 10.sp,
+                                maxLines = 1,
+                                modifier = if (onTapAuthor != null) Modifier.clickable { onTapAuthor(authorName) } else Modifier,
+                            )
+                        }
                     }
                 }
             }

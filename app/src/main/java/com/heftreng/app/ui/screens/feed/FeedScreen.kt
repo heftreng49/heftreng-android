@@ -1191,6 +1191,7 @@ fun PostCard(
                     quoteText   = post.quoteText,
                     bookName    = post.bookName,
                     authorName  = post.authorName,
+                    coverImg    = post.coverImg,
                     onTapBook   = onTapBook,
                     onTapAuthor = onTapAuthor,
                     modifier    = Modifier.padding(bottom = 8.dp),
