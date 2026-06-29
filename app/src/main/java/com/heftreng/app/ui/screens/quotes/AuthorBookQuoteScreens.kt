@@ -260,14 +260,16 @@ fun AuthorDetailScreen(
                                 items(quotes, key = { it.id }) { quote ->
                                     val post = quote.toPost()
                                     PostCard(
-                                        post      = post,
-                                        language  = language,
-                                        onLike    = { feedVm.toggleLike(post) },
-                                        onSave    = { feedVm.toggleSave(post) },
-                                        onProfile = { navController.navigate("profile/${post.uid}") },
-                                        onComment = { navController.navigate("post/${post.id}") },
-                                        onShare   = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
-                                        onTapBook = { navController.navigate("library_book_detail/${quote.bookId}") },
+                                        post        = post,
+                                        language    = language,
+                                        onLike      = { feedVm.toggleLike(post) },
+                                        onSave      = { feedVm.toggleSave(post) },
+                                        onProfile   = { navController.navigate("profile/${post.uid}") },
+                                        onComment   = { navController.navigate("post/${post.id}") },
+                                        onShare     = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
+                                        onTap       = { navController.navigate("post/${post.id}") },
+                                        onTapBook   = { navController.navigate("library_book_detail/${quote.bookId}") },
+                                        onTapAuthor = { navController.navigate("author_detail/${authorId}") },
                                     )
                                 }
                             }
@@ -644,6 +646,8 @@ fun LibraryBookDetailScreen(
                                         onProfile   = { navController.navigate("profile/${post.uid}") },
                                         onComment   = { navController.navigate("post/${post.id}") },
                                         onShare     = { if (post.isRepostedByMe) feedVm.unrepost(post) else feedVm.repost(post) },
+                                        onTap       = { navController.navigate("post/${post.id}") },
+                                        onTapBook   = { navController.navigate("library_book_detail/${bookId}") },
                                         onTapAuthor = { navController.navigate("author_detail/${quote.authorId}") },
                                     )
                                 }
@@ -1020,13 +1024,16 @@ private fun LegacyQuoteListPage(
             ) {
                 items(posts, key = { it.id }) { post ->
                     PostCard(
-                        post      = post,
-                        language  = language,
-                        onLike    = { feedVm?.toggleLike(post) },
-                        onSave    = { feedVm?.toggleSave(post) },
-                        onProfile = { navController?.navigate("profile/${post.uid}") },
-                        onComment = { navController?.navigate("post/${post.id}") },
-                        onShare   = { if (post.isRepostedByMe) feedVm?.unrepost(post) else feedVm?.repost(post) },
+                        post        = post,
+                        language    = language,
+                        onLike      = { feedVm?.toggleLike(post) },
+                        onSave      = { feedVm?.toggleSave(post) },
+                        onProfile   = { navController?.navigate("profile/${post.uid}") },
+                        onComment   = { navController?.navigate("post/${post.id}") },
+                        onShare     = { if (post.isRepostedByMe) feedVm?.unrepost(post) else feedVm?.repost(post) },
+                        onTap       = { navController?.navigate("post/${post.id}") },
+                        onTapBook   = { _ -> post.libraryBookId.takeIf { it.isNotBlank() }?.let { navController?.navigate("library_book_detail/$it") } },
+                        onTapAuthor = { _ -> post.libraryAuthorId.takeIf { it.isNotBlank() }?.let { navController?.navigate("author_detail/$it") } },
                     )
                 }
             }

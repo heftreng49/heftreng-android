@@ -417,7 +417,7 @@ class FeedViewModel @Inject constructor(
     }
 
     /** coverImg boş alıntı postlarını Supabase library_books'tan tamamlar */
-    private fun enrichMissingCovers(posts: List<Post>) {
+    internal fun enrichMissingCovers(posts: List<Post>) {
         val needsCover = posts.filter {
             it.coverImg.isBlank() && it.bookName.isNotBlank()
         }
@@ -1414,7 +1414,14 @@ class FeedViewModel @Inject constructor(
     private val _fetchingPostIds = mutableSetOf<String>()
 
     fun ensurePost(postId: String) {
-        if (_posts.value.any { it.id == postId }) return
+        // Post listede varsa cover eksikse enrich et, sonra dön
+        val existing = _posts.value.find { it.id == postId }
+        if (existing != null) {
+            if (existing.coverImg.isBlank() && existing.bookName.isNotBlank()) {
+                enrichMissingCovers(listOf(existing))
+            }
+            return
+        }
         if (_fetchingPostIds.contains(postId)) return
         _fetchingPostIds.add(postId)
         if (_postNotFound.value == postId) _postNotFound.value = null

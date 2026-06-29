@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 import com.heftreng.app.utils.openUrl
+import java.net.URLEncoder
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.data.model.Post
@@ -468,6 +469,18 @@ fun ProfileScreen(
                                 onDelete  = if (isMe) ({ vm.deleteOwnPost(post.id) }) else null,
                                 onEdit    = if (isMe) ({ newText -> vm.editOwnPost(post.id, newText) }) else null,
                                 onTap     = { navController.navigate(Screen.PostDetail.go(post.id)) },
+                                onTapBook = { _ ->
+                                    if (post.libraryBookId.isNotBlank())
+                                        navController.navigate("library_book_detail/${post.libraryBookId}")
+                                    else if (post.bookName.isNotBlank())
+                                        navController.navigate("book_quotes/${URLEncoder.encode(post.bookName, "UTF-8")}")
+                                },
+                                onTapAuthor = { _ ->
+                                    if (post.libraryAuthorId.isNotBlank())
+                                        navController.navigate("author_detail/${post.libraryAuthorId}")
+                                    else if (post.authorName.isNotBlank())
+                                        navController.navigate("author_quotes/${URLEncoder.encode(post.authorName, "UTF-8")}")
+                                },
                                 onTapRepost = { repostId, repostType ->
                                     when (repostType) {
                                         "feed"    -> navController.navigate(Screen.PostDetail.go(repostId))
