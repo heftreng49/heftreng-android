@@ -42,6 +42,7 @@ data class Post(
     val displayName   : String     = "",
     val username      : String     = "",
     val photoURL      : String     = "",
+    val title         : String     = "",
     val text          : String     = "",
     val imgUrl        : String     = "",
     val ytVid         : String     = "",

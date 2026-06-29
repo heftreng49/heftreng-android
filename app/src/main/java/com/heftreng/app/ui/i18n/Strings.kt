@@ -77,6 +77,7 @@ object Strings {
 
     // ── Feed ──────────────────────────────────────────────────────────────────
     fun whatsOnMind(l: String)     = t(l, "Ne düşünüyorsun?",         "Tu çi difikiri?")
+    fun postTitleHint(l: String)   = t(l, "Başlık (opsiyonel)",       "Sernav (vebijarkî)")
     fun postHint(l: String)        = t(l, "Düşüncelerini paylaş...",  "Ramanên xwe parve bike...")
     fun like(l: String)            = t(l, "Beğen",                    "Hez bike")
     fun comment(l: String)         = t(l, "Yorum",                    "Şîrove")

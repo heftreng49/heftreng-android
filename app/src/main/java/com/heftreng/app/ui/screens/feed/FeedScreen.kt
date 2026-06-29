@@ -182,6 +182,7 @@ fun FeedScreen(
     val likers           by socialVm.likers.collectAsState()
     val socialLoading    by socialVm.loading.collectAsState()
     var inlineText       by remember { mutableStateOf("") }
+    var inlineTitle      by remember { mutableStateOf("") }
     var inlineQuote      by remember { mutableStateOf<QuotePayload?>(null) }
     var showInlineQuote  by remember { mutableStateOf(false) }
     var inlineImageUri   by remember { mutableStateOf<Uri?>(null) }
@@ -363,6 +364,8 @@ fun FeedScreen(
                     InlineComposeBox(
                         text          = inlineText,
                         onTextChange  = { inlineText = it },
+                        title         = inlineTitle,
+                        onTitleChange = { inlineTitle = it },
                         quote         = inlineQuote,
                         onQuoteAdd    = { if (appConfig.feedAllowQuotes) showInlineQuote = true },
                         onQuoteRemove = { inlineQuote = null },
@@ -373,6 +376,7 @@ fun FeedScreen(
                                     vm.uploadImageAndCreatePost(
                                         imageUri   = uri,
                                         text       = inlineText.trim(),
+                                        title      = inlineTitle.trim(),
                                         quoteText  = inlineQuote?.text ?: "",
                                         authorName = inlineQuote?.authorName ?: "",
                                         bookName   = inlineQuote?.bookName ?: "",
@@ -382,6 +386,7 @@ fun FeedScreen(
                                 } else {
                                     vm.createPost(
                                         text       = inlineText.trim(),
+                                        title      = inlineTitle.trim(),
                                         quoteText  = inlineQuote?.text ?: "",
                                         authorName = inlineQuote?.authorName ?: "",
                                         bookName   = inlineQuote?.bookName ?: "",
@@ -389,6 +394,7 @@ fun FeedScreen(
                                     )
                                 }
                                 inlineText     = ""
+                                inlineTitle    = ""
                                 inlineQuote    = null
                                 inlineImageUri = null
                             }
@@ -725,6 +731,8 @@ private fun ReportDialog(
 private fun InlineComposeBox(
     text          : String,
     onTextChange  : (String) -> Unit,
+    title         : String        = "",
+    onTitleChange : (String) -> Unit = {},
     quote         : QuotePayload?,
     onQuoteAdd    : () -> Unit,
     onQuoteRemove : () -> Unit,
@@ -744,6 +752,31 @@ private fun InlineComposeBox(
         tonalElevation = 0.dp,
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
+            OutlinedTextField(
+                value           = title,
+                onValueChange   = { if (it.length <= 120) onTitleChange(it) },
+                placeholder     = {
+                    Text(
+                        Strings.postTitleHint(language),
+                        color = Muted, fontSize = 14.sp,
+                    )
+                },
+                modifier        = Modifier.fillMaxWidth(),
+                colors          = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor      = Primary,
+                    unfocusedBorderColor    = Color.Transparent,
+                    focusedTextColor        = OnBackground,
+                    unfocusedTextColor      = OnBackground,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedContainerColor   = Color.Transparent,
+                    cursorColor             = Primary,
+                ),
+                shape           = RoundedCornerShape(8.dp),
+                textStyle       = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 15.sp),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                singleLine      = true,
+            )
+            Spacer(Modifier.height(4.dp))
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 verticalAlignment     = Alignment.Top,
@@ -1198,6 +1231,16 @@ fun PostCard(
                     onTapBook   = onTapBook,
                     onTapAuthor = onTapAuthor,
                     modifier    = Modifier.padding(bottom = 8.dp),
+                )
+            }
+            if (post.title.isNotBlank()) {
+                Text(
+                    post.title,
+                    color      = OnBackground,
+                    fontSize   = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 21.sp,
+                    modifier   = Modifier.padding(bottom = 4.dp),
                 )
             }
             if (post.text.isNotBlank()) {
