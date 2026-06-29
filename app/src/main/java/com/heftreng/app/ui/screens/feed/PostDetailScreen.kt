@@ -50,6 +50,7 @@ import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.net.URLEncoder
 
 private data class DetailComment(
     val id           : String     = "",
@@ -316,6 +317,18 @@ fun PostDetailScreen(
                             onComment    = { openKeyboard = true },
                             onShare      = { viewModel.repost(post) },
                             onShowLikers = { socialVm.loadPostLikers(post.id); showLikers = true },
+                            onTapBook    = { _ ->
+                                if (post.libraryBookId.isNotBlank())
+                                    navController.navigate("library_book_detail/${post.libraryBookId}")
+                                else if (post.bookName.isNotBlank())
+                                    navController.navigate("book_quotes/${URLEncoder.encode(post.bookName, "UTF-8")}")
+                            },
+                            onTapAuthor  = { _ ->
+                                if (post.libraryAuthorId.isNotBlank())
+                                    navController.navigate("author_detail/${post.libraryAuthorId}")
+                                else if (post.authorName.isNotBlank())
+                                    navController.navigate("author_quotes/${URLEncoder.encode(post.authorName, "UTF-8")}")
+                            },
                             onTapRepost  = { repostId, repostType ->
                                 when (repostType) {
                                     "feed"    -> navController.navigate(Screen.PostDetail.go(repostId))
