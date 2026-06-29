@@ -383,6 +383,7 @@ fun FeedScreen(
                                         quoteText  = inlineQuote?.text ?: "",
                                         authorName = inlineQuote?.authorName ?: "",
                                         bookName   = inlineQuote?.bookName ?: "",
+                                        coverImg   = inlineQuote?.coverImg ?: "",
                                     )
                                 }
                                 inlineText     = ""

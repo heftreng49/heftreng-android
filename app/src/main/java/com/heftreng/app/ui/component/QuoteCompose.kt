@@ -33,6 +33,7 @@ data class QuotePayload(
     val text      : String = "",
     val authorName: String = "",
     val bookName  : String = "",
+    val coverImg  : String = "",
     val postId    : String = "",
 )
 
@@ -40,6 +41,7 @@ data class QuotePayload(
 data class QuoteSuggestion(
     val bookName  : String = "",
     val authorName: String = "",
+    val coverImg  : String = "",
     val count     : Int    = 0,
 )
 
@@ -178,9 +180,10 @@ fun QuoteDialog(
     onDismiss    : () -> Unit,
     onConfirm    : (QuotePayload) -> Unit,
 ) {
-    var text   by remember { mutableStateOf(initialText) }
-    var book   by remember { mutableStateOf(initialBook) }
-    var author by remember { mutableStateOf(initialAuthor) }
+    var text     by remember { mutableStateOf(initialText) }
+    var book     by remember { mutableStateOf(initialBook) }
+    var author   by remember { mutableStateOf(initialAuthor) }
+    var coverImg by remember { mutableStateOf("") }
 
     // Firestore'dan önceki alıntı kitap+yazar geçmişi
     val db  = remember { FirebaseFirestore.getInstance() }
@@ -212,7 +215,7 @@ fun QuoteDialog(
             val bookMap   = mutableMapOf<String, QuoteSuggestion>()
             val authorMap = mutableMapOf<String, QuoteSuggestion>()
 
-            fun processEntry(bName: String, aName: String) {
+            fun processEntry(bName: String, aName: String, cover: String = "") {
                 if (bName.isBlank()) return
                 val bKey = bName.lowercase().trim()
                 val aKey = aName.lowercase().trim()
@@ -220,6 +223,7 @@ fun QuoteDialog(
                 bookMap[bKey] = QuoteSuggestion(
                     bookName   = bName.trim(),
                     authorName = cur?.authorName?.ifBlank { aName.trim() } ?: aName.trim(),
+                    coverImg   = cur?.coverImg?.ifBlank { cover } ?: cover,
                     count      = (cur?.count ?: 0) + 1,
                 )
                 if (aName.isNotBlank()) {
@@ -253,7 +257,8 @@ fun QuoteDialog(
             cgSnap?.documents?.forEach { doc ->
                 val bName = (doc.getString("bookTitle") ?: doc.getString("bookName") ?: "").trim()
                 val aName = (doc.getString("authorName") ?: "").trim()
-                processEntry(bName, aName)
+                val cover = (doc.getString("coverImg") ?: doc.getString("cover_img") ?: "").trim()
+                processEntry(bName, aName, cover)
             }
 
             bookSuggestions   = bookMap.values.sortedByDescending { it.count }
@@ -340,8 +345,9 @@ fun QuoteDialog(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clickable {
-                                                book   = s.bookName
+                                                book     = s.bookName
                                                 if (s.authorName.isNotBlank()) author = s.authorName
+                                                coverImg       = s.coverImg
                                                 showBookDrop   = false
                                                 showAuthorDrop = false
                                             }
@@ -451,7 +457,7 @@ fun QuoteDialog(
             TextButton(
                 onClick = {
                     if (text.isNotBlank() || book.isNotBlank()) {
-                        onConfirm(QuotePayload(text = text, bookName = book, authorName = author))
+                        onConfirm(QuotePayload(text = text, bookName = book, authorName = author, coverImg = coverImg))
                     }
                 },
                 enabled = text.isNotBlank() || book.isNotBlank(),
