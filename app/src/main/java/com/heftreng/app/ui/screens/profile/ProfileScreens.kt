@@ -464,7 +464,7 @@ fun ProfileScreen(
                                 feedVm           = feedVm,
                                 language         = language,
                                 onDeleteOverride = if (isMe) ({ vm.deleteOwnPost(post.id) }) else null,
-                                onEditOverride   = if (isMe) ({ newText -> vm.editOwnPost(post.id, newText) }) else null,
+                                onEditOverride   = if (isMe) ({ newTitle, newText -> vm.editOwnPost(post.id, newTitle, newText) }) else null,
                             )
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
                             // CMS/RC'deki position/frequency alanlarına göre native ad yerleşimi.

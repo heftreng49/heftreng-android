@@ -163,7 +163,7 @@ fun SinglePostScreen(
                         username     = d["username"]    as? String ?: "",
                         photoURL     = d["photoURL"]    as? String ?: "",
                         text         = d["text"]        as? String ?: "",
-                        imageURL     = d["imageURL"]    as? String ?: d["imgUrl"] as? String ?: "",
+                        title        = d["title"]       as? String ?: "",
                         imgUrl       = d["imgUrl"]      as? String ?: "",
                         quoteText    = quoteText,
                         bookName     = bookName,
@@ -334,7 +334,7 @@ fun SinglePostScreen(
                             language         = language,
                             isDetailScreen   = true,
                             onDeleteOverride = { vm.deletePost(post.id); navController.popBackStack() },
-                            onEditOverride   = { newText -> vm.editPost(post.id, newText) },
+                            onEditOverride   = { newTitle, newText -> vm.editPost(post.id, newTitle, newText) },
                         )
                         HorizontalDivider(color = SurfaceVar, thickness = 6.dp)
                     }

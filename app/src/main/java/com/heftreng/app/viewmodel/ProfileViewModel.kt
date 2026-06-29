@@ -546,6 +546,7 @@ class ProfileViewModel @Inject constructor(
                         username    = fd["username"]    as? String ?: "",
                         photoURL    = fd["photoURL"]    as? String ?: "",
                         text        = fd["text"]        as? String ?: "",
+                        title       = fd["title"]        as? String ?: "",
                         imageURL    = fd["imageURL"]    as? String ?: fd["imgUrl"] as? String ?: "",
                         ytVid       = fd["ytVid"]        as? String ?: "",
                         badges      = badges,
@@ -758,15 +759,16 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    fun editOwnPost(postId: String, newText: String) {
+    fun editOwnPost(postId: String, newTitle: String = "", newText: String) {
         if (myUid.isEmpty() || newText.isBlank()) return
         viewModelScope.launch {
             try {
                 // Güvenlik: post sahibi mi kontrol et
                 val postDoc = firestore.collection("feed").document(postId).get().await()
                 if (postDoc.getString("uid") != myUid) return@launch
-                firestore.collection("feed").document(postId).update("text", newText).await()
-                _posts.value = _posts.value.map { if (it.id == postId) it.copy(text = newText) else it }
+                firestore.collection("feed").document(postId)
+                    .update(mapOf("text" to newText, "title" to newTitle.trim())).await()
+                _posts.value = _posts.value.map { if (it.id == postId) it.copy(text = newText, title = newTitle.trim()) else it }
             }
             catch (e: Exception) { e.printStackTrace() }
         }
@@ -810,6 +812,7 @@ class ProfileViewModel @Inject constructor(
                             username      = fd["username"] as? String ?: "",
                             photoURL      = fd["photoURL"] as? String ?: "",
                             text          = fd["text"]     as? String ?: "",
+                            title         = fd["title"]    as? String ?: "",
                             imageURL      = fd["imgUrl"]   as? String ?: fd["imageURL"] as? String ?: "",
                             ytVid         = fd["ytVid"]     as? String ?: "",
                             badges        = badges,

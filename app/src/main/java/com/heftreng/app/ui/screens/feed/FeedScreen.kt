@@ -472,7 +472,7 @@ fun FeedScreen(
                             else vm.repost(post)
                         },
                         onDelete  = { vm.deletePost(post.id) },
-                        onEdit    = { newText -> vm.editPost(post.id, newText) },
+                        onEdit    = { newTitle, newText -> vm.editPost(post.id, newTitle, newText) },
                         onEditQuote = { newQ, newB, newA -> vm.editQuote(post.id, newQ, newB, newA) },
                         onTap        = { navController.navigate(Screen.PostDetail.go(post.id)) },
                         onDoubleTap  = {
@@ -1042,7 +1042,7 @@ fun PostCard(
     onComment : () -> Unit,
     onShare      : () -> Unit,
     onDelete     : (() -> Unit)? = null,
-    onEdit       : ((String) -> Unit)? = null,
+    onEdit       : ((title: String, text: String) -> Unit)? = null,
     onEditQuote  : ((quoteText: String, bookName: String, authorName: String) -> Unit)? = null,
     onTap        : (() -> Unit)? = null,
     onDoubleTap  : (() -> Unit)? = null,
@@ -1444,10 +1444,11 @@ fun PostCard(
     // Düzenleme dialog — normal post
     if (showEditDialog) {
         EditPostDialog(
-            currentText = post.text,
-            language    = language,
-            onDismiss   = { showEditDialog = false },
-            onSave      = { newText -> onEdit?.invoke(newText); showEditDialog = false },
+            currentText  = post.text,
+            currentTitle = post.title,
+            language     = language,
+            onDismiss    = { showEditDialog = false },
+            onSave       = { newTitle, newText -> onEdit?.invoke(newTitle, newText); showEditDialog = false },
         )
     }
 
@@ -1490,14 +1491,32 @@ fun PostCard(
 // ── EditPostDialog ────────────────────────────────────────────────────────────
 
 @Composable
-fun EditPostDialog(currentText: String, onDismiss: () -> Unit, onSave: (String) -> Unit, language: String = "tr") {
+fun EditPostDialog(currentText: String, currentTitle: String = "", onDismiss: () -> Unit, onSave: (title: String, text: String) -> Unit, language: String = "tr") {
     val ku = language == "ku"
+    var title by remember { mutableStateOf(currentTitle) }
     var text by remember { mutableStateOf(currentText) }
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = HeftSurface), modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(Strings.edit(language), fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 16.sp)
                 Spacer(Modifier.height(14.dp))
+                OutlinedTextField(
+                    value         = title,
+                    onValueChange = { if (it.length <= 120) title = it },
+                    placeholder   = { Text(Strings.postTitleHint(language), color = Muted) },
+                    modifier      = Modifier.fillMaxWidth(),
+                    singleLine    = true,
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor      = Amber,
+                        unfocusedBorderColor    = Divider,
+                        focusedTextColor        = OnBackground,
+                        unfocusedTextColor      = OnBackground,
+                        unfocusedContainerColor = SurfaceVar,
+                        focusedContainerColor   = SurfaceVar,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                )
+                Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
                     value         = text,
                     onValueChange = { text = it },
@@ -1517,7 +1536,7 @@ fun EditPostDialog(currentText: String, onDismiss: () -> Unit, onSave: (String) 
                     TextButton(onClick = onDismiss) { Text(Strings.cancel(language), color = Muted) }
                     Spacer(Modifier.width(8.dp))
                     Button(
-                        onClick = { if (text.isNotBlank()) onSave(text) },
+                        onClick = { if (text.isNotBlank()) onSave(title.trim(), text) },
                         colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
                         shape   = RoundedCornerShape(10.dp),
                     ) { Text(Strings.save(language), fontWeight = FontWeight.Bold) }

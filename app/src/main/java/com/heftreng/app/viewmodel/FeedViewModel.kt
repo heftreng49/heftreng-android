@@ -540,6 +540,7 @@ class FeedViewModel @Inject constructor(
         quoteText       = text,
         bookName        = bookTitle,
         authorName      = authorName,
+        coverImg        = coverImg,
         likesCount      = likesCount,
         libraryBookId   = bookId,
         libraryAuthorId = authorId ?: "",
@@ -1168,14 +1169,15 @@ class FeedViewModel @Inject constructor(
         }
     }
 
-    fun editPost(postId: String, newText: String) {
+    fun editPost(postId: String, newTitle: String = "", newText: String) {
         if (uid.isEmpty() || newText.isBlank()) return
         viewModelScope.launch {
             try {
                 val postDoc = firestore.collection("feed").document(postId).get().await()
                 if (postDoc.getString("uid") != uid) return@launch
-                firestore.collection("feed").document(postId).update("text", newText.trim()).await()
-                _posts.value = _posts.value.map { if (it.id == postId) it.copy(text = newText.trim()) else it }
+                firestore.collection("feed").document(postId)
+                    .update(mapOf("text" to newText.trim(), "title" to newTitle.trim())).await()
+                _posts.value = _posts.value.map { if (it.id == postId) it.copy(text = newText.trim(), title = newTitle.trim()) else it }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
