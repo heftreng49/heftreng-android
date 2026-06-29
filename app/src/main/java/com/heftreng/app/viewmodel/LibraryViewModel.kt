@@ -260,7 +260,13 @@ class LibraryViewModel @Inject constructor(
                 _selectedBook.value = book
                 val qDeferred = async { library.getQuotesByBook(bookId) }
                 val rDeferred = async { library.getReviewsByBook(bookId) }
-                _bookQuotes.value  = qDeferred.await().map { it.toDomain() }
+                val quotes = qDeferred.await()
+                // Eski kayıtlarda cover_img boşsa kitabın kapağını kullan
+                val bookCover = book.coverImg
+                _bookQuotes.value  = quotes.map { row ->
+                    val q = row.toDomain()
+                    if (q.coverImg.isBlank() && bookCover.isNotBlank()) q.copy(coverImg = bookCover) else q
+                }
                 _bookReviews.value = rDeferred.await().map { it.toDomain() }
             } catch (e: Exception) {
                 _error.value = e.message

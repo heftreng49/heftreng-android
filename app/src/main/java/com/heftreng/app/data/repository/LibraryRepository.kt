@@ -450,7 +450,8 @@ class LibraryRepository @Inject constructor(
         feedPostId     : String,
     ) {
         if (libraryBookId.isBlank()) return
-        val newId = UUID.randomUUID().toString()
+        val newId    = UUID.randomUUID().toString()
+        val coverUrl = try { getBook(libraryBookId)?.coverImg ?: "" } catch (_: Exception) { "" }
         insertQuote(BookQuoteRow(
             id              = newId,
             bookId          = libraryBookId,
@@ -462,6 +463,7 @@ class LibraryRepository @Inject constructor(
             userDisplayName = userDisplayName,
             userPhotoUrl    = userPhotoURL,
             feedPostId      = feedPostId,
+            coverImg        = coverUrl,
         ))
         val book = getBook(libraryBookId)
         if (book != null) updateBookCounters(libraryBookId, quoteCount = book.quoteCount + 1)

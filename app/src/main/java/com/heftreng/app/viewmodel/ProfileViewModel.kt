@@ -285,11 +285,15 @@ class ProfileViewModel @Inject constructor(
                         chapterId     = fd["chapterId"]     as? String ?: "",
                         chapterTitle  = fd["chapterTitle"]  as? String ?: "",
                         chapterOrder  = (fd["chapterOrder"] as? Long)?.toInt() ?: 0,
-                        likesCount    = (fd["likesCount"]    as? Long)?.toInt() ?: 0,
-                        commentsCount = (fd["commentsCount"] as? Long)?.toInt() ?: 0,
-                        repostsCount  = (fd["reposts"]  as? Long)?.toInt() ?: 0,
-                        isLikedByMe   = doc.id in likedIds,
-                        ts            = fd["ts"] as? Timestamp,
+                        likesCount      = (fd["likesCount"]    as? Long)?.toInt() ?: 0,
+                        commentsCount   = (fd["commentsCount"] as? Long)?.toInt() ?: 0,
+                        repostsCount    = (fd["reposts"]  as? Long)?.toInt() ?: 0,
+                        isLikedByMe     = doc.id in likedIds,
+                        ts              = fd["ts"] as? Timestamp,
+                        coverImg        = fd["coverImg"]        as? String ?: "",
+                        libraryBookId   = fd["libraryBookId"]   as? String ?: "",
+                        libraryAuthorId = fd["libraryAuthorId"] as? String ?: "",
+                        type            = fd["type"]            as? String ?: "",
                     )
                 }.sortedByDescending { it.ts?.seconds ?: 0L }
 
@@ -335,15 +339,38 @@ class ProfileViewModel @Inject constructor(
                     }
                 } catch (_: Exception) {}
             }
-            if (userMap.isEmpty()) return@launch
-            val updated = target.value.map { post ->
-                val (freshName, freshPhoto) = userMap[post.uid] ?: return@map post
-                post.copy(
-                    displayName = freshName.ifBlank { post.displayName },
-                    photoURL    = freshPhoto.ifBlank { post.photoURL },
-                )
+            if (userMap.isNotEmpty()) {
+                target.value = target.value.map { post ->
+                    val (freshName, freshPhoto) = userMap[post.uid] ?: return@map post
+                    post.copy(
+                        displayName = freshName.ifBlank { post.displayName },
+                        photoURL    = freshPhoto.ifBlank { post.photoURL },
+                    )
+                }
             }
-            target.value = updated
+            // coverImg boş alıntı postları için Supabase'den kapak URL'ini çek
+            val needsCover = posts.filter { it.coverImg.isBlank() && it.bookName.isNotBlank() }
+            if (needsCover.isNotEmpty()) {
+                val coverMap = mutableMapOf<String, String>()
+                needsCover.map { it.bookName }.distinct().forEach { title ->
+                    try {
+                        val url = library.searchBooks(title)
+                            .firstOrNull { it.title.equals(title.trim(), ignoreCase = true) }
+                            ?.coverImg
+                            ?: library.searchBooks(title).firstOrNull()?.coverImg
+                            ?: ""
+                        if (url.isNotBlank()) coverMap[title] = url
+                    } catch (_: Exception) {}
+                }
+                if (coverMap.isNotEmpty()) {
+                    target.value = target.value.map { post ->
+                        if (post.coverImg.isBlank() && post.bookName.isNotBlank()) {
+                            val url = coverMap[post.bookName] ?: return@map post
+                            post.copy(coverImg = url)
+                        } else post
+                    }
+                }
+            }
         }
     }
 

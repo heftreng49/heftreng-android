@@ -44,6 +44,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.Comment
+import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.screens.feed.PostCard
@@ -82,8 +83,10 @@ fun SinglePostScreen(
     val likers        by socialVm.likers.collectAsState()
     val socialLoading by socialVm.loading.collectAsState()
     val postNotFound  by vm.postNotFound.collectAsState()
-    val post          = posts.find { it.id == postId }
-    val loadFailed    = postNotFound == postId
+    // vm.posts boşsa (yeni instance) Firestore'dan direkt çekilen post kullanılır
+    var fetchedPost   by remember { mutableStateOf<Post?>(null) }
+    val post          = posts.find { it.id == postId } ?: fetchedPost
+    val loadFailed    = postNotFound == postId && fetchedPost == null
 
     val db    = FirebaseFirestore.getInstance()
     val auth  = FirebaseAuth.getInstance()
@@ -141,6 +144,41 @@ fun SinglePostScreen(
 
     LaunchedEffect(postId) {
         vm.ensurePost(postId)
+        // Direkt Firestore'dan çek — vm yeni instance'sa post listesi boş olabilir
+        if (fetchedPost == null) {
+            try {
+                val doc = db.collection("feed").document(postId).get().await()
+                if (doc.exists()) {
+                    val d = doc.data ?: emptyMap<String, Any>()
+                    val quoteObj   = d["quote"] as? Map<*, *>
+                    val quoteText  = (quoteObj?.get("text")   as? String)?.takeIf { it.isNotBlank() } ?: d["quoteText"]  as? String ?: ""
+                    val bookName   = (quoteObj?.get("book")   as? String)?.takeIf { it.isNotBlank() } ?: d["bookName"]   as? String ?: ""
+                    val authorName = (quoteObj?.get("author") as? String)?.takeIf { it.isNotBlank() } ?: d["authorName"] as? String ?: ""
+                    fetchedPost = Post(
+                        id           = doc.id,
+                        uid          = d["uid"]         as? String ?: "",
+                        displayName  = (d["displayName"] as? String)?.takeIf { it.isNotBlank() } ?: d["name"] as? String ?: "",
+                        name         = d["name"]        as? String ?: "",
+                        username     = d["username"]    as? String ?: "",
+                        photoURL     = d["photoURL"]    as? String ?: "",
+                        text         = d["text"]        as? String ?: "",
+                        imageURL     = d["imageURL"]    as? String ?: d["imgUrl"] as? String ?: "",
+                        imgUrl       = d["imgUrl"]      as? String ?: "",
+                        quoteText    = quoteText,
+                        bookName     = bookName,
+                        authorName   = authorName,
+                        coverImg     = d["coverImg"]    as? String ?: "",
+                        libraryBookId   = d["libraryBookId"]   as? String ?: "",
+                        libraryAuthorId = d["libraryAuthorId"] as? String ?: "",
+                        likesCount   = (d["likes"]    as? Long)?.toInt() ?: 0,
+                        commentsCount= (d["cmtCount"] as? Long)?.toInt() ?: 0,
+                        repostsCount = (d["reposts"]  as? Long)?.toInt() ?: 0,
+                        ts           = d["ts"] as? com.google.firebase.Timestamp,
+                        type         = d["type"]        as? String ?: "",
+                    )
+                }
+            } catch (_: Exception) {}
+        }
         // postAuthorUid
         postAuthorUid = post?.uid?.takeIf { it.isNotBlank() } ?: try {
             db.collection("feed").document(postId).get().await().getString("uid") ?: ""
