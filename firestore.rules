@@ -156,7 +156,7 @@ service cloud.firestore {
           || (isAuth() && onlyChanging(['likesCount']))
           || (isAuth() && onlyChanging(['saves']))
           || (isAuth() && onlyChanging(['commentsCount']))
-          || (isAuth() && onlyChanging(['repostsCount']))
+          || (isAuth() && onlyChanging(['reposts']))
           || ((isModerator() || hasPermission("edit")) && onlyChanging(['moderationStatus','moderationReason','moderationNote','moderatedBy','moderatedAt']));
 
       allow delete: if (isAuth() && resource.data.uid == request.auth.uid) || isModerator() || hasPermission("edit");
