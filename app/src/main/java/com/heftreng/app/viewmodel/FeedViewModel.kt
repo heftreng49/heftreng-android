@@ -954,12 +954,31 @@ class FeedViewModel @Inject constructor(
         val origAuthorName = if (chainedRepost) post.repostAuthor.ifBlank { post.displayName } else post.displayName
         val origAuthorPhoto = if (chainedRepost) post.repostAuthorPhoto.ifBlank { post.photoURL } else post.photoURL
         val origAuthorUid  = if (chainedRepost) post.repostAuthorUid.ifBlank { post.uid } else post.uid
+        // ÖNEMLİ: Deterministik doküman ID'si kullanılıyor (repost_<uid>_<origId>).
+        // Profil, Kütüphane, Gönderi Detayı gibi farklı ekranlar kendi FeedViewModel
+        // örneğine ve myRepostMap'e sahip olabildiği için (henüz senkron olmamış olabilir),
+        // eskiden .add() ile rastgele ID üretilince aynı içerik birden fazla kez
+        // repostlanabiliyordu. Artık aynı kullanıcı + aynı orijinal içerik için her zaman
+        // AYNI doküman ID'sine yazılıyor — sunucu tarafında ikinci bir kayıt asla oluşmaz.
+        val repostDocId = "repost_${uid}_$origId"
         viewModelScope.launch {
             try {
+                val ref = firestore.collection("feed").document(repostDocId)
+                val existing = ref.get().await()
+                if (existing.exists()) {
+                    // Sunucuda zaten var (başka bir ekrandan/oturumdan önceden repostlanmış) —
+                    // yinelenen kayıt oluşturma, sadece yerel state'i gerçek duruma senkronla.
+                    myRepostMap = myRepostMap + (post.id to repostDocId)
+                    _posts.value = _posts.value.map {
+                        if (it.id == post.id) it.copy(isRepostedByMe = true, myRepostId = repostDocId) else it
+                    }
+                    return@launch
+                }
+
                 val d       = cachedUserDoc(uid) ?: myUserData()
                 val myName  = d["displayName"] as? String ?: d["name"] as? String ?: ""
                 val myPhoto = d["photoURL"] as? String ?: ""
-                val newRef = firestore.collection("feed").add(mapOf(
+                ref.set(mapOf(
                     "uid"               to uid,
                     "name"              to myName,
                     "displayName"       to myName,
@@ -979,13 +998,13 @@ class FeedViewModel @Inject constructor(
                     "likesCount" to 0, "saves" to 0, "commentsCount" to 0, "reposts" to 0,
                     "ts"    to Timestamp.now(),
                 )).await()
-                
+
                 firestore.collection("feed").document(post.id)
                     .update("reposts", FieldValue.increment(1)).await()
-                
-                myRepostMap = myRepostMap + (post.id to newRef.id)
+
+                myRepostMap = myRepostMap + (post.id to repostDocId)
                 _posts.value = _posts.value.map {
-                    if (it.id == post.id) it.copy(myRepostId = newRef.id) else it
+                    if (it.id == post.id) it.copy(myRepostId = repostDocId) else it
                 }
                 if (post.uid != uid) sendNotif(post.uid, "repost", "$myName gönderini paylaştı", previewText.take(60), post.id)
             } catch (e: Exception) {

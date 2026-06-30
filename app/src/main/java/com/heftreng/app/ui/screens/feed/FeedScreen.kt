@@ -444,6 +444,7 @@ fun FeedScreen(
                     val context = LocalContext.current
                     var heartBurst by remember { mutableStateOf(false) }
                     var visible    by remember { mutableStateOf(false) }
+                    var showUnrepostConfirm by remember(post.id) { mutableStateOf(false) }
                     LaunchedEffect(post.id) { visible = true }
 
                     val enterAlpha by animateFloatAsState(
@@ -475,7 +476,7 @@ fun FeedScreen(
                         onProfile = { navController.navigate(Screen.Profile.go(post.uid)) },
                         onComment = { navController.navigate(Screen.PostDetail.go(post.id)) },
                         onShare   = {
-                            if (post.isRepostedByMe) vm.unrepost(post)
+                            if (post.isRepostedByMe) showUnrepostConfirm = true
                             else vm.repost(post)
                         },
                         onDelete  = { vm.deletePost(post.id) },
@@ -547,6 +548,24 @@ fun FeedScreen(
                     )
                     } // inner Box (heart burst)
                     } // outer Box (enter animation)
+
+                    if (showUnrepostConfirm) {
+                        AlertDialog(
+                            onDismissRequest = { showUnrepostConfirm = false },
+                            shape   = RoundedCornerShape(16.dp),
+                            title   = { Text(Strings.undoRepostTitle(language)) },
+                            text    = { Text(Strings.undoRepostBody(language)) },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    vm.unrepost(post)
+                                    showUnrepostConfirm = false
+                                }) { Text(Strings.undoRepostConfirm(language), color = Error) }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showUnrepostConfirm = false }) { Text(Strings.cancel(language)) }
+                            },
+                        )
+                    }
 
                     // CMS'deki position/frequency alanlarına göre native ad yerleşimi.
                     // DÜZELTME: Eskiden SADECE "position" okunuyor ve frekans gibi
