@@ -17,6 +17,7 @@ import com.google.android.gms.ads.rewarded.RewardItem
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.ads.AdEngine
+import com.heftreng.app.ads.NativeAdPool
 import com.heftreng.app.ads.AdFrequencyManager
 import com.heftreng.app.ads.RemoteConfigManager
 import com.heftreng.app.data.model.AdMobProdIds
@@ -72,6 +73,9 @@ class AdsViewModel @Inject constructor(
 
     private val engine           = AdEngine(appContext, viewModelScope)
     private val frequencyManager = AdFrequencyManager(appContext, firestore, viewModelScope)
+
+    // ── Basit native reklam havuzu ─────────────────────────────────────────
+    val nativeAdPool = NativeAdPool(appContext, viewModelScope)
 
     // ── Slot tanımları ─────────────────────────────────────────────────────
     enum class BannerSlot  { FEED, LIB, KURDI, BLOG }
@@ -484,21 +488,30 @@ class AdsViewModel @Inject constructor(
 
     init {
         // RC fetch'i consent'ten bağımsız olarak hemen başlat.
-        // Remote Config okumak kişisel veri içermez, consent gerekmez.
-        // Consent geldiğinde config zaten cache'de hazır olur → reklam anında yüklenir.
         viewModelScope.launch { remoteConfigManager.fetchAndActivate() }
 
         if (ConsentHelper.canRequestAds.value) {
             loadAdConfigs()
+            // Pool'u hemen ısıt — nativeFeedUnitId zaten prod ID ile başlıyor
+            val unitId = nativeFeedUnitId.value
+            if (!unitId.isNullOrBlank()) nativeAdPool.warmUp(unitId)
         } else {
             viewModelScope.launch {
                 ConsentHelper.canRequestAds.collect { canAds ->
                     if (canAds) {
                         loadAdConfigs()
+                        val unitId = nativeFeedUnitId.value
+                        if (!unitId.isNullOrBlank()) nativeAdPool.warmUp(unitId)
                         return@collect
                     }
                 }
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        nativeAdPool.destroy()
+        engine.destroyAll()
     }
 }

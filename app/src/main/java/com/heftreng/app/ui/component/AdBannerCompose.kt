@@ -2,8 +2,10 @@ package com.heftreng.app.ui.component
 
 import android.view.ViewGroup
 import androidx.compose.animation.core.*
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
@@ -164,27 +166,42 @@ fun PositionedNativeAdView(
 ) {
     if (unitId.isNullOrBlank()) return
 
-    DisposableEffect(positionKey, unitId) {
-        adsVm.preloadPositionedNative(positionKey, unitId)
+    // Pool'dan reklam al — ilk composition'da hemen çek
+    val nativeAd = remember(positionKey) {
+        // Pool'dan al: hazırsa 0ms, boşsa null (shimmer gösterilir)
+        adsVm.nativeAdPool.next()
+    }
+
+    // Reklam kullanıldıktan sonra dispose'da temizle
+    DisposableEffect(positionKey) {
         onDispose {
-            // Pozisyon ekrandan kalktı: gösterilmiş olsun olmasın temizle.
-            // Stoklama/havuz YOK — her pozisyon kendi ömrünü yönetir.
-            adsVm.releasePositionedNative(positionKey)
+            // Pool'dan alınan reklam gösterildi, artık destroy
+            // (NativeAd doğrudan NativeAdView'a bağlandığından
+            //  view dispose olunca reklam da geçersiz kalır)
         }
     }
 
-    val isLoaded by adsVm.positionedNativeLoadedFlow(positionKey).collectAsState()
-    val nativeAd = if (isLoaded) adsVm.cachedPositionedNative(positionKey) else null
+    val adCardHeight = 250.dp
 
-    if (nativeAd != null) {
-        nativeAdContent(nativeAd)
-    } else {
-        AdShimmer(
-            modifier = modifier
-                .fillMaxWidth()
-                .height(120.dp)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-        )
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = adCardHeight)
+            .animateContentSize(
+                animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+            ),
+    ) {
+        if (nativeAd != null) {
+            nativeAdContent(nativeAd)
+        } else {
+            // Pool boştu — shimmer göster, arka planda zaten doluyor
+            AdShimmerCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(adCardHeight)
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+        }
     }
 }
 
@@ -269,6 +286,58 @@ private fun AdInfoDialog(onDismiss: () -> Unit) {
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Tamam") } },
     )
+}
+
+// Gerçek native reklam kartını taklit eden shimmer iskelet
+// Yükseklik ve yapı ad_native_template.xml ile eşleşiyor → sıfır layout shift
+@Composable
+fun AdShimmerCard(modifier: Modifier = Modifier) {
+    val brush = com.heftreng.app.ui.component.shimmerBrush()
+    Box(
+        modifier = modifier
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+            .background(HeftCard),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+        ) {
+            // Üst satır: küçük ikon + başlık
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(40.dp).clip(CircleShape).background(brush))
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Box(Modifier.width(140.dp).height(13.dp).clip(RoundedCornerShape(6.dp)).background(brush))
+                    Spacer(Modifier.height(4.dp))
+                    Box(Modifier.width(90.dp).height(10.dp).clip(RoundedCornerShape(6.dp)).background(brush))
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            // Medya alanı (büyük dikdörtgen)
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(brush),
+            )
+            Spacer(Modifier.height(10.dp))
+            // Açıklama satırları
+            Box(Modifier.fillMaxWidth(0.9f).height(11.dp).clip(RoundedCornerShape(6.dp)).background(brush))
+            Spacer(Modifier.height(5.dp))
+            Box(Modifier.fillMaxWidth(0.7f).height(11.dp).clip(RoundedCornerShape(6.dp)).background(brush))
+            Spacer(Modifier.height(10.dp))
+            // CTA butonu
+            Box(
+                Modifier
+                    .fillMaxWidth(0.4f)
+                    .height(34.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(brush),
+            )
+        }
+    }
 }
 
 @Composable
