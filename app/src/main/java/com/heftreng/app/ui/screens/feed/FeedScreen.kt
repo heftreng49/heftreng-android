@@ -146,7 +146,7 @@ fun FeedScreen(
     DisposableEffect(Unit) {
         onDispose {
             adsVm.releasePositionedBanners("feed_banner_")
-            adsVm.releasePositionedNatives("feed_native_")
+            adsVm.releaseAllPositionedNatives("feed_native_")
         }
     }
 
@@ -596,9 +596,6 @@ fun FeedScreen(
                             unitId         = nativeUnitId,
                             adsVm          = adsVm,
                             modifier       = Modifier.fillMaxWidth(),
-                            prefetchKeys   = nativeUnitId?.let { uid ->
-                                listOf("feed_native_${postIndex + nativeFreq}" to uid)
-                            } ?: emptyList(),
                         ) { ad ->
                             NativeAdViewCompose(
                                 nativeAd = ad,

@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
  *     önce yeni istek başlıyordu → yarış durumu + bellek sızıntısı. Düzeltildi.
  *   - loadBanner / loadPositionedBanner: "zaten yüklü" guard'ı unit ID
  *     değişimini de doğru şekilde algılar hale getirildi.
- *   - warmUpNativePool: havuz dolduğunda nativePoolFilling bayrağı temizlenir.
+ *   - Native ad havuz sistemi kaldırıldı: pozisyon başına tek istek/tek kullanım modeline geçildi (v3).
  * ═══════════════════════════════════════════════════════════════════════════
  */
 class AdEngine(
@@ -44,9 +44,6 @@ class AdEngine(
     companion object {
         private const val MAX_RETRY         = 4
         private const val RETRY_BASE_DELAY  = 8_000L
-        private const val POOL_TARGET       = 8   // havuz hep bu sayıda dolu tutulur
-        private const val POOL_MAX          = 10  // taşma toleransı
-        private const val PREFETCH_BATCH    = 5   // AdMob loadAds() limiti: istek başına en fazla 5
     }
 
     // SDK hazır olana kadar bekle — coroutine içinde, UI'ı bloklamaz (<200ms)
@@ -222,91 +219,68 @@ class AdEngine(
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    //  NATIVE AD HAVUZU
+    //  NATIVE AD — basit model: pozisyon başına TEK istek, TEK kullanım.
+    //
+    //  ÖNCEKİ SİSTEM (havuz + prefetch + recycle) AdMob fill-rate'i kötüleştiriyordu:
+    //  her pozisyon kendi reklamını + bir sonraki pozisyonun reklamını önceden
+    //  istiyordu, kullanıcı hızlı kaydırınca çoğu hiç gösterilmeden çöpe gidiyordu
+    //  (istek/gösterim oranı çok düşüktü). AdMob'un kendi önerisi: reklamı sadece
+    //  gerçekten gösterileceği an iste, kullanılmazsa hemen imha et — stoklama yapma.
     // ══════════════════════════════════════════════════════════════════════
-    private val nativePool        = mutableMapOf<String, ArrayDeque<NativeAd>>()
-    private val nativePoolFilling = mutableMapOf<String, Int>()  // kaç slot doldurulmakta
-
     private val posNativeAd     = mutableMapOf<String, NativeAd>()
     private val posNativeLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
     private val posNativeUnit   = mutableMapOf<String, String>()
+    private val posNativeJob    = mutableMapOf<String, kotlinx.coroutines.Job>()
 
     fun positionedNativeLoadedFlow(key: String): StateFlow<Boolean> =
         posNativeLoaded.getOrPut(key) { MutableStateFlow(false) }.asStateFlow()
 
     fun cachedPositionedNative(key: String): NativeAd? = posNativeAd[key]
 
-    /** Havuzu doldurur — AdMob'un loadAds() limiti (istek başına en fazla 5) nedeniyle
-     *  gerekirse birden çok istekte (5+3 gibi) doldurur. */
-    fun warmUpNativePool(unitId: String) {
-        if (unitId.isBlank()) return
-        val pool    = nativePool.getOrPut(unitId) { ArrayDeque() }
-        val filling = nativePoolFilling[unitId] ?: 0
-        val needed  = POOL_TARGET - pool.size - filling
-        if (needed <= 0) return
-        nativePoolFilling[unitId] = (filling + needed)
-
-        scope.launch {
-            awaitSdk()
-            var remaining = needed
-            while (remaining > 0) {
-                val batchSize = remaining.coerceAtMost(PREFETCH_BATCH)
-                remaining -= batchSize
-                AdLoader.Builder(appContext, unitId)
-                    .forNativeAd { nativeAd ->
-                        nativePoolFilling[unitId] = ((nativePoolFilling[unitId] ?: 1) - 1).coerceAtLeast(0)
-                        val p = nativePool.getOrPut(unitId) { ArrayDeque() }
-                        if (p.size < POOL_MAX) p.addLast(nativeAd) else nativeAd.destroy()
-                    }
-                    .withNativeAdOptions(nativeOptions)
-                    .withAdListener(object : AdListener() {
-                        override fun onAdFailedToLoad(error: LoadAdError) {
-                            nativePoolFilling[unitId] = ((nativePoolFilling[unitId] ?: 1) - 1).coerceAtLeast(0)
-                        }
-                    })
-                    .build()
-                    .loadAds(adRequest(), batchSize)
-                if (remaining > 0) delay(400)  // AdMob'u arka arkaya istekle boğmamak için kısa ara
-            }
-        }
-    }
-
     /**
-     * Pozisyon için reklam hazırlar.
-     * Havuzda reklam varsa → anında (0 gecikme).
-     * Yoksa → doğrudan yükler, arka planda havuzu doldurur.
+     * Pozisyon için TEK reklam ister. Aynı key+unitId için zaten yüklü veya
+     * yükleniyorsa tekrar istek atmaz (idempotent).
      */
     fun preloadPositionedNative(key: String, unitId: String) {
         if (unitId.isBlank()) return
         val loadedFlow = posNativeLoaded.getOrPut(key) { MutableStateFlow(false) }
 
-        // Zaten bu unitId için yüklü ve geçerli bir reklam varsa tekrar istek atma
-        if (loadedFlow.value && posNativeUnit[key] == unitId && posNativeAd[key] != null) return
-        posNativeUnit[key] = unitId
+        // Zaten bu unitId için yüklü VEYA şu an yükleniyor → tekrar isteme
+        if (posNativeUnit[key] == unitId && (loadedFlow.value || posNativeJob[key]?.isActive == true)) return
 
-        // Havuzdan çek
-        val pool     = nativePool.getOrPut(unitId) { ArrayDeque() }
-        val fromPool = pool.removeFirstOrNull()
-        if (fromPool != null) {
-            posNativeAd.remove(key)?.destroy()
-            posNativeAd[key] = fromPool
-            loadedFlow.value = true
-            return
-        }
+        // unitId değiştiyse eski isteği iptal et
+        posNativeJob[key]?.cancel()
+        posNativeAd.remove(key)?.destroy()
+        posNativeUnit[key] = unitId
         loadedFlow.value = false
-        scope.launch {
+
+        posNativeJob[key] = scope.launch {
             awaitSdk()
             loadOneNative(
                 unitId    = unitId,
                 retry     = 0,
                 onSuccess = { ad ->
-                    posNativeAd.remove(key)?.destroy()
                     posNativeAd[key] = ad
                     loadedFlow.value = true
                 },
-                onFail = {},
+                onFail = {
+                    loadedFlow.value = false
+                },
             )
         }
+    }
+
+    /**
+     * Composable LazyColumn dışına çıkıp dispose olduğunda çağrılır.
+     * Reklam GÖSTERİLMEDEN (isLoaded=false ya da hiç compose edilmeden)
+     * pozisyon terk edildiyse: bekleyen isteği iptal et, gelen reklamı imha et.
+     * Stoklama/havuz YOK — AdMob'a "boşa istek" bırakmamak en iyi pratik.
+     */
+    fun releasePositionedNative(key: String) {
+        posNativeJob.remove(key)?.cancel()
+        posNativeAd.remove(key)?.destroy()
+        posNativeLoaded.remove(key)
+        posNativeUnit.remove(key)
     }
 
     /**
@@ -352,40 +326,11 @@ class AdEngine(
         adLoader.loadAd(adRequest())
     }
 
-    /**
-     * Composable ekrandan kalkarken (LazyColumn dışına scroll, ekran değişimi)
-     * çağrılır. Reklam o pozisyonda HİÇ render edilmediyse (kullanıcı görmeden
-     * geçtiyse) destroy() etmek yerine havuza geri koyar — böylece bir
-     * sonraki pozisyon onu kullanabilir. Bu, AdMob'a "filled" sayılan ama
-     * hiç gösterilmeyen reklamların oranını düşürmek için eklendi.
-     */
-    fun recycleUnshownNative(key: String) {
-        val ad = posNativeAd.remove(key) ?: return
-        val unitId = posNativeUnit.remove(key)
-        posNativeLoaded.remove(key)
-        if (unitId != null) {
-            val pool = nativePool.getOrPut(unitId) { ArrayDeque() }
-            if (pool.size < POOL_MAX) pool.addLast(ad) else ad.destroy()
-        } else {
-            ad.destroy()
-        }
-    }
-
-    fun releasePositionedNatives(keyPrefix: String? = null) {
-        val keys = if (keyPrefix == null) posNativeAd.keys.toList()
-                   else posNativeAd.keys.filter { it.startsWith(keyPrefix) }
-        keys.forEach { k ->
-            posNativeAd.remove(k)?.destroy()
-            posNativeLoaded.remove(k)
-            posNativeUnit.remove(k)
-        }
-    }
-
-    fun releaseAdPool(unitId: String? = null) {
-        val pools = if (unitId == null) nativePool.values else listOfNotNull(nativePool[unitId])
-        pools.forEach { pool -> while (pool.isNotEmpty()) pool.removeFirst().destroy() }
-        if (unitId != null) nativePool.remove(unitId) else nativePool.clear()
-        if (unitId != null) nativePoolFilling.remove(unitId) else nativePoolFilling.clear()
+    /** Birden çok pozisyonu serbest bırakmak için (örn. tüm ekran kapanırken). */
+    fun releaseAllPositionedNatives(keyPrefix: String? = null) {
+        val keys = if (keyPrefix == null) posNativeAd.keys.toList() + posNativeJob.keys.toList()
+                   else (posNativeAd.keys + posNativeJob.keys).filter { it.startsWith(keyPrefix) }
+        keys.toSet().forEach { releasePositionedNative(it) }
     }
 
     // ── Yardımcılar ───────────────────────────────────────────────────────
@@ -418,12 +363,11 @@ class AdEngine(
     fun destroyAll() {
         singleBannerView.values.forEach { it.destroy() }
         posBannerView.values.forEach { it.destroy() }
+        posNativeJob.values.forEach { it.cancel() }
         posNativeAd.values.forEach { it.destroy() }
-        nativePool.values.forEach { pool -> pool.forEach { it.destroy() } }
         singleBannerView.clear(); singleBannerLoaded.clear()
         singleBannerSize.clear(); singleBannerUnit.clear()
         posBannerView.clear();    posBannerLoaded.clear()
-        posNativeAd.clear();      posNativeLoaded.clear(); posNativeUnit.clear()
-        nativePool.clear();       nativePoolFilling.clear()
+        posNativeAd.clear();      posNativeLoaded.clear(); posNativeUnit.clear(); posNativeJob.clear()
     }
 }

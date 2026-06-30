@@ -120,10 +120,8 @@ class AdsViewModel @Inject constructor(
     fun positionedNativeLoadedFlow(key: String): StateFlow<Boolean> = engine.positionedNativeLoadedFlow(key)
     fun cachedPositionedNative(key: String): NativeAd? = engine.cachedPositionedNative(key)
     fun preloadPositionedNative(key: String, unitId: String) = engine.preloadPositionedNative(key, unitId)
-    fun releasePositionedNatives(keyPrefix: String? = null) = engine.releasePositionedNatives(keyPrefix)
-    fun recycleUnshownNative(key: String) = engine.recycleUnshownNative(key)
-    fun warmUpNativePool(unitId: String) = engine.warmUpNativePool(unitId)
-    fun releaseAdPool(unitId: String? = null) = engine.releaseAdPool(unitId)
+    fun releasePositionedNative(key: String) = engine.releasePositionedNative(key)
+    fun releaseAllPositionedNatives(keyPrefix: String? = null) = engine.releaseAllPositionedNatives(keyPrefix)
 
     // ── Config StateFlow'ları ─────────────────────────────────────────────
     // Başlangıç değeri null → Remote Config fetch gelene kadar prod ID ile yüklenir
@@ -266,7 +264,7 @@ class AdsViewModel @Inject constructor(
             val config = remoteConfigManager.getAdConfig(key) ?: return
             flow.value = config
             newAll[key] = config
-            // warmUpNativePool kaldırıldı — havuz yerine doğrudan yükleme kullanılıyor
+            // Native ad havuzu kaldırıldı — her pozisyon kendi istek/release döngüsünü yönetiyor
         }
 
         applyBanner(_bannerConfig,        RemoteConfigManager.KEY_BANNER_FEED,    BannerSlot.FEED)
@@ -469,7 +467,7 @@ class AdsViewModel @Inject constructor(
             // Arka plandan dönünce Remote Config'i de yenile (cache geçerliyse 0ms)
             loadAdConfigs()
             // Native havuz feed ekranında PositionedNativeAdView tarafından zaten dolduruluyor.
-            // Burada tekrar warmUpNativePool çağırmak gereksiz istek üretiyordu.
+            // Native ad artık per-position lazy-load — burada ekstra çağrı gerekmiyor.
             if (interstitialAd == null && interstitialUnitId.isNotBlank()) loadInterstitialAd(interstitialUnitId)
             if (rewardedAd == null && rewardedUnitId.isNotBlank() && !rewardedLoading) preloadRewardedAd(rewardedUnitId)
         }

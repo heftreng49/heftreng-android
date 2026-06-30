@@ -906,7 +906,6 @@ private fun UnitsTab(
                                 unitId       = nativeUnitId,
                                 adsVm        = adsVm,
                                 modifier     = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                                prefetchKeys = nativeUnitId?.let { uid -> listOf("kurdi_native_${units.getOrNull(unitIndex + nativeKurdiFreq)?.id ?: ""}" to uid) }?.filter { it.first.isNotBlank() } ?: emptyList(),
                             ) { ad ->
                                 NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = when (nativeKurdiCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL })
                             }

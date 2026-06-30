@@ -145,7 +145,14 @@ fun PositionedAdBannerView(
 }
 
 /**
- * PositionedNativeAdView — Cache-first native reklam.
+ * PositionedNativeAdView — sade model: pozisyon görünür olunca TEK istek atar,
+ * composable LazyColumn dışına çıkıp dispose olunca isteği/reklamı temizler.
+ *
+ * ÖNCEKİ SİSTEM (havuz + bir-sonraki-pozisyon prefetch + recycle) AdMob'un
+ * istek/gösterim oranını kötüleştiriyordu: her pozisyon hem kendi reklamını
+ * hem bir sonrakini önceden istiyordu, kullanıcı hızlı kaydırınca isteklerin
+ * büyük kısmı hiç gösterilmeden çöpe gidiyordu. AdMob'un kendi önerisi net:
+ * reklamı sadece gerçekten gösterileceği an iste, kullanılmazsa imha et.
  */
 @Composable
 fun PositionedNativeAdView(
@@ -153,35 +160,21 @@ fun PositionedNativeAdView(
     unitId         : String?,
     adsVm          : AdsViewModel,
     modifier       : Modifier = Modifier,
-    prefetchKeys   : List<Pair<String, String>> = emptyList(),
     nativeAdContent: @Composable (com.google.android.gms.ads.nativead.NativeAd) -> Unit,
 ) {
     if (unitId.isNullOrBlank()) return
 
-    LaunchedEffect(positionKey, unitId) {
+    DisposableEffect(positionKey, unitId) {
         adsVm.preloadPositionedNative(positionKey, unitId)
-        prefetchKeys.forEach { (key, nextUnitId) ->
-            if (nextUnitId.isNotBlank()) adsVm.preloadPositionedNative(key, nextUnitId)
+        onDispose {
+            // Pozisyon ekrandan kalktı: gösterilmiş olsun olmasın temizle.
+            // Stoklama/havuz YOK — her pozisyon kendi ömrünü yönetir.
+            adsVm.releasePositionedNative(positionKey)
         }
     }
 
     val isLoaded by adsVm.positionedNativeLoadedFlow(positionKey).collectAsState()
     val nativeAd = if (isLoaded) adsVm.cachedPositionedNative(positionKey) else null
-
-    // Composable, reklamı GERÇEKTEN ekrana çizmeden (henüz shimmer
-    // gösterirken, isLoaded=false durumdayken) LazyColumn dışına çıkıp
-    // dispose olursa: arka planda gelecek olan reklamı (varsa zaten gelmiş
-    // ama henüz compose edilmemişse) imha etmek yerine havuza geri koy.
-    // ÖNCEDEN: dispose'da hiçbir temizlik yoktu, AdMob'a göre "filled"
-    // sayılan reklamların büyük kısmı hiç gösterilmeden kaybolup gidiyordu
-    // (istek/gösterim oranı çok düşüktü — örn. 2630 istek / 75 gösterim).
-    DisposableEffect(positionKey) {
-        onDispose {
-            if (!isLoaded) {
-                adsVm.recycleUnshownNative(positionKey)
-            }
-        }
-    }
 
     if (nativeAd != null) {
         nativeAdContent(nativeAd)

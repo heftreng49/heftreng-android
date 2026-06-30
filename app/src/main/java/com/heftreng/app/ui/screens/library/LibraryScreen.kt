@@ -120,7 +120,7 @@ fun LibraryScreen(
     DisposableEffect(Unit) {
         onDispose {
             adsVm.releasePositionedBanners("lib_")
-            adsVm.releasePositionedNatives("lib_")
+            adsVm.releaseAllPositionedNatives("lib_")
         }
     }
 
@@ -423,7 +423,6 @@ private fun LibraryQuotesTab(
                         unitId       = nativeUnitId,
                         adsVm        = adsVm,
                         modifier     = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        prefetchKeys = nativeUnitId?.let { uid -> listOf("lib_quotes_native_${index + nativeLibFreq}" to uid) } ?: emptyList(),
                     ) { ad ->
                         NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = when (nativeLibCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL })
                     }

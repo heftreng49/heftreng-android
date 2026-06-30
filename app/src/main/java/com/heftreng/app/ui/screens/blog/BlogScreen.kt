@@ -63,7 +63,7 @@ fun BlogScreen(
     DisposableEffect(Unit) {
         onDispose {
             adsVm.releasePositionedBanners("blog_banner_")
-            adsVm.releasePositionedNatives("blog_native_")
+            adsVm.releaseAllPositionedNatives("blog_native_")
         }
     }
 
@@ -185,9 +185,6 @@ fun BlogScreen(
                                     unitId       = nativeUnitId,
                                     adsVm        = adsVm,
                                     modifier     = Modifier.fillMaxWidth(),
-                                    prefetchKeys = nativeUnitId?.let { uid ->
-                                        listOf("blog_native_${index + nativeBlogFreq}" to uid)
-                                    } ?: emptyList(),
                                 ) { ad ->
                                     NativeAdViewCompose(
                                         nativeAd = ad,
