@@ -141,8 +141,8 @@ jobs:
             );
 
             console.log("\n-- CMS --");
-            await test("herkes cms_ads okuyabilir (reklam config)", () =>
-              assertSucceeds(anon.firestore().collection("cms_ads").get())
+            await test("cms_ads kaldirildi - artik erisilemez (Remote Config'e gecildi)", () =>
+              assertFails(anon.firestore().collection("cms_ads").get())
             );
             await test("herkes appConfig okuyabilir", () =>
               assertSucceeds(anon.firestore().collection("appConfig").get())
