@@ -101,6 +101,7 @@ fun FeedScreen(
     blogVm       : BlogViewModel    = hiltViewModel(),
 ) {
     val posts       by vm.posts.collectAsState()
+    val repostError by vm.repostError.collectAsState()
     val suggestedUsers by vm.suggestedUsers.collectAsState()
     val loading     by vm.loading.collectAsState()
     val hasMore     by vm.hasMore.collectAsState()
@@ -682,6 +683,17 @@ fun FeedScreen(
         } // Column
     } // Box
 
+    // GEÇİCİ DEBUG: repost hatasının gerçek mesajını göster
+    if (repostError != null) {
+        AlertDialog(
+            onDismissRequest = { vm.clearRepostError() },
+            title   = { Text("Repost Hatası (debug)") },
+            text    = { Text(repostError ?: "") },
+            confirmButton = {
+                TextButton(onClick = { vm.clearRepostError() }) { Text("Tamam") }
+            },
+        )
+    }
 }
 
 // ── ReportDialog ──────────────────────────────────────────────────────────────

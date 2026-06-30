@@ -1008,7 +1008,8 @@ class FeedViewModel @Inject constructor(
                 }
                 if (post.uid != uid) sendNotif(post.uid, "repost", "$myName gönderini paylaştı", previewText.take(60), post.id)
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.e("HeftrengRepost", "repost() hata: ${e.javaClass.simpleName}: ${e.message}", e)
+                _repostError.value = "${e.javaClass.simpleName}: ${e.message}"
                 // Hata → optimistic güncellemeyi geri al
                 myRepostMap = myRepostMap - post.id
                 _posts.value = _posts.value.map {
@@ -1074,6 +1075,10 @@ class FeedViewModel @Inject constructor(
     private val _createPostError = MutableStateFlow<String?>(null)
     val createPostError = _createPostError.asStateFlow()
     fun clearCreatePostError() { _createPostError.value = null }
+
+    private val _repostError = MutableStateFlow<String?>(null)
+    val repostError = _repostError.asStateFlow()
+    fun clearRepostError() { _repostError.value = null }
 
     private val _createPostLoading = MutableStateFlow(false)
     val createPostLoading = _createPostLoading.asStateFlow()
