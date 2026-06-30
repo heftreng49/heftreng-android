@@ -361,6 +361,13 @@ service cloud.firestore {
       allow create:       if isVerified() && maxLen('reason', 500);
     }
 
+    // ─── KURDİ DERS HATA BİLDİRİMLERİ ────────────────────────
+    match /kf_reports/{reportId} {
+      allow read, update: if isModerator() || isAdmin() || hasPermission("kurdi");
+      allow delete:       if isAdmin();
+      allow create:       if isAuth();
+    }
+
     // ─── İTİRAZLAR ────────────────────────────────────────────
     match /appeals/{appealId} {
       allow read, update: if isModerator() || hasPermission("appeals");
