@@ -352,6 +352,25 @@ class AdEngine(
         adLoader.loadAd(adRequest())
     }
 
+    /**
+     * Composable ekrandan kalkarken (LazyColumn dışına scroll, ekran değişimi)
+     * çağrılır. Reklam o pozisyonda HİÇ render edilmediyse (kullanıcı görmeden
+     * geçtiyse) destroy() etmek yerine havuza geri koyar — böylece bir
+     * sonraki pozisyon onu kullanabilir. Bu, AdMob'a "filled" sayılan ama
+     * hiç gösterilmeyen reklamların oranını düşürmek için eklendi.
+     */
+    fun recycleUnshownNative(key: String) {
+        val ad = posNativeAd.remove(key) ?: return
+        val unitId = posNativeUnit.remove(key)
+        posNativeLoaded.remove(key)
+        if (unitId != null) {
+            val pool = nativePool.getOrPut(unitId) { ArrayDeque() }
+            if (pool.size < POOL_MAX) pool.addLast(ad) else ad.destroy()
+        } else {
+            ad.destroy()
+        }
+    }
+
     fun releasePositionedNatives(keyPrefix: String? = null) {
         val keys = if (keyPrefix == null) posNativeAd.keys.toList()
                    else posNativeAd.keys.filter { it.startsWith(keyPrefix) }

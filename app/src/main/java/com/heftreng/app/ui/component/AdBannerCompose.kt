@@ -168,6 +168,21 @@ fun PositionedNativeAdView(
     val isLoaded by adsVm.positionedNativeLoadedFlow(positionKey).collectAsState()
     val nativeAd = if (isLoaded) adsVm.cachedPositionedNative(positionKey) else null
 
+    // Composable, reklamı GERÇEKTEN ekrana çizmeden (henüz shimmer
+    // gösterirken, isLoaded=false durumdayken) LazyColumn dışına çıkıp
+    // dispose olursa: arka planda gelecek olan reklamı (varsa zaten gelmiş
+    // ama henüz compose edilmemişse) imha etmek yerine havuza geri koy.
+    // ÖNCEDEN: dispose'da hiçbir temizlik yoktu, AdMob'a göre "filled"
+    // sayılan reklamların büyük kısmı hiç gösterilmeden kaybolup gidiyordu
+    // (istek/gösterim oranı çok düşüktü — örn. 2630 istek / 75 gösterim).
+    DisposableEffect(positionKey) {
+        onDispose {
+            if (!isLoaded) {
+                adsVm.recycleUnshownNative(positionKey)
+            }
+        }
+    }
+
     if (nativeAd != null) {
         nativeAdContent(nativeAd)
     } else {

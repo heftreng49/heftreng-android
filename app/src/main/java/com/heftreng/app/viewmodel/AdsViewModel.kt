@@ -121,6 +121,7 @@ class AdsViewModel @Inject constructor(
     fun cachedPositionedNative(key: String): NativeAd? = engine.cachedPositionedNative(key)
     fun preloadPositionedNative(key: String, unitId: String) = engine.preloadPositionedNative(key, unitId)
     fun releasePositionedNatives(keyPrefix: String? = null) = engine.releasePositionedNatives(keyPrefix)
+    fun recycleUnshownNative(key: String) = engine.recycleUnshownNative(key)
     fun warmUpNativePool(unitId: String) = engine.warmUpNativePool(unitId)
     fun releaseAdPool(unitId: String? = null) = engine.releaseAdPool(unitId)
 
