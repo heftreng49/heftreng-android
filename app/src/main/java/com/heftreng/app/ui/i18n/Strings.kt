@@ -78,6 +78,16 @@ object Strings {
     // ── Feed ──────────────────────────────────────────────────────────────────
     fun whatsOnMind(l: String)     = t(l, "Ne düşünüyorsun?",         "Tu çi difikiri?")
     fun postTitleHint(l: String)   = t(l, "Başlık (opsiyonel)",       "Sernav (vebijarkî)")
+    fun chooseTopic(l: String)     = t(l, "Konu seç",                 "Mijarê hilbijêre")
+    val postTopics = listOf("genel", "kitap", "alinti", "soru", "tartisma", "siir")
+    fun topicLabel(l: String, key: String) = when (key) {
+        "kitap"    -> t(l, "Kitap",     "Pirtûk")
+        "alinti"   -> t(l, "Alıntı",    "Vegotin")
+        "soru"     -> t(l, "Soru",      "Pirs")
+        "tartisma" -> t(l, "Tartışma",  "Niqaş")
+        "siir"     -> t(l, "Şiir",      "Helbest")
+        else       -> t(l, "Genel",     "Giştî")
+    }
     fun postHint(l: String)        = t(l, "Düşüncelerini paylaş...",  "Ramanên xwe parve bike...")
     fun like(l: String)            = t(l, "Beğen",                    "Hez bike")
     fun comment(l: String)         = t(l, "Yorum",                    "Şîrove")

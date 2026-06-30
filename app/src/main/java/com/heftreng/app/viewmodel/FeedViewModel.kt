@@ -608,6 +608,7 @@ class FeedViewModel @Inject constructor(
             photoURL      = d["photoURL"] as? String ?: "",
             text          = d["text"]     as? String ?: "",
             title         = d["title"]    as? String ?: "",
+            category      = d["category"] as? String ?: "",
             imageURL      = imageURL,
             imgUrl        = imageURL,
             ytVid         = d["ytVid"]       as? String ?: "",
@@ -1030,6 +1031,7 @@ class FeedViewModel @Inject constructor(
         imageUri   : android.net.Uri,
         text       : String,
         title      : String = "",
+        category   : String = "",
         quoteText  : String = "",
         authorName : String = "",
         bookName   : String = "",
@@ -1044,7 +1046,7 @@ class FeedViewModel @Inject constructor(
                 val ref = storage.reference.child("posts/$uid/${System.currentTimeMillis()}.jpg")
                 ref.putFile(imageUri).await()
                 val url = ref.downloadUrl.await().toString()
-                createPost(text = text, title = title, imageURL = url, quoteText = quoteText, authorName = authorName, bookName = bookName, coverImg = coverImg, type = if (quoteText.isNotBlank()) "library_quote" else "")
+                createPost(text = text, title = title, category = category, imageURL = url, quoteText = quoteText, authorName = authorName, bookName = bookName, coverImg = coverImg, type = if (quoteText.isNotBlank()) "library_quote" else "")
             } catch (e: Exception) { e.printStackTrace() }
             finally { _uploading.value = false }
         }
@@ -1057,7 +1059,7 @@ class FeedViewModel @Inject constructor(
     private val _createPostLoading = MutableStateFlow(false)
     val createPostLoading = _createPostLoading.asStateFlow()
 
-    fun createPost(text: String, title: String = "", imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "", coverImg: String = "", type: String = "", libraryAuthorId: String = "", libraryBookId: String = "") {
+    fun createPost(text: String, title: String = "", category: String = "", imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "", coverImg: String = "", type: String = "", libraryAuthorId: String = "", libraryBookId: String = "") {
         if (uid.isEmpty()) return
         viewModelScope.launch {
             _createPostLoading.value = true
@@ -1099,6 +1101,7 @@ class FeedViewModel @Inject constructor(
                     "authorEmail"     to myEmail,
                     "text"            to text,
                     "title"           to title,
+                    "category"        to category,
                     "imgUrl"          to imageURL,
                     "imageURL"        to imageURL,
                     "quoteText"       to quoteText,

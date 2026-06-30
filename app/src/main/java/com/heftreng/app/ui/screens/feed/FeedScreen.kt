@@ -15,6 +15,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -183,6 +184,7 @@ fun FeedScreen(
     val socialLoading    by socialVm.loading.collectAsState()
     var inlineText       by remember { mutableStateOf("") }
     var inlineTitle      by remember { mutableStateOf("") }
+    var inlineTopic      by remember { mutableStateOf("") }
     var inlineQuote      by remember { mutableStateOf<QuotePayload?>(null) }
     var showInlineQuote  by remember { mutableStateOf(false) }
     var inlineImageUri   by remember { mutableStateOf<Uri?>(null) }
@@ -366,6 +368,8 @@ fun FeedScreen(
                         onTextChange  = { inlineText = it },
                         title         = inlineTitle,
                         onTitleChange = { inlineTitle = it },
+                        topic         = inlineTopic,
+                        onTopicChange = { inlineTopic = it },
                         quote         = inlineQuote,
                         onQuoteAdd    = { if (appConfig.feedAllowQuotes) showInlineQuote = true },
                         onQuoteRemove = { inlineQuote = null },
@@ -377,6 +381,7 @@ fun FeedScreen(
                                         imageUri   = uri,
                                         text       = inlineText.trim(),
                                         title      = inlineTitle.trim(),
+                                        category   = inlineTopic,
                                         quoteText  = inlineQuote?.text ?: "",
                                         authorName = inlineQuote?.authorName ?: "",
                                         bookName   = inlineQuote?.bookName ?: "",
@@ -387,6 +392,7 @@ fun FeedScreen(
                                     vm.createPost(
                                         text       = inlineText.trim(),
                                         title      = inlineTitle.trim(),
+                                        category   = inlineTopic,
                                         quoteText  = inlineQuote?.text ?: "",
                                         authorName = inlineQuote?.authorName ?: "",
                                         bookName   = inlineQuote?.bookName ?: "",
@@ -395,6 +401,7 @@ fun FeedScreen(
                                 }
                                 inlineText     = ""
                                 inlineTitle    = ""
+                                inlineTopic    = ""
                                 inlineQuote    = null
                                 inlineImageUri = null
                             }
@@ -733,6 +740,8 @@ private fun InlineComposeBox(
     onTextChange  : (String) -> Unit,
     title         : String        = "",
     onTitleChange : (String) -> Unit = {},
+    topic         : String        = "",
+    onTopicChange : (String) -> Unit = {},
     quote         : QuotePayload?,
     onQuoteAdd    : () -> Unit,
     onQuoteRemove : () -> Unit,
@@ -752,31 +761,6 @@ private fun InlineComposeBox(
         tonalElevation = 0.dp,
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            OutlinedTextField(
-                value           = title,
-                onValueChange   = { if (it.length <= 120) onTitleChange(it) },
-                placeholder     = {
-                    Text(
-                        Strings.postTitleHint(language),
-                        color = Muted, fontSize = 14.sp,
-                    )
-                },
-                modifier        = Modifier.fillMaxWidth(),
-                colors          = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor      = Primary,
-                    unfocusedBorderColor    = Color.Transparent,
-                    focusedTextColor        = OnBackground,
-                    unfocusedTextColor      = OnBackground,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedContainerColor   = Color.Transparent,
-                    cursorColor             = Primary,
-                ),
-                shape           = RoundedCornerShape(8.dp),
-                textStyle       = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 15.sp),
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                singleLine      = true,
-            )
-            Spacer(Modifier.height(4.dp))
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 verticalAlignment     = Alignment.Top,
@@ -788,29 +772,42 @@ private fun InlineComposeBox(
                     modifier           = Modifier.size(36.dp).clip(CircleShape).background(SurfaceVar),
                     contentScale       = ContentScale.Crop,
                 )
-                OutlinedTextField(
-                    value           = text,
-                    onValueChange   = onTextChange,
-                    placeholder     = {
-                        Text(
-                            Strings.whatsOnMind(language),
-                            color = Muted, fontSize = 14.sp,
-                        )
-                    },
-                    modifier        = Modifier.fillMaxWidth().heightIn(min = 60.dp, max = 200.dp),
-                    colors          = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor      = Primary,
-                        unfocusedBorderColor    = Color.Transparent,
-                        focusedTextColor        = OnBackground,
-                        unfocusedTextColor      = OnBackground,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedContainerColor   = Color.Transparent,
-                        cursorColor             = Primary,
-                    ),
-                    shape           = RoundedCornerShape(8.dp),
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                    maxLines        = 8,
-                )
+                // ── Başlık + gövde tek, kutusuz bir yazım alanında birleşik ──────────
+                Column(modifier = Modifier.weight(1f)) {
+                    BasicTextField(
+                        value           = title,
+                        onValueChange   = { if (it.length <= 120) onTitleChange(it) },
+                        modifier        = Modifier.fillMaxWidth(),
+                        textStyle       = androidx.compose.ui.text.TextStyle(
+                            color      = OnBackground,
+                            fontSize   = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        cursorBrush     = androidx.compose.ui.graphics.SolidColor(Primary),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        singleLine      = true,
+                        decorationBox   = { inner ->
+                            if (title.isEmpty()) {
+                                Text(Strings.postTitleHint(language), color = Muted, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            }
+                            inner()
+                        },
+                    )
+                    BasicTextField(
+                        value           = text,
+                        onValueChange   = onTextChange,
+                        modifier        = Modifier.fillMaxWidth().heightIn(min = 56.dp, max = 200.dp).padding(top = 4.dp),
+                        textStyle       = androidx.compose.ui.text.TextStyle(color = OnBackground, fontSize = 15.sp),
+                        cursorBrush     = androidx.compose.ui.graphics.SolidColor(Primary),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        decorationBox   = { inner ->
+                            if (text.isEmpty()) {
+                                Text(Strings.whatsOnMind(language), color = Muted, fontSize = 15.sp)
+                            }
+                            inner()
+                        },
+                    )
+                }
             }
             if (quote != null) {
                 Spacer(Modifier.height(8.dp))
@@ -837,6 +834,32 @@ private fun InlineComposeBox(
                     ) {
                         Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(14.dp))
                     }
+                }
+            }
+            // ── Konu seçici — opsiyonel chip listesi ──────────────────────────────
+            Spacer(Modifier.height(8.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(Strings.postTopics) { key ->
+                    val selected = topic == key
+                    FilterChip(
+                        selected = selected,
+                        onClick  = { onTopicChange(if (selected) "" else key) },
+                        label    = { Text(Strings.topicLabel(language, key), fontSize = 12.sp) },
+                        colors   = FilterChipDefaults.filterChipColors(
+                            containerColor          = SurfaceVar,
+                            labelColor              = Muted,
+                            selectedContainerColor  = Primary.copy(alpha = 0.16f),
+                            selectedLabelColor      = Primary,
+                        ),
+                        border   = FilterChipDefaults.filterChipBorder(
+                            enabled = true, selected = selected,
+                            borderColor         = Divider,
+                            selectedBorderColor = Primary,
+                            borderWidth          = 1.dp,
+                            selectedBorderWidth  = 1.dp,
+                        ),
+                        modifier = Modifier.height(30.dp),
+                    )
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -1232,6 +1255,21 @@ fun PostCard(
                     onTapAuthor = onTapAuthor,
                     modifier    = Modifier.padding(bottom = 8.dp),
                 )
+            }
+            if (post.category.isNotBlank()) {
+                Surface(
+                    color    = Primary.copy(alpha = 0.12f),
+                    shape    = RoundedCornerShape(99.dp),
+                    modifier = Modifier.padding(bottom = 4.dp),
+                ) {
+                    Text(
+                        Strings.topicLabel(language, post.category),
+                        color      = Primary,
+                        fontSize   = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier   = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                }
             }
             if (post.title.isNotBlank()) {
                 Text(

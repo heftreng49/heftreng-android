@@ -164,6 +164,7 @@ fun SinglePostScreen(
                         photoURL     = d["photoURL"]    as? String ?: "",
                         text         = d["text"]        as? String ?: "",
                         title        = d["title"]       as? String ?: "",
+                        category     = d["category"]    as? String ?: "",
                         imgUrl       = d["imgUrl"]      as? String ?: "",
                         quoteText    = quoteText,
                         bookName     = bookName,
