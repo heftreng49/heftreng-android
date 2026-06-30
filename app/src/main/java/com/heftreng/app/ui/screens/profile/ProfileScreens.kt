@@ -110,6 +110,18 @@ fun ProfileScreen(
     val socialLoading by socialVm.loading.collectAsState()
     var showFollowers  by remember { mutableStateOf(false) }
     var showFollowing  by remember { mutableStateOf(false) }
+    var privateListBlockedMsg by remember { mutableStateOf(false) }
+    val localContext = LocalContext.current
+    LaunchedEffect(privateListBlockedMsg) {
+        if (privateListBlockedMsg) {
+            android.widget.Toast.makeText(
+                localContext,
+                if (language == "ku") "Ev hesab veşartî ye" else "Bu hesap gizli",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+            privateListBlockedMsg = false
+        }
+    }
     var msgPermDenied  by remember { mutableStateOf(false) }
     var showReadBooksSheet by remember { mutableStateOf(false) }
     var showQuotesSheet    by remember { mutableStateOf(false) }
@@ -306,12 +318,20 @@ fun ProfileScreen(
                     onFollow       = { vm.toggleFollow(targetUid) },
                     onEditProfile  = { navController.navigate(Screen.EditProfile.route) },
                     onFollowers    = {
-                        socialVm.loadFollowers(targetUid)
-                        showFollowers = true
+                        if (canSeeContent) {
+                            socialVm.loadFollowers(targetUid)
+                            showFollowers = true
+                        } else {
+                            privateListBlockedMsg = true
+                        }
                     },
                     onFollowing    = {
-                        socialVm.loadFollowing(targetUid)
-                        showFollowing = true
+                        if (canSeeContent) {
+                            socialVm.loadFollowing(targetUid)
+                            showFollowing = true
+                        } else {
+                            privateListBlockedMsg = true
+                        }
                     },
                     onMessage      = {
                         if (!isMe && targetUid.isNotBlank()) {

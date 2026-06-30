@@ -334,7 +334,7 @@ service cloud.firestore {
         allow read:   if isOwner(uid) || isStaff();
         // FATURA OPTİMİZASYONU: notBanned kaldırıldı — bildirim yazmak düşük riskli, 1 get() tasarruf
         allow create: if isAuth();
-        allow update: if isOwner(uid) && onlyChanging(['read']);
+        allow update: if isOwner(uid) && onlyChanging(['read', 'status']);
         allow delete: if isOwner(uid) || isAdmin();
       }
     }

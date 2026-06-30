@@ -69,6 +69,22 @@ class FeedViewModel @Inject constructor(
     private val _followingUids = MutableStateFlow<Set<String>>(emptySet())
     val followingUids = _followingUids.asStateFlow()
 
+    // Gizli hesap koruması — client-side son katman.
+    // Firestore Rules "list" sorgusunda tek tek belge bazlı filtre yapamadığı için
+    // (allow list: if true), feed çekildikten sonra burada filtreliyoruz:
+    // visibility == "friends" olan bir post sadece sahibi veya takipçisi tarafından görülebilir.
+    private fun filterVisible(posts: List<Post>): List<Post> {
+        val myUid = uid
+        return posts.filter { p ->
+            when (p.visibility) {
+                "only_me" -> p.uid == myUid
+                "friends" -> p.uid == myUid || _followingUids.value.contains(p.uid)
+                else      -> true
+            }
+        }
+    }
+
+
     // Swipe-to-refresh için ayrı state — server fetch bitince false olur
     private val _serverRefreshing = MutableStateFlow(false)
     val serverRefreshing = _serverRefreshing.asStateFlow()
@@ -334,7 +350,7 @@ class FeedViewModel @Inject constructor(
                     _hasMore.value = cacheSnap.documents.size >= PAGE_SIZE.toInt()
                     
                     val rawPosts = cacheSnap.documents.mapNotNull { it.toPost() }
-                    val filtered = rawPosts.filter { it.moderationStatus != "removed" }
+                    val filtered = filterVisible(rawPosts.filter { it.moderationStatus != "removed" })
                     
                     _posts.value = mapInteractions(filtered)
                     _loading.value = false // Önbellekten veri geldiği an yükleme çemberi biter!
@@ -358,7 +374,7 @@ class FeedViewModel @Inject constructor(
                         if (serverSnap.documents.isNotEmpty()) lastDoc = serverSnap.documents.last()
                         _hasMore.value = serverSnap.documents.size >= PAGE_SIZE.toInt()
                         val rawPosts = serverSnap.documents.mapNotNull { it.toPost() }
-                        val filtered = rawPosts.filter { it.moderationStatus != "removed" }
+                        val filtered = filterVisible(rawPosts.filter { it.moderationStatus != "removed" })
                         _posts.value = mapInteractions(filtered)
                         enrichPostsInBackground(filtered)
                         refreshInteractionsForPage(filtered)
@@ -393,7 +409,7 @@ class FeedViewModel @Inject constructor(
                 _hasMore.value = snap.documents.size >= PAGE_SIZE.toInt()
                 
                 val rawMore = snap.documents.mapNotNull { it.toPost() }
-                val filtered = rawMore.filter { it.moderationStatus != "removed" }
+                val filtered = filterVisible(rawMore.filter { it.moderationStatus != "removed" })
                 
                 _posts.value = _posts.value + mapInteractions(filtered)
                 enrichPostsInBackground(filtered)
@@ -1123,6 +1139,9 @@ class FeedViewModel @Inject constructor(
                     } catch (_: Exception) {}
                 }
 
+                val myIsPrivate = d["isPrivate"] as? Boolean ?: false
+                val resolvedVisibility = if (myIsPrivate) "friends" else "public"
+
                 val feedRef = firestore.collection("feed").add(mapOf(
                     "uid"             to uid,
                     "name"            to myName,
@@ -1142,6 +1161,7 @@ class FeedViewModel @Inject constructor(
                     "libraryAuthorId" to resolvedAuthorId,
                     "libraryBookId"   to resolvedBookId,
                     "type"            to if (quoteText.isNotBlank() && type.isBlank()) "library_quote" else type,
+                    "visibility"      to resolvedVisibility,
                     "likes"           to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
                     "ts"              to Timestamp.now(),
                 )).await()
