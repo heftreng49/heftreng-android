@@ -74,7 +74,7 @@ class AdsViewModel @Inject constructor(
     private val engine           = AdEngine(appContext, viewModelScope)
     private val frequencyManager = AdFrequencyManager(appContext, firestore, viewModelScope)
 
-    // ── Basit native reklam havuzu ─────────────────────────────────────────
+    /** Basit native reklam havuzu — RC'den gelen ID ile önceden doldurulur. */
     val nativeAdPool = NativeAdPool(appContext, viewModelScope)
 
     // ── Slot tanımları ─────────────────────────────────────────────────────
@@ -483,35 +483,29 @@ class AdsViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        nativeAdPool.destroy()
         engine.destroyAll()
     }
 
     init {
-        // RC fetch'i consent'ten bağımsız olarak hemen başlat.
         viewModelScope.launch { remoteConfigManager.fetchAndActivate() }
 
         if (ConsentHelper.canRequestAds.value) {
             loadAdConfigs()
-            // Pool'u hemen ısıt — nativeFeedUnitId zaten prod ID ile başlıyor
-            val unitId = nativeFeedUnitId.value
-            if (!unitId.isNullOrBlank()) nativeAdPool.warmUp(unitId)
+            // Pool'u RC'den gelen ID ile ısıt — nativeFeedUnitId başlangıçta prod ID
+            val uid = nativeFeedUnitId.value
+            if (!uid.isNullOrBlank()) nativeAdPool.warmUp(uid)
         } else {
             viewModelScope.launch {
                 ConsentHelper.canRequestAds.collect { canAds ->
                     if (canAds) {
                         loadAdConfigs()
-                        val unitId = nativeFeedUnitId.value
-                        if (!unitId.isNullOrBlank()) nativeAdPool.warmUp(unitId)
+                        val uid = nativeFeedUnitId.value
+                        if (!uid.isNullOrBlank()) nativeAdPool.warmUp(uid)
                         return@collect
                     }
                 }
             }
         }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        nativeAdPool.destroy()
-        engine.destroyAll()
     }
 }
