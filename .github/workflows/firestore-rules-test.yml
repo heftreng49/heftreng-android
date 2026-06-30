@@ -148,6 +148,17 @@ jobs:
               assertSucceeds(anon.firestore().collection("appConfig").get())
             );
 
+            console.log("\n-- AD FREQUENCY --");
+            await test("anonim user_ad_frequency okuyamaz", () =>
+              assertFails(anon.firestore().collection("user_ad_frequency").doc("uid1").get())
+            );
+            await test("kullanici kendi frekans kaydina yazabilir", () =>
+              assertSucceeds(user.firestore().collection("user_ad_frequency").doc("uid1").set({ rewarded_2026: 1 }))
+            );
+            await test("kullanici baskasinin frekans kaydina yazamaz", () =>
+              assertFails(user.firestore().collection("user_ad_frequency").doc("other_uid").set({ rewarded_2026: 1 }))
+            );
+
             await env.cleanup();
             console.log("\nSonuc: " + passed + " gecti, " + failed + " basarisiz");
             if (failed > 0) process.exit(1);

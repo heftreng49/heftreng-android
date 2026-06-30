@@ -368,6 +368,14 @@ service cloud.firestore {
       allow create:       if isAuth();
     }
 
+    // ─── REKLAM FREKANS ANALİTİĞİ ─────────────────────────────
+    // AdFrequencyManager rewarded reklam sayacını burada tutar (analitik amaçlı).
+    // Kullanıcı sadece kendi verisine yazabilir; okuma sadece admin/moderatör.
+    match /user_ad_frequency/{uid} {
+      allow read:  if isOwner(uid) || isModerator();
+      allow write: if isOwner(uid) && isAuth();
+    }
+
     // ─── İTİRAZLAR ────────────────────────────────────────────
     match /appeals/{appealId} {
       allow read, update: if isModerator() || hasPermission("appeals");

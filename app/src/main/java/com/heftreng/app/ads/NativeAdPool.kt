@@ -79,9 +79,14 @@ class NativeAdPool(
         isLoading = true
         Log.d("AdPool", "Yükleniyor: $needed reklam (havuz: ${pool.size})")
 
+        // AdMob politikası: önceden yüklenen reklamlar makul sürede gösterilmeli.
+        // NativeAdPool yalnızca bu constraint biliniyorsa kullanılmalı —
+        // havuz dolunca yeni istek atılmaz (MAX_SIZE koruması).
+        // isLoading → sadece tüm batch callback'leri tamamlanınca false yapılır
+        // (race condition önlemi: loadAds() async, launch bloğu anında biter)
+        var remaining = needed
         scope.launch {
-            // Küçük gecikme — AdMob rate limit koruması
-            if (pool.isEmpty()) delay(0) else delay(200)
+            if (pool.isNotEmpty()) delay(200)  // rate limit koruması
 
             AdLoader.Builder(context, unitId)
                 .forNativeAd { nativeAd ->
@@ -99,14 +104,18 @@ class NativeAdPool(
                         .build()
                 )
                 .withAdListener(object : AdListener() {
+                    override fun onAdLoaded() {
+                        remaining--
+                        if (remaining <= 0) isLoading = false
+                    }
                     override fun onAdFailedToLoad(error: LoadAdError) {
                         Log.w("AdPool", "Yüklenemedi: ${error.message}")
+                        remaining--
+                        if (remaining <= 0) isLoading = false
                     }
                 })
                 .build()
                 .loadAds(AdRequest.Builder().build(), needed)
-
-            isLoading = false
         }
     }
 }

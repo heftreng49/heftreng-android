@@ -149,14 +149,14 @@ fun PositionedAdBannerView(
 }
 
 /**
- * PositionedNativeAdView — sade model: pozisyon görünür olunca TEK istek atar,
- * composable LazyColumn dışına çıkıp dispose olunca isteği/reklamı temizler.
+ * PositionedNativeAdView — AdMob politikasına uygun model:
+ * Pozisyon ekrana girince TEK istek atar (per-position lazy-load).
+ * LazyColumn dışına çıkıp dispose olunca hem isteği iptal eder
+ * hem de gösterilmemiş reklamı imha eder (boşa istek = fill rate düşer).
  *
- * ÖNCEKİ SİSTEM (havuz + bir-sonraki-pozisyon prefetch + recycle) AdMob'un
- * istek/gösterim oranını kötüleştiriyordu: her pozisyon hem kendi reklamını
- * hem bir sonrakini önceden istiyordu, kullanıcı hızlı kaydırınca isteklerin
- * büyük kısmı hiç gösterilmeden çöpe gidiyordu. AdMob'un kendi önerisi net:
- * reklamı sadece gerçekten gösterileceği an iste, kullanılmazsa imha et.
+ * NEDEN POOL YOK: Önceden yüklenen reklamlar makul sürede gösterilmezse
+ * AdMob politika ihlali (guideline: yüklenen ad ~1 saatte gösterilmeli).
+ * Havuz yaklaşımı ayrıca istek/gösterim oranını düşürür.
  */
 @Composable
 fun PositionedNativeAdView(
@@ -168,18 +168,17 @@ fun PositionedNativeAdView(
 ) {
     if (unitId.isNullOrBlank()) return
 
-    // Pool'dan reklam al — ilk composition'da hemen çek
-    val nativeAd = remember(positionKey) {
-        // Pool'dan al: hazırsa 0ms, boşsa null (shimmer gösterilir)
-        adsVm.nativeAdPool.next()
-    }
+    // AdEngine'den yüklü reklamı al (lazy: ekrana girince istek atılmış olmalı)
+    val isLoaded by adsVm.positionedNativeLoadedFlow(positionKey).collectAsState()
+    val nativeAd = if (isLoaded) adsVm.cachedPositionedNative(positionKey) else null
 
-    // Reklam kullanıldıktan sonra dispose'da temizle
-    DisposableEffect(positionKey) {
+    // Composable ekrana girince istek at, çıkınca temizle
+    DisposableEffect(positionKey, unitId) {
+        adsVm.preloadPositionedNative(positionKey, unitId)
         onDispose {
-            // Pool'dan alınan reklam gösterildi, artık destroy
-            // (NativeAd doğrudan NativeAdView'a bağlandığından
-            //  view dispose olunca reklam da geçersiz kalır)
+            // Gösterilmemişse isteği iptal et ve reklamı imha et
+            // Gösterilmişse NativeAdView zaten destroy etmiş olur
+            adsVm.releasePositionedNative(positionKey)
         }
     }
 
