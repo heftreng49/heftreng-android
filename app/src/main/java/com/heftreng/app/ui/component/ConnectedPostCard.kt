@@ -41,6 +41,10 @@ fun ConnectedPostCard(
     showReport      : Boolean = false,
     onReport        : (() -> Unit)? = null,
     onBlock         : (() -> Unit)? = null,
+    // Profil/Kütüphane gibi feedVm dışında kendi post listesini tutan ekranlar
+    // için: repost/unrepost sonrası bu ekranın da kendi state'ini güncellemesi gerekir.
+    onRepostOverride   : (() -> Unit)? = null,
+    onUnrepostOverride : (() -> Unit)? = null,
 ) {
     // Twitter tarzı: repostu geri almadan önce onay iste — yanlışlıkla geri almayı önler.
     var showUnrepostConfirm by remember(post.id) { mutableStateOf(false) }
@@ -54,7 +58,10 @@ fun ConnectedPostCard(
         onSave   = onSaveOverride ?: { feedVm.toggleSave(post) },
         onShare  = {
             if (post.isRepostedByMe) showUnrepostConfirm = true
-            else feedVm.repost(post)
+            else {
+                feedVm.repost(post)
+                onRepostOverride?.invoke()
+            }
         },
         onDelete = onDeleteOverride,
         onEdit   = onEditOverride,
@@ -118,6 +125,7 @@ fun ConnectedPostCard(
             confirmButton = {
                 TextButton(onClick = {
                     feedVm.unrepost(post)
+                    onUnrepostOverride?.invoke()
                     showUnrepostConfirm = false
                 }) { Text(Strings.undoRepostConfirm(language), color = androidx.compose.ui.graphics.Color(0xFFEF4444)) }
             },

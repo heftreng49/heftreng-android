@@ -746,6 +746,20 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
+    /**
+     * feedVm.repost()/unrepost() Firestore yazmasını yapar; bu fonksiyon sadece
+     * Profile ekranının kendi _posts state'ini senkron tutar (ConnectedPostCard
+     * onRepostOverride/onUnrepostOverride üzerinden çağırır).
+     */
+    fun markPostReposted(postId: String, reposted: Boolean) {
+        _posts.value = _posts.value.map {
+            if (it.id == postId) it.copy(
+                isRepostedByMe = reposted,
+                repostsCount   = maxOf(0, it.repostsCount + if (reposted) 1 else -1),
+            ) else it
+        }
+    }
+
     fun deleteOwnPost(postId: String) {
         if (myUid.isEmpty()) return
         _posts.value = _posts.value.filter { it.id != postId }

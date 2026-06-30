@@ -459,12 +459,14 @@ fun ProfileScreen(
                     } else {
                         itemsIndexed(posts, key = { _, p -> "post_${p.id}" }) { index, post ->
                             ConnectedPostCard(
-                                post             = post,
-                                navController    = navController,
-                                feedVm           = feedVm,
-                                language         = language,
-                                onDeleteOverride = if (isMe) ({ vm.deleteOwnPost(post.id) }) else null,
-                                onEditOverride   = if (isMe) ({ newTitle, newText -> vm.editOwnPost(post.id, newTitle, newText) }) else null,
+                                post               = post,
+                                navController      = navController,
+                                feedVm             = feedVm,
+                                language           = language,
+                                onDeleteOverride   = if (isMe) ({ vm.deleteOwnPost(post.id) }) else null,
+                                onEditOverride     = if (isMe) ({ newTitle, newText -> vm.editOwnPost(post.id, newTitle, newText) }) else null,
+                                onRepostOverride   = { vm.markPostReposted(post.id, true) },
+                                onUnrepostOverride = { vm.markPostReposted(post.id, false) },
                             )
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
                             // CMS/RC'deki position/frequency alanlarına göre native ad yerleşimi.
