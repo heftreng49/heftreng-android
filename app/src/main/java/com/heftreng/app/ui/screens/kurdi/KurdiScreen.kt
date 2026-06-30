@@ -1541,6 +1541,14 @@ fun LessonScreen(
 
     var showReportDialog by remember { mutableStateOf(false) }
     var reportSent       by remember { mutableStateOf(false) }
+    val lessonToast       by vm.toast.collectAsState()
+
+    LaunchedEffect(lessonToast) {
+        if (lessonToast != null) {
+            kotlinx.coroutines.delay(2500)
+            vm.clearToast()
+        }
+    }
 
     Scaffold(
         containerColor = Background,
@@ -1961,6 +1969,27 @@ fun LessonScreen(
             dismissButton = { TextButton(onClick = { showReportDialog = false }) { Text("İptal", color = Muted) } },
             containerColor = HeftSurface,
         )
+    }
+
+    // Toast snackbar — reportLessonError gibi hataları burada gösterir.
+    // ÖNCEDEN: vm.toast hiç dinlenmiyordu, bu yüzden "Hata Bildir" başarısız
+    // olduğunda kullanıcıya hiçbir geri bildirim verilmiyordu (sessiz başarısızlık).
+    if (lessonToast != null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            Surface(
+                modifier = Modifier.padding(24.dp).navigationBarsPadding(),
+                shape    = RoundedCornerShape(24.dp),
+                color    = Primary,
+            ) {
+                Text(
+                    lessonToast ?: "",
+                    color      = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 14.sp,
+                    modifier   = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                )
+            }
+        }
     }
 }
 
