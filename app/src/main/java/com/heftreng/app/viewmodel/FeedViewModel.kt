@@ -964,7 +964,14 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val ref = firestore.collection("feed").document(repostDocId)
-                val existing = ref.get().await()
+                val existing = try {
+                    ref.get().await()
+                } catch (offlineErr: Exception) {
+                    // Firestore SDK bazen network varken bile ilk istekte "client is offline"
+                    // hatası fırlatabilir (cache senkronizasyon gecikmesi) — bir kez yeniden dene.
+                    kotlinx.coroutines.delay(700)
+                    ref.get().await()
+                }
                 if (existing.exists()) {
                     // Sunucuda zaten var (başka bir ekrandan/oturumdan önceden repostlanmış) —
                     // yinelenen kayıt oluşturma, sadece yerel state'i gerçek duruma senkronla.

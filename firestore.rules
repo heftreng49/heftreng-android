@@ -137,7 +137,10 @@ service cloud.firestore {
     }
 
     match /feed/{postId} {
-      allow get:  if postVisible(resource.data);
+      // Belge yoksa (örn. repost'tan önceki varlık kontrolü) resource null olur —
+      // bu durumda postVisible() çağrılmadan true dönülmeli, aksi halde
+      // null.data çağrısı PERMISSION_DENIED olarak görünen bir rules hatasına yol açar.
+      allow get:  if resource == null || postVisible(resource.data);
       // FATURA OPTİMİZASYONU: list tamamen açık — web sitesi ve arama için,
       // notBanned kontrolü write tarafında yapılıyor
       allow list: if true;
