@@ -282,6 +282,10 @@ class LibraryRepository @Inject constructor(
         db["book_quotes"].delete { filter { eq("id", id) } }
     }
 
+    /** ESKİ: book_quotes.likes_count'u doğrudan artırıp azaltıyordu — feed_likes ile
+     *  senkron değildi, bu yüzden kütüphane akışı ile kitap/yazar detay sayfası farklı
+     *  beğeni sayıları gösteriyordu. Artık feed_likes tek kaynak; bkz. toggleQuoteFeedLike. */
+    @Deprecated("feed_likes tabanlı toggleQuoteFeedLike kullan")
     suspend fun incrementQuoteLikes(id: String, delta: Int) {
         val row = db["book_quotes"].select {
             filter { eq("id", id) }
@@ -290,6 +294,57 @@ class LibraryRepository @Inject constructor(
         db["book_quotes"].update(
             mapOf("likes_count" to (row.likesCount + delta).coerceAtLeast(0))
         ) { filter { eq("id", id) } }
+    }
+
+    /** Verilen feed gönderi id'leri için gerçek beğeni sayılarını ve giriş yapan
+     *  kullanıcının beğenip beğenmediğini feed_likes tablosundan döndürür.
+     *  Hem kütüphane akışı (ConnectedPostCard) hem de kitap/yazar detay sayfası
+     *  (BookQuoteCard) artık aynı tabloyu okuyup yazdığı için sayılar her zaman eşleşir. */
+    suspend fun getQuoteLikeStates(feedPostIds: List<String>): Map<String, Pair<Int, Boolean>> {
+        val ids = feedPostIds.filter { it.isNotBlank() }.distinct()
+        if (ids.isEmpty()) return emptyMap()
+        val myUid = auth.currentUser?.uid.orEmpty()
+        val rows = try {
+            db["feed_likes"].select {
+                filter { isIn("post_id", ids) }
+            }.decodeList<com.heftreng.app.data.model.FeedLikeRow>()
+        } catch (e: Exception) { return emptyMap() }
+        val counts = rows.groupingBy { it.postId }.eachCount()
+        val likedByMe = rows.filter { it.uid == myUid }.map { it.postId }.toSet()
+        return ids.associateWith { (counts[it] ?: 0) to (it in likedByMe) }
+    }
+
+    /** Bir alıntının (kütüphane akışındaki karşılığı olan) feed gönderisini
+     *  feed_likes tablosu üzerinden beğenir/beğeniyi geri alır. Dönüş: yeni (sayı, beğenildi mi). */
+    suspend fun toggleQuoteFeedLike(feedPostId: String, myName: String, myPhoto: String): Pair<Int, Boolean> {
+        val myUid = auth.currentUser?.uid.orEmpty()
+        if (myUid.isEmpty() || feedPostId.isBlank()) return 0 to false
+        val existing = try {
+            db["feed_likes"].select {
+                filter { eq("post_id", feedPostId); eq("uid", myUid) }
+                limit(1)
+            }.decodeList<com.heftreng.app.data.model.FeedLikeRow>()
+        } catch (e: Exception) { emptyList() }
+
+        if (existing.isEmpty()) {
+            db["feed_likes"].insert(
+                mapOf(
+                    "id"        to "${feedPostId}_$myUid",
+                    "post_id"   to feedPostId,
+                    "uid"       to myUid,
+                    "name"      to myName,
+                    "photo_url" to myPhoto,
+                )
+            )
+        } else {
+            db["feed_likes"].delete { filter { eq("post_id", feedPostId); eq("uid", myUid) } }
+        }
+
+        val count = try {
+            db["feed_likes"].select { filter { eq("post_id", feedPostId) } }
+                .decodeList<com.heftreng.app.data.model.FeedLikeRow>().size
+        } catch (e: Exception) { 0 }
+        return count to existing.isEmpty()
     }
 
     // ── Book Reviews ──────────────────────────────────────────────────────────

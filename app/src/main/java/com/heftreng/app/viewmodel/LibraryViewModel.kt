@@ -168,6 +168,7 @@ class LibraryViewModel @Inject constructor(
                 _authorBooks.value   = booksDeferred.await().map  { it.toDomain() }
                 _authorQuotes.value  = quotesDeferred.await().map { it.toDomain() }
                 _authorReviews.value = reviewsDeferred.await().map{ it.toDomain() }
+                syncQuoteLikeStates(_authorQuotes.value, _authorQuotes)
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -268,6 +269,7 @@ class LibraryViewModel @Inject constructor(
                     if (q.coverImg.isBlank() && bookCover.isNotBlank()) q.copy(coverImg = bookCover) else q
                 }
                 _bookReviews.value = rDeferred.await().map { it.toDomain() }
+                syncQuoteLikeStates(_bookQuotes.value, _bookQuotes)
             } catch (e: Exception) {
                 _error.value = e.message
             } finally {
@@ -482,16 +484,43 @@ class LibraryViewModel @Inject constructor(
     fun toggleLikeQuote(bookId: String, quoteId: String) {
         viewModelScope.launch {
             try {
-                val current = _bookQuotes.value.find { it.id == quoteId } ?: return@launch
-                val delta   = if (current.isLikedByMe) -1 else 1
-                library.incrementQuoteLikes(quoteId, delta)
+                val current = _bookQuotes.value.find { it.id == quoteId }
+                    ?: _authorQuotes.value.find { it.id == quoteId } ?: return@launch
+                if (current.feedPostId.isBlank()) return@launch
+                // Optimistic UI
+                val nowLiked = !current.isLikedByMe
+                val optimisticDelta = if (nowLiked) 1 else -1
                 _bookQuotes.value = _bookQuotes.value.map {
-                    if (it.id == quoteId) it.copy(
-                        isLikedByMe = !it.isLikedByMe,
-                        likesCount  = (it.likesCount + delta).coerceAtLeast(0),
-                    ) else it
+                    if (it.id == quoteId) it.copy(isLikedByMe = nowLiked, likesCount = (it.likesCount + optimisticDelta).coerceAtLeast(0)) else it
+                }
+                _authorQuotes.value = _authorQuotes.value.map {
+                    if (it.id == quoteId) it.copy(isLikedByMe = nowLiked, likesCount = (it.likesCount + optimisticDelta).coerceAtLeast(0)) else it
+                }
+                val (realCount, liked) = library.toggleQuoteFeedLike(current.feedPostId, myName, myPhoto)
+                _bookQuotes.value = _bookQuotes.value.map {
+                    if (it.id == quoteId) it.copy(isLikedByMe = liked, likesCount = realCount) else it
+                }
+                _authorQuotes.value = _authorQuotes.value.map {
+                    if (it.id == quoteId) it.copy(isLikedByMe = liked, likesCount = realCount) else it
                 }
             } catch (e: Exception) { _error.value = e.message }
+        }
+    }
+
+    /** Yüklenen alıntıların gerçek beğeni sayısını/durumunu feed_likes'tan çekip
+     *  state'e yansıtır — kütüphane akışıyla (ConnectedPostCard) aynı sayıyı gösterir. */
+    private fun syncQuoteLikeStates(quotes: List<BookQuote>, target: MutableStateFlow<List<BookQuote>>) {
+        val feedIds = quotes.map { it.feedPostId }.filter { it.isNotBlank() }
+        if (feedIds.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val states = library.getQuoteLikeStates(feedIds)
+                if (states.isEmpty()) return@launch
+                target.value = target.value.map { q ->
+                    val s = states[q.feedPostId] ?: return@map q
+                    q.copy(likesCount = s.first, isLikedByMe = s.second)
+                }
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
