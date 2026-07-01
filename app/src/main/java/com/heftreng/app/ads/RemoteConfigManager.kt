@@ -99,6 +99,21 @@ class RemoteConfigManager @Inject constructor(
         remoteConfig.fetchAndActivate().await()
     }.getOrDefault(false)
 
+    /**
+     * Gerçek zorla yenileme — SDK'nın 12 saatlik minimumFetchInterval kuralını
+     * BYPASS eder (fetch(0) ile). Admin panelinden "Reklamları Yenile" gibi bir
+     * butona bağlanabilir. Normal kullanıcı akışında ÇAĞRILMAMALI — Firebase'in
+     * ücretsiz kotasını (günde sınırlı istek) hızla tüketebilir.
+     *
+     * ÖNCEDEN: loadAdConfigs(forceRefresh=true) parametresi tanımlıydı ama hiçbir
+     * yerde kullanılmıyordu — normal fetchAndActivate() zaten 12 saat cache'e
+     * tabiydi, "force" hiçbir şeyi zorlamıyordu.
+     */
+    suspend fun forceFetchAndActivate(): Boolean = runCatching {
+        remoteConfig.fetch(0).await()
+        remoteConfig.activate().await()
+    }.getOrDefault(false)
+
     // ── Config okuma yardımcıları ────────────────────────────────────────
 
     /** Global reklam açık/kapalı flag'i */

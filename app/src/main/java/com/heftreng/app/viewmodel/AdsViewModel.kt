@@ -159,6 +159,31 @@ class AdsViewModel @Inject constructor(
     private val _adsEnabled = MutableStateFlow(true)
     val adsEnabled          = _adsEnabled.asStateFlow()
 
+    // GEÇİCİ DEBUG: Remote Config'ten gerçekten ne geldiğini görmek için.
+    // Sorun çözülünce bu state ve ilgili dialog kaldırılabilir.
+    private val _adsDebugInfo = MutableStateFlow<String?>(null)
+    val adsDebugInfo = _adsDebugInfo.asStateFlow()
+    fun clearAdsDebugInfo() { _adsDebugInfo.value = null }
+    fun showAdsDebugInfo() {
+        viewModelScope.launch {
+            val fetchResult = remoteConfigManager.forceFetchAndActivate()
+            val bf = remoteConfigManager.getAdConfig(RemoteConfigManager.KEY_BANNER_FEED)
+            val bl = remoteConfigManager.getAdConfig(RemoteConfigManager.KEY_BANNER_LIBRARY)
+            _adsDebugInfo.value = buildString {
+                appendLine("fetchAndActivate: $fetchResult")
+                appendLine("adsEnabled (global): ${remoteConfigManager.isAdsEnabled()}")
+                appendLine()
+                appendLine("banner_feed:")
+                appendLine("  enabled=${bf?.enabled}  unitId=${bf?.unitId}")
+                appendLine("banner_library:")
+                appendLine("  enabled=${bl?.enabled}  unitId=${bl?.unitId}")
+                appendLine()
+                appendLine("bannerUnitId (çözümlenmiş): ${bannerUnitId.value}")
+                appendLine("bannerLibraryUnitId (çözümlenmiş): ${bannerLibraryUnitId.value}")
+            }
+        }
+    }
+
     // ── Unit ID StateFlow'ları ─────────────────────────────────────────────
     // resolveOrDefault mantığı: c==null → config henüz gelmedi → prod ID ile başla
     //                           c!=null && !c.enabled → admin kapattı → null (reklam yok)
@@ -234,7 +259,12 @@ class AdsViewModel @Inject constructor(
             // onAppForeground() gibi başka kod yollarından gelen çağrılarda SDK
             // henüz hazır olmayabilir — awaitSdk() bunu garantiler.
             HeftrangApp.sdkReady.first { it }
-            remoteConfigManager.fetchAndActivate()
+            // ÖNCEDEN forceRefresh parametresi hiçbir şey yapmıyordu — normal
+            // fetchAndActivate() her zaman 12 saatlik cache'e tabiydi. Artık
+            // forceRefresh=true → gerçekten cache'i bypass edip anında sunucudan çeker.
+            val fetchResult = if (forceRefresh) remoteConfigManager.forceFetchAndActivate()
+                               else remoteConfigManager.fetchAndActivate()
+            android.util.Log.e("HeftrengAdsDebug", "fetchAndActivate sonucu: $fetchResult (forceRefresh=$forceRefresh)")
             applyRemoteConfigs(preloadAds = true)
         }
     }
@@ -251,6 +281,7 @@ class AdsViewModel @Inject constructor(
 
         fun applyBanner(flow: MutableStateFlow<CmsAdConfig?>, key: String, slot: BannerSlot) {
             val config = remoteConfigManager.getAdConfig(key) ?: return
+            android.util.Log.e("HeftrengAdsDebug", "$key -> enabled=${config.enabled} unitId=${config.unitId} raw config yüklendi")
             flow.value = config
             newAll[key] = config
             if (preloadAds && config.enabled && _adsEnabled.value) {
