@@ -38,10 +38,15 @@ class RemoteConfigManager @Inject constructor(
 ) {
     companion object {
         // ── Fetch interval ───────────────────────────────────────────────
-        // Production: 1 saat → konsol değişikliği max 1 saatte devreye girer
-        // (eski: 43200 = 12 saat — reklamı kapattığında 12 saat beklemek gerekiyordu)
-        private const val FETCH_INTERVAL_PROD  = 3_600L   // 1 saat
-        private const val FETCH_INTERVAL_DEBUG = 0L       // debug: her açılışta anında
+        // Production: 0 — Firebase SDK'nın minimumFetchInterval'ı kullanıyoruz (1 saat)
+        // Debug: 0 — her açılışta anında güncelle
+        // Client-side throttle ayrıca var (bkz. fetchAndActivate) — çift güvence
+        private const val FETCH_INTERVAL_PROD  = 3_600L
+        private const val FETCH_INTERVAL_DEBUG = 0L
+
+        // Client-side throttle — SDK interval'ına ek güvence
+        // Aynı oturumda 30 dakikadan sık fetch yapmaz
+        private const val CLIENT_THROTTLE_MS = 30 * 60 * 1_000L  // 30 dakika
 
         // ── Remote Config key isimleri ───────────────────────────────────
         // Firebase konsolunda bu isimlerle değer tanımlanacak.
@@ -97,19 +102,23 @@ class RemoteConfigManager @Inject constructor(
         remoteConfig.setDefaultsAsync(DEFAULTS)
     }
 
+    private var lastFetchMs = 0L
+
     /**
      * Remote Config'i fetch et ve aktive et.
-     *
-     * • Cache geçerliyse (12h) → anında döner, network yok
-     * • Cache bayatsa → arka planda network fetch → activate
-     * • Başarısız olsa bile default değerler/cache aktif kalır — reklam durmaz
-     *
-     * Bu fonksiyon AdsViewModel.init() içinden bir kez çağrılır.
-     * Hata fırlattırmaz, başarı durumu döner (log için).
+     * Client-side throttle: aynı oturumda 30 dakikadan sık fetch yapmaz.
+     * Debug build'de throttle yok — her açılışta anında günceller.
      */
-    suspend fun fetchAndActivate(): Boolean = runCatching {
-        remoteConfig.fetchAndActivate().await()
-    }.getOrDefault(false)
+    suspend fun fetchAndActivate(): Boolean {
+        val now     = System.currentTimeMillis()
+        val throttle = if (com.heftreng.app.BuildConfig.DEBUG) 0L else CLIENT_THROTTLE_MS
+        if (now - lastFetchMs < throttle) return false
+        return runCatching {
+            val result = remoteConfig.fetchAndActivate().await()
+            if (result) lastFetchMs = now
+            result
+        }.getOrDefault(false)
+    }
 
     /**
      * Gerçek zorla yenileme — SDK'nın 12 saatlik minimumFetchInterval kuralını
