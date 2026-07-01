@@ -408,7 +408,9 @@ class AdsViewModel @Inject constructor(
         return scenarioEnabled && _remainingRewardedAds.value > 0
     }
 
-    private fun syncRemainingRewardedAds(dailyLimit: Int) {
+    // dailyLimit: RC'den gelir. RC henüz gelmemişse default 3 kullan.
+    // Bu fonksiyon hem RC gelince hem uygulama açılışında çağrılır.
+    private fun syncRemainingRewardedAds(dailyLimit: Int = _rewardedConfig.value?.dailyLimit ?: 3) {
         val uid = auth.currentUser?.uid ?: return
         val used = frequencyManager.getCount(uid, "rewarded")
         _remainingRewardedAds.value = (dailyLimit - used).coerceAtLeast(0)
@@ -487,6 +489,11 @@ class AdsViewModel @Inject constructor(
     }
 
     init {
+        // Uygulama açılışında kalan rewarded hakkını SharedPreferences'tan hemen yükle.
+        // RC beklemeye gerek yok — dailyLimit bilinmese de "bugün kaç kullandım" yerel.
+        // RC gelince syncRemainingRewardedAds(config.dailyLimit) ile kesin değer güncellenir.
+        syncRemainingRewardedAds()
+
         // Remote Config'i hemen arka planda fetch et (cache geçerliyse 0ms, ağdan ~200ms)
         // Bu, reklam config'ini UMP onayından bağımsız olarak hazır tutar.
         viewModelScope.launch { remoteConfigManager.fetchAndActivate() }
