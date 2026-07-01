@@ -19,6 +19,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.ads.AdEngine
 import com.heftreng.app.ads.AdFrequencyManager
 import com.heftreng.app.ads.RemoteConfigManager
+import com.heftreng.app.HeftrangApp
 import com.heftreng.app.data.model.AdMobProdIds
 import com.heftreng.app.data.model.CmsAdConfig
 import com.heftreng.app.util.ConsentHelper
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -225,17 +227,14 @@ class AdsViewModel @Inject constructor(
     //   → JSON parse — güvenli, alan ekleyince format bozulmuyor
     fun loadAdConfigs(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            if (!ConsentHelper.canRequestAds.value) {
-                android.util.Log.d("AdsVM", "loadAdConfigs: UMP onayı bekleniyor")
-                return@launch
-            }
-
-            // fetchAndActivate() — cache geçerliyse (12h) anında döner, ağ isteği yok.
-            // forceRefresh=true ise: RC minimum fetch interval 0'a set edilmiş debug builds'de
-            // çalışır. Production'da Firebase konsolundan "force update" kontrolü yoktur —
-            // bunun yerine Remote Config Conditions kullanılır.
+            // SDK hazır olana kadar bekle — UMP tamamlandıktan sonra MainActivity
+            // notifySdkReady() → sdkReady=true yapar. Burada beklemek, canRequestAds
+            // guard'ının yarattığı race condition'ı ortadan kaldırır: init{}'ten gelen
+            // çağrı canRequestAds true olduğunda tetiklendiği için güvenli; ama
+            // onAppForeground() gibi başka kod yollarından gelen çağrılarda SDK
+            // henüz hazır olmayabilir — awaitSdk() bunu garantiler.
+            HeftrangApp.sdkReady.first { it }
             remoteConfigManager.fetchAndActivate()
-
             applyRemoteConfigs(preloadAds = true)
         }
     }
@@ -486,17 +485,32 @@ class AdsViewModel @Inject constructor(
     }
 
     init {
+        // Remote Config'i hemen arka planda fetch et (cache geçerliyse 0ms, ağdan ~200ms)
+        // Bu, reklam config'ini UMP onayından bağımsız olarak hazır tutar.
         viewModelScope.launch { remoteConfigManager.fetchAndActivate() }
 
-        if (ConsentHelper.canRequestAds.value) {
-            loadAdConfigs()
-        } else {
-            viewModelScope.launch {
-                ConsentHelper.canRequestAds.collect { canAds ->
-                    if (canAds) {
-                        loadAdConfigs()
-                        return@collect
-                    }
+        // canRequestAds true olduğu anda (UMP tamamlandı veya UMP gereksiz) config yükle.
+        // ESKİ HATA: init{} içinde önce canRequestAds.value'ya bakıp "true ise hemen çağır,
+        // değilse koleksiyona başla" yapısı bir race condition yaratıyordu:
+        //   - AdsViewModel, MainActivity UMP callback'inden (notifySdkReady()) ÖNCE
+        //     oluşturulursa → canRequestAds.value == false → collect başlar
+        //   - Ama collecten sonra UMP callback gelirse → collect tepki verir ✓
+        //   - AdsViewModel, notifySdkReady() SONRA oluşturulursa → canRequestAds.value == true
+        //     → doğrudan çağırır ✓ (bu yol çalışıyordu)
+        //   - Problem: Hilt, ViewModel'i her zaman Activity.onCreate'nin ortasında yaratır;
+        //     UMP çağrısı da onCreate'de başlar, ama UMP async — ViewModel UMP'den önce
+        //     yaratılıyor, canRequestAds her zaman false başlıyor, collect üzerinden
+        //     gidiyor. AMA: collect, "ilk true emisyonu" görünce loadAdConfigs() çağırıyor,
+        //     bu tamam. Asıl sorun: loadAdConfigs() içindeki erken return:
+        //       if (!ConsentHelper.canRequestAds.value) return@launch
+        //     Bu satır collect callback'inden çağrılınca TRUE'dur ama aynı satır
+        //     onAppForeground() gibi farklı kod yollarından çağrılınca FALSE olabilir.
+        //     Tek bir flag yerine, zaten canRequestAds.first{it} bekleme deseni kullanılıyor.
+        viewModelScope.launch {
+            ConsentHelper.canRequestAds.collect { canAds ->
+                if (canAds) {
+                    loadAdConfigs()
+                    return@collect
                 }
             }
         }

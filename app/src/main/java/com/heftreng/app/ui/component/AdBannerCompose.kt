@@ -103,6 +103,12 @@ fun AdBannerView(
 
 /**
  * PositionedAdBannerView — Liste içinde her konuma özel banner.
+ *
+ * NOT: prefetchKeys parametresi kaldırıldı. Önceden her banner kendi bir sonraki
+ * konumu önceden ısıtıyordu — bu FeedScreen'deki scroll-tabanlı ön-yükleme
+ * (snapshotFlow { firstVisibleItemIndex }) ile çakışıp aynı pozisyona çift
+ * istek atılmasına yol açıyordu. Artık ön-yükleme tamamen FeedScreen'de
+ * (ve diğer ekranlarda) yönetilir; bu composable sadece gösterimden sorumludur.
  */
 @Composable
 fun PositionedAdBannerView(
@@ -111,15 +117,11 @@ fun PositionedAdBannerView(
     adsVm        : AdsViewModel,
     modifier     : Modifier = Modifier,
     bannerSize   : String   = "adaptive",
-    prefetchKeys : List<Pair<String, String>> = emptyList(),
 ) {
     if (unitId.isNullOrBlank()) return
 
     LaunchedEffect(positionKey, unitId, bannerSize) {
         adsVm.preloadPositionedBanner(positionKey, unitId, bannerSize)
-        prefetchKeys.forEach { (key, nextUnitId) ->
-            if (nextUnitId.isNotBlank()) adsVm.preloadPositionedBanner(key, nextUnitId, bannerSize)
-        }
     }
 
     val isLoaded by adsVm.positionedBannerLoadedFlow(positionKey).collectAsState()

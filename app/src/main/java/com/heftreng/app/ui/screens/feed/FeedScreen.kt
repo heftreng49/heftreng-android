@@ -639,8 +639,7 @@ fun FeedScreen(
                             positionKey  = "feed_banner_$postIndex",
                             unitId       = bannerUnitId,
                             adsVm        = adsVm,
-                            prefetchKeys = listOf("feed_banner_${postIndex + bannerPos}" to bannerUnitId!!),
-                            bannerSize  = feedBannerSize,
+                            bannerSize   = feedBannerSize,
                         )
                     }
                     // ── Arkadaşlar ne okuyor? — gönderi kartlarının arasına ────

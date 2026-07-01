@@ -48,8 +48,8 @@ class AdEngine(
     private val scope: CoroutineScope,
 ) {
     companion object {
-        private const val MAX_RETRY         = 4
-        private const val RETRY_BASE_DELAY  = 8_000L
+        private const val MAX_RETRY         = 3
+        private const val RETRY_BASE_DELAY  = 5_000L   // 5s,10s,20s — daha hızlı ilk retry
 
         // Yüklenip gösterilmeyen native reklam bu süre sonunda otomatik imha edilir.
         // AdMob guideline: yüklenen reklam "makul sürede" gösterilmeli. Kullanıcı
@@ -139,10 +139,15 @@ class AdEngine(
     }
 
     // ── Pozisyon bazlı banner ──────────────────────────────────────────────
-    private val posBannerView   = mutableMapOf<String, AdView>()
-    private val posBannerLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
-    private val posBannerSize   = mutableMapOf<String, String>()
-    private val posBannerUnit   = mutableMapOf<String, String>()
+    private val posBannerView      = mutableMapOf<String, AdView>()
+    private val posBannerLoaded    = mutableMapOf<String, MutableStateFlow<Boolean>>()
+    private val posBannerSize      = mutableMapOf<String, String>()
+    private val posBannerUnit      = mutableMapOf<String, String>()
+    // DÜZELTME: Önceden posBanner da singleRetryCount'u paylaşıyordu. Bu bir
+    // pozisyon bazlı banner'ın başarısızlığının, tamamen farklı bir slot için
+    // (örn. "banner_feed") retry sayacını yanlışlıkla artırmasına yol açıyordu.
+    // Sonuç: tekil feed banner'ı, hiç denemeden "MAX_RETRY aşıldı" sayılıyordu.
+    private val posBannerRetry     = mutableMapOf<String, Int>()
 
     fun positionedBannerLoadedFlow(key: String): StateFlow<Boolean> =
         posBannerLoaded.getOrPut(key) { MutableStateFlow(false) }.asStateFlow()
@@ -160,11 +165,12 @@ class AdEngine(
             posBannerView.remove(key)?.destroy()
             loadedFlow.value = false
         }
-        posBannerSize[key] = bannerSize
-        posBannerUnit[key] = unitId
+        posBannerSize[key]  = bannerSize
+        posBannerUnit[key]  = unitId
+        posBannerRetry[key] = 0
         scope.launch {
             awaitSdk()
-            spawnBannerAdView(key, unitId, bannerSize) { adView ->
+            spawnPositionedBannerAdView(key, unitId, bannerSize) { adView ->
                 posBannerView.remove(key)?.destroy()
                 posBannerView[key] = adView
                 loadedFlow.value = true
@@ -199,14 +205,13 @@ class AdEngine(
             adUnitId = unitId
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
         }
-
         adView.adListener = object : AdListener() {
             override fun onAdLoaded() {
                 singleRetryCount[key] = 0
                 onLoaded(adView)
             }
             override fun onAdFailedToLoad(e: LoadAdError) {
-                adView.destroy()  // ← başarısız AdView'ı hemen temizle
+                adView.destroy()
                 scope.launch {
                     val retry = (singleRetryCount[key] ?: 0) + 1
                     singleRetryCount[key] = retry
@@ -217,7 +222,44 @@ class AdEngine(
                 }
             }
         }
+        adView.loadAd(adRequest())
+    }
 
+    /**
+     * Pozisyon bazlı banner AdView'ı — tekil banner'dan AYRI retry sayacı (posBannerRetry)
+     * kullanır. Bu sayede farklı pozisyonların başarısızlıkları birbirini etkilemez.
+     * Önceki kodda loadPositionedBanner, spawnBannerAdView'ı çağırıyordu; bu
+     * singleRetryCount'u kirletiyordu → feed banner gibi tekil slotlar haksız yere
+     * bloklanabiliyordu.
+     */
+    private fun spawnPositionedBannerAdView(
+        key: String,
+        unitId: String,
+        bannerSize: String,
+        onLoaded: (AdView) -> Unit,
+    ) {
+        val adView = AdView(appContext).apply {
+            setAdSize(resolveAdSize(bannerSize))
+            adUnitId = unitId
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        }
+        adView.adListener = object : AdListener() {
+            override fun onAdLoaded() {
+                posBannerRetry[key] = 0
+                onLoaded(adView)
+            }
+            override fun onAdFailedToLoad(e: LoadAdError) {
+                adView.destroy()
+                scope.launch {
+                    val retry = (posBannerRetry[key] ?: 0) + 1
+                    posBannerRetry[key] = retry
+                    if (retry <= MAX_RETRY) {
+                        delay(backoffDelay(retry))
+                        spawnPositionedBannerAdView(key, unitId, bannerSize, onLoaded)
+                    }
+                }
+            }
+        }
         adView.loadAd(adRequest())
     }
 
@@ -423,7 +465,7 @@ class AdEngine(
 
     // ── Yardımcılar ───────────────────────────────────────────────────────
     private fun backoffDelay(retry: Int): Long =
-        RETRY_BASE_DELAY * (1L shl (retry - 1).coerceAtMost(4))   // 8s,16s,32s,64s,128s
+        RETRY_BASE_DELAY * (1L shl (retry - 1).coerceAtMost(3))   // 5s,10s,20s,40s
 
     /**
      * CMS config'inden gerçek unit ID'yi belirler.
@@ -474,7 +516,7 @@ class AdEngine(
         singleBannerView.clear(); singleBannerLoaded.clear()
         singleBannerSize.clear(); singleBannerUnit.clear(); singleRetryCount.clear()
         posBannerView.clear();    posBannerLoaded.clear()
-        posBannerSize.clear();    posBannerUnit.clear()
+        posBannerSize.clear();    posBannerUnit.clear();    posBannerRetry.clear()
         posNativeAd.clear();      posNativeLoaded.clear()
         posNativeUnit.clear();    posNativeJob.clear()
         posNativeStaleJob.clear(); posNativeExhausted.clear()

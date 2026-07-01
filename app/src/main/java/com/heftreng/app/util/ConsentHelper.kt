@@ -47,7 +47,11 @@ object ConsentHelper {
     private const val TAG = "ConsentHelper"
 
     // UMP ağ çağrısı bu süre içinde sonuçlanmazsa, NPA-güvenli modda zorla ilerle.
-    private const val CONSENT_TIMEOUT_MS = 2_000L
+    // Google UMP dokümanı: istek genellikle 3–5 saniye sürer; 2 saniye çok kısaydı
+    // — yavaş ağlarda gerçek onay hiç gelmeden NPA'ya düşüyordu, bu hem fill rate'i
+    // düşürüyor hem de GDPR uyumunu riske atıyordu (kullanıcıya form gösterilmeden
+    // NPA-consent sayılıyor). 8 saniye hem güvenli hem AdMob önerisiyle uyumlu.
+    private const val CONSENT_TIMEOUT_MS = 8_000L
 
     // ── Consent durumu akışı — AdsViewModel ve NavHost buradan dinler ─────
     private val _canRequestAds = MutableStateFlow(false)
