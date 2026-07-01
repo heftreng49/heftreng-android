@@ -357,6 +357,31 @@ fun FeedScreen(
                 }
             }
 
+            // ── Native reklam önden-ısıtma: banner ile birebir aynı desen ────
+            // PositionedNativeAdView'ın kendi DisposableEffect'i composable
+            // ekrana GİRDİĞİNDE istek atar — LazyColumn'un tampon item sayısı
+            // hızlı kaydırmada yeterli gelmeyip kısa bir shimmer görünebiliyordu.
+            // Havuz YOK: sadece scroll konumuna göre gerçek bir sonraki 3 native
+            // pozisyonunu, gösterilmeden önce sürekli tazeleyerek önceden ısıtıyoruz.
+            val nativeFeedCfgForWarm by adsVm.nativeFeedConfig.collectAsState()
+            val nativeUnitIdForWarm  by adsVm.nativeFeedUnitId.collectAsState()
+            if (nativeUnitIdForWarm != null) {
+                LaunchedEffect(feedListState, nativeFeedCfgForWarm, nativeUnitIdForWarm) {
+                    val startPos = (nativeFeedCfgForWarm?.position ?: 5).coerceAtLeast(1)
+                    val freq     = (nativeFeedCfgForWarm?.frequency ?: 5).coerceAtLeast(1)
+                    snapshotFlow { feedListState.firstVisibleItemIndex }
+                        .collect { firstVisible ->
+                            // Görünür konumdan sonraki ilk native reklam pozisyonunu bul
+                            val nextNativeIdx = if (firstVisible < startPos) startPos
+                                else startPos + (((firstVisible - startPos) / freq) + 1) * freq
+                            (0 until 3).forEach { step ->
+                                val idx = nextNativeIdx + step * freq
+                                adsVm.preloadPositionedNative("feed_native_$idx", nativeUnitIdForWarm!!)
+                            }
+                        }
+                }
+            }
+
             LazyColumn(
                 state          = feedListState,
                 modifier       = Modifier.fillMaxSize(),
