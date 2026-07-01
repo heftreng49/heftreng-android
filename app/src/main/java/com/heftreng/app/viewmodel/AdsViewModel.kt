@@ -14,13 +14,10 @@ import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import com.google.android.gms.ads.rewarded.RewardItem
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.ads.AdEngine
 import com.heftreng.app.ads.AdFrequencyManager
 import com.heftreng.app.ads.RemoteConfigManager
 import com.heftreng.app.HeftrangApp
-import com.heftreng.app.data.model.AdMobProdIds
 import com.heftreng.app.data.model.CmsAdConfig
 import com.heftreng.app.util.ConsentHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -40,7 +37,7 @@ import javax.inject.Inject
  *
  *  DEĞİŞEN ŞEYLER (Firestore → Remote Config):
  *  ─────────────────────────────────────────────
- *  ✗ KALKAN: FirebaseFirestore bağımlılığı (reklam config için)
+ *  ✗ KALKAN: FirebaseFirestore bağımlılığı (tamamen kaldırıldı)
  *  ✗ KALKAN: loadAdConfigs() → Firestore get() çağrısı
  *  ✗ KALKAN: persistConfig() / loadPersistedConfig() → 19 alanlı string serialization
  *  ✗ KALKAN: adPrefs SharedPreferences → RC kendi cache'ini yönetiyor
@@ -58,22 +55,18 @@ import javax.inject.Inject
  *  • BannerSlot / NativeAdSlot enum'ları — dokunmadık
  *  • resolveOrDefault() mantığı — dokunmadık
  *
- *  NOT: FirebaseFirestore bağımlılığı AdFrequencyManager için hâlâ gerekli
- *  (analitik yazma). Bu yüzden inject listesinden tamamen kaldırılmadı.
+ *  NOT: AdFrequencyManager artık tamamen yerel (SharedPreferences). Firestore yok.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 @HiltViewModel
 class AdsViewModel @Inject constructor(
-    // Remote Config: reklam yapılandırması artık buradan geliyor
     private val remoteConfigManager: RemoteConfigManager,
-    // Firestore: SADECE AdFrequencyManager analitik yazması için (reklam config için artık değil)
-    private val firestore: FirebaseFirestore,
-    private val auth: FirebaseAuth,
+    private val frequencyManager   : AdFrequencyManager,
+    private val auth               : com.google.firebase.auth.FirebaseAuth,
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
 ) : ViewModel() {
 
-    private val engine           = AdEngine(appContext, viewModelScope)
-    private val frequencyManager = AdFrequencyManager(appContext, firestore, viewModelScope)
+    private val engine = AdEngine(appContext, viewModelScope)
 
     // ── Slot tanımları ─────────────────────────────────────────────────────
     enum class BannerSlot  { FEED, LIB, KURDI, BLOG }
@@ -163,52 +156,55 @@ class AdsViewModel @Inject constructor(
     // resolveOrDefault mantığı: c==null → config henüz gelmedi → prod ID ile başla
     //                           c!=null && !c.enabled → admin kapattı → null (reklam yok)
     //                           c!=null && c.enabled  → custom ID varsa onu, yoksa prod ID
-    private fun resolveOrDefault(c: CmsAdConfig?, e: Boolean, prodId: String): String? {
+    // Remote Config henüz gelmemişse (c==null) reklam yüklenmez — hardcode prod ID fallback YOK.
+    // Kural: Remote Config dışından hardcode ID gelmemeli. RC gelince unitId dolar.
+    // enabled=false → admin kapattı → null. unitId boşsa → RC'de tanımsız → null.
+    private fun resolveOrDefault(c: CmsAdConfig?, e: Boolean): String? {
         if (!e) return null
-        if (c == null) return prodId
-        if (!c.enabled) return null
-        return c.unitId.ifBlank { prodId }
+        if (c == null) return null          // RC henüz gelmedi — bekle
+        if (!c.enabled) return null         // admin kapattı
+        return c.unitId.ifBlank { null }    // unitId boşsa RC'de tanımsız — gösterme
     }
 
     val bannerUnitId: StateFlow<String?> = combine(_bannerConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e, AdMobProdIds.BANNER)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
+        resolveOrDefault(c, e)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val bannerLibraryUnitId: StateFlow<String?> = combine(_bannerLibraryConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e, AdMobProdIds.BANNER)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
+        resolveOrDefault(c, e)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val bannerKurdiUnitId: StateFlow<String?> = combine(_bannerKurdiConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e, AdMobProdIds.BANNER)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
+        resolveOrDefault(c, e)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val bannerBlogUnitId: StateFlow<String?> = combine(_bannerBlogConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e, AdMobProdIds.BANNER)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.BANNER)
+        resolveOrDefault(c, e)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val nativeFeedUnitId: StateFlow<String?> = combine(_nativeFeedConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e, AdMobProdIds.NATIVE)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
+        resolveOrDefault(c, e)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val nativeBlogUnitId: StateFlow<String?> = combine(_nativeBlogConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e, AdMobProdIds.NATIVE)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
+        resolveOrDefault(c, e)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val nativeLibraryUnitId: StateFlow<String?> = combine(_nativeLibraryConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e, AdMobProdIds.NATIVE)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
+        resolveOrDefault(c, e)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val nativeKurdiUnitId: StateFlow<String?> = combine(_nativeKurdiConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e, AdMobProdIds.NATIVE)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
+        resolveOrDefault(c, e)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val nativeProfileUnitId: StateFlow<String?> = combine(_nativeProfileConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e, AdMobProdIds.NATIVE)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
+        resolveOrDefault(c, e)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val nativeSearchUnitId: StateFlow<String?> = combine(_nativeSearchConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e, AdMobProdIds.NATIVE)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, AdMobProdIds.NATIVE)
+        resolveOrDefault(c, e)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val bannerPosition: StateFlow<Int> =
         _bannerConfig.combine(_adsEnabled) { c, _ -> c?.position ?: 5 }
@@ -260,7 +256,7 @@ class AdsViewModel @Inject constructor(
             flow.value = config
             newAll[key] = config
             if (preloadAds && config.enabled && _adsEnabled.value) {
-                engine.resolveUnitId(config, AdMobProdIds.BANNER)
+                config.unitId.ifBlank { null }
                     ?.let { engine.loadBanner(slot.key(), it, config.bannerSize) }
             }
         }
@@ -290,7 +286,7 @@ class AdsViewModel @Inject constructor(
             _interstitialConfig.value = config
             newAll[RemoteConfigManager.KEY_INTERSTITIAL] = config
             if (preloadAds && changed && config.enabled && _adsEnabled.value) {
-                engine.resolveUnitId(config, AdMobProdIds.INTERSTITIAL)?.let {
+                config.unitId.ifBlank { null }?.let {
                     interstitialUnitId = it
                     loadInterstitialAd(it)
                 }
@@ -304,7 +300,7 @@ class AdsViewModel @Inject constructor(
             newAll[RemoteConfigManager.KEY_REWARDED] = config
             syncRemainingRewardedAds(config.dailyLimit)
             if (preloadAds && changed && config.enabled && _adsEnabled.value) {
-                engine.resolveUnitId(config, AdMobProdIds.REWARDED)?.let { preloadRewardedAd(it) }
+                config.unitId.ifBlank { null }?.let { preloadRewardedAd(it) }
             }
         }
 
@@ -329,7 +325,7 @@ class AdsViewModel @Inject constructor(
     fun loadInterstitial() {
         val config = _interstitialConfig.value ?: return
         if (!config.enabled) return
-        val unitId = engine.resolveUnitId(config, AdMobProdIds.INTERSTITIAL) ?: return
+        val unitId = config.unitId.ifBlank { null } ?: return
         interstitialUnitId = unitId
         loadInterstitialAd(unitId)
     }
@@ -395,7 +391,7 @@ class AdsViewModel @Inject constructor(
     fun loadRewarded() {
         val config = _rewardedConfig.value ?: return
         if (!config.enabled) return
-        val unitId = engine.resolveUnitId(config, AdMobProdIds.REWARDED) ?: return
+        val unitId = config.unitId.ifBlank { null } ?: return
         preloadRewardedAd(unitId)
     }
 

@@ -68,20 +68,23 @@ class RemoteConfigManager @Inject constructor(
         // ── Default JSON değerleri ───────────────────────────────────────
         // Firebase konsolu henüz yapılandırılmamışsa veya offline iken devreye girer.
         // Production unit ID'leri buraya yazılır → ilk açılışta reklam zaten çalışır.
+        // DEFAULTS: Firebase konsolu henüz yapılandırılmamışsa veya offline iken devreye girer.
+        // unitId boş bırakıldı — RC'de gerçek ID tanımlanmadan reklam yüklenmesin (Kural 4).
+        // enabled:false → kesinlikle gösterme. enabled:true + unitId:"" → ID gelene kadar bekle.
         private val DEFAULTS = mapOf(
             KEY_ADS_GLOBAL     to """{"enabled":true}""",
-            KEY_BANNER_FEED    to """{"enabled":true,"unitId":"","bannerSize":"adaptive","position":5,"frequency":5}""",
-            KEY_BANNER_LIBRARY to """{"enabled":true,"unitId":"","bannerSize":"adaptive","position":5,"frequency":5}""",
-            KEY_BANNER_KURDI   to """{"enabled":true,"unitId":"","bannerSize":"adaptive","position":5,"frequency":5}""",
-            KEY_BANNER_BLOG    to """{"enabled":true,"unitId":"","bannerSize":"adaptive","position":5,"frequency":5}""",
-            KEY_INTERSTITIAL   to """{"enabled":true,"unitId":"","frequency":4,"screens":"feed,library,kurdi,blog"}""",
-            KEY_REWARDED       to """{"enabled":true,"unitId":"","dailyLimit":3,"xpReward":50,"scenarioDoubleXp":true,"scenarioUnlockLesson":true,"scenarioSaveStreak":true}""",
-            KEY_NATIVE_FEED    to """{"enabled":true,"unitId":"","adType":"native","placement":"in_list"}""",
-            KEY_NATIVE_BLOG    to """{"enabled":true,"unitId":"","adType":"native","placement":"in_list"}""",
-            KEY_NATIVE_LIBRARY to """{"enabled":true,"unitId":"","adType":"native","placement":"in_list"}""",
-            KEY_NATIVE_KURDI   to """{"enabled":true,"unitId":"","adType":"native","placement":"in_list"}""",
-            KEY_NATIVE_PROFILE to """{"enabled":false,"unitId":"","adType":"native","placement":"in_list"}""",
-            KEY_NATIVE_SEARCH  to """{"enabled":false,"unitId":"","adType":"native","placement":"in_list"}""",
+            KEY_BANNER_FEED    to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":5,"frequency":5}""",
+            KEY_BANNER_LIBRARY to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":5,"frequency":5}""",
+            KEY_BANNER_KURDI   to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":5,"frequency":5}""",
+            KEY_BANNER_BLOG    to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":5,"frequency":5}""",
+            KEY_INTERSTITIAL   to """{"enabled":false,"unitId":"","frequency":4,"screens":"feed,library,kurdi,blog"}""",
+            KEY_REWARDED       to """{"enabled":false,"unitId":"","dailyLimit":3,"xpReward":50,"scenarioDoubleXp":true,"scenarioUnlockLesson":true,"scenarioSaveStreak":true}""",
+            KEY_NATIVE_FEED    to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
+            KEY_NATIVE_BLOG    to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
+            KEY_NATIVE_LIBRARY to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
+            KEY_NATIVE_KURDI   to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
+            KEY_NATIVE_PROFILE to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
+            KEY_NATIVE_SEARCH  to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
         )
     }
 

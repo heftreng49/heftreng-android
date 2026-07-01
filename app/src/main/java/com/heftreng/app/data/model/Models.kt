@@ -502,12 +502,8 @@ data class AppConfig(
 // atılsa da bu cihazda otomatik olarak test reklamı gösterilir. Ayrı bir test
 // ID setine hiç gerek yok; kaldırıldı (CMS'teki "testMode" anahtarı artık
 // devre dışı/etkisiz — her zaman prod ID kullanılıyor, bkz. AdEngine.resolveUnitId).
-object AdMobProdIds {
-    const val BANNER        = "ca-app-pub-6463746824939277/7866834575"
-    const val INTERSTITIAL  = "ca-app-pub-6463746824939277/4989839500"
-    const val REWARDED      = "ca-app-pub-6463746824939277/9693325673"
-    const val NATIVE        = "ca-app-pub-6463746824939277/9038907874"
-}
+// AdMobProdIds kaldırıldı — unit ID'ler sadece Firebase Remote Config'den gelir.
+// Kural: Remote Config dışından hardcode ID gelmemeli.
 
 // ─── KÜTÜPHANE YAPISI ──────────────────────────────────────────────────
 data class Author(

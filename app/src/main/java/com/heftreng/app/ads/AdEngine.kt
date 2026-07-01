@@ -468,14 +468,14 @@ class AdEngine(
         RETRY_BASE_DELAY * (1L shl (retry - 1).coerceAtMost(3))   // 5s,10s,20s,40s
 
     /**
-     * CMS config'inden gerçek unit ID'yi belirler.
-     * CMS'te özel unitId tanımlıysa → onu kullan, yoksa → prod varsayılanı.
-     * enabled=false ise null döner → reklam gösterilmez.
+     * Config'den unit ID'yi belirler.
+     * enabled=false → null (reklam gösterilmez).
+     * unitId boş → null (RC'de tanımsız, hardcode fallback yok — Kural 4).
      */
-    fun resolveUnitId(config: CmsAdConfig?, prodId: String): String? {
+    fun resolveUnitId(config: CmsAdConfig?): String? {
         config ?: return null
         if (!config.enabled) return null
-        return config.unitId.ifBlank { prodId }
+        return config.unitId.ifBlank { null }
     }
 
     /** MainActivity.onResume() → AdsViewModel.onAppForeground() üzerinden çağrılır. */
