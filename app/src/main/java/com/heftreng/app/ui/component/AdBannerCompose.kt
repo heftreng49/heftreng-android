@@ -168,23 +168,21 @@ fun PositionedNativeAdView(
     modifier       : Modifier = Modifier,
     nativeAdContent: @Composable (com.google.android.gms.ads.nativead.NativeAd) -> Unit,
 ) {
-    if (unitId.isNullOrBlank()) return
+    val adCardHeight = 250.dp
 
-    // AdEngine'den yüklü reklamı al (lazy: ekrana girince istek atılmış olmalı)
+    // unitId null/boş: RC henüz gelmedi — shimmer göster, layout kaymasin.
+    // DisposableEffect yalnızca geçerli unitId ile çalış.
     val isLoaded by adsVm.positionedNativeLoadedFlow(positionKey).collectAsState()
     val nativeAd = if (isLoaded) adsVm.cachedPositionedNative(positionKey) else null
 
-    // Composable ekrana girince istek at, çıkınca temizle
     DisposableEffect(positionKey, unitId) {
-        adsVm.preloadPositionedNative(positionKey, unitId)
+        if (!unitId.isNullOrBlank()) {
+            adsVm.preloadPositionedNative(positionKey, unitId)
+        }
         onDispose {
-            // Gösterilmemişse isteği iptal et ve reklamı imha et
-            // Gösterilmişse NativeAdView zaten destroy etmiş olur
             adsVm.releasePositionedNative(positionKey)
         }
     }
-
-    val adCardHeight = 250.dp
 
     Box(
         modifier = modifier
@@ -197,8 +195,7 @@ fun PositionedNativeAdView(
         if (nativeAd != null) {
             nativeAdContent(nativeAd)
         } else {
-            // Henüz yüklenmedi/dispose edildi — shimmer göster.
-            // Havuz YOK: bu istek AdEngine'de tam olarak bu pozisyon için atıldı.
+            // Henüz yüklenmedi veya RC bekleniyor — shimmer göster
             AdShimmerCard(
                 modifier = Modifier
                     .fillMaxWidth()
