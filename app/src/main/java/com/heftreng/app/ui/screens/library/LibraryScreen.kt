@@ -406,7 +406,7 @@ private fun LibraryQuotesTab(
                                        {{ feedVm.deletePost(post.id) }} else null,
             )
             if (bannerUnitId != null && (index + 1) % 5 == 0) {
-                PositionedAdBannerView(positionKey = "lib_quotes_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize, prefetchKeys = listOf("lib_quotes_banner_${index + 5}" to bannerUnitId))
+                PositionedAdBannerView(positionKey = "lib_quotes_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize)
             }
             // CMS/RC'deki position/frequency alanlarına göre native ad yerleşimi
             // (bkz. FeedScreen.kt aynı düzeltme — position=ilk gösterim, frequency=tekrar aralığı).
@@ -451,7 +451,7 @@ private fun LibraryReviewsTab(
         itemsIndexed(reviews, key = { _, r -> r.id }) { index, review ->
             BookReviewCard(review = review, actions = actions, language = language)
             if (bannerUnitId != null && (index + 1) % 5 == 0) {
-                PositionedAdBannerView(positionKey = "lib_reviews_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize, prefetchKeys = listOf("lib_reviews_banner_${index + 5}" to bannerUnitId))
+                PositionedAdBannerView(positionKey = "lib_reviews_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize)
             }
         }
     }
@@ -477,7 +477,7 @@ private fun LibraryAuthorsTab(
         itemsIndexed(authors, key = { _, a -> a.id }) { index, author ->
             LibraryAuthorRow(author = author, navController = navController)
             if (bannerUnitId != null && (index + 1) % 6 == 0) {
-                PositionedAdBannerView(positionKey = "lib_authors_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize, prefetchKeys = listOf("lib_authors_banner_${index + 6}" to bannerUnitId))
+                PositionedAdBannerView(positionKey = "lib_authors_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize)
             }
         }
     }
