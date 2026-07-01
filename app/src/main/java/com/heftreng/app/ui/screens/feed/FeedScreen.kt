@@ -78,6 +78,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import com.heftreng.app.data.model.AppConfig
 import androidx.core.content.ContextCompat
 import androidx.compose.animation.core.Spring
@@ -1212,6 +1214,8 @@ fun PostCard(
                 }
             }
             Box {
+                val clipboard = LocalClipboardManager.current
+                val ctxForCopy = LocalContext.current
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(Icons.Default.MoreVert, contentDescription = if (ku) "Vebijêrk" else "Seçenekler", tint = Muted)
                 }
@@ -1265,6 +1269,20 @@ fun PostCard(
                         text        = { Text(if (ku) "Sepanên Din" else "Diğer Uygulamalar", color = OnBackground) },
                         leadingIcon = { Icon(Icons.Default.IosShare, null, tint = Muted) },
                         onClick     = { menuExpanded = false; shareTarget = ShareTarget.ANY },
+                    )
+                    HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                    DropdownMenuItem(
+                        text        = { Text(if (ku) "ID'ya Kopî Bike" else "Gönderi ID'sini Kopyala", color = OnBackground) },
+                        leadingIcon = { Icon(Icons.Default.ContentCopy, null, tint = Muted) },
+                        onClick     = {
+                            menuExpanded = false
+                            clipboard.setText(AnnotatedString(post.id))
+                            android.widget.Toast.makeText(
+                                ctxForCopy,
+                                if (ku) "ID hate kopîkirin" else "Gönderi ID'si kopyalandı",
+                                android.widget.Toast.LENGTH_SHORT,
+                            ).show()
+                        },
                     )
                     if (!isOwn) {
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
