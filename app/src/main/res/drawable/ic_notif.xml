@@ -5,7 +5,21 @@
     android:viewportWidth="24"
     android:viewportHeight="24"
     android:tint="#FFFFFFFF">
+    <!--
+        "H" harfi — Heftreng bildirim ikonu
+        Sol dikey çizgi + sağ dikey çizgi + ortadaki yatay köprü
+        Stroke tabanlı, Android bildirim sisteminin beyaz/şeffaf kuralına uygun
+    -->
+    <!-- Sol dikey çizgi -->
     <path
         android:fillColor="@android:color/white"
-        android:pathData="M12,4.5c-1.9,-1.2 -4.2,-1.7 -6.4,-1.5c-0.7,0.1 -1.3,0.6 -1.3,1.4v11.8c0,0.8 0.7,1.4 1.5,1.3c1.9,-0.2 4,0.2 5.6,1.3c0.1,0.1 0.4,0.1 0.5,0c1.6,-1.1 3.7,-1.5 5.6,-1.3c0.8,0.1 1.5,-0.5 1.5,-1.3V4.4c0,-0.8 -0.6,-1.3 -1.3,-1.4c-2.2,-0.2 -4.5,0.3 -6.4,1.5z"/>
+        android:pathData="M5,3 L5,21 L8,21 L8,3 Z"/>
+    <!-- Sağ dikey çizgi -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M16,3 L16,21 L19,21 L19,3 Z"/>
+    <!-- Orta yatay köprü -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M8,10.5 L16,10.5 L16,13.5 L8,13.5 Z"/>
 </vector>
