@@ -17,7 +17,6 @@ import com.google.android.gms.ads.rewarded.RewardItem
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.ads.AdEngine
-import com.heftreng.app.ads.NativeAdPool
 import com.heftreng.app.ads.AdFrequencyManager
 import com.heftreng.app.ads.RemoteConfigManager
 import com.heftreng.app.data.model.AdMobProdIds
@@ -73,9 +72,6 @@ class AdsViewModel @Inject constructor(
 
     private val engine           = AdEngine(appContext, viewModelScope)
     private val frequencyManager = AdFrequencyManager(appContext, firestore, viewModelScope)
-
-    /** Basit native reklam havuzu — RC'den gelen ID ile önceden doldurulur. */
-    val nativeAdPool = NativeAdPool(appContext, viewModelScope)
 
     // ── Slot tanımları ─────────────────────────────────────────────────────
     enum class BannerSlot  { FEED, LIB, KURDI, BLOG }
@@ -479,11 +475,13 @@ class AdsViewModel @Inject constructor(
 
     fun onAppBackground() {
         engine.pauseAllBanners()
+        // Politika uyumu: arka plana alınmış uygulamada henüz gösterilmemiş
+        // native reklamları hemen serbest bırak — STALE_AD_TIMEOUT_MS'i bekleme.
+        engine.releaseUnseenNativesOnBackground()
     }
 
     override fun onCleared() {
         super.onCleared()
-        nativeAdPool.destroy()
         engine.destroyAll()
     }
 
@@ -492,16 +490,11 @@ class AdsViewModel @Inject constructor(
 
         if (ConsentHelper.canRequestAds.value) {
             loadAdConfigs()
-            // Pool'u RC'den gelen ID ile ısıt — nativeFeedUnitId başlangıçta prod ID
-            val uid = nativeFeedUnitId.value
-            if (!uid.isNullOrBlank()) nativeAdPool.warmUp(uid)
         } else {
             viewModelScope.launch {
                 ConsentHelper.canRequestAds.collect { canAds ->
                     if (canAds) {
                         loadAdConfigs()
-                        val uid = nativeFeedUnitId.value
-                        if (!uid.isNullOrBlank()) nativeAdPool.warmUp(uid)
                         return@collect
                     }
                 }

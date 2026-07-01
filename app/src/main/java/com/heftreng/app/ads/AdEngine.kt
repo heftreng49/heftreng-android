@@ -26,15 +26,21 @@ import kotlinx.coroutines.launch
  * ═══════════════════════════════════════════════════════════════════════════
  *  AdEngine — Heftreng'in TEK reklam motoru.
  *
- *  Tüm banner ve native reklam yükleme/retry/havuz mantığı tek yerde.
+ *  Tüm banner ve native reklam yükleme/retry/yaşam döngüsü tek yerde.
  *  Ekranlar sadece key (String) bazında istekte bulunur.
  *
- *  Düzeltmeler (v2):
+ *  AdMob politika uyumu (v4):
+ *   - STALE_AD_TIMEOUT: yüklenip gösterilmeyen native reklamlar belirli süre
+ *     sonra otomatik destroy edilir. AdMob kuralı: yüklenen reklam makul
+ *     sürede gösterilmeli; ekranda kalmayan ama hâlâ bellekte tutulan reklam
+ *     politika ihlali sayılır. Composable dispose olmasa da (örn. arka plana
+ *     alınan uygulama) reklam sonsuza dek canlı tutulmaz.
+ *   - Havuz/stoklama YOK: her pozisyon kendi tek isteğini atar, kullanılmazsa
+ *     hemen imha edilir (AdMob'un kendi önerisi).
  *   - spawnBannerAdView: retry döngüsünde ESKİ AdView destroy edilmeden
  *     önce yeni istek başlıyordu → yarış durumu + bellek sızıntısı. Düzeltildi.
  *   - loadBanner / loadPositionedBanner: "zaten yüklü" guard'ı unit ID
- *     değişimini de doğru şekilde algılar hale getirildi.
- *   - Native ad havuz sistemi kaldırıldı: pozisyon başına tek istek/tek kullanım modeline geçildi (v3).
+ *     değişimini de doğru şekilde algılar.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 class AdEngine(
@@ -44,6 +50,11 @@ class AdEngine(
     companion object {
         private const val MAX_RETRY         = 4
         private const val RETRY_BASE_DELAY  = 8_000L
+
+        // Yüklenip gösterilmeyen native reklam bu süre sonunda otomatik imha edilir.
+        // AdMob guideline: yüklenen reklam "makul sürede" gösterilmeli. Kullanıcı
+        // genelde saniyeler içinde kaydırır; 5dk çok daha sıkı ve güvenli bir limit.
+        private const val STALE_AD_TIMEOUT_MS = 5 * 60_000L   // 5 dakika
     }
 
     // SDK hazır olana kadar bekle — coroutine içinde, UI'ı bloklamaz (<200ms)
@@ -231,6 +242,14 @@ class AdEngine(
     private val posNativeLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
     private val posNativeUnit   = mutableMapOf<String, String>()
     private val posNativeJob    = mutableMapOf<String, kotlinx.coroutines.Job>()
+    // Yüklenip gösterilmeyen reklamı STALE_AD_TIMEOUT_MS sonunda imha eden zamanlayıcı.
+    // Composable dispose çağrılmasa bile (örn. arka plana alınmış uygulama) reklam
+    // sonsuza dek bellekte tutulmaz — AdMob politika gerekliliği.
+    private val posNativeStaleJob = mutableMapOf<String, kotlinx.coroutines.Job>()
+    // Bir pozisyonun son denemesi başarısızlıkla tükendiyse işaretle; ekrana
+    // tekrar girildiğinde (preloadPositionedNative tekrar çağrıldığında) bu
+    // sayede yeniden denenir, aksi halde "sonsuza dek yüklenmedi" kalırdı.
+    private val posNativeExhausted = mutableSetOf<String>()
 
     fun positionedNativeLoadedFlow(key: String): StateFlow<Boolean> =
         posNativeLoaded.getOrPut(key) { MutableStateFlow(false) }.asStateFlow()
@@ -239,16 +258,23 @@ class AdEngine(
 
     /**
      * Pozisyon için TEK reklam ister. Aynı key+unitId için zaten yüklü veya
-     * yükleniyorsa tekrar istek atmaz (idempotent).
+     * yükleniyorsa tekrar istek atmaz (idempotent). Önceki deneme tükenmişse
+     * (MAX_RETRY aşıldıysa) burada tekrar çağrılınca yeniden denenir.
      */
     fun preloadPositionedNative(key: String, unitId: String) {
         if (unitId.isBlank()) return
         val loadedFlow = posNativeLoaded.getOrPut(key) { MutableStateFlow(false) }
 
-        // Zaten bu unitId için yüklü VEYA şu an yükleniyor → tekrar isteme
-        if (posNativeUnit[key] == unitId && (loadedFlow.value || posNativeJob[key]?.isActive == true)) return
+        // Zaten bu unitId için yüklü VEYA şu an yükleniyor → tekrar isteme.
+        // Tükenmiş (exhausted) durumdaysa bu guard'ı atla — yeniden dene.
+        val exhausted = key in posNativeExhausted
+        if (!exhausted && posNativeUnit[key] == unitId &&
+            (loadedFlow.value || posNativeJob[key]?.isActive == true)
+        ) return
 
-        // unitId değiştiyse eski isteği iptal et
+        // unitId değiştiyse veya yeniden deneniyorsa eski isteği/reklamı temizle
+        posNativeExhausted.remove(key)
+        posNativeStaleJob.remove(key)?.cancel()
         posNativeJob[key]?.cancel()
         posNativeAd.remove(key)?.destroy()
         posNativeUnit[key] = unitId
@@ -262,25 +288,37 @@ class AdEngine(
                 onSuccess = { ad ->
                     posNativeAd[key] = ad
                     loadedFlow.value = true
+                    // Gösterilmeden bekleyen reklam için politika-uyumlu otomatik temizlik
+                    posNativeStaleJob[key] = scope.launch {
+                        delay(STALE_AD_TIMEOUT_MS)
+                        android.util.Log.d("AdEngine", "Native '$key' gösterilmeden zaman aşımına uğradı, imha ediliyor")
+                        releasePositionedNative(key)
+                    }
                 },
                 onFail = {
                     loadedFlow.value = false
+                    posNativeExhausted.add(key)
                 },
             )
         }
     }
 
     /**
-     * Composable LazyColumn dışına çıkıp dispose olduğunda çağrılır.
+     * Composable LazyColumn dışına çıkıp dispose olduğunda ÇAĞRILIR, ya da
+     * STALE_AD_TIMEOUT_MS dolunca otomatik tetiklenir.
      * Reklam GÖSTERİLMEDEN (isLoaded=false ya da hiç compose edilmeden)
      * pozisyon terk edildiyse: bekleyen isteği iptal et, gelen reklamı imha et.
      * Stoklama/havuz YOK — AdMob'a "boşa istek" bırakmamak en iyi pratik.
      */
     fun releasePositionedNative(key: String) {
+        posNativeStaleJob.remove(key)?.cancel()
         posNativeJob.remove(key)?.cancel()
         posNativeAd.remove(key)?.destroy()
+        // Önce false'a çek (aktif collector'lar görsün), sonra map'ten sil
+        posNativeLoaded[key]?.value = false
         posNativeLoaded.remove(key)
         posNativeUnit.remove(key)
+        posNativeExhausted.remove(key)
     }
 
     /**
@@ -328,8 +366,9 @@ class AdEngine(
 
     /** Birden çok pozisyonu serbest bırakmak için (örn. tüm ekran kapanırken). */
     fun releaseAllPositionedNatives(keyPrefix: String? = null) {
-        val keys = if (keyPrefix == null) posNativeAd.keys.toList() + posNativeJob.keys.toList()
-                   else (posNativeAd.keys + posNativeJob.keys).filter { it.startsWith(keyPrefix) }
+        val allKeys = posNativeAd.keys + posNativeJob.keys + posNativeStaleJob.keys
+        val keys = if (keyPrefix == null) allKeys.toList()
+                   else allKeys.filter { it.startsWith(keyPrefix) }
         keys.toSet().forEach { releasePositionedNative(it) }
     }
 
@@ -354,20 +393,40 @@ class AdEngine(
         posBannerView.values.forEach    { runCatching { it.resume() } }
     }
 
-    /** MainActivity.onPause() → AdsViewModel.onAppBackground() üzerinden çağrılır. */
+    /**
+     * MainActivity.onPause() → AdsViewModel.onAppBackground() üzerinden çağrılır.
+     * Banner'lar pause edilir. Native reklamlardaki MediaView (video) için AdMob
+     * SDK'sında manuel pause API'si yok — video kontrolü SDK içinde otomatik
+     * yönetilir (Activity lifecycle'a bağlı). Burada ekstra olarak: arka plana
+     * alınmış uygulamada gösterilmeyi bekleyen native reklamları hemen serbest
+     * bırakıyoruz (politika: arka planda boşa tutulan reklam istenmez).
+     */
     fun pauseAllBanners() {
         singleBannerView.values.forEach { runCatching { it.pause() } }
         posBannerView.values.forEach    { runCatching { it.pause() } }
+    }
+
+    /**
+     * Uygulama arka plana alındığında, henüz gösterilmemiş (kullanıcı görmedi)
+     * native reklamları serbest bırakır. Bekleyen yükleme istekleri de iptal edilir.
+     * Bu, STALE_AD_TIMEOUT_MS'i beklemeden anında politika-uyumlu temizlik sağlar.
+     */
+    fun releaseUnseenNativesOnBackground() {
+        releaseAllPositionedNatives()
     }
 
     fun destroyAll() {
         singleBannerView.values.forEach { it.destroy() }
         posBannerView.values.forEach { it.destroy() }
         posNativeJob.values.forEach { it.cancel() }
+        posNativeStaleJob.values.forEach { it.cancel() }
         posNativeAd.values.forEach { it.destroy() }
         singleBannerView.clear(); singleBannerLoaded.clear()
-        singleBannerSize.clear(); singleBannerUnit.clear()
+        singleBannerSize.clear(); singleBannerUnit.clear(); singleRetryCount.clear()
         posBannerView.clear();    posBannerLoaded.clear()
-        posNativeAd.clear();      posNativeLoaded.clear(); posNativeUnit.clear(); posNativeJob.clear()
+        posBannerSize.clear();    posBannerUnit.clear()
+        posNativeAd.clear();      posNativeLoaded.clear()
+        posNativeUnit.clear();    posNativeJob.clear()
+        posNativeStaleJob.clear(); posNativeExhausted.clear()
     }
 }

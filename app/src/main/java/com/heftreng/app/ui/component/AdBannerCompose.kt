@@ -195,7 +195,8 @@ fun PositionedNativeAdView(
         if (nativeAd != null) {
             nativeAdContent(nativeAd)
         } else {
-            // Pool boştu — shimmer göster, arka planda zaten doluyor
+            // Henüz yüklenmedi/dispose edildi — shimmer göster.
+            // Havuz YOK: bu istek AdEngine'de tam olarak bu pozisyon için atıldı.
             AdShimmerCard(
                 modifier = Modifier
                     .fillMaxWidth()
