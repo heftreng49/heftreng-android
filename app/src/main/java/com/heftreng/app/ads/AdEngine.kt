@@ -58,11 +58,15 @@ class AdEngine(
 
         // LazyColumn recycle/recompose sırasında composable KALICI OLARAK değil,
         // kısa süreliğine dispose-recreate olabilir (hafif scroll, animateContentSize
-        // tetiklemesi, parent recomposition vb.). DisposableEffect.onDispose bunu
-        // "pozisyon terk edildi" ile ayırt edemez. Çözüm: imhayı bu kadar geciktir;
-        // aynı pozisyon bu süre içinde tekrar preload isterse (ekrana geri döndüyse)
-        // bekleyen imha iptal edilir ve zaten yüklü reklam olduğu gibi kullanılır.
-        private const val DISPOSE_GRACE_MS = 1_200L
+        // tetiklemesi, parent recomposition vb.) — ama daha gerçekçi olarak kullanıcı
+        // pozisyonu geçip birkaç saniye başka bir kartı okuyup GERİ dönebilir; bu da
+        // "terk etme" değil. DisposableEffect.onDispose bu durumları ayırt edemez.
+        // Çözüm: imhayı bu kadar geciktir; aynı pozisyon bu süre içinde tekrar
+        // preload isterse (ekrana geri döndüyse) bekleyen imha iptal edilir ve
+        // zaten yüklü reklam olduğu gibi kullanılır. Çok kısa tutulursa (ör. 1sn)
+        // gerçekçi "geri dön" senaryolarını kaçırır; çok uzun tutulursa kalıcı
+        // terk edilen pozisyonlarda reklam gereksiz yere bellekte/istekte kalır.
+        private const val DISPOSE_GRACE_MS = 10_000L
     }
 
     // SDK hazır olana kadar bekle — coroutine içinde, UI'ı bloklamaz (<200ms)
