@@ -38,10 +38,10 @@ class RemoteConfigManager @Inject constructor(
 ) {
     companion object {
         // ── Fetch interval ───────────────────────────────────────────────
-        // Production: 12 saat → günde max 2 fetch/kullanıcı (ücretsiz limitin çok altında)
-        // Debug: 0 → her çağrıda anında güncelle (Firebase konsolundan test ederken)
-        private const val FETCH_INTERVAL_PROD  = 43_200L  // 12 saat (saniye)
-        private const val FETCH_INTERVAL_DEBUG = 0L
+        // Production: 1 saat → konsol değişikliği max 1 saatte devreye girer
+        // (eski: 43200 = 12 saat — reklamı kapattığında 12 saat beklemek gerekiyordu)
+        private const val FETCH_INTERVAL_PROD  = 3_600L   // 1 saat
+        private const val FETCH_INTERVAL_DEBUG = 0L       // debug: her açılışta anında
 
         // ── Remote Config key isimleri ───────────────────────────────────
         // Firebase konsolunda bu isimlerle değer tanımlanacak.
@@ -81,6 +81,18 @@ class RemoteConfigManager @Inject constructor(
     }
 
     init {
+        // Fetch interval: debug'da 0 (her açılışta anında günceller),
+        // production'da 1 saat (eski 12 saat → konsol değişikliği max 1 saatte devreye girer)
+        val interval = if (com.heftreng.app.BuildConfig.DEBUG)
+            FETCH_INTERVAL_DEBUG
+        else
+            FETCH_INTERVAL_PROD
+
+        remoteConfig.setConfigSettingsAsync(
+            FirebaseRemoteConfigSettings.Builder()
+                .setMinimumFetchIntervalInSeconds(interval)
+                .build()
+        )
         // Default değerleri SDK'ya kaydet — network öncesi her zaman anında okunabilir
         remoteConfig.setDefaultsAsync(DEFAULTS)
     }
