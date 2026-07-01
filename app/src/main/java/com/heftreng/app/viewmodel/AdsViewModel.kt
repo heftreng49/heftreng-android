@@ -157,32 +157,7 @@ class AdsViewModel @Inject constructor(
     val allAdConfigs          = _allAdConfigs.asStateFlow()
 
     private val _adsEnabled = MutableStateFlow(true)
-    val adsEnabled          = _adsEnabled.asStateFlow()
-
-    // GEÇİCİ DEBUG: Remote Config'ten gerçekten ne geldiğini görmek için.
-    // Sorun çözülünce bu state ve ilgili dialog kaldırılabilir.
-    private val _adsDebugInfo = MutableStateFlow<String?>(null)
-    val adsDebugInfo = _adsDebugInfo.asStateFlow()
-    fun clearAdsDebugInfo() { _adsDebugInfo.value = null }
-    fun showAdsDebugInfo() {
-        viewModelScope.launch {
-            val fetchResult = remoteConfigManager.forceFetchAndActivate()
-            val bf = remoteConfigManager.getAdConfig(RemoteConfigManager.KEY_BANNER_FEED)
-            val bl = remoteConfigManager.getAdConfig(RemoteConfigManager.KEY_BANNER_LIBRARY)
-            _adsDebugInfo.value = buildString {
-                appendLine("fetchAndActivate: $fetchResult")
-                appendLine("adsEnabled (global): ${remoteConfigManager.isAdsEnabled()}")
-                appendLine()
-                appendLine("banner_feed:")
-                appendLine("  enabled=${bf?.enabled}  unitId=${bf?.unitId}")
-                appendLine("banner_library:")
-                appendLine("  enabled=${bl?.enabled}  unitId=${bl?.unitId}")
-                appendLine()
-                appendLine("bannerUnitId (çözümlenmiş): ${bannerUnitId.value}")
-                appendLine("bannerLibraryUnitId (çözümlenmiş): ${bannerLibraryUnitId.value}")
-            }
-        }
-    }
+    val adsEnabled = _adsEnabled.asStateFlow()
 
     // ── Unit ID StateFlow'ları ─────────────────────────────────────────────
     // resolveOrDefault mantığı: c==null → config henüz gelmedi → prod ID ile başla

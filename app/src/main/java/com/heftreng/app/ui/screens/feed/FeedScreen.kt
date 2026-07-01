@@ -186,10 +186,6 @@ fun FeedScreen(
     val likers           by socialVm.likers.collectAsState()
     val socialLoading    by socialVm.loading.collectAsState()
 
-    // GEÇİCİ DEBUG: feed açılır açılmaz reklam config'inin gerçek değerini göster.
-    // Sorun çözülünce bu LaunchedEffect + AdsViewModel.showAdsDebugInfo() kaldırılabilir.
-    LaunchedEffect(Unit) { adsVm.showAdsDebugInfo() }
-
     var inlineText       by remember { mutableStateOf("") }
     var inlineTitle      by remember { mutableStateOf("") }
     var inlineTopic      by remember { mutableStateOf("") }
@@ -742,20 +738,6 @@ fun FeedScreen(
             text    = { Text(repostError ?: "") },
             confirmButton = {
                 TextButton(onClick = { vm.clearRepostError() }) { Text("Tamam") }
-            },
-        )
-    }
-
-    // GEÇİCİ DEBUG: Remote Config'ten reklam ayarlarının gerçekten ne geldiğini gösterir.
-    // Sorun çözülünce bu dialog + adsVm.showAdsDebugInfo() çağrısı kaldırılabilir.
-    val adsDebugInfo by adsVm.adsDebugInfo.collectAsState()
-    if (adsDebugInfo != null) {
-        AlertDialog(
-            onDismissRequest = { adsVm.clearAdsDebugInfo() },
-            title   = { Text("Reklam Config (debug)") },
-            text    = { Text(adsDebugInfo ?: "", fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace) },
-            confirmButton = {
-                TextButton(onClick = { adsVm.clearAdsDebugInfo() }) { Text("Tamam") }
             },
         )
     }
