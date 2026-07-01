@@ -55,6 +55,14 @@ class AdEngine(
         // AdMob guideline: yüklenen reklam "makul sürede" gösterilmeli. Kullanıcı
         // genelde saniyeler içinde kaydırır; 5dk çok daha sıkı ve güvenli bir limit.
         private const val STALE_AD_TIMEOUT_MS = 5 * 60_000L   // 5 dakika
+
+        // LazyColumn recycle/recompose sırasında composable KALICI OLARAK değil,
+        // kısa süreliğine dispose-recreate olabilir (hafif scroll, animateContentSize
+        // tetiklemesi, parent recomposition vb.). DisposableEffect.onDispose bunu
+        // "pozisyon terk edildi" ile ayırt edemez. Çözüm: imhayı bu kadar geciktir;
+        // aynı pozisyon bu süre içinde tekrar preload isterse (ekrana geri döndüyse)
+        // bekleyen imha iptal edilir ve zaten yüklü reklam olduğu gibi kullanılır.
+        private const val DISPOSE_GRACE_MS = 1_200L
     }
 
     // SDK hazır olana kadar bekle — coroutine içinde, UI'ı bloklamaz (<200ms)
@@ -246,6 +254,10 @@ class AdEngine(
     // Composable dispose çağrılmasa bile (örn. arka plana alınmış uygulama) reklam
     // sonsuza dek bellekte tutulmaz — AdMob politika gerekliliği.
     private val posNativeStaleJob = mutableMapOf<String, kotlinx.coroutines.Job>()
+    // Gecikmeli imha job'ı — pozisyon kısa süreliğine dispose olduğunda hemen
+    // silmek yerine bu job planlanır; aynı pozisyon DISPOSE_GRACE_MS içinde
+    // tekrar preload isterse (kullanıcı geri döndüyse) iptal edilir.
+    private val posNativeReleaseJob = mutableMapOf<String, kotlinx.coroutines.Job>()
     // Bir pozisyonun son denemesi başarısızlıkla tükendiyse işaretle; ekrana
     // tekrar girildiğinde (preloadPositionedNative tekrar çağrıldığında) bu
     // sayede yeniden denenir, aksi halde "sonsuza dek yüklenmedi" kalırdı.
@@ -263,6 +275,11 @@ class AdEngine(
      */
     fun preloadPositionedNative(key: String, unitId: String) {
         if (unitId.isBlank()) return
+
+        // Pozisyon geri geldi — bekleyen gecikmeli imha varsa iptal et.
+        // Bu, kısa süreli scroll-out/scroll-in'de reklamı canlı tutar.
+        posNativeReleaseJob.remove(key)?.cancel()
+
         val loadedFlow = posNativeLoaded.getOrPut(key) { MutableStateFlow(false) }
 
         // Zaten bu unitId için yüklü VEYA şu an yükleniyor → tekrar isteme.
@@ -306,15 +323,43 @@ class AdEngine(
     /**
      * Composable LazyColumn dışına çıkıp dispose olduğunda ÇAĞRILIR, ya da
      * STALE_AD_TIMEOUT_MS dolunca otomatik tetiklenir.
-     * Reklam GÖSTERİLMEDEN (isLoaded=false ya da hiç compose edilmeden)
-     * pozisyon terk edildiyse: bekleyen isteği iptal et, gelen reklamı imha et.
-     * Stoklama/havuz YOK — AdMob'a "boşa istek" bırakmamak en iyi pratik.
+     *
+     * DÜZELTME: Eskiden burada ANINDA imha ediyorduk. Ama LazyColumn'da bir
+     * composable geçici olarak dispose-recreate olabilir (hafif scroll,
+     * animateContentSize tetiklemesi, parent recomposition) — bu "pozisyon
+     * kalıcı olarak terk edildi" anlamına gelmez. Anında imha, ısıtılmış bir
+     * reklamı kullanıcı tam o pozisyona geldiği anda siliyordu (alan boş
+     * kalıyordu) ve ısıtma job'ı ile yarışıyordu (ısıtılan reklam hemen
+     * imha ediliyordu). Artık DISPOSE_GRACE_MS kadar bekliyoruz; pozisyon bu
+     * süre içinde preloadPositionedNative ile tekrar istenirse (kullanıcı
+     * geri döndüyse) imha iptal edilir ve reklam olduğu gibi kalır.
      */
     fun releasePositionedNative(key: String) {
         posNativeStaleJob.remove(key)?.cancel()
+        posNativeReleaseJob.remove(key)?.cancel()
+        posNativeReleaseJob[key] = scope.launch {
+            delay(DISPOSE_GRACE_MS)
+            posNativeJob.remove(key)?.cancel()
+            posNativeAd.remove(key)?.destroy()
+            // Önce false'a çek (aktif collector'lar görsün), sonra map'ten sil
+            posNativeLoaded[key]?.value = false
+            posNativeLoaded.remove(key)
+            posNativeUnit.remove(key)
+            posNativeExhausted.remove(key)
+            posNativeReleaseJob.remove(key)
+        }
+    }
+
+    /**
+     * Anında ve kalıcı imha — grace period BEKLEMEZ. Ekran tamamen kapanırken
+     * (releaseAllPositionedNatives, destroyAll) kullanılır; orada "geri dönüş"
+     * ihtimali yok, bekletmenin bir faydası olmaz.
+     */
+    private fun releasePositionedNativeImmediate(key: String) {
+        posNativeStaleJob.remove(key)?.cancel()
+        posNativeReleaseJob.remove(key)?.cancel()
         posNativeJob.remove(key)?.cancel()
         posNativeAd.remove(key)?.destroy()
-        // Önce false'a çek (aktif collector'lar görsün), sonra map'ten sil
         posNativeLoaded[key]?.value = false
         posNativeLoaded.remove(key)
         posNativeUnit.remove(key)
@@ -366,10 +411,10 @@ class AdEngine(
 
     /** Birden çok pozisyonu serbest bırakmak için (örn. tüm ekran kapanırken). */
     fun releaseAllPositionedNatives(keyPrefix: String? = null) {
-        val allKeys = posNativeAd.keys + posNativeJob.keys + posNativeStaleJob.keys
+        val allKeys = posNativeAd.keys + posNativeJob.keys + posNativeStaleJob.keys + posNativeReleaseJob.keys
         val keys = if (keyPrefix == null) allKeys.toList()
                    else allKeys.filter { it.startsWith(keyPrefix) }
-        keys.toSet().forEach { releasePositionedNative(it) }
+        keys.toSet().forEach { releasePositionedNativeImmediate(it) }
     }
 
     // ── Yardımcılar ───────────────────────────────────────────────────────
@@ -420,6 +465,7 @@ class AdEngine(
         posBannerView.values.forEach { it.destroy() }
         posNativeJob.values.forEach { it.cancel() }
         posNativeStaleJob.values.forEach { it.cancel() }
+        posNativeReleaseJob.values.forEach { it.cancel() }
         posNativeAd.values.forEach { it.destroy() }
         singleBannerView.clear(); singleBannerLoaded.clear()
         singleBannerSize.clear(); singleBannerUnit.clear(); singleRetryCount.clear()
@@ -428,5 +474,6 @@ class AdEngine(
         posNativeAd.clear();      posNativeLoaded.clear()
         posNativeUnit.clear();    posNativeJob.clear()
         posNativeStaleJob.clear(); posNativeExhausted.clear()
+        posNativeReleaseJob.clear()
     }
 }
