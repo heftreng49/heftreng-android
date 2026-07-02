@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
 import java.net.URLEncoder
@@ -355,6 +356,7 @@ fun FeedScreen(
             LaunchedEffect(feedListState, adPlan) {
                 adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0)
                 snapshotFlow { feedListState.firstVisibleItemIndex }
+                    .debounce(300L) // hızlı scroll'da her kart için istek atılmasın
                     .collect { firstVisible ->
                         adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = firstVisible)
                     }

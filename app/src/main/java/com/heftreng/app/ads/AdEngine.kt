@@ -50,18 +50,37 @@ class AdEngine(
 ) {
     companion object {
         private const val MAX_RETRY        = 3
-        private const val RETRY_BASE_DELAY = 5_000L // 5s,10s,20s
-
-        /** Yüklenip gösterilmeyen native reklam bu süre sonunda otomatik imha edilir. */
-        private const val STALE_AD_TIMEOUT_MS = 5 * 60_000L // 5 dakika
+        private const val RETRY_BASE_DELAY = 5_000L // 5s, 10s, 20s (exponential)
 
         /**
-         * Composable kısa süreliğine dispose-recreate olabilir (scroll, recompose).
-         * Anında imha "terk etme" ile "geçici scroll-out"u ayırt edemez ve ısıtılmış
-         * bir reklamı kullanıcı tam o pozisyona geldiği anda silebilir. Bu grace period
-         * içinde aynı key tekrar istenirse (kullanıcı geri döndüyse) imha iptal edilir.
+         * NATIVE REKLAM YENİLEME SÜRESİ.
+         * Yüklenip gösterilmeyen (kullanıcı o pozisyona hiç gelmemiş) native reklam
+         * bu süre sonunda imha edilir.
+         *
+         * Neden 30 dakika:
+         *  - 5 dakika (eski değer) çok kısaydı: kullanıcı feed'i kapatıp 6 dakika
+         *    sonra açınca aynı pozisyon için yeni istek gidiyordu (gösterim olmadan).
+         *  - AdMob'un önerisi: yüklenmiş reklamı 1 saat içinde göster. 30 dakika
+         *    bu sınırın güvenli bir altı — hem taze kalır hem gereksiz istek olmaz.
+         *  - Ekran kapanınca releaseAllNatives() zaten anında imha eder,
+         *    bu timeout sadece "açık ekranda ama o pozisyona hiç gidilmedi" durumu için.
          */
-        private const val DISPOSE_GRACE_MS = 10_000L
+        private const val STALE_AD_TIMEOUT_MS = 30 * 60_000L // 30 dakika
+
+        /**
+         * SCROLL-OUT GRACE PERİYODU (native).
+         * Kullanıcı bir native reklam pozisyonunu scroll ile geçince Composable
+         * dispose olur. Anında imha etmek yerine bu kadar bekleriz — kullanıcı
+         * geri dönerse imha iptal edilir, yeni istek ATILMAz.
+         *
+         * Neden 2 dakika:
+         *  - 10 saniye (eski değer) çok kısaydı: hızlı scroll'da veya back/forward
+         *    yapan kullanıcı 11 saniye sonra aynı pozisyon için yeni istek tetikliyordu.
+         *  - 2 dakika normal "scroll edip geri dön" senaryolarının tamamını kapsar.
+         *  - Bu süre STALE_AD_TIMEOUT_MS'den çok kısa — dolmadan önce stale timeout
+         *    zaten devreye girirse imha eder, çakışma yok.
+         */
+        private const val DISPOSE_GRACE_MS = 2 * 60_000L // 2 dakika
     }
 
     /** Bir reklam türü: banner veya native. Retry/lifecycle mantığı türe göre dallanır. */
@@ -145,7 +164,13 @@ class AdEngine(
         val slot = slotFor(key, SlotType.BANNER)
 
         val changed = slot.unitId.isNotEmpty() && (slot.unitId != unitId || slot.size != bannerSize)
-        if (slot.loaded.value && !changed) return // zaten yüklü, aynı config — tekrar isteme
+
+        // Zaten yüklü ve config aynı — hiçbir şey yapma.
+        if (slot.loaded.value && !changed) return
+
+        // Zaten bu config ile yükleniyorsa — iptal edip yeniden başlatma,
+        // mevcut isteğin tamamlanmasını bekle (istek sayısını katlamamak için).
+        if (!changed && slot.loadJob?.isActive == true) return
 
         if (changed) {
             slot.bannerView?.destroy()
@@ -153,7 +178,7 @@ class AdEngine(
             slot.loaded.value = false
         }
         slot.unitId     = unitId
-        slot.size        = bannerSize
+        slot.size       = bannerSize
         slot.retryCount = 0
 
         slot.loadJob?.cancel()
@@ -225,14 +250,16 @@ class AdEngine(
         if (unitId.isBlank()) return
         val slot = slotFor(key, SlotType.NATIVE)
 
-        // Pozisyon geri geldi — bekleyen gecikmeli imha varsa iptal et.
+        // Bekleyen gecikmeli imha varsa iptal et (kullanıcı geri döndü).
         slot.releaseJob?.cancel()
         slot.releaseJob = null
 
+        // Zaten yüklü, yükleniyor veya bu oturumda MAX_RETRY tükendi — istek atma.
+        // exhausted sıfırlanmaz: warmVisiblePositions scroll'da defalarca çağrılır,
+        // her geçişte sıfırlayıp yeni istek atmak aşırı istek sayısının ana nedenidir.
         val sameUnit = slot.unitId == unitId
-        if (!slot.exhausted && sameUnit && (slot.loaded.value || slot.loadJob?.isActive == true)) return
+        if (sameUnit && (slot.exhausted || slot.loaded.value || slot.loadJob?.isActive == true)) return
 
-        slot.exhausted = false
         slot.staleJob?.cancel()
         slot.loadJob?.cancel()
         slot.nativeAd?.destroy()
@@ -248,7 +275,6 @@ class AdEngine(
                 onSuccess = { ad ->
                     slot.nativeAd = ad
                     slot.loaded.value = true
-                    // Gösterilmeden bekleyen reklam için politika-uyumlu otomatik temizlik
                     slot.staleJob = scope.launch {
                         delay(STALE_AD_TIMEOUT_MS)
                         releaseNativeImmediate(key)

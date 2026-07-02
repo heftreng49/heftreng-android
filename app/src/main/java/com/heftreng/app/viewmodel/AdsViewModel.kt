@@ -134,7 +134,11 @@ class AdsViewModel @Inject constructor(
         firstVisibleIndex: Int,
         viewportItemCount: Int = 8,
     ) {
-        val windowEnd = firstVisibleIndex + (viewportItemCount * 2).coerceAtLeast(6)
+        // Pencere: görünür viewport + 3 kart öne bak.
+        // Daha geniş pencere (eski: viewport*2=16) gereksiz yüzlerce istek atıyordu —
+        // kullanıcının hiç görmeyeceği pozisyonlar önceden yükleniyor, istek/gösterim
+        // oranı düşüyor, AdMob "low match rate" penaltısı uyguluyor.
+        val windowEnd = firstVisibleIndex + viewportItemCount + 3
         plan.forEach { (idx, placement) ->
             if (idx < firstVisibleIndex) return@forEach
             if (idx > windowEnd) return@forEach

@@ -49,16 +49,12 @@ fun AdSlotView(
     adsVm    : AdsViewModel,
     modifier : Modifier = Modifier,
 ) {
+    // İstek warmVisiblePositions tarafından zaten atıldı.
+    // Burada tekrar request* çağırmak her recompose'da çift istek yaratır.
+    // Sadece native için dispose (banner lifecycle farklı yönetilir).
     DisposableEffect(placement.slotKey) {
-        when (placement) {
-            is AdPlacement.Banner -> adsVm.requestBanner(placement.slotKey, placement.unitId, placement.size)
-            is AdPlacement.Native -> adsVm.requestNative(placement.slotKey, placement.unitId)
-        }
         onDispose {
-            when (placement) {
-                is AdPlacement.Banner -> Unit // banner tek seferlik istektir, dispose'da imha etmiyoruz (resume/pause lifecycle'da yönetilir)
-                is AdPlacement.Native -> adsVm.releaseNative(placement.slotKey)
-            }
+            if (placement is AdPlacement.Native) adsVm.releaseNative(placement.slotKey)
         }
     }
 
