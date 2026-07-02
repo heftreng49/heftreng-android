@@ -829,6 +829,10 @@ private fun ExerciseEditDialog(
     var optD     by remember { mutableStateOf(doc["optD"]       as? String ?: "") }
     var answer     by remember { mutableStateOf(doc["answer"]     as? String ?: "") }
     var tr         by remember { mutableStateOf(doc["tr"]         as? String ?: "") }
+    // fill tipinin Türkçe çevirisi "questionTr" alanında tutulur (mcq ile aynı isimlendirme);
+    // "tr" alanı build tipine ait. Eskiden fill burada "tr"yi okuyordu, bu yüzden
+    // JSON'dan questionTr olarak gelen çeviriler ekranda hep boş görünüyordu.
+    var questionTr by remember { mutableStateOf(doc["questionTr"] as? String ?: "") }
     var wordsRaw by remember { mutableStateOf(
         (doc["words"] as? List<*>)?.joinToString(" ") ?: ""
     )}
@@ -881,6 +885,7 @@ private fun ExerciseEditDialog(
 
                 when (type) {
                     "mcq" -> {
+                        AdminField(questionTr, { questionTr = it }, "Türkçe çeviri (opsiyonel)", hint = "Sorunun Türkçe karşılığı")
                         AdminField(optA, { optA = it }, "Seçenek A *")
                         AdminField(optB, { optB = it }, "Seçenek B")
                         AdminField(optC, { optC = it }, "Seçenek C")
@@ -889,7 +894,7 @@ private fun ExerciseEditDialog(
                     }
                     "fill" -> {
                         AdminField(answer, { answer = it }, "Doğru Cevap *", hint = "Boşluğa gelecek kelime")
-                        AdminField(tr, { tr = it }, "Türkçe ipucu (opsiyonel)")
+                        AdminField(questionTr, { questionTr = it }, "Türkçe çeviri (opsiyonel)", hint = "Cümlenin tam Türkçe karşılığı")
                         if (!question.contains("___")) {
                             Text("⚠️ Soru içinde ___ (üç alt çizgi) olmalı — boşluğun yeri", color = Color(0xFFEF9A00), fontSize = 11.sp)
                         }
@@ -926,8 +931,21 @@ private fun ExerciseEditDialog(
                         if (type == "fill"  && answer.isBlank()) { error = "Cevap zorunlu"; return@Button }
                         if (type == "fill"  && !question.contains("___")) { error = "Soru içinde ___ olmalı"; return@Button }
                         if (type == "build" && wordsRaw.isBlank()) { error = "Kelimeler zorunlu"; return@Button }
+                        // Kaydedilecek çiftlerle AYNI mantıkla hesapla — validasyon ve kayıt
+                        // birbirinden kopuk olmasın (trim edilmemiş "=" sayımı yanlış
+                        // sonuç veriyordu: boşluklu satırlar veya tek taraf boşken
+                        // sayım kayıt sonucuyla uyuşmuyordu).
+                        val parsedPairs = pairsRaw.lines()
+                            .map { it.trim() }
+                            .filter { it.contains("=") }
+                            .map { line ->
+                                val idx = line.indexOf("=")
+                                listOf(line.substring(0, idx).trim(), line.substring(idx + 1).trim())
+                            }
+                            .filter { it[0].isNotBlank() && it[1].isNotBlank() }
+
                         if (type == "match" && pairsRaw.isBlank()) { error = "En az bir çift gerekli"; return@Button }
-                        if (type == "match" && pairsRaw.lines().filter { it.contains("=") }.size < 2) { error = "En az 2 çift giriniz"; return@Button }
+                        if (type == "match" && parsedPairs.size < 2) { error = "En az 2 geçerli çift giriniz (kürtçe=türkçe biçiminde, her iki taraf da dolu olmalı)"; return@Button }
 
                         scope.launch {
                             saving = true
@@ -944,24 +962,18 @@ private fun ExerciseEditDialog(
                                         data["optC"]   = optC.trim()
                                         data["optD"]   = optD.trim()
                                         data["answer"] = optA.trim() // web temasıyla aynı: optA her zaman doğru
+                                        if (questionTr.isNotBlank()) data["questionTr"] = questionTr.trim()
                                     }
                                     "fill" -> {
                                         data["answer"] = answer.trim()
-                                        data["tr"]     = tr.trim()
+                                        if (questionTr.isNotBlank()) data["questionTr"] = questionTr.trim()
                                     }
                                     "build" -> {
                                         data["words"] = wordsRaw.trim().split("\\s+".toRegex()).filter { it.isNotBlank() }
                                         data["tr"]    = tr.trim()
                                     }
                                     "match" -> {
-                                        data["pairs"] = pairsRaw.lines()
-                                            .map { it.trim() }
-                                            .filter { it.contains("=") }
-                                            .map { line ->
-                                                val idx = line.indexOf("=")
-                                                listOf(line.substring(0, idx).trim(), line.substring(idx + 1).trim())
-                                            }
-                                            .filter { it[0].isNotBlank() && it[1].isNotBlank() }
+                                        data["pairs"] = parsedPairs
                                     }
                                 }
                                 if (docId.isBlank())

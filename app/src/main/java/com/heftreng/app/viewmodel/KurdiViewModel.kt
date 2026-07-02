@@ -1156,8 +1156,9 @@ class KurdiViewModel @Inject constructor(
                         "nameKu" to u.optString("nameKu"), "desc" to u.optString("desc"),
                         "icon" to u.optString("icon","📖"), "color" to u.optString("color","#8B5CF6"),
                         "order" to u.optInt("order", ord))).await()
+                    // ✅ desc eksikti — state'e eklenirken kayboluyordu, ekranda boş görünüyordu
                     _units.value = (_units.value + KfUnit(id=uid, ttl=u.optString("ttl"),
-                        nameKu=u.optString("nameKu"), icon=u.optString("icon","📖"),
+                        nameKu=u.optString("nameKu"), desc=u.optString("desc"), icon=u.optString("icon","📖"),
                         color=u.optString("color","#8B5CF6"), order=u.optInt("order",ord)))
                         .sortedBy { it.order }
                     unitsAdded++
@@ -1286,6 +1287,7 @@ class KurdiViewModel @Inject constructor(
                 units.forEach { u ->
                     unitsArr.put(org.json.JSONObject().apply {
                         put("id", u.id); put("ttl", u.ttl); put("nameKu", u.nameKu)
+                        put("desc", u.desc) // ✅ eskiden export edilmiyordu, içe aktarımda kayboluyordu
                         put("icon", u.icon); put("color", u.color); put("order", u.order)
                     })
                 }
