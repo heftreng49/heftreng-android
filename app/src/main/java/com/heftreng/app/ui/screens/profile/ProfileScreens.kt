@@ -299,6 +299,18 @@ fun ProfileScreen(
         val listState = rememberLazyListState()
 
         // Tab'ın sticky olması için: header kaç item — 1 item (header), 1 item (tabbar), sonra içerik
+        // Reklam planı composable bağlamda hesaplanır (collectAsState/remember burada
+        // çağrılabilir) — LazyListScope içinde (item/itemsIndexed bloklarında) ÇAĞRILAMAZ,
+        // çünkü o bağlam @Composable değildir.
+        val profileAdConfigs by adsVm.allConfigs.collectAsState()
+        val profileAdPlan = remember(posts.size, profileAdConfigs, targetUid) {
+            adsVm.planFor(
+                screenKey = "profile_$targetUid",
+                itemCount = posts.size,
+                nativeKey = RemoteConfigManager.KEY_NATIVE_PROFILE,
+            )
+        }
+
         LazyColumn(
             state          = listState,
             modifier       = Modifier.fillMaxSize().padding(padding),
@@ -477,14 +489,6 @@ fun ProfileScreen(
                             }
                         }
                     } else {
-                        val adConfigs by adsVm.allConfigs.collectAsState()
-                        val profileAdPlan = remember(posts.size, adConfigs, targetUid) {
-                            adsVm.planFor(
-                                screenKey = "profile_$targetUid",
-                                itemCount = posts.size,
-                                nativeKey = RemoteConfigManager.KEY_NATIVE_PROFILE,
-                            )
-                        }
                         itemsIndexed(posts, key = { _, p -> "post_${p.id}" }) { index, post ->
                             ConnectedPostCard(
                                 post               = post,
