@@ -353,7 +353,13 @@ class AdsViewModel @Inject constructor(
     }
 
     init {
-        syncRemainingRewardedAds()
+        // NOT: syncRemainingRewardedAds() burada BİLEREK çağrılmıyor.
+        // Bu noktada configRepo henüz refresh() edilmemiş olabilir, yani
+        // dailyLimit fallback (3) ile geçici/yanlış bir değer set edilip
+        // "kalan reklam" UI'ında kısa süreli bir sıçrama yaratabilirdi.
+        // Gerçek senkronizasyon preloadTopLevelAds() içinde, Remote Config
+        // çekildikten SONRA gerçek dailyLimit ile yapılıyor (satır ~174).
+        //
         // TEK fetch tetikleyici: loadAdConfigs() zaten configRepo.refresh() çağırıyor
         // ve sdkReady + consent hazır olana kadar bekliyor. Burada AYRICA
         // configRepo.refresh() çağırmak, aynı Remote Config isteğini bağımsız
