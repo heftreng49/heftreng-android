@@ -354,7 +354,11 @@ class AdsViewModel @Inject constructor(
 
     init {
         syncRemainingRewardedAds()
-        viewModelScope.launch { configRepo.refresh() }
+        // TEK fetch tetikleyici: loadAdConfigs() zaten configRepo.refresh() çağırıyor
+        // ve sdkReady + consent hazır olana kadar bekliyor. Burada AYRICA
+        // configRepo.refresh() çağırmak, aynı Remote Config isteğini bağımsız
+        // iki coroutine'den tetikleyip lastFetchMs üzerinde yarış durumu
+        // yaratıyordu (biri "throttle geçti" derken diğeri de aynı anda deniyor).
         viewModelScope.launch {
             ConsentHelper.canRequestAds.collect { canAds ->
                 if (canAds) {

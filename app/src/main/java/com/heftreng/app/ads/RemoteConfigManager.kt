@@ -22,7 +22,8 @@ import javax.inject.Singleton
  *  ÇALIŞMA MANTIĞI:
  *  ─────────────────
  *  1. App açılır → fetchAndActivate() çağrılır (async, UI'ı bloklamaz)
- *  2. Cache (12 saat) geçerli ise network'e gitmez → 0ms gecikme
+ *  2. Cache (12 saat — hem SDK'nın minimumFetchInterval'ı hem bizim
+ *     client-side throttle'ımız AYNI süre) geçerli ise network'e gitmez → 0ms gecikme
  *  3. Cache bayatsa arka planda fetch → activate → StateFlow güncellenir
  *  4. İlk açılış veya network yok → defaultValues devreye girer (reklam hiç durmuyor)
  *
@@ -38,15 +39,20 @@ class RemoteConfigManager @Inject constructor(
 ) {
     companion object {
         // ── Fetch interval ───────────────────────────────────────────────
-        // Production: 0 — Firebase SDK'nın minimumFetchInterval'ı kullanıyoruz (1 saat)
-        // Debug: 0 — her açılışta anında güncelle
-        // Client-side throttle ayrıca var (bkz. fetchAndActivate) — çift güvence
-        private const val FETCH_INTERVAL_PROD  = 3_600L
+        // TEK KAYNAK: prod cache süresi 12 saat. Debug'da 0 (her açılışta anında
+        // günceller, geliştirme sırasında bekleme olmasın).
+        // ÖNEMLİ: CLIENT_THROTTLE_MS bu değerle AYNI olmalı — aksi halde iki
+        // katman (SDK'nın kendi minimumFetchInterval'ı + bizim client-side
+        // throttle'ımız) birbirinden habersiz farklı sürelerle çalışır ve biri
+        // diğerini anlamsız kılar (biri kilitliyken diğeri gereksiz yere
+        // "süresi doldu" sanıp fetch dener, SDK zaten cache'ten döner).
+        private const val FETCH_INTERVAL_HOURS = 12L
+        private const val FETCH_INTERVAL_PROD  = FETCH_INTERVAL_HOURS * 3_600L
         private const val FETCH_INTERVAL_DEBUG = 0L
 
-        // Client-side throttle — SDK interval'ına ek güvence
-        // Aynı oturumda 30 dakikadan sık fetch yapmaz
-        private const val CLIENT_THROTTLE_MS = 30 * 60 * 1_000L  // 30 dakika
+        // Client-side throttle — SDK'nın minimumFetchInterval'ı ile AYNI süre.
+        // Farklı bir değer olursa iki katman senkron olmayan kararlar verir.
+        private const val CLIENT_THROTTLE_MS = FETCH_INTERVAL_HOURS * 3_600_000L  // 12 saat
 
         // ── Remote Config key isimleri ───────────────────────────────────
         // Firebase konsolunda bu isimlerle değer tanımlanacak.
@@ -103,7 +109,7 @@ class RemoteConfigManager @Inject constructor(
 
     init {
         // Fetch interval: debug'da 0 (her açılışta anında günceller),
-        // production'da 1 saat (eski 12 saat → konsol değişikliği max 1 saatte devreye girer)
+        // production'da 12 saat (FETCH_INTERVAL_PROD ile CLIENT_THROTTLE_MS aynı kaynaktan türetilir)
         val interval = if (com.heftreng.app.BuildConfig.DEBUG)
             FETCH_INTERVAL_DEBUG
         else
@@ -122,7 +128,11 @@ class RemoteConfigManager @Inject constructor(
 
     /**
      * Remote Config'i fetch et ve aktive et.
-     * Client-side throttle: aynı oturumda 30 dakikadan sık fetch yapmaz.
+     * Client-side throttle: aynı oturumda 12 saatten sık fetch yapmaz —
+     * bu süre SDK'nın minimumFetchIntervalInSeconds'ı (FETCH_INTERVAL_PROD)
+     * ile bilerek AYNI: iki katman farklı süre kullanırsa biri "süresi
+     * doldu" sanıp gereksiz yere fetch dener ama SDK zaten kendi cache'inden
+     * döner — hiçbir şey kazandırmadan kod karmaşıklaştırır.
      * Debug build'de throttle yok — her açılışta anında günceller.
      */
     suspend fun fetchAndActivate(): Boolean {
@@ -141,10 +151,6 @@ class RemoteConfigManager @Inject constructor(
      * BYPASS eder (fetch(0) ile). Admin panelinden "Reklamları Yenile" gibi bir
      * butona bağlanabilir. Normal kullanıcı akışında ÇAĞRILMAMALI — Firebase'in
      * ücretsiz kotasını (günde sınırlı istek) hızla tüketebilir.
-     *
-     * ÖNCEDEN: loadAdConfigs(forceRefresh=true) parametresi tanımlıydı ama hiçbir
-     * yerde kullanılmıyordu — normal fetchAndActivate() zaten 12 saat cache'e
-     * tabiydi, "force" hiçbir şeyi zorlamıyordu.
      */
     suspend fun forceFetchAndActivate(): Boolean = runCatching {
         remoteConfig.fetch(0).await()
