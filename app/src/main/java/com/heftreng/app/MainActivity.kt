@@ -203,6 +203,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         appUpdateManager.unregisterListener(installStateListener)
+        application.unregisterActivityLifecycleCallbacks(screenTracker)
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
