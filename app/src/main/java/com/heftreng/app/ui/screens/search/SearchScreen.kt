@@ -8,8 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import com.heftreng.app.ui.component.PositionedNativeAdView
-import com.heftreng.app.ui.component.NativeAdViewCompose
+import com.heftreng.app.ads.RemoteConfigManager
+import com.heftreng.app.ui.component.AdSlotView
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -57,7 +57,7 @@ fun SearchScreen(
     val activeTab      by vm.activeTab.collectAsState()
 
     DisposableEffect(Unit) {
-        onDispose { adsVm.releaseAllPositionedNatives("search_native_") }
+        onDispose { adsVm.releaseAllNatives("search_native_") }
     }
 
     var query          by remember { mutableStateOf("") }
@@ -180,6 +180,11 @@ fun SearchScreen(
                             }
                         }
                     } else {
+                        val searchAdPlan = adsVm.planFor(
+                            screenKey = "search",
+                            itemCount = filtered.size,
+                            nativeKey = RemoteConfigManager.KEY_NATIVE_SEARCH,
+                        )
                         itemsIndexed(filtered, key = { _, r -> r.type + r.id }) { index, result ->
                             SearchResultRow(result, language = language, onClick = {
                                 when (result.type) {
@@ -193,22 +198,8 @@ fun SearchScreen(
                                 }
                             })
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
-                            // CMS/RC'deki position/frequency alanlarına göre native ad yerleşimi.
-                            val nativeSearchCfg by adsVm.nativeSearchConfig.collectAsState()
-                            val nativeSearchStartPos = (nativeSearchCfg?.position ?: 8).coerceAtLeast(1)
-                            val nativeSearchFreq     = (nativeSearchCfg?.frequency ?: 8).coerceAtLeast(1)
-                            val showSearchNativeHere = index >= nativeSearchStartPos &&
-                                (index - nativeSearchStartPos) % nativeSearchFreq == 0
-                            if (showSearchNativeHere) {
-                                val nativeUnitId by adsVm.nativeSearchUnitId.collectAsState()
-                                PositionedNativeAdView(
-                                    positionKey  = "search_native_$index",
-                                    unitId       = nativeUnitId,
-                                    adsVm        = adsVm,
-                                    modifier     = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                ) { ad ->
-                                    NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = when (nativeSearchCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL })
-                                }
+                            searchAdPlan[index]?.let { placement ->
+                                AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp))
                             }
                         }
                     }

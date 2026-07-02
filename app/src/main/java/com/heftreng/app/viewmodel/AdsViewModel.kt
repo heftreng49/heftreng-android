@@ -14,10 +14,15 @@ import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import com.google.android.gms.ads.rewarded.RewardItem
+import com.heftreng.app.HeftrangApp
+import com.heftreng.app.ads.AdConfigRepository
 import com.heftreng.app.ads.AdEngine
 import com.heftreng.app.ads.AdFrequencyManager
 import com.heftreng.app.ads.RemoteConfigManager
-import com.heftreng.app.HeftrangApp
+import com.heftreng.app.ads.AdPlacement
+import com.heftreng.app.ads.SlotSpec
+import com.heftreng.app.ads.buildAdPlan
+import com.heftreng.app.ads.toSlotSpec
 import com.heftreng.app.data.model.CmsAdConfig
 import com.heftreng.app.util.ConsentHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -27,40 +32,33 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  AdsViewModel — Remote Config geçişi sonrası temizlenmiş versiyon.
+ *  AdsViewModel — v2, sıfırdan yazım.
  *
- *  DEĞİŞEN ŞEYLER (Firestore → Remote Config):
- *  ─────────────────────────────────────────────
- *  ✗ KALKAN: FirebaseFirestore bağımlılığı (tamamen kaldırıldı)
- *  ✗ KALKAN: loadAdConfigs() → Firestore get() çağrısı
- *  ✗ KALKAN: persistConfig() / loadPersistedConfig() → 19 alanlı string serialization
- *  ✗ KALKAN: adPrefs SharedPreferences → RC kendi cache'ini yönetiyor
- *  ✗ KALKAN: lastServerFetchMs + ADS_CONFIG_TTL_MS → RC'de built-in (setMinimumFetchInterval)
+ *  Bu sınıf artık İNCE BİR CEPHE: AdEngine (banner/native slot yönetimi) +
+ *  AdConfigRepository (Remote Config'ten tek Map) + Interstitial/Rewarded
+ *  (ekran-bağımsız, dokunulmadı) bir araya getirir. Ekran-özel StateFlow
+ *  çoğaltması, ekran-özel resolveOrDefault tekrarı YOK.
  *
- *  ✓ GELEN: RemoteConfigManager bağımlılığı
- *  ✓ GELEN: loadAdConfigs() → RC.fetchAndActivate() + applyConfigs()
+ *  Ekranlar için tek kullanım deseni:
+ *    val cfg   = adsVm.configFor(RemoteConfigManager.KEY_NATIVE_FEED)
+ *    val plan  = remember(itemCount, cfg) { adsVm.planFor("feed", itemCount, nativeCfg = cfg, ...) }
+ *    // render sırasında: plan[index]?.let { AdSlotView(it, adsVm) }
  *
- *  DEĞİŞMEYEN ŞEYLER:
- *  ──────────────────
- *  • AdEngine (banner pool, native pool, retry/backoff) — dokunmadık
- *  • AdFrequencyManager (local-first sayaç) — dokunmadık
- *  • Interstitial / Rewarded yükleme ve gösterme mantığı — dokunmadık
- *  • ConsentHelper.canRequestAds kontrolleri — dokunmadık
- *  • BannerSlot / NativeAdSlot enum'ları — dokunmadık
- *  • resolveOrDefault() mantığı — dokunmadık
- *
- *  NOT: AdFrequencyManager artık tamamen yerel (SharedPreferences). Firestore yok.
+ *  Bkz. ads/AdPlanner.kt (yerleşim hesaplama — çakışma yapısal olarak imkansız)
+ *       ads/AdEngine.kt   (tek slot deposu — banner/native yükleme, retry, lifecycle)
+ *       ui/component/AdSlotView.kt (tek render noktası)
  * ═══════════════════════════════════════════════════════════════════════════
  */
 @HiltViewModel
 class AdsViewModel @Inject constructor(
-    private val remoteConfigManager: RemoteConfigManager,
+    private val configRepo         : AdConfigRepository,
     private val frequencyManager   : AdFrequencyManager,
     private val auth               : com.google.firebase.auth.FirebaseAuth,
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
@@ -68,246 +66,119 @@ class AdsViewModel @Inject constructor(
 
     private val engine = AdEngine(appContext, viewModelScope)
 
-    // ── Slot tanımları ─────────────────────────────────────────────────────
-    enum class BannerSlot  { FEED, LIB, KURDI, BLOG }
-    enum class NativeAdSlot { FEED, BLOG, LIBRARY, KURDI, PROFILE, SEARCH }
+    // ── Config erişimi (ekranlar buradan okur) ─────────────────────────────
+    val allConfigs: StateFlow<Map<String, CmsAdConfig>> = configRepo.configs
+    val adsEnabled: StateFlow<Boolean> = configRepo.adsEnabled
 
-    private fun BannerSlot.key() = when (this) {
-        BannerSlot.FEED  -> "banner_feed"
-        BannerSlot.LIB   -> "banner_library"
-        BannerSlot.KURDI -> "banner_kurdi"
-        BannerSlot.BLOG  -> "banner_blog"
+    /** Belirli bir RC key'i için reaktif config. */
+    fun configFlow(key: String): StateFlow<CmsAdConfig?> =
+        configRepo.configs.map { it[key] }.stateIn(viewModelScope, SharingStarted.Eagerly, configRepo.get(key))
+
+    /** Belirli bir RC key'i için reaktif, çözümlenmiş unitId (enabled+global+boş kontrolü dahil). */
+    fun unitIdFlow(key: String): StateFlow<String?> =
+        combine(configRepo.configs, configRepo.adsEnabled) { configs, enabled ->
+            if (!enabled) return@combine null
+            val c = configs[key] ?: return@combine null
+            if (!c.enabled) return@combine null
+            c.unitId.ifBlank { null }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, configRepo.resolvedUnitId(key))
+
+    // ── Reklam planı (AdPlanner'a ince sarmalayıcı) ────────────────────────
+    /**
+     * Bir ekrandaki listede hangi index'te ne gösterileceğini hesaplar.
+     * Native ve banner aynı çağrıda planlandığı için aynı index'e ikisinin
+     * birden düşmesi yapısal olarak imkansızdır (bkz. AdPlanner.kt).
+     */
+    fun planFor(
+        screenKey   : String,
+        itemCount   : Int,
+        nativeKey   : String? = null,
+        bannerKey   : String? = null,
+    ): Map<Int, AdPlacement> {
+        val nativeSpec: SlotSpec? = nativeKey?.let { key ->
+            configRepo.get(key)?.toSlotSpec(configRepo.resolvedUnitId(key))
+        }
+        val bannerSpec: SlotSpec? = bannerKey?.let { key ->
+            configRepo.get(key)?.toSlotSpec(configRepo.resolvedUnitId(key))
+        }
+        return buildAdPlan(itemCount, nativeSpec, bannerSpec, screenKey)
     }
 
-    private fun NativeAdSlot.key() = when (this) {
-        NativeAdSlot.FEED    -> "native_feed"
-        NativeAdSlot.BLOG    -> "native_blog"
-        NativeAdSlot.LIBRARY -> "native_library"
-        NativeAdSlot.KURDI   -> "native_kurdi"
-        NativeAdSlot.PROFILE -> "native_profile"
-        NativeAdSlot.SEARCH  -> "native_search"
-    }
-
-    // ── Banner public API ──────────────────────────────────────────────────
-    val bannerFeedLoaded  get() = engine.bannerLoadedFlow(BannerSlot.FEED.key())
-    val bannerLibLoaded   get() = engine.bannerLoadedFlow(BannerSlot.LIB.key())
-    val bannerKurdiLoaded get() = engine.bannerLoadedFlow(BannerSlot.KURDI.key())
-    val bannerBlogLoaded  get() = engine.bannerLoadedFlow(BannerSlot.BLOG.key())
-
-    val cachedFeedBanner  : AdView? get() = engine.cachedBanner(BannerSlot.FEED.key())
-    val cachedLibBanner   : AdView? get() = engine.cachedBanner(BannerSlot.LIB.key())
-    val cachedKurdiBanner : AdView? get() = engine.cachedBanner(BannerSlot.KURDI.key())
-    val cachedBlogBanner  : AdView? get() = engine.cachedBanner(BannerSlot.BLOG.key())
-
-    fun preloadBanner(unitId: String, slot: BannerSlot, bannerSize: String = "adaptive") =
-        engine.loadBanner(slot.key(), unitId, bannerSize)
-
+    // ── Banner slot API (AdEngine'e ince sarmalayıcı) ──────────────────────
+    fun bannerLoadedFlow(key: String): StateFlow<Boolean> = engine.bannerLoadedFlow(key)
+    fun cachedBanner(key: String): AdView? = engine.cachedBanner(key)
+    fun requestBanner(key: String, unitId: String, bannerSize: String = "adaptive") =
+        engine.requestBanner(key, unitId, bannerSize)
+    fun releaseBanner(key: String) = engine.releaseBanner(key)
+    fun releaseBanners(keyPrefix: String? = null) = engine.releaseBanners(keyPrefix)
     fun getAdSize(bannerSize: String): AdSize = engine.resolveAdSize(bannerSize)
 
-    // ── Pozisyon bazlı banner API ─────────────────────────────────────────
-    fun positionedBannerLoadedFlow(key: String): StateFlow<Boolean> = engine.positionedBannerLoadedFlow(key)
-    fun cachedPositionedBanner(key: String): AdView? = engine.cachedPositionedBanner(key)
-    fun preloadPositionedBanner(key: String, unitId: String, bannerSize: String = "adaptive") =
-        engine.loadPositionedBanner(key, unitId, bannerSize)
-    fun releasePositionedBanners(keyPrefix: String? = null) = engine.releasePositionedBanners(keyPrefix)
+    // ── Native slot API (AdEngine'e ince sarmalayıcı) ──────────────────────
+    fun nativeLoadedFlow(key: String): StateFlow<Boolean> = engine.nativeLoadedFlow(key)
+    fun cachedNative(key: String): NativeAd? = engine.cachedNative(key)
+    fun requestNative(key: String, unitId: String) = engine.requestNative(key, unitId)
+    fun releaseNative(key: String) = engine.releaseNative(key)
+    fun releaseAllNatives(keyPrefix: String? = null) = engine.releaseAllNatives(keyPrefix)
 
-    // ── Native API ────────────────────────────────────────────────────────
-    fun positionedNativeLoadedFlow(key: String): StateFlow<Boolean> = engine.positionedNativeLoadedFlow(key)
-    fun cachedPositionedNative(key: String): NativeAd? = engine.cachedPositionedNative(key)
-    fun preloadPositionedNative(key: String, unitId: String) = engine.preloadPositionedNative(key, unitId)
-    fun releasePositionedNative(key: String) = engine.releasePositionedNative(key)
-    fun releaseAllPositionedNatives(keyPrefix: String? = null) = engine.releaseAllPositionedNatives(keyPrefix)
-
-    // ── Config StateFlow'ları ─────────────────────────────────────────────
-    // Başlangıç değeri null → Remote Config fetch gelene kadar prod ID ile yüklenir
-    // (resolveOrDefault: c==null → prod ID kullan, hemen başlat)
-    private val _bannerConfig        = MutableStateFlow<CmsAdConfig?>(null)
-    val bannerConfig                 = _bannerConfig.asStateFlow()
-    private val _bannerLibraryConfig = MutableStateFlow<CmsAdConfig?>(null)
-    val bannerLibraryConfig          = _bannerLibraryConfig.asStateFlow()
-    private val _bannerKurdiConfig   = MutableStateFlow<CmsAdConfig?>(null)
-    val bannerKurdiConfig            = _bannerKurdiConfig.asStateFlow()
-    private val _bannerBlogConfig    = MutableStateFlow<CmsAdConfig?>(null)
-    val bannerBlogConfig             = _bannerBlogConfig.asStateFlow()
-    private val _interstitialConfig  = MutableStateFlow<CmsAdConfig?>(null)
-    val interstitialConfig           = _interstitialConfig.asStateFlow()
-    private val _rewardedConfig      = MutableStateFlow<CmsAdConfig?>(null)
-    val rewardedConfig               = _rewardedConfig.asStateFlow()
-    private val _nativeFeedConfig    = MutableStateFlow<CmsAdConfig?>(null)
-    val nativeFeedConfig             = _nativeFeedConfig.asStateFlow()
-    private val _nativeBlogConfig    = MutableStateFlow<CmsAdConfig?>(null)
-    val nativeBlogConfig             = _nativeBlogConfig.asStateFlow()
-    private val _nativeLibraryConfig = MutableStateFlow<CmsAdConfig?>(null)
-    val nativeLibraryConfig          = _nativeLibraryConfig.asStateFlow()
-    private val _nativeKurdiConfig   = MutableStateFlow<CmsAdConfig?>(null)
-    val nativeKurdiConfig            = _nativeKurdiConfig.asStateFlow()
-    private val _nativeProfileConfig = MutableStateFlow<CmsAdConfig?>(null)
-    val nativeProfileConfig          = _nativeProfileConfig.asStateFlow()
-    private val _nativeSearchConfig  = MutableStateFlow<CmsAdConfig?>(null)
-    val nativeSearchConfig           = _nativeSearchConfig.asStateFlow()
-
-    private val _allAdConfigs = MutableStateFlow<Map<String, CmsAdConfig>>(emptyMap())
-    val allAdConfigs          = _allAdConfigs.asStateFlow()
-
-    private val _adsEnabled = MutableStateFlow(true)
-    val adsEnabled = _adsEnabled.asStateFlow()
-
-    // ── Unit ID StateFlow'ları ─────────────────────────────────────────────
-    // resolveOrDefault mantığı: c==null → config henüz gelmedi → prod ID ile başla
-    //                           c!=null && !c.enabled → admin kapattı → null (reklam yok)
-    //                           c!=null && c.enabled  → custom ID varsa onu, yoksa prod ID
-    // Remote Config henüz gelmemişse (c==null) reklam yüklenmez — hardcode prod ID fallback YOK.
-    // Kural: Remote Config dışından hardcode ID gelmemeli. RC gelince unitId dolar.
-    // enabled=false → admin kapattı → null. unitId boşsa → RC'de tanımsız → null.
-    private fun resolveOrDefault(c: CmsAdConfig?, e: Boolean): String? {
-        if (!e) return null
-        if (c == null) return null          // RC henüz gelmedi — bekle
-        if (!c.enabled) return null         // admin kapattı
-        return c.unitId.ifBlank { null }    // unitId boşsa RC'de tanımsız — gösterme
+    /**
+     * Bir liste ekranında görünür pozisyona göre ileri pozisyonları ısıtır.
+     * Isıtma penceresi viewportItemCount'a göre dinamik — sabit "3 ileri"
+     * yerine görünen kart sayısının katları kullanılır; hızlı scroll'da da
+     * reklamın 1-3sn yükleme süresini karşılayacak kadar erken tetiklenir.
+     *
+     * Ekranlar bunu tek bir snapshotFlow.collect içinde çağırır; kendi
+     * index formüllerini YAZMAZ — plan zaten hesaplanmış durumda.
+     */
+    fun warmVisiblePositions(
+        plan             : Map<Int, AdPlacement>,
+        firstVisibleIndex: Int,
+        viewportItemCount: Int = 8,
+    ) {
+        val windowEnd = firstVisibleIndex + (viewportItemCount * 2).coerceAtLeast(6)
+        plan.forEach { (idx, placement) ->
+            if (idx < firstVisibleIndex) return@forEach
+            if (idx > windowEnd) return@forEach
+            when (placement) {
+                is AdPlacement.Banner -> requestBanner(placement.slotKey, placement.unitId, placement.size)
+                is AdPlacement.Native -> requestNative(placement.slotKey, placement.unitId)
+            }
+        }
     }
 
-    val bannerUnitId: StateFlow<String?> = combine(_bannerConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
-    val bannerLibraryUnitId: StateFlow<String?> = combine(_bannerLibraryConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
-    val bannerKurdiUnitId: StateFlow<String?> = combine(_bannerKurdiConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
-    val bannerBlogUnitId: StateFlow<String?> = combine(_bannerBlogConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
-    val nativeFeedUnitId: StateFlow<String?> = combine(_nativeFeedConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
-    val nativeBlogUnitId: StateFlow<String?> = combine(_nativeBlogConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
-    val nativeLibraryUnitId: StateFlow<String?> = combine(_nativeLibraryConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
-    val nativeKurdiUnitId: StateFlow<String?> = combine(_nativeKurdiConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
-    val nativeProfileUnitId: StateFlow<String?> = combine(_nativeProfileConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
-    val nativeSearchUnitId: StateFlow<String?> = combine(_nativeSearchConfig, _adsEnabled) { c, e ->
-        resolveOrDefault(c, e)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
-    val bannerPosition: StateFlow<Int> =
-        _bannerConfig.combine(_adsEnabled) { c, _ -> c?.position ?: 5 }
-            .stateIn(viewModelScope, SharingStarted.Eagerly, 5)
-
-    // ── Remote Config'den config yükleme ──────────────────────────────────
-    //
-    // ESKİ (Firestore): firestore.collection("cms_ads").get(Source.SERVER).await()
-    //   → Her açılışta Firestore okuma = fatura
-    //   → Offline'da çalışmıyor
-    //   → 19 alanlı String serialization (kırılgan)
-    //
-    // YENİ (Remote Config): remoteConfigManager.fetchAndActivate()
-    //   → 12 saatte bir ağ isteği (SDK kendi cache'ini yönetiyor)
-    //   → Offline'da son cached değer — hiç fail olmuyor
-    //   → JSON parse — güvenli, alan ekleyince format bozulmuyor
+    // ── Remote Config yükleme ──────────────────────────────────────────────
     fun loadAdConfigs(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            // SDK hazır olana kadar bekle — UMP tamamlandıktan sonra MainActivity
-            // notifySdkReady() → sdkReady=true yapar. Burada beklemek, canRequestAds
-            // guard'ının yarattığı race condition'ı ortadan kaldırır: init{}'ten gelen
-            // çağrı canRequestAds true olduğunda tetiklendiği için güvenli; ama
-            // onAppForeground() gibi başka kod yollarından gelen çağrılarda SDK
-            // henüz hazır olmayabilir — awaitSdk() bunu garantiler.
+            // SDK hazır olana kadar bekle (UMP tamamlandıktan sonra sdkReady=true olur).
             HeftrangApp.sdkReady.first { it }
-            // ÖNCEDEN forceRefresh parametresi hiçbir şey yapmıyordu — normal
-            // fetchAndActivate() her zaman 12 saatlik cache'e tabiydi. Artık
-            // forceRefresh=true → gerçekten cache'i bypass edip anında sunucudan çeker.
-            val fetchResult = if (forceRefresh) remoteConfigManager.forceFetchAndActivate()
-                               else remoteConfigManager.fetchAndActivate()
-            android.util.Log.e("HeftrengAdsDebug", "fetchAndActivate sonucu: $fetchResult (forceRefresh=$forceRefresh)")
-            applyRemoteConfigs(preloadAds = true)
+            configRepo.refresh(forceRefresh)
+            preloadTopLevelAds()
         }
     }
 
     /**
-     * Remote Config'den tüm slot değerlerini okur ve StateFlow'ları günceller.
-     * Bu fonksiyon sync'tir (ağ isteği yok) — tüm değerler zaten SDK cache'inde.
+     * Liste-içi (pozisyon bazlı) olmayan, ekran açılır açılmaz doğrudan
+     * gösterilecek reklamları önceden yükler (tekil banner slotları,
+     * interstitial, rewarded). Liste içi slotlar warmVisiblePositions ile
+     * ekranın kendi scroll akışında ısıtılır.
      */
-    private fun applyRemoteConfigs(preloadAds: Boolean) {
-        // Global flag
-        _adsEnabled.value = remoteConfigManager.isAdsEnabled()
-
-        val newAll = mutableMapOf<String, CmsAdConfig>()
-
-        fun applyBanner(flow: MutableStateFlow<CmsAdConfig?>, key: String, slot: BannerSlot) {
-            val config = remoteConfigManager.getAdConfig(key) ?: return
-            android.util.Log.e("HeftrengAdsDebug", "$key -> enabled=${config.enabled} unitId=${config.unitId} raw config yüklendi")
-            flow.value = config
-            newAll[key] = config
-            if (preloadAds && config.enabled && _adsEnabled.value) {
-                config.unitId.ifBlank { null }
-                    ?.let { engine.loadBanner(slot.key(), it, config.bannerSize) }
-            }
-        }
-
-        fun applyNative(flow: MutableStateFlow<CmsAdConfig?>, key: String, slot: NativeAdSlot) {
-            val config = remoteConfigManager.getAdConfig(key) ?: return
-            flow.value = config
-            newAll[key] = config
-            // Native ad havuzu kaldırıldı — her pozisyon kendi istek/release döngüsünü yönetiyor
-        }
-
-        applyBanner(_bannerConfig,        RemoteConfigManager.KEY_BANNER_FEED,    BannerSlot.FEED)
-        applyBanner(_bannerLibraryConfig, RemoteConfigManager.KEY_BANNER_LIBRARY, BannerSlot.LIB)
-        applyBanner(_bannerKurdiConfig,   RemoteConfigManager.KEY_BANNER_KURDI,   BannerSlot.KURDI)
-        applyBanner(_bannerBlogConfig,    RemoteConfigManager.KEY_BANNER_BLOG,    BannerSlot.BLOG)
-
-        applyNative(_nativeFeedConfig,    RemoteConfigManager.KEY_NATIVE_FEED,    NativeAdSlot.FEED)
-        applyNative(_nativeBlogConfig,    RemoteConfigManager.KEY_NATIVE_BLOG,    NativeAdSlot.BLOG)
-        applyNative(_nativeLibraryConfig, RemoteConfigManager.KEY_NATIVE_LIBRARY, NativeAdSlot.LIBRARY)
-        applyNative(_nativeKurdiConfig,   RemoteConfigManager.KEY_NATIVE_KURDI,   NativeAdSlot.KURDI)
-        applyNative(_nativeProfileConfig, RemoteConfigManager.KEY_NATIVE_PROFILE, NativeAdSlot.PROFILE)
-        applyNative(_nativeSearchConfig,  RemoteConfigManager.KEY_NATIVE_SEARCH,  NativeAdSlot.SEARCH)
-
-        // Interstitial
-        remoteConfigManager.getAdConfig(RemoteConfigManager.KEY_INTERSTITIAL)?.let { config ->
-            val changed = _interstitialConfig.value != config
-            _interstitialConfig.value = config
-            newAll[RemoteConfigManager.KEY_INTERSTITIAL] = config
-            if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+    private fun preloadTopLevelAds() {
+        configRepo.get(RemoteConfigManager.KEY_INTERSTITIAL)?.let { config ->
+            if (config.enabled) {
                 config.unitId.ifBlank { null }?.let {
                     interstitialUnitId = it
                     loadInterstitialAd(it)
                 }
             }
         }
-
-        // Rewarded
-        remoteConfigManager.getAdConfig(RemoteConfigManager.KEY_REWARDED)?.let { config ->
-            val changed = _rewardedConfig.value != config
-            _rewardedConfig.value = config
-            newAll[RemoteConfigManager.KEY_REWARDED] = config
+        configRepo.get(RemoteConfigManager.KEY_REWARDED)?.let { config ->
             syncRemainingRewardedAds(config.dailyLimit)
-            if (preloadAds && changed && config.enabled && _adsEnabled.value) {
+            if (config.enabled) {
                 config.unitId.ifBlank { null }?.let { preloadRewardedAd(it) }
             }
         }
-
-        _allAdConfigs.value = newAll
     }
 
-    // ── Interstitial ──────────────────────────────────────────────────────
+    // ── Interstitial (ekran-bağımsız, davranış korunuyor) ──────────────────
     private var interstitialAd: InterstitialAd? = null
     private var interstitialUnitId: String = ""
 
@@ -323,7 +194,7 @@ class AdsViewModel @Inject constructor(
     }
 
     fun loadInterstitial() {
-        val config = _interstitialConfig.value ?: return
+        val config = configRepo.get(RemoteConfigManager.KEY_INTERSTITIAL) ?: return
         if (!config.enabled) return
         val unitId = config.unitId.ifBlank { null } ?: return
         interstitialUnitId = unitId
@@ -348,7 +219,7 @@ class AdsViewModel @Inject constructor(
         ad.show(activity)
     }
 
-    // ── Rewarded ──────────────────────────────────────────────────────────
+    // ── Rewarded (ekran-bağımsız, davranış korunuyor) ──────────────────────
     private var rewardedAd      : RewardedAd? = null
     private var rewardedUnitId  : String = ""
     private var rewardedLoading : Boolean = false
@@ -389,7 +260,7 @@ class AdsViewModel @Inject constructor(
     enum class RewardType { DOUBLE_XP, UNLOCK_LESSON, SAVE_STREAK }
 
     fun loadRewarded() {
-        val config = _rewardedConfig.value ?: return
+        val config = configRepo.get(RemoteConfigManager.KEY_REWARDED) ?: return
         if (!config.enabled) return
         val unitId = config.unitId.ifBlank { null } ?: return
         preloadRewardedAd(unitId)
@@ -399,7 +270,7 @@ class AdsViewModel @Inject constructor(
     val remainingRewardedAds = _remainingRewardedAds.asStateFlow()
 
     fun canShowScenario(rewardType: RewardType): Boolean {
-        val cfg = _rewardedConfig.value ?: return _remainingRewardedAds.value > 0
+        val cfg = configRepo.get(RemoteConfigManager.KEY_REWARDED) ?: return _remainingRewardedAds.value > 0
         val scenarioEnabled = when (rewardType) {
             RewardType.DOUBLE_XP     -> cfg.scenarioDoubleXp
             RewardType.UNLOCK_LESSON -> cfg.scenarioUnlockLesson
@@ -408,9 +279,7 @@ class AdsViewModel @Inject constructor(
         return scenarioEnabled && _remainingRewardedAds.value > 0
     }
 
-    // dailyLimit: RC'den gelir. RC henüz gelmemişse default 3 kullan.
-    // Bu fonksiyon hem RC gelince hem uygulama açılışında çağrılır.
-    private fun syncRemainingRewardedAds(dailyLimit: Int = _rewardedConfig.value?.dailyLimit ?: 3) {
+    private fun syncRemainingRewardedAds(dailyLimit: Int = configRepo.get(RemoteConfigManager.KEY_REWARDED)?.dailyLimit ?: 3) {
         val uid = auth.currentUser?.uid ?: return
         val used = frequencyManager.getCount(uid, "rewarded")
         _remainingRewardedAds.value = (dailyLimit - used).coerceAtLeast(0)
@@ -424,7 +293,7 @@ class AdsViewModel @Inject constructor(
         onLimitReached: () -> Unit = {},
     ) {
         val uid        = auth.currentUser?.uid ?: ""
-        val dailyLimit = _rewardedConfig.value?.dailyLimit ?: 3
+        val dailyLimit = configRepo.get(RemoteConfigManager.KEY_REWARDED)?.dailyLimit ?: 3
 
         if (uid.isNotEmpty() && frequencyManager.isLimitReached(uid, "rewarded", dailyLimit)) {
             _remainingRewardedAds.value = 0
@@ -467,10 +336,7 @@ class AdsViewModel @Inject constructor(
         viewModelScope.launch {
             if (!ConsentHelper.canRequestAds.value) return@launch
             engine.resumeAllBanners()
-            // Arka plandan dönünce Remote Config'i de yenile (cache geçerliyse 0ms)
             loadAdConfigs()
-            // Native havuz feed ekranında PositionedNativeAdView tarafından zaten dolduruluyor.
-            // Native ad artık per-position lazy-load — burada ekstra çağrı gerekmiyor.
             if (interstitialAd == null && interstitialUnitId.isNotBlank()) loadInterstitialAd(interstitialUnitId)
             if (rewardedAd == null && rewardedUnitId.isNotBlank() && !rewardedLoading) preloadRewardedAd(rewardedUnitId)
         }
@@ -478,8 +344,6 @@ class AdsViewModel @Inject constructor(
 
     fun onAppBackground() {
         engine.pauseAllBanners()
-        // Politika uyumu: arka plana alınmış uygulamada henüz gösterilmemiş
-        // native reklamları hemen serbest bırak — STALE_AD_TIMEOUT_MS'i bekleme.
         engine.releaseUnseenNativesOnBackground()
     }
 
@@ -489,32 +353,8 @@ class AdsViewModel @Inject constructor(
     }
 
     init {
-        // Uygulama açılışında kalan rewarded hakkını SharedPreferences'tan hemen yükle.
-        // RC beklemeye gerek yok — dailyLimit bilinmese de "bugün kaç kullandım" yerel.
-        // RC gelince syncRemainingRewardedAds(config.dailyLimit) ile kesin değer güncellenir.
         syncRemainingRewardedAds()
-
-        // Remote Config'i hemen arka planda fetch et (cache geçerliyse 0ms, ağdan ~200ms)
-        // Bu, reklam config'ini UMP onayından bağımsız olarak hazır tutar.
-        viewModelScope.launch { remoteConfigManager.fetchAndActivate() }
-
-        // canRequestAds true olduğu anda (UMP tamamlandı veya UMP gereksiz) config yükle.
-        // ESKİ HATA: init{} içinde önce canRequestAds.value'ya bakıp "true ise hemen çağır,
-        // değilse koleksiyona başla" yapısı bir race condition yaratıyordu:
-        //   - AdsViewModel, MainActivity UMP callback'inden (notifySdkReady()) ÖNCE
-        //     oluşturulursa → canRequestAds.value == false → collect başlar
-        //   - Ama collecten sonra UMP callback gelirse → collect tepki verir ✓
-        //   - AdsViewModel, notifySdkReady() SONRA oluşturulursa → canRequestAds.value == true
-        //     → doğrudan çağırır ✓ (bu yol çalışıyordu)
-        //   - Problem: Hilt, ViewModel'i her zaman Activity.onCreate'nin ortasında yaratır;
-        //     UMP çağrısı da onCreate'de başlar, ama UMP async — ViewModel UMP'den önce
-        //     yaratılıyor, canRequestAds her zaman false başlıyor, collect üzerinden
-        //     gidiyor. AMA: collect, "ilk true emisyonu" görünce loadAdConfigs() çağırıyor,
-        //     bu tamam. Asıl sorun: loadAdConfigs() içindeki erken return:
-        //       if (!ConsentHelper.canRequestAds.value) return@launch
-        //     Bu satır collect callback'inden çağrılınca TRUE'dur ama aynı satır
-        //     onAppForeground() gibi farklı kod yollarından çağrılınca FALSE olabilir.
-        //     Tek bir flag yerine, zaten canRequestAds.first{it} bekleme deseni kullanılıyor.
+        viewModelScope.launch { configRepo.refresh() }
         viewModelScope.launch {
             ConsentHelper.canRequestAds.collect { canAds ->
                 if (canAds) {

@@ -22,10 +22,8 @@ import androidx.compose.ui.unit.*
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.ui.theme.*
-import com.heftreng.app.ui.component.AdBannerView
-import com.heftreng.app.ui.component.NativeAdViewCompose
-import com.heftreng.app.ui.component.PositionedAdBannerView
-import com.heftreng.app.ui.component.PositionedNativeAdView
+import com.heftreng.app.ads.RemoteConfigManager
+import com.heftreng.app.ui.component.AdSlotView
 import com.heftreng.app.viewmodel.AdsViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.heftreng.app.viewmodel.BlogPost
@@ -52,18 +50,22 @@ fun BlogScreen(
 ) {
     val ku = language == "ku"
     val state    by vm.state.collectAsState()
-    val bannerUnitId  by adsVm.bannerBlogUnitId.collectAsState()
-    val bannerCfg     by adsVm.bannerBlogConfig.collectAsState()
-    val blogBannerSize = bannerCfg?.bannerSize ?: "adaptive"
-    val bannerPos      = bannerCfg?.position ?: 4
-    // nativeBlogAd artık pozisyon bazlı yükleniyor (PositionedNativeAdView), tekil collect kaldırıldı.
+    val adConfigs by adsVm.allConfigs.collectAsState()
+    val adPlan = remember(state.posts.size, adConfigs) {
+        adsVm.planFor(
+            screenKey = "blog",
+            itemCount = state.posts.size,
+            nativeKey = RemoteConfigManager.KEY_NATIVE_BLOG,
+            bannerKey = RemoteConfigManager.KEY_BANNER_BLOG,
+        )
+    }
     var selLabel by remember { mutableStateOf<String?>(null) }
 
 
     DisposableEffect(Unit) {
         onDispose {
-            adsVm.releasePositionedBanners("blog_banner_")
-            adsVm.releaseAllPositionedNatives("blog_native_")
+            adsVm.releaseBanners("blog_banner_")
+            adsVm.releaseAllNatives("blog_native_")
         }
     }
 
@@ -156,41 +158,10 @@ fun BlogScreen(
                                 post     = post,
                                 onClick  = { navController.navigate("blog_post/${post.id}") },
                             )
-                            // Her bannerPos. yazıdan sonra reklam göster — her pozisyon kendi AdView'ını yükler
-                            if (bannerUnitId != null && (index + 1) % bannerPos == 0) {
-                                PositionedAdBannerView(
-                                    positionKey  = "blog_banner_$index",
-                                    unitId       = bannerUnitId,
-                                    adsVm        = adsVm,
-                                    bannerSize   = blogBannerSize,
-                                )
-                            }
-
-                            // CMS'deki position/frequency alanlarına göre native ad yerleşimi.
-                            // DÜZELTME: bkz. FeedScreen.kt aynı blok — eskiden sadece "position"
-                            // okunup frekans gibi kullanılıyordu, "frequency" göz ardı ediliyordu.
-                            val nativeBlogCfg by adsVm.nativeBlogConfig.collectAsState()
-                            val nativeBlogStartPos = (nativeBlogCfg?.position ?: 5).coerceAtLeast(1)
-                            val nativeBlogFreq     = (nativeBlogCfg?.frequency ?: 5).coerceAtLeast(1)
-                            val showBlogNativeHere = index >= nativeBlogStartPos &&
-                                (index - nativeBlogStartPos) % nativeBlogFreq == 0
-                            if (showBlogNativeHere) {
-                                // ÖNEMLİ: nativeBlogCfg CMS'den gelene kadar null'dur — eskiden bu
-                                // yüzden unitId de null kalıyor, reklam hiç istenmiyordu. Artık
-                                // adsVm.nativeBlogUnitId (anlık varsayılan prod ID'li) kullanılıyor.
-                                val nativeUnitId by adsVm.nativeBlogUnitId.collectAsState()
-                                PositionedNativeAdView(
-                                    positionKey  = "blog_native_$index",
-                                    unitId       = nativeUnitId,
-                                    adsVm        = adsVm,
-                                    modifier     = Modifier.fillMaxWidth(),
-                                ) { ad ->
-                                    NativeAdViewCompose(
-                                        nativeAd = ad,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        adSize   = when (nativeBlogCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL }
-                                    )
-                                }
+                            // Reklam yerleşimi adPlan'dan gelir — banner/native çakışması
+                            // yapısal olarak imkansız (bkz. AdPlanner.kt).
+                            adPlan[index]?.let { placement ->
+                                AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.fillMaxWidth())
                             }
                         }
 

@@ -42,9 +42,9 @@ import androidx.compose.foundation.clickable
 import androidx.navigation.NavController
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
-import com.heftreng.app.ui.component.AdBannerView
-import com.heftreng.app.ui.component.PositionedNativeAdView
-import com.heftreng.app.ui.component.NativeAdViewCompose
+import com.heftreng.app.ads.AdPlacement
+import com.heftreng.app.ads.RemoteConfigManager
+import com.heftreng.app.ui.component.AdSlotView
 import com.heftreng.app.viewmodel.*
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -86,9 +86,7 @@ fun KurdiScreen(
     val canUnlockLesson         = adsVm.canShowScenario(AdsViewModel.RewardType.UNLOCK_LESSON)
     val canSaveStreak           = adsVm.canShowScenario(AdsViewModel.RewardType.SAVE_STREAK)
     val remainingAds            = adsVm.remainingRewardedAds.collectAsState().value
-    val bannerUnitId    by adsVm.bannerKurdiUnitId.collectAsState()
-    val bannerKurdiCfg  by adsVm.bannerKurdiConfig.collectAsState()
-    val kurdiBannerSize = bannerKurdiCfg?.bannerSize ?: "adaptive"
+    // Reklam config'i UnitsTab içinde, kendi plan'ını hesaplar (bkz. UnitsTab).
 
     // Native ad havuzunu önceden doldur — CMS config beklemeden ANINDA tetiklenir.
     val context  = androidx.compose.ui.platform.LocalContext.current
@@ -303,8 +301,6 @@ fun KurdiScreen(
                 language        = language,
                 tempUnlockedIds = tempUnlockedIds,
                 canWatchAd      = canUnlockLesson,
-                bannerUnitId    = bannerUnitId,
-                bannerSize      = kurdiBannerSize,
                 adsVm           = adsVm,
                 onNext   = { vm.getNextLesson()?.let { vm.openLesson(it.id) } },
                 onOpen   = { lessonId -> vm.openLesson(lessonId) },
@@ -832,9 +828,7 @@ private fun UnitsTab(
     language        : String,
     tempUnlockedIds : Set<String> = emptySet(),
     canWatchAd      : Boolean = false,
-    bannerUnitId    : String? = null,
-    bannerSize      : String = "adaptive",
-    adsVm           : AdsViewModel? = null,
+    adsVm           : AdsViewModel,
     onNext          : () -> Unit,
     onOpen          : (String) -> Unit,
     onLockedClick   : (String) -> Unit = {},
@@ -850,7 +844,17 @@ private fun UnitsTab(
                 Text(Strings.lessonNotFound(language), color = Muted, fontSize = 14.sp)
             }
         }
-        else -> LazyColumn(
+        else -> {
+        val adConfigs by adsVm.allConfigs.collectAsState()
+        val kurdiAdPlan = remember(units.size, adConfigs) {
+            adsVm.planFor(
+                screenKey = "kurdi",
+                itemCount = units.size,
+                nativeKey = RemoteConfigManager.KEY_NATIVE_KURDI,
+                bannerKey = RemoteConfigManager.KEY_BANNER_KURDI,
+            )
+        }
+        LazyColumn(
             modifier       = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 32.dp),
         ) {
@@ -874,42 +878,13 @@ private fun UnitsTab(
                 val pct   = if (total > 0) done * 100 / total else 0
                 val color = parseColor(unit.color)
 
-                // Her 2 üniteden sonra banner (1. ünite bitmeden gösterme)
-                if (bannerUnitId != null && unitIndex > 0 && unitIndex % 2 == 0) {
-                    item(key = "banner_${unit.id}") {
-                        AdBannerView(
-                            unitId      = bannerUnitId,
-                            bannerSize  = bannerSize,
-                            modifier = Modifier.padding(vertical = 8.dp),
-                            adsVm    = adsVm,
-                            slot     = AdsViewModel.BannerSlot.KURDI,
-                        )
-                    }
-                }
-
-                // CMS/RC'deki position/frequency alanlarına göre native ad yerleşimi.
-                // ÖNEMLİ: collectAsState() composable bir çağrı olduğu için item(){}
-                // bloğu KOŞULSUZ eklenir; gösterilip gösterilmeyeceği içeride, config
-                // okunduktan SONRA karar verilir (forEachIndexed @Composable bir bağlam
-                // değildir, dışarıda collectAsState() çağrılamaz).
-                if (adsVm != null) {
-                    item(key = "native_${unit.id}") {
-                        val nativeKurdiCfg by adsVm.nativeKurdiConfig.collectAsState()
-                        val nativeKurdiStartPos = (nativeKurdiCfg?.position ?: 3).coerceAtLeast(1)
-                        val nativeKurdiFreq     = (nativeKurdiCfg?.frequency ?: 3).coerceAtLeast(1)
-                        val showKurdiNativeHere = unitIndex >= nativeKurdiStartPos &&
-                            (unitIndex - nativeKurdiStartPos) % nativeKurdiFreq == 0
-                        if (showKurdiNativeHere) {
-                            val nativeUnitId by adsVm.nativeKurdiUnitId.collectAsState()
-                            PositionedNativeAdView(
-                                positionKey  = "kurdi_native_${unit.id}",
-                                unitId       = nativeUnitId,
-                                adsVm        = adsVm,
-                                modifier     = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                            ) { ad ->
-                                NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = when (nativeKurdiCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL })
-                            }
-                        }
+                // Reklam yerleşimi adPlan'dan gelir — banner/native çakışması
+                // yapısal olarak imkansız (bkz. AdPlanner.kt). item(){} bloğu
+                // koşulsuz eklenir (forEachIndexed @Composable bağlam değildir),
+                // içeriği plan'a bakarak kendi kararını verir.
+                kurdiAdPlan[unitIndex]?.let { placement ->
+                    item(key = "ad_${unit.id}") {
+                        AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(vertical = 8.dp))
                     }
                 }
 
@@ -932,6 +907,7 @@ private fun UnitsTab(
                     }
                 }
             }
+        }
         }
     }
 }

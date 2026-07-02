@@ -47,8 +47,8 @@ import com.heftreng.app.ui.screens.auth.heftrangTextFieldColors
 import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.ui.component.ConnectedPostCard
 import com.heftreng.app.ui.component.FullScreenImageViewer
-import com.heftreng.app.ui.component.PositionedNativeAdView
-import com.heftreng.app.ui.component.NativeAdViewCompose
+import com.heftreng.app.ads.RemoteConfigManager
+import com.heftreng.app.ui.component.AdSlotView
 import com.heftreng.app.ui.screens.books.BookCard
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.FollowListSheet
@@ -96,7 +96,7 @@ fun ProfileScreen(
     val rlEntries      by rlVm.entries.collectAsState()
 
     DisposableEffect(Unit) {
-        onDispose { adsVm.releaseAllPositionedNatives("profile_native_") }
+        onDispose { adsVm.releaseAllNatives("profile_native_") }
     }
 
     val followers     by socialVm.followers.collectAsState()
@@ -477,6 +477,14 @@ fun ProfileScreen(
                             }
                         }
                     } else {
+                        val adConfigs by adsVm.allConfigs.collectAsState()
+                        val profileAdPlan = remember(posts.size, adConfigs, targetUid) {
+                            adsVm.planFor(
+                                screenKey = "profile_$targetUid",
+                                itemCount = posts.size,
+                                nativeKey = RemoteConfigManager.KEY_NATIVE_PROFILE,
+                            )
+                        }
                         itemsIndexed(posts, key = { _, p -> "post_${p.id}" }) { index, post ->
                             ConnectedPostCard(
                                 post               = post,
@@ -489,22 +497,8 @@ fun ProfileScreen(
                                 onUnrepostOverride = { vm.markPostReposted(post.id, false) },
                             )
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
-                            // CMS/RC'deki position/frequency alanlarına göre native ad yerleşimi.
-                            val nativeProfileCfg by adsVm.nativeProfileConfig.collectAsState()
-                            val nativeProfileStartPos = (nativeProfileCfg?.position ?: 6).coerceAtLeast(1)
-                            val nativeProfileFreq     = (nativeProfileCfg?.frequency ?: 6).coerceAtLeast(1)
-                            val showProfileNativeHere = index >= nativeProfileStartPos &&
-                                (index - nativeProfileStartPos) % nativeProfileFreq == 0
-                            if (showProfileNativeHere) {
-                                val nativeUnitId by adsVm.nativeProfileUnitId.collectAsState()
-                                PositionedNativeAdView(
-                                    positionKey  = "profile_native_${targetUid}_$index",
-                                    unitId       = nativeUnitId,
-                                    adsVm        = adsVm,
-                                    modifier     = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                ) { ad ->
-                                    NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = when (nativeProfileCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL })
-                                }
+                            profileAdPlan[index]?.let { placement ->
+                                AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp))
                             }
                         }
                         // ── Daha Fazla Yükle ──────────────────────────────

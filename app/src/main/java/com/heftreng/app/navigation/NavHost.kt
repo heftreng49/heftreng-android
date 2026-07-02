@@ -154,17 +154,15 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     }
 
     // Interstitial config gelir gelmez anlık yükle
-    val interstitialConfig by adsVm.interstitialConfig.collectAsState()
+    val interstitialConfig by adsVm.configFlow(com.heftreng.app.ads.RemoteConfigManager.KEY_INTERSTITIAL).collectAsState()
     LaunchedEffect(interstitialConfig) {
         if (interstitialConfig?.enabled == true) {
             adsVm.loadInterstitial()
         }
     }
 
-    // ÖNCEDEN: Rewarded (ödüllü) reklamlar için bu eşdeğer hiç yoktu — bu yüzden
-    // "2x XP" / "kilidi reklamla aç" gibi senaryolarda reklam hazır olmuyordu.
-    // Interstitial ile birebir aynı desen.
-    val rewardedConfig by adsVm.rewardedConfig.collectAsState()
+    // Rewarded (ödüllü) reklamlar — Interstitial ile birebir aynı desen.
+    val rewardedConfig by adsVm.configFlow(com.heftreng.app.ads.RemoteConfigManager.KEY_REWARDED).collectAsState()
     LaunchedEffect(rewardedConfig) {
         if (rewardedConfig?.enabled == true) {
             adsVm.loadRewarded()

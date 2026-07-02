@@ -49,10 +49,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.data.model.Comment
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
-import com.heftreng.app.ui.component.AdBannerView
-import com.heftreng.app.ui.component.NativeAdViewCompose
-import com.heftreng.app.ui.component.PositionedAdBannerView
-import com.heftreng.app.ui.component.PositionedNativeAdView
+import com.heftreng.app.ads.RemoteConfigManager
+import com.heftreng.app.ui.component.AdSlotView
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.viewmodel.AdsViewModel
 import com.heftreng.app.viewmodel.BlogViewModel
@@ -108,10 +106,18 @@ fun FeedScreen(
     val loading     by vm.loading.collectAsState()
     val hasMore     by vm.hasMore.collectAsState()
     val loadingMore by vm.loadingMore.collectAsState()
-    val bannerUnitId   by adsVm.bannerUnitId.collectAsState()
-    val bannerPos      by adsVm.bannerPosition.collectAsState()
-    val bannerCfg      by adsVm.bannerConfig.collectAsState()
-    val feedBannerSize = bannerCfg?.bannerSize ?: "adaptive"
+    // Reklam planı: banner+native aynı çağrıda hesaplanır, çakışma yapısal
+    // olarak imkansızdır (bkz. AdPlanner.kt). Ekran artık kendi index
+    // formülünü yazmaz.
+    val adConfigs by adsVm.allConfigs.collectAsState()
+    val adPlan = remember(posts.size, adConfigs) {
+        adsVm.planFor(
+            screenKey = "feed",
+            itemCount = posts.size,
+            nativeKey = RemoteConfigManager.KEY_NATIVE_FEED,
+            bannerKey = RemoteConfigManager.KEY_BANNER_FEED,
+        )
+    }
     val blockedUsers by settingsVm.blockedUsers.collectAsState()
 
     val serverRefreshing by vm.serverRefreshing.collectAsState()
@@ -147,8 +153,8 @@ fun FeedScreen(
     // erişilmez durumda yüzlerce stale AdView bırakıyordu (bellek sızıntısı).
     DisposableEffect(Unit) {
         onDispose {
-            adsVm.releasePositionedBanners("feed_banner_")
-            adsVm.releaseAllPositionedNatives("feed_native_")
+            adsVm.releaseBanners("feed_banner_")
+            adsVm.releaseAllNatives("feed_native_")
         }
     }
 
@@ -339,67 +345,19 @@ fun FeedScreen(
             Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
             val feedListState = rememberLazyListState()
 
-            // ── İLK AÇILIŞ ÖN-YÜKLEME: Feed ekranı açılır açılmaz, kullanıcı
-            // henüz scroll etmeden ilk 3 reklam pozisyonunu hemen ısıt.
-            // Scroll-tabanlı ısıtma firstVisibleItemIndex değişince tetiklenir —
-            // yani kullanıcı kaydırmaya başlayana kadar çalışmaz. Bu boşluğu
-            // kapatan LaunchedEffect, unitId hazır olur olmaz (sdkReady + RC fetch
-            // tamamlanır tamamlanmaz) ilk pozisyonları erkenden ateşler.
-            // AdEngine idempotent: aynı key için zaten yüklü/yükleniyorsa tekrar istek atmaz.
-            // EarlyWarm kaldırıldı — ScrollWarm firstVisible=0 ile ilk açılışta
-            // zaten ilk pozisyonları ısıtıyor; ayrı bir LaunchedEffect gereksizdi.
-
-            // ── Reklam önden-ısıtma: gerçek scroll pozisyonuna göre ──────────
-            // LazyColumn yalnızca görünür + birkaç tampon item'ı compose eder;
-            // "bir sonraki pozisyonu" item compose anında ısıtmak, hızlı kaydırmada
-            // reklamın yüklenme süresini (1-3sn) karşılamaya yetmiyordu. Bunun yerine
-            // mevcut scroll konumundan ileriye doğru 3 banner pozisyonunu sürekli
-            // önceden ısıtıyoruz (firstVisibleItemIndex değiştikçe tetiklenir).
-            if (bannerUnitId != null) {
-                // unitId da key'e eklendi — RC gelince yeni ID ile hemen ısıt
-                LaunchedEffect(feedListState, bannerPos, feedBannerSize, bannerUnitId) {
-                    // Başlangıçta ilk 3 pozisyonu hemen ısıt (earlyWarm yerine)
-                    (0 until 3).forEach { step ->
-                        val idx = (bannerPos - 1) + step * bannerPos
-                        adsVm.preloadPositionedBanner("feed_banner_$idx", bannerUnitId!!, feedBannerSize)
+            // ── Reklam önden-ısıtma: TEK çağrı, motor kararı veriyor ─────────
+            // Plan zaten hesaplanmış (adPlan) — hangi index'te ne var biliniyor.
+            // warmVisiblePositions viewport'a göre dinamik pencere kullanır
+            // (sabit "3 ileri" değil), bu yüzden hızlı scroll'da da reklamın
+            // 1-3sn yükleme süresini karşılayacak kadar erken tetiklenir.
+            // Ekran artık kendi index formülünü YAZMAZ, banner/native ayrı ayrı
+            // ısıtılmaz — ikisi de aynı plan'dan, aynı çağrıdan gelir.
+            LaunchedEffect(feedListState, adPlan) {
+                adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0)
+                snapshotFlow { feedListState.firstVisibleItemIndex }
+                    .collect { firstVisible ->
+                        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = firstVisible)
                     }
-                    // Scroll'a göre ileriye bak
-                    snapshotFlow { feedListState.firstVisibleItemIndex }
-                        .collect { firstVisible ->
-                            val nextBannerPostIndex = ((firstVisible / bannerPos) + 1) * bannerPos - 1
-                            (0 until 3).forEach { step ->
-                                val idx = nextBannerPostIndex + step * bannerPos
-                                if (idx >= 0) {
-                                    adsVm.preloadPositionedBanner("feed_banner_$idx", bannerUnitId!!, feedBannerSize)
-                                }
-                            }
-                        }
-                }
-            }
-
-            // ── Native reklam önden-ısıtma: banner ile birebir aynı desen ────
-            val nativeFeedCfgForWarm by adsVm.nativeFeedConfig.collectAsState()
-            val nativeUnitIdForWarm  by adsVm.nativeFeedUnitId.collectAsState()
-            if (nativeUnitIdForWarm != null) {
-                LaunchedEffect(feedListState, nativeFeedCfgForWarm, nativeUnitIdForWarm) {
-                    val startPos = (nativeFeedCfgForWarm?.position ?: 5).coerceAtLeast(1)
-                    val freq     = (nativeFeedCfgForWarm?.frequency ?: 5).coerceAtLeast(1)
-                    // Başlangıçta ilk 3 native pozisyonu hemen ısıt (earlyWarm yerine)
-                    (0 until 3).forEach { step ->
-                        val idx = startPos + step * freq
-                        adsVm.preloadPositionedNative("feed_native_$idx", nativeUnitIdForWarm!!)
-                    }
-                    // Scroll'a göre ileriye bak
-                    snapshotFlow { feedListState.firstVisibleItemIndex }
-                        .collect { firstVisible ->
-                            val nextNativeIdx = if (firstVisible < startPos) startPos
-                                else startPos + (((firstVisible - startPos) / freq) + 1) * freq
-                            (0 until 3).forEach { step ->
-                                val idx = nextNativeIdx + step * freq
-                                adsVm.preloadPositionedNative("feed_native_$idx", nativeUnitIdForWarm!!)
-                            }
-                        }
-                }
             }
 
             LazyColumn(
@@ -613,47 +571,15 @@ fun FeedScreen(
                         )
                     }
 
-                    // CMS'deki position/frequency alanlarına göre native ad yerleşimi.
-                    // DÜZELTME: Eskiden SADECE "position" okunuyor ve frekans gibi
-                    // kullanılıyordu (position=2 → her 2 kartta bir!), "frequency" alanı
-                    // tamamen göz ardı ediliyordu. Doğru semantik: position = İLK reklamın
-                    // göründüğü kart, frequency = ondan SONRA her kaç kartta bir tekrar
-                    // edeceği. Örn. position=2, frequency=5 → kart 2, 7, 12, 17...
-                    // nativeFeedCfgForWarm zaten dışarıda collect ediliyor — item içinde
-                    // tekrar collectAsState çağırmaya gerek yok (recompose azalır)
-                    val nativeStartPos = (nativeFeedCfgForWarm?.position ?: 5).coerceAtLeast(1)
-                    val nativeFreq     = (nativeFeedCfgForWarm?.frequency ?: 5).coerceAtLeast(1)
-                    val showNativeHere = postIndex >= nativeStartPos &&
-                        (postIndex - nativeStartPos) % nativeFreq == 0
-                    if (showNativeHere) {
-                        PositionedNativeAdView(
-                            positionKey    = "feed_native_$postIndex",
-                            unitId         = nativeUnitIdForWarm,
-                            adsVm          = adsVm,
-                            modifier       = Modifier.fillMaxWidth(),
-                        ) { ad ->
-                            NativeAdViewCompose(
-                                nativeAd = ad,
-                                modifier = Modifier.fillMaxWidth(),
-                                adSize   = when (nativeFeedCfgForWarm?.bannerSize?.lowercase()) {
-                                    "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM
-                                    "large"  -> com.heftreng.app.ui.component.NativeAdSize.LARGE
-                                    else     -> com.heftreng.app.ui.component.NativeAdSize.SMALL
-                                },
-                            )
-                        }
+                    // Reklam yerleşimi tamamen adPlan'dan gelir — banner/native
+                    // çakışması yapısal olarak imkansız çünkü plan tek geçişte,
+                    // tek index havuzundan hesaplanmıştı (bkz. AdPlanner.kt).
+                    // Ekran burada hiçbir index formülü YAZMAZ.
+                    adPlan[postIndex]?.let { placement ->
+                        AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.fillMaxWidth())
                     }
 
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
-                    // ── AdMob Banner — her bannerPos. kartta bir — her pozisyon kendi AdView'ını yükler
-                    if (bannerUnitId != null && (postIndex + 1) % bannerPos == 0) {
-                        PositionedAdBannerView(
-                            positionKey  = "feed_banner_$postIndex",
-                            unitId       = bannerUnitId,
-                            adsVm        = adsVm,
-                            bannerSize   = feedBannerSize,
-                        )
-                    }
                     // ── Arkadaşlar ne okuyor? — gönderi kartlarının arasına ────
                     if (selectedFeedTab == 0 && postIndex == 2 && friendsReading.isNotEmpty()) {
                         FriendsReadingStrip(

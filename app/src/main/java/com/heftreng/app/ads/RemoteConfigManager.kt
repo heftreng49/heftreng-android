@@ -65,6 +65,19 @@ class RemoteConfigManager @Inject constructor(
         const val KEY_NATIVE_PROFILE    = "native_profile"
         const val KEY_NATIVE_SEARCH     = "native_search"
 
+        /**
+         * Tüm banner/native config key'lerinin tek listesi. Yeni bir ekrana
+         * reklam eklemek istendiğinde tek yapılması gereken: burada bir KEY_*
+         * sabiti + bu listeye giriş + aşağıdaki DEFAULTS'a bir satır eklemek.
+         * (Interstitial/Rewarded ayrı ele alınır — AdConfigRepository.refresh()'e bakınız.)
+         */
+        val ALL_AD_KEYS = listOf(
+            KEY_BANNER_FEED, KEY_BANNER_LIBRARY, KEY_BANNER_KURDI, KEY_BANNER_BLOG,
+            KEY_NATIVE_FEED, KEY_NATIVE_BLOG, KEY_NATIVE_LIBRARY, KEY_NATIVE_KURDI,
+            KEY_NATIVE_PROFILE, KEY_NATIVE_SEARCH,
+            KEY_INTERSTITIAL, KEY_REWARDED,
+        )
+
         // ── Default JSON değerleri ───────────────────────────────────────
         // Firebase konsolu henüz yapılandırılmamışsa veya offline iken devreye girer.
         // Production unit ID'leri buraya yazılır → ilk açılışta reklam zaten çalışır.

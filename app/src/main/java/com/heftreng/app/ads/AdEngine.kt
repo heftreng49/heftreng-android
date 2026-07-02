@@ -1,6 +1,7 @@
 package com.heftreng.app.ads
 
 import android.content.Context
+import com.google.ads.mediation.admob.AdMobAdapter
 import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdLoader
 import com.google.android.gms.ads.AdRequest
@@ -10,11 +11,10 @@ import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.VideoOptions
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdOptions
-import com.google.ads.mediation.admob.AdMobAdapter
 import com.heftreng.app.HeftrangApp
-import com.heftreng.app.data.model.CmsAdConfig
 import com.heftreng.app.util.ConsentHelper
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,23 +24,24 @@ import kotlinx.coroutines.launch
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  AdEngine — Heftreng'in TEK reklam motoru.
+ *  AdEngine — Heftreng'in TEK reklam motoru (v2, sıfırdan yazım).
  *
- *  Tüm banner ve native reklam yükleme/retry/yaşam döngüsü tek yerde.
- *  Ekranlar sadece key (String) bazında istekte bulunur.
+ *  TEK SLOT DEPOSU: eskiden banner için "tekil" ve "pozisyon bazlı" diye iki
+ *  paralel map seti ve iki ayrı spawn fonksiyonu vardı (aynı mantık, iki kopya).
+ *  Artık her banner/native reklam alanı tek bir `key: String` ile tanımlanan
+ *  bir SLOT'tur; hangi ekranın hangi kartı olduğu motoru ilgilendirmez.
  *
- *  AdMob politika uyumu (v4):
+ *  Ekranlar sadece requestBanner(key, ...) / requestNative(key, ...) çağırır;
+ *  hangi key'in "tekil" mi "listede kaçıncı kart" mı olduğunu motor bilmez,
+ *  bilmesine de gerek yok — key zaten benzersiz.
+ *
+ *  AdMob politika uyumu (korunan davranışlar):
  *   - STALE_AD_TIMEOUT: yüklenip gösterilmeyen native reklamlar belirli süre
- *     sonra otomatik destroy edilir. AdMob kuralı: yüklenen reklam makul
- *     sürede gösterilmeli; ekranda kalmayan ama hâlâ bellekte tutulan reklam
- *     politika ihlali sayılır. Composable dispose olmasa da (örn. arka plana
- *     alınan uygulama) reklam sonsuza dek canlı tutulmaz.
- *   - Havuz/stoklama YOK: her pozisyon kendi tek isteğini atar, kullanılmazsa
- *     hemen imha edilir (AdMob'un kendi önerisi).
- *   - spawnBannerAdView: retry döngüsünde ESKİ AdView destroy edilmeden
- *     önce yeni istek başlıyordu → yarış durumu + bellek sızıntısı. Düzeltildi.
- *   - loadBanner / loadPositionedBanner: "zaten yüklü" guard'ı unit ID
- *     değişimini de doğru şekilde algılar.
+ *     sonra otomatik destroy edilir (kullanıcı görmeden bellekte tutulmaz).
+ *   - DISPOSE_GRACE: LazyColumn recycle/scroll-out-in senaryosunda anında imha
+ *     yerine kısa bir bekleme — kullanıcı geri dönerse imha iptal edilir.
+ *   - Havuz/stoklama YOK: her slot kendi tek isteğini atar, kullanılmazsa
+ *     imha edilir (AdMob'un kendi önerisi — istek/gösterim oranını korur).
  * ═══════════════════════════════════════════════════════════════════════════
  */
 class AdEngine(
@@ -48,41 +49,50 @@ class AdEngine(
     private val scope: CoroutineScope,
 ) {
     companion object {
-        private const val MAX_RETRY         = 3
-        private const val RETRY_BASE_DELAY  = 5_000L   // 5s,10s,20s — daha hızlı ilk retry
+        private const val MAX_RETRY        = 3
+        private const val RETRY_BASE_DELAY = 5_000L // 5s,10s,20s
 
-        // Yüklenip gösterilmeyen native reklam bu süre sonunda otomatik imha edilir.
-        // AdMob guideline: yüklenen reklam "makul sürede" gösterilmeli. Kullanıcı
-        // genelde saniyeler içinde kaydırır; 5dk çok daha sıkı ve güvenli bir limit.
-        private const val STALE_AD_TIMEOUT_MS = 5 * 60_000L   // 5 dakika
+        /** Yüklenip gösterilmeyen native reklam bu süre sonunda otomatik imha edilir. */
+        private const val STALE_AD_TIMEOUT_MS = 5 * 60_000L // 5 dakika
 
-        // LazyColumn recycle/recompose sırasında composable KALICI OLARAK değil,
-        // kısa süreliğine dispose-recreate olabilir (hafif scroll, animateContentSize
-        // tetiklemesi, parent recomposition vb.) — ama daha gerçekçi olarak kullanıcı
-        // pozisyonu geçip birkaç saniye başka bir kartı okuyup GERİ dönebilir; bu da
-        // "terk etme" değil. DisposableEffect.onDispose bu durumları ayırt edemez.
-        // Çözüm: imhayı bu kadar geciktir; aynı pozisyon bu süre içinde tekrar
-        // preload isterse (ekrana geri döndüyse) bekleyen imha iptal edilir ve
-        // zaten yüklü reklam olduğu gibi kullanılır. Çok kısa tutulursa (ör. 1sn)
-        // gerçekçi "geri dön" senaryolarını kaçırır; çok uzun tutulursa kalıcı
-        // terk edilen pozisyonlarda reklam gereksiz yere bellekte/istekte kalır.
+        /**
+         * Composable kısa süreliğine dispose-recreate olabilir (scroll, recompose).
+         * Anında imha "terk etme" ile "geçici scroll-out"u ayırt edemez ve ısıtılmış
+         * bir reklamı kullanıcı tam o pozisyona geldiği anda silebilir. Bu grace period
+         * içinde aynı key tekrar istenirse (kullanıcı geri döndüyse) imha iptal edilir.
+         */
         private const val DISPOSE_GRACE_MS = 10_000L
     }
 
-    // SDK hazır olana kadar bekle — coroutine içinde, UI'ı bloklamaz (<200ms)
+    /** Bir reklam türü: banner veya native. Retry/lifecycle mantığı türe göre dallanır. */
+    private enum class SlotType { BANNER, NATIVE }
+
+    /** Tek bir reklam alanının tüm durumu — banner ve native aynı yapıyı paylaşır. */
+    private class SlotState(val type: SlotType) {
+        val loaded    = MutableStateFlow(false)
+        var unitId    : String = ""
+        var size      : String = "adaptive"     // banner için
+        var retryCount: Int = 0
+        var bannerView: AdView? = null          // type == BANNER ise dolu
+        var nativeAd  : NativeAd? = null        // type == NATIVE ise dolu
+        var loadJob   : Job? = null
+        var staleJob  : Job? = null             // native: gösterilmeden zaman aşımı
+        var releaseJob: Job? = null             // grace-period gecikmeli imha
+        var exhausted : Boolean = false         // MAX_RETRY aşıldı, tekrar denenebilir
+    }
+
+    private val slots = mutableMapOf<String, SlotState>()
+
+    private fun slotFor(key: String, type: SlotType): SlotState =
+        slots.getOrPut(key) { SlotState(type) }
+
+    // SDK hazır olana kadar bekle — coroutine içinde, UI'ı bloklamaz
     private suspend fun awaitSdk() = HeftrangApp.sdkReady.first { it }
 
-    // AdRequest — consent durumuna göre kişiselleştirilmiş veya NPA modu.
-    //
-    // ConsentHelper.consentStatus:
-    //   OBTAINED  → kullanıcı kabul etti → personalized reklam
-    //   NOT_REQUIRED → GDPR/CCPA dışı bölge (Türkiye vb.) → personalized reklam
-    //   REQUIRED  → form gösterildi ama ret/belirsiz → NPA ("npa"="1")
-    //   UNKNOWN   → henüz bilinmiyor → NPA (güvenli taraf)
+    // Consent durumuna göre personalized veya NPA reklam isteği.
     fun adRequest(): AdRequest {
         val status = ConsentHelper.consentStatus.value
         val npa = status == com.google.android.ump.ConsentInformation.ConsentStatus.REQUIRED
-
         return if (npa) {
             AdRequest.Builder()
                 .addNetworkExtrasBundle(AdMobAdapter::class.java, android.os.Bundle().apply {
@@ -94,183 +104,19 @@ class AdEngine(
         }
     }
 
-    // Native optimizasyon: statik reklam öncelikli, video başlarsa sessiz
     private val nativeOptions = NativeAdOptions.Builder()
         .setVideoOptions(VideoOptions.Builder().setStartMuted(true).build())
         .setRequestMultipleImages(false)
         .setAdChoicesPlacement(NativeAdOptions.ADCHOICES_TOP_RIGHT)
         .build()
 
-    // ── Tekil (single) banner ─────────────────────────────────────────────
-    private val singleBannerView   = mutableMapOf<String, AdView>()
-    private val singleBannerLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
-    private val singleBannerSize   = mutableMapOf<String, String>()
-    private val singleBannerUnit   = mutableMapOf<String, String>()
-    private val singleRetryCount   = mutableMapOf<String, Int>()
-
-    fun bannerLoadedFlow(key: String): StateFlow<Boolean> =
-        singleBannerLoaded.getOrPut(key) { MutableStateFlow(false) }.asStateFlow()
-
-    fun cachedBanner(key: String): AdView? = singleBannerView[key]
-
-    /** Tekil banner slotunu yükler. Unit ID veya boyut değiştiyse otomatik yeniler. */
-    fun loadBanner(key: String, unitId: String, bannerSize: String = "adaptive") {
-        if (unitId.isBlank()) return
-        val loadedFlow  = singleBannerLoaded.getOrPut(key) { MutableStateFlow(false) }
-        val sizeChanged = singleBannerSize[key] != null && singleBannerSize[key] != bannerSize
-        val unitChanged = singleBannerUnit[key] != null && singleBannerUnit[key] != unitId
-        if (loadedFlow.value && !sizeChanged && !unitChanged) return
-
-        if (sizeChanged || unitChanged) {
-            singleBannerView.remove(key)?.destroy()
-            loadedFlow.value = false
-        }
-        singleBannerSize[key]  = bannerSize
-        singleBannerUnit[key]  = unitId
-        singleRetryCount[key]  = 0
-        scope.launch {
-            awaitSdk()
-            spawnBannerAdView(key, unitId, bannerSize) { adView ->
-                singleBannerView.remove(key)?.destroy()
-                singleBannerView[key] = adView
-                loadedFlow.value = true
-            }
-        }
-    }
-
-    // ── Pozisyon bazlı banner ──────────────────────────────────────────────
-    private val posBannerView      = mutableMapOf<String, AdView>()
-    private val posBannerLoaded    = mutableMapOf<String, MutableStateFlow<Boolean>>()
-    private val posBannerSize      = mutableMapOf<String, String>()
-    private val posBannerUnit      = mutableMapOf<String, String>()
-    // DÜZELTME: Önceden posBanner da singleRetryCount'u paylaşıyordu. Bu bir
-    // pozisyon bazlı banner'ın başarısızlığının, tamamen farklı bir slot için
-    // (örn. "banner_feed") retry sayacını yanlışlıkla artırmasına yol açıyordu.
-    // Sonuç: tekil feed banner'ı, hiç denemeden "MAX_RETRY aşıldı" sayılıyordu.
-    private val posBannerRetry     = mutableMapOf<String, Int>()
-
-    fun positionedBannerLoadedFlow(key: String): StateFlow<Boolean> =
-        posBannerLoaded.getOrPut(key) { MutableStateFlow(false) }.asStateFlow()
-
-    fun cachedPositionedBanner(key: String): AdView? = posBannerView[key]
-
-    fun loadPositionedBanner(key: String, unitId: String, bannerSize: String = "adaptive") {
-        if (unitId.isBlank()) return
-        val loadedFlow  = posBannerLoaded.getOrPut(key) { MutableStateFlow(false) }
-        val sizeChanged = posBannerSize[key] != null && posBannerSize[key] != bannerSize
-        val unitChanged = posBannerUnit[key] != null && posBannerUnit[key] != unitId
-        if (loadedFlow.value && !sizeChanged && !unitChanged) return
-
-        if (sizeChanged || unitChanged) {
-            posBannerView.remove(key)?.destroy()
-            loadedFlow.value = false
-        }
-        posBannerSize[key]  = bannerSize
-        posBannerUnit[key]  = unitId
-        posBannerRetry[key] = 0
-        scope.launch {
-            awaitSdk()
-            spawnPositionedBannerAdView(key, unitId, bannerSize) { adView ->
-                posBannerView.remove(key)?.destroy()
-                posBannerView[key] = adView
-                loadedFlow.value = true
-            }
-        }
-    }
-
-    fun releasePositionedBanners(keyPrefix: String? = null) {
-        val keys = if (keyPrefix == null) posBannerView.keys.toList()
-                   else posBannerView.keys.filter { it.startsWith(keyPrefix) }
-        keys.forEach { k ->
-            posBannerView.remove(k)?.destroy()
-            posBannerLoaded.remove(k)
-            posBannerSize.remove(k)
-            posBannerUnit.remove(k)
-        }
-    }
+    private fun backoffDelay(retry: Int): Long =
+        RETRY_BASE_DELAY * (1L shl (retry - 1).coerceAtMost(3)) // 5s,10s,20s,40s
 
     /**
-     * Tek bir AdView üretip yükler.
-     * Retry'da: callback saklayarak sadece en son istek "kazanır",
-     * aradaki stale AdView'lar anında destroy edilir.
-     */
-    private fun spawnBannerAdView(
-        key: String,
-        unitId: String,
-        bannerSize: String,
-        onLoaded: (AdView) -> Unit,
-    ) {
-        val adView = AdView(appContext).apply {
-            setAdSize(resolveAdSize(bannerSize))
-            adUnitId = unitId
-            setBackgroundColor(android.graphics.Color.TRANSPARENT)
-        }
-        adView.adListener = object : AdListener() {
-            override fun onAdLoaded() {
-                singleRetryCount[key] = 0
-                onLoaded(adView)
-            }
-            override fun onAdFailedToLoad(e: LoadAdError) {
-                adView.destroy()
-                scope.launch {
-                    val retry = (singleRetryCount[key] ?: 0) + 1
-                    singleRetryCount[key] = retry
-                    if (retry <= MAX_RETRY) {
-                        delay(backoffDelay(retry))
-                        spawnBannerAdView(key, unitId, bannerSize, onLoaded)
-                    }
-                }
-            }
-        }
-        adView.loadAd(adRequest())
-    }
-
-    /**
-     * Pozisyon bazlı banner AdView'ı — tekil banner'dan AYRI retry sayacı (posBannerRetry)
-     * kullanır. Bu sayede farklı pozisyonların başarısızlıkları birbirini etkilemez.
-     * Önceki kodda loadPositionedBanner, spawnBannerAdView'ı çağırıyordu; bu
-     * singleRetryCount'u kirletiyordu → feed banner gibi tekil slotlar haksız yere
-     * bloklanabiliyordu.
-     */
-    private fun spawnPositionedBannerAdView(
-        key: String,
-        unitId: String,
-        bannerSize: String,
-        onLoaded: (AdView) -> Unit,
-    ) {
-        val adView = AdView(appContext).apply {
-            setAdSize(resolveAdSize(bannerSize))
-            adUnitId = unitId
-            setBackgroundColor(android.graphics.Color.TRANSPARENT)
-        }
-        adView.adListener = object : AdListener() {
-            override fun onAdLoaded() {
-                posBannerRetry[key] = 0
-                onLoaded(adView)
-            }
-            override fun onAdFailedToLoad(e: LoadAdError) {
-                adView.destroy()
-                scope.launch {
-                    val retry = (posBannerRetry[key] ?: 0) + 1
-                    posBannerRetry[key] = retry
-                    if (retry <= MAX_RETRY) {
-                        delay(backoffDelay(retry))
-                        spawnPositionedBannerAdView(key, unitId, bannerSize, onLoaded)
-                    }
-                }
-            }
-        }
-        adView.loadAd(adRequest())
-    }
-
-    /**
-     * DÜZELTME: "bannerSize" alanı CMS/RC'de hem NATIVE hem BANNER reklamlar için
-     * aynı isimle kullanılıyor. Native tarafı "small"/"medium"/"large" kelimelerini
-     * okuyor (bkz. ekranlardaki NativeAdSize eşlemesi); banner tarafı ise sadece
-     * "banner"/"medium_rectangle"/"large_banner" kelimelerini tanıyordu — yani
-     * bir admin native'de işe yarayan "medium"'u banner'da yazsa sessizce
-     * "adaptive"e düşüyordu. Artık iki kelime seti birbirine eşleniyor; hangisi
-     * yazılırsa yazılsın aynı sonucu verir.
+     * "bannerSize" alanı CMS/RC'de native VE banner reklamlar için aynı isimle
+     * kullanılıyor: native "small/medium/large", banner "banner/medium_rectangle/
+     * large_banner" bekler. İki kelime seti burada birbirine eşleniyor.
      */
     fun resolveAdSize(bannerSize: String): AdSize {
         val dm    = appContext.resources.displayMetrics
@@ -283,142 +129,176 @@ class AdEngine(
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════
-    //  NATIVE AD — basit model: pozisyon başına TEK istek, TEK kullanım.
-    //
-    //  ÖNCEKİ SİSTEM (havuz + prefetch + recycle) AdMob fill-rate'i kötüleştiriyordu:
-    //  her pozisyon kendi reklamını + bir sonraki pozisyonun reklamını önceden
-    //  istiyordu, kullanıcı hızlı kaydırınca çoğu hiç gösterilmeden çöpe gidiyordu
-    //  (istek/gösterim oranı çok düşüktü). AdMob'un kendi önerisi: reklamı sadece
-    //  gerçekten gösterileceği an iste, kullanılmazsa hemen imha et — stoklama yapma.
-    // ══════════════════════════════════════════════════════════════════════
-    private val posNativeAd     = mutableMapOf<String, NativeAd>()
-    private val posNativeLoaded = mutableMapOf<String, MutableStateFlow<Boolean>>()
-    private val posNativeUnit   = mutableMapOf<String, String>()
-    private val posNativeJob    = mutableMapOf<String, kotlinx.coroutines.Job>()
-    // Yüklenip gösterilmeyen reklamı STALE_AD_TIMEOUT_MS sonunda imha eden zamanlayıcı.
-    // Composable dispose çağrılmasa bile (örn. arka plana alınmış uygulama) reklam
-    // sonsuza dek bellekte tutulmaz — AdMob politika gerekliliği.
-    private val posNativeStaleJob = mutableMapOf<String, kotlinx.coroutines.Job>()
-    // Gecikmeli imha job'ı — pozisyon kısa süreliğine dispose olduğunda hemen
-    // silmek yerine bu job planlanır; aynı pozisyon DISPOSE_GRACE_MS içinde
-    // tekrar preload isterse (kullanıcı geri döndüyse) iptal edilir.
-    private val posNativeReleaseJob = mutableMapOf<String, kotlinx.coroutines.Job>()
-    // Bir pozisyonun son denemesi başarısızlıkla tükendiyse işaretle; ekrana
-    // tekrar girildiğinde (preloadPositionedNative tekrar çağrıldığında) bu
-    // sayede yeniden denenir, aksi halde "sonsuza dek yüklenmedi" kalırdı.
-    private val posNativeExhausted = mutableSetOf<String>()
+    // ═══════════════════════════════════════════════════════════════════════
+    //  BANNER — tek yol. "Tekil" veya "pozisyon bazlı" ayrımı yok; her key
+    //  kendi bağımsız slotudur.
+    // ═══════════════════════════════════════════════════════════════════════
 
-    fun positionedNativeLoadedFlow(key: String): StateFlow<Boolean> =
-        posNativeLoaded.getOrPut(key) { MutableStateFlow(false) }.asStateFlow()
+    fun bannerLoadedFlow(key: String): StateFlow<Boolean> =
+        slotFor(key, SlotType.BANNER).loaded.asStateFlow()
 
-    fun cachedPositionedNative(key: String): NativeAd? = posNativeAd[key]
+    fun cachedBanner(key: String): AdView? = slots[key]?.bannerView
+
+    /** Banner slotunu yükler. unitId veya boyut değiştiyse otomatik yeniler. İdempotent. */
+    fun requestBanner(key: String, unitId: String, bannerSize: String = "adaptive") {
+        if (unitId.isBlank()) return
+        val slot = slotFor(key, SlotType.BANNER)
+
+        val changed = slot.unitId.isNotEmpty() && (slot.unitId != unitId || slot.size != bannerSize)
+        if (slot.loaded.value && !changed) return // zaten yüklü, aynı config — tekrar isteme
+
+        if (changed) {
+            slot.bannerView?.destroy()
+            slot.bannerView = null
+            slot.loaded.value = false
+        }
+        slot.unitId     = unitId
+        slot.size        = bannerSize
+        slot.retryCount = 0
+
+        slot.loadJob?.cancel()
+        slot.loadJob = scope.launch {
+            awaitSdk()
+            spawnBanner(key, slot)
+        }
+    }
+
+    /** Bir banner slotunu (ve varsa devam eden isteğini) serbest bırakır. */
+    fun releaseBanner(key: String) {
+        val slot = slots.remove(key) ?: return
+        slot.loadJob?.cancel()
+        slot.bannerView?.destroy()
+    }
+
+    /** keyPrefix ile başlayan tüm banner slotlarını serbest bırakır (ekran kapanırken). */
+    fun releaseBanners(keyPrefix: String? = null) {
+        val keys = slots.filterValues { it.type == SlotType.BANNER }.keys
+            .let { if (keyPrefix == null) it.toList() else it.filter { k -> k.startsWith(keyPrefix) } }
+        keys.forEach { releaseBanner(it) }
+    }
+
+    /** Retry zinciri: eski AdView her denemede destroy edilip yeni istek atılır (yarış durumu yok). */
+    private fun spawnBanner(key: String, slot: SlotState) {
+        val adView = AdView(appContext).apply {
+            setAdSize(resolveAdSize(slot.size))
+            adUnitId = slot.unitId
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        }
+        adView.adListener = object : AdListener() {
+            override fun onAdLoaded() {
+                slot.retryCount = 0
+                slot.bannerView?.destroy()
+                slot.bannerView = adView
+                slot.loaded.value = true
+            }
+            override fun onAdFailedToLoad(e: LoadAdError) {
+                adView.destroy()
+                val retry = slot.retryCount + 1
+                slot.retryCount = retry
+                if (retry <= MAX_RETRY) {
+                    slot.loadJob = scope.launch {
+                        delay(backoffDelay(retry))
+                        spawnBanner(key, slot)
+                    }
+                }
+            }
+        }
+        adView.loadAd(adRequest())
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  NATIVE — pozisyon başına tek istek, tek kullanım. Havuz/prefetch yok:
+    //  her pozisyon ekrana gireceği an istenir, kullanılmazsa imha edilir.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    fun nativeLoadedFlow(key: String): StateFlow<Boolean> =
+        slotFor(key, SlotType.NATIVE).loaded.asStateFlow()
+
+    fun cachedNative(key: String): NativeAd? = slots[key]?.nativeAd
 
     /**
-     * Pozisyon için TEK reklam ister. Aynı key+unitId için zaten yüklü veya
-     * yükleniyorsa tekrar istek atmaz (idempotent). Önceki deneme tükenmişse
-     * (MAX_RETRY aşıldıysa) burada tekrar çağrılınca yeniden denenir.
+     * Pozisyon için tek native reklam ister. Aynı key+unitId için zaten yüklü
+     * veya yükleniyorsa tekrar istek atmaz (idempotent). Tükenmiş durumdaysa
+     * (MAX_RETRY aşıldıysa) tekrar çağrılınca yeniden dener.
      */
-    fun preloadPositionedNative(key: String, unitId: String) {
+    fun requestNative(key: String, unitId: String) {
         if (unitId.isBlank()) return
+        val slot = slotFor(key, SlotType.NATIVE)
 
         // Pozisyon geri geldi — bekleyen gecikmeli imha varsa iptal et.
-        // Bu, kısa süreli scroll-out/scroll-in'de reklamı canlı tutar.
-        posNativeReleaseJob.remove(key)?.cancel()
+        slot.releaseJob?.cancel()
+        slot.releaseJob = null
 
-        val loadedFlow = posNativeLoaded.getOrPut(key) { MutableStateFlow(false) }
+        val sameUnit = slot.unitId == unitId
+        if (!slot.exhausted && sameUnit && (slot.loaded.value || slot.loadJob?.isActive == true)) return
 
-        // Zaten bu unitId için yüklü VEYA şu an yükleniyor → tekrar isteme.
-        // Tükenmiş (exhausted) durumdaysa bu guard'ı atla — yeniden dene.
-        val exhausted = key in posNativeExhausted
-        if (!exhausted && posNativeUnit[key] == unitId &&
-            (loadedFlow.value || posNativeJob[key]?.isActive == true)
-        ) return
+        slot.exhausted = false
+        slot.staleJob?.cancel()
+        slot.loadJob?.cancel()
+        slot.nativeAd?.destroy()
+        slot.nativeAd = null
+        slot.unitId = unitId
+        slot.loaded.value = false
 
-        // unitId değiştiyse veya yeniden deneniyorsa eski isteği/reklamı temizle
-        posNativeExhausted.remove(key)
-        posNativeStaleJob.remove(key)?.cancel()
-        posNativeJob[key]?.cancel()
-        posNativeAd.remove(key)?.destroy()
-        posNativeUnit[key] = unitId
-        loadedFlow.value = false
-
-        posNativeJob[key] = scope.launch {
+        slot.loadJob = scope.launch {
             awaitSdk()
             loadOneNative(
                 unitId    = unitId,
                 retry     = 0,
                 onSuccess = { ad ->
-                    posNativeAd[key] = ad
-                    loadedFlow.value = true
+                    slot.nativeAd = ad
+                    slot.loaded.value = true
                     // Gösterilmeden bekleyen reklam için politika-uyumlu otomatik temizlik
-                    posNativeStaleJob[key] = scope.launch {
+                    slot.staleJob = scope.launch {
                         delay(STALE_AD_TIMEOUT_MS)
-                        android.util.Log.d("AdEngine", "Native '$key' gösterilmeden zaman aşımına uğradı, imha ediliyor")
-                        releasePositionedNative(key)
+                        releaseNativeImmediate(key)
                     }
                 },
                 onFail = {
-                    loadedFlow.value = false
-                    posNativeExhausted.add(key)
+                    slot.loaded.value = false
+                    slot.exhausted = true
                 },
             )
         }
     }
 
     /**
-     * Composable LazyColumn dışına çıkıp dispose olduğunda ÇAĞRILIR, ya da
-     * STALE_AD_TIMEOUT_MS dolunca otomatik tetiklenir.
-     *
-     * DÜZELTME: Eskiden burada ANINDA imha ediyorduk. Ama LazyColumn'da bir
-     * composable geçici olarak dispose-recreate olabilir (hafif scroll,
-     * animateContentSize tetiklemesi, parent recomposition) — bu "pozisyon
-     * kalıcı olarak terk edildi" anlamına gelmez. Anında imha, ısıtılmış bir
-     * reklamı kullanıcı tam o pozisyona geldiği anda siliyordu (alan boş
-     * kalıyordu) ve ısıtma job'ı ile yarışıyordu (ısıtılan reklam hemen
-     * imha ediliyordu). Artık DISPOSE_GRACE_MS kadar bekliyoruz; pozisyon bu
-     * süre içinde preloadPositionedNative ile tekrar istenirse (kullanıcı
-     * geri döndüyse) imha iptal edilir ve reklam olduğu gibi kalır.
+     * Composable dispose olduğunda çağrılır. Anında imha etmez — DISPOSE_GRACE_MS
+     * kadar bekler; aynı key bu süre içinde requestNative ile tekrar istenirse
+     * (kullanıcı geri döndüyse) imha iptal edilir.
      */
-    fun releasePositionedNative(key: String) {
-        posNativeStaleJob.remove(key)?.cancel()
-        posNativeReleaseJob.remove(key)?.cancel()
-        posNativeReleaseJob[key] = scope.launch {
+    fun releaseNative(key: String) {
+        val slot = slots[key] ?: return
+        if (slot.type != SlotType.NATIVE) return
+        slot.staleJob?.cancel()
+        slot.releaseJob?.cancel()
+        slot.releaseJob = scope.launch {
             delay(DISPOSE_GRACE_MS)
-            posNativeJob.remove(key)?.cancel()
-            posNativeAd.remove(key)?.destroy()
-            // Önce false'a çek (aktif collector'lar görsün), sonra map'ten sil
-            posNativeLoaded[key]?.value = false
-            posNativeLoaded.remove(key)
-            posNativeUnit.remove(key)
-            posNativeExhausted.remove(key)
-            posNativeReleaseJob.remove(key)
+            releaseNativeImmediate(key)
         }
     }
 
-    /**
-     * Anında ve kalıcı imha — grace period BEKLEMEZ. Ekran tamamen kapanırken
-     * (releaseAllPositionedNatives, destroyAll) kullanılır; orada "geri dönüş"
-     * ihtimali yok, bekletmenin bir faydası olmaz.
-     */
-    private fun releasePositionedNativeImmediate(key: String) {
-        posNativeStaleJob.remove(key)?.cancel()
-        posNativeReleaseJob.remove(key)?.cancel()
-        posNativeJob.remove(key)?.cancel()
-        posNativeAd.remove(key)?.destroy()
-        posNativeLoaded[key]?.value = false
-        posNativeLoaded.remove(key)
-        posNativeUnit.remove(key)
-        posNativeExhausted.remove(key)
+    /** Anında ve kalıcı imha — grace period beklemez. Ekran tamamen kapanırken kullanılır. */
+    private fun releaseNativeImmediate(key: String) {
+        val slot = slots.remove(key) ?: return
+        slot.staleJob?.cancel()
+        slot.releaseJob?.cancel()
+        slot.loadJob?.cancel()
+        slot.nativeAd?.destroy()
+        slot.loaded.value = false
+    }
+
+    /** keyPrefix ile başlayan tüm native slotları anında serbest bırakır (ekran kapanırken). */
+    fun releaseAllNatives(keyPrefix: String? = null) {
+        val keys = slots.filterValues { it.type == SlotType.NATIVE }.keys
+            .let { if (keyPrefix == null) it.toList() else it.filter { k -> k.startsWith(keyPrefix) } }
+        keys.forEach { releaseNativeImmediate(it) }
     }
 
     /**
-     * TEK native ad yükleme primitifi.
-     * forNativeAd ile withAdListener AYRI zincirde — ikisi aynı builder'da
-     * olduğunda AdMob SDK başarılı yüklemede withAdListener.onAdLoaded()'ı
-     * çağırmaz (beklenen davranış); ama bazen forNativeAd callback'i de
-     * güvenilir şekilde çalışmaz. Çözüm: her şeyi TEK bir AdListener'a topla
-     * ve NativeAdOptions ile forNativeAd'i ayrı tanımla.
+     * Tek native ad yükleme primitifi. forNativeAd ile withAdListener AYRI
+     * zincirde tutulur — aynı builder'da olduklarında AdMob SDK bazı durumlarda
+     * callback'lerden birini güvenilir şekilde tetiklemiyor.
      */
     private fun loadOneNative(
         unitId   : String,
@@ -426,16 +306,11 @@ class AdEngine(
         onSuccess: (NativeAd) -> Unit,
         onFail   : () -> Unit,
     ) {
-        var received = false  // callback'in iki kez çalışmasını engelle
-
+        var received = false
         val adLoader = AdLoader.Builder(appContext, unitId)
             .forNativeAd { nativeAd ->
-                if (!received) {
-                    received = true
-                    onSuccess(nativeAd)
-                } else {
-                    nativeAd.destroy()
-                }
+                if (!received) { received = true; onSuccess(nativeAd) }
+                else nativeAd.destroy()
             }
             .withNativeAdOptions(nativeOptions)
             .withAdListener(object : AdListener() {
@@ -451,75 +326,42 @@ class AdEngine(
                 }
             })
             .build()
-
         adLoader.loadAd(adRequest())
     }
 
-    /** Birden çok pozisyonu serbest bırakmak için (örn. tüm ekran kapanırken). */
-    fun releaseAllPositionedNatives(keyPrefix: String? = null) {
-        val allKeys = posNativeAd.keys + posNativeJob.keys + posNativeStaleJob.keys + posNativeReleaseJob.keys
-        val keys = if (keyPrefix == null) allKeys.toList()
-                   else allKeys.filter { it.startsWith(keyPrefix) }
-        keys.toSet().forEach { releasePositionedNativeImmediate(it) }
-    }
-
-    // ── Yardımcılar ───────────────────────────────────────────────────────
-    private fun backoffDelay(retry: Int): Long =
-        RETRY_BASE_DELAY * (1L shl (retry - 1).coerceAtMost(3))   // 5s,10s,20s,40s
-
-    /**
-     * Config'den unit ID'yi belirler.
-     * enabled=false → null (reklam gösterilmez).
-     * unitId boş → null (RC'de tanımsız, hardcode fallback yok — Kural 4).
-     */
-    fun resolveUnitId(config: CmsAdConfig?): String? {
-        config ?: return null
-        if (!config.enabled) return null
-        return config.unitId.ifBlank { null }
-    }
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Yaşam döngüsü
+    // ═══════════════════════════════════════════════════════════════════════
 
     /** MainActivity.onResume() → AdsViewModel.onAppForeground() üzerinden çağrılır. */
     fun resumeAllBanners() {
-        singleBannerView.values.forEach { runCatching { it.resume() } }
-        posBannerView.values.forEach    { runCatching { it.resume() } }
+        slots.values.filter { it.type == SlotType.BANNER }
+            .forEach { runCatching { it.bannerView?.resume() } }
     }
 
     /**
      * MainActivity.onPause() → AdsViewModel.onAppBackground() üzerinden çağrılır.
-     * Banner'lar pause edilir. Native reklamlardaki MediaView (video) için AdMob
-     * SDK'sında manuel pause API'si yok — video kontrolü SDK içinde otomatik
-     * yönetilir (Activity lifecycle'a bağlı). Burada ekstra olarak: arka plana
-     * alınmış uygulamada gösterilmeyi bekleyen native reklamları hemen serbest
-     * bırakıyoruz (politika: arka planda boşa tutulan reklam istenmez).
+     * Native reklamlardaki video için manuel pause API'si yok (SDK otomatik yönetir).
      */
     fun pauseAllBanners() {
-        singleBannerView.values.forEach { runCatching { it.pause() } }
-        posBannerView.values.forEach    { runCatching { it.pause() } }
+        slots.values.filter { it.type == SlotType.BANNER }
+            .forEach { runCatching { it.bannerView?.pause() } }
     }
 
     /**
-     * Uygulama arka plana alındığında, henüz gösterilmemiş (kullanıcı görmedi)
-     * native reklamları serbest bırakır. Bekleyen yükleme istekleri de iptal edilir.
-     * Bu, STALE_AD_TIMEOUT_MS'i beklemeden anında politika-uyumlu temizlik sağlar.
+     * Uygulama arka plana alındığında henüz gösterilmemiş native reklamları
+     * serbest bırakır — STALE_AD_TIMEOUT_MS'i beklemeden anında politika-uyumlu temizlik.
      */
-    fun releaseUnseenNativesOnBackground() {
-        releaseAllPositionedNatives()
-    }
+    fun releaseUnseenNativesOnBackground() = releaseAllNatives()
 
     fun destroyAll() {
-        singleBannerView.values.forEach { it.destroy() }
-        posBannerView.values.forEach { it.destroy() }
-        posNativeJob.values.forEach { it.cancel() }
-        posNativeStaleJob.values.forEach { it.cancel() }
-        posNativeReleaseJob.values.forEach { it.cancel() }
-        posNativeAd.values.forEach { it.destroy() }
-        singleBannerView.clear(); singleBannerLoaded.clear()
-        singleBannerSize.clear(); singleBannerUnit.clear(); singleRetryCount.clear()
-        posBannerView.clear();    posBannerLoaded.clear()
-        posBannerSize.clear();    posBannerUnit.clear();    posBannerRetry.clear()
-        posNativeAd.clear();      posNativeLoaded.clear()
-        posNativeUnit.clear();    posNativeJob.clear()
-        posNativeStaleJob.clear(); posNativeExhausted.clear()
-        posNativeReleaseJob.clear()
+        slots.values.forEach { slot ->
+            slot.loadJob?.cancel()
+            slot.staleJob?.cancel()
+            slot.releaseJob?.cancel()
+            slot.bannerView?.destroy()
+            slot.nativeAd?.destroy()
+        }
+        slots.clear()
     }
 }

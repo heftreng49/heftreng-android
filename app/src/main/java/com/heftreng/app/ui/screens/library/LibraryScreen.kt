@@ -61,10 +61,9 @@ import com.heftreng.app.ui.component.LibraryBookGridCard
 import com.heftreng.app.ui.component.AddReviewDialog
 import com.heftreng.app.ui.component.BookPickerDialog
 import com.heftreng.app.ui.component.ConnectedPostCard
-import com.heftreng.app.ui.component.AdBannerView
-import com.heftreng.app.ui.component.PositionedAdBannerView
-import com.heftreng.app.ui.component.PositionedNativeAdView
-import com.heftreng.app.ui.component.NativeAdViewCompose
+import com.heftreng.app.ads.AdPlacement
+import com.heftreng.app.ads.RemoteConfigManager
+import com.heftreng.app.ui.component.AdSlotView
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
@@ -112,15 +111,13 @@ fun LibraryScreen(
     val authors by libraryVm.authors.collectAsState()
     var books   by remember { mutableStateOf<List<LibraryBook>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
-    val bannerUnitId    by adsVm.bannerLibraryUnitId.collectAsState()
-    val bannerLibCfg    by adsVm.bannerLibraryConfig.collectAsState()
-    val libBannerSize   = bannerLibCfg?.bannerSize ?: "adaptive"
+    val adConfigs by adsVm.allConfigs.collectAsState()
 
 
     DisposableEffect(Unit) {
         onDispose {
-            adsVm.releasePositionedBanners("lib_")
-            adsVm.releaseAllPositionedNatives("lib_")
+            adsVm.releaseBanners("lib_")
+            adsVm.releaseAllNatives("lib_")
         }
     }
 
@@ -267,10 +264,10 @@ fun LibraryScreen(
                     modifier                = Modifier.fillMaxSize(),
                 ) { page ->
                     when (page) {
-                        0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize, isOffline = quotesOffline)
-                        1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize)
-                        2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize)
-                        3 -> LibraryBooksTab(books = books, navController = navController, language = language, bannerUnitId = bannerUnitId, adsVm = adsVm, bannerSize = libBannerSize)
+                        0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, adsVm = adsVm, isOffline = quotesOffline)
+                        1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm, adsVm = adsVm)
+                        2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language, adsVm = adsVm)
+                        3 -> LibraryBooksTab(books = books, navController = navController, language = language, adsVm = adsVm)
                         else -> {}
                     }
                 }
@@ -366,14 +363,21 @@ private fun LibraryQuotesTab(
     language     : String,
     navController: NavController,
     feedVm       : FeedViewModel,
-    bannerUnitId : String? = null,
-    adsVm        : com.heftreng.app.viewmodel.AdsViewModel? = null,
-    bannerSize   : String = "adaptive",
+    adsVm        : com.heftreng.app.viewmodel.AdsViewModel,
     isOffline    : Boolean = false,
 ) {
     if (quotes.isEmpty()) {
         EmptyState(Icons.Outlined.FormatQuote, Strings.libraryNoQuotes(language))
         return
+    }
+    val adConfigs by adsVm.allConfigs.collectAsState()
+    val adPlan = remember(quotes.size, adConfigs) {
+        adsVm.planFor(
+            screenKey = "lib_quotes",
+            itemCount = quotes.size,
+            nativeKey = RemoteConfigManager.KEY_NATIVE_LIBRARY,
+            bannerKey = RemoteConfigManager.KEY_BANNER_LIBRARY,
+        )
     }
     LazyColumn(contentPadding = PaddingValues(vertical = 0.dp)) {
         if (isOffline) {
@@ -405,28 +409,10 @@ private fun LibraryQuotesTab(
                 onDeleteOverride = if (post.uid == com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid)
                                        {{ feedVm.deletePost(post.id) }} else null,
             )
-            if (bannerUnitId != null && (index + 1) % 5 == 0) {
-                PositionedAdBannerView(positionKey = "lib_quotes_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize)
-            }
-            // CMS/RC'deki position/frequency alanlarına göre native ad yerleşimi
-            // (bkz. FeedScreen.kt aynı düzeltme — position=ilk gösterim, frequency=tekrar aralığı).
-            if (adsVm != null) {
-                val nativeLibCfg by adsVm.nativeLibraryConfig.collectAsState()
-                val nativeLibStartPos = (nativeLibCfg?.position ?: 6).coerceAtLeast(1)
-                val nativeLibFreq     = (nativeLibCfg?.frequency ?: 6).coerceAtLeast(1)
-                val showLibNativeHere = index >= nativeLibStartPos &&
-                    (index - nativeLibStartPos) % nativeLibFreq == 0
-                if (showLibNativeHere) {
-                    val nativeUnitId by adsVm.nativeLibraryUnitId.collectAsState()
-                    PositionedNativeAdView(
-                        positionKey  = "lib_quotes_native_$index",
-                        unitId       = nativeUnitId,
-                        adsVm        = adsVm,
-                        modifier     = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    ) { ad ->
-                        NativeAdViewCompose(nativeAd = ad, modifier = Modifier.fillMaxWidth(), adSize = when (nativeLibCfg?.bannerSize?.lowercase()) { "medium" -> com.heftreng.app.ui.component.NativeAdSize.MEDIUM; "large" -> com.heftreng.app.ui.component.NativeAdSize.LARGE; else -> com.heftreng.app.ui.component.NativeAdSize.SMALL })
-                    }
-                }
+            // Reklam yerleşimi adPlan'dan gelir — banner/native çakışması
+            // yapısal olarak imkansız (bkz. AdPlanner.kt).
+            adPlan[index]?.let { placement ->
+                AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(vertical = 4.dp))
             }
         }
     }
@@ -438,20 +424,22 @@ private fun LibraryReviewsTab(
     language     : String,
     navController: NavController,
     vm           : LibraryViewModel? = null,
-    bannerUnitId : String? = null,
-    adsVm        : com.heftreng.app.viewmodel.AdsViewModel? = null,
-    bannerSize   : String = "adaptive",
+    adsVm        : com.heftreng.app.viewmodel.AdsViewModel,
 ) {
     if (reviews.isEmpty()) {
         EmptyState(Icons.Outlined.RateReview, Strings.libraryNoReviews(language))
         return
     }
+    val adConfigs by adsVm.allConfigs.collectAsState()
+    val adPlan = remember(reviews.size, adConfigs) {
+        adsVm.planFor(screenKey = "lib_reviews", itemCount = reviews.size, bannerKey = RemoteConfigManager.KEY_BANNER_LIBRARY)
+    }
     val actions = BookCardActions(vm = vm, navController = navController)
     LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
         itemsIndexed(reviews, key = { _, r -> r.id }) { index, review ->
             BookReviewCard(review = review, actions = actions, language = language)
-            if (bannerUnitId != null && (index + 1) % 5 == 0) {
-                PositionedAdBannerView(positionKey = "lib_reviews_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize)
+            adPlan[index]?.let { placement ->
+                AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(vertical = 4.dp))
             }
         }
     }
@@ -462,13 +450,15 @@ private fun LibraryAuthorsTab(
     authors      : List<Author>,
     language     : String,
     navController: NavController,
-    bannerUnitId : String? = null,
-    adsVm        : com.heftreng.app.viewmodel.AdsViewModel? = null,
-    bannerSize   : String = "adaptive",
+    adsVm        : com.heftreng.app.viewmodel.AdsViewModel,
 ) {
     if (authors.isEmpty()) {
         EmptyState(Icons.Outlined.Person, Strings.libraryNoAuthors(language))
         return
+    }
+    val adConfigs by adsVm.allConfigs.collectAsState()
+    val adPlan = remember(authors.size, adConfigs) {
+        adsVm.planFor(screenKey = "lib_authors", itemCount = authors.size, bannerKey = RemoteConfigManager.KEY_BANNER_LIBRARY)
     }
     LazyColumn(
         contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
@@ -476,8 +466,8 @@ private fun LibraryAuthorsTab(
     ) {
         itemsIndexed(authors, key = { _, a -> a.id }) { index, author ->
             LibraryAuthorRow(author = author, navController = navController)
-            if (bannerUnitId != null && (index + 1) % 6 == 0) {
-                PositionedAdBannerView(positionKey = "lib_authors_banner_$index", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize)
+            adPlan[index]?.let { placement ->
+                AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(vertical = 4.dp))
             }
         }
     }
@@ -488,14 +478,14 @@ private fun LibraryBooksTab(
     books        : List<LibraryBook>,
     language     : String,
     navController: NavController,
-    bannerUnitId : String? = null,
-    adsVm        : com.heftreng.app.viewmodel.AdsViewModel? = null,
-    bannerSize   : String = "adaptive",
+    adsVm        : com.heftreng.app.viewmodel.AdsViewModel,
 ) {
     if (books.isEmpty()) {
         EmptyState(Icons.Outlined.AutoStories, Strings.libraryNoBooks(language))
         return
     }
+    val bannerUnitId by adsVm.unitIdFlow(RemoteConfigManager.KEY_BANNER_LIBRARY).collectAsState()
+    val bannerCfg    by adsVm.configFlow(RemoteConfigManager.KEY_BANNER_LIBRARY).collectAsState()
     LazyVerticalGrid(
         columns             = GridCells.Fixed(2),
         contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
@@ -510,7 +500,11 @@ private fun LibraryBooksTab(
         }
         if (bannerUnitId != null) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                PositionedAdBannerView(positionKey = "lib_books_banner_0", unitId = bannerUnitId, adsVm = adsVm!!, modifier = Modifier.padding(vertical = 4.dp), bannerSize = bannerSize)
+                AdSlotView(
+                    placement = AdPlacement.Banner("lib_books_banner_0", bannerUnitId!!, bannerCfg?.bannerSize ?: "adaptive"),
+                    adsVm     = adsVm,
+                    modifier  = Modifier.padding(vertical = 4.dp),
+                )
             }
         }
     }

@@ -31,7 +31,9 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.ui.theme.*
-import com.heftreng.app.ui.component.AdBannerView
+import com.heftreng.app.ads.AdPlacement
+import com.heftreng.app.ads.RemoteConfigManager
+import com.heftreng.app.ui.component.AdSlotView
 import com.heftreng.app.viewmodel.AdsViewModel
 import com.heftreng.app.viewmodel.BlogViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -50,8 +52,8 @@ fun BlogPostScreen(
 ) {
     val post    by vm.detail.collectAsState()
     val loading by vm.detailLoading.collectAsState()
-    val bannerUnitId  by adsVm.bannerBlogUnitId.collectAsState()
-    val bannerCfg     by adsVm.bannerBlogConfig.collectAsState()
+    val bannerUnitId by adsVm.unitIdFlow(RemoteConfigManager.KEY_BANNER_BLOG).collectAsState()
+    val bannerCfg    by adsVm.configFlow(RemoteConfigManager.KEY_BANNER_BLOG).collectAsState()
     val blogBannerSize = bannerCfg?.bannerSize ?: "adaptive"
 
     LaunchedEffect(postId) {
@@ -159,12 +161,14 @@ fun BlogPostScreen(
                         Spacer(Modifier.height(16.dp))
 
                         // Yazı ortası reklam — içerikten önce
+                        // NOT: eskiden bu ve aşağıdaki reklam AYNI slot'u
+                        // (BannerSlot.BLOG) paylaşıyordu — aynı AdView iki yerde
+                        // birden render edilemeyeceği için biri sessizce boş
+                        // kalıyordu. Artık her ikisi kendi benzersiz slotKey'ine sahip.
                         if (bannerUnitId != null) {
-                            AdBannerView(
-                                unitId     = bannerUnitId,
-                                adsVm      = adsVm,
-                                slot       = AdsViewModel.BannerSlot.BLOG,
-                                bannerSize = blogBannerSize,
+                            AdSlotView(
+                                placement = AdPlacement.Banner("blogpost_${p.id}_top", bannerUnitId!!, blogBannerSize),
+                                adsVm     = adsVm,
                             )
                             Spacer(Modifier.height(8.dp))
                         }
@@ -175,11 +179,9 @@ fun BlogPostScreen(
                         // Yazı sonu reklam
                         if (bannerUnitId != null) {
                             Spacer(Modifier.height(16.dp))
-                            AdBannerView(
-                                unitId     = bannerUnitId,
-                                adsVm      = adsVm,
-                                slot       = AdsViewModel.BannerSlot.BLOG,
-                                bannerSize = blogBannerSize,
+                            AdSlotView(
+                                placement = AdPlacement.Banner("blogpost_${p.id}_bottom", bannerUnitId!!, blogBannerSize),
+                                adsVm     = adsVm,
                             )
                         }
                     }
