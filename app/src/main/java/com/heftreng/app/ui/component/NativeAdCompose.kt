@@ -108,6 +108,12 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
         it.text = nativeAd.headline ?: ""
     }
 
+    // AdMob politikası: "Reklam" ibaresi net, okunabilir ve HER zaman görünür olmalı.
+    // Önceden bu view'a kod hiç dokunmuyordu — statik XML default'una (visible) güveniliyordu,
+    // yani biri layout'u değiştirip visibility ekleyecek olsa etiket sessizce kaybolabilirdi.
+    // Artık her populateAd() çağrısında (ilk yükleme + tema/update) açıkça VISIBLE garanti ediliyor.
+    adView.findViewById<TextView>(R.id.ad_sponsored_label).visibility = View.VISIBLE
+
     adView.bodyView = adView.findViewById<TextView>(R.id.ad_body).also {
         it.visibility = if (nativeAd.body.isNullOrBlank()) View.GONE else View.VISIBLE
         it.text = nativeAd.body ?: ""
