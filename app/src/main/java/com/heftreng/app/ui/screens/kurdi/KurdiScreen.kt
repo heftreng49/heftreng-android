@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.debounce
 import androidx.compose.foundation.clickable
 import androidx.navigation.NavController
 import com.heftreng.app.ui.i18n.Strings
@@ -854,7 +855,37 @@ private fun UnitsTab(
                 bannerKey = RemoteConfigManager.KEY_BANNER_KURDI,
             )
         }
+        val kurdiListState = rememberLazyListState()
+
+        // ── Reklam önden-ısıtma — diğer ekranlarla (Feed/Library/Blog) aynı desen ──
+        // ÖNCEDEN: kurdiAdPlan hesaplanıyor ve AdSlotView render ediliyordu ama
+        // hiçbir yerde warmVisiblePositions çağrılmıyordu — yani requestBanner/
+        // requestNative HİÇ tetiklenmiyordu. Sonuç: kullanıcı reklam pozisyonuna
+        // gelse bile isLoaded hep false kalıyor, sonsuz shimmer görünüyordu,
+        // gerçek reklam asla yüklenmiyordu. AdMob envanteri bu ekranda hiç
+        // kullanılmıyordu.
+        LaunchedEffect(kurdiListState, kurdiAdPlan) {
+            adsVm.warmVisiblePositions(kurdiAdPlan, firstVisibleIndex = 0)
+            snapshotFlow { kurdiListState.firstVisibleItemIndex }
+                .debounce(300L) // hızlı scroll'da her kart için istek atılmasın
+                .collect { firstVisible ->
+                    adsVm.warmVisiblePositions(kurdiAdPlan, firstVisibleIndex = firstVisible)
+                }
+        }
+
+        // ── Ekran kapanırken temizlik — diğer ekranlarla aynı ────────────────
+        // ÖNCEDEN bu da yoktu: ısıtılan slotlar (varsayımsal olarak ısıtılsaydı)
+        // ekrandan çıkınca hiç serbest bırakılmayacaktı (bellek sızıntısı riski,
+        // bkz. FeedScreen'deki aynı yorum).
+        DisposableEffect(Unit) {
+            onDispose {
+                adsVm.releaseBanners("kurdi_banner_")
+                adsVm.releaseAllNatives("kurdi_native_")
+            }
+        }
+
         LazyColumn(
+            state          = kurdiListState,
             modifier       = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 32.dp),
         ) {
