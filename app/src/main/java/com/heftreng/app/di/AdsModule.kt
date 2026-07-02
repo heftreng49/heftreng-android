@@ -16,9 +16,7 @@ import javax.inject.Singleton
  * setConfigSettingsAsync() çağrısı olmasın; iki çağrı yarış yaratıyor
  * ve hangisi kazanırsa onun interval'ı geçerli oluyordu (tutarsız).
  *
- * RemoteConfigManager interval'ları:
- *   Debug  → 0s   (her açılışta anında günceller)
- *   Prod   → 3600s (1 saat — konsol değişikliği max 1 saatte devreye girer)
+ * RemoteConfigManager interval: Debug → 0s, Prod → 43200s (12 saat)
  */
 @Module
 @InstallIn(SingletonComponent::class)

@@ -348,7 +348,8 @@ class AdsViewModel @Inject constructor(
 
     fun onAppBackground() {
         engine.pauseAllBanners()
-        engine.releaseUnseenNativesOnBackground()
+        // Native'leri arka planda silmiyoruz — 30dk stale timeout zaten yönetiyor.
+        // Silsek kullanıcı geri dönünce shimmer görünür + yeni istek gider (gereksiz).
     }
 
     override fun onCleared() {

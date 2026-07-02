@@ -16,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,19 +28,12 @@ import com.heftreng.app.ui.theme.HeftCard
 import com.heftreng.app.viewmodel.AdsViewModel
 
 /**
- * ═══════════════════════════════════════════════════════════════════════════
- *  AdSlotView — tek render noktası. Eskiden AdBannerView / PositionedAdBannerView
- *  / PositionedNativeAdView diye üç ayrı composable vardı (banner-tekil,
- *  banner-pozisyon, native-pozisyon) — üçü de aynı iskeleti (etiket + içerik/
- *  shimmer + info dialog) tekrarlıyordu. AdEngine artık tekil/pozisyon ayrımı
- *  yapmadığı için (bkz. AdEngine.kt) burada da tek composable yeterli:
- *  placement'ın türüne (Banner/Native) göre içeriği dallandırır.
+ * Banner ve native reklamlar için tek render noktası.
+ * placement türüne (Banner/Native) göre içeriği dallandırır.
  *
- *  Kullanım (bir liste içinde):
- *    val plan = adsVm.planFor("feed", items.size, nativeKey = KEY_NATIVE_FEED, bannerKey = KEY_BANNER_FEED)
- *    // item render'da:
- *    plan[index]?.let { placement -> AdSlotView(placement, adsVm) }
- * ═══════════════════════════════════════════════════════════════════════════
+ * Kullanım:
+ *   val plan = adsVm.planFor("feed", items.size, nativeKey = KEY_NATIVE_FEED, bannerKey = KEY_BANNER_FEED)
+ *   plan[index]?.let { placement -> AdSlotView(placement, adsVm) }
  */
 @Composable
 fun AdSlotView(
@@ -127,27 +119,6 @@ private fun NativeSlotContent(
             )
         }
     }
-}
-
-/**
- * Ekran açılır açılmaz doğrudan gösterilecek (liste-içi olmayan, "tekil")
- * banner alanları için. AdSlotView'dan farkı yok — sadece placement'ı
- * çağıran taraf oluşturur (ekranın kendi unitId/size config'inden).
- */
-@Composable
-fun StandaloneBannerSlot(
-    slotKey    : String,
-    unitId     : String?,
-    adsVm      : AdsViewModel,
-    modifier   : Modifier = Modifier,
-    bannerSize : String = "adaptive",
-) {
-    if (unitId.isNullOrBlank()) return
-    AdSlotView(
-        placement = AdPlacement.Banner(slotKey, unitId, bannerSize),
-        adsVm     = adsVm,
-        modifier  = modifier,
-    )
 }
 
 // ── AndroidView sarmalayıcı (banner lifecycle) ─────────────────────────────
