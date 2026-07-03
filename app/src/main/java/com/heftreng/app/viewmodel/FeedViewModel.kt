@@ -51,6 +51,64 @@ class FeedViewModel @Inject constructor(
         val isFollowing: Boolean = false,
     )
 
+    // ── Mention (@kullanıcı) önerileri ──────────────────────────────────────
+    data class MentionUser(
+        val uid      : String,
+        val name     : String,
+        val photoURL : String = "",
+    )
+
+    private val _mentionSuggestions = MutableStateFlow<List<MentionUser>>(emptyList())
+    val mentionSuggestions = _mentionSuggestions.asStateFlow()
+
+    private var mentionSearchJob: kotlinx.coroutines.Job? = null
+
+    /** @sonrası yazılan metne göre Firestore users koleksiyonundan displayName prefix araması yapar. */
+    fun searchMentionUsers(query: String) {
+        mentionSearchJob?.cancel()
+        if (query.isBlank()) {
+            _mentionSuggestions.value = emptyList()
+            return
+        }
+        mentionSearchJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(200) // basit debounce
+            try {
+                val qLower = query.lowercase()
+                val qCap   = query.replaceFirstChar { it.uppercase() }
+                val seenIds = mutableSetOf<String>()
+                val results = mutableListOf<MentionUser>()
+
+                for (prefix in listOf(query, qLower, qCap).distinct()) {
+                    val snap = firestore.collection("users")
+                        .orderBy("displayName")
+                        .startAt(prefix).endAt(prefix + "\uF8FF")
+                        .limit(8).get().await()
+                    for (doc in snap.documents) {
+                        if (!seenIds.add(doc.id)) continue
+                        val d = doc.data ?: continue
+                        val name = (d["displayName"] as? String)?.ifBlank { null }
+                            ?: (d["name"] as? String)?.ifBlank { null }
+                            ?: continue
+                        results += MentionUser(
+                            uid      = doc.id,
+                            name     = name,
+                            photoURL = d["photoURL"] as? String ?: "",
+                        )
+                    }
+                }
+                _mentionSuggestions.value = results.take(8)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _mentionSuggestions.value = emptyList()
+            }
+        }
+    }
+
+    fun clearMentionSuggestions() {
+        mentionSearchJob?.cancel()
+        _mentionSuggestions.value = emptyList()
+    }
+
     private val _libraryQuotes = MutableStateFlow<List<Post>>(emptyList())
     val libraryQuotes = _libraryQuotes.asStateFlow()
 
@@ -909,6 +967,12 @@ class FeedViewModel @Inject constructor(
                     if (it.id == post.id) it.copy(commentsCount = it.commentsCount + 1) else it
                 }
                 if (post.uid != uid) sendNotif(post.uid, "cmt", "$myName gönderine yorum yaptı", text.take(60), post.id)
+                // Mention bildirimi — gönderi sahibine zaten "cmt" bildirimi gitti, tekrar mention göndermeyelim
+                mentions.distinct().forEach { mentionedUid ->
+                    if (mentionedUid != uid && mentionedUid != post.uid) {
+                        sendNotif(mentionedUid, "mention", "$myName seni bir yorumda etiketledi", text.take(60), post.id)
+                    }
+                }
                 loadComments(post.id)
             } catch (e: Exception) {
                 e.printStackTrace()

@@ -41,6 +41,8 @@ import com.heftreng.app.data.model.Comment
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.component.ConnectedPostCard
+import com.heftreng.app.ui.component.MentionSuggestionBar
+import com.heftreng.app.ui.component.MentionText
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.ui.theme.*
@@ -87,6 +89,40 @@ fun SinglePostScreen(
     var showLikers   by remember { mutableStateOf(false) }
     var cmtLikersId  by remember { mutableStateOf<String?>(null) }
     val listState    = rememberLazyListState()
+
+    // ── Mention (@kullanıcı) — girilen metindeki sırayla eklenen uid listesi ────
+    val mentionSuggestions by vm.mentionSuggestions.collectAsState()
+    // key: metinde eklendiği andaki "@DisplayName " öneki, value: uid — sıraya göre gönderilirken kullanılır
+    var mentionedUids by remember { mutableStateOf(listOf<String>()) }
+
+    // inputText her değiştiğinde: sondaki "@query" tetikleyicisini bul, aksi halde öneriyi temizle
+    LaunchedEffect(inputText) {
+        val atIndex = inputText.lastIndexOf('@')
+        if (atIndex == -1) {
+            vm.clearMentionSuggestions()
+        } else {
+            val afterAt = inputText.substring(atIndex + 1)
+            // @ sonrası boşluk varsa artık mention yazımı bitmiştir
+            if (afterAt.contains(' ') || afterAt.contains('\n')) {
+                vm.clearMentionSuggestions()
+            } else if (afterAt.isNotEmpty()) {
+                vm.searchMentionUsers(afterAt)
+            } else {
+                vm.clearMentionSuggestions()
+            }
+        }
+    }
+
+    fun onMentionSelected(user: FeedViewModel.MentionUser) {
+        val atIndex = inputText.lastIndexOf('@')
+        if (atIndex != -1) {
+            val before = inputText.substring(0, atIndex)
+            val safeName = user.name.replace(" ", "")
+            inputText = "$before@$safeName "
+            mentionedUids = mentionedUids + user.uid
+        }
+        vm.clearMentionSuggestions()
+    }
 
     // Düzenleme moduna girilince inputText doldur + klavye aç
     LaunchedEffect(editTarget) {
@@ -305,6 +341,12 @@ fun SinglePostScreen(
                     }
                 }
 
+                // ── Mention öneri barı ────────────────────────────────────────
+                MentionSuggestionBar(
+                    suggestions = mentionSuggestions,
+                    onSelect    = { onMentionSelected(it) },
+                )
+
                 // ── Giriş kutusu ─────────────────────────────────────────────
                 HorizontalDivider(color = Divider)
                 Row(
@@ -348,7 +390,8 @@ fun SinglePostScreen(
                                 inputText   = inputText,
                                 editTarget  = editTarget,
                                 replyTo     = replyTo,
-                                onDone      = { inputText = ""; editTarget = null; replyTo = null },
+                                mentionUids = mentionedUids,
+                                onDone      = { inputText = ""; editTarget = null; replyTo = null; mentionedUids = emptyList() },
                             )
                         }),
                     )
@@ -361,7 +404,8 @@ fun SinglePostScreen(
                                 inputText   = inputText,
                                 editTarget  = editTarget,
                                 replyTo     = replyTo,
-                                onDone      = { inputText = ""; editTarget = null; replyTo = null },
+                                mentionUids = mentionedUids,
+                                onDone      = { inputText = ""; editTarget = null; replyTo = null; mentionedUids = emptyList() },
                             )
                         },
                         enabled  = inputText.isNotBlank(),
@@ -484,6 +528,7 @@ private fun submitComment(
     inputText  : String,
     editTarget : Comment?,
     replyTo    : Comment?,
+    mentionUids: List<String> = emptyList(),
     onDone     : () -> Unit,
 ) {
     val text = inputText.trim()
@@ -491,7 +536,7 @@ private fun submitComment(
     if (editTarget != null) {
         vm.editComment(post.id, editTarget.id, text)
     } else {
-        vm.addComment(post, text, replyTo)
+        vm.addComment(post, text, replyTo, mentionUids)
     }
     onDone()
 }
@@ -552,7 +597,14 @@ private fun SingleCommentRow(
             Spacer(Modifier.height(2.dp))
 
             // Yorum metni
-            Text(cmt.text, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
+            MentionText(
+                text        = cmt.text,
+                mentionUids = cmt.mentions,
+                fontSize    = 14.sp,
+                lineHeight  = 20.sp,
+                color       = OnSurface,
+                onMentionClick = onMentionClick,
+            )
 
             // Aksiyon satırı
             Row(

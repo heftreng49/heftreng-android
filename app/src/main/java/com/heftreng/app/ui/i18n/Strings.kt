@@ -162,6 +162,7 @@ object Strings {
     fun noNotif(l: String)         = t(l, "Henüz bildirim yok",          "Hîn agahî tune")
     fun notifLike(l: String)       = t(l, "gönderinizi beğendi",         "nivîsa we xweş dît")
     fun notifComment(l: String)    = t(l, "gönderinize yorum yaptı",     "li ser nivîsa we şîrove kir")
+    fun notifMention(l: String)    = t(l, "sizi bir yorumda etiketledi", "we di şîroveyekê de nîşan da")
     fun notifFollow(l: String)     = t(l, "sizi takip etmeye başladı",   "dest bi şopandina we kir")
     fun notifRepost(l: String)     = t(l, "gönderinizi paylaştı",        "nivîsa we parve kir")
     fun notifNew(l: String)        = t(l, "yeni bir bildirim",           "agahdariya nû")

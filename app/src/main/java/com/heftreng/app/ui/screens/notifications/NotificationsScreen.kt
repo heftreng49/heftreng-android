@@ -73,6 +73,7 @@ private fun notifGroup(ts: com.google.firebase.Timestamp?): NotifGroup {
 fun notifIcon(type: String): ImageVector = when (type) {
     "like"                    -> Icons.Default.Favorite
     "cmt", "comment"          -> Icons.Default.ChatBubble
+    "mention"                 -> Icons.Default.AlternateEmail
     "follow"                  -> Icons.Default.PersonAdd
     "follow_request"          -> Icons.Default.PersonAdd
     "follow_request_accepted" -> Icons.Default.HowToReg
@@ -93,6 +94,7 @@ fun notifIcon(type: String): ImageVector = when (type) {
 fun notifIconColor(type: String): Color = when (type) {
     "like"                    -> Color(0xFFEF4444)
     "cmt", "comment"          -> Color(0xFF3B82F6)
+    "mention"                 -> Color(0xFFFFA726)
     "follow"                  -> Color(0xFF10B981)
     "follow_request"          -> Color(0xFFF59E0B)
     "follow_request_accepted" -> Color(0xFF10B981)
@@ -115,6 +117,7 @@ fun notifDefaultMessage(type: String, ku: Boolean = false): String {
     return when (type) {
         "like"                    -> Strings.notifLike(l)
         "cmt", "comment"          -> Strings.notifComment(l)
+        "mention"                 -> Strings.notifMention(l)
         "follow"                  -> Strings.notifFollow(l)
         "follow_request"          -> Strings.notifFollowRequest(l)
         "follow_request_accepted" -> if (ku) "Daxwaza şopînê qebûl kir" else "Takip isteğini kabul etti"
@@ -318,7 +321,7 @@ private fun handleNotifClick(
         "follow_request",
         "follow_request_accepted" -> navController.navigate(Screen.Profile.go(notif.fromUid))
         "message"                 -> navController.navigate("messages/${notif.fromUid}")
-        "like", "cmt", "comment",
+        "like", "cmt", "comment", "mention",
         "repost", "bm", "bookmark",
         "chapter", "book_chapter",
         "post_approved", "post_rejected" -> {
