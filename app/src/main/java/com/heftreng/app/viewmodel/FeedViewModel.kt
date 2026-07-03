@@ -881,7 +881,7 @@ class FeedViewModel @Inject constructor(
         } catch (_: Exception) { null }
     }
 
-    fun addComment(post: Post, text: String, replyTo: Comment? = null) {
+    fun addComment(post: Post, text: String, replyTo: Comment? = null, mentions: List<String> = emptyList()) {
         if (uid.isEmpty() || text.isBlank()) return
         viewModelScope.launch {
             try {
