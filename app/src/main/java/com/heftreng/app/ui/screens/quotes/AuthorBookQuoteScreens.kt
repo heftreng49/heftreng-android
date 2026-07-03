@@ -186,22 +186,7 @@ fun AuthorDetailScreen(
             }
         } else {
             Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-                // ── Yazar Başlık / Profil ──────────────────────────────────
-                AuthorHeaderSection(
-                    photoURL      = author?.photoURL ?: "",
-                    name          = author?.name ?: "",
-                    bio           = author?.bio ?: "",
-                    birthYear     = author?.birthYear ?: 0,
-                    nationality   = author?.nationality ?: "",
-                    bookCount     = author?.bookCount ?: 0,
-                    quoteCount    = author?.quoteCount ?: 0,
-                    reviewCount   = author?.reviewCount ?: 0,
-                    followerCount = author?.followerCount ?: 0,
-                    isFollowing   = isFollowing,
-                    onFollowClick = { vm.toggleFollowAuthor(authorId) },
-                )
-
-                // ── Tab Bar ───────────────────────────────────────────────
+                // ── Tab Bar (sabit, sticky) ───────────────────────────────
                 TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor   = HeftSurface,
@@ -240,6 +225,22 @@ fun AuthorDetailScreen(
                             modifier       = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 80.dp),
                         ) {
+                            // Header her tab'ın ilk item'ı olarak scroll'a dahil
+                            item {
+                                AuthorHeaderSection(
+                                    photoURL      = author?.photoURL ?: "",
+                                    name          = author?.name ?: "",
+                                    bio           = author?.bio ?: "",
+                                    birthYear     = author?.birthYear ?: 0,
+                                    nationality   = author?.nationality ?: "",
+                                    bookCount     = author?.bookCount ?: 0,
+                                    quoteCount    = author?.quoteCount ?: 0,
+                                    reviewCount   = author?.reviewCount ?: 0,
+                                    followerCount = author?.followerCount ?: 0,
+                                    isFollowing   = isFollowing,
+                                    onFollowClick = { vm.toggleFollowAuthor(authorId) },
+                                )
+                            }
                             if (books.isEmpty()) {
                                 item { EmptyState(Icons.Outlined.MenuBook, "Henüz kitap yok") }
                             } else {
@@ -255,6 +256,21 @@ fun AuthorDetailScreen(
                             modifier       = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 80.dp),
                         ) {
+                            item {
+                                AuthorHeaderSection(
+                                    photoURL      = author?.photoURL ?: "",
+                                    name          = author?.name ?: "",
+                                    bio           = author?.bio ?: "",
+                                    birthYear     = author?.birthYear ?: 0,
+                                    nationality   = author?.nationality ?: "",
+                                    bookCount     = author?.bookCount ?: 0,
+                                    quoteCount    = author?.quoteCount ?: 0,
+                                    reviewCount   = author?.reviewCount ?: 0,
+                                    followerCount = author?.followerCount ?: 0,
+                                    isFollowing   = isFollowing,
+                                    onFollowClick = { vm.toggleFollowAuthor(authorId) },
+                                )
+                            }
                             if (quotes.isEmpty()) {
                                 item { EmptyState(Icons.Default.FormatQuote, "Henüz alıntı yok") }
                             } else {
@@ -273,6 +289,21 @@ fun AuthorDetailScreen(
                             modifier       = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 80.dp),
                         ) {
+                            item {
+                                AuthorHeaderSection(
+                                    photoURL      = author?.photoURL ?: "",
+                                    name          = author?.name ?: "",
+                                    bio           = author?.bio ?: "",
+                                    birthYear     = author?.birthYear ?: 0,
+                                    nationality   = author?.nationality ?: "",
+                                    bookCount     = author?.bookCount ?: 0,
+                                    quoteCount    = author?.quoteCount ?: 0,
+                                    reviewCount   = author?.reviewCount ?: 0,
+                                    followerCount = author?.followerCount ?: 0,
+                                    isFollowing   = isFollowing,
+                                    onFollowClick = { vm.toggleFollowAuthor(authorId) },
+                                )
+                            }
                             if (reviews.isEmpty()) {
                                 item { EmptyState(Icons.Outlined.RateReview, "Henüz inceleme yok") }
                             } else {
