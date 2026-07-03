@@ -431,6 +431,7 @@ fun MessageDetailScreen(
 
     LaunchedEffect(convId) {
         if (conversations.isEmpty()) vm.listenConversations()
+        vm.initCache(context)
         vm.listenMessages(convId)
         vm.loadOtherUser(convId)
     }

@@ -15,6 +15,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import com.heftreng.app.util.AppLifecycleObserver
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
 
 // ═══════════════════════════════════════════════════════════════
 //  MessagesViewModel — Firestore tabanlı [GÜNCELLENDİ]
@@ -60,6 +66,103 @@ class MessagesViewModel @Inject constructor(
     private var newestMsgTs  : com.google.firebase.Timestamp? = null
     private var currentConvId: String = ""
     private val MSG_PAGE     = 50
+
+    // ── Mesaj önbelleği — disk tabanlı, konuşma başına JSON dosyası ──────────
+    // Strateji:
+    //   1. Ekran açılınca cache'den yükle → anında göster (0 Firestore okuması)
+    //   2. cache'deki en son mesajın ts'inden itibaren Firestore'dan sadece
+    //      delta (yeni mesajlar) çek → çok az okuma
+    //   3. Snapshot listener yalnızca delta için → gerçek zamanlı güncel kalır
+    //   4. Her yeni mesaj gelince cache güncellenir (son MSG_CACHE_SIZE mesaj)
+    //   5. Cache yoksa (ilk açılış) normal tam yükleme → cache oluşturulur
+    private companion object {
+        const val MSG_CACHE_SIZE = 50   // konuşma başına saklanacak max mesaj
+        const val CACHE_DIR      = "msg_cache"
+    }
+
+    private lateinit var cacheDir: File
+
+    fun initCache(context: android.content.Context) {
+        cacheDir = File(context.cacheDir, CACHE_DIR).also { it.mkdirs() }
+    }
+
+    private fun cacheFile(convId: String): File =
+        File(cacheDir, "${uid}_${convId}.json")
+
+    private suspend fun readCache(convId: String): List<Message> = withContext(Dispatchers.IO) {
+        try {
+            val f = cacheFile(convId)
+            if (!f.exists()) return@withContext emptyList()
+            val arr = JSONArray(f.readText())
+            (0 until arr.length()).mapNotNull { i ->
+                try { arr.getJSONObject(i).toMessage(convId) } catch (_: Exception) { null }
+            }
+        } catch (e: Exception) {
+            Log.w("MsgCache", "readCache error: ${e.message}")
+            emptyList()
+        }
+    }
+
+    private suspend fun writeCache(convId: String, messages: List<Message>) = withContext(Dispatchers.IO) {
+        try {
+            val recent = messages.takeLast(MSG_CACHE_SIZE)
+            val arr = JSONArray()
+            recent.forEach { arr.put(it.toJson()) }
+            cacheFile(convId).writeText(arr.toString())
+        } catch (e: Exception) {
+            Log.w("MsgCache", "writeCache error: ${e.message}")
+        }
+    }
+
+    fun clearCache(convId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try { cacheFile(convId).delete() } catch (_: Exception) {}
+        }
+    }
+
+    // JSON serialize / deserialize — sadece temel alanlar, görüntüleme için yeterli
+    private fun Message.toJson(): JSONObject = JSONObject().apply {
+        put("id",          id)
+        put("senderId",    senderId)
+        put("text",        text)
+        put("imageUrl",    imageUrl)
+        put("audioUrl",    audioUrl)
+        put("read",        read)
+        put("deleted",     deleted)
+        put("edited",      edited)
+        put("replyToId",   replyToId)
+        put("replyToText", replyToText)
+        put("replyToName", replyToName)
+        put("likesCount",  likesCount)
+        put("isLikedByMe", isLikedByMe)
+        put("tsSeconds",   createdAt?.seconds ?: 0L)
+        put("tsNanos",     createdAt?.nanoseconds ?: 0)
+        val mentionsArr = JSONArray(); mentions.forEach { mentionsArr.put(it) }
+        put("mentions", mentionsArr)
+    }
+
+    private fun JSONObject.toMessage(convId: String): Message = Message(
+        id             = getString("id"),
+        conversationId = convId,
+        senderId       = optString("senderId"),
+        text           = optString("text"),
+        imageUrl       = optString("imageUrl"),
+        audioUrl       = optString("audioUrl"),
+        read           = optBoolean("read"),
+        deleted        = optBoolean("deleted"),
+        edited         = optBoolean("edited"),
+        replyToId      = optString("replyToId"),
+        replyToText    = optString("replyToText"),
+        replyToName    = optString("replyToName"),
+        likesCount     = optInt("likesCount"),
+        isLikedByMe    = optBoolean("isLikedByMe"),
+        createdAt      = optLong("tsSeconds").takeIf { it > 0 }?.let {
+            Timestamp(it, optInt("tsNanos"))
+        },
+        mentions       = optJSONArray("mentions")?.let { arr ->
+            (0 until arr.length()).map { arr.getString(it) }
+        } ?: emptyList(),
+    )
 
     // ── Mention (@kullanıcı) önerileri — FeedViewModel'deki ile aynı ortak
     //    MentionHelper üzerinden çalışır, kod tekrarı yok. ────────────────────
@@ -225,34 +328,67 @@ class MessagesViewModel @Inject constructor(
             }
     }
 
-    // ── Mesaj listesi — hibrit sistem ────────────────────────
+    // ── Mesaj listesi — hibrit cache sistemi ─────────────────────────────────
+    // Açılışta: cache → anında göster → sadece delta Firestore'dan çek
+    // Her yeni mesajda: cache güncellenir
+    // Net tasarruf: aynı konuşmanın tekrar açılmasında 0 Firestore okuması
     fun listenMessages(convId: String) {
         msgListener?.remove()
-        currentConvId    = convId
-        oldestMsgDoc     = null
-        newestMsgTs      = null
-        _messages.value  = emptyList()
+        currentConvId           = convId
+        oldestMsgDoc            = null
+        newestMsgTs             = null
+        _messages.value         = emptyList()
         _hasOlderMessages.value = false
-        _loading.value   = true
+        _loading.value          = true
 
         viewModelScope.launch {
+            // ── 1. Cache'den yükle → anında göster ────────────────────────────
+            val cached = if (::cacheDir.isInitialized) readCache(convId) else emptyList()
+            if (cached.isNotEmpty()) {
+                _messages.value = cached
+                _loading.value  = false
+                // cache'deki en yeni mesajın ts'i → bu noktadan itibaren delta çekeceğiz
+                newestMsgTs = cached.mapNotNull { it.createdAt }.maxByOrNull { it.seconds }
+            }
+
+            // ── 2. Firestore'dan delta çek (cache'den sonraki yeniler) ─────────
             try {
-                val snap = firestore.collection("convMessages").document(convId)
-                    .collection("msgs")
-                    .orderBy("createdAt", Query.Direction.DESCENDING)
-                    .limit(MSG_PAGE.toLong())
-                    .get().await()
+                if (newestMsgTs != null) {
+                    // Cache var → sadece yeni mesajları çek
+                    val deltaSnap = firestore.collection("convMessages").document(convId)
+                        .collection("msgs")
+                        .orderBy("createdAt", Query.Direction.ASCENDING)
+                        .whereGreaterThan("createdAt", newestMsgTs!!)
+                        .get().await()
 
-                val docs = snap.documents
-                if (docs.isNotEmpty()) {
-                    oldestMsgDoc = docs.last()
-                    newestMsgTs  = docs.first().getTimestamp("createdAt")
+                    if (deltaSnap.documents.isNotEmpty()) {
+                        val delta = deltaSnap.documents.mapNotNull { it.toMessage(convId) }
+                        val merged = mergeMessages(_messages.value, delta)
+                        _messages.value = merged
+                        newestMsgTs = deltaSnap.documents.last().getTimestamp("createdAt") ?: newestMsgTs
+                        writeCache(convId, merged)
+                    }
+                    // ilk sayfanın tamamını çekip çekemeyeceğimizi bilmiyoruz,
+                    // hasOlderMessages cache varsa true kabul et
+                    _hasOlderMessages.value = cached.size >= MSG_CACHE_SIZE
+                } else {
+                    // Cache yok → tam ilk yükleme (eski davranış)
+                    val snap = firestore.collection("convMessages").document(convId)
+                        .collection("msgs")
+                        .orderBy("createdAt", Query.Direction.DESCENDING)
+                        .limit(MSG_PAGE.toLong())
+                        .get().await()
+
+                    val docs = snap.documents
+                    if (docs.isNotEmpty()) {
+                        oldestMsgDoc = docs.last()
+                        newestMsgTs  = docs.first().getTimestamp("createdAt")
+                    }
+                    val initial = docs.reversed().mapNotNull { it.toMessage(convId) }
+                    _messages.value         = initial
+                    _hasOlderMessages.value = docs.size >= MSG_PAGE
+                    if (initial.isNotEmpty() && ::cacheDir.isInitialized) writeCache(convId, initial)
                 }
-
-                val initial = docs.reversed()
-                    .mapNotNull { it.toMessage(convId) }
-                _messages.value = initial
-                _hasOlderMessages.value = docs.size >= MSG_PAGE
                 _loading.value = false
                 markRead(convId)
 
@@ -261,6 +397,7 @@ class MessagesViewModel @Inject constructor(
                 _loading.value = false
             }
 
+            // ── 3. Sadece yeni gelen mesajlar için listener ────────────────────
             val afterTs = newestMsgTs ?: Timestamp.now()
             msgListener = firestore.collection("convMessages").document(convId)
                 .collection("msgs")
@@ -270,16 +407,26 @@ class MessagesViewModel @Inject constructor(
                     if (snap == null || snap.isEmpty) return@addSnapshotListener
                     val newMsgs = snap.documents.mapNotNull { it.toMessage(convId) }
                     if (newMsgs.isEmpty()) return@addSnapshotListener
-                    val existing = _messages.value
-                    val existingIds = existing.map { it.id }.toSet()
-                    val toAdd = newMsgs.filter { it.id !in existingIds }
-                    if (toAdd.isNotEmpty()) {
-                        _messages.value = existing + toAdd
-                        newestMsgTs = snap.documents.last().getTimestamp("createdAt") ?: newestMsgTs
-                        markRead(convId)
+                    val merged = mergeMessages(_messages.value, newMsgs)
+                    _messages.value = merged
+                    newestMsgTs = snap.documents.last().getTimestamp("createdAt") ?: newestMsgTs
+                    markRead(convId)
+                    // Cache'i arka planda güncelle
+                    if (::cacheDir.isInitialized) {
+                        viewModelScope.launch { writeCache(convId, merged) }
                     }
                 }
         }
+    }
+
+    /** İki listeyi birleştir — id çakışması olmadan, sıraya göre */
+    private fun mergeMessages(existing: List<Message>, incoming: List<Message>): List<Message> {
+        val existingIds = existing.map { it.id }.toSet()
+        val toAdd = incoming.filter { it.id !in existingIds }
+        return (existing + toAdd).sortedWith(compareBy(
+            { it.createdAt?.seconds ?: 0L },
+            { it.createdAt?.nanoseconds ?: 0 },
+        ))
     }
 
     fun loadOlderMessages() {
