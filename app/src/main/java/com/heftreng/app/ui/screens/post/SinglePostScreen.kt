@@ -78,6 +78,7 @@ fun SinglePostScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester     = remember { FocusRequester() }
 
+    var cmtLoading   by remember { mutableStateOf(true) }
     var inputText    by remember { mutableStateOf("") }
     var replyTo      by remember { mutableStateOf<Comment?>(null) }
     var editTarget   by remember { mutableStateOf<Comment?>(null) }
@@ -98,8 +99,10 @@ fun SinglePostScreen(
 
     // Post ve yorumları yükle
     LaunchedEffect(postId) {
+        cmtLoading = true
         vm.ensurePost(postId)
         vm.loadComments(postId)
+        cmtLoading = false
     }
 
     // cmtError dialog
@@ -212,8 +215,17 @@ fun SinglePostScreen(
                         HorizontalDivider(color = Divider)
                     }
 
+                    // Yükleniyor
+                    if (cmtLoading) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = Amber, modifier = Modifier.size(24.dp))
+                            }
+                        }
+                    }
+
                     // Boş durum
-                    if (comments.isEmpty()) {
+                    if (!cmtLoading && comments.isEmpty()) {
                         item {
                             Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {

@@ -832,6 +832,7 @@ class FeedViewModel @Inject constructor(
     fun loadComments(postId: String) {
         viewModelScope.launch {
             try {
+                _comments.value = emptyList() // önceki post yorumlarını temizle
                 val rows = supabase.postgrest["feed_comments"]
                     .select { filter { eq("post_id", postId) }; order("created_at", Order.ASCENDING) }
                     .decodeList<FeedCommentRow>()
@@ -863,7 +864,10 @@ class FeedViewModel @Inject constructor(
                         isLikedByMe = r.id in myLikedCmtIds,
                     )
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _commentError.value = "Yorumlar yüklenemedi: ${e.message}"
+            }
         }
     }
 
