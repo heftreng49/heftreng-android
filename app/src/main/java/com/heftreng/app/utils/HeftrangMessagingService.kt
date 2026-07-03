@@ -92,7 +92,7 @@ class HeftrangMessagingService : FirebaseMessagingService() {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             when (type) {
-                "like", "cmt", "comment", "repost" -> {
+                "like", "cmt", "comment", "mention", "repost" -> {
                     if (postId.isNotBlank()) putExtra("navigate_to", "post/$postId")
                     else putExtra("navigate_to", "notifications")
                 }
