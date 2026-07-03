@@ -106,6 +106,15 @@
             </intent-filter>
         </service>
 
+        <!-- Bildirimden doğrudan yanıt (Quick Reply) receiver -->
+        <receiver
+            android:name=".utils.ReplyReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.heftreng.app.ACTION_REPLY" />
+            </intent-filter>
+        </receiver>
+
         <!-- FCM varsayılan bildirim kanalı -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"

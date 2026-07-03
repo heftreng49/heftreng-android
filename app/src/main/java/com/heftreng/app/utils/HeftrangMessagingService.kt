@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import androidx.core.app.NotificationCompat
+import androidx.core.app.RemoteInput
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -175,6 +176,37 @@ class HeftrangMessagingService : FirebaseMessagingService() {
                     .setStyle(NotificationCompat.BigTextStyle().bigText(body))
                     .setGroup("conv_$convId")
                     .setOnlyAlertOnce(true)
+
+                // Bildirimden doğrudan yanıt (Quick Reply)
+                if (convId.isNotBlank() && fromUid.isNotBlank()) {
+                    val remoteInput = RemoteInput.Builder(ReplyReceiver.KEY_REPLY_TEXT)
+                        .setLabel("Yanıt yaz…")
+                        .build()
+
+                    val replyIntent = Intent(this, ReplyReceiver::class.java).apply {
+                        action = ReplyReceiver.ACTION_REPLY
+                        putExtra(ReplyReceiver.EXTRA_CONV_ID, convId)
+                        putExtra(ReplyReceiver.EXTRA_TO_UID, fromUid)
+                        putExtra(ReplyReceiver.EXTRA_NOTIF_ID, notifId)
+                    }
+
+                    val replyPendingIntent = PendingIntent.getBroadcast(
+                        this,
+                        notifId,
+                        replyIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+                    )
+
+                    val replyAction = NotificationCompat.Action.Builder(
+                        R.drawable.ic_notif,
+                        "Yanıtla",
+                        replyPendingIntent,
+                    ).addRemoteInput(remoteInput)
+                        .setAllowGeneratedReplies(true)
+                        .build()
+
+                    notificationBuilder.addAction(replyAction)
+                }
             }
             else -> {
                 notificationBuilder
