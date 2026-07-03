@@ -211,6 +211,8 @@ class HeftrangMessagingService : FirebaseMessagingService() {
                         replyPendingIntent,
                     ).addRemoteInput(remoteInput)
                         .setAllowGeneratedReplies(true)
+                        .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+                        .setShowsUserInterface(false)
                         .build()
 
                     notificationBuilder.addAction(replyAction)
