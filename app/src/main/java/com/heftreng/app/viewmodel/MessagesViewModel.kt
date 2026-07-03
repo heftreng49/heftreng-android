@@ -314,6 +314,8 @@ class MessagesViewModel @Inject constructor(
     private fun com.google.firebase.firestore.DocumentSnapshot.toMessage(convId: String): Message? {
         val d = data ?: return null
         if (d["deleted"] as? Boolean == true) return null
+        val likedByUids = (d["likedByUids"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+        val myUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
         return Message(
             id             = id,
             conversationId = convId,
@@ -329,6 +331,8 @@ class MessagesViewModel @Inject constructor(
             replyToText    = d["reply_to_text"] as? String ?: "",
             replyToName    = d["reply_to_name"] as? String ?: "",
             mentions       = (d["mentions"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            likesCount     = (d["likesCount"] as? Long)?.toInt() ?: likedByUids.size,
+            isLikedByMe    = myUid.isNotBlank() && myUid in likedByUids,
         )
     }
 
@@ -506,15 +510,24 @@ class MessagesViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val likeRef = firestore.collection("convMessages")
+                val msgRef = firestore.collection("convMessages")
                     .document(msg.conversationId)
                     .collection("msgs").document(msg.id)
-                    .collection("likes").document(uid)
+
+                val likeRef = msgRef.collection("likes").document(uid)
 
                 if (wasLiked) {
                     likeRef.delete().await()
+                    msgRef.update(
+                        "likedByUids", FieldValue.arrayRemove(uid),
+                        "likesCount",  FieldValue.increment(-1),
+                    ).await()
                 } else {
                     likeRef.set(mapOf("uid" to uid, "ts" to FieldValue.serverTimestamp())).await()
+                    msgRef.update(
+                        "likedByUids", FieldValue.arrayUnion(uid),
+                        "likesCount",  FieldValue.increment(1),
+                    ).await()
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
