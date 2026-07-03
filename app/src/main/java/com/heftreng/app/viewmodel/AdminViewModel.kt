@@ -994,8 +994,16 @@ class AdminViewModel @Inject constructor(
         if (_perms.value?.can("edit") != true) return
         viewModelScope.launch {
             try {
-                firestore.collection("feed").document(postId)
-                    .collection("comments").document(commentId).delete().await()
+                // Yorumlar artık Supabase feed_comments'te tutuluyor (eski Firestore
+                // feed/{id}/comments koleksiyonu kaldırıldı, bkz. COMMENT_SYSTEM_PLAN Adım 3/7).
+                supabase.postgrest["feed_comments"].delete {
+                    filter { eq("id", commentId) }
+                }
+                try {
+                    supabase.postgrest["comment_likes"].delete {
+                        filter { eq("comment_id", commentId) }
+                    }
+                } catch (_: Exception) {}
                 firestore.collection("feed").document(postId)
                     .update("cmtCount", FieldValue.increment(-1)).await()
                 _editResult.value = "✓ Yorum silindi"
