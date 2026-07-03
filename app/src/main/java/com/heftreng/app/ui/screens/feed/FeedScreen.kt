@@ -56,6 +56,8 @@ import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.viewmodel.AdsViewModel
 import com.heftreng.app.viewmodel.BlogViewModel
 import com.heftreng.app.ui.component.QuoteCard
+import com.heftreng.app.ui.component.MentionSuggestionBar
+import com.heftreng.app.util.MentionHelper
 import com.heftreng.app.ui.component.LinkifyText
 import com.heftreng.app.ui.component.FullScreenImageViewer
 import com.heftreng.app.ui.component.QuoteDialog
@@ -197,6 +199,25 @@ fun FeedScreen(
     var inlineTitle      by remember { mutableStateOf("") }
     var inlineTopic      by remember { mutableStateOf("") }
     var inlineQuote      by remember { mutableStateOf<QuotePayload?>(null) }
+    val mentionSuggestions by vm.mentionSuggestions.collectAsState()
+    var inlineMentionedUids by remember { mutableStateOf(listOf<String>()) }
+    LaunchedEffect(inlineText) {
+        val atIndex = inlineText.lastIndexOf('@')
+        if (atIndex < 0) { vm.clearMentionSuggestions(); return@LaunchedEffect }
+        val afterAt = inlineText.substring(atIndex + 1)
+        if (afterAt.contains(' ') || afterAt.isEmpty()) { vm.clearMentionSuggestions(); return@LaunchedEffect }
+        vm.searchMentionUsers(afterAt)
+    }
+    fun onInlineMentionSelected(user: MentionHelper.MentionUser) {
+        val atIndex = inlineText.lastIndexOf('@')
+        if (atIndex >= 0) {
+            val before = inlineText.substring(0, atIndex)
+            val safeName = user.name.replace(" ", "_")
+            inlineText = "$before@$safeName "
+            inlineMentionedUids = inlineMentionedUids + user.uid
+        }
+        vm.clearMentionSuggestions()
+    }
     var showInlineQuote  by remember { mutableStateOf(false) }
     var inlineImageUri   by remember { mutableStateOf<Uri?>(null) }
     val uploading        by vm.uploading.collectAsState()
@@ -405,11 +426,13 @@ fun FeedScreen(
                                         coverImg   = inlineQuote?.coverImg ?: "",
                                     )
                                 }
-                                inlineText     = ""
-                                inlineTitle    = ""
-                                inlineTopic    = ""
-                                inlineQuote    = null
-                                inlineImageUri = null
+                                inlineText          = ""
+                                inlineTitle         = ""
+                                inlineTopic         = ""
+                                inlineQuote         = null
+                                inlineImageUri      = null
+                                inlineMentionedUids = emptyList()
+                                vm.clearMentionSuggestions()
                             }
                         },
                         photoURL     = myPhotoURL,
@@ -430,6 +453,8 @@ fun FeedScreen(
                             }
                         },
                         onImageClear = { inlineImageUri = null },
+                        mentionSuggestions = mentionSuggestions,
+                        onMentionSelected  = { onInlineMentionSelected(it) },
                     )
                 }
                 // ── Gönderi listesi ───────────────────────────────────
@@ -743,10 +768,12 @@ private fun InlineComposeBox(
     onSend        : () -> Unit,
     photoURL      : String,
     language      : String,
-    imageUri      : Uri?         = null,
-    uploading     : Boolean      = false,
-    onImagePick   : () -> Unit   = {},
-    onImageClear  : () -> Unit   = {},
+    imageUri           : Uri?         = null,
+    uploading          : Boolean      = false,
+    onImagePick        : () -> Unit   = {},
+    onImageClear       : () -> Unit   = {},
+    mentionSuggestions : List<MentionHelper.MentionUser> = emptyList(),
+    onMentionSelected  : (MentionHelper.MentionUser) -> Unit = {},
 ) {
     Surface(
         modifier       = Modifier.fillMaxWidth().padding(12.dp),
@@ -831,6 +858,12 @@ private fun InlineComposeBox(
                     }
                 }
             }
+            // ── Mention öneri barı ─────────────────────────────────────────────────
+            MentionSuggestionBar(
+                suggestions = mentionSuggestions,
+                onSelect    = onMentionSelected,
+                modifier    = Modifier.fillMaxWidth(),
+            )
             // ── Konu seçici — opsiyonel chip listesi ──────────────────────────────
             Spacer(Modifier.height(8.dp))
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1698,6 +1731,26 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel, language:
     val myUid = vm.uid
     LaunchedEffect(post.id) { vm.loadComments(post.id) }
 
+    val mentionSuggestions by vm.mentionSuggestions.collectAsState()
+    var mentionedUids by remember { mutableStateOf(listOf<String>()) }
+    LaunchedEffect(commentText) {
+        val atIndex = commentText.lastIndexOf('@')
+        if (atIndex < 0) { vm.clearMentionSuggestions(); return@LaunchedEffect }
+        val afterAt = commentText.substring(atIndex + 1)
+        if (afterAt.contains(' ') || afterAt.isEmpty()) { vm.clearMentionSuggestions(); return@LaunchedEffect }
+        vm.searchMentionUsers(afterAt)
+    }
+    fun onMentionSelected(user: MentionHelper.MentionUser) {
+        val atIndex = commentText.lastIndexOf('@')
+        if (atIndex >= 0) {
+            val before = commentText.substring(0, atIndex)
+            val safeName = user.name.replace(" ", "_")
+            commentText = "$before@$safeName "
+            mentionedUids = mentionedUids + user.uid
+        }
+        vm.clearMentionSuggestions()
+    }
+
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = HeftSurface) {
         Column(
             modifier = Modifier
@@ -1741,6 +1794,11 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel, language:
                 }
             }
             HorizontalDivider(color = Divider)
+            MentionSuggestionBar(
+                suggestions = mentionSuggestions,
+                onSelect    = { onMentionSelected(it) },
+                modifier    = Modifier.fillMaxWidth(),
+            )
             Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = commentText, onValueChange = { commentText = it },
@@ -1754,7 +1812,14 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel, language:
                 )
                 Spacer(Modifier.width(8.dp))
                 IconButton(
-                    onClick  = { if (commentText.isNotBlank()) { vm.addComment(post, commentText.trim()); commentText = "" } },
+                    onClick  = {
+                        if (commentText.isNotBlank()) {
+                            vm.addComment(post, commentText.trim(), mentions = mentionedUids)
+                            commentText   = ""
+                            mentionedUids = emptyList()
+                            vm.clearMentionSuggestions()
+                        }
+                    },
                     modifier = Modifier.size(40.dp).clip(CircleShape).background(Amber),
                 ) {
                     Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color.Black, modifier = Modifier.size(18.dp))
