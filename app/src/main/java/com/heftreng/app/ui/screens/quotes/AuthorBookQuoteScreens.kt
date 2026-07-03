@@ -602,25 +602,7 @@ fun LibraryBookDetailScreen(
             }
         } else {
             Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-                // ── Kitap Başlık ────────────────────────────────────────
-                book?.let { b ->
-                    LibraryBookHeader(
-                        book          = b,
-                        onAuthorClick = {
-                            if (b.authorId.isNotBlank())
-                                navController.navigate("author_detail/${b.authorId}")
-                        },
-                    )
-                    ReadingStatusButton(
-                        currentStatus = currentRlStatus,
-                        onClick       = { showRlSheet = true },
-                        modifier      = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 4.dp),
-                    )
-                }
-
-                // ── Tab Bar ─────────────────────────────────────────────
+                // ── Tab Bar (sabit, sticky) ─────────────────────────────
                 TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor   = HeftSurface,
@@ -659,6 +641,25 @@ fun LibraryBookDetailScreen(
                             modifier       = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 80.dp),
                         ) {
+                            // Header scroll'a dahil
+                            item {
+                                book?.let { b ->
+                                    LibraryBookHeader(
+                                        book          = b,
+                                        onAuthorClick = {
+                                            if (b.authorId.isNotBlank())
+                                                navController.navigate("author_detail/${b.authorId}")
+                                        },
+                                    )
+                                    ReadingStatusButton(
+                                        currentStatus = currentRlStatus,
+                                        onClick       = { showRlSheet = true },
+                                        modifier      = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 20.dp, vertical = 4.dp),
+                                    )
+                                }
+                            }
                             if (quotes.isEmpty()) {
                                 item { EmptyState(Icons.Default.FormatQuote, "Henüz alıntı yok.\nİlk alıntıyı sen ekle!") }
                             } else {
@@ -677,6 +678,24 @@ fun LibraryBookDetailScreen(
                             modifier       = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 80.dp),
                         ) {
+                            item {
+                                book?.let { b ->
+                                    LibraryBookHeader(
+                                        book          = b,
+                                        onAuthorClick = {
+                                            if (b.authorId.isNotBlank())
+                                                navController.navigate("author_detail/${b.authorId}")
+                                        },
+                                    )
+                                    ReadingStatusButton(
+                                        currentStatus = currentRlStatus,
+                                        onClick       = { showRlSheet = true },
+                                        modifier      = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 20.dp, vertical = 4.dp),
+                                    )
+                                }
+                            }
                             if (reviews.isEmpty()) {
                                 item { EmptyState(Icons.Outlined.RateReview, "Henüz inceleme yok.\nBu kitabı incele!") }
                             } else {
