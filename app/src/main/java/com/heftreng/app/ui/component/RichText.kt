@@ -36,8 +36,9 @@ fun MentionText(
     lineHeight  : TextUnit = 20.sp,
     color       : Color = LocalContentColor.current,
     onMentionClick: (uid: String) -> Unit = {},
+    onHashtagClick: ((postId: String) -> Unit)? = null,
 ) {
-    val annotated = buildMentionAnnotatedString(text, mentionUids)
+    val annotated = buildRichAnnotatedString(text, mentionUids)
     ClickableText(
         text     = annotated,
         modifier = modifier,
@@ -49,6 +50,8 @@ fun MentionText(
         onClick  = { offset ->
             annotated.getStringAnnotations(tag = MENTION_TAG, start = offset, end = offset)
                 .firstOrNull()?.let { onMentionClick(it.item) }
+            annotated.getStringAnnotations(tag = HASHTAG_TAG, start = offset, end = offset)
+                .firstOrNull()?.let { onHashtagClick?.invoke(it.item) }
         },
     )
 }
@@ -59,25 +62,37 @@ private const val MENTION_TAG = "mention"
 private val MENTION_REGEX = Regex("@[\\p{L}0-9_]+")
 
 @Composable
-private fun buildMentionAnnotatedString(text: String, mentionUids: List<String>): AnnotatedString {
+private fun buildRichAnnotatedString(text: String, mentionUids: List<String>): AnnotatedString {
     return remember(text, mentionUids) {
         buildAnnotatedString {
+            val matches = (MENTION_REGEX.findAll(text).map { MENTION_TAG to it } +
+                           HASHTAG_REGEX.findAll(text).map { HASHTAG_TAG to it })
+                .sortedBy { it.second.range.first }
             var lastIndex = 0
             var mentionIdx = 0
-            for (match in MENTION_REGEX.findAll(text)) {
+            for ((tag, match) in matches) {
+                if (match.range.first < lastIndex) continue // çakışan eşleşme, atla
                 append(text.substring(lastIndex, match.range.first))
-                val uid = mentionUids.getOrNull(mentionIdx)
-                if (uid != null) {
-                    pushStringAnnotation(tag = MENTION_TAG, annotation = uid)
+                if (tag == MENTION_TAG) {
+                    val uid = mentionUids.getOrNull(mentionIdx)
+                    mentionIdx++
+                    if (uid != null) {
+                        pushStringAnnotation(tag = MENTION_TAG, annotation = uid)
+                        withStyle(SpanStyle(color = MentionAmber, fontWeight = FontWeight.SemiBold)) {
+                            append(match.value)
+                        }
+                        pop()
+                    } else {
+                        append(match.value) // mentionUids'te karşılığı yoksa düz metin
+                    }
+                } else {
+                    val postId = match.value.removePrefix("#")
+                    pushStringAnnotation(tag = HASHTAG_TAG, annotation = postId)
                     withStyle(SpanStyle(color = MentionAmber, fontWeight = FontWeight.SemiBold)) {
                         append(match.value)
                     }
                     pop()
-                } else {
-                    // mentionUids'te karşılığı yoksa düz metin (tıklanamaz)
-                    append(match.value)
                 }
-                mentionIdx++
                 lastIndex = match.range.last + 1
             }
             append(text.substring(lastIndex))

@@ -301,6 +301,7 @@ fun SinglePostScreen(
                             onDelete    = { deleteTarget = cmt },
                             onLongPress = { menuTarget = cmt },
                             onMentionClick = { uid -> navController.navigate("profile/$uid") },
+                            onHashtagClick = { taggedPostId -> navController.navigate(Screen.PostDetail.go(taggedPostId)) },
                         )
                         HorizontalDivider(
                             color     = Divider.copy(alpha = 0.4f),
@@ -557,6 +558,7 @@ private fun SingleCommentRow(
     onDelete       : () -> Unit,
     onLongPress    : () -> Unit,
     onMentionClick : (uid: String) -> Unit,
+    onHashtagClick : (postId: String) -> Unit = {},
 ) {
     val ku = language == "ku"
     Row(
@@ -604,6 +606,7 @@ private fun SingleCommentRow(
                 lineHeight  = 20.sp,
                 color       = OnSurface,
                 onMentionClick = onMentionClick,
+                onHashtagClick = onHashtagClick,
             )
 
             // Aksiyon satırı

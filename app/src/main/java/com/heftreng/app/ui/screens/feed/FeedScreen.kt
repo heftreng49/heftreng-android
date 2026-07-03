@@ -535,6 +535,7 @@ fun FeedScreen(
                                 else           -> navController.navigate(Screen.PostDetail.go(repostId))
                             }
                         },
+                        onTapHashtag = { taggedPostId -> navController.navigate(Screen.PostDetail.go(taggedPostId)) },
                         onReport  = {
                             reportPostId     = post.id
                             reportTargetUid  = post.uid
@@ -1069,6 +1070,7 @@ fun PostCard(
     onTapAuthor  : ((String) -> Unit)? = null,
     onTapBook    : ((String) -> Unit)? = null,
     onTapRepost  : ((postId: String, type: String) -> Unit)? = null,
+    onTapHashtag : ((postId: String) -> Unit)? = null,
     onReport     : (() -> Unit)? = null,
     onBlock      : (() -> Unit)? = null,
     language     : String = "tr",
@@ -1292,7 +1294,10 @@ fun PostCard(
                 )
             }
             if (post.text.isNotBlank()) {
-                LinkifyText(post.text, fontSize = 15.sp, lineHeight = 22.sp, expandable = true, language = language)
+                LinkifyText(
+                    post.text, fontSize = 15.sp, lineHeight = 22.sp, expandable = true, language = language,
+                    onHashtagClick = onTapHashtag,
+                )
                 Spacer(Modifier.height(8.dp))
             }
                         if (post.repostType.isNotBlank() && post.repostType != "feed") {

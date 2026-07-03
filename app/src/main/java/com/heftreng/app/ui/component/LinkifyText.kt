@@ -17,36 +17,45 @@ import com.heftreng.app.ui.theme.Muted
 import com.heftreng.app.ui.theme.OnBackground
 import com.heftreng.app.utils.openUrl
 
-private val URL_REGEX = Regex("""https?://[^\s]+|www\.[^\s]+""")
+private val URL_REGEX     = Regex("""https?://[^\s]+|www\.[^\s]+""")
+private val HASHTAG_REGEX = Regex("""#[a-zA-Z0-9_-]{6,}""")
 
 // Kaç satırdan sonra "daha fazlasını göster" çıksın
 private const val COLLAPSED_LINES = 4
 
 @Composable
 fun LinkifyText(
-    text       : String,
-    modifier   : Modifier  = Modifier,
-    fontSize   : TextUnit  = 15.sp,
-    lineHeight : TextUnit  = 22.sp,
-    maxLines   : Int       = Int.MAX_VALUE,
-    overflow   : TextOverflow = TextOverflow.Clip,
-    expandable : Boolean   = false,   // Feed listesinde true, detail'de false
-    language   : String    = "tr",
+    text            : String,
+    modifier        : Modifier  = Modifier,
+    fontSize        : TextUnit  = 15.sp,
+    lineHeight      : TextUnit  = 22.sp,
+    maxLines        : Int       = Int.MAX_VALUE,
+    overflow        : TextOverflow = TextOverflow.Clip,
+    expandable      : Boolean   = false,   // Feed listesinde true, detail'de false
+    language        : String    = "tr",
+    onHashtagClick  : ((postId: String) -> Unit)? = null,  // null ise #etiketler tıklanamaz, sadece renklendirilir
 ) {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
 
-    // Link annotasyonları
-    val annotated = buildAnnotatedString {
-        var last = 0
-        URL_REGEX.findAll(text).forEach { match ->
-            append(text.substring(last, match.range.first))
-            pushStringAnnotation("URL", match.value)
-            withStyle(SpanStyle(color = Amber)) { append(match.value) }
-            pop()
-            last = match.range.last + 1
+    // Link + hashtag annotasyonları (tek geçişte, pozisyona göre sıralı)
+    val annotated = remember(text) {
+        buildAnnotatedString {
+            val matches = (URL_REGEX.findAll(text).map { "URL" to it } +
+                           HASHTAG_REGEX.findAll(text).map { "HASHTAG" to it })
+                .sortedBy { it.second.range.first }
+            var last = 0
+            for ((tag, match) in matches) {
+                if (match.range.first < last) continue // çakışan eşleşmeyi atla
+                append(text.substring(last, match.range.first))
+                val annotation = if (tag == "HASHTAG") match.value.removePrefix("#") else match.value
+                pushStringAnnotation(tag, annotation)
+                withStyle(SpanStyle(color = Amber)) { append(match.value) }
+                pop()
+                last = match.range.last + 1
+            }
+            append(text.substring(last))
         }
-        append(text.substring(last))
     }
 
     // Metnin kaç satır olduğunu tahmin et
@@ -69,6 +78,8 @@ fun LinkifyText(
             onClick  = { offset ->
                 annotated.getStringAnnotations("URL", offset, offset)
                     .firstOrNull()?.let { openUrl(context, it.item) }
+                annotated.getStringAnnotations("HASHTAG", offset, offset)
+                    .firstOrNull()?.let { onHashtagClick?.invoke(it.item) }
             },
         )
 
