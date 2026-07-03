@@ -1015,6 +1015,7 @@ fun MessageDetailScreen(
                             ctxMsg    = msg
                             ctxOffset = offset
                         },
+                        onTapHashtag = { taggedPostId -> navController.navigate(Screen.PostDetail.go(taggedPostId)) },
                     )
                 }
             }
@@ -1151,6 +1152,7 @@ private fun MsgRow(
     onDelete      : () -> Unit,
     onLike        : () -> Unit,
     onLongPress   : (androidx.compose.ui.geometry.Offset) -> Unit,
+    onTapHashtag  : (postId: String) -> Unit = {},
 ) {
     if (msg.text.isBlank() && msg.imageUrl.isBlank() && msg.audioUrl.isBlank()) return
     val iLiked = false // likedBy subcollection'a taşındı
@@ -1315,6 +1317,7 @@ private fun MsgRow(
                                 fontSize   = 15.sp,
                                 lineHeight = 22.sp,
                                 modifier   = Modifier,
+                                onHashtagClick = onTapHashtag,
                             )
                         if (msg.edited)
                             Text(Strings.edited(language),
