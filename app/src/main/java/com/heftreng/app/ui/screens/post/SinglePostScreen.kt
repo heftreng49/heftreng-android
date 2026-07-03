@@ -156,6 +156,14 @@ fun SinglePostScreen(
         cmtLoading = false
     }
 
+    // Feed arka planda yenilenip bu post listeden düşerse (feed sadece son N postu tutar),
+    // sonsuza kadar "Yükleniyor..." ekranında kalmaması için post kaybolduğunda tekrar çek.
+    LaunchedEffect(post, loadFailed) {
+        if (post == null && !loadFailed) {
+            vm.ensurePost(postId)
+        }
+    }
+
     // cmtError dialog
     if (cmtError != null) {
         AlertDialog(
