@@ -85,6 +85,13 @@ class HeftrangMessagingService : FirebaseMessagingService() {
         val postId  = data["postId"]  ?: ""
         val fromUid = data["fromUid"] ?: ""
         val convId  = data["convId"]  ?: ""
+        val targetUid = data["targetUid"] ?: ""
+
+        // Çoklu hesap: bu bildirim şu an cihazda aktif olan hesaba ait değilse
+        // hiç gösterme — aksi halde "Yanıtla" aksiyonu yanlış hesaptan mesaj
+        // gönderir (Firestore neyin hangi hesaba ait olduğunu anlayamaz).
+        val activeUid = FirebaseAuth.getInstance().currentUser?.uid
+        if (targetUid.isNotBlank() && activeUid != null && targetUid != activeUid) return
 
         // Mesajlar ekranı açıksa mesaj bildirimini bastır
         if (type == "message" && isMessagesScreenActive) return
@@ -188,6 +195,7 @@ class HeftrangMessagingService : FirebaseMessagingService() {
                         putExtra(ReplyReceiver.EXTRA_CONV_ID, convId)
                         putExtra(ReplyReceiver.EXTRA_TO_UID, fromUid)
                         putExtra(ReplyReceiver.EXTRA_NOTIF_ID, notifId)
+                        putExtra(ReplyReceiver.EXTRA_OWNER_UID, targetUid)
                     }
 
                     val replyPendingIntent = PendingIntent.getBroadcast(

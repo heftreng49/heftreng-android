@@ -33,6 +33,7 @@ class ReplyReceiver : BroadcastReceiver() {
         const val EXTRA_CONV_ID  = "extra_conv_id"
         const val EXTRA_TO_UID   = "extra_to_uid"
         const val EXTRA_NOTIF_ID = "extra_notif_id"
+        const val EXTRA_OWNER_UID = "extra_owner_uid"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -46,11 +47,21 @@ class ReplyReceiver : BroadcastReceiver() {
         val convId  = intent.getStringExtra(EXTRA_CONV_ID) ?: return
         val toUid   = intent.getStringExtra(EXTRA_TO_UID) ?: ""
         val notifId = intent.getIntExtra(EXTRA_NOTIF_ID, -1)
+        val ownerUid = intent.getStringExtra(EXTRA_OWNER_UID) ?: ""
 
         if (replyText.isNullOrBlank() || toUid.isBlank()) return
 
         val uid = FirebaseAuth.getInstance().currentUser?.uid
         if (uid.isNullOrBlank()) return
+
+        // Çoklu hesap koruması: bildirim başka bir hesaba aitse ve cihazda
+        // şu an farklı bir hesap açıksa, yanıtı YANLIŞ hesaptan göndermemek
+        // için burada durduruyoruz. Kullanıcı doğru hesaba geçip uygulama
+        // içinden yanıtlamalı.
+        if (ownerUid.isNotBlank() && ownerUid != uid) {
+            markNotificationWrongAccount(context, notifId)
+            return
+        }
 
         val firestore = FirebaseFirestore.getInstance()
 
@@ -118,6 +129,20 @@ class ReplyReceiver : BroadcastReceiver() {
         val builder = NotificationCompat.Builder(context, HeftrangMessagingService.CHANNEL_ID_MESSAGES)
             .setSmallIcon(R.drawable.ic_notif)
             .setContentText("Mesaj gönderilemedi, uygulamayı açıp tekrar dene")
+            .setAutoCancel(true)
+            .setColor(0xFF8B5CF6.toInt())
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+
+        NotificationManagerCompat.from(context).notify(notifId, builder.build())
+    }
+
+    // Bildirim başka bir hesaba aitken cihazda farklı bir hesap açıksa —
+    // yanıtı sessizce yanlış hesaptan göndermek yerine kullanıcıyı uyar.
+    private fun markNotificationWrongAccount(context: Context, notifId: Int) {
+        if (notifId == -1) return
+        val builder = NotificationCompat.Builder(context, HeftrangMessagingService.CHANNEL_ID_MESSAGES)
+            .setSmallIcon(R.drawable.ic_notif)
+            .setContentText("Bu mesaj başka bir hesaba ait — yanıtlamak için o hesaba geç")
             .setAutoCancel(true)
             .setColor(0xFF8B5CF6.toInt())
             .setPriority(NotificationCompat.PRIORITY_HIGH)

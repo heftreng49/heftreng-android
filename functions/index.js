@@ -161,7 +161,7 @@ exports.sendPush = onCall(
       const msg = {
         token: fcmToken,
         android: { priority: "high" },
-        data: { type, postId, fromUid, convId, url, title, body, channelId },
+        data: { type, postId, fromUid, convId, url, title, body, channelId, targetUid },
       };
       const result = await getMessaging().send(msg);
       return { success: true, messageId: result };
