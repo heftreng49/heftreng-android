@@ -126,6 +126,7 @@ data class Comment(
     val likesCount  : Int        = 0,
     val replyTo     : ReplyTo?   = null,
     val ts          : Timestamp? = null,
+    val mentions    : List<String> = emptyList(), // mention edilen uid listesi
     // ÇÖZÜLDÜ: Client-state — Firestore'a yazılmaz
     @get:Exclude @set:Exclude
     var isLikedByMe : Boolean    = false,

@@ -61,6 +61,7 @@ data class FeedCommentRow(
     val text            : String  = "",
     @SerialName("likes_count")     val likesCount    : Int     = 0,
     @SerialName("reply_to_cmt_id") val replyToCmtId  : String? = null,
+    @SerialName("mentions")        val mentions      : List<String> = emptyList(),
     @SerialName("created_at")      val createdAt     : String? = null,
 )
 
