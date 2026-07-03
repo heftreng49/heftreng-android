@@ -1,7 +1,5 @@
 package com.heftreng.app.utils
 
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -18,29 +16,27 @@ import com.heftreng.app.R
 // ═══════════════════════════════════════════════════════════════
 //  ReplyReceiver — Bildirimden doğrudan yanıt (Quick Reply)
 //
-//  Bildirimdeki "Yanıtla" aksiyonundan gelen RemoteInput metnini alır,
-//  Firestore'a yazar ve bildirimi "gönderildi" durumuna günceller.
-//  Hilt inject burada kullanılamadığından (BroadcastReceiver Hilt
-//  entry point değil) FirebaseAuth/Firestore doğrudan instance
-//  üzerinden alınır — MessagesViewModel.sendMessage()'in sadeleştirilmiş
-//  senkron/coroutine'siz bir eşleniği.
+//  DÜZELTME: sendPush çağrısı artık fire-and-forget.
+//  Önceki sürümde sendPush'un addOnCompleteListener'ı içinde
+//  pendingResult.finish() çağrılıyordu — Cloud Function geç
+//  yanıt verince goAsync() 10sn limitini aşıyor, Android
+//  process'i öldürüyor, bildirim "gönderiliyor" ekranında
+//  donup kalıyordu.
 //
-//  ÖNEMLİ: onReceive() senkron döner ama Firestore.add() ASENKRON'dur.
-//  goAsync() çağrılmazsa, sistem onReceive() geri döner dönmez (özellikle
-//  uygulama arka plandaysa) process'i öldürebilir ve yanıt ağa hiç
-//  ulaşmadan kaybolabilir. goAsync() ile PendingResult alınıp, Firestore
-//  işlemi bitene kadar (başarı/hata fark etmez) process canlı tutulur;
-//  her çıkış yolunda pendingResult.finish() çağrılması ZORUNLUDUR,
-//  aksi halde sistem receiver'ı "ANR" olarak işaretleyebilir.
+//  Yeni akış:
+//    1. Firestore mesaj yaz
+//    2. conversations doc güncelle
+//    3. markNotificationSent → pendingResult.finish()  ← hızlı
+//    4. sendPush fire-and-forget (sonucu önemsemiyoruz)
 // ═══════════════════════════════════════════════════════════════
 class ReplyReceiver : BroadcastReceiver() {
 
     companion object {
-        const val ACTION_REPLY   = "com.heftreng.app.ACTION_REPLY"
-        const val KEY_REPLY_TEXT = "key_reply_text"
-        const val EXTRA_CONV_ID  = "extra_conv_id"
-        const val EXTRA_TO_UID   = "extra_to_uid"
-        const val EXTRA_NOTIF_ID = "extra_notif_id"
+        const val ACTION_REPLY    = "com.heftreng.app.ACTION_REPLY"
+        const val KEY_REPLY_TEXT  = "key_reply_text"
+        const val EXTRA_CONV_ID   = "extra_conv_id"
+        const val EXTRA_TO_UID    = "extra_to_uid"
+        const val EXTRA_NOTIF_ID  = "extra_notif_id"
         const val EXTRA_OWNER_UID = "extra_owner_uid"
     }
 
@@ -52,9 +48,9 @@ class ReplyReceiver : BroadcastReceiver() {
             ?.toString()
             ?.trim()
 
-        val convId  = intent.getStringExtra(EXTRA_CONV_ID) ?: return
-        val toUid   = intent.getStringExtra(EXTRA_TO_UID) ?: ""
-        val notifId = intent.getIntExtra(EXTRA_NOTIF_ID, -1)
+        val convId   = intent.getStringExtra(EXTRA_CONV_ID)   ?: return
+        val toUid    = intent.getStringExtra(EXTRA_TO_UID)    ?: ""
+        val notifId  = intent.getIntExtra(EXTRA_NOTIF_ID, -1)
         val ownerUid = intent.getStringExtra(EXTRA_OWNER_UID) ?: ""
 
         if (replyText.isNullOrBlank() || toUid.isBlank()) return
@@ -62,15 +58,11 @@ class ReplyReceiver : BroadcastReceiver() {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
         if (uid.isNullOrBlank()) return
 
-        // Firestore yazması bitene kadar process'i canlı tut — bkz. yukarıdaki not.
         val pendingResult = goAsync()
 
-        // Çoklu hesap koruması: bildirim başka bir hesaba aitse ve cihazda
-        // şu an farklı bir hesap açıksa, yanıtı YANLIŞ hesaptan göndermemek
-        // için burada durduruyoruz. Kullanıcı doğru hesaba geçip uygulama
-        // içinden yanıtlamalı.
+        // Çoklu hesap koruması
         if (ownerUid.isNotBlank() && ownerUid != uid) {
-            markNotificationWrongAccount(context, notifId)
+            markNotification(context, notifId, "Bu mesaj başka bir hesaba ait — o hesaba geç")
             pendingResult.finish()
             return
         }
@@ -99,8 +91,12 @@ class ReplyReceiver : BroadcastReceiver() {
                 firestore.collection("conversations").document(convId)
                     .set(convUpd, SetOptions.merge())
                     .addOnCompleteListener {
-                        // Push bildirimi karşı tarafa gönder (best-effort, hata sessizce yutulur).
-                        // Bu çağrı da asenkron olduğundan pendingResult.finish() ondan SONRA çağrılır.
+                        // ✅ Firestore tamamlandı → hemen bildirim güncelle + finish
+                        markNotificationSent(context, notifId, replyText)
+                        pendingResult.finish()
+
+                        // Push: fire-and-forget, finish() beklemiyoruz
+                        // (Cloud Function geç yanıt verse bile kullanıcıyı etkilemez)
                         try {
                             val myName = FirebaseAuth.getInstance().currentUser?.displayName ?: "Biri"
                             FirebaseFunctions.getInstance("europe-west1")
@@ -114,60 +110,42 @@ class ReplyReceiver : BroadcastReceiver() {
                                     "fromUid"   to uid,
                                     "postId"    to "",
                                 ))
-                                .addOnCompleteListener {
-                                    markNotificationSent(context, notifId, replyText)
-                                    pendingResult.finish()
-                                }
-                        } catch (_: Exception) {
-                            // best-effort — push gitmese de yanıt zaten Firestore'a yazıldı
-                            markNotificationSent(context, notifId, replyText)
-                            pendingResult.finish()
-                        }
+                            // addOnCompleteListener YOK — fire-and-forget
+                        } catch (_: Exception) {}
                     }
             }
             .addOnFailureListener {
-                markNotificationFailed(context, notifId)
+                markNotification(context, notifId, "Mesaj gönderilemedi, uygulamayı açıp tekrar dene")
                 pendingResult.finish()
             }
     }
 
-    // Yanıt başarıyla gönderildikten sonra bildirimi günceller —
-    // WhatsApp'taki gibi "Sen: <mesaj>" şeklinde anlık geri bildirim.
     private fun markNotificationSent(context: Context, notifId: Int, replyText: String) {
         if (notifId == -1) return
-        val builder = NotificationCompat.Builder(context, HeftrangMessagingService.CHANNEL_ID_MESSAGES)
-            .setSmallIcon(R.drawable.ic_notif)
-            .setContentText("Sen: $replyText")
-            .setAutoCancel(true)
-            .setColor(0xFF8B5CF6.toInt())
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-
-        NotificationManagerCompat.from(context).notify(notifId, builder.build())
+        NotificationManagerCompat.from(context).notify(
+            notifId,
+            NotificationCompat.Builder(context, HeftrangMessagingService.CHANNEL_ID_MESSAGES)
+                .setSmallIcon(R.drawable.ic_notif)
+                .setContentTitle("Sen")
+                .setContentText(replyText)
+                .setAutoCancel(true)
+                .setColor(0xFF8B5CF6.toInt())
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build()
+        )
     }
 
-    private fun markNotificationFailed(context: Context, notifId: Int) {
+    private fun markNotification(context: Context, notifId: Int, msg: String) {
         if (notifId == -1) return
-        val builder = NotificationCompat.Builder(context, HeftrangMessagingService.CHANNEL_ID_MESSAGES)
-            .setSmallIcon(R.drawable.ic_notif)
-            .setContentText("Mesaj gönderilemedi, uygulamayı açıp tekrar dene")
-            .setAutoCancel(true)
-            .setColor(0xFF8B5CF6.toInt())
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-
-        NotificationManagerCompat.from(context).notify(notifId, builder.build())
-    }
-
-    // Bildirim başka bir hesaba aitken cihazda farklı bir hesap açıksa —
-    // yanıtı sessizce yanlış hesaptan göndermek yerine kullanıcıyı uyar.
-    private fun markNotificationWrongAccount(context: Context, notifId: Int) {
-        if (notifId == -1) return
-        val builder = NotificationCompat.Builder(context, HeftrangMessagingService.CHANNEL_ID_MESSAGES)
-            .setSmallIcon(R.drawable.ic_notif)
-            .setContentText("Bu mesaj başka bir hesaba ait — yanıtlamak için o hesaba geç")
-            .setAutoCancel(true)
-            .setColor(0xFF8B5CF6.toInt())
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-
-        NotificationManagerCompat.from(context).notify(notifId, builder.build())
+        NotificationManagerCompat.from(context).notify(
+            notifId,
+            NotificationCompat.Builder(context, HeftrangMessagingService.CHANNEL_ID_MESSAGES)
+                .setSmallIcon(R.drawable.ic_notif)
+                .setContentText(msg)
+                .setAutoCancel(true)
+                .setColor(0xFF8B5CF6.toInt())
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build()
+        )
     }
 }
