@@ -25,6 +25,7 @@ import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import com.heftreng.app.util.CacheEntry
 import javax.inject.Inject
 
@@ -1566,8 +1567,21 @@ class FeedViewModel @Inject constructor(
         if (_postNotFound.value == postId) _postNotFound.value = null
         viewModelScope.launch {
             try {
-                val doc = firestore.collection("feed").document(postId).get().await()
-                val post = doc.toPost()
+                // Ağ yavaş/yoksa sonsuza kadar "Yükleniyor..." ekranında kalmasın diye
+                // önce cache'i dene, ardından timeout'lu şekilde server'ı dene.
+                var doc = try {
+                    firestore.collection("feed").document(postId).get(Source.CACHE).await()
+                } catch (_: Exception) { null }
+
+                var post = doc?.toPost()
+
+                if (post == null) {
+                    doc = withTimeoutOrNull(12_000L) {
+                        firestore.collection("feed").document(postId).get(Source.SERVER).await()
+                    }
+                    post = doc?.toPost()
+                }
+
                 if (post == null) {
                     _postNotFound.value = postId
                 } else {
