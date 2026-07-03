@@ -918,7 +918,7 @@ class FeedViewModel @Inject constructor(
                         text        = r.text,
                         likesCount  = r.likesCount,
                         mentions    = r.mentions ?: emptyList(),
-                        replyTo     = replyToCmt?.let { ReplyTo(uid = it.uid, displayName = it.name ?: "") },
+                        replyTo     = replyToCmt?.let { ReplyTo(commentId = it.id, uid = it.uid, displayName = it.name ?: "") },
                         ts          = parseSupabaseTimestamp(r.createdAt),
                         isLikedByMe = r.id in myLikedCmtIds,
                     )

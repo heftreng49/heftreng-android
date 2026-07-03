@@ -90,6 +90,21 @@ fun SinglePostScreen(
     var cmtLikersId  by remember { mutableStateOf<String?>(null) }
     val listState    = rememberLazyListState()
 
+    // ── Yorum ağaçlaştırma — Instagram tarzı: üst yorum + altında girintili yanıtlar ──
+    // replyTo.commentId üst yorumun id'siyle eşleşen her yorum, o üst yorumun "yanıtları"
+    // listesine girer. Parent yorum silinmiş/bulunamıyorsa yanıt üst seviyede kalır
+    // (kaybolmasın diye) — Instagram da silinen yorumun yanıtlarını böyle gösterir.
+    val commentThreads = remember(comments) {
+        val allIds = comments.map { it.id }.toSet()
+        val topLevel = comments.filter { it.replyTo == null || it.replyTo.commentId !in allIds }
+        val repliesByParent = comments
+            .filter { it.replyTo != null && it.replyTo.commentId in allIds }
+            .groupBy { it.replyTo!!.commentId }
+        topLevel.map { parent -> CommentThread(parent, repliesByParent[parent.id] ?: emptyList()) }
+    }
+    // Açık olan thread'lerin parent id'leri — varsayılan kapalı, tıklanınca açılır
+    var expandedThreads by remember { mutableStateOf(setOf<String>()) }
+
     // ── Mention (@kullanıcı) — girilen metindeki sırayla eklenen uid listesi ────
     val mentionSuggestions by vm.mentionSuggestions.collectAsState()
     // key: metinde eklendiği andaki "@DisplayName " öneki, value: uid — sıraya göre gönderilirken kullanılır
@@ -273,36 +288,114 @@ fun SinglePostScreen(
                         }
                     }
 
-                    // Yorum listesi
-                    items(comments, key = { it.id }) { cmt ->
+                    // Yorum listesi — üst yorum + altında girintili, aç/kapa'lı yanıtlar
+                    items(commentThreads, key = { it.parent.id }) { thread ->
+                        val cmt = thread.parent
                         val isOwner   = myUid.isNotBlank() && cmt.uid.isNotBlank() && cmt.uid == myUid
                         val isPostOwner = myUid.isNotBlank() && myUid == post.uid
                         val canDelete = isOwner || isPostOwner
-                        SingleCommentRow(
-                            cmt         = cmt,
-                            myUid       = myUid,
-                            canEdit     = isOwner,
-                            canDelete   = canDelete,
-                            language    = language,
-                            onLikeClick = { vm.toggleCommentLike(postId, cmt) },
-                            onLikersClick = {
-                                if (cmt.likesCount > 0) {
-                                    cmtLikersId = cmt.id
-                                    socialVm.loadCommentLikers(cmt.id)
+                        val isExpanded = thread.parent.id in expandedThreads
+
+                        Column {
+                            SingleCommentRow(
+                                cmt         = cmt,
+                                myUid       = myUid,
+                                canEdit     = isOwner,
+                                canDelete   = canDelete,
+                                language    = language,
+                                onLikeClick = { vm.toggleCommentLike(postId, cmt) },
+                                onLikersClick = {
+                                    if (cmt.likesCount > 0) {
+                                        cmtLikersId = cmt.id
+                                        socialVm.loadCommentLikers(cmt.id)
+                                    }
+                                },
+                                onReply     = {
+                                    replyTo = cmt
+                                    editTarget = null
+                                    focusRequester.requestFocus()
+                                    keyboardController?.show()
+                                },
+                                onEdit      = { editTarget = cmt; replyTo = null },
+                                onDelete    = { deleteTarget = cmt },
+                                onLongPress = { menuTarget = cmt },
+                                onMentionClick = { uid -> navController.navigate("profile/$uid") },
+                                onHashtagClick = { taggedPostId -> navController.navigate(Screen.PostDetail.go(taggedPostId)) },
+                            )
+
+                            // "N yanıtı gör" tıklacı — girintili, üst yorumun altında
+                            if (thread.replies.isNotEmpty()) {
+                                Row(
+                                    modifier = Modifier
+                                        .padding(start = 56.dp, top = 2.dp, bottom = 4.dp)
+                                        .clickable {
+                                            expandedThreads = if (isExpanded)
+                                                expandedThreads - thread.parent.id
+                                            else
+                                                expandedThreads + thread.parent.id
+                                        },
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    HorizontalDivider(
+                                        color    = Muted.copy(alpha = 0.5f),
+                                        modifier = Modifier.width(24.dp),
+                                        thickness = 1.dp,
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        if (isExpanded)
+                                            (if (ku) "Veşêre" else "Gizle")
+                                        else {
+                                            val n = thread.replies.size
+                                            if (ku) "$n bersiv bibîne" else "$n yanıtı gör"
+                                        },
+                                        color      = Muted,
+                                        fontSize   = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
                                 }
-                            },
-                            onReply     = {
-                                replyTo = cmt
-                                editTarget = null
-                                focusRequester.requestFocus()
-                                keyboardController?.show()
-                            },
-                            onEdit      = { editTarget = cmt; replyTo = null },
-                            onDelete    = { deleteTarget = cmt },
-                            onLongPress = { menuTarget = cmt },
-                            onMentionClick = { uid -> navController.navigate("profile/$uid") },
-                            onHashtagClick = { taggedPostId -> navController.navigate(Screen.PostDetail.go(taggedPostId)) },
-                        )
+                            }
+
+                            // Yanıtlar — girintili, hafif arka planlı ayrı kutular
+                            if (isExpanded) {
+                                thread.replies.forEach { reply ->
+                                    val replyIsOwner   = myUid.isNotBlank() && reply.uid.isNotBlank() && reply.uid == myUid
+                                    val replyCanDelete = replyIsOwner || isPostOwner
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(start = 40.dp, end = 8.dp, bottom = 2.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(SurfaceVar.copy(alpha = 0.5f)),
+                                    ) {
+                                        SingleCommentRow(
+                                            cmt         = reply,
+                                            myUid       = myUid,
+                                            canEdit     = replyIsOwner,
+                                            canDelete   = replyCanDelete,
+                                            language    = language,
+                                            onLikeClick = { vm.toggleCommentLike(postId, reply) },
+                                            onLikersClick = {
+                                                if (reply.likesCount > 0) {
+                                                    cmtLikersId = reply.id
+                                                    socialVm.loadCommentLikers(reply.id)
+                                                }
+                                            },
+                                            onReply     = {
+                                                replyTo = cmt // yanıta yanıt → yine üst yorumun thread'ine eklenir
+                                                editTarget = null
+                                                focusRequester.requestFocus()
+                                                keyboardController?.show()
+                                            },
+                                            onEdit      = { editTarget = reply; replyTo = null },
+                                            onDelete    = { deleteTarget = reply },
+                                            onLongPress = { menuTarget = reply },
+                                            onMentionClick = { uid -> navController.navigate("profile/$uid") },
+                                            onHashtagClick = { taggedPostId -> navController.navigate(Screen.PostDetail.go(taggedPostId)) },
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         HorizontalDivider(
                             color     = Divider.copy(alpha = 0.4f),
                             thickness = 0.5.dp,
@@ -541,6 +634,12 @@ private fun submitComment(
     }
     onDone()
 }
+
+// ── Yorum + yanıtları grubu (Instagram tarzı thread gösterimi için) ────────────
+private data class CommentThread(
+    val parent  : Comment,
+    val replies : List<Comment>,
+)
 
 // ── Yorum satırı ─────────────────────────────────────────────────────────────
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)

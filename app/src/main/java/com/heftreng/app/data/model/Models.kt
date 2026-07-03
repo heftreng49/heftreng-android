@@ -133,6 +133,7 @@ data class Comment(
 )
 
 data class ReplyTo(
+    val commentId   : String = "",
     val uid         : String = "",
     val displayName : String = ""
 )
