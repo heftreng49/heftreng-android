@@ -892,8 +892,9 @@ class FeedViewModel @Inject constructor(
                 val myPhoto = d["photoURL"] as? String
                     ?: _cachedMyPhoto.ifBlank { auth.currentUser?.photoUrl?.toString() } ?: ""
 
+                val cmtId = "${post.id}_${uid}_${System.currentTimeMillis()}"
                 val insertMap = mutableMapOf<String, Any>(
-                    "id"        to java.util.UUID.randomUUID().toString(),
+                    "id"        to cmtId,
                     "post_id"   to post.id,
                     "uid"       to uid,
                     "name"      to myName,
@@ -903,8 +904,6 @@ class FeedViewModel @Inject constructor(
                 if (replyTo != null) {
                     insertMap["reply_to_cmt_id"] = replyTo.id
                 }
-                // mentions sütunu Supabase'de ALTER TABLE ile eklendiyse dahil et
-                // insertMap["mentions"] = emptyList<String>()
 
                 supabase.postgrest["feed_comments"].insert(insertMap)
 
