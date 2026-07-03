@@ -41,6 +41,8 @@ import com.heftreng.app.data.model.Message
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.component.LinkifyText
 import com.heftreng.app.ui.component.FullScreenImageViewer
+import com.heftreng.app.ui.component.MentionText
+import com.heftreng.app.ui.component.MentionSuggestionBar
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.MessagesViewModel
@@ -339,6 +341,37 @@ fun MessageDetailScreen(
     var ctxOffset     by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     val clipboardManager = LocalClipboardManager.current
     val ctxLocalContext   = LocalContext.current
+
+    // ── Mention (@kullanıcı) — feed'deki mantıkla birebir aynı desen ──────────
+    val mentionSuggestions by vm.mentionSuggestions.collectAsState()
+    var mentionedUids by remember { mutableStateOf(listOf<String>()) }
+
+    LaunchedEffect(inputText) {
+        val atIndex = inputText.lastIndexOf('@')
+        if (atIndex == -1) {
+            vm.clearMentionSuggestions()
+        } else {
+            val afterAt = inputText.substring(atIndex + 1)
+            if (afterAt.contains(' ') || afterAt.contains('\n')) {
+                vm.clearMentionSuggestions()
+            } else if (afterAt.isNotEmpty()) {
+                vm.searchMentionUsers(afterAt)
+            } else {
+                vm.clearMentionSuggestions()
+            }
+        }
+    }
+
+    fun onMentionSelected(user: com.heftreng.app.util.MentionHelper.MentionUser) {
+        val atIndex = inputText.lastIndexOf('@')
+        if (atIndex != -1) {
+            val before = inputText.substring(0, atIndex)
+            val safeName = user.name.replace(" ", "")
+            inputText = "$before@$safeName "
+            mentionedUids = mentionedUids + user.uid
+        }
+        vm.clearMentionSuggestions()
+    }
     var selectedImage by remember { mutableStateOf<Uri?>(null) }
     var isRecording      by remember { mutableStateOf(false) }
     var showAudioPreview by remember { mutableStateOf(false) }
@@ -771,6 +804,11 @@ fun MessageDetailScreen(
                 // Tema: .msg-inp-bar
                 Surface(color = HeftSurface, tonalElevation = 0.dp) {
                     Column {
+                        // ── Mention öneri barı ──────────────────────────────
+                        MentionSuggestionBar(
+                            suggestions = mentionSuggestions,
+                            onSelect    = { onMentionSelected(it) },
+                        )
                         // Seçili resim önizleme
                         if (selectedImage != null) {
                             Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
@@ -929,9 +967,11 @@ fun MessageDetailScreen(
                                             replyToText = replyTo?.text ?: "",
                                             replyToName = if (replyTo?.senderId == vm.uid) if (ku) "Tu" else "Sen"
                                                           else otherUser?.displayName ?: "",
+                                            mentions    = mentionedUids,
                                         )
                                         presenceVm.setTyping(convId, false)
                                         replyTo = null
+                                        mentionedUids = emptyList()
                                     }
                                     inputText = ""
                                 },
@@ -1020,6 +1060,7 @@ fun MessageDetailScreen(
                             ctxOffset = offset
                         },
                         onTapHashtag = { taggedPostId -> navController.navigate(Screen.PostDetail.go(taggedPostId)) },
+                        onTapMention = { mentionedUid -> navController.navigate(Screen.Profile.go(mentionedUid)) },
                     )
                 }
             }
@@ -1167,6 +1208,7 @@ private fun MsgRow(
     onLike        : () -> Unit,
     onLongPress   : (androidx.compose.ui.geometry.Offset) -> Unit,
     onTapHashtag  : (postId: String) -> Unit = {},
+    onTapMention  : (uid: String) -> Unit = {},
 ) {
     if (msg.text.isBlank() && msg.imageUrl.isBlank() && msg.audioUrl.isBlank()) return
 
@@ -1324,14 +1366,28 @@ private fun MsgRow(
                             AudioMessagePlayer(audioUrl = msg.audioUrl, isMine = isMine, language = language)
                             Spacer(Modifier.height(4.dp))
                         }
-                        if (msg.text.isNotBlank())
-                            LinkifyText(
-                                text       = msg.text,
-                                fontSize   = 15.sp,
-                                lineHeight = 22.sp,
-                                modifier   = Modifier,
-                                onHashtagClick = onTapHashtag,
-                            )
+                        if (msg.text.isNotBlank()) {
+                            if (msg.mentions.isNotEmpty()) {
+                                // Mention içeren mesaj — @isim'ler tıklanabilir amber vurgulu
+                                MentionText(
+                                    text        = msg.text,
+                                    mentionUids = msg.mentions,
+                                    fontSize    = 15.sp,
+                                    lineHeight  = 22.sp,
+                                    color       = if (isMine) Color.White else OnBackground,
+                                    onMentionClick = onTapMention,
+                                    onHashtagClick = onTapHashtag,
+                                )
+                            } else {
+                                LinkifyText(
+                                    text       = msg.text,
+                                    fontSize   = 15.sp,
+                                    lineHeight = 22.sp,
+                                    modifier   = Modifier,
+                                    onHashtagClick = onTapHashtag,
+                                )
+                            }
+                        }
                         if (msg.edited)
                             Text(Strings.edited(language),
                                 color = if (isMine) Color.White.copy(alpha = 0.55f) else Muted,

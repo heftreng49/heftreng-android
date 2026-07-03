@@ -212,6 +212,7 @@ data class Message(
     val replyToName    : String       = "",
     val isLikedByMe    : Boolean      = false,
     val likesCount     : Int          = 0,
+    val mentions       : List<String> = emptyList(), // mention edilen uid listesi (feed'deki Comment.mentions ile aynı desen)
     // ÇÖZÜLDÜ: 1MB limit çökmesini önlemek için 'likedBy: List<String>' kaldırıldı.
     // Beğeniler 'messages/{msgId}/likes' subcollection'ında tutulmalı.
 )

@@ -17,16 +17,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.heftreng.app.viewmodel.FeedViewModel
+import com.heftreng.app.util.MentionHelper
 
 /**
- * `@` yazınca yorum/gönderi input alanının üstünde açılan yatay kullanıcı öneri barı.
+ * `@` yazınca yorum/gönderi/mesaj input alanının üstünde açılan yatay kullanıcı öneri barı.
  * Boşsa hiçbir şey çizmez.
+ *
+ * MentionHelper.MentionUser üzerinden çalışır (FeedViewModel ve MessagesViewModel'in
+ * ikisi de aynı tipi kullanır) — böylece bu bileşen tek bir ViewModel'e bağımlı kalmaz.
  */
 @Composable
 fun MentionSuggestionBar(
-    suggestions : List<FeedViewModel.MentionUser>,
-    onSelect    : (FeedViewModel.MentionUser) -> Unit,
+    suggestions : List<MentionHelper.MentionUser>,
+    onSelect    : (MentionHelper.MentionUser) -> Unit,
     modifier    : Modifier = Modifier,
 ) {
     if (suggestions.isEmpty()) return

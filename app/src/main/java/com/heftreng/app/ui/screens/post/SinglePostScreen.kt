@@ -128,7 +128,7 @@ fun SinglePostScreen(
         }
     }
 
-    fun onMentionSelected(user: FeedViewModel.MentionUser) {
+    fun onMentionSelected(user: com.heftreng.app.util.MentionHelper.MentionUser) {
         val atIndex = inputText.lastIndexOf('@')
         if (atIndex != -1) {
             val before = inputText.substring(0, atIndex)

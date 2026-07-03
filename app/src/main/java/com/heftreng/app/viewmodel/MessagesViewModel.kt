@@ -61,6 +61,30 @@ class MessagesViewModel @Inject constructor(
     private var currentConvId: String = ""
     private val MSG_PAGE     = 50
 
+    // ── Mention (@kullanıcı) önerileri — FeedViewModel'deki ile aynı ortak
+    //    MentionHelper üzerinden çalışır, kod tekrarı yok. ────────────────────
+    private val _mentionSuggestions = MutableStateFlow<List<com.heftreng.app.util.MentionHelper.MentionUser>>(emptyList())
+    val mentionSuggestions = _mentionSuggestions.asStateFlow()
+
+    private var mentionSearchJob: kotlinx.coroutines.Job? = null
+
+    fun searchMentionUsers(query: String) {
+        mentionSearchJob?.cancel()
+        if (query.isBlank()) {
+            _mentionSuggestions.value = emptyList()
+            return
+        }
+        mentionSearchJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(200) // basit debounce
+            _mentionSuggestions.value = com.heftreng.app.util.MentionHelper.searchUsers(firestore, query)
+        }
+    }
+
+    fun clearMentionSuggestions() {
+        mentionSearchJob?.cancel()
+        _mentionSuggestions.value = emptyList()
+    }
+
     init {
         // Kullanıcı adı önbelleğe al (auth state değişince güncelle)
         auth.addAuthStateListener { firebaseAuth ->
@@ -304,6 +328,7 @@ class MessagesViewModel @Inject constructor(
             replyToId      = d["reply_to_id"]   as? String ?: "",
             replyToText    = d["reply_to_text"] as? String ?: "",
             replyToName    = d["reply_to_name"] as? String ?: "",
+            mentions       = (d["mentions"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
         )
     }
 
@@ -316,6 +341,7 @@ class MessagesViewModel @Inject constructor(
         replyToId  : String = "",
         replyToText: String = "",
         replyToName: String = "",
+        mentions   : List<String> = emptyList(),
     ) {
         if (uid.isEmpty() || (text.isBlank() && imageUrl.isBlank())) return
         viewModelScope.launch {
@@ -333,6 +359,9 @@ class MessagesViewModel @Inject constructor(
                     msgData["reply_to_id"]   = replyToId
                     msgData["reply_to_text"] = replyToText
                     msgData["reply_to_name"] = replyToName
+                }
+                if (mentions.isNotEmpty()) {
+                    msgData["mentions"] = mentions
                 }
                 firestore.collection("convMessages").document(convId)
                     .collection("msgs").add(msgData).await()

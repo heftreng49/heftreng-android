@@ -53,13 +53,9 @@ class FeedViewModel @Inject constructor(
     )
 
     // ── Mention (@kullanıcı) önerileri ──────────────────────────────────────
-    data class MentionUser(
-        val uid      : String,
-        val name     : String,
-        val photoURL : String = "",
-    )
-
-    private val _mentionSuggestions = MutableStateFlow<List<MentionUser>>(emptyList())
+    // Not: arama mantığı ve tip tanımı ortak MentionHelper'a taşındı (kod tekrarını
+    // önlemek için) — MessagesViewModel de aynı MentionHelper.MentionUser tipini kullanır.
+    private val _mentionSuggestions = MutableStateFlow<List<com.heftreng.app.util.MentionHelper.MentionUser>>(emptyList())
     val mentionSuggestions = _mentionSuggestions.asStateFlow()
 
     private var mentionSearchJob: kotlinx.coroutines.Job? = null
@@ -73,35 +69,7 @@ class FeedViewModel @Inject constructor(
         }
         mentionSearchJob = viewModelScope.launch {
             kotlinx.coroutines.delay(200) // basit debounce
-            try {
-                val qLower = query.lowercase()
-                val qCap   = query.replaceFirstChar { it.uppercase() }
-                val seenIds = mutableSetOf<String>()
-                val results = mutableListOf<MentionUser>()
-
-                for (prefix in listOf(query, qLower, qCap).distinct()) {
-                    val snap = firestore.collection("users")
-                        .orderBy("displayName")
-                        .startAt(prefix).endAt(prefix + "\uF8FF")
-                        .limit(8).get().await()
-                    for (doc in snap.documents) {
-                        if (!seenIds.add(doc.id)) continue
-                        val d = doc.data ?: continue
-                        val name = (d["displayName"] as? String)?.ifBlank { null }
-                            ?: (d["name"] as? String)?.ifBlank { null }
-                            ?: continue
-                        results += MentionUser(
-                            uid      = doc.id,
-                            name     = name,
-                            photoURL = d["photoURL"] as? String ?: "",
-                        )
-                    }
-                }
-                _mentionSuggestions.value = results.take(8)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                _mentionSuggestions.value = emptyList()
-            }
+            _mentionSuggestions.value = com.heftreng.app.util.MentionHelper.searchUsers(firestore, query)
         }
     }
 
