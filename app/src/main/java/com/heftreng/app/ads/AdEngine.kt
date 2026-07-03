@@ -172,10 +172,17 @@ class AdEngine(
         // mevcut isteğin tamamlanmasını bekle (istek sayısını katlamamak için).
         if (!changed && slot.loadJob?.isActive == true) return
 
+        // MAX_RETRY tükendiyse (native'deki exhausted mantığının aynısı) —
+        // warmVisiblePositions scroll'da defalarca çağrılır; bunu engellemezsek
+        // her scroll tetiklemesinde tükenmiş slot için sıfırdan istek zinciri
+        // başlar (AdMob "ad requests" sayacını gereksiz şişirir).
+        if (!changed && slot.exhausted) return
+
         if (changed) {
             slot.bannerView?.destroy()
             slot.bannerView = null
             slot.loaded.value = false
+            slot.exhausted = false
         }
         slot.unitId     = unitId
         slot.size       = bannerSize
@@ -225,6 +232,8 @@ class AdEngine(
                         delay(backoffDelay(retry))
                         spawnBanner(key, slot)
                     }
+                } else {
+                    slot.exhausted = true
                 }
             }
         }
