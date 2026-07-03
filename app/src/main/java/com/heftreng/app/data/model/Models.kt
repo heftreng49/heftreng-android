@@ -209,7 +209,9 @@ data class Message(
     val edited         : Boolean      = false,
     val replyToId      : String       = "",
     val replyToText    : String       = "",
-    val replyToName    : String       = ""
+    val replyToName    : String       = "",
+    val isLikedByMe    : Boolean      = false,
+    val likesCount     : Int          = 0,
     // ÇÖZÜLDÜ: 1MB limit çökmesini önlemek için 'likedBy: List<String>' kaldırıldı.
     // Beğeniler 'messages/{msgId}/likes' subcollection'ında tutulmalı.
 )

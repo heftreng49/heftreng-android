@@ -465,6 +465,16 @@ class MessagesViewModel @Inject constructor(
     // ── ÇÖZÜLDÜ: Alt koleksiyon (Subcollection) Destekli Yeni Beğeni Yapısı ──
     fun toggleLike(msg: Message) {
         if (uid.isEmpty()) return
+
+        // Optimistic UI güncellemesi — Firestore yanıtını beklemeden anında yansıt.
+        val wasLiked = msg.isLikedByMe
+        _messages.value = _messages.value.map {
+            if (it.id == msg.id) it.copy(
+                isLikedByMe = !wasLiked,
+                likesCount  = (it.likesCount + if (!wasLiked) 1 else -1).coerceAtLeast(0),
+            ) else it
+        }
+
         viewModelScope.launch {
             try {
                 val likeRef = firestore.collection("convMessages")
@@ -472,15 +482,21 @@ class MessagesViewModel @Inject constructor(
                     .collection("msgs").document(msg.id)
                     .collection("likes").document(uid)
 
-                val doc = likeRef.get().await()
-                if (doc.exists()) {
+                if (wasLiked) {
                     likeRef.delete().await()
                 } else {
                     likeRef.set(mapOf("uid" to uid, "ts" to FieldValue.serverTimestamp())).await()
                 }
-                // Mesaj beğenildiğinde UI katmanında dinleyen bir alt tetikleyici yoksa 
-                // ya da listeyi yerelde anlık güncellemek istersen (isteğe bağlı) burayı kullanabilirsin.
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // Firestore yazması başarısız oldu — optimistic değişikliği geri al.
+                _messages.value = _messages.value.map {
+                    if (it.id == msg.id) it.copy(
+                        isLikedByMe = wasLiked,
+                        likesCount  = (it.likesCount + if (wasLiked) 1 else -1).coerceAtLeast(0),
+                    ) else it
+                }
+            }
         }
     }
 

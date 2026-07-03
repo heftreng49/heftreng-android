@@ -1055,7 +1055,10 @@ fun MessageDetailScreen(
                         MsgCtxItem(Icons.Default.Create, Strings.edit(language), false) { editMsg = ctxMsg; ctxMsg = null }
                         MsgCtxItem(Icons.Default.Delete, Strings.delete(language), true) { vm.deleteMessage(ctxMsg!!); ctxMsg = null }
                     }
-                    MsgCtxItem(Icons.Default.FavoriteBorder, Strings.like(language), false) { vm.toggleLike(ctxMsg!!); ctxMsg = null }
+                    MsgCtxItem(
+                        if (ctxMsg?.isLikedByMe == true) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        Strings.like(language), false
+                    ) { vm.toggleLike(ctxMsg!!); ctxMsg = null }
                 }
             }
         }
@@ -1166,7 +1169,6 @@ private fun MsgRow(
     onTapHashtag  : (postId: String) -> Unit = {},
 ) {
     if (msg.text.isBlank() && msg.imageUrl.isBlank() && msg.audioUrl.isBlank()) return
-    val iLiked = false // likedBy subcollection'a taşındı
 
     // ── Swipe + LongPress + DoubleTap — tek pointerInput ─────────────────────
     val swipeThreshold = 80f
@@ -1357,20 +1359,23 @@ private fun MsgRow(
             }
 
             // Tema: .msg-like-badge
-            if (false) { // likedBy subcollection'a taşındı
+            if (msg.likesCount > 0 || msg.isLikedByMe) {
                 Surface(
                     shape  = RoundedCornerShape(99.dp),
-                    color  = if (iLiked) Color(0xFFF43F5E).copy(alpha = 0.1f) else SurfaceVar,
-                    border = BorderStroke(1.dp, if (iLiked) Color(0xFFF43F5E) else Divider),
+                    color  = if (msg.isLikedByMe) Color(0xFFF43F5E).copy(alpha = 0.1f) else SurfaceVar,
+                    border = BorderStroke(1.dp, if (msg.isLikedByMe) Color(0xFFF43F5E) else Divider),
                     modifier = Modifier.clickable { onLike() }.padding(top = 3.dp),
                 ) {
                     Row(modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Icon(Icons.Default.Favorite, null,
-                            tint = if (iLiked) Color(0xFFF43F5E) else Muted,
+                        Icon(
+                            if (msg.isLikedByMe) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            null,
+                            tint = if (msg.isLikedByMe) Color(0xFFF43F5E) else Muted,
                             modifier = Modifier.size(11.dp))
-                        Text("0", color = if (iLiked) Color(0xFFF43F5E) else Muted, fontSize = 10.sp)
+                        if (msg.likesCount > 0)
+                            Text("${msg.likesCount}", color = if (msg.isLikedByMe) Color(0xFFF43F5E) else Muted, fontSize = 10.sp)
                     }
                 }
             }
