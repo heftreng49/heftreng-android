@@ -19,7 +19,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,37 +37,20 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.google.firebase.Timestamp
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
-import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.Comment
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
-import com.heftreng.app.ui.i18n.Strings
-import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.ui.component.ConnectedPostCard
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 
-// Firestore'dan direkt okunan yorum modeli (Comment model'inden bağımsız)
-private data class SingleComment(
-    val id           : String     = "",
-    val uid          : String     = "",
-    val name         : String     = "",
-    val photoURL     : String     = "",
-    val text         : String     = "",
-    val replyTo      : String     = "",
-    val replyToCmtId : String     = "",
-    val likes        : Int        = 0,
-    val edited       : Boolean    = false,
-    val ts           : Timestamp? = null,
-)
+// ─────────────────────────────────────────────────────────────────────────────
+//  SinglePostScreen — Supabase feed_comments tabanlı tek detay ekranı
+//  PostDetailScreen ve CommentsSheet kaldırıldı, tüm yorum CRUD buradan yönetilir.
+// ─────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -80,50 +62,30 @@ fun SinglePostScreen(
     language     : String = "tr",
 ) {
     val ku = language == "ku"
+
     val posts         by vm.posts.collectAsState()
+    val comments      by vm.comments.collectAsState()
+    val cmtError      by vm.commentError.collectAsState()
     val likers        by socialVm.likers.collectAsState()
     val socialLoading by socialVm.loading.collectAsState()
     val postNotFound  by vm.postNotFound.collectAsState()
-    // vm.posts boşsa (yeni instance) Firestore'dan direkt çekilen post kullanılır
-    var fetchedPost   by remember { mutableStateOf<Post?>(null) }
-    val post          = posts.find { it.id == postId } ?: fetchedPost
-    val loadFailed    = postNotFound == postId && fetchedPost == null
 
-    val db    = FirebaseFirestore.getInstance()
-    val auth  = FirebaseAuth.getInstance()
-    val scope = rememberCoroutineScope()
+    val post        = posts.find { it.id == postId }
+    val loadFailed  = postNotFound == postId
 
-    var myUid   by remember { mutableStateOf(auth.currentUser?.uid ?: "") }
-    var myName  by remember { mutableStateOf(auth.currentUser?.displayName ?: "") }
-    var myPhoto by remember { mutableStateOf(auth.currentUser?.photoUrl?.toString() ?: "") }
-    DisposableEffect(Unit) {
-        val listener = FirebaseAuth.AuthStateListener { a ->
-            myUid   = a.currentUser?.uid ?: ""
-            myName  = a.currentUser?.displayName ?: ""
-            myPhoto = a.currentUser?.photoUrl?.toString() ?: ""
-        }
-        auth.addAuthStateListener(listener)
-        onDispose { auth.removeAuthStateListener(listener) }
-    }
+    val myUid = vm.uid
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester     = remember { FocusRequester() }
 
-    var comments     by remember { mutableStateOf<List<SingleComment>>(emptyList()) }
-    var cmtLoading   by remember { mutableStateOf(true) }
     var inputText    by remember { mutableStateOf("") }
-    var replyTo      by remember { mutableStateOf<SingleComment?>(null) }
-    var editTarget   by remember { mutableStateOf<SingleComment?>(null) }
-    var deleteTarget by remember { mutableStateOf<SingleComment?>(null) }
-    var menuTarget   by remember { mutableStateOf<SingleComment?>(null) }
-    var errorMsg     by remember { mutableStateOf("") }
+    var replyTo      by remember { mutableStateOf<Comment?>(null) }
+    var editTarget   by remember { mutableStateOf<Comment?>(null) }
+    var deleteTarget by remember { mutableStateOf<Comment?>(null) }
+    var menuTarget   by remember { mutableStateOf<Comment?>(null) }
     var showLikers   by remember { mutableStateOf(false) }
     var cmtLikersId  by remember { mutableStateOf<String?>(null) }
     val listState    = rememberLazyListState()
-
-    var postAuthorUid    by remember { mutableStateOf("") }
-    var myFirestoreName  by remember { mutableStateOf("") }
-    var myFirestorePhoto by remember { mutableStateOf("") }
 
     // Düzenleme moduna girilince inputText doldur + klavye aç
     LaunchedEffect(editTarget) {
@@ -134,146 +96,21 @@ fun SinglePostScreen(
         }
     }
 
-    LaunchedEffect(myUid) {
-        if (myUid.isBlank()) return@LaunchedEffect
-        try {
-            val doc = db.collection("users").document(myUid).get().await()
-            myFirestoreName  = doc.getString("displayName") ?: doc.getString("name") ?: ""
-            myFirestorePhoto = doc.getString("photoURL") ?: myPhoto
-        } catch (_: Exception) {}
-    }
-
+    // Post ve yorumları yükle
     LaunchedEffect(postId) {
         vm.ensurePost(postId)
-        // Direkt Firestore'dan çek — vm yeni instance'sa post listesi boş olabilir
-        if (fetchedPost == null) {
-            try {
-                val doc = db.collection("feed").document(postId).get().await()
-                if (doc.exists()) {
-                    val d = doc.data ?: emptyMap<String, Any>()
-                    val quoteObj   = d["quote"] as? Map<*, *>
-                    val quoteText  = (quoteObj?.get("text")   as? String)?.takeIf { it.isNotBlank() } ?: d["quoteText"]  as? String ?: ""
-                    val bookName   = (quoteObj?.get("book")   as? String)?.takeIf { it.isNotBlank() } ?: d["bookName"]   as? String ?: ""
-                    val authorName = (quoteObj?.get("author") as? String)?.takeIf { it.isNotBlank() } ?: d["authorName"] as? String ?: ""
-                    fetchedPost = Post(
-                        id           = doc.id,
-                        uid          = d["uid"]         as? String ?: "",
-                        displayName  = (d["displayName"] as? String)?.takeIf { it.isNotBlank() } ?: d["name"] as? String ?: "",
-                        name         = d["name"]        as? String ?: "",
-                        username     = d["username"]    as? String ?: "",
-                        photoURL     = d["photoURL"]    as? String ?: "",
-                        text         = d["text"]        as? String ?: "",
-                        title        = d["title"]       as? String ?: "",
-                        category     = d["category"]    as? String ?: "",
-                        imgUrl       = d["imgUrl"]      as? String ?: "",
-                        quoteText    = quoteText,
-                        bookName     = bookName,
-                        authorName   = authorName,
-                        coverImg     = d["coverImg"]    as? String ?: "",
-                        libraryBookId   = d["libraryBookId"]   as? String ?: "",
-                        libraryAuthorId = d["libraryAuthorId"] as? String ?: "",
-                        likesCount   = (d["likes"]    as? Long)?.toInt() ?: 0,
-                        commentsCount= (d["cmtCount"] as? Long)?.toInt() ?: 0,
-                        repostsCount = (d["reposts"]  as? Long)?.toInt() ?: 0,
-                        ts           = d["ts"] as? com.google.firebase.Timestamp,
-                        type         = d["type"]        as? String ?: "",
-                    )
-                }
-            } catch (_: Exception) {}
-        }
-        // postAuthorUid
-        postAuthorUid = post?.uid?.takeIf { it.isNotBlank() } ?: try {
-            db.collection("feed").document(postId).get().await().getString("uid") ?: ""
-        } catch (_: Exception) { "" }
+        vm.loadComments(postId)
     }
 
-    // Realtime yorum listener
-    DisposableEffect(postId) {
-        var reg: ListenerRegistration? = null
-        reg = db.collection("feed").document(postId)
-            .collection("comments")
-            .orderBy("ts", Query.Direction.ASCENDING)
-            .addSnapshotListener { snap, err ->
-                if (err != null || snap == null) { cmtLoading = false; return@addSnapshotListener }
-                comments = snap.documents.mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    val cmtUid = (d["uid"] as? String)?.takeIf { it.isNotBlank() }
-                        ?: (d["userId"] as? String)?.takeIf { it.isNotBlank() }
-                        ?: ""
-                    SingleComment(
-                        id           = doc.id,
-                        uid          = cmtUid,
-                        name         = (d["displayName"] as? String)?.ifBlank { null }
-                                       ?: d["name"] as? String ?: "?",
-                        photoURL     = d["photoURL"]     as? String ?: "",
-                        text         = d["text"]         as? String ?: "",
-                        replyTo      = d["replyTo"]      as? String ?: "",
-                        replyToCmtId = d["replyToCmtId"] as? String ?: "",
-                        likes        = (d["likes"]       as? Long)?.toInt() ?: 0,
-                        edited       = d["edited"]       as? Boolean ?: false,
-                        ts           = d["ts"]           as? Timestamp,
-                    )
-                }
-                cmtLoading = false
-            }
-        onDispose { reg?.remove() }
-    }
-
-    fun submitComment() {
-        val text = inputText.trim()
-        if (text.isBlank() || myUid.isBlank()) return
-
-        val editing = editTarget
-        inputText  = ""
-        editTarget = null
-
-        if (editing != null) {
-            scope.launch {
-                try {
-                    db.collection("feed").document(postId)
-                        .collection("comments").document(editing.id)
-                        .update(mapOf("text" to text, "edited" to true))
-                        .await()
-                } catch (e: Exception) { errorMsg = e.message ?: "Hata" }
-            }
-            return
-        }
-
-        val replyRef = replyTo
-        replyTo = null
-        scope.launch {
-            try {
-                val name  = myFirestoreName.ifBlank { myName.ifBlank { "?" } }
-                val photo = myFirestorePhoto.ifBlank { myPhoto }
-                db.collection("feed").document(postId).collection("comments").add(
-                    mapOf(
-                        "uid"          to myUid,
-                        "displayName"  to name,
-                        "name"         to name,
-                        "photoURL"     to photo,
-                        "text"         to text,
-                        "replyTo"      to (replyRef?.name ?: ""),
-                        "replyToCmtId" to (replyRef?.id   ?: ""),
-                        "likes"        to 0,
-                        "edited"       to false,
-                        "ts"           to Timestamp.now(),
-                    )
-                ).await()
-                db.collection("feed").document(postId)
-                    .update("cmtCount", FieldValue.increment(1)).await()
-            } catch (e: Exception) { errorMsg = e.message ?: "Hata" }
-        }
-    }
-
-    fun deleteComment(cmt: SingleComment) {
-        scope.launch {
-            try {
-                db.collection("feed").document(postId)
-                    .collection("comments").document(cmt.id).delete().await()
-                db.collection("feed").document(postId)
-                    .update("cmtCount", FieldValue.increment(-1)).await()
-            } catch (e: Exception) { errorMsg = "Silinemedi: ${e.message}" }
-        }
+    // cmtError dialog
+    if (cmtError != null) {
+        AlertDialog(
+            onDismissRequest = { vm.clearCommentError() },
+            containerColor   = HeftSurface,
+            title  = { Text(Strings.error(language), color = Color(0xFFEF4444), fontWeight = FontWeight.SemiBold) },
+            text   = { Text(cmtError!!, color = Muted, fontSize = 13.sp) },
+            confirmButton = { TextButton(onClick = { vm.clearCommentError() }) { Text(Strings.confirm(language), color = Amber) } },
+        )
     }
 
     // ── UI ────────────────────────────────────────────────────────────────────
@@ -308,10 +145,7 @@ fun SinglePostScreen(
                     } else {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             CircularProgressIndicator(color = Amber, modifier = Modifier.size(32.dp))
-                            Text(
-                                if (ku) "Bar dike..." else "Yükleniyor...",
-                                color = Muted, fontSize = 13.sp,
-                            )
+                            Text(if (ku) "Bar dike..." else "Yükleniyor...", color = Muted, fontSize = 13.sp)
                         }
                     }
                 }
@@ -326,6 +160,7 @@ fun SinglePostScreen(
                     modifier       = Modifier.weight(1f),
                     contentPadding = PaddingValues(bottom = 8.dp),
                 ) {
+                    // Gönderi kartı
                     item {
                         ConnectedPostCard(
                             post             = post,
@@ -340,6 +175,7 @@ fun SinglePostScreen(
                         HorizontalDivider(color = SurfaceVar, thickness = 6.dp)
                     }
 
+                    // Beğeni sayısı
                     if (post.likesCount > 0) {
                         item {
                             Row(
@@ -360,6 +196,7 @@ fun SinglePostScreen(
                         }
                     }
 
+                    // Yorum başlığı
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
@@ -375,15 +212,8 @@ fun SinglePostScreen(
                         HorizontalDivider(color = Divider)
                     }
 
-                    if (cmtLoading) {
-                        item {
-                            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(color = Amber, modifier = Modifier.size(24.dp))
-                            }
-                        }
-                    }
-
-                    if (!cmtLoading && comments.isEmpty()) {
+                    // Boş durum
+                    if (comments.isEmpty()) {
                         item {
                             Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -395,18 +225,34 @@ fun SinglePostScreen(
                         }
                     }
 
+                    // Yorum listesi
                     items(comments, key = { it.id }) { cmt ->
                         val isOwner   = myUid.isNotBlank() && cmt.uid.isNotBlank() && cmt.uid == myUid
-                        val canDelete = isOwner || (myUid.isNotBlank() && myUid == postAuthorUid)
+                        val isPostOwner = myUid.isNotBlank() && myUid == post.uid
+                        val canDelete = isOwner || isPostOwner
                         SingleCommentRow(
                             cmt         = cmt,
+                            myUid       = myUid,
                             canEdit     = isOwner,
                             canDelete   = canDelete,
                             language    = language,
-                            onLongPress = { menuTarget = cmt },
-                            onReply     = { replyTo = cmt; editTarget = null; focusRequester.requestFocus(); keyboardController?.show() },
+                            onLikeClick = { vm.toggleCommentLike(postId, cmt) },
+                            onLikersClick = {
+                                if (cmt.likesCount > 0) {
+                                    cmtLikersId = cmt.id
+                                    socialVm.loadCommentLikers(cmt.id)
+                                }
+                            },
+                            onReply     = {
+                                replyTo = cmt
+                                editTarget = null
+                                focusRequester.requestFocus()
+                                keyboardController?.show()
+                            },
                             onEdit      = { editTarget = cmt; replyTo = null },
                             onDelete    = { deleteTarget = cmt },
+                            onLongPress = { menuTarget = cmt },
+                            onMentionClick = { uid -> navController.navigate("profile/$uid") },
                         )
                         HorizontalDivider(
                             color     = Divider.copy(alpha = 0.4f),
@@ -435,7 +281,7 @@ fun SinglePostScreen(
                             } else {
                                 Icon(Icons.AutoMirrored.Filled.Reply, null, tint = Amber, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("@${replyTo!!.name} ${Strings.replyingToSuffix(language)}", color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                Text("@${replyTo!!.displayName} ${Strings.replyingToSuffix(language)}", color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             }
                         }
                         IconButton(
@@ -464,7 +310,7 @@ fun SinglePostScreen(
                             Text(
                                 when {
                                     editTarget != null -> Strings.editCommentHint(language)
-                                    replyTo    != null -> "@${replyTo!!.name} ${Strings.reply(language)}..."
+                                    replyTo    != null -> "@${replyTo!!.displayName} ${Strings.reply(language)}..."
                                     else               -> if (ku) "Şîrove binivîse..." else "Yorum yaz..."
                                 },
                                 color = Muted, fontSize = 14.sp,
@@ -483,11 +329,29 @@ fun SinglePostScreen(
                         ),
                         maxLines        = 4,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(onSend = { submitComment() }),
+                        keyboardActions = KeyboardActions(onSend = {
+                            submitComment(
+                                vm          = vm,
+                                post        = post,
+                                inputText   = inputText,
+                                editTarget  = editTarget,
+                                replyTo     = replyTo,
+                                onDone      = { inputText = ""; editTarget = null; replyTo = null },
+                            )
+                        }),
                     )
                     Spacer(Modifier.width(8.dp))
                     IconButton(
-                        onClick  = { submitComment() },
+                        onClick  = {
+                            submitComment(
+                                vm          = vm,
+                                post        = post,
+                                inputText   = inputText,
+                                editTarget  = editTarget,
+                                replyTo     = replyTo,
+                                onDone      = { inputText = ""; editTarget = null; replyTo = null },
+                            )
+                        },
                         enabled  = inputText.isNotBlank(),
                         modifier = Modifier
                             .size(44.dp)
@@ -511,16 +375,20 @@ fun SinglePostScreen(
     // ── Long-press menü ───────────────────────────────────────────────────────
     menuTarget?.let { cmt ->
         val isOwner   = myUid.isNotBlank() && cmt.uid.isNotBlank() && cmt.uid == myUid
-        val canDelete = isOwner || (myUid.isNotBlank() && myUid == postAuthorUid)
+        val isPostOwner = myUid.isNotBlank() && myUid == post?.uid
+        val canDelete = isOwner || isPostOwner
         AlertDialog(
             onDismissRequest = { menuTarget = null },
             containerColor   = HeftSurface,
-            title = { Text(cmt.name, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
+            title = { Text(cmt.displayName, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
             text  = { Text(cmt.text.take(100) + if (cmt.text.length > 100) "…" else "", color = Muted, fontSize = 13.sp) },
             confirmButton = {
                 Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(
-                        onClick  = { replyTo = cmt; editTarget = null; menuTarget = null; focusRequester.requestFocus(); keyboardController?.show() },
+                        onClick  = {
+                            replyTo = cmt; editTarget = null; menuTarget = null
+                            focusRequester.requestFocus(); keyboardController?.show()
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.AutoMirrored.Filled.Reply, null, tint = Amber, modifier = Modifier.size(16.dp))
@@ -555,7 +423,7 @@ fun SinglePostScreen(
         )
     }
 
-    // ── Silme onay ────────────────────────────────────────────────────────────
+    // ── Silme onayı ──────────────────────────────────────────────────────────
     deleteTarget?.let { cmt ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
@@ -563,7 +431,7 @@ fun SinglePostScreen(
             title  = { Text(if (ku) "Şîrove Jê Bibe" else "Yorumu Sil", color = OnBackground, fontWeight = FontWeight.SemiBold) },
             text   = { Text(cmt.text.take(80), color = Muted, fontSize = 13.sp) },
             confirmButton = {
-                TextButton(onClick = { deleteComment(cmt); deleteTarget = null }) {
+                TextButton(onClick = { vm.deleteComment(postId, cmt.id); deleteTarget = null }) {
                     Text(if (ku) "Jê bibe" else "Sil", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                 }
             },
@@ -575,16 +443,7 @@ fun SinglePostScreen(
         )
     }
 
-    if (errorMsg.isNotBlank()) {
-        AlertDialog(
-            onDismissRequest = { errorMsg = "" },
-            containerColor   = HeftSurface,
-            title  = { Text(Strings.error(language), color = Color(0xFFEF4444), fontWeight = FontWeight.SemiBold) },
-            text   = { Text(errorMsg, color = Muted, fontSize = 13.sp) },
-            confirmButton = { TextButton(onClick = { errorMsg = "" }) { Text(Strings.confirm(language), color = Amber) } },
-        )
-    }
-
+    // ── Beğeni listesi (gönderi) ──────────────────────────────────────────────
     if (showLikers) {
         LikerListSheet(
             likers    = likers,
@@ -594,6 +453,7 @@ fun SinglePostScreen(
         )
     }
 
+    // ── Beğeni listesi (yorum) ────────────────────────────────────────────────
     if (cmtLikersId != null) {
         LikerListSheet(
             title     = if (ku) "Xweşandina Şîroveyê" else "Yorum Beğenenler",
@@ -605,18 +465,41 @@ fun SinglePostScreen(
     }
 }
 
+// ── Yorum gönderme yardımcısı ─────────────────────────────────────────────────
+private fun submitComment(
+    vm         : FeedViewModel,
+    post       : Post,
+    inputText  : String,
+    editTarget : Comment?,
+    replyTo    : Comment?,
+    onDone     : () -> Unit,
+) {
+    val text = inputText.trim()
+    if (text.isBlank()) return
+    if (editTarget != null) {
+        vm.editComment(post.id, editTarget.id, text)
+    } else {
+        vm.addComment(post, text, replyTo)
+    }
+    onDone()
+}
+
 // ── Yorum satırı ─────────────────────────────────────────────────────────────
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun SingleCommentRow(
-    cmt         : SingleComment,
-    canEdit     : Boolean,
-    canDelete   : Boolean,
-    language    : String,
-    onLongPress : () -> Unit,
-    onReply     : () -> Unit,
-    onEdit      : () -> Unit,
-    onDelete    : () -> Unit,
+    cmt            : Comment,
+    myUid          : String,
+    canEdit        : Boolean,
+    canDelete      : Boolean,
+    language       : String,
+    onLikeClick    : () -> Unit,
+    onLikersClick  : () -> Unit,
+    onReply        : () -> Unit,
+    onEdit         : () -> Unit,
+    onDelete       : () -> Unit,
+    onLongPress    : () -> Unit,
+    onMentionClick : (uid: String) -> Unit,
 ) {
     val ku = language == "ku"
     Row(
@@ -631,43 +514,83 @@ private fun SingleCommentRow(
             contentAlignment = Alignment.Center,
         ) {
             if (cmt.photoURL.isNotBlank()) {
-                AsyncImage(model = cmt.photoURL, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                AsyncImage(
+                    model            = cmt.photoURL,
+                    contentDescription = null,
+                    modifier         = Modifier.fillMaxSize(),
+                    contentScale     = ContentScale.Crop,
+                )
             } else {
-                Text(cmt.name.firstOrNull()?.uppercase() ?: "?", color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    cmt.displayName.firstOrNull()?.uppercase() ?: "?",
+                    color      = OnBackground,
+                    fontSize   = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(cmt.name, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                if (cmt.edited) {
-                    Spacer(Modifier.width(4.dp))
-                    Text("· ${Strings.editedLabel(language)}", color = Muted, fontSize = 10.sp)
-                }
-            }
-            if (cmt.replyTo.isNotBlank()) {
-                Text("@${cmt.replyTo}", color = Amber, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Text(cmt.displayName, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+
+            // Reply göstergesi
+            if (cmt.replyTo != null && cmt.replyTo.displayName.isNotBlank()) {
+                Text("@${cmt.replyTo.displayName}", color = Amber, fontSize = 11.sp, fontWeight = FontWeight.Medium)
             }
             Spacer(Modifier.height(2.dp))
+
+            // Yorum metni
             Text(cmt.text, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
+
+            // Aksiyon satırı
             Row(
                 modifier              = Modifier.padding(top = 4.dp),
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (cmt.likes > 0) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Favorite, null, tint = Color(0xFFEF4444), modifier = Modifier.size(11.dp))
+                // Beğeni
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier          = Modifier.clickable { onLikeClick() },
+                ) {
+                    Icon(
+                        if (cmt.isLikedByMe) Icons.Filled.Favorite else Icons.Filled.Favorite,
+                        null,
+                        tint     = if (cmt.isLikedByMe) Color(0xFFEF4444) else Muted,
+                        modifier = Modifier.size(12.dp),
+                    )
+                    if (cmt.likesCount > 0) {
                         Spacer(Modifier.width(2.dp))
-                        Text("${cmt.likes}", color = Muted, fontSize = 11.sp)
+                        Text(
+                            "${cmt.likesCount}",
+                            color    = Muted,
+                            fontSize = 11.sp,
+                            modifier = Modifier.clickable { onLikersClick() },
+                        )
                     }
                 }
-                Text(Strings.replyAction(language), color = Muted, fontSize = 11.sp, modifier = Modifier.clickable { onReply() })
+
+                Text(
+                    Strings.replyAction(language),
+                    color    = Muted,
+                    fontSize = 11.sp,
+                    modifier = Modifier.clickable { onReply() },
+                )
                 if (canEdit) {
-                    Text(Strings.editAction(language), color = Muted, fontSize = 11.sp, modifier = Modifier.clickable { onEdit() })
+                    Text(
+                        Strings.editAction(language),
+                        color    = Muted,
+                        fontSize = 11.sp,
+                        modifier = Modifier.clickable { onEdit() },
+                    )
                 }
                 if (canDelete) {
-                    Text(Strings.deleteAction(language), color = Color(0xFFEF4444).copy(alpha = 0.7f), fontSize = 11.sp, modifier = Modifier.clickable { onDelete() })
+                    Text(
+                        Strings.deleteAction(language),
+                        color    = Color(0xFFEF4444).copy(alpha = 0.7f),
+                        fontSize = 11.sp,
+                        modifier = Modifier.clickable { onDelete() },
+                    )
                 }
             }
         }

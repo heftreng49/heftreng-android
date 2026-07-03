@@ -9,6 +9,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.Source
 import com.heftreng.app.data.model.Comment
+import com.heftreng.app.data.model.ReplyTo
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.data.repository.LibraryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -844,7 +845,10 @@ class FeedViewModel @Inject constructor(
                     } catch (_: Exception) { emptySet() }
                 } else emptySet()
 
+                // replyToCmtId -> ReplyTo: displayName için yorumlar arasında eşleşme yap
+                val cmtMap = rows.associateBy { it.id }
                 _comments.value = rows.map { r ->
+                    val replyToCmt = r.replyToCmtId?.let { cmtMap[it] }
                     Comment(
                         id          = r.id,
                         postId      = r.postId,
@@ -853,6 +857,8 @@ class FeedViewModel @Inject constructor(
                         photoURL    = r.photoUrl ?: "",
                         text        = r.text,
                         likesCount  = r.likesCount,
+                        mentions    = r.mentions,
+                        replyTo     = replyToCmt?.let { ReplyTo(uid = it.uid, displayName = it.name ?: "") },
                         ts          = parseSupabaseTimestamp(r.createdAt),
                         isLikedByMe = r.id in myLikedCmtIds,
                     )
@@ -870,7 +876,7 @@ class FeedViewModel @Inject constructor(
         } catch (_: Exception) { null }
     }
 
-    fun addComment(post: Post, text: String) {
+    fun addComment(post: Post, text: String, replyTo: Comment? = null) {
         if (uid.isEmpty() || text.isBlank()) return
         viewModelScope.launch {
             try {
@@ -882,15 +888,18 @@ class FeedViewModel @Inject constructor(
                 val myPhoto = d["photoURL"] as? String
                     ?: _cachedMyPhoto.ifBlank { auth.currentUser?.photoUrl?.toString() } ?: ""
 
-                supabase.postgrest["feed_comments"].insert(
-                    mapOf(
-                        "post_id" to post.id,
-                        "uid"     to uid,
-                        "name"    to myName,
-                        "photo_url" to myPhoto,
-                        "text"    to text.trim(),
-                    )
+                val insertMap = mutableMapOf<String, Any>(
+                    "post_id"   to post.id,
+                    "uid"       to uid,
+                    "name"      to myName,
+                    "photo_url" to myPhoto,
+                    "text"      to text.trim(),
                 )
+                if (replyTo != null) {
+                    insertMap["reply_to_cmt_id"] = replyTo.id
+                }
+
+                supabase.postgrest["feed_comments"].insert(insertMap)
 
                 _posts.value = _posts.value.map {
                     if (it.id == post.id) it.copy(commentsCount = it.commentsCount + 1) else it
