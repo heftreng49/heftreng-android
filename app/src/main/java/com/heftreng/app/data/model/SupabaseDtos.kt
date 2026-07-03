@@ -66,6 +66,17 @@ data class FeedCommentRow(
 )
 
 @Serializable
+data class FeedCommentInsert(
+    @SerialName("post_id")         val postId       : String,
+    val uid             : String,
+    val name            : String,
+    @SerialName("photo_url")       val photoUrl     : String,
+    val text            : String,
+    @SerialName("reply_to_cmt_id") val replyToCmtId : String? = null,
+    @SerialName("mentions")        val mentions     : List<String>? = null,
+)
+
+@Serializable
 data class CommentLikeRow(
     val id         : String = "",
     @SerialName("comment_id") val commentId: String = "",

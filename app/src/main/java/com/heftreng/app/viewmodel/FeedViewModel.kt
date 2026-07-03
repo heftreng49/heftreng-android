@@ -16,6 +16,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import com.heftreng.app.data.model.FeedLikeRow
 import com.heftreng.app.data.model.FeedSaveRow
 import com.heftreng.app.data.model.FeedCommentRow
+import com.heftreng.app.data.model.FeedCommentInsert
 import com.heftreng.app.data.model.CommentLikeRow
 import com.heftreng.app.data.model.FollowRow
 import io.github.jan.supabase.SupabaseClient
@@ -892,18 +893,17 @@ class FeedViewModel @Inject constructor(
                 val myPhoto = d["photoURL"] as? String
                     ?: _cachedMyPhoto.ifBlank { auth.currentUser?.photoUrl?.toString() } ?: ""
 
-                val insertMap = mutableMapOf<String, Any>(
-                    "post_id"   to post.id,
-                    "uid"       to uid,
-                    "name"      to myName,
-                    "photo_url" to myPhoto,
-                    "text"      to text.trim(),
+                val insertRow = FeedCommentInsert(
+                    postId       = post.id,
+                    uid          = uid,
+                    name         = myName,
+                    photoUrl     = myPhoto,
+                    text         = text.trim(),
+                    replyToCmtId = replyTo?.id,
+                    mentions     = mentions.ifEmpty { null },
                 )
-                if (replyTo != null) {
-                    insertMap["reply_to_cmt_id"] = replyTo.id
-                }
 
-                supabase.postgrest["feed_comments"].insert(insertMap)
+                supabase.postgrest["feed_comments"].insert(insertRow)
 
                 _posts.value = _posts.value.map {
                     if (it.id == post.id) it.copy(commentsCount = it.commentsCount + 1) else it
