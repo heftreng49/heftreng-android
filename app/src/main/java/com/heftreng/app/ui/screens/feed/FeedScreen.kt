@@ -1217,7 +1217,7 @@ fun PostCard(
                         leadingIcon = { Icon(Icons.Default.ContentCopy, null, tint = Muted) },
                         onClick     = {
                             menuExpanded = false
-                            clipboard.setText(AnnotatedString(post.id))
+                            clipboard.setText(AnnotatedString("#${post.id}"))
                             android.widget.Toast.makeText(
                                 ctxForCopy,
                                 if (ku) "ID hate kopîkirin" else "Gönderi ID'si kopyalandı",
