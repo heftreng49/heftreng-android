@@ -43,6 +43,8 @@ object Strings {
     fun retry(l: String)           = t(l, "Tekrar Dene",     "Dîsa biceribîne")
     fun close(l: String)           = t(l, "Kapat",           "Bigire")
     fun next(l: String)            = t(l, "Sonraki",         "Pêştir")
+    fun copyText(l: String)        = t(l, "Kopyala",         "Kopî bike")
+    fun copied(l: String)          = t(l, "Kopyalandı",      "Kopî bû")
     fun finish(l: String)          = t(l, "Bitir",           "Bidawî bike")
     fun share(l: String)           = t(l, "Paylaş",          "Parve bike")
     fun noResult(l: String)        = t(l, "Sonuç bulunamadı","Encam nehate dîtin")

@@ -58,6 +58,8 @@ import java.io.File
 import androidx.core.content.ContextCompat
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
@@ -335,6 +337,8 @@ fun MessageDetailScreen(
     var editMsg       by remember { mutableStateOf<Message?>(null) }
     var ctxMsg        by remember { mutableStateOf<Message?>(null) }
     var ctxOffset     by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val clipboardManager = LocalClipboardManager.current
+    val ctxLocalContext   = LocalContext.current
     var selectedImage by remember { mutableStateOf<Uri?>(null) }
     var isRecording      by remember { mutableStateOf(false) }
     var showAudioPreview by remember { mutableStateOf(false) }
@@ -1040,6 +1044,13 @@ fun MessageDetailScreen(
             ) {
                 Column(modifier = Modifier.padding(5.dp)) {
                     MsgCtxItem(Icons.Default.Reply, Strings.reply(language), false) { replyTo = ctxMsg; ctxMsg = null }
+                    if (ctxMsg?.text?.isNotBlank() == true) {
+                        MsgCtxItem(Icons.Default.ContentCopy, Strings.copyText(language), false) {
+                            clipboardManager.setText(AnnotatedString(ctxMsg?.text ?: ""))
+                            android.widget.Toast.makeText(ctxLocalContext, Strings.copied(language), android.widget.Toast.LENGTH_SHORT).show()
+                            ctxMsg = null
+                        }
+                    }
                     if (ctxMsg?.senderId == vm.uid) {
                         MsgCtxItem(Icons.Default.Create, Strings.edit(language), false) { editMsg = ctxMsg; ctxMsg = null }
                         MsgCtxItem(Icons.Default.Delete, Strings.delete(language), true) { vm.deleteMessage(ctxMsg!!); ctxMsg = null }
