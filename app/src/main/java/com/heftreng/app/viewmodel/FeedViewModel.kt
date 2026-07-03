@@ -858,7 +858,7 @@ class FeedViewModel @Inject constructor(
                         photoURL    = r.photoUrl ?: "",
                         text        = r.text,
                         likesCount  = r.likesCount,
-                        mentions    = r.mentions,
+                        mentions    = r.mentions ?: emptyList(),
                         replyTo     = replyToCmt?.let { ReplyTo(uid = it.uid, displayName = it.name ?: "") },
                         ts          = parseSupabaseTimestamp(r.createdAt),
                         isLikedByMe = r.id in myLikedCmtIds,
@@ -893,6 +893,7 @@ class FeedViewModel @Inject constructor(
                     ?: _cachedMyPhoto.ifBlank { auth.currentUser?.photoUrl?.toString() } ?: ""
 
                 val insertMap = mutableMapOf<String, Any>(
+                    "id"        to java.util.UUID.randomUUID().toString(),
                     "post_id"   to post.id,
                     "uid"       to uid,
                     "name"      to myName,
@@ -902,6 +903,8 @@ class FeedViewModel @Inject constructor(
                 if (replyTo != null) {
                     insertMap["reply_to_cmt_id"] = replyTo.id
                 }
+                // mentions sütunu Supabase'de ALTER TABLE ile eklendiyse dahil et
+                // insertMap["mentions"] = emptyList<String>()
 
                 supabase.postgrest["feed_comments"].insert(insertMap)
 
@@ -910,7 +913,10 @@ class FeedViewModel @Inject constructor(
                 }
                 if (post.uid != uid) sendNotif(post.uid, "cmt", "$myName gönderine yorum yaptı", text.take(60), post.id)
                 loadComments(post.id)
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _commentError.value = "Yorum gönderilemedi: ${e.message}"
+            }
         }
     }
 
