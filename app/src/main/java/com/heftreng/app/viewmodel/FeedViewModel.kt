@@ -892,9 +892,7 @@ class FeedViewModel @Inject constructor(
                 val myPhoto = d["photoURL"] as? String
                     ?: _cachedMyPhoto.ifBlank { auth.currentUser?.photoUrl?.toString() } ?: ""
 
-                val cmtId = "${post.id}_${uid}_${System.currentTimeMillis()}"
                 val insertMap = mutableMapOf<String, Any>(
-                    "id"        to cmtId,
                     "post_id"   to post.id,
                     "uid"       to uid,
                     "name"      to myName,

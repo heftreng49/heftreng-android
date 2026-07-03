@@ -13,6 +13,7 @@ create table if not exists public.feed_comments (
   text            text not null check (char_length(text) between 1 and 500),
   likes_count     integer not null default 0,
   reply_to_cmt_id text default '',
+  mentions        text[]      not null default '{}',
   created_at      timestamptz not null default now()
 );
 
@@ -27,3 +28,7 @@ do $$ begin
     create policy "all_feed_comments" on public.feed_comments for all to anon, authenticated using (true) with check (true);
   end if;
 end $$;
+
+-- Mevcut tabloya mentions kolonu ekle (tablo zaten oluşturulmuşsa)
+alter table public.feed_comments
+  add column if not exists mentions text[] not null default '{}';
