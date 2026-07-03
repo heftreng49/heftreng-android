@@ -24,6 +24,14 @@ import com.heftreng.app.R
 //  entry point değil) FirebaseAuth/Firestore doğrudan instance
 //  üzerinden alınır — MessagesViewModel.sendMessage()'in sadeleştirilmiş
 //  senkron/coroutine'siz bir eşleniği.
+//
+//  ÖNEMLİ: onReceive() senkron döner ama Firestore.add() ASENKRON'dur.
+//  goAsync() çağrılmazsa, sistem onReceive() geri döner dönmez (özellikle
+//  uygulama arka plandaysa) process'i öldürebilir ve yanıt ağa hiç
+//  ulaşmadan kaybolabilir. goAsync() ile PendingResult alınıp, Firestore
+//  işlemi bitene kadar (başarı/hata fark etmez) process canlı tutulur;
+//  her çıkış yolunda pendingResult.finish() çağrılması ZORUNLUDUR,
+//  aksi halde sistem receiver'ı "ANR" olarak işaretleyebilir.
 // ═══════════════════════════════════════════════════════════════
 class ReplyReceiver : BroadcastReceiver() {
 
@@ -54,12 +62,16 @@ class ReplyReceiver : BroadcastReceiver() {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
         if (uid.isNullOrBlank()) return
 
+        // Firestore yazması bitene kadar process'i canlı tut — bkz. yukarıdaki not.
+        val pendingResult = goAsync()
+
         // Çoklu hesap koruması: bildirim başka bir hesaba aitse ve cihazda
         // şu an farklı bir hesap açıksa, yanıtı YANLIŞ hesaptan göndermemek
         // için burada durduruyoruz. Kullanıcı doğru hesaba geçip uygulama
         // içinden yanıtlamalı.
         if (ownerUid.isNotBlank() && ownerUid != uid) {
             markNotificationWrongAccount(context, notifId)
+            pendingResult.finish()
             return
         }
 
@@ -86,27 +98,36 @@ class ReplyReceiver : BroadcastReceiver() {
                 )
                 firestore.collection("conversations").document(convId)
                     .set(convUpd, SetOptions.merge())
-
-                // Push bildirimi karşı tarafa gönder (best-effort, hata sessizce yutulur)
-                try {
-                    val myName = FirebaseAuth.getInstance().currentUser?.displayName ?: "Biri"
-                    FirebaseFunctions.getInstance("europe-west1")
-                        .getHttpsCallable("sendPush")
-                        .call(hashMapOf(
-                            "targetUid" to toUid,
-                            "title"     to myName,
-                            "body"      to replyText,
-                            "type"      to "message",
-                            "convId"    to convId,
-                            "fromUid"   to uid,
-                            "postId"    to "",
-                        ))
-                } catch (_: Exception) { /* best-effort */ }
-
-                markNotificationSent(context, notifId, replyText)
+                    .addOnCompleteListener {
+                        // Push bildirimi karşı tarafa gönder (best-effort, hata sessizce yutulur).
+                        // Bu çağrı da asenkron olduğundan pendingResult.finish() ondan SONRA çağrılır.
+                        try {
+                            val myName = FirebaseAuth.getInstance().currentUser?.displayName ?: "Biri"
+                            FirebaseFunctions.getInstance("europe-west1")
+                                .getHttpsCallable("sendPush")
+                                .call(hashMapOf(
+                                    "targetUid" to toUid,
+                                    "title"     to myName,
+                                    "body"      to replyText,
+                                    "type"      to "message",
+                                    "convId"    to convId,
+                                    "fromUid"   to uid,
+                                    "postId"    to "",
+                                ))
+                                .addOnCompleteListener {
+                                    markNotificationSent(context, notifId, replyText)
+                                    pendingResult.finish()
+                                }
+                        } catch (_: Exception) {
+                            // best-effort — push gitmese de yanıt zaten Firestore'a yazıldı
+                            markNotificationSent(context, notifId, replyText)
+                            pendingResult.finish()
+                        }
+                    }
             }
             .addOnFailureListener {
                 markNotificationFailed(context, notifId)
+                pendingResult.finish()
             }
     }
 
