@@ -62,9 +62,15 @@ private fun BannerSlotContent(
     adsVm    : AdsViewModel,
     modifier : Modifier,
 ) {
-    val isLoaded by adsVm.bannerLoadedFlow(placement.slotKey).collectAsState()
+    val isLoaded    by adsVm.bannerLoadedFlow(placement.slotKey).collectAsState()
+    val isExhausted by adsVm.bannerExhaustedFlow(placement.slotKey).collectAsState()
     val adView   = if (isLoaded) adsVm.cachedBanner(placement.slotKey) else null
     var showDialog by remember { mutableStateOf(false) }
+
+    // Reklam kesin olarak gelmediyse (no-fill, tekrar denenmiyor) shimmer'ı
+    // sonsuza kadar döndürmek yerine alanı tamamen kaldırıyoruz — "boş/kırık
+    // alan" görünümü yerine sayfa sanki o reklam hiç planlanmamış gibi akıyor.
+    if (isExhausted && adView == null) return
 
     Column(
         modifier = modifier
@@ -94,8 +100,13 @@ private fun NativeSlotContent(
     modifier : Modifier,
 ) {
     val adCardHeight = 250.dp
-    val isLoaded by adsVm.nativeLoadedFlow(placement.slotKey).collectAsState()
+    val isLoaded    by adsVm.nativeLoadedFlow(placement.slotKey).collectAsState()
+    val isExhausted by adsVm.nativeExhaustedFlow(placement.slotKey).collectAsState()
     val nativeAd = if (isLoaded) adsVm.cachedNative(placement.slotKey) else null
+
+    // Banner'daki ile aynı mantık: no-fill kesinleştiyse (artık retry de yok,
+    // bkz. AdEngine.loadOneNative) kalıcı shimmer yerine alanı hiç göstermiyoruz.
+    if (isExhausted && nativeAd == null) return
 
     Box(
         modifier = modifier

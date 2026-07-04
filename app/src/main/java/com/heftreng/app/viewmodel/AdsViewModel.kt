@@ -106,6 +106,7 @@ class AdsViewModel @Inject constructor(
 
     // ── Banner slot API (AdEngine'e ince sarmalayıcı) ──────────────────────
     fun bannerLoadedFlow(key: String): StateFlow<Boolean> = engine.bannerLoadedFlow(key)
+    fun bannerExhaustedFlow(key: String): StateFlow<Boolean> = engine.bannerExhaustedFlow(key)
     fun cachedBanner(key: String): AdView? = engine.cachedBanner(key)
     fun requestBanner(key: String, unitId: String, bannerSize: String = "adaptive") =
         engine.requestBanner(key, unitId, bannerSize)
@@ -115,6 +116,7 @@ class AdsViewModel @Inject constructor(
 
     // ── Native slot API (AdEngine'e ince sarmalayıcı) ──────────────────────
     fun nativeLoadedFlow(key: String): StateFlow<Boolean> = engine.nativeLoadedFlow(key)
+    fun nativeExhaustedFlow(key: String): StateFlow<Boolean> = engine.nativeExhaustedFlow(key)
     fun cachedNative(key: String): NativeAd? = engine.cachedNative(key)
     fun requestNative(key: String, unitId: String) = engine.requestNative(key, unitId)
     fun releaseNative(key: String) = engine.releaseNative(key)

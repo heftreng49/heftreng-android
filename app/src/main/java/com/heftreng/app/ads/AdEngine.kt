@@ -101,7 +101,10 @@ class AdEngine(
         var loadJob   : Job? = null
         var staleJob  : Job? = null             // native: gösterilmeden zaman aşımı
         var releaseJob: Job? = null             // grace-period gecikmeli imha
-        var exhausted : Boolean = false         // MAX_RETRY aşıldı, tekrar denenebilir
+        private val _exhausted = MutableStateFlow(false)
+        var exhausted : Boolean get() = _exhausted.value
+                                 set(v) { _exhausted.value = v }
+        val exhaustedFlow = _exhausted.asStateFlow()  // MAX_RETRY aşıldı — UI artık shimmer yerine boş/gizli alan gösterebilir
     }
 
     private val slots = mutableMapOf<String, SlotState>()
@@ -160,6 +163,9 @@ class AdEngine(
     fun bannerLoadedFlow(key: String): StateFlow<Boolean> =
         slotFor(key, SlotType.BANNER).loaded.asStateFlow()
 
+    fun bannerExhaustedFlow(key: String): StateFlow<Boolean> =
+        slotFor(key, SlotType.BANNER).exhaustedFlow
+
     fun cachedBanner(key: String): AdView? = slots[key]?.bannerView
 
     /** Banner slotunu yükler. unitId veya boyut değiştiyse otomatik yeniler. İdempotent. */
@@ -216,9 +222,11 @@ class AdEngine(
     /**
      * RETRY KALDIRILDI (native ile aynı sebep, bkz. loadOneNative dokümanı):
      * no-fill'de otomatik tekrar deneme, istek sayısını gereksiz katlıyordu.
-     * Artık no-fill = adView imha edilir, exhausted set edilmez (banner
-     * "tükendi" kavramı yok — bir sonraki requestBanner çağrısı yeni bir
-     * deneme başlatabilir, native'deki gibi kalıcı exhausted flag yok).
+     * Artık no-fill = adView imha edilir, exhausted = true (native ile aynı
+     * mantık) — requestBanner tarafındaki guard sayesinde aynı slot için
+     * config değişmediği sürece tekrar istek atılmaz. UI (AdSlotView) bu
+     * flag'i bannerExhaustedFlow üzerinden okuyup kalıcı shimmer yerine
+     * alanı gizleyebiliyor.
      */
     private fun spawnBanner(key: String, slot: SlotState) {
         val adView = AdView(appContext).apply {
@@ -248,6 +256,9 @@ class AdEngine(
 
     fun nativeLoadedFlow(key: String): StateFlow<Boolean> =
         slotFor(key, SlotType.NATIVE).loaded.asStateFlow()
+
+    fun nativeExhaustedFlow(key: String): StateFlow<Boolean> =
+        slotFor(key, SlotType.NATIVE).exhaustedFlow
 
     fun cachedNative(key: String): NativeAd? = slots[key]?.nativeAd
 
