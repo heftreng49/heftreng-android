@@ -1223,17 +1223,18 @@ private fun MsgCtxItem(icon: androidx.compose.ui.graphics.vector.ImageVector, la
     }
 }
 
+// ── ÇÖZÜLDÜ (Faz 4): "Tu"/"Sen" ifadesi 4 farklı yerde elle kopyalanmıştı.
+// Artık tek bir yardımcı fonksiyondan hesaplanıyor — gönderen bir mesajın
+// kendi mesajımız mı yoksa karşı tarafın mı olduğuna göre etiketi üretir.
+// NOT: @Composable DEĞİL — sıradan bir string hesaplama fonksiyonu.
+private fun senderLabel(senderId: String, myUid: String, otherName: String, ku: Boolean): String =
+    if (senderId == myUid) (if (ku) "Tu" else "Sen") else otherName
+
 // ── Mesaj Satırı ─────────────────────────────────────────────────────────────
 // Tema: .msg-row, .msg-row.me, .msg-row.them, .msg-row-av, .msg-bubble
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-// ── ÇÖZÜLDÜ (Faz 4): "Tu"/"Sen" ifadesi 4 farklı yerde elle kopyalanmıştı.
-// Artık tek bir yardımcı fonksiyondan hesaplanıyor — gönderen bir mesajın
-// kendi mesajımız mı yoksa karşı tarafın mı olduğuna göre etiketi üretir.
-private fun senderLabel(senderId: String, myUid: String, otherName: String, ku: Boolean): String =
-    if (senderId == myUid) (if (ku) "Tu" else "Sen") else otherName
-
 private fun MsgRow(
     msg           : Message,
     isMine        : Boolean,
