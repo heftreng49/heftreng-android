@@ -779,7 +779,7 @@ fun MessageDetailScreen(
                         Box(modifier = Modifier.size(3.dp, 32.dp).clip(RoundedCornerShape(2.dp)).background(Primary))
                         Column(modifier = Modifier.weight(1f)) {
                             // .msg-reply-bar-name
-                            Text(if (replyTo?.senderId == vm.uid) if (ku) "Tu" else "Sen" else otherUser?.displayName ?: "",
+                            Text(replyTo?.let { senderLabel(it.senderId, vm.uid, otherUser?.displayName ?: "", ku) } ?: "",
                                 color = Primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             // .msg-reply-bar-txt
                             Text(replyTo?.text ?: "", color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -964,10 +964,7 @@ fun MessageDetailScreen(
                                             uri         = selectedImage!!,
                                             replyToId   = replyTo?.id ?: "",
                                             replyToText = replyTo?.text ?: "",
-                                            replyToName = if (replyTo?.senderId == vm.uid) if (ku) "Tu" else "Sen"
-                                                          else otherUser?.displayName ?: "",
-                                        )
-                                        selectedImage = null
+                                            replyToName = replyTo?.let { senderLabel(it.senderId, vm.uid, otherUser?.displayName ?: "", ku) } ?: "",
                                         replyTo = null
                                     } else {
                                         vm.sendMessage(
@@ -976,9 +973,7 @@ fun MessageDetailScreen(
                                             text        = inputText.trim(),
                                             replyToId   = replyTo?.id ?: "",
                                             replyToText = replyTo?.text ?: "",
-                                            replyToName = if (replyTo?.senderId == vm.uid) if (ku) "Tu" else "Sen"
-                                                          else otherUser?.displayName ?: "",
-                                            mentions    = mentionedUids,
+                                            replyToName = replyTo?.let { senderLabel(it.senderId, vm.uid, otherUser?.displayName ?: "", ku) } ?: "",
                                         )
                                         presenceVm.setTyping(convId, false)
                                         replyTo = null
@@ -1083,6 +1078,20 @@ fun MessageDetailScreen(
                         },
                         onTapHashtag = { taggedPostId -> navController.navigate(Screen.PostDetail.go(taggedPostId)) },
                         onTapMention = { mentionedUid -> navController.navigate(Screen.Profile.go(mentionedUid)) },
+                        // ÇÖZÜLDÜ (Faz 4): id ile canlı listeden orijinal mesajı bul
+                        resolveReplySource = { replyId -> messages.firstOrNull { it.id == replyId } },
+                        // ÇÖZÜLDÜ (Faz 4): reply önizlemesine dokununca orijinal
+                        // mesaja scroll et. Mesaj o an yüklü listede değilse
+                        // (eski sayfaya gitmiş olabilir) sessizce hiçbir şey
+                        // yapmaz — kullanıcıya yanlış/boş bir scroll göstermemek
+                        // için "Eski mesajları gör" ile önce yüklemesi gerekir.
+                        onReplyPreviewClick = { replyId ->
+                            val idx = messages.indexOfFirst { it.id == replyId }
+                            if (idx >= 0) {
+                                // "older_btn" item'ı listenin başında olduğu için +1 kaydırılıyor
+                                scope.launch { listState.animateScrollToItem(idx + 1) }
+                            }
+                        },
                     )
                 }
             }
@@ -1217,6 +1226,12 @@ private fun MsgCtxItem(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
+// ── ÇÖZÜLDÜ (Faz 4): "Tu"/"Sen" ifadesi 4 farklı yerde elle kopyalanmıştı.
+// Artık tek bir yardımcı fonksiyondan hesaplanıyor — gönderen bir mesajın
+// kendi mesajımız mı yoksa karşı tarafın mı olduğuna göre etiketi üretir.
+private fun senderLabel(senderId: String, myUid: String, otherName: String, ku: Boolean): String =
+    if (senderId == myUid) (if (ku) "Tu" else "Sen") else otherName
+
 private fun MsgRow(
     msg           : Message,
     isMine        : Boolean,
@@ -1232,6 +1247,14 @@ private fun MsgRow(
     onLongPress   : (androidx.compose.ui.geometry.Offset) -> Unit,
     onTapHashtag  : (postId: String) -> Unit = {},
     onTapMention  : (uid: String) -> Unit = {},
+    // ÇÖZÜLDÜ (Faz 4): reply preview artık id ile canlı listeden çözümleniyor.
+    // resolveReplySource(replyToId) -> orijinal mesaj hâlâ listede/cache'de
+    // varsa onu döner (silinmiş/düzenlenmiş olsa bile GÜNCEL halini gösterir).
+    // null dönerse mesaj artık yok (silinmiş/çok eski) — fallback olarak
+    // msg.replyToText/replyToName (mesaj gönderilirken kopyalanan düz metin)
+    // kullanılır.
+    resolveReplySource : (String) -> Message? = { null },
+    onReplyPreviewClick: (String) -> Unit = {},
 ) {
     if (msg.text.isBlank() && msg.imageUrl.isBlank() && msg.audioUrl.isBlank()) return
 
@@ -1315,32 +1338,67 @@ private fun MsgRow(
             horizontalAlignment = if (isMine) Alignment.End else Alignment.Start,
         ) {
             // Tema: reply preview — .msg-reply-preview
-            if (msg.replyToId.isNotBlank() && msg.replyToText.isNotBlank()) {
-                Box(
-                    modifier = Modifier
-                        .widthIn(max = 250.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(
-                            if (isMine) Color.Black.copy(alpha = 0.15f)
-                            else Primary.copy(alpha = 0.1f)
-                        )
-                        .startBorder(
-                            color = if (isMine) Color.White.copy(alpha = 0.5f) else Primary,
-                            width = 3.dp,
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Column {
-                        if (msg.replyToName.isNotBlank())
-                            // .msg-reply-preview-name
-                            Text(msg.replyToName, color = if (isMine) Color.White.copy(alpha = 0.9f) else Primary,
-                                fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        // .msg-reply-preview-txt
-                        Text(msg.replyToText, color = if (isMine) Color.White.copy(alpha = 0.75f) else Muted,
-                            fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // ÇÖZÜLDÜ (Faz 4): önceden msg.replyToText/replyToName sadece
+            // gönderim anında kopyalanan düz metindi — orijinal mesaj
+            // silinirse/düzenlenirse önizleme eski/yanlış veriyi göstermeye
+            // devam ediyordu. Artık replyToId ile GÜNCEL mesaj listesinden
+            // çözülüyor; sadece o da bulunamazsa (mesaj silinmiş / cache
+            // dışında kalmış) eski düz metin fallback'i kullanılıyor.
+            if (msg.replyToId.isNotBlank()) {
+                val liveSource   = resolveReplySource(msg.replyToId)
+                // NOT: toMessage() zaten deleted=true olan belgeleri null'a
+                // çeviriyor (bkz. MessagesViewModel), yani silinmiş bir mesaj
+                // hiçbir zaman _messages listesinde yer almaz — liveSource
+                // burada zaten otomatik olarak null gelir, ekstra kontrol
+                // gerekmiyor.
+                val previewText  = liveSource?.let {
+                    it.text.ifBlank { if (it.imageUrl.isNotBlank()) "📷 Görsel" else if (it.audioUrl.isNotBlank()) "🎤 Ses kaydı" else null }
+                } ?: msg.replyToText.ifBlank { null }
+                val previewName  = liveSource?.let { senderLabel(it.senderId, myUid, otherName, language == "ku") }
+                    ?: msg.replyToName
+
+                // replyToId varsa önizleme her zaman gösterilir: ya gerçek
+                // metin/isim, ya da "silinen mesaj" fallback'i.
+                run {
+                    Box(
+                        modifier = Modifier
+                            .widthIn(max = 250.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                if (isMine) Color.Black.copy(alpha = 0.15f)
+                                else Primary.copy(alpha = 0.1f)
+                            )
+                            .startBorder(
+                                color = if (isMine) Color.White.copy(alpha = 0.5f) else Primary,
+                                width = 3.dp,
+                            )
+                            .clickable(enabled = liveSource != null) {
+                                onReplyPreviewClick(msg.replyToId)
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Column {
+                            if (previewText == null) {
+                                // Orijinal mesaj silinmiş veya artık bulunamıyor
+                                Text(
+                                    if (language == "ku") "Peyama orjînal hate jêbirin" else "Silinen mesaj",
+                                    color = if (isMine) Color.White.copy(alpha = 0.6f) else Muted,
+                                    fontSize = 12.sp,
+                                    fontStyle = FontStyle.Italic,
+                                )
+                            } else {
+                                if (previewName.isNotBlank())
+                                    // .msg-reply-preview-name
+                                    Text(previewName, color = if (isMine) Color.White.copy(alpha = 0.9f) else Primary,
+                                        fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                // .msg-reply-preview-txt
+                                Text(previewText, color = if (isMine) Color.White.copy(alpha = 0.75f) else Muted,
+                                    fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
                     }
+                    Spacer(Modifier.height(2.dp))
                 }
-                Spacer(Modifier.height(2.dp))
             }
 
             // Tema: .msg-bubble — ana balon
