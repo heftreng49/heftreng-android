@@ -16,14 +16,14 @@ import javax.inject.Singleton
  *  ─────────────────────────────────────────────────
  *  • Firestore okuma = para (her kullanıcı açılışı = 1 okuma faturası)
  *  • Remote Config = ücretsiz, Google CDN'den gelir, built-in offline cache var
- *  • Minimum fetch interval: 12 saat → günde 1 fetch/kullanıcı, Firestore'da her açılış
+ *  • Minimum fetch interval: normalde 12 saat (şu an test için 1 saat, bkz. FETCH_INTERVAL_HOURS) → günde 1 fetch/kullanıcı, Firestore'da her açılış
  *  • A/B test ve Conditions Remote Config'de built-in (Firestore'da manuel yapıyorduk)
  *
  *  ÇALIŞMA MANTIĞI:
  *  ─────────────────
  *  1. App açılır → fetchAndActivate() çağrılır (async, UI'ı bloklamaz)
- *  2. Cache (12 saat — hem SDK'nın minimumFetchInterval'ı hem bizim
- *     client-side throttle'ımız AYNI süre) geçerli ise network'e gitmez → 0ms gecikme
+ *  2. Cache (normalde 12 saat, şu an test için 1 saat — hem SDK'nın minimumFetchInterval'ı
+ *     hem bizim client-side throttle'ımız AYNI süre) geçerli ise network'e gitmez → 0ms gecikme
  *  3. Cache bayatsa arka planda fetch → activate → StateFlow güncellenir
  *  4. İlk açılış veya network yok → defaultValues devreye girer (reklam hiç durmuyor)
  *
@@ -39,20 +39,22 @@ class RemoteConfigManager @Inject constructor(
 ) {
     companion object {
         // ── Fetch interval ───────────────────────────────────────────────
-        // TEK KAYNAK: prod cache süresi 12 saat. Debug'da 0 (her açılışta anında
-        // günceller, geliştirme sırasında bekleme olmasın).
+        // TEK KAYNAK: prod cache süresi (şu an test için 1 saat, normalde 12 saat).
+        // Debug'da 0 (her açılışta anında günceller, geliştirme sırasında bekleme olmasın).
         // ÖNEMLİ: CLIENT_THROTTLE_MS bu değerle AYNI olmalı — aksi halde iki
         // katman (SDK'nın kendi minimumFetchInterval'ı + bizim client-side
         // throttle'ımız) birbirinden habersiz farklı sürelerle çalışır ve biri
         // diğerini anlamsız kılar (biri kilitliyken diğeri gereksiz yere
         // "süresi doldu" sanıp fetch dener, SDK zaten cache'ten döner).
-        private const val FETCH_INTERVAL_HOURS = 12L
+        // GEÇİCİ: test aşaması için 1 saat. Testler bitince 12'ye geri dön.
+        // TODO(test-sonrası): FETCH_INTERVAL_HOURS = 12L yap.
+        private const val FETCH_INTERVAL_HOURS = 1L
         private const val FETCH_INTERVAL_PROD  = FETCH_INTERVAL_HOURS * 3_600L
         private const val FETCH_INTERVAL_DEBUG = 0L
 
         // Client-side throttle — SDK'nın minimumFetchInterval'ı ile AYNI süre.
         // Farklı bir değer olursa iki katman senkron olmayan kararlar verir.
-        private const val CLIENT_THROTTLE_MS = FETCH_INTERVAL_HOURS * 3_600_000L  // 12 saat
+        private const val CLIENT_THROTTLE_MS = FETCH_INTERVAL_HOURS * 3_600_000L  // şu an 1 saat (test)
 
         // ── Remote Config key isimleri ───────────────────────────────────
         // Firebase konsolunda bu isimlerle değer tanımlanacak.
@@ -109,7 +111,8 @@ class RemoteConfigManager @Inject constructor(
 
     init {
         // Fetch interval: debug'da 0 (her açılışta anında günceller),
-        // production'da 12 saat (FETCH_INTERVAL_PROD ile CLIENT_THROTTLE_MS aynı kaynaktan türetilir)
+        // production'da FETCH_INTERVAL_HOURS (şu an test için 1 saat, normalde 12 saat;
+        // FETCH_INTERVAL_PROD ile CLIENT_THROTTLE_MS aynı kaynaktan türetilir)
         val interval = if (com.heftreng.app.BuildConfig.DEBUG)
             FETCH_INTERVAL_DEBUG
         else
@@ -128,8 +131,9 @@ class RemoteConfigManager @Inject constructor(
 
     /**
      * Remote Config'i fetch et ve aktive et.
-     * Client-side throttle: aynı oturumda 12 saatten sık fetch yapmaz —
-     * bu süre SDK'nın minimumFetchIntervalInSeconds'ı (FETCH_INTERVAL_PROD)
+     * Client-side throttle: aynı oturumda FETCH_INTERVAL_HOURS'tan (şu an 1 saat,
+     * normalde 12 saat) sık fetch yapmaz — bu süre SDK'nın
+     * minimumFetchIntervalInSeconds'ı (FETCH_INTERVAL_PROD)
      * ile bilerek AYNI: iki katman farklı süre kullanırsa biri "süresi
      * doldu" sanıp gereksiz yere fetch dener ama SDK zaten kendi cache'inden
      * döner — hiçbir şey kazandırmadan kod karmaşıklaştırır.
@@ -147,8 +151,8 @@ class RemoteConfigManager @Inject constructor(
     }
 
     /**
-     * Gerçek zorla yenileme — SDK'nın 12 saatlik minimumFetchInterval kuralını
-     * BYPASS eder (fetch(0) ile). Admin panelinden "Reklamları Yenile" gibi bir
+     * Gerçek zorla yenileme — SDK'nın minimumFetchInterval kuralını (şu an 1 saat,
+     * normalde 12 saat) BYPASS eder (fetch(0) ile). Admin panelinden "Reklamları Yenile" gibi bir
      * butona bağlanabilir. Normal kullanıcı akışında ÇAĞRILMAMALI — Firebase'in
      * ücretsiz kotasını (günde sınırlı istek) hızla tüketebilir.
      */
