@@ -3,7 +3,6 @@ package com.heftreng.app.ui.screens.messages
 import androidx.compose.material3.AlertDialog
 import com.heftreng.app.utils.HeftrangMessagingService
 
-import androidx.compose.foundation.layout.imeNestedScroll
 import androidx.compose.foundation.layout.WindowInsets
 
 import androidx.compose.animation.*
@@ -1000,12 +999,18 @@ fun MessageDetailScreen(
             }
         } else {
             // Tema: .msg-chat-body
+            // ÇÖZÜLDÜ (insets-fix): imeNestedScroll() kaldırıldı — bu, aynı anda
+            // hem imePadding() (alt input bar'da) hem de manuel WindowInsets.ime
+            // okuyan LaunchedEffect ile birlikte klavye animasyon controller'ını
+            // ("InsetsAnimationControlImpl") çift yönlü yönetmeye çalışıyordu.
+            // Klavye hızlı açılıp kapanınca sistem "Already resumed, but proposed
+            // with update..." IllegalStateException'ı fırlatıyordu. Scroll işini
+            // zaten aşağıdaki LaunchedEffect(imeVisible) üstleniyor, bu yeterli.
             LazyColumn(
                 state               = listState,
                 modifier            = Modifier
                     .fillMaxSize()
-                    .padding(padding)
-                    .imeNestedScroll(),
+                    .padding(padding),
                 contentPadding      = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(3.dp),
                 reverseLayout       = false,
