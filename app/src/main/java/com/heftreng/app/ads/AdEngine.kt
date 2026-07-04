@@ -49,6 +49,10 @@ class AdEngine(
     private val scope: CoroutineScope,
 ) {
     companion object {
+        // NOT: MAX_RETRY/RETRY_BASE_DELAY/backoffDelay artık native ve banner
+        // yükleme akışlarında KULLANILMIYOR (retry mekanizması kaldırıldı,
+        // bkz. loadOneNative/spawnBanner dokümanları). Kod içinde bilerek
+        // bırakıldı — ileride kontrollü bir retry istenirse hazır dursun.
         private const val MAX_RETRY        = 3
         private const val RETRY_BASE_DELAY = 5_000L // 5s, 10s, 20s (exponential)
 
@@ -209,7 +213,13 @@ class AdEngine(
         keys.forEach { releaseBanner(it) }
     }
 
-    /** Retry zinciri: eski AdView her denemede destroy edilip yeni istek atılır (yarış durumu yok). */
+    /**
+     * RETRY KALDIRILDI (native ile aynı sebep, bkz. loadOneNative dokümanı):
+     * no-fill'de otomatik tekrar deneme, istek sayısını gereksiz katlıyordu.
+     * Artık no-fill = adView imha edilir, exhausted set edilmez (banner
+     * "tükendi" kavramı yok — bir sonraki requestBanner çağrısı yeni bir
+     * deneme başlatabilir, native'deki gibi kalıcı exhausted flag yok).
+     */
     private fun spawnBanner(key: String, slot: SlotState) {
         val adView = AdView(appContext).apply {
             setAdSize(resolveAdSize(slot.size))
@@ -225,16 +235,7 @@ class AdEngine(
             }
             override fun onAdFailedToLoad(e: LoadAdError) {
                 adView.destroy()
-                val retry = slot.retryCount + 1
-                slot.retryCount = retry
-                if (retry <= MAX_RETRY) {
-                    slot.loadJob = scope.launch {
-                        delay(backoffDelay(retry))
-                        spawnBanner(key, slot)
-                    }
-                } else {
-                    slot.exhausted = true
-                }
+                slot.exhausted = true
             }
         }
         adView.loadAd(adRequest())
@@ -334,6 +335,14 @@ class AdEngine(
      * Tek native ad yükleme primitifi. forNativeAd ile withAdListener AYRI
      * zincirde tutulur — aynı builder'da olduklarında AdMob SDK bazı durumlarda
      * callback'lerden birini güvenilir şekilde tetiklemiyor.
+     *
+     * RETRY KALDIRILDI: no-fill (%37 eşleşme oranı → isteklerin ~%63'ü no-fill)
+     * yaşandığında MAX_RETRY'a kadar (5s,10s,20s) otomatik tekrar deniyordu.
+     * Bu, geometrik seri ile her no-fill başına ortalama ~2,3 istek üretiyordu
+     * (1 + 0,63 + 0,63² + 0,63³) — 51 gösterim için 4600+ istek anomalisinin
+     * ana kaynağı buydu. No-fill genelde "şu an bu unit için envanter yok"
+     * demektir; hemen retry nadiren işe yarar, sadece istek/gösterim oranını
+     * daha da bozar. Artık no-fill = anında vazgeç, tek istek.
      */
     private fun loadOneNative(
         unitId   : String,
@@ -350,14 +359,7 @@ class AdEngine(
             .withNativeAdOptions(nativeOptions)
             .withAdListener(object : AdListener() {
                 override fun onAdFailedToLoad(error: LoadAdError) {
-                    if (retry < MAX_RETRY) {
-                        scope.launch {
-                            delay(backoffDelay(retry + 1))
-                            loadOneNative(unitId, retry + 1, onSuccess, onFail)
-                        }
-                    } else {
-                        onFail()
-                    }
+                    onFail()
                 }
             })
             .build()
