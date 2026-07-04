@@ -697,6 +697,7 @@ class FeedViewModel @Inject constructor(
             coverImg               = d["coverImg"]               as? String ?: "",
             type                   = d["type"]                   as? String ?: "",
             visibility             = d["visibility"]             as? String ?: "public",
+            mentions               = (d["mentions"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
             moderationStatus       = d["moderationStatus"]       as? String ?: "active",
             moderationReason       = d["moderationReason"]       as? String ?: "",
         )
@@ -1155,7 +1156,7 @@ class FeedViewModel @Inject constructor(
     private val _createPostLoading = MutableStateFlow(false)
     val createPostLoading = _createPostLoading.asStateFlow()
 
-    fun createPost(text: String, title: String = "", category: String = "", imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "", coverImg: String = "", type: String = "", libraryAuthorId: String = "", libraryBookId: String = "") {
+    fun createPost(text: String, title: String = "", category: String = "", imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "", coverImg: String = "", type: String = "", libraryAuthorId: String = "", libraryBookId: String = "", mentions: List<String> = emptyList()) {
         if (uid.isEmpty()) return
         viewModelScope.launch {
             _createPostLoading.value = true
@@ -1211,9 +1212,17 @@ class FeedViewModel @Inject constructor(
                     "libraryBookId"   to resolvedBookId,
                     "type"            to if (quoteText.isNotBlank() && type.isBlank()) "library_quote" else type,
                     "visibility"      to resolvedVisibility,
+                    "mentions"        to mentions.distinct(),
                     "likes"           to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
                     "ts"              to Timestamp.now(),
                 )).await()
+
+                // Mention edilen kullanıcılara bildirim gönder (yorumlardaki mention mantığıyla aynı desen)
+                mentions.distinct().forEach { mentionedUid ->
+                    if (mentionedUid.isNotBlank() && mentionedUid != uid) {
+                        sendNotif(mentionedUid, "mention", "$myName seni bir gönderide etiketledi", text.take(60), feedRef.id)
+                    }
+                }
 
                 if (quoteText.isNotBlank() && resolvedBookId.isNotBlank()) {
                     try {

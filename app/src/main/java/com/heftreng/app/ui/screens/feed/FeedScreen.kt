@@ -424,6 +424,7 @@ fun FeedScreen(
                                         authorName = inlineQuote?.authorName ?: "",
                                         bookName   = inlineQuote?.bookName ?: "",
                                         coverImg   = inlineQuote?.coverImg ?: "",
+                                        mentions   = inlineMentionedUids,
                                     )
                                 }
                                 inlineText          = ""
@@ -561,6 +562,7 @@ fun FeedScreen(
                             }
                         },
                         onTapHashtag = { taggedPostId -> navController.navigate(Screen.PostDetail.go(taggedPostId)) },
+                        onTapMention = { mentionedUid -> navController.navigate("profile/$mentionedUid") },
                         onReport  = {
                             reportPostId     = post.id
                             reportTargetUid  = post.uid
@@ -1104,6 +1106,7 @@ fun PostCard(
     onTapBook    : ((String) -> Unit)? = null,
     onTapRepost  : ((postId: String, type: String) -> Unit)? = null,
     onTapHashtag : ((postId: String) -> Unit)? = null,
+    onTapMention : ((uid: String) -> Unit)? = null,
     onReport     : (() -> Unit)? = null,
     onBlock      : (() -> Unit)? = null,
     language     : String = "tr",
@@ -1330,6 +1333,8 @@ fun PostCard(
                 LinkifyText(
                     post.text, fontSize = 15.sp, lineHeight = 22.sp, expandable = true, language = language,
                     onHashtagClick = onTapHashtag,
+                    mentionUids    = post.mentions,
+                    onMentionClick = onTapMention,
                 )
                 Spacer(Modifier.height(8.dp))
             }

@@ -115,6 +115,7 @@ fun ConnectedPostCard(
         onReport = onReport,
         onBlock  = onBlock,
         onTapHashtag = { taggedPostId -> navController.navigate(Screen.PostDetail.go(taggedPostId)) },
+        onTapMention = { mentionedUid -> navController.navigate("profile/$mentionedUid") },
     )
 
     if (showUnrepostConfirm) {

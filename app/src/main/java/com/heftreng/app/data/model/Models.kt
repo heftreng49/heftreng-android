@@ -90,6 +90,7 @@ data class Post(
     val moderationNote   : String     = "",
     val moderationReason : String     = "",
     val visibility       : String     = "public",
+    val mentions         : List<String> = emptyList(), // mention edilen uid listesi (Comment.mentions ile aynı desen)
     // ÇÖZÜLDÜ: Client-state alanları — Firestore'a YAZILMAZ, sadece ViewModel'de doldurulur
     @get:Exclude @set:Exclude
     var isLikedByMe    : Boolean    = false,

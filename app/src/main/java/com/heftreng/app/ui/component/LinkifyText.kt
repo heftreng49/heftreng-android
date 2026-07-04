@@ -19,6 +19,7 @@ import com.heftreng.app.utils.openUrl
 
 private val URL_REGEX     = Regex("""https?://[^\s]+|www\.[^\s]+""")
 private val HASHTAG_REGEX = Regex("""#[a-zA-Z0-9_-]{6,}""")
+private val MENTION_REGEX = Regex("""@[\p{L}0-9_]+""")
 
 // Kaç satırdan sonra "daha fazlasını göster" çıksın
 private const val COLLAPSED_LINES = 4
@@ -34,24 +35,40 @@ fun LinkifyText(
     expandable      : Boolean   = false,   // Feed listesinde true, detail'de false
     language        : String    = "tr",
     onHashtagClick  : ((postId: String) -> Unit)? = null,  // null ise #etiketler tıklanamaz, sadece renklendirilir
+    mentionUids     : List<String> = emptyList(),          // metindeki @mention'ların görünme sırasına göre uid'leri
+    onMentionClick  : ((uid: String) -> Unit)? = null,     // null ise @mention'lar tıklanamaz, sadece renklendirilir
 ) {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
 
-    // Link + hashtag annotasyonları (tek geçişte, pozisyona göre sıralı)
-    val annotated = remember(text) {
+    // Link + hashtag + mention annotasyonları (tek geçişte, pozisyona göre sıralı)
+    val annotated = remember(text, mentionUids) {
         buildAnnotatedString {
             val matches = (URL_REGEX.findAll(text).map { "URL" to it } +
-                           HASHTAG_REGEX.findAll(text).map { "HASHTAG" to it })
+                           HASHTAG_REGEX.findAll(text).map { "HASHTAG" to it } +
+                           MENTION_REGEX.findAll(text).map { "MENTION" to it })
                 .sortedBy { it.second.range.first }
             var last = 0
+            var mentionIdx = 0
             for ((tag, match) in matches) {
                 if (match.range.first < last) continue // çakışan eşleşmeyi atla
                 append(text.substring(last, match.range.first))
-                val annotation = if (tag == "HASHTAG") match.value.removePrefix("#") else match.value
-                pushStringAnnotation(tag, annotation)
-                withStyle(SpanStyle(color = Amber)) { append(match.value) }
-                pop()
+                if (tag == "MENTION") {
+                    val uid = mentionUids.getOrNull(mentionIdx)
+                    mentionIdx++
+                    if (uid != null) {
+                        pushStringAnnotation("MENTION", uid)
+                        withStyle(SpanStyle(color = Amber)) { append(match.value) }
+                        pop()
+                    } else {
+                        append(match.value) // eşleşen uid yoksa düz metin, tıklanamaz
+                    }
+                } else {
+                    val annotation = if (tag == "HASHTAG") match.value.removePrefix("#") else match.value
+                    pushStringAnnotation(tag, annotation)
+                    withStyle(SpanStyle(color = Amber)) { append(match.value) }
+                    pop()
+                }
                 last = match.range.last + 1
             }
             append(text.substring(last))
@@ -80,6 +97,8 @@ fun LinkifyText(
                     .firstOrNull()?.let { openUrl(context, it.item) }
                 annotated.getStringAnnotations("HASHTAG", offset, offset)
                     .firstOrNull()?.let { onHashtagClick?.invoke(it.item) }
+                annotated.getStringAnnotations("MENTION", offset, offset)
+                    .firstOrNull()?.let { onMentionClick?.invoke(it.item) }
             },
         )
 
