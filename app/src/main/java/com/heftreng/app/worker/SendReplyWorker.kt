@@ -72,9 +72,18 @@ class SendReplyWorker(
                 .build()
             // convId+notifId ile unique work adı: aynı bildirime art arda
             // hızlı yanıt basılırsa mükerrer gönderim olmasın.
+            //
+            // ÖNEMLİ: REPLACE kullanılıyor (KEEP değil). KEEP ile, önceki
+            // reply işi WorkManager veritabanından henüz temizlenmemişse
+            // (bazı cihazlarda bu epey gecikebilir) aynı konuşmaya ikinci
+            // bir hızlı yanıt basıldığında yeni iş SESSİZCE yok sayılır —
+            // kullanıcı "Yanıtla"ya basar, bildirim kapanır ama mesaj asla
+            // gönderilmez. REPLACE ile her yeni yanıt denemesi öncekini
+            // (varsa hâlâ bekleyen/bitmemiş olanı) geçersiz kılıp kendi işini
+            // kuyruğa koyar — böylece hiçbir yanıt sessizce kaybolmaz.
             WorkManager.getInstance(context).enqueueUniqueWork(
                 "reply_${convId}_$notifId",
-                ExistingWorkPolicy.KEEP,
+                ExistingWorkPolicy.REPLACE,
                 request,
             )
         }
