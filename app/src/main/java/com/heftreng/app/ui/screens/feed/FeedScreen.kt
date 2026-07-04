@@ -362,6 +362,26 @@ fun FeedScreen(
             ) {
                 items(5) { com.heftreng.app.ui.component.PostCardSkeleton() }
             }
+        } else if (!loading && displayedPosts.isEmpty()) {
+            // İlk kurulumda cache boşken server isteği zaman aşımına uğradıysa
+            // (bkz. FeedViewModel.refresh() — withTimeoutOrNull(15_000L)) kullanıcı
+            // artık sonsuz skeleton değil, net bir "tekrar dene" ekranı görüyor.
+            Column(
+                modifier             = Modifier.fillMaxSize().padding(24.dp),
+                horizontalAlignment  = Alignment.CenterHorizontally,
+                verticalArrangement  = Arrangement.Center,
+            ) {
+                Text(
+                    com.heftreng.app.ui.i18n.Strings.noPosts(language),
+                    fontSize   = 15.sp,
+                    color      = Muted,
+                    textAlign  = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                Spacer(Modifier.height(12.dp))
+                TextButton(onClick = { vm.refresh(forceRefresh = true) }) {
+                    Text(com.heftreng.app.ui.i18n.Strings.tryAgain(language), color = Primary)
+                }
+            }
         } else {
             Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
             val feedListState = rememberLazyListState()

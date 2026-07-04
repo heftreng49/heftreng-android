@@ -21,16 +21,50 @@ class HeftrangApp : Application() {
 
         /** MainActivity'deki UMP onay callback'inden çağrılır. */
         fun notifySdkReady() { _sdkReady.value = true }
+
+        // Huawei ve GMS'siz diğer cihazlarda (AppGallery, bazı Çin OEM'leri vb.)
+        // Google Play Services YOK. Firebase (Auth/Firestore/Messaging/AppCheck)
+        // ve AdMob bu servise dayandığı için, GMS yoksa initializeApp() gibi
+        // çağrılar Application.onCreate() içinde crash edip uygulamayı hiç
+        // AÇILAMAZ hale getirebiliyordu. Bu bayrak sayesinde:
+        //  - GMS varsa: her şey eskisi gibi çalışır (davranış değişmedi)
+        //  - GMS yoksa: Firebase/AdMob'a hiç dokunulmaz, uygulama açılır;
+        //    feed/kütüphane gibi Supabase üzerinden çalışan içerik (varsa)
+        //    etkilenmez, sadece push bildirim / reklam / Firestore'a bağlı
+        //    özellikler sessizce devre dışı kalır.
+        // NOT: Bu, "gerçek Huawei desteği" (HMS entegrasyonu) DEĞİL — sadece
+        // GMS'siz bir cihazda uygulamanın crash olmadan açılmasını sağlar.
+        private val _isGmsAvailable = MutableStateFlow(true)
+        val isGmsAvailable = _isGmsAvailable.asStateFlow()
     }
 
     override fun onCreate() {
         super.onCreate()
 
-        FirebaseApp.initializeApp(this)
-        FirebaseAppCheck.getInstance().installAppCheckProviderFactory(
-            PlayIntegrityAppCheckProviderFactory.getInstance()
-        )
+        val gmsAvailable = checkGmsAvailability()
+        _isGmsAvailable.value = gmsAvailable
 
+        if (gmsAvailable) {
+            try {
+                FirebaseApp.initializeApp(this)
+                FirebaseAppCheck.getInstance().installAppCheckProviderFactory(
+                    PlayIntegrityAppCheckProviderFactory.getInstance()
+                )
+            } catch (e: Exception) {
+                // GoogleApiAvailability "mevcut" dese bile sürüm çok eski/uyumsuz
+                // olabilir — burada da yine çökmeyelim, sadece Firebase'siz devam.
+                android.util.Log.e("HeftrangApp", "Firebase init başarısız (GMS uyumsuz olabilir): ${e.message}")
+                _isGmsAvailable.value = false
+            }
+        } else {
+            android.util.Log.w(
+                "HeftrangApp",
+                "Google Play Services bulunamadı (Huawei/GMS'siz cihaz) — " +
+                    "Firebase, AdMob ve push bildirimleri bu oturumda devre dışı."
+            )
+        }
+
+        // Coil, GMS'e bağımlı değil — her koşulda kurulabilir.
         Coil.setImageLoader(
             ImageLoader.Builder(this)
                 .memoryCache {
@@ -63,5 +97,23 @@ class HeftrangApp : Application() {
         // artık dahili bir zaman aşımı korumasına sahip (CONSENT_TIMEOUT_MS)
         // — yani bu callback ağ sorunu olsa bile en fazla ~4 saniye içinde
         // garanti tetiklenir, "reklamlar hiç yüklenmiyor" riski kalmaz.
+    }
+
+    /**
+     * GMS gerçekten kullanılabilir mi kontrol eder — sadece "yüklü mü" değil,
+     * sürümü uygulamanın ihtiyacını karşılıyor mu (isGooglePlayServicesAvailable
+     * SUCCESS dışında bir kod dönerse GMS ya yok ya da güncellenmesi gerekiyor).
+     */
+    private fun checkGmsAvailability(): Boolean {
+        return try {
+            val availability = com.google.android.gms.common.GoogleApiAvailability.getInstance()
+            val result = availability.isGooglePlayServicesAvailable(this)
+            result == com.google.android.gms.common.ConnectionResult.SUCCESS
+        } catch (e: Exception) {
+            // GoogleApiAvailability sınıfının kendisi bulunamazsa (çok nadir,
+            // ama GMS'siz bazı özel ROM'larda mümkün) burada da çökmeyelim.
+            android.util.Log.e("HeftrangApp", "GMS kontrolü başarısız: ${e.message}")
+            false
+        }
     }
 }

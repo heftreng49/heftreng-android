@@ -80,25 +80,37 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val gmsAvailable = com.heftreng.app.HeftrangApp.isGmsAvailable.value
+
         // ── UMP Onay Akışı ────────────────────────────────────────────────
         // GDPR/CCPA bölgelerinde kullanıcıya onay formu gösterilir.
         // Türkiye gibi dışarıdaki bölgelerde form çıkmaz, hemen devam edilir.
         // MobileAds.initialize() UMP onayından SONRA çağrılmalı (Google zorunluluğu).
-        ConsentHelper.initialize(
-            activity           = this,
-            debugMode          = false,      // prod'da false — test için true yap + testDeviceHashedId ekle
-            testDeviceHashedId = null,
-            onCanRequestAds    = {
-                // UMP tamamlandı → AdMob SDK'yı (yeniden) başlat
-                // Native Ad Validator: debug build'de test device listesi BOŞ bırakılırsa
-                // validator dialog gösterilmez. Emülatör otomatik test cihazı sayılır
-                // ama fiziksel cihazı test listesine eklememişsek dialog çıkmaz.
-                MobileAds.initialize(this) { initStatus ->
-                    com.heftreng.app.HeftrangApp.notifySdkReady()
-                    android.util.Log.d("AdMob", "SDK hazır (UMP sonrası)")
-                }
-            },
-        )
+        //
+        // GMS'siz cihazda (Huawei vb.) hem UMP hem MobileAds Google Play
+        // Services'e dayanır — bu adımı tamamen atlıyoruz. sdkReady hiç
+        // true olmaz, bu da AdsViewModel'in reklam yüklemeyi hiç denememesini
+        // sağlar (zaten unitId/config çağrıları network'e gitmeden sessizce
+        // no-op kalır çünkü sdkReady beklenen ilk adım).
+        if (gmsAvailable) {
+            ConsentHelper.initialize(
+                activity           = this,
+                debugMode          = false,      // prod'da false — test için true yap + testDeviceHashedId ekle
+                testDeviceHashedId = null,
+                onCanRequestAds    = {
+                    // UMP tamamlandı → AdMob SDK'yı (yeniden) başlat
+                    // Native Ad Validator: debug build'de test device listesi BOŞ bırakılırsa
+                    // validator dialog gösterilmez. Emülatör otomatik test cihazı sayılır
+                    // ama fiziksel cihazı test listesine eklememişsek dialog çıkmaz.
+                    MobileAds.initialize(this) { initStatus ->
+                        com.heftreng.app.HeftrangApp.notifySdkReady()
+                        android.util.Log.d("AdMob", "SDK hazır (UMP sonrası)")
+                    }
+                },
+            )
+        } else {
+            Log.w("MainActivity", "GMS yok — UMP/AdMob atlandı, uygulama reklamsız/push'suz modda açılıyor")
+        }
         
         // Foreground/background durumunu tüm ViewModel'lar için tek noktadan takip et
         AppLifecycleObserver.register()
@@ -155,11 +167,11 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Bildirim izni iste
-        requestNotificationPermission()
+        // Bildirim izni iste (FCM → GMS gerektirir)
+        if (gmsAvailable) requestNotificationPermission()
 
-        // Güncelleme kontrolü
-        checkForUpdate()
+        // Güncelleme kontrolü (Play Core → GMS/Play Store gerektirir)
+        if (gmsAvailable) checkForUpdate()
 
         // Play Store puan/yorum kutusu — fırsatçı, kendi kotamızla (spam olmasın)
         com.heftreng.app.util.InAppReviewHelper.maybeRequestReview(this)

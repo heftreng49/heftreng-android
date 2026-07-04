@@ -397,8 +397,14 @@ class FeedViewModel @Inject constructor(
                 || (now - lastServerFetchMs) > AUTO_REFRESH_INTERVAL_MS
             if (shouldHitServer) {
                 try {
-                    val serverSnap = query.get(Source.SERVER).await()
-                    if (!serverSnap.isEmpty) {
+                    // ÖNEMLİ: withTimeoutOrNull olmadan bu çağrı, zayıf/sorunsuz
+                    // bağlantılarda (özellikle cache de boşsa, yani ilk kurulumda)
+                    // dakikalarca askıda kalabiliyordu — kullanıcı süresiz skeleton
+                    // görüyordu, "ilk açılışta içerik boş kalıyor" şikayetinin sebebi buydu.
+                    // 15sn sonra pes edip _loading'i kapatıyoruz; postNotFound/hata UI'ı
+                    // yerine boş feed + pull-to-refresh ile tekrar deneme imkânı kalıyor.
+                    val serverSnap = withTimeoutOrNull(15_000L) { query.get(Source.SERVER).await() }
+                    if (serverSnap != null && !serverSnap.isEmpty) {
                         lastServerFetchMs = now
                         if (serverSnap.documents.isNotEmpty()) lastDoc = serverSnap.documents.last()
                         _hasMore.value = serverSnap.documents.size >= PAGE_SIZE.toInt()
