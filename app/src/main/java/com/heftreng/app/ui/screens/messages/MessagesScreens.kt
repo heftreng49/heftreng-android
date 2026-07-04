@@ -394,6 +394,17 @@ fun MessageDetailScreen(
     val uploading = vm.uploading.collectAsState().value
     val context   = LocalContext.current
 
+    // TEŞHİS + KALICI DÜZELTME: mesaj gönderimi Firestore'da hata verirse
+    // (izin, ağ, index vb.) artık sessizce kaybolmuyor — kullanıcıya Toast
+    // ile gösteriliyor. Bu sayede gerçek hatanın ne olduğu da görülebilir.
+    val sendError by vm.sendError.collectAsState()
+    LaunchedEffect(sendError) {
+        sendError?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
+            vm.clearSendError()
+        }
+    }
+
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri -> selectedImage = uri }

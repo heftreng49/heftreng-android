@@ -526,6 +526,15 @@ class MessagesViewModel @Inject constructor(
         )
     }
 
+    // ── Gönderim hatası: teşhis + kullanıcıya görünür geri bildirim ──
+    // ÖNCEDEN: sendMessage() içindeki catch bloğu sadece e.printStackTrace()
+    // yapıyordu — hata olduğunda kullanıcı hiçbir şey görmüyordu, mesaj
+    // sessizce kayboluyordu. Artık gerçek hata mesajı bu akışa yazılıyor,
+    // UI (MessagesScreens.kt) bunu Toast/Snackbar ile gösterecek.
+    private val _sendError = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    val sendError = _sendError.asStateFlow()
+    fun clearSendError() { _sendError.value = null }
+
     // ── Mesaj gönder ──────────────────────────────────────────
     fun sendMessage(
         convId     : String,
@@ -587,7 +596,15 @@ class MessagesViewModel @Inject constructor(
                 } catch (e: Exception) {
                     android.util.Log.e("HF_PUSH", "Mesaj push hatası: ${e.message}")
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // TEŞHİS + KALICI DÜZELTME: hata artık sessizce yutulmuyor.
+                // Firestore hatası ise (PERMISSION_DENIED, UNAVAILABLE vb.)
+                // e.message genelde net bir kod içerir — bunu UI'a taşıyoruz.
+                val detail = (e as? com.google.firebase.firestore.FirebaseFirestoreException)
+                    ?.let { "${it.code}: ${it.message}" } ?: (e.message ?: e.toString())
+                _sendError.value = "Mesaj gönderilemedi: $detail"
+            }
         }
     }
 
