@@ -185,14 +185,28 @@ class AdsViewModel @Inject constructor(
     // ── Interstitial (ekran-bağımsız, davranış korunuyor) ──────────────────
     private var interstitialAd: InterstitialAd? = null
     private var interstitialUnitId: String = ""
+    private var interstitialLoading: Boolean = false
 
     private fun loadInterstitialAd(unitId: String) {
         if (unitId.isBlank()) return
+        // rewardedLoading ile aynı koruma: bu bayrak olmadan onAppForeground()
+        // (uygulamalar arası geçiş, ekran kilidi aç/kapa gibi sık tetiklenen bir
+        // lifecycle olayı) callback dönmeden tekrar tekrar çağrılırsa her seferinde
+        // yeni bir InterstitialAd.load() isteği atılıyordu — istek/gösterim oranını
+        // bozan ana sebeplerden biri buydu.
+        if (interstitialAd != null || interstitialLoading) return
+        interstitialLoading = true
         InterstitialAd.load(
             appContext, unitId, engine.adRequest(),
             object : InterstitialAdLoadCallback() {
-                override fun onAdFailedToLoad(adError: LoadAdError) { interstitialAd = null }
-                override fun onAdLoaded(ad: InterstitialAd)         { interstitialAd = ad }
+                override fun onAdFailedToLoad(adError: LoadAdError) {
+                    interstitialAd = null
+                    interstitialLoading = false
+                }
+                override fun onAdLoaded(ad: InterstitialAd) {
+                    interstitialAd = ad
+                    interstitialLoading = false
+                }
             },
         )
     }
@@ -341,7 +355,7 @@ class AdsViewModel @Inject constructor(
             if (!ConsentHelper.canRequestAds.value) return@launch
             engine.resumeAllBanners()
             loadAdConfigs()
-            if (interstitialAd == null && interstitialUnitId.isNotBlank()) loadInterstitialAd(interstitialUnitId)
+            if (interstitialAd == null && !interstitialLoading && interstitialUnitId.isNotBlank()) loadInterstitialAd(interstitialUnitId)
             if (rewardedAd == null && rewardedUnitId.isNotBlank() && !rewardedLoading) preloadRewardedAd(rewardedUnitId)
         }
     }
