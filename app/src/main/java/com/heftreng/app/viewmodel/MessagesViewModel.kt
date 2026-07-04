@@ -850,7 +850,14 @@ class MessagesViewModel @Inject constructor(
                     .document(msg.conversationId)
                     .collection("msgs").document(msg.id)
                     .update("deleted", true).await()
-                _messages.value = _messages.value.filter { it.id != msg.id }
+                val updated = _messages.value.filter { it.id != msg.id }
+                _messages.value = updated
+                // ÇÖZÜLDÜ (Faz 6): cache önceden güncellenmiyordu — mesaj
+                // silindikten sonra ekranda doğru görünüyordu ama uygulama
+                // kapatılıp açıldığında cache'den okunan eski (silinmemiş)
+                // hali kısa süreliğine geri gelebiliyordu. Artık silme
+                // sonrası cache de anında güncelleniyor.
+                if (::cacheDir.isInitialized) writeCache(msg.conversationId, updated)
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
@@ -864,9 +871,13 @@ class MessagesViewModel @Inject constructor(
                     .document(msg.conversationId)
                     .collection("msgs").document(msg.id)
                     .update(mapOf("text" to newText, "edited" to true)).await()
-                _messages.value = _messages.value.map {
+                val updated = _messages.value.map {
                     if (it.id == msg.id) it.copy(text = newText, edited = true) else it
                 }
+                _messages.value = updated
+                // ÇÖZÜLDÜ (Faz 6): aynı sebeple düzenleme sonrası da cache
+                // güncelleniyor — eski metnin cache'den geri gelmesi önlenir.
+                if (::cacheDir.isInitialized) writeCache(msg.conversationId, updated)
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
