@@ -132,8 +132,7 @@ fun SinglePostScreen(
         val atIndex = inputText.lastIndexOf('@')
         if (atIndex != -1) {
             val before = inputText.substring(0, atIndex)
-            val safeName = user.name.replace(" ", "")
-            inputText = "$before@$safeName "
+            inputText = "$before@${user.username} "
             mentionedUids = mentionedUids + user.uid
         }
         vm.clearMentionSuggestions()

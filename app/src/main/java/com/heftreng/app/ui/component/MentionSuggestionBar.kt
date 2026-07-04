@@ -71,7 +71,14 @@ fun MentionSuggestionBar(
                         }
                     }
                     Spacer(Modifier.width(6.dp))
-                    Text(user.name, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Column {
+                        Text(user.name, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            "@${user.username}",
+                            fontSize = 11.sp,
+                            color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }

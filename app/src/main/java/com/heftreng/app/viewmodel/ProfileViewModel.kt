@@ -294,6 +294,7 @@ class ProfileViewModel @Inject constructor(
                         libraryBookId   = fd["libraryBookId"]   as? String ?: "",
                         libraryAuthorId = fd["libraryAuthorId"] as? String ?: "",
                         type            = fd["type"]            as? String ?: "",
+                        mentions        = (fd["mentions"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
                     )
                 }.sortedByDescending { it.ts?.seconds ?: 0L }
 
@@ -584,6 +585,7 @@ class ProfileViewModel @Inject constructor(
                         repostsCount  = (fd["reposts"]  as? Long)?.toInt() ?: 0,
                         isLikedByMe   = doc.id in moreLikedIds,
                         ts          = fd["ts"]          as? com.google.firebase.Timestamp,
+                        mentions    = (fd["mentions"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
                     )
                 }
                 _posts.value = _posts.value + newPosts
@@ -864,6 +866,7 @@ class ProfileViewModel @Inject constructor(
                             commentsCount = (fd["cmtCount"] as? Long)?.toInt() ?: 0,
                             repostsCount  = (fd["reposts"]  as? Long)?.toInt() ?: 0,
                             ts            = fd["ts"] as? com.google.firebase.Timestamp,
+                            mentions      = (fd["mentions"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
                         ))
                     }
                 }

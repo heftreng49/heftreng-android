@@ -212,8 +212,7 @@ fun FeedScreen(
         val atIndex = inlineText.lastIndexOf('@')
         if (atIndex >= 0) {
             val before = inlineText.substring(0, atIndex)
-            val safeName = user.name.replace(" ", "_")
-            inlineText = "$before@$safeName "
+            inlineText = "$before@${user.username} "
             inlineMentionedUids = inlineMentionedUids + user.uid
         }
         vm.clearMentionSuggestions()
@@ -1749,8 +1748,7 @@ fun CommentSheet(post: Post, onDismiss: () -> Unit, vm: FeedViewModel, language:
         val atIndex = commentText.lastIndexOf('@')
         if (atIndex >= 0) {
             val before = commentText.substring(0, atIndex)
-            val safeName = user.name.replace(" ", "_")
-            commentText = "$before@$safeName "
+            commentText = "$before@${user.username} "
             mentionedUids = mentionedUids + user.uid
         }
         vm.clearMentionSuggestions()
