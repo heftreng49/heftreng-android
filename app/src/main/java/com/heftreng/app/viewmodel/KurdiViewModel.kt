@@ -612,6 +612,14 @@ class KurdiViewModel @Inject constructor(
 
     fun clearToast() { _toast.value = null }
 
+    /** Reklam (rewarded) o an yüklü değilken kullanıcıya bilgi vermek için. */
+    fun showAdNotReadyToast(language: String) {
+        _toast.value = if (language == "ku")
+            "Reklam ne amade ye, ji kerema xwe piştre dîsa biceribîne"
+        else
+            "Reklam şu an hazır değil, birazdan tekrar dene"
+    }
+
     // ── Senaryo 1: Çift XP — ders tamamlandıktan sonra XP'yi 2 katla ─────────
     fun doubleLastLessonXp() {
         if (_lastLessonXp.value <= 0) return

@@ -137,6 +137,7 @@ fun KurdiScreen(
                                 onRewarded  = { _, _ -> vm.saveStreak() },
                                 onDismiss   = { vm.dismissStreakBroke() },
                                 onLimitReached = { vm.dismissStreakBroke() },
+                                onAdNotReady   = { vm.showAdNotReadyToast(language); vm.dismissStreakBroke() },
                             )
                         }
                     },
@@ -214,9 +215,10 @@ fun KurdiScreen(
                         showDoubleXpSheet = false
                         activity?.let {
                             adsVm.showRewarded(
-                                activity   = it,
-                                rewardType = AdsViewModel.RewardType.DOUBLE_XP,
-                                onRewarded = { _, _ -> vm.doubleLastLessonXp() },
+                                activity     = it,
+                                rewardType   = AdsViewModel.RewardType.DOUBLE_XP,
+                                onRewarded   = { _, _ -> vm.doubleLastLessonXp() },
+                                onAdNotReady = { vm.showAdNotReadyToast(language) },
                             )
                         }
                     },
@@ -308,12 +310,13 @@ fun KurdiScreen(
                 onLockedClick = { lessonId ->
                     activity?.let {
                         adsVm.showRewarded(
-                            activity   = it,
-                            rewardType = AdsViewModel.RewardType.UNLOCK_LESSON,
-                            onRewarded = { _, _ ->
+                            activity     = it,
+                            rewardType   = AdsViewModel.RewardType.UNLOCK_LESSON,
+                            onRewarded   = { _, _ ->
                                 vm.tempUnlockLesson(lessonId)
                                 vm.openLesson(lessonId)
                             },
+                            onAdNotReady = { vm.showAdNotReadyToast(language) },
                         )
                     }
                 },

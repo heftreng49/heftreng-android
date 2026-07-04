@@ -311,6 +311,13 @@ class AdsViewModel @Inject constructor(
         onRewarded    : (RewardItem, RewardType) -> Unit,
         onDismiss     : () -> Unit = {},
         onLimitReached: () -> Unit = {},
+        // onDismiss'ten BİLEREK ayrı tutuldu: onDismiss hem "reklam normal
+        // izlenip kapatıldı" hem "reklam hiç gösterilemedi" durumunda
+        // çağrılıyordu — kullanıcı reklamı gerçekten izlese de izlemese de
+        // aynı callback tetiklendiği için ekranlar bu ikisini ayıramıyordu.
+        // Şimdi reklam o an yüklü değilse SADECE bu çağrılır, onDismiss'e
+        // dokunulmaz.
+        onAdNotReady  : () -> Unit = {},
     ) {
         val uid        = auth.currentUser?.uid ?: ""
         val dailyLimit = configRepo.get(RemoteConfigManager.KEY_REWARDED)?.dailyLimit ?: 3
@@ -347,7 +354,14 @@ class AdsViewModel @Inject constructor(
                 onRewarded(rewardItem, rewardType)
             }
         } else {
-            onDismiss()
+            // Reklam henüz preload edilmemiş (ör. az önce başka bir rewarded
+            // gösterildi, yenisi yüklenmeyi bekliyor). Önceden burada sadece
+            // onDismiss() çağrılıyordu — kullanıcı butona bastığında sheet
+            // sessizce kapanıyor, hiçbir reklam açılmıyor, hiçbir açıklama
+            // görünmüyordu. Şimdi ekran bu durumu ayrıca yakalayıp kullanıcıya
+            // "reklam hazır değil, birazdan tekrar dene" diyebiliyor.
+            onAdNotReady()
+            if (rewardedUnitId.isNotBlank()) preloadRewardedAd(rewardedUnitId)
         }
     }
 
