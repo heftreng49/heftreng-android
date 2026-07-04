@@ -128,6 +128,8 @@ class MessagesViewModel @Inject constructor(
         put("imageUrl",    imageUrl)
         put("audioUrl",    audioUrl)
         put("read",        read)
+        put("readAtSeconds", readAt?.seconds ?: 0L)
+        put("readAtNanos",   readAt?.nanoseconds ?: 0)
         put("deleted",     deleted)
         put("edited",      edited)
         put("replyToId",   replyToId)
@@ -149,6 +151,9 @@ class MessagesViewModel @Inject constructor(
         imageUrl       = optString("imageUrl"),
         audioUrl       = optString("audioUrl"),
         read           = optBoolean("read"),
+        readAt         = optLong("readAtSeconds").takeIf { it > 0 }?.let {
+            Timestamp(it, optInt("readAtNanos"))
+        },
         deleted        = optBoolean("deleted"),
         edited         = optBoolean("edited"),
         replyToId      = optString("replyToId"),
@@ -472,6 +477,7 @@ class MessagesViewModel @Inject constructor(
             audioUrl       = d["audio_url"]     as? String ?: "",
             createdAt      = d["createdAt"]     as? Timestamp,
             read           = d["read"]          as? Boolean ?: false,
+            readAt         = d["readAt"]        as? Timestamp,
             deleted        = d["deleted"]       as? Boolean ?: false,
             edited         = d["edited"]        as? Boolean ?: false,
             replyToId      = d["reply_to_id"]   as? String ?: "",
@@ -720,6 +726,12 @@ class MessagesViewModel @Inject constructor(
     }
 
     // ── Okundu işaretleme ─────────────────────────────────────
+    // ÇÖZÜLDÜ (Faz 2): Eskiden sadece conversations/{id}.unread_$uid = 0
+    // yazılıyordu; mesajın kendi "read" alanı hiç güncellenmiyordu, bu yüzden
+    // karşı tarafta mavi tik / görülme saati asla çalışmıyordu.
+    // Artık bu konuşmada KARŞI TARAFIN gönderdiği ve henüz read=false olan
+    // mesajlar (sadece o an ekranda yüklü olanlar, tüm geçmiş taranmıyor)
+    // batch ile read=true + readAt=serverTimestamp() yapılıyor.
     private fun markRead(convId: String) {
         if (uid.isEmpty()) return
         _conversations.value = _conversations.value.map { conv ->
@@ -730,6 +742,36 @@ class MessagesViewModel @Inject constructor(
                 firestore.collection("conversations").document(convId)
                     .update("unread_$uid", 0L).await()
             } catch (_: Exception) {}
+
+            // Sadece karşı tarafın gönderdiği + henüz okunmamış + o an listede
+            // yüklü olan mesajları işaretle — gereksiz tüm-koleksiyon taraması yok.
+            val unreadFromOther = _messages.value.filter {
+                it.senderId != uid && it.senderId.isNotBlank() && !it.read
+            }
+            if (unreadFromOther.isEmpty()) return@launch
+
+            try {
+                val batch = firestore.batch()
+                val now   = Timestamp.now()
+                unreadFromOther.forEach { msg ->
+                    val ref = firestore.collection("convMessages").document(convId)
+                        .collection("msgs").document(msg.id)
+                    batch.update(ref, mapOf(
+                        "read"   to true,
+                        "readAt" to FieldValue.serverTimestamp(),
+                    ))
+                }
+                batch.commit().await()
+
+                // Local state + cache'i de anında güncelle (listener zaten
+                // aynı veriyi tekrar getirecek ama UI'da gecikme olmasın diye).
+                val updatedIds = unreadFromOther.map { it.id }.toSet()
+                val merged = _messages.value.map {
+                    if (it.id in updatedIds) it.copy(read = true, readAt = now) else it
+                }
+                _messages.value = merged
+                if (::cacheDir.isInitialized) writeCache(convId, merged)
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 

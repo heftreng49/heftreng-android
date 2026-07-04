@@ -206,6 +206,7 @@ data class Message(
     val audioUrl       : String       = "",
     val createdAt      : Timestamp?   = null,
     val read           : Boolean      = false,
+    val readAt         : Timestamp?   = null,
     val deleted        : Boolean      = false,
     val edited         : Boolean      = false,
     val replyToId      : String       = "",

@@ -1045,9 +1045,14 @@ fun MessageDetailScreen(
 
                 items(messages, key = { it.id }) { msg ->
                     val isMine = msg.senderId == vm.uid
+                    // ÇÖZÜLDÜ (Faz 2): "Görüldü HH:mm" sadece benim gönderdiğim
+                    // EN SON mesajda gösterilsin (WhatsApp mantığı) — her mesajda
+                    // tekrar etmesin diye burada tek seferlik hesaplanıyor.
+                    val isLastMine = isMine && messages.lastOrNull { it.senderId == vm.uid }?.id == msg.id
                     MsgRow(
                         msg      = msg,
                         isMine   = isMine,
+                        isLastMine = isLastMine,
                         myUid    = vm.uid,
                         otherPhotoURL = otherUser?.photoURL ?: "",
                         otherName     = otherUser?.displayName ?: "",
@@ -1199,6 +1204,7 @@ private fun MsgCtxItem(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 private fun MsgRow(
     msg           : Message,
     isMine        : Boolean,
+    isLastMine    : Boolean = false,
     myUid         : String,
     otherPhotoURL : String,
     otherName     : String,
@@ -1412,6 +1418,18 @@ private fun MsgRow(
                         tint     = if (msg.read) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.55f),
                         modifier = Modifier.size(13.dp),
                     )
+                    // ÇÖZÜLDÜ (Faz 2): Görülme saati — sadece okunmuşsa VE bu
+                    // benim gönderdiğim en son mesajsa göster (WhatsApp mantığı,
+                    // her mesajda tekrar etmesin).
+                    if (isLastMine && msg.read && msg.readAt != null) {
+                        Spacer(Modifier.width(3.dp))
+                        val seenLabel = if (language == "ku") "Hate dîtin" else "Görüldü"
+                        Text(
+                            "$seenLabel ${formatTime(msg.readAt, language)}",
+                            color    = Color(0xFF38BDF8),
+                            fontSize = 10.sp,
+                        )
+                    }
                 }
             }
 
