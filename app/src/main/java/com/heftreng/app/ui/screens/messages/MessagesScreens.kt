@@ -282,7 +282,7 @@ fun ConversationsScreen(
                             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 if (conv.lastMessageAt != null) {
                                     // .msgp-conv-time
-                                    Text(formatTime(conv.lastMessageAt?.toDate()?.toString() ?: ""), color = Muted, fontSize = 10.sp)
+                                    Text(formatTime(conv.lastMessageAt, language), color = Muted, fontSize = 10.sp)
                                 }
                                 // .msgp-unread-dot
                                 if (unread) {
@@ -1403,7 +1403,7 @@ private fun MsgRow(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
             ) {
-                Text(formatTime(msg.createdAt?.toDate()?.toString() ?: ""), color = Muted, fontSize = 11.sp)
+                Text(formatTime(msg.createdAt, language), color = Muted, fontSize = 11.sp)
                 if (isMine) {
                     Spacer(Modifier.width(3.dp))
                     // Tema: .msg-read.read → mavi, .msg-read.sent → soluk
@@ -1443,18 +1443,41 @@ private fun MsgRow(
     } // end Box (swipe)
 }
 
-// ── Yardımcı ─────────────────────────────────────────────────────────────────
-private fun formatTime(ts: String): String {
-    if (ts.isBlank()) return ""
+// ── Yardımcı — mesaj saat/tarih formatı ───────────────────────────────────────
+// ÇÖZÜLDÜ (Faz 1): Eskiden Timestamp → Date → String → Long round-trip'i
+// yapılıyordu, bu her zaman null dönüp "HH:mm" yerine ham string'in ilk 5
+// karakterini gösteriyordu. Artık doğrudan Timestamp alınıyor.
+// Ayrıca artık cihaz Locale'i değil, uygulama içi seçili dil (tr/ku/zza/ckb)
+// kullanılıyor; format sayısal (dd.MM.yyyy) olduğu için ay adı çevirisine
+// gerek kalmıyor — tüm diller için tutarlı ve doğru çalışıyor.
+private fun formatTime(ts: com.google.firebase.Timestamp?, language: String): String {
+    if (ts == null) return ""
     return try {
-        val ms = ts.toLongOrNull() ?: return ts.take(5)
+        val ms   = ts.toDate().time
         val cal  = Calendar.getInstance().apply { timeInMillis = ms }
         val now  = Calendar.getInstance()
-        if (cal.get(Calendar.DAY_OF_YEAR) == now.get(Calendar.DAY_OF_YEAR))
-            SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ms))
-        else
-            SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(ms))
-    } catch (_: Exception) { ts.take(5) }
+
+        val sameDay  = cal.get(Calendar.DAY_OF_YEAR) == now.get(Calendar.DAY_OF_YEAR) &&
+                       cal.get(Calendar.YEAR) == now.get(Calendar.YEAR)
+
+        val yesterday = Calendar.getInstance().apply {
+            timeInMillis = now.timeInMillis
+            add(Calendar.DAY_OF_YEAR, -1)
+        }
+        val wasYesterday = cal.get(Calendar.DAY_OF_YEAR) == yesterday.get(Calendar.DAY_OF_YEAR) &&
+                            cal.get(Calendar.YEAR) == yesterday.get(Calendar.YEAR)
+
+        val hhmm = SimpleDateFormat("HH:mm", Locale.US).format(Date(ms))
+
+        when {
+            sameDay     -> hhmm
+            wasYesterday -> {
+                val duenLabel = if (language == "ku") "Duh" else "Dün"
+                "$duenLabel $hhmm"
+            }
+            else -> SimpleDateFormat("dd.MM.yyyy", Locale.US).format(Date(ms))
+        }
+    } catch (_: Exception) { "" }
 }
 
 // ── Sol kenarlık yardımcısı ──────────────────────────────────────────────────
