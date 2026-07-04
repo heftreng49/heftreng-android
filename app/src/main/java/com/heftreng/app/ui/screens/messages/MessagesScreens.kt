@@ -1417,24 +1417,16 @@ private fun MsgRow(
                 Text(formatTime(msg.createdAt, language), color = Muted, fontSize = 11.sp)
                 if (isMine) {
                     Spacer(Modifier.width(3.dp))
-                    // Tema: .msg-read.read → mavi, .msg-read.sent → soluk
+                    // ÇÖZÜLDÜ: WhatsApp tarzı çift tik — okunmadıysa GRİ,
+                    // okunduysa MAVİ. Metin/saat eklenmiyor, sadece ikon rengi
+                    // değişiyor. Bu artık msg.read alanı gerçekten Firestore'da
+                    // güncellendiği için (bkz. MessagesViewModel.markRead)
+                    // doğru çalışıyor.
                     Icon(
                         Icons.Default.DoneAll, null,
                         tint     = if (msg.read) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.55f),
                         modifier = Modifier.size(13.dp),
                     )
-                    // ÇÖZÜLDÜ (Faz 2): Görülme saati — sadece okunmuşsa VE bu
-                    // benim gönderdiğim en son mesajsa göster (WhatsApp mantığı,
-                    // her mesajda tekrar etmesin).
-                    if (isLastMine && msg.read && msg.readAt != null) {
-                        Spacer(Modifier.width(3.dp))
-                        val seenLabel = if (language == "ku") "Hate dîtin" else "Görüldü"
-                        Text(
-                            "$seenLabel ${formatTime(msg.readAt, language)}",
-                            color    = Color(0xFF38BDF8),
-                            fontSize = 10.sp,
-                        )
-                    }
                 }
             }
 

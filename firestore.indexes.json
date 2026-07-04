@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "msgs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "senderUid", "order": "ASCENDING" },
+        { "fieldPath": "read", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "books",
       "queryScope": "COLLECTION",
       "fields": [

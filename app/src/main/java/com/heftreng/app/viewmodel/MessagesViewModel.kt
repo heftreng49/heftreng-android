@@ -55,6 +55,7 @@ class MessagesViewModel @Inject constructor(
 
     private var convListener: ListenerRegistration? = null
     private var msgListener : ListenerRegistration? = null
+    private var readReceiptListener: ListenerRegistration? = null
 
     private val _hasOlderMessages = MutableStateFlow(false)
     val hasOlderMessages = _hasOlderMessages.asStateFlow()
@@ -419,6 +420,42 @@ class MessagesViewModel @Inject constructor(
                     // Cache'i arka planda güncelle
                     if (::cacheDir.isInitialized) {
                         viewModelScope.launch { writeCache(convId, merged) }
+                    }
+                }
+
+            // ── 4. ÇÖZÜLDÜ: Kendi gönderdiğim mesajların "okundu" durumunu
+            //    dinleyen AYRI bir listener — çünkü yukarıdaki msgListener
+            //    sadece createdAt > afterTs olan YENİ dökümanları görür.
+            //    Karşı taraf benim eski bir mesajımı "read=true" yaptığında,
+            //    bu bir FIELD UPDATE'dir (yeni createdAt üretmez), bu yüzden
+            //    o listener'ın sorgu kapsamına asla girmez ve mavi tik hiç
+            //    gelmezdi. Bu listener, benim gönderdiğim ve henüz
+            //    read=false olan mesajları izleyip read/readAt değişince
+            //    local state + cache'i günceller.
+            readReceiptListener?.remove()
+            readReceiptListener = firestore.collection("convMessages").document(convId)
+                .collection("msgs")
+                .whereEqualTo("senderUid", uid)
+                .whereEqualTo("read", false)
+                .addSnapshotListener { snap, _ ->
+                    if (snap == null) return@addSnapshotListener
+                    var changed = false
+                    var merged = _messages.value
+                    snap.documentChanges.forEach { change ->
+                        if (change.type == com.google.firebase.firestore.DocumentChange.Type.MODIFIED ||
+                            change.type == com.google.firebase.firestore.DocumentChange.Type.REMOVED) {
+                            val updated = change.document.toMessage(convId)
+                            if (updated != null) {
+                                merged = merged.map { if (it.id == updated.id) updated else it }
+                                changed = true
+                            }
+                        }
+                    }
+                    if (changed) {
+                        _messages.value = merged
+                        if (::cacheDir.isInitialized) {
+                            viewModelScope.launch { writeCache(convId, merged) }
+                        }
                     }
                 }
         }
@@ -885,6 +922,8 @@ class MessagesViewModel @Inject constructor(
     fun stopMsgListener() {
         msgListener?.remove()
         msgListener = null
+        readReceiptListener?.remove()
+        readReceiptListener = null
         currentConvId = ""
         oldestMsgDoc  = null
         newestMsgTs   = null
@@ -894,5 +933,6 @@ class MessagesViewModel @Inject constructor(
         super.onCleared()
         convListener?.remove()
         msgListener?.remove()
+        readReceiptListener?.remove()
     }
 }
