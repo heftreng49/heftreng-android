@@ -31,14 +31,41 @@ class PresenceViewModel @Inject constructor(
 
     val uid get() = auth.currentUser?.uid ?: ""
 
-    // Kaç saniyedir heartbeat gelmemişse offline say (12 dk)
-    private val ONLINE_TIMEOUT_MS = 720_000L
-    // Heartbeat aralığı — 5 dakikada bir yaz (90s→300s: 3x daha az yazma)
-    private val HEARTBEAT_INTERVAL_MS = 300_000L
+    // ÇÖZÜLDÜ: Eskiden timeout(12dk) >> heartbeat(5dk) olduğu için, uygulama
+    // "son uygulamalardan silinerek" (swipe-kill) kapatıldığında — ki bu
+    // durumda Compose'un onDispose/goOffline() ÇALIŞMA GARANTİSİ YOKTUR —
+    // kullanıcı gerçekte çevrimdışı olsa bile 12 dakika boyunca hâlâ "çevrimiçi"
+    // gösteriliyordu. Timeout artık heartbeat aralığının ~2.5 katı: son
+    // heartbeat'ten bu kadar süre geçtiyse, uygulama kapanmış/arka planda
+    // askıya alınmış kabul edilip offline sayılır.
+    private val HEARTBEAT_INTERVAL_MS = 60_000L   // 1 dakikada bir yaz — uygulama açıkken online kalır
+    private val ONLINE_TIMEOUT_MS     = 150_000L  // 2.5 dakika — bu süre heartbeat gelmezse offline say
 
     private var heartbeatJob     : kotlinx.coroutines.Job? = null
     private var presenceListener : com.google.firebase.firestore.ListenerRegistration? = null
     private var typingListener   : com.google.firebase.firestore.ListenerRegistration? = null
+
+    // ÇÖZÜLDÜ: Eskiden goOffline() SADECE MessagesScreen'in kendi
+    // DisposableEffect(onDispose) callback'inde çağrılıyordu. Uygulama "son
+    // uygulamalardan silinerek" (swipe-kill) kapatıldığında Compose'un
+    // onDispose çalışma garantisi yoktur — bu yüzden presence dokümanı
+    // "online: true" olarak asılı kalıyordu. Artık uygulama tamamen arka
+    // plana geçtiğinde (ProcessLifecycleOwner.onStop — hiçbir ekran
+    // görünmüyor) İŞLETİM SİSTEMİ SEVİYESİNDE garanti tetiklenen bir
+    // callback ile de offline yazılıyor. Bu, ekran bazlı goOffline()'a EK
+    // bir güvenlik katmanıdır, onun yerine geçmez.
+    private val appBackgroundCb: () -> Unit = { goOffline() }
+    private val appForegroundCb: () -> Unit = {
+        // Uygulama tekrar öne gelince, sohbet ekranı zaten açıksa goOnline()
+        // kendi DisposableEffect'inden tekrar tetiklenecek; burada sadece
+        // heartbeat'i olası bir kapanmadan sonra tazelemek için ekstra bir
+        // şey yapmıyoruz — MessagesScreen kontrolü elinde tutuyor.
+    }
+
+    init {
+        com.heftreng.app.util.AppLifecycleObserver.addBackgroundCallback(appBackgroundCb)
+        com.heftreng.app.util.AppLifecycleObserver.addForegroundCallback(appForegroundCb)
+    }
 
     // ── Online durumunu yaz + heartbeat başlat ────────────────────────────────
     fun goOnline() {
@@ -165,5 +192,7 @@ class PresenceViewModel @Inject constructor(
         heartbeatJob?.cancel()
         presenceListener?.remove()
         typingListener?.remove()
+        com.heftreng.app.util.AppLifecycleObserver.removeBackgroundCallback(appBackgroundCb)
+        com.heftreng.app.util.AppLifecycleObserver.removeForegroundCallback(appForegroundCb)
     }
 }
