@@ -226,7 +226,7 @@ fun KurdiScreen(
                         containerColor = com.heftreng.app.ui.theme.Amber, contentColor = Color.Black,
                     ),
                 ) { Text(if (language == "ku") "⚡ 2x XP Bistîne" else "⚡ 2x XP Kazan", fontWeight = FontWeight.Bold) }
-                TextButton(onClick = { showDoubleXpSheet = false; vm.doubleLastLessonXp() .let {} }) {
+                TextButton(onClick = { showDoubleXpSheet = false }) {
                     Text(if (language == "ku") "Na spas" else "Hayır teşekkürler", color = com.heftreng.app.ui.theme.Muted)
                 }
                 Spacer(Modifier.height(8.dp))
