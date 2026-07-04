@@ -91,15 +91,23 @@ class MessagesViewModel @Inject constructor(
         File(cacheDir, "${uid}_${convId}.json")
 
     private suspend fun readCache(convId: String): List<Message> = withContext(Dispatchers.IO) {
+        val f = cacheFile(convId)
         try {
-            val f = cacheFile(convId)
             if (!f.exists()) return@withContext emptyList()
             val arr = JSONArray(f.readText())
             (0 until arr.length()).mapNotNull { i ->
                 try { arr.getJSONObject(i).toMessage(convId) } catch (_: Exception) { null }
             }
         } catch (e: Exception) {
-            Log.w("MsgCache", "readCache error: ${e.message}")
+            // ÇÖZÜLDÜ (Faz 5): bozuk/eksik JSON artık sessizce yutulmuyor —
+            // dosya bozuksa (yarım yazılmış, cihaz kapanmış vb.) bir daha
+            // hiç okunamayacağı için burada SİLİNİYOR. Böylece bir sonraki
+            // açılışta "cache yok" durumuna düşülür ve normal Firestore
+            // yüklemesiyle sıfırdan sağlıklı bir cache oluşturulur — kalıcı
+            // olarak "hep boş liste dönen ama hiç düzelmeyen" bir cache
+            // dosyası kalmaz.
+            Log.w("MsgCache", "readCache bozuk, siliniyor: ${e.message}")
+            try { f.delete() } catch (_: Exception) {}
             emptyList()
         }
     }
@@ -118,6 +126,73 @@ class MessagesViewModel @Inject constructor(
     fun clearCache(convId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try { cacheFile(convId).delete() } catch (_: Exception) {}
+        }
+    }
+
+    // ── Konuşma listesi önbelleği (Faz 5) ────────────────────────────────────
+    // Aynı disk-cache stratejisi konuşma listesine de uygulanıyor: ilk açılış
+    // anında son bilinen listeyi anında göster, arkaplanda Firestore'dan
+    // güncelle. Mesaj cache'inden farklı olarak burada delta çekme yok —
+    // konuşma listesi zaten küçük (max 50) ve tam liste snapshot listener'ı
+    // zaten en güncel haliyle geliyor; cache sadece "ilk boya" gecikmesini
+    // önlemek için var.
+    private fun convCacheFile(): File = File(cacheDir, "${uid}_conversations.json")
+
+    private suspend fun readConvCache(): List<Conversation> = withContext(Dispatchers.IO) {
+        val f = convCacheFile()
+        try {
+            if (!f.exists()) return@withContext emptyList()
+            val arr = JSONArray(f.readText())
+            (0 until arr.length()).mapNotNull { i ->
+                try {
+                    val o = arr.getJSONObject(i)
+                    val partsArr = o.optJSONArray("participantIds")
+                    val parts = partsArr?.let { pa -> (0 until pa.length()).map { pa.getString(it) } } ?: emptyList()
+                    Conversation(
+                        id             = o.getString("id"),
+                        participantIds = parts,
+                        lastMessage    = o.optString("lastMessage"),
+                        lastMessageAt  = o.optLong("tsSeconds").takeIf { it > 0 }
+                            ?.let { Timestamp(it, o.optInt("tsNanos")) },
+                        otherUser      = User(
+                            uid         = o.optString("otherUid"),
+                            displayName = o.optString("otherName"),
+                            photoURL    = o.optString("otherPhoto"),
+                            email       = o.optString("otherEmail"),
+                        ),
+                        unreadCount    = o.optInt("unreadCount"),
+                    )
+                } catch (_: Exception) { null }
+            }
+        } catch (e: Exception) {
+            // Bozuk dosya — sil ki bir daha hep boş dönmesin (bkz. readCache).
+            Log.w("MsgCache", "readConvCache bozuk, siliniyor: ${e.message}")
+            try { f.delete() } catch (_: Exception) {}
+            emptyList()
+        }
+    }
+
+    private suspend fun writeConvCache(list: List<Conversation>) = withContext(Dispatchers.IO) {
+        try {
+            val arr = JSONArray()
+            list.forEach { c ->
+                val o = JSONObject()
+                o.put("id", c.id)
+                val partsArr = JSONArray(); c.participantIds.forEach { partsArr.put(it) }
+                o.put("participantIds", partsArr)
+                o.put("lastMessage", c.lastMessage)
+                o.put("tsSeconds", c.lastMessageAt?.seconds ?: 0L)
+                o.put("tsNanos", c.lastMessageAt?.nanoseconds ?: 0)
+                o.put("otherUid", c.otherUser?.uid ?: "")
+                o.put("otherName", c.otherUser?.displayName ?: "")
+                o.put("otherPhoto", c.otherUser?.photoURL ?: "")
+                o.put("otherEmail", c.otherUser?.email ?: "")
+                o.put("unreadCount", c.unreadCount)
+                arr.put(o)
+            }
+            convCacheFile().writeText(arr.toString())
+        } catch (e: Exception) {
+            Log.w("MsgCache", "writeConvCache error: ${e.message}")
         }
     }
 
@@ -268,6 +343,18 @@ class MessagesViewModel @Inject constructor(
     // ── Konuşma listesi — realtime ────────────────────────────
     fun listenConversations() {
         if (uid.isEmpty()) return
+
+        // ÇÖZÜLDÜ (Faz 5): cache'den anında göster → 0 gecikme hissi.
+        // ::cacheDir.isInitialized kontrolü: initCache() henüz çağrılmadıysa
+        // (örn. ConversationsScreen mesaj ekranından önce ilk açılıyorsa)
+        // cache sessizce atlanır, doğrudan Firestore'a düşer — çökme olmaz.
+        if (::cacheDir.isInitialized && _conversations.value.isEmpty()) {
+            viewModelScope.launch {
+                val cached = readConvCache()
+                if (cached.isNotEmpty()) _conversations.value = cached
+            }
+        }
+
         _loading.value = _conversations.value.isEmpty()
         convListener?.remove()
         convListener = firestore.collection("conversations")
@@ -319,7 +406,7 @@ class MessagesViewModel @Inject constructor(
                         } catch (_: Exception) {}
                     }
 
-                    _conversations.value = rawList.map { raw ->
+                    val updated = rawList.map { raw ->
                         Conversation(
                             id             = raw.id,
                             participantIds = raw.parts,
@@ -329,7 +416,12 @@ class MessagesViewModel @Inject constructor(
                             unreadCount    = raw.unread,
                         )
                     }
+                    _conversations.value = updated
                     _loading.value = false
+                    // Arka planda cache'i güncelle — bir sonraki açılışta anında görünsün.
+                    if (::cacheDir.isInitialized) {
+                        viewModelScope.launch { writeConvCache(updated) }
+                    }
                 }
             }
     }

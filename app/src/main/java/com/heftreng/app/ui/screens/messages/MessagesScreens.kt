@@ -81,14 +81,24 @@ fun ConversationsScreen(
     var showSearch    by remember { mutableStateOf(false) }
 
     val uid = vm.uid
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // ÇÖZÜLDÜ (Faz 5): initCache() önceden sadece MessageDetailScreen'de
+    // çağrılıyordu. Kullanıcı konuşma listesini mesaj ekranını hiç açmadan
+    // görürse (uygulama ilk açılış / arka plandan dönüş) cache tamamen
+    // sessizce devre dışı kalıyordu. Artık burada da garanti çağrılıyor —
+    // ve listenConversations() ile AYNI LaunchedEffect'te, initCache()'den
+    // SONRA çağrılıyor ki cache okuması ::cacheDir.isInitialized kontrolüne
+    // takılıp atlanmasın (iki ayrı LaunchedEffect'in çalışma sırası garanti
+    // değildir, tek effect içinde sıralamak kesinleştirir).
+    LaunchedEffect(uid) {
+        vm.initCache(context)
+        if (uid.isNotEmpty()) vm.listenConversations()
+    }
+
     // Ekran açıkken mesaj bildirimlerini bastır
     DisposableEffect(Unit) {
         HeftrangMessagingService.isMessagesScreenActive = true
         onDispose { HeftrangMessagingService.isMessagesScreenActive = false }
-    }
-
-    LaunchedEffect(uid) {
-        if (uid.isNotEmpty()) vm.listenConversations()
     }
 
     val filtered = if (searchQuery.isBlank()) conversations
