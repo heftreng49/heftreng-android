@@ -103,17 +103,34 @@ class MainActivity : ComponentActivity() {
         // Foreground/background durumunu tüm ViewModel'lar için tek noktadan takip et
         AppLifecycleObserver.register()
 
-        // EdgeToEdge modunu aktifleştiriyoruz — sistem çubuklarını şeffaf yapar
-        enableEdgeToEdge()
+        // ÇÖZÜLDÜ (crash raporu): enableEdgeToEdge() bazı cihaz/OEM/Android
+        // sürümü kombinasyonlarında decorView'in child view hiyerarşisi henüz
+        // tam kurulmamışken çağrılırsa AndroidX içinde
+        // "ViewGroup.getChildAt(int) on a null object reference" ile
+        // RASTGELE (cihaza/soğuk-sıcak başlatmaya göre değişen) bir çökmeye
+        // yol açan bilinen bir timing sorunu var. Bu çağrı asıl işlevsel bir
+        // gereklilik değil (sadece sistem çubuklarını şeffaf yapıyor), bu
+        // yüzden try-catch ile sarmalanıyor: en kötü ihtimalle edge-to-edge
+        // görünüm bir seferliğine uygulanmaz ama uygulama asla bu yüzden
+        // çökmez.
+        try {
+            enableEdgeToEdge()
+        } catch (e: Exception) {
+            Log.w("MainActivity", "enableEdgeToEdge başarısız, atlanıyor: ${e.message}")
+        }
 
         // Android 15 uyumluluğu: LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES deprecated.
         // Bazı SDK'lar (AdMob, Firebase) kendi içlerinde shortEdges kullanabiliyor.
         // Runtime'da ALWAYS ile override ederek Play Console uyarısını gideriyoruz.
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            window.attributes = window.attributes.also { attrs ->
-                attrs.layoutInDisplayCutoutMode =
-                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                window.attributes = window.attributes.also { attrs ->
+                    attrs.layoutInDisplayCutoutMode =
+                        android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                }
             }
+        } catch (e: Exception) {
+            Log.w("MainActivity", "layoutInDisplayCutoutMode ayarlanamadı: ${e.message}")
         }
 
         // AdMob SDK zaten HeftrangApp.onCreate() içinde (Application seviyesinde,
