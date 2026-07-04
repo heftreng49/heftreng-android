@@ -965,6 +965,8 @@ fun MessageDetailScreen(
                                             replyToId   = replyTo?.id ?: "",
                                             replyToText = replyTo?.text ?: "",
                                             replyToName = replyTo?.let { senderLabel(it.senderId, vm.uid, otherUser?.displayName ?: "", ku) } ?: "",
+                                        )
+                                        selectedImage = null
                                         replyTo = null
                                     } else {
                                         vm.sendMessage(
