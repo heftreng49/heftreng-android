@@ -107,7 +107,8 @@ fun AuthScreen(
     // ── Giriş sonrası: doğrulanmamış hesap ekranı ─────────────────────────
     if (showVerifyPending) {
         var notYetError by remember { mutableStateOf(false) }
-        Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
+        // ÇÖZÜLDÜ (Play Console edge-to-edge uyarısı): systemBarsPadding() eklendi.
+        Box(Modifier.fillMaxSize().background(Background).systemBarsPadding(), contentAlignment = Alignment.Center) {
             Column(
                 modifier            = Modifier.fillMaxWidth().padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -196,7 +197,7 @@ fun AuthScreen(
     // ── Kayıt sonrası: doğrulama maili gönderildi ekranı ─────────────────
     if (showVerifySent) {
         var notYetError by remember { mutableStateOf(false) }
-        Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize().background(Background).systemBarsPadding(), contentAlignment = Alignment.Center) {
             Column(
                 modifier            = Modifier.fillMaxWidth().padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -272,11 +273,16 @@ fun AuthScreen(
         return
     }
 
+    // ÇÖZÜLDÜ (Play Console: "Uçtan uca ekran tüm kullanıcılara gösterilmeyebilir"):
+    // targetSdk 35 ile Android 15+'ta edge-to-edge varsayılan. Bu ekran daha
+    // önce sistem çubuğu padding'i olmadan tam ekrana yayılıyordu — logo ve
+    // üst içerik durum çubuğunun (saat/batarya/sinyal) arkasında kalabiliyordu.
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Background)
-            .imePadding(),
+            .imePadding()
+            .systemBarsPadding(),
         contentAlignment = Alignment.TopCenter,
     ) {
         Column(

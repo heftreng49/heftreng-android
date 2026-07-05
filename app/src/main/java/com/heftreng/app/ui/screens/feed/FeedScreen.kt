@@ -315,7 +315,14 @@ fun FeedScreen(
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Background).imePadding()) {
+    // ÇÖZÜLDÜ (Play Console: "Uçtan uca ekran tüm kullanıcılara gösterilmeyebilir"):
+    // targetSdk 35 ile Android 15+'ta edge-to-edge varsayılan hale geliyor.
+    // Bu ekran statusBarsPadding() olmadan doğrudan en üstten başlıyordu —
+    // üstteki TabRow (sekme satırı) durum çubuğunun (saat, batarya, sinyal
+    // simgeleri) ARKASINDA/ALTINDA kalıp tıklanamaz veya görünmez oluyordu.
+    // navigationBarsPadding() zaten aşağıda mevcut yerlerde vardı, üstte de
+    // aynı mantıkla statusBarsPadding() ekleniyor.
+    Box(modifier = Modifier.fillMaxSize().background(Background).imePadding().statusBarsPadding()) {
         Column(Modifier.fillMaxSize()) {
             // ── Sekme satırı ────────────────────────────────────────────────
             TabRow(
