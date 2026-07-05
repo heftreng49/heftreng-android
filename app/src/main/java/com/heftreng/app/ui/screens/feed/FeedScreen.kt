@@ -32,6 +32,7 @@ import androidx.compose.runtime.*
 import java.net.URLEncoder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -417,6 +418,7 @@ fun FeedScreen(
                 // ── Inline compose — tema .compose ────────────────────────
                 if (selectedFeedTab == 0) item {
                     InlineComposeBox(
+                        listState     = feedListState,
                         text          = inlineText,
                         onTextChange  = { inlineText = it },
                         title         = inlineTitle,
@@ -802,6 +804,13 @@ private fun InlineComposeBox(
     onImageClear       : () -> Unit   = {},
     mentionSuggestions : List<MentionHelper.MentionUser> = emptyList(),
     onMentionSelected  : (MentionHelper.MentionUser) -> Unit = {},
+    // ÇÖZÜLDÜ: Klavye açılınca bu kutu LazyColumn'ın ilk item'ı olduğu için
+    // görünür alanın dışına kayabiliyor, altındaki "Blog Yazıları" şeridi
+    // klavyenin üstünde asılı/boş bir alanda render edilebiliyordu. listState
+    // verilirse, metin alanlarından birine odaklanınca bu item'a (index 0)
+    // otomatik scroll edilir — kutu her zaman klavyenin hemen üstünde, tam
+    // görünür kalır.
+    listState     : androidx.compose.foundation.lazy.LazyListState? = null,
 ) {
     Surface(
         modifier       = Modifier.fillMaxWidth().padding(12.dp),
@@ -824,10 +833,21 @@ private fun InlineComposeBox(
                 )
                 // ── Başlık + gövde tek, kutusuz bir yazım alanında birleşik ──────────
                 Column(modifier = Modifier.weight(1f)) {
+                    // ÇÖZÜLDÜ: metin alanlarından birine odaklanınca, bu kutu
+                    // (LazyColumn'ın ilk item'ı) her zaman görünür kalsın diye
+                    // ilk pozisyona scroll ediliyor — klavye açıkken altındaki
+                    // Blog Yazıları şeridinin görünmez/boş bir alanda asılı
+                    // kalması engellenir.
+                    val focusScope = androidx.compose.runtime.rememberCoroutineScope()
                     BasicTextField(
                         value           = title,
                         onValueChange   = { if (it.length <= 120) onTitleChange(it) },
-                        modifier        = Modifier.fillMaxWidth(),
+                        modifier        = Modifier.fillMaxWidth()
+                            .onFocusEvent { state ->
+                                if (state.isFocused) {
+                                    focusScope.launch { listState?.animateScrollToItem(0) }
+                                }
+                            },
                         textStyle       = androidx.compose.ui.text.TextStyle(
                             color      = OnBackground,
                             fontSize   = 16.sp,
@@ -846,7 +866,12 @@ private fun InlineComposeBox(
                     BasicTextField(
                         value           = text,
                         onValueChange   = onTextChange,
-                        modifier        = Modifier.fillMaxWidth().heightIn(min = 56.dp, max = 200.dp).padding(top = 4.dp),
+                        modifier        = Modifier.fillMaxWidth().heightIn(min = 56.dp, max = 200.dp).padding(top = 4.dp)
+                            .onFocusEvent { state ->
+                                if (state.isFocused) {
+                                    focusScope.launch { listState?.animateScrollToItem(0) }
+                                }
+                            },
                         textStyle       = androidx.compose.ui.text.TextStyle(color = OnBackground, fontSize = 15.sp),
                         cursorBrush     = androidx.compose.ui.graphics.SolidColor(Primary),
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
