@@ -158,14 +158,46 @@ class MainActivity : ComponentActivity() {
         // Bildirimden gelen intent'i al
         pendingNavTarget = intent?.getStringExtra("navigate_to")
 
-        setContent {
-            // SettingsViewModel'dan reactive dark/light modu oku
-            val isDark by settingsVm.darkMode.collectAsState()
-
-            HeftrangTheme(darkMode = isDark) {
-                HeftrangNavHost(initialRoute = pendingNavTarget)
+        // ÇÖZÜLDÜ (Play Console crash raporu): androidx.activity.compose'un
+        // setContent() implementasyonu şu şekilde başlıyor:
+        //   window.decorView.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+        // Bazı OEM ROM'larında (crash raporlarında görülen kombinasyonlar —
+        // ağırlıklı MIUI/EMUI/bazı One UI sürümleri) decorView'in
+        // "android.R.id.content" görünümü, Activity yaşam döngüsünün bu
+        // noktasında HENÜZ TAM KURULMAMIŞ olabiliyor — findViewById() null
+        // dönüyor, ardından çağrılan .getChildAt(0) "NullPointerException:
+        // getChildAt on a null object reference" ile çöküyor. Bu AndroidX
+        // kütüphanesinin kendi iç kodunda olan bilinen bir zamanlama sorunu.
+        // Kesin/garanti bir önlem yok (Google'ın kendi kütüphane kodu), ama
+        // bir sonraki UI frame'inde (View hiyerarşisi kesinlikle hazır
+        // olduğunda) tekrar denemek pratikte bu crash'i ortadan kaldırıyor —
+        // kullanıcı milisaniyelik bir gecikme dışında hiçbir şey fark etmez.
+        var setContentAttempts = 0
+        fun safeSetContent() {
+            setContentAttempts++
+            try {
+                setContent {
+                    val isDark by settingsVm.darkMode.collectAsState()
+                    HeftrangTheme(darkMode = isDark) {
+                        HeftrangNavHost(initialRoute = pendingNavTarget)
+                    }
+                }
+            } catch (e: NullPointerException) {
+                if (setContentAttempts < 5) {
+                    Log.w("MainActivity", "setContent deneme #$setContentAttempts başarısız, bir sonraki frame'de tekrar denenecek: ${e.message}")
+                    window.decorView.post { safeSetContent() }
+                } else {
+                    // 5 denemede de olmadıysa artık AndroidX kütüphanesinde
+                    // farklı/kalıcı bir sorun var demektir — sessizce
+                    // yutmuyoruz, tekrar fırlatıp normal crash raporuna
+                    // düşmesini sağlıyoruz (aksi halde beyaz ekranda
+                    // asılı kalırdı, sebepsiz bir kilitlenmeden farksız olurdu).
+                    Log.e("MainActivity", "setContent 5 denemede de başarısız oldu, hata fırlatılıyor")
+                    throw e
+                }
             }
         }
+        safeSetContent()
 
         // Bildirim izni iste (FCM → GMS gerektirir)
         if (gmsAvailable) requestNotificationPermission()
