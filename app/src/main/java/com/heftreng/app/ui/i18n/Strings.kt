@@ -173,6 +173,7 @@ object Strings {
     fun settingsTitle(l: String)   = t(l, "Ayarlar",          "Mîheng")
     fun darkMode(l: String)        = t(l, "Karanlık Mod",     "Moda Tarî")
     fun lightMode(l: String)       = t(l, "Aydınlık Mod",     "Moda Ronî")
+    fun systemMode(l: String)      = t(l, "Sistemi Takip Et", "Li gorî Pergalê")
     fun appLanguage(l: String)     = t(l, "Uygulama Dili",    "Zimana Bernameyê")
     fun about(l: String)           = t(l, "Hakkında",         "Der barê me")
     fun version(l: String)         = t(l, "Sürüm",            "Guherto")

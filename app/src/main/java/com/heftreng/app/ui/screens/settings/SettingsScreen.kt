@@ -63,7 +63,7 @@ fun SettingsScreen(
     authVm        : AuthViewModel     = hiltViewModel(),
     adminVm       : AdminViewModel    = hiltViewModel(),
 ) {
-    val isDark         by vm.darkMode.collectAsState()
+    val themeMode      by vm.themeMode.collectAsState()
     val adminPerms     by adminVm.perms.collectAsState()
     val isAdmin        = adminPerms?.isStaff() == true
     val language       by vm.language.collectAsState()
@@ -127,37 +127,62 @@ fun SettingsScreen(
         ) {
 
             // ── Görünüm ──────────────────────────────────────────────────
+            // ÇÖZÜLDÜ: Eskiden tek bir Switch ile sadece açık/koyu arası
+            // geçiş yapılıyordu, telefonun sistem temasını takip eden bir
+            // seçenek hiç yoktu. Artık 3 seçenekli bir buton grubu var:
+            // Açık / Koyu / Sistemi Takip Et (varsayılan).
             item {
                 SettingsSection(title = Strings.appearance(language)) {
-                    Row(
-                        modifier          = Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            if (isDark) Icons.Filled.DarkMode else Icons.Outlined.LightMode,
-                            null, tint = Amber, modifier = Modifier.size(22.dp),
-                        )
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                when (themeMode) {
+                                    "dark"  -> Icons.Filled.DarkMode
+                                    "light" -> Icons.Outlined.LightMode
+                                    else    -> Icons.Filled.BrightnessAuto
+                                },
+                                null, tint = Amber, modifier = Modifier.size(22.dp),
+                            )
+                            Spacer(Modifier.width(14.dp))
                             Text(
-                                if (isDark) Strings.darkMode(language) else Strings.lightMode(language),
+                                Strings.appearance(language),
                                 color = OnBackground, fontWeight = FontWeight.Medium,
                             )
-                            Text(
-                                if (isDark) "Rêya Tarî" else "Rêya Ronahî",
-                                color = Muted, fontSize = 12.sp,
-                            )
                         }
-                        Switch(
-                            checked         = isDark,
-                            onCheckedChange = { vm.toggleDarkMode() },
-                            colors          = SwitchDefaults.colors(
-                                checkedThumbColor   = Amber,
-                                checkedTrackColor   = Amber.copy(alpha = 0.35f),
-                                uncheckedThumbColor = Muted,
-                                uncheckedTrackColor = Muted.copy(alpha = 0.2f),
-                            ),
-                        )
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            modifier              = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            listOf(
+                                "light"  to Strings.lightMode(language),
+                                "dark"   to Strings.darkMode(language),
+                                "system" to Strings.systemMode(language),
+                            ).forEach { (mode, label) ->
+                                val selected = themeMode == mode
+                                FilterChip(
+                                    selected = selected,
+                                    onClick  = { vm.setThemeMode(mode) },
+                                    label    = { Text(label, fontSize = 12.sp) },
+                                    modifier = Modifier.weight(1f),
+                                    colors   = FilterChipDefaults.filterChipColors(
+                                        containerColor         = SurfaceVar,
+                                        labelColor              = Muted,
+                                        selectedContainerColor  = Amber.copy(alpha = 0.16f),
+                                        selectedLabelColor      = Amber,
+                                    ),
+                                    border   = FilterChipDefaults.filterChipBorder(
+                                        enabled = true, selected = selected,
+                                        borderColor         = Divider,
+                                        selectedBorderColor = Amber,
+                                        borderWidth          = 1.dp,
+                                        selectedBorderWidth  = 1.dp,
+                                    ),
+                                )
+                            }
+                        }
                     }
 
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))

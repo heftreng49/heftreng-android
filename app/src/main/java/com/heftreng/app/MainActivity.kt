@@ -184,7 +184,20 @@ class MainActivity : ComponentActivity() {
         // yapmaz.
         val composeView = androidx.compose.ui.platform.ComposeView(this).apply {
             setContent {
-                val isDark by settingsVm.darkMode.collectAsState()
+                // ÇÖZÜLDÜ: Eskiden sadece settingsVm.darkMode (sabit Boolean)
+                // okunuyordu — "system" tercihi hiç ele alınmıyordu, uygulama
+                // telefonun karanlık/aydınlık mod değişikliğine hiç tepki
+                // vermiyordu. Artık themeMode "system" ise gerçek zamanlı
+                // isSystemInDarkTheme() kullanılıyor — telefonun teması
+                // değişince (örn. güneş batımı otomatik koyu moda geçince)
+                // uygulama da anında buna uyuyor.
+                val themeMode by settingsVm.themeMode.collectAsState()
+                val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+                val isDark = when (themeMode) {
+                    "light" -> false
+                    "dark"  -> true
+                    else    -> systemDark   // "system"
+                }
                 HeftrangTheme(darkMode = isDark) {
                     HeftrangNavHost(initialRoute = pendingNavTarget)
                 }

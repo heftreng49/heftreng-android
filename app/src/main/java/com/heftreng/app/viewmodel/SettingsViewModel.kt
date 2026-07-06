@@ -28,6 +28,20 @@ class SettingsViewModel @Inject constructor(
     private val prefs: SharedPreferences =
         context.getSharedPreferences("hf_settings", Context.MODE_PRIVATE)
 
+    // ÇÖZÜLDÜ: Eskiden sadece "hf_theme_dark" (Boolean) tutuluyordu — bu,
+    // uygulama içi manuel toggle DIŞINDA hiçbir zaman telefonun sistem
+    // karanlık/aydınlık mod ayarına bağlı değildi; kullanıcı telefonun
+    // temasını değiştirse bile uygulama hep aynı (varsayılan koyu) kalıyordu.
+    // Artık 3 seviyeli bir mod var: "light" | "dark" | "system". "system"
+    // seçiliyken gerçek koyu/açık durumu MainActivity'de
+    // isSystemInDarkTheme() ile canlı okunup HeftrangTheme'e geçiliyor.
+    private val _themeMode = MutableStateFlow(prefs.getString("hf_theme_mode", "system") ?: "system")
+    val themeMode = _themeMode.asStateFlow()
+
+    // Geriye dönük uyumluluk: eski "hf_theme_dark" boolean'ını okuyan
+    // yerler (varsa) için sabit bir Boolean değeri hâlâ sunuyoruz, ama
+    // gerçek tema kararı artık UI katmanında themeMode + sistem durumuna
+    // göre hesaplanıyor (bkz. MainActivity.safeSetContent).
     private val _darkMode       = MutableStateFlow(prefs.getBoolean("hf_theme_dark", true))
     val darkMode = _darkMode.asStateFlow()
 
@@ -165,10 +179,21 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    // ÇÖZÜLDÜ: Yeni 3-seviyeli tema seçimi — "light" | "dark" | "system".
+    fun setThemeMode(mode: String) {
+        require(mode == "light" || mode == "dark" || mode == "system") { "Geçersiz tema modu: $mode" }
+        _themeMode.value = mode
+        prefs.edit().putString("hf_theme_mode", mode).apply()
+    }
+
+    // Geriye dönük uyumluluk: eski UI kodu hâlâ toggleDarkMode() çağırıyorsa
+    // (light↔dark arası switch), bu artık "system" dışına çıkarıp doğrudan
+    // light/dark arasında geçiş yapıyor.
     fun toggleDarkMode() {
-        val next = !_darkMode.value
-        _darkMode.value = next
-        prefs.edit().putBoolean("hf_theme_dark", next).apply()
+        val next = if (_themeMode.value == "dark") "light" else "dark"
+        setThemeMode(next)
+        _darkMode.value = (next == "dark")
+        prefs.edit().putBoolean("hf_theme_dark", next == "dark").apply()
     }
 
     fun setLanguage(lang: String) {
