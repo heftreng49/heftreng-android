@@ -170,15 +170,19 @@ class MainActivity : ComponentActivity() {
         // ComposeView'imizi oluşturup doğrudan setContentView() ile activity'nin
         // köküne bağlıyoruz — bu, AndroidX'in içindeki problemli
         // "var olan ComposeView'i bul" adımını tamamen atlıyor.
+        //
+        // NOT: Owner'ları (Lifecycle/ViewModelStore/SavedState) burada MANUEL
+        // set etmiyoruz — bir önceki denemede bunu yapmıştık ama
+        // setViewTreeLifecycleOwner/setViewTreeViewModelStoreOwner fonksiyon
+        // imzaları androidx.lifecycle sürümüne göre değişebiliyor ve CI'da
+        // derleme hatası verdi ("Unresolved reference"). Buna hiç gerek yok:
+        // ComponentActivity'nin kendi super.onCreate()'i bu owner'ları zaten
+        // decorView'e set eder, ve View hiyerarşisinde child view'ler
+        // (setContentView() ile decorView'in altına eklenen bu ComposeView
+        // dahil) bunları YUKARI doğru arayarak otomatik miras alır — normal
+        // setContent() akışı da zaten bu mekanizmaya güvenir, ekstra bir şey
+        // yapmaz.
         val composeView = androidx.compose.ui.platform.ComposeView(this).apply {
-            // ComponentActivity kendi super.onCreate()'inde zaten
-            // ViewTreeLifecycleOwner/ViewTreeSavedStateRegistryOwner'ı
-            // decorView'e set eder ve bunlar View hiyerarşisinde YUKARI
-            // doğru miras alınır (child view'ler otomatik görür) — normal
-            // setContent() akışında da zaten buna güvenilir. Burada sadece
-            // lifecycle owner'ı ekstra netlik için açıkça bağlıyoruz.
-            androidx.lifecycle.setViewTreeLifecycleOwner(this@MainActivity)
-            androidx.lifecycle.setViewTreeViewModelStoreOwner(this@MainActivity)
             setContent {
                 val isDark by settingsVm.darkMode.collectAsState()
                 HeftrangTheme(darkMode = isDark) {
