@@ -7,7 +7,6 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -158,46 +157,36 @@ class MainActivity : ComponentActivity() {
         // Bildirimden gelen intent'i al
         pendingNavTarget = intent?.getStringExtra("navigate_to")
 
-        // ÇÖZÜLDÜ (Play Console crash raporu): androidx.activity.compose'un
-        // setContent() implementasyonu şu şekilde başlıyor:
+        // ÇÖZÜLDÜ (Play Console crash raporu — Redmi Note 8/MIUI'de HER
+        // SEFERİNDE tekrarlanan kalıcı çökme): androidx.activity.compose'un
+        // setContent() implementasyonu şu satırla başlıyor:
         //   window.decorView.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
-        // Bazı OEM ROM'larında (crash raporlarında görülen kombinasyonlar —
-        // ağırlıklı MIUI/EMUI/bazı One UI sürümleri) decorView'in
-        // "android.R.id.content" görünümü, Activity yaşam döngüsünün bu
-        // noktasında HENÜZ TAM KURULMAMIŞ olabiliyor — findViewById() null
-        // dönüyor, ardından çağrılan .getChildAt(0) "NullPointerException:
-        // getChildAt on a null object reference" ile çöküyor. Bu AndroidX
-        // kütüphanesinin kendi iç kodunda olan bilinen bir zamanlama sorunu.
-        // Kesin/garanti bir önlem yok (Google'ın kendi kütüphane kodu), ama
-        // bir sonraki UI frame'inde (View hiyerarşisi kesinlikle hazır
-        // olduğunda) tekrar denemek pratikte bu crash'i ortadan kaldırıyor —
-        // kullanıcı milisaniyelik bir gecikme dışında hiçbir şey fark etmez.
-        var setContentAttempts = 0
-        fun safeSetContent() {
-            setContentAttempts++
-            try {
-                setContent {
-                    val isDark by settingsVm.darkMode.collectAsState()
-                    HeftrangTheme(darkMode = isDark) {
-                        HeftrangNavHost(initialRoute = pendingNavTarget)
-                    }
-                }
-            } catch (e: NullPointerException) {
-                if (setContentAttempts < 5) {
-                    Log.w("MainActivity", "setContent deneme #$setContentAttempts başarısız, bir sonraki frame'de tekrar denenecek: ${e.message}")
-                    window.decorView.post { safeSetContent() }
-                } else {
-                    // 5 denemede de olmadıysa artık AndroidX kütüphanesinde
-                    // farklı/kalıcı bir sorun var demektir — sessizce
-                    // yutmuyoruz, tekrar fırlatıp normal crash raporuna
-                    // düşmesini sağlıyoruz (aksi halde beyaz ekranda
-                    // asılı kalırdı, sebepsiz bir kilitlenmeden farksız olurdu).
-                    Log.e("MainActivity", "setContent 5 denemede de başarısız oldu, hata fırlatılıyor")
-                    throw e
+        // "Bir sonraki frame'de tekrar dene" yaklaşımı bu cihazda işe
+        // yaramadı, çünkü sorun geçici bir zamanlama meselesi değil: bazı
+        // MIUI/EMUI sürümlerinde decorView'in "android.R.id.content" view'i
+        // standart Android'den farklı kurulduğu için findViewById() HİÇBİR
+        // ZAMAN normal View dönmüyor, her denemede aynı NPE tekrar oluşuyor.
+        // Çözüm: setContent()'i hiç çağırmıyoruz. Bunun yerine kendi
+        // ComposeView'imizi oluşturup doğrudan setContentView() ile activity'nin
+        // köküne bağlıyoruz — bu, AndroidX'in içindeki problemli
+        // "var olan ComposeView'i bul" adımını tamamen atlıyor.
+        val composeView = androidx.compose.ui.platform.ComposeView(this).apply {
+            // ComponentActivity kendi super.onCreate()'inde zaten
+            // ViewTreeLifecycleOwner/ViewTreeSavedStateRegistryOwner'ı
+            // decorView'e set eder ve bunlar View hiyerarşisinde YUKARI
+            // doğru miras alınır (child view'ler otomatik görür) — normal
+            // setContent() akışında da zaten buna güvenilir. Burada sadece
+            // lifecycle owner'ı ekstra netlik için açıkça bağlıyoruz.
+            androidx.lifecycle.setViewTreeLifecycleOwner(this@MainActivity)
+            androidx.lifecycle.setViewTreeViewModelStoreOwner(this@MainActivity)
+            setContent {
+                val isDark by settingsVm.darkMode.collectAsState()
+                HeftrangTheme(darkMode = isDark) {
+                    HeftrangNavHost(initialRoute = pendingNavTarget)
                 }
             }
         }
-        safeSetContent()
+        setContentView(composeView)
 
         // Bildirim izni iste (FCM → GMS gerektirir)
         if (gmsAvailable) requestNotificationPermission()
