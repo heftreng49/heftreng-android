@@ -227,11 +227,12 @@ private fun VisibilityGatedAdSlot(content: @Composable () -> Unit) {
     Box(
         modifier = Modifier.onGloballyPositioned { coords ->
             if (isVisible) return@onGloballyPositioned // bir kez görünür olduysa geri almaya gerek yok
-            val bounds = coords.boundsInWindow()
-            val rootHeight = coords.findRootCoordinates().size.height
-            // Basit ama yeterli viewability kontrolü: elemanın en az bir kısmı
-            // ekran (root) sınırları içinde mi? (piksel bazlı, tutarlı birim)
-            if (bounds.bottom > 0f && bounds.top < rootHeight) {
+            // boundsInWindow() zaten pencereye göre KIRPILMIŞ (clipped) sınırları
+            // verir — eleman ekranın tamamen dışındaysa yüksekliği 0 olur.
+            // Basit ama yeterli viewability kontrolü: kırpılmış alan pozitif
+            // yükseklikte mi (yani en az bir kısmı gerçekten görünür mü)?
+            val bounds: androidx.compose.ui.geometry.Rect = coords.boundsInWindow()
+            if (bounds.height > 0f) {
                 isVisible = true
             }
         }
