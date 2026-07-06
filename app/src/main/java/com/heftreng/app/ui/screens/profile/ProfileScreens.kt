@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.debounce
 import com.heftreng.app.utils.openUrl
 import java.net.URLEncoder
 import androidx.navigation.NavController
@@ -95,10 +97,6 @@ fun ProfileScreen(
     val myBooks        = allMyBooks.filter { it.type == "book" }
     val rlEntries      by rlVm.entries.collectAsState()
 
-    DisposableEffect(Unit) {
-        onDispose { adsVm.releaseAllNatives("profile_native_") }
-    }
-
     val followers     by socialVm.followers.collectAsState()
     val following     by socialVm.following.collectAsState()
     val followersLoading by socialVm.followersLoading.collectAsState()
@@ -131,6 +129,10 @@ fun ProfileScreen(
     val isMe      = uid == "me" || uid == vm.myUid
     val targetUid = if (uid == "me") vm.myUid else uid
     val ku = language == "ku"
+
+    DisposableEffect(targetUid) {
+        onDispose { adsVm.releaseAllNatives("profile_${targetUid}_native_") }
+    }
 
     val isPrivate      = user?.isPrivate ?: false
     val canSeeContent  = isMe || !isPrivate || isFollowing
@@ -309,6 +311,21 @@ fun ProfileScreen(
                 itemCount = posts.size,
                 nativeKey = RemoteConfigManager.KEY_NATIVE_PROFILE,
             )
+        }
+
+        // ── Reklam önden-ısıtma — diğer ekranlarla (Feed/Kurdi) aynı desen ──
+        // ÖNCEDEN: profileAdPlan hesaplanıyor ve AdSlotView render ediliyordu
+        // ama hiçbir yerde warmVisiblePositions çağrılmıyordu — yani
+        // requestNative HİÇ tetiklenmiyordu. Sonuç: kullanıcı reklam
+        // pozisyonuna gelse bile isLoaded hep false kalıyor, sonsuz shimmer
+        // görünüyordu, gerçek reklam asla yüklenmiyordu.
+        LaunchedEffect(listState, profileAdPlan) {
+            adsVm.warmVisiblePositions(profileAdPlan, firstVisibleIndex = 0)
+            snapshotFlow { listState.firstVisibleItemIndex }
+                .debounce(300L)
+                .collect { firstVisible ->
+                    adsVm.warmVisiblePositions(profileAdPlan, firstVisibleIndex = firstVisible)
+                }
         }
 
         LazyColumn(

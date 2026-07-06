@@ -36,6 +36,7 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import kotlinx.coroutines.flow.debounce
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // BLOG LİSTESİ EKRANI
@@ -60,6 +61,22 @@ fun BlogScreen(
         )
     }
     var selLabel by remember { mutableStateOf<String?>(null) }
+    val blogListState = rememberLazyListState()
+
+    // ── Reklam önden-ısıtma — diğer ekranlarla (Feed/Kurdi) aynı desen ──
+    // ÖNCEDEN: adPlan hesaplanıyor ve AdSlotView render ediliyordu ama
+    // hiçbir yerde warmVisiblePositions çağrılmıyordu — yani requestBanner/
+    // requestNative HİÇ tetiklenmiyordu. Sonuç: kullanıcı reklam pozisyonuna
+    // gelse bile isLoaded hep false kalıyor, sonsuz shimmer görünüyordu,
+    // gerçek reklam asla yüklenmiyordu.
+    LaunchedEffect(blogListState, adPlan) {
+        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0)
+        snapshotFlow { blogListState.firstVisibleItemIndex }
+            .debounce(300L)
+            .collect { firstVisible ->
+                adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = firstVisible)
+            }
+    }
 
 
     DisposableEffect(Unit) {
@@ -149,6 +166,7 @@ fun BlogScreen(
                 )
                 else -> {
                     LazyColumn(
+                        state                 = blogListState,
                         contentPadding        = PaddingValues(12.dp),
                         verticalArrangement   = Arrangement.spacedBy(12.dp),
                         modifier              = Modifier.fillMaxSize(),
