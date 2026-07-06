@@ -22,6 +22,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -165,11 +167,23 @@ fun BlogPostScreen(
                         // (BannerSlot.BLOG) paylaşıyordu — aynı AdView iki yerde
                         // birden render edilemeyeceği için biri sessizce boş
                         // kalıyordu. Artık her ikisi kendi benzersiz slotKey'ine sahip.
+                        //
+                        // ÖNEMLİ: Bu ekran LazyColumn değil, verticalScroll'lu düz
+                        // Column kullanıyor — yani içindeki HER ŞEY (aşağıdaki
+                        // "yazı sonu" reklamı dahil) sayfa ilk açıldığı anda,
+                        // kullanıcı hiç scroll etmeden Compose ağacına dahil olur.
+                        // VisibilityGatedAdSlot, reklamı sadece gerçekten viewport'a
+                        // girdiğinde "aktif" sayar — ileride biri bu slotlara
+                        // requestBanner tetikleyen bir kod eklerse (yükleme
+                        // eklenirse), kullanıcı görmeden istek atılmasını burada
+                        // önceden engellemiş oluyoruz.
                         if (bannerUnitId != null) {
-                            AdSlotView(
-                                placement = AdPlacement.Banner("blogpost_${p.id}_top", bannerUnitId!!, blogBannerSize),
-                                adsVm     = adsVm,
-                            )
+                            VisibilityGatedAdSlot {
+                                AdSlotView(
+                                    placement = AdPlacement.Banner("blogpost_${p.id}_top", bannerUnitId!!, blogBannerSize),
+                                    adsVm     = adsVm,
+                                )
+                            }
                             Spacer(Modifier.height(8.dp))
                         }
 
@@ -179,15 +193,50 @@ fun BlogPostScreen(
                         // Yazı sonu reklam
                         if (bannerUnitId != null) {
                             Spacer(Modifier.height(16.dp))
-                            AdSlotView(
-                                placement = AdPlacement.Banner("blogpost_${p.id}_bottom", bannerUnitId!!, blogBannerSize),
-                                adsVm     = adsVm,
-                            )
+                            VisibilityGatedAdSlot {
+                                AdSlotView(
+                                    placement = AdPlacement.Banner("blogpost_${p.id}_bottom", bannerUnitId!!, blogBannerSize),
+                                    adsVm     = adsVm,
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  VisibilityGatedAdSlot — bu ekran verticalScroll'lu düz Column kullandığı
+//  için (LazyColumn değil), içindeki reklamlar sayfa açılır açılmaz, kullanıcı
+//  hiç scroll etmeden Compose ağacına dahil olur. Bu wrapper, gerçek ekran
+//  koordinatlarını (onGloballyPositioned + boundsInWindow) kontrol ederek
+//  reklamı sadece GERÇEKTEN görünür hale geldiğinde compose eder.
+//
+//  Şu an AdSlotView kendi başına istek atmıyor (warmVisiblePositions bu
+//  ekranda hiç çağrılmıyor) — yani şu an için pratik bir istek şişmesi yok.
+//  Ama bu gate, ileride biri "neden blog'da reklam yüklenmiyor" diye bakıp
+//  buraya bir yükleme tetikleyicisi eklerse, kullanıcı görmeden istek
+//  atılmasını yapısal olarak imkansız hale getiriyor.
+// ═══════════════════════════════════════════════════════════════════════════
+@Composable
+private fun VisibilityGatedAdSlot(content: @Composable () -> Unit) {
+    var isVisible by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier.onGloballyPositioned { coords ->
+            if (isVisible) return@onGloballyPositioned // bir kez görünür olduysa geri almaya gerek yok
+            val bounds = coords.boundsInWindow()
+            val rootHeight = coords.findRootCoordinates().size.height
+            // Basit ama yeterli viewability kontrolü: elemanın en az bir kısmı
+            // ekran (root) sınırları içinde mi? (piksel bazlı, tutarlı birim)
+            if (bounds.bottom > 0f && bounds.top < rootHeight) {
+                isVisible = true
+            }
+        }
+    ) {
+        if (isVisible) content()
     }
 }
 
