@@ -128,7 +128,8 @@ class RemoteConfigManager @Inject constructor(
             KEY_NATIVE_LIBRARY to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
             KEY_NATIVE_KURDI   to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
             KEY_NATIVE_PROFILE to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
-            KEY_NATIVE_SEARCH  to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
+            // Search: sonuç listesi kısa olabilir — ilk sonuç grubunda görmesi için erken başla
+            KEY_NATIVE_SEARCH  to """{"enabled":false,"unitId":"","position":3,"frequency":5}""",
             KEY_NATIVE_SINGLEPOST to """{"enabled":false,"unitId":"","position":3,"frequency":6}""",
 
             // ── Adım 2: yeni ekranlar — hepsi enabled:false, unitId boş ──
@@ -139,9 +140,12 @@ class RemoteConfigManager @Inject constructor(
             KEY_BANNER_YAZAR         to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":3,"frequency":4}""",
             KEY_BANNER_CMSPAGE       to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":3,"frequency":4}""",
             // Kart bazlı listeler (kitap/seri listeleri, okuma listesi, kayıtlı gönderiler) → native
-            KEY_NATIVE_BOOKSCREENS   to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
-            KEY_NATIVE_READINGLIST  to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
-            KEY_NATIVE_SERIALS       to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
+            // BookScreens: orta uzunluk, 4. kartta ilk reklam makul
+            KEY_NATIVE_BOOKSCREENS   to """{"enabled":false,"unitId":"","position":4,"frequency":5}""",
+            // ReadingList: kısa olabilir — 3. kartta ilk reklam, yoksa hiç görünmez
+            KEY_NATIVE_READINGLIST  to """{"enabled":false,"unitId":"","position":3,"frequency":5}""",
+            // Serials: orta uzunluk, seri listesi genelde 5-15 öğe
+            KEY_NATIVE_SERIALS       to """{"enabled":false,"unitId":"","position":3,"frequency":6}""",
             KEY_NATIVE_SAVEDPOSTS    to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
             // Kullanıcı listeleri (kısa listeler, düşük öncelik) → banner
             KEY_BANNER_PEOPLEHUB     to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":8,"frequency":8}""",
