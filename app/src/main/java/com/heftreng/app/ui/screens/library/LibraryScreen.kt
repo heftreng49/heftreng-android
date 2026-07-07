@@ -174,7 +174,12 @@ fun LibraryScreen(
     }
 
     // ── Dialog state ──────────────────────────────────────────────────────
-    val isAdmin = libraryVm.isAdmin
+    // FAZ -1 DÜZELTME: `libraryVm.isAdmin` bir Compose state'i DEĞİLDİ
+    // (val get()) — perms Firestore'dan asenkron dolduğunda burası
+    // recompose olmuyordu, "kutuphaneci" rolündeki kullanıcı (hatta admin)
+    // her zaman yetkisiz görünebiliyordu. libraryPerms'i doğrudan izliyoruz.
+    val libraryPermsState by libraryVm.libraryPerms.collectAsState()
+    val isAdmin = libraryPermsState?.can("library") == true
     var showQuoteDialog        by remember { mutableStateOf(false) }
     var showReviewBookPicker   by remember { mutableStateOf(false) }
     var reviewTargetBook       by remember { mutableStateOf<LibraryBook?>(null) }

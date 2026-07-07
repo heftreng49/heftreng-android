@@ -56,6 +56,14 @@ fun CmsScreen(
     val categories    by vm.categories.collectAsState()
     val loading       by vm.loading.collectAsState()
     val result        by vm.result.collectAsState()
+    // FAZ -1 DÜZELTME: `vm.isAdmin` bir Compose state'i DEĞİL (val get()),
+    // yani perms Firestore'dan asenkron dolduğunda recompose tetiklemiyordu.
+    // Ayrıca "henüz yükleniyor" (null) durumu "yetkisiz" ile aynı
+    // muameleyi görüyordu — bu yüzden gerçek admin hesabı bile Firestore
+    // cevabı gelmeden (veya gecikirse hiç) "Erişim Yok" ekranına takılıyordu.
+    // Çözüm: perms'i doğrudan collectAsState ile izle, null/false/true
+    // durumlarını ayrı ele al.
+    val cmsPerms      by vm.perms.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) }
     val pendingPosts  by yazarVm.pendingPosts.collectAsState()
@@ -74,7 +82,16 @@ fun CmsScreen(
     }
 
     // Erişim kontrolü
-    if (!vm.isAdmin) {
+    // cmsPerms == null  → henüz yükleniyor, bekleme göstergesi
+    // cmsPerms.can("edit") == false → gerçekten yetkisiz, "Erişim Yok"
+    // cmsPerms.can("edit") == true  → ekran açılır
+    if (cmsPerms == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Amber)
+        }
+        return
+    }
+    if (cmsPerms?.can("edit") != true) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Default.Block, null, tint = Error, modifier = Modifier.size(48.dp))
