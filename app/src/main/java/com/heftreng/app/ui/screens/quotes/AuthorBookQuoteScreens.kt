@@ -62,7 +62,9 @@ import com.heftreng.app.ui.component.AddReviewDialog
 import com.heftreng.app.ui.component.BookPickerDialog
 import com.heftreng.app.ui.component.ConnectedPostCard
 import com.heftreng.app.ui.theme.*
+import com.heftreng.app.viewmodel.AdsViewModel
 import com.heftreng.app.viewmodel.LibraryViewModel
+import kotlinx.coroutines.flow.debounce
 import com.heftreng.app.ui.screens.feed.PostCard
 import com.heftreng.app.viewmodel.ReadingListViewModel
 import com.heftreng.app.viewmodel.RlStatus
@@ -105,6 +107,7 @@ fun AuthorDetailScreen(
     language     : String = "tr",
     vm           : LibraryViewModel = hiltViewModel(),
     feedVm       : com.heftreng.app.viewmodel.FeedViewModel = hiltViewModel(),
+    adsVm        : AdsViewModel = hiltViewModel(),
 ) {
     val author      by vm.selectedAuthor.collectAsState()
     val books       by vm.authorBooks.collectAsState()
@@ -128,6 +131,39 @@ fun AuthorDetailScreen(
     val tabs = listOf("Kitapları", "Alıntılar", "İncelemeler")
 
     LaunchedEffect(authorId) { vm.loadAuthor(authorId) }
+
+    // ── Reklam altyapısı (enabled:false — unitId Firebase Console'dan girilene kadar kapalı) ──
+    val adConfigs by adsVm.allConfigs.collectAsState()
+    val authorBooksListState  = rememberLazyListState()
+    val authorQuotesListState = rememberLazyListState()
+    val authorReviewsListState = rememberLazyListState()
+    val authorBooksAdPlan = remember(books.size, adConfigs) {
+        adsVm.planFor("author_books", books.size, bannerKey = RemoteConfigManager.KEY_BANNER_AUTHOR_DETAIL)
+    }
+    val authorQuotesAdPlan = remember(quotes.size, adConfigs) {
+        adsVm.planFor("author_quotes", quotes.size, bannerKey = RemoteConfigManager.KEY_BANNER_AUTHOR_DETAIL)
+    }
+    val authorReviewsAdPlan = remember(reviews.size, adConfigs) {
+        adsVm.planFor("author_reviews", reviews.size, bannerKey = RemoteConfigManager.KEY_BANNER_AUTHOR_DETAIL)
+    }
+    LaunchedEffect(authorBooksListState, authorBooksAdPlan) {
+        adsVm.warmVisiblePositions(authorBooksAdPlan, firstVisibleIndex = 0, maxInitialAds = 2)
+        snapshotFlow { authorBooksListState.firstVisibleItemIndex }.debounce(300L)
+            .collect { adsVm.warmVisiblePositions(authorBooksAdPlan, firstVisibleIndex = it) }
+    }
+    LaunchedEffect(authorQuotesListState, authorQuotesAdPlan) {
+        adsVm.warmVisiblePositions(authorQuotesAdPlan, firstVisibleIndex = 0, maxInitialAds = 2)
+        snapshotFlow { authorQuotesListState.firstVisibleItemIndex }.debounce(300L)
+            .collect { adsVm.warmVisiblePositions(authorQuotesAdPlan, firstVisibleIndex = it) }
+    }
+    LaunchedEffect(authorReviewsListState, authorReviewsAdPlan) {
+        adsVm.warmVisiblePositions(authorReviewsAdPlan, firstVisibleIndex = 0, maxInitialAds = 2)
+        snapshotFlow { authorReviewsListState.firstVisibleItemIndex }.debounce(300L)
+            .collect { adsVm.warmVisiblePositions(authorReviewsAdPlan, firstVisibleIndex = it) }
+    }
+    DisposableEffect(authorId) {
+        onDispose { adsVm.releaseBanners("author_books_banner_"); adsVm.releaseBanners("author_quotes_banner_"); adsVm.releaseBanners("author_reviews_banner_") }
+    }
 
     Scaffold(
         containerColor = Background,
@@ -222,6 +258,7 @@ fun AuthorDetailScreen(
                 ) { page ->
                     when (page) {
                         0 -> LazyColumn(
+                            state          = authorBooksListState,
                             modifier       = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 80.dp),
                         ) {
@@ -244,15 +281,19 @@ fun AuthorDetailScreen(
                             if (books.isEmpty()) {
                                 item { EmptyState(Icons.Outlined.MenuBook, "Henüz kitap yok") }
                             } else {
-                                items(books, key = { it.id }) { book ->
+                                itemsIndexed(books, key = { _, b -> b.id }) { index, book ->
                                     LibraryBookCard(
                                         book    = book,
                                         onClick = { navController.navigate("library_book_detail/${book.id}") },
                                     )
+                                    authorBooksAdPlan[index]?.let { placement ->
+                                        AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(vertical = 4.dp))
+                                    }
                                 }
                             }
                         }
                         1 -> LazyColumn(
+                            state          = authorQuotesListState,
                             modifier       = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 80.dp),
                         ) {
@@ -274,7 +315,7 @@ fun AuthorDetailScreen(
                             if (quotes.isEmpty()) {
                                 item { EmptyState(Icons.Default.FormatQuote, "Henüz alıntı yok") }
                             } else {
-                                items(quotes, key = { it.id }) { quote ->
+                                itemsIndexed(quotes, key = { _, q -> q.id }) { index, quote ->
                                     val post = quote.toPost()
                                     ConnectedPostCard(
                                         post          = post,
@@ -282,10 +323,14 @@ fun AuthorDetailScreen(
                                         feedVm        = feedVm,
                                         language      = language,
                                     )
+                                    authorQuotesAdPlan[index]?.let { placement ->
+                                        AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(vertical = 4.dp))
+                                    }
                                 }
                             }
                         }
                         2 -> LazyColumn(
+                            state          = authorReviewsListState,
                             modifier       = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 80.dp),
                         ) {
@@ -307,12 +352,15 @@ fun AuthorDetailScreen(
                             if (reviews.isEmpty()) {
                                 item { EmptyState(Icons.Outlined.RateReview, "Henüz inceleme yok") }
                             } else {
-                                items(reviews, key = { it.id }) { review ->
+                                itemsIndexed(reviews, key = { _, r -> r.id }) { index, review ->
                                     BookReviewCard(
                                         review   = review,
                                         actions  = BookCardActions(vm = vm, navController = navController),
                                         language = language,
                                     )
+                                    authorReviewsAdPlan[index]?.let { placement ->
+                                        AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(vertical = 4.dp))
+                                    }
                                 }
                             }
                         }

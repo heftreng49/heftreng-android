@@ -6,8 +6,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -27,9 +30,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.data.model.ReadingListEntry
+import com.heftreng.app.ads.RemoteConfigManager
+import com.heftreng.app.ui.component.AdSlotView
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
+import com.heftreng.app.viewmodel.AdsViewModel
 import com.heftreng.app.viewmodel.ReadingListViewModel
+import kotlinx.coroutines.flow.debounce
 import com.heftreng.app.viewmodel.RlStatus
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
@@ -45,6 +52,7 @@ fun ReadingListScreen(
     navController : NavController,
     language      : String = "tr",
     vm            : ReadingListViewModel = hiltViewModel(),
+    adsVm         : AdsViewModel         = hiltViewModel(),
 ) {
     val ku = language == "ku"
     val entries  by vm.entries.collectAsState()
@@ -53,6 +61,12 @@ fun ReadingListScreen(
 
     LaunchedEffect(uid) { vm.load(uid) }
 
+    // ── Reklam altyapısı (enabled:false — unitId Firebase Console'dan girilene kadar kapalı) ──
+    val adConfigs by adsVm.allConfigs.collectAsState()
+    val rlGridState = rememberLazyGridState()
+    DisposableEffect(Unit) {
+        onDispose { adsVm.releaseAllNatives("readinglist_native_") }
+    }
 
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullRefreshState(
@@ -125,14 +139,30 @@ fun ReadingListScreen(
                         }
                     }
                 } else {
+                    val rlAdPlan = remember(list.size, adConfigs) {
+                            adsVm.planFor(
+                                screenKey = "readinglist",
+                                itemCount = list.size,
+                                nativeKey = RemoteConfigManager.KEY_NATIVE_READINGLIST,
+                            )
+                        }
+                    LaunchedEffect(rlGridState, rlAdPlan) {
+                            adsVm.warmVisiblePositions(rlAdPlan, firstVisibleIndex = 0, maxInitialAds = 2)
+                            snapshotFlow { rlGridState.firstVisibleItemIndex }
+                                .debounce(300L)
+                                .collect { firstVisible ->
+                                    adsVm.warmVisiblePositions(rlAdPlan, firstVisibleIndex = firstVisible)
+                                }
+                        }
                     LazyVerticalGrid(
+                        state          = rlGridState,
                         columns        = GridCells.Fixed(3),
                         contentPadding = PaddingValues(12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement   = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        items(list) { entry ->
+                        itemsIndexed(list) { index, entry ->
                             ReadingListBookCard(
                                 entry    = entry,
                                 status   = selectedStatus,
@@ -147,6 +177,17 @@ fun ReadingListScreen(
                                 onRemove = { vm.remove(entry.sid) },
                                 onUpdatePage = { page -> vm.updateCurrentPage(entry.sid, page) },
                             )
+                        }
+                        // Native reklam: plan'daki index'lere tam satır genişliğinde eklenir
+                        rlAdPlan.keys.sorted().forEach { adIndex ->
+                            val placement = rlAdPlan[adIndex] ?: return@forEach
+                            item(span = { GridItemSpan(maxLineSpan) }, key = placement.slotKey) {
+                                AdSlotView(
+                                    placement = placement,
+                                    adsVm     = adsVm,
+                                    modifier  = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                )
+                            }
                         }
                     }
                 }

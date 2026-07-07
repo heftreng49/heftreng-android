@@ -52,15 +52,19 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.heftreng.app.data.model.Book
 import com.heftreng.app.data.model.BookChapter
+import com.heftreng.app.ads.RemoteConfigManager
+import com.heftreng.app.ui.component.AdSlotView
 import com.heftreng.app.ui.component.RichTextEditor
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.screens.social.LikerListSheet
 import com.heftreng.app.ui.screens.social.UserAvatar
 import com.heftreng.app.ui.theme.*
+import com.heftreng.app.viewmodel.AdsViewModel
 import com.heftreng.app.viewmodel.BookViewModel
 import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import androidx.compose.ui.text.style.TextDirection
@@ -76,6 +80,7 @@ fun BooksScreen(
     navController: NavController,
     language     : String = "tr",
     vm           : BookViewModel = hiltViewModel(),
+    adsVm        : AdsViewModel  = hiltViewModel(),
 ) {
     val books   by vm.books.collectAsState()
     val loading by vm.loading.collectAsState()
@@ -83,6 +88,27 @@ fun BooksScreen(
 
     LaunchedEffect(Unit) { vm.loadBooks() }
 
+    // ── Reklam altyapısı (enabled:false — unitId Firebase Console'dan girilene kadar kapalı) ──
+    val adConfigs by adsVm.allConfigs.collectAsState()
+    val booksListState = rememberLazyListState()
+    val booksAdPlan = remember(books.size, adConfigs) {
+        adsVm.planFor(
+            screenKey = "bookscreens",
+            itemCount = books.size,
+            nativeKey = RemoteConfigManager.KEY_NATIVE_BOOKSCREENS,
+        )
+    }
+    LaunchedEffect(booksListState, booksAdPlan) {
+        adsVm.warmVisiblePositions(booksAdPlan, firstVisibleIndex = 0, maxInitialAds = 3)
+        snapshotFlow { booksListState.firstVisibleItemIndex }
+            .debounce(300L)
+            .collect { firstVisible ->
+                adsVm.warmVisiblePositions(booksAdPlan, firstVisibleIndex = firstVisible)
+            }
+    }
+    DisposableEffect(Unit) {
+        onDispose { adsVm.releaseAllNatives("bookscreens_native_") }
+    }
 
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullRefreshState(
@@ -125,11 +151,12 @@ fun BooksScreen(
             }
         } else {
             LazyColumn(
+                state   = booksListState,
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(books, key = { it.id }) { book ->
+                itemsIndexed(books, key = { _, b -> b.id }) { index, book ->
                     BookCard(
                         book      = book,
                         language  = language,
@@ -137,6 +164,9 @@ fun BooksScreen(
                         onLike    = { vm.toggleLikeBook(book) },
                         onProfile = { navController.navigate("profile/${book.uid}") },
                     )
+                    booksAdPlan[index]?.let { placement ->
+                        AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(top = 6.dp))
+                    }
                 }
             }
         }
