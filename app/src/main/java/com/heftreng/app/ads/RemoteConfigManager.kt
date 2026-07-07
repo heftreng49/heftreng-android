@@ -75,6 +75,20 @@ class RemoteConfigManager @Inject constructor(
         const val KEY_NATIVE_SEARCH     = "native_search"
         const val KEY_NATIVE_SINGLEPOST = "native_singlepost"
 
+        // ── Adım 2: reklamı henüz olmayan ekranlar için hazırlanan key'ler ──
+        // Bu key'ler kod tarafında hazır ama enabled:false — Firebase Console'da
+        // gerçek unitId girilene kadar reklam hiç görünmeyecek (Adım 6/1 prensibi).
+        const val KEY_BANNER_AUTHOR_DETAIL  = "banner_author_detail"
+        const val KEY_BANNER_BOOK_DETAIL    = "banner_book_detail"
+        const val KEY_BANNER_QUOTE_DETAIL   = "banner_quote_detail"
+        const val KEY_NATIVE_BOOKSCREENS    = "native_bookscreens"
+        const val KEY_NATIVE_READINGLIST    = "native_readinglist"
+        const val KEY_BANNER_YAZAR          = "banner_yazar"
+        const val KEY_NATIVE_SERIALS        = "native_serials"
+        const val KEY_NATIVE_SAVEDPOSTS     = "native_savedposts"
+        const val KEY_BANNER_PEOPLEHUB      = "banner_peoplehub"
+        const val KEY_BANNER_CMSPAGE        = "banner_cmspage"
+
         /**
          * Tüm banner/native config key'lerinin tek listesi. Yeni bir ekrana
          * reklam eklemek istendiğinde tek yapılması gereken: burada bir KEY_*
@@ -87,6 +101,11 @@ class RemoteConfigManager @Inject constructor(
             KEY_NATIVE_FEED, KEY_NATIVE_BLOG, KEY_NATIVE_LIBRARY, KEY_NATIVE_KURDI,
             KEY_NATIVE_PROFILE, KEY_NATIVE_SEARCH, KEY_NATIVE_SINGLEPOST,
             KEY_INTERSTITIAL, KEY_REWARDED,
+            // Adım 2'de eklenen yeni ekranlar
+            KEY_BANNER_AUTHOR_DETAIL, KEY_BANNER_BOOK_DETAIL, KEY_BANNER_QUOTE_DETAIL,
+            KEY_NATIVE_BOOKSCREENS, KEY_NATIVE_READINGLIST, KEY_BANNER_YAZAR,
+            KEY_NATIVE_SERIALS, KEY_NATIVE_SAVEDPOSTS, KEY_BANNER_PEOPLEHUB,
+            KEY_BANNER_CMSPAGE,
         )
 
         // ── Default JSON değerleri ───────────────────────────────────────
@@ -111,6 +130,21 @@ class RemoteConfigManager @Inject constructor(
             KEY_NATIVE_PROFILE to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
             KEY_NATIVE_SEARCH  to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
             KEY_NATIVE_SINGLEPOST to """{"enabled":false,"unitId":"","position":3,"frequency":6}""",
+
+            // ── Adım 2: yeni ekranlar — hepsi enabled:false, unitId boş ──
+            // Detay sayfaları (yazar/kitap/alıntı/Yazar ekranı/CMS statik sayfa) → banner
+            KEY_BANNER_AUTHOR_DETAIL to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":3,"frequency":4}""",
+            KEY_BANNER_BOOK_DETAIL   to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":3,"frequency":4}""",
+            KEY_BANNER_QUOTE_DETAIL  to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":3,"frequency":4}""",
+            KEY_BANNER_YAZAR         to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":3,"frequency":4}""",
+            KEY_BANNER_CMSPAGE       to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":3,"frequency":4}""",
+            // Kart bazlı listeler (kitap/seri listeleri, okuma listesi, kayıtlı gönderiler) → native
+            KEY_NATIVE_BOOKSCREENS   to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
+            KEY_NATIVE_READINGLIST  to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
+            KEY_NATIVE_SERIALS       to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
+            KEY_NATIVE_SAVEDPOSTS    to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
+            // Kullanıcı listeleri (kısa listeler, düşük öncelik) → banner
+            KEY_BANNER_PEOPLEHUB     to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":8,"frequency":8}""",
         )
     }
 
