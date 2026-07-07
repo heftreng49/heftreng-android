@@ -6,6 +6,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,6 +38,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.google.firebase.Timestamp
+import com.heftreng.app.ads.RemoteConfigManager
+import com.heftreng.app.ui.component.AdSlotView
+import kotlinx.coroutines.flow.debounce
 import com.heftreng.app.data.model.Comment
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
@@ -61,6 +65,7 @@ fun SinglePostScreen(
     navController: NavController,
     vm           : FeedViewModel   = hiltViewModel(),
     socialVm     : SocialViewModel = hiltViewModel(),
+    adsVm        : com.heftreng.app.viewmodel.AdsViewModel = hiltViewModel(),
     language     : String = "tr",
 ) {
     val ku = language == "ku"
@@ -101,6 +106,33 @@ fun SinglePostScreen(
             .filter { it.replyTo != null && it.replyTo.commentId in allIds }
             .groupBy { it.replyTo!!.commentId }
         topLevel.map { parent -> CommentThread(parent, repliesByParent[parent.id] ?: emptyList()) }
+    }
+
+    // ── Reklam alt yapısı — bilinçli olarak KAPALI başlıyor ────────────────
+    // Yorum thread'leri (üst seviye) arasına native reklam. Yorum sayısı
+    // genelde az olduğu için position düşük tutuldu (Remote Config'te 3) —
+    // kısa yorum listelerinde bile reklamın en az bir kez görünme şansı olsun.
+    // Remote Config'te enabled:false olduğu sürece hiçbir şey görünmez —
+    // gerçek unitId Firebase Console'dan girilene kadar bu ekranda reklam
+    // yüklenmeyecek (bkz. REKLAM-DENETIM-PLANI.md Adım 6).
+    val adConfigs by adsVm.allConfigs.collectAsState()
+    val singlePostAdPlan = remember(commentThreads.size, adConfigs) {
+        adsVm.planFor(
+            screenKey = "singlepost",
+            itemCount = commentThreads.size,
+            nativeKey = RemoteConfigManager.KEY_NATIVE_SINGLEPOST,
+        )
+    }
+    LaunchedEffect(listState, singlePostAdPlan) {
+        adsVm.warmVisiblePositions(singlePostAdPlan, firstVisibleIndex = 0)
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .debounce(300L)
+            .collect { firstVisible ->
+                adsVm.warmVisiblePositions(singlePostAdPlan, firstVisibleIndex = firstVisible)
+            }
+    }
+    DisposableEffect(postId) {
+        onDispose { adsVm.releaseAllNatives("singlepost_native_") }
     }
     // Açık olan thread'lerin parent id'leri — varsayılan kapalı, tıklanınca açılır
     var expandedThreads by remember { mutableStateOf(setOf<String>()) }
@@ -296,7 +328,7 @@ fun SinglePostScreen(
                     }
 
                     // Yorum listesi — üst yorum + altında girintili, aç/kapa'lı yanıtlar
-                    items(commentThreads, key = { it.parent.id }) { thread ->
+                    itemsIndexed(commentThreads, key = { _, t -> t.parent.id }) { index, thread ->
                         val cmt = thread.parent
                         val isOwner   = myUid.isNotBlank() && cmt.uid.isNotBlank() && cmt.uid == myUid
                         val isPostOwner = myUid.isNotBlank() && myUid == post.uid
@@ -408,6 +440,9 @@ fun SinglePostScreen(
                             thickness = 0.5.dp,
                             modifier  = Modifier.padding(start = 56.dp),
                         )
+                        singlePostAdPlan[index]?.let { placement ->
+                            AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(vertical = 4.dp))
+                        }
                     }
                 }
 

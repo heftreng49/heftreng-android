@@ -73,6 +73,7 @@ class RemoteConfigManager @Inject constructor(
         const val KEY_NATIVE_KURDI      = "native_kurdi"
         const val KEY_NATIVE_PROFILE    = "native_profile"
         const val KEY_NATIVE_SEARCH     = "native_search"
+        const val KEY_NATIVE_SINGLEPOST = "native_singlepost"
 
         /**
          * Tüm banner/native config key'lerinin tek listesi. Yeni bir ekrana
@@ -84,7 +85,7 @@ class RemoteConfigManager @Inject constructor(
             KEY_BANNER_FEED, KEY_BANNER_LIBRARY, KEY_BANNER_KURDI, KEY_BANNER_BLOG,
             KEY_BANNER_NOTIFICATIONS,
             KEY_NATIVE_FEED, KEY_NATIVE_BLOG, KEY_NATIVE_LIBRARY, KEY_NATIVE_KURDI,
-            KEY_NATIVE_PROFILE, KEY_NATIVE_SEARCH,
+            KEY_NATIVE_PROFILE, KEY_NATIVE_SEARCH, KEY_NATIVE_SINGLEPOST,
             KEY_INTERSTITIAL, KEY_REWARDED,
         )
 
@@ -109,6 +110,7 @@ class RemoteConfigManager @Inject constructor(
             KEY_NATIVE_KURDI   to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
             KEY_NATIVE_PROFILE to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
             KEY_NATIVE_SEARCH  to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
+            KEY_NATIVE_SINGLEPOST to """{"enabled":false,"unitId":"","position":3,"frequency":6}""",
         )
     }
 

@@ -30,7 +30,7 @@ Aşağıdaki tablo, projedeki **24 ekran dosyasının tamamının** taranmasıyl
 
 | Ekran | İçerik tipi | Container | Uzun/scroll'lanabilir mi | Durum |
 |---|---|---|---|---|
-| SinglePostScreen (tekil gönderi) | Post detayı + yorumlar | LazyColumn | Evet, yorum sayısına göre uzun olabilir | ⬜ |
+| **SinglePostScreen (tekil gönderi)** | Post detayı + yorumlar | LazyColumn | Evet, yorum sayısına göre uzun olabilir | **✅ Tamamlandı — native eklendi (kapalı, enabled:false)** |
 | AuthorBookQuoteScreens (6 ayrı ekran: yazar detay, kitap detay, alıntı detay vb.) | Liste + detay karışık | LazyColumn / verticalScroll karışık | Evet | ⬜ |
 | BookScreens (3 ekran) | Kitap/seri listeleri | LazyColumn | Evet | ⬜ |
 | ReadingListScreen | Okuma listesi | LazyColumn/Grid | Evet | ⬜ |
