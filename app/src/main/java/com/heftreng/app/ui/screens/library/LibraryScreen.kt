@@ -80,6 +80,9 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.debounce
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Ana ekran
@@ -379,7 +382,19 @@ private fun LibraryQuotesTab(
             bannerKey = RemoteConfigManager.KEY_BANNER_LIBRARY,
         )
     }
-    LazyColumn(contentPadding = PaddingValues(vertical = 0.dp)) {
+    val quotesListState = rememberLazyListState()
+    // Feed/Kurdi/Profile/Blog'daki kanıtlanmış ısıtma deseninin birebir aynısı —
+    // önceden bu sekmede warmVisiblePositions hiç çağrılmıyordu, bu yüzden
+    // native/banner reklamlar hiç yüklenmiyordu.
+    LaunchedEffect(quotesListState, adPlan) {
+        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0)
+        snapshotFlow { quotesListState.firstVisibleItemIndex }
+            .debounce(300L)
+            .collect { firstVisible ->
+                adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = firstVisible)
+            }
+    }
+    LazyColumn(state = quotesListState, contentPadding = PaddingValues(vertical = 0.dp)) {
         if (isOffline) {
             item(key = "offline_banner") {
                 Row(
@@ -434,8 +449,17 @@ private fun LibraryReviewsTab(
     val adPlan = remember(reviews.size, adConfigs) {
         adsVm.planFor(screenKey = "lib_reviews", itemCount = reviews.size, bannerKey = RemoteConfigManager.KEY_BANNER_LIBRARY)
     }
+    val reviewsListState = rememberLazyListState()
+    LaunchedEffect(reviewsListState, adPlan) {
+        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0)
+        snapshotFlow { reviewsListState.firstVisibleItemIndex }
+            .debounce(300L)
+            .collect { firstVisible ->
+                adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = firstVisible)
+            }
+    }
     val actions = BookCardActions(vm = vm, navController = navController)
-    LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
+    LazyColumn(state = reviewsListState, contentPadding = PaddingValues(vertical = 8.dp)) {
         itemsIndexed(reviews, key = { _, r -> r.id }) { index, review ->
             BookReviewCard(review = review, actions = actions, language = language)
             adPlan[index]?.let { placement ->
@@ -460,7 +484,17 @@ private fun LibraryAuthorsTab(
     val adPlan = remember(authors.size, adConfigs) {
         adsVm.planFor(screenKey = "lib_authors", itemCount = authors.size, bannerKey = RemoteConfigManager.KEY_BANNER_LIBRARY)
     }
+    val authorsListState = rememberLazyListState()
+    LaunchedEffect(authorsListState, adPlan) {
+        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0)
+        snapshotFlow { authorsListState.firstVisibleItemIndex }
+            .debounce(300L)
+            .collect { firstVisible ->
+                adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = firstVisible)
+            }
+    }
     LazyColumn(
+        state               = authorsListState,
         contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -486,6 +520,15 @@ private fun LibraryBooksTab(
     }
     val bannerUnitId by adsVm.unitIdFlow(RemoteConfigManager.KEY_BANNER_LIBRARY).collectAsState()
     val bannerCfg    by adsVm.configFlow(RemoteConfigManager.KEY_BANNER_LIBRARY).collectAsState()
+    // AdSlotView artık kendi başına requestBanner çağırmıyor (bkz. AdSlotView.kt) —
+    // istek warmVisiblePositions veya doğrudan requestBanner ile atılmak zorunda.
+    // Bu tek statik slot bir liste penceresi değil, tek seferlik olduğu için
+    // burada doğrudan requestBanner çağrılıyor.
+    LaunchedEffect(bannerUnitId) {
+        bannerUnitId?.let { unitId ->
+            adsVm.requestBanner("lib_books_banner_0", unitId, bannerCfg?.bannerSize ?: "adaptive")
+        }
+    }
     LazyVerticalGrid(
         columns             = GridCells.Fixed(2),
         contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),

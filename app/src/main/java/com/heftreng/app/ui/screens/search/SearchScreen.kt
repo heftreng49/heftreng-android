@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import com.heftreng.app.ads.RemoteConfigManager
 import com.heftreng.app.ui.component.AdSlotView
 import androidx.compose.foundation.shape.CircleShape
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,6 +43,7 @@ import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.SearchResult
 import com.heftreng.app.viewmodel.SearchViewModel
+import kotlinx.coroutines.flow.debounce
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -149,20 +152,45 @@ fun SearchScreen(
                 }
             }
 
+            val searchListState = rememberLazyListState()
+
+            // Arama sonuçları sekmeye/aramaya göre değiştikçe plan yeniden hesaplanır.
+            val filteredForAds = when (activeTab) {
+                1    -> searchResults.filter { it.type == "user" }
+                2    -> searchResults.filter { it.type == "post" }
+                3    -> searchResults.filter { it.type == "serial" }
+                4    -> searchResults.filter { it.type == "library_book" || it.type == "book_quote" }
+                5    -> searchResults.filter { it.type == "library_author" || it.type == "author" }
+                else -> searchResults
+            }
+            val searchAdPlan = if (query.length >= 2 && filteredForAds.isNotEmpty()) {
+                adsVm.planFor(
+                    screenKey = "search",
+                    itemCount = filteredForAds.size,
+                    nativeKey = RemoteConfigManager.KEY_NATIVE_SEARCH,
+                )
+            } else emptyMap()
+
+            // Feed/Kurdi/Profile/Blog'daki kanıtlanmış desenin birebir aynısı:
+            // viewport + 3 kart penceresiyle, 300ms debounce ile ısıtma.
+            LaunchedEffect(searchListState, searchAdPlan) {
+                if (searchAdPlan.isEmpty()) return@LaunchedEffect
+                adsVm.warmVisiblePositions(searchAdPlan, firstVisibleIndex = 0)
+                snapshotFlow { searchListState.firstVisibleItemIndex }
+                    .debounce(300L)
+                    .collect { firstVisible ->
+                        adsVm.warmVisiblePositions(searchAdPlan, firstVisibleIndex = firstVisible)
+                    }
+            }
+
             LazyColumn(
+                state          = searchListState,
                 modifier       = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 80.dp),
             ) {
                 if (query.length >= 2) {
                     // Arama sonuçları — sekmeye göre filtrele
-                    val filtered = when (activeTab) {
-                        1    -> searchResults.filter { it.type == "user" }
-                        2    -> searchResults.filter { it.type == "post" }
-                        3    -> searchResults.filter { it.type == "serial" }
-                        4    -> searchResults.filter { it.type == "library_book" || it.type == "book_quote" }
-                        5    -> searchResults.filter { it.type == "library_author" || it.type == "author" }
-                        else -> searchResults
-                    }
+                    val filtered = filteredForAds
 
                     if (loading) {
                         items(6, key = { "sk_$it" }) {
@@ -180,11 +208,6 @@ fun SearchScreen(
                             }
                         }
                     } else {
-                        val searchAdPlan = adsVm.planFor(
-                            screenKey = "search",
-                            itemCount = filtered.size,
-                            nativeKey = RemoteConfigManager.KEY_NATIVE_SEARCH,
-                        )
                         itemsIndexed(filtered, key = { _, r -> r.type + r.id }) { index, result ->
                             SearchResultRow(result, language = language, onClick = {
                                 when (result.type) {
