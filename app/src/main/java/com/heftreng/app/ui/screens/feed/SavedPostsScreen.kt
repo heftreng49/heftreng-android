@@ -5,7 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlinx.coroutines.flow.debounce
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -20,9 +22,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
+import com.heftreng.app.ads.RemoteConfigManager
+import com.heftreng.app.ui.component.AdSlotView
 import com.heftreng.app.ui.component.ConnectedPostCard
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
+import com.heftreng.app.viewmodel.AdsViewModel
 import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
@@ -46,6 +51,7 @@ fun SavedPostsScreen(
     feedVm        : FeedViewModel    = hiltViewModel(),
     socialVm      : SocialViewModel  = hiltViewModel(),
     settingsVm    : SettingsViewModel = hiltViewModel(),
+    adsVm         : AdsViewModel     = hiltViewModel(),
 ) {
     val language by settingsVm.language.collectAsState()
     val ku = language == "ku"
@@ -57,6 +63,27 @@ fun SavedPostsScreen(
     var loading     by remember { mutableStateOf(true) }
     var errorMsg    by remember { mutableStateOf("") }
     val listState   = rememberLazyListState()
+
+    // ── Reklam altyapısı (enabled:false — Firebase Console'dan unitId girilene kadar kapalı) ──
+    val adConfigs by adsVm.allConfigs.collectAsState()
+    val savedPostsAdPlan = remember(savedPosts.size, adConfigs) {
+        adsVm.planFor(
+            screenKey = "savedposts",
+            itemCount = savedPosts.size,
+            nativeKey = RemoteConfigManager.KEY_NATIVE_SAVEDPOSTS,
+        )
+    }
+    LaunchedEffect(listState, savedPostsAdPlan) {
+        adsVm.warmVisiblePositions(savedPostsAdPlan, firstVisibleIndex = 0, maxInitialAds = 3)
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .debounce(300L)
+            .collect { firstVisible ->
+                adsVm.warmVisiblePositions(savedPostsAdPlan, firstVisibleIndex = firstVisible)
+            }
+    }
+    DisposableEffect(Unit) {
+        onDispose { adsVm.releaseAllNatives("savedposts_native_") }
+    }
 
     // feedSaves koleksiyonundan uid'ye göre çek, sonra feed dokümanlarını getir
     LaunchedEffect(uid) {
@@ -212,7 +239,7 @@ fun SavedPostsScreen(
                     modifier       = Modifier.fillMaxSize().padding(padding),
                     contentPadding = PaddingValues(bottom = 80.dp),
                 ) {
-                    items(savedPosts, key = { it.id }) { post ->
+                    itemsIndexed(savedPosts, key = { _, p -> p.id }) { index, post ->
                         ConnectedPostCard(
                             post           = post,
                             navController  = navController,
@@ -225,6 +252,9 @@ fun SavedPostsScreen(
                             },
                         )
                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                        savedPostsAdPlan[index]?.let { placement ->
+                            AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(vertical = 4.dp))
+                        }
                     }
                 }
             }
