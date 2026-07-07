@@ -64,6 +64,7 @@ class RemoteConfigManager @Inject constructor(
         const val KEY_BANNER_LIBRARY    = "banner_library"
         const val KEY_BANNER_KURDI      = "banner_kurdi"
         const val KEY_BANNER_BLOG       = "banner_blog"
+        const val KEY_BANNER_NOTIFICATIONS = "banner_notifications"
         const val KEY_INTERSTITIAL      = "interstitial_serial"
         const val KEY_REWARDED          = "rewarded_xp"
         const val KEY_NATIVE_FEED       = "native_feed"
@@ -81,6 +82,7 @@ class RemoteConfigManager @Inject constructor(
          */
         val ALL_AD_KEYS = listOf(
             KEY_BANNER_FEED, KEY_BANNER_LIBRARY, KEY_BANNER_KURDI, KEY_BANNER_BLOG,
+            KEY_BANNER_NOTIFICATIONS,
             KEY_NATIVE_FEED, KEY_NATIVE_BLOG, KEY_NATIVE_LIBRARY, KEY_NATIVE_KURDI,
             KEY_NATIVE_PROFILE, KEY_NATIVE_SEARCH,
             KEY_INTERSTITIAL, KEY_REWARDED,
@@ -98,6 +100,7 @@ class RemoteConfigManager @Inject constructor(
             KEY_BANNER_LIBRARY to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":5,"frequency":5}""",
             KEY_BANNER_KURDI   to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":5,"frequency":5}""",
             KEY_BANNER_BLOG    to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":5,"frequency":5}""",
+            KEY_BANNER_NOTIFICATIONS to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":8,"frequency":8}""",
             KEY_INTERSTITIAL   to """{"enabled":false,"unitId":"","frequency":4,"screens":"feed,library,kurdi,blog"}""",
             KEY_REWARDED       to """{"enabled":false,"unitId":"","dailyLimit":3,"xpReward":50,"scenarioDoubleXp":true,"scenarioUnlockLesson":true,"scenarioSaveStreak":true}""",
             KEY_NATIVE_FEED    to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",

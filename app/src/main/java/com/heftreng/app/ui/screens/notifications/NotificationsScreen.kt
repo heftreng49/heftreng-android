@@ -5,6 +5,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.heftreng.app.ads.RemoteConfigManager
+import com.heftreng.app.ui.component.AdSlotView
+import kotlinx.coroutines.flow.debounce
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ExperimentalMaterialApi
@@ -141,12 +146,42 @@ fun notifDefaultMessage(type: String, ku: Boolean = false): String {
 fun NotificationsScreen(
     navController: NavController,
     vm: NotificationsViewModel = hiltViewModel(),
+    adsVm: com.heftreng.app.viewmodel.AdsViewModel = hiltViewModel(),
     language: String = "tr",
 ) {
     val ku            = language == "ku"
     val notifications by vm.notifications.collectAsState()
     val loading       by vm.loading.collectAsState()
     val unreadCount   = notifications.count { !it.read }
+
+    // ── Reklam alt yapısı — bilinçli olarak KAPALI başlıyor ────────────────
+    // Bu ekran metin ağırlıklı, düz bir liste olduğu için native yerine
+    // banner tercih edildi (Adım 5 kriteri: metin ağırlıklı listeler → banner).
+    // Remote Config'te enabled:false olduğu sürece hiçbir şey görünmez —
+    // gerçek unitId Firebase Console'dan girilene kadar bu ekranda reklam
+    // yüklenmeyecek (bkz. REKLAM-DENETIM-PLANI.md Adım 6).
+    val adConfigs by adsVm.allConfigs.collectAsState()
+    val adPlan = remember(notifications.size, adConfigs) {
+        adsVm.planFor(
+            screenKey = "notifications",
+            itemCount = notifications.size,
+            bannerKey = RemoteConfigManager.KEY_BANNER_NOTIFICATIONS,
+        )
+    }
+    val notifListState = rememberLazyListState()
+
+    LaunchedEffect(notifListState, adPlan) {
+        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0)
+        snapshotFlow { notifListState.firstVisibleItemIndex }
+            .debounce(300L)
+            .collect { firstVisible ->
+                adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = firstVisible)
+            }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { adsVm.releaseBanners("notifications_banner_") }
+    }
 
     val refreshing by vm.refreshing.collectAsState()
     val pullRefreshState = rememberPullRefreshState(
@@ -255,6 +290,7 @@ fun NotificationsScreen(
                     val olderList  = grouped[NotifGroup.OLDER]  ?: emptyList()
 
                     LazyColumn(
+                        state          = notifListState,
                         modifier       = Modifier.fillMaxSize().padding(padding),
                         contentPadding = PaddingValues(bottom = 80.dp),
                     ) {
@@ -262,7 +298,7 @@ fun NotificationsScreen(
                             item {
                                 NotifGroupHeader(Strings.notifGroupToday(language))
                             }
-                            items(todayList, key = { it.id }) { notif ->
+                            itemsIndexed(todayList, key = { _, n -> n.id }) { idx, notif ->
                                 NotifItem(
                                     notif    = notif,
                                     language = language,
@@ -270,11 +306,15 @@ fun NotificationsScreen(
                                     onDeclineFollowRequest = if (notif.type == "follow_request") {{ vm.declineFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onClick  = { handleNotifClick(notif, navController, vm) },
                                 )
+                                // Global index = grup içi index (offset 0, ilk grup)
+                                adPlan[idx]?.let { placement ->
+                                    AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(vertical = 4.dp))
+                                }
                             }
                         }
                         if (weekList.isNotEmpty()) {
                             item { NotifGroupHeader(Strings.notifGroupWeek(language)) }
-                            items(weekList, key = { it.id }) { notif ->
+                            itemsIndexed(weekList, key = { _, n -> n.id }) { idx, notif ->
                                 NotifItem(
                                     notif    = notif,
                                     language = language,
@@ -282,11 +322,15 @@ fun NotificationsScreen(
                                     onDeclineFollowRequest = if (notif.type == "follow_request") {{ vm.declineFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onClick  = { handleNotifClick(notif, navController, vm) },
                                 )
+                                // Global index = todayList'in boyutu + grup içi index
+                                adPlan[todayList.size + idx]?.let { placement ->
+                                    AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(vertical = 4.dp))
+                                }
                             }
                         }
                         if (olderList.isNotEmpty()) {
                             item { NotifGroupHeader(Strings.notifGroupOlder(language)) }
-                            items(olderList, key = { it.id }) { notif ->
+                            itemsIndexed(olderList, key = { _, n -> n.id }) { idx, notif ->
                                 NotifItem(
                                     notif    = notif,
                                     language = language,
@@ -294,6 +338,10 @@ fun NotificationsScreen(
                                     onDeclineFollowRequest = if (notif.type == "follow_request") {{ vm.declineFollowRequest(notif.fromUid, notif.id) }} else null,
                                     onClick  = { handleNotifClick(notif, navController, vm) },
                                 )
+                                // Global index = (todayList + weekList) boyutu + grup içi index
+                                adPlan[todayList.size + weekList.size + idx]?.let { placement ->
+                                    AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(vertical = 4.dp))
+                                }
                             }
                         }
                     }
