@@ -221,9 +221,24 @@ class AdsViewModel @Inject constructor(
         loadInterstitialAd(unitId)
     }
 
+    // Adım 3 (madde 5) savunma katmanı: şu an gösterimin TEK giriş noktası
+    // ScreenTracker.tryShowInterstitial() (MIN_SCREENS_BETWEEN=4 ile korunuyor).
+    // Ama showInterstitial public bir fonksiyon — ileride biri ScreenTracker'ı
+    // atlayıp buradan doğrudan çağırırsa hiçbir frekans koruması devreye
+    // girmez. Bu minimum-süre kontrolü ScreenTracker'ın yerini almaz (o hâlâ
+    // asıl karar mercii), sadece ikinci bir güvenlik ağı.
+    private var lastInterstitialShownAtMs = 0L
+    private val MIN_INTERSTITIAL_INTERVAL_MS = 60_000L // 60 sn — makul bir alt sınır
+
     fun showInterstitial(activity: Activity, onAdDismissed: () -> Unit) {
+        val now = System.currentTimeMillis()
+        if (now - lastInterstitialShownAtMs < MIN_INTERSTITIAL_INTERVAL_MS) {
+            onAdDismissed()
+            return
+        }
         val ad = interstitialAd
         if (ad == null) { onAdDismissed(); return }
+        lastInterstitialShownAtMs = now
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdDismissedFullScreenContent() {
                 interstitialAd = null
@@ -238,6 +253,8 @@ class AdsViewModel @Inject constructor(
         }
         ad.show(activity)
     }
+
+
 
     // ── Rewarded (ekran-bağımsız, davranış korunuyor) ──────────────────────
     private var rewardedAd      : RewardedAd? = null

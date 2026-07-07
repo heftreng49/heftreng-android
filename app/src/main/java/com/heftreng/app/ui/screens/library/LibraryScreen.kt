@@ -124,6 +124,28 @@ fun LibraryScreen(
         }
     }
 
+    // Adım 3 düzeltmesi: pager sekmeleri aynı composition içinde kaldığı için
+    // yukarıdaki onDispose SADECE Library ekranından tamamen çıkılınca (geri
+    // tuşu) tetikleniyordu — kullanıcı Alıntılar→Yazarlar→Kitaplar gibi sekmeler
+    // arası gezindikçe önceki sekmenin native/banner reklamları hiç release
+    // edilmiyordu (sessiz bellek sızıntısı + gereksiz canlı AdView/NativeAd).
+    // Her sekmeye özel prefix'i, o sekmeden ayrılırken (currentPage değişince)
+    // release ediyoruz; genel "lib_" temizliği ekrandan tam çıkışta hâlâ geçerli.
+    val libraryTabPrefixes = listOf("lib_quotes_", "lib_reviews_", "lib_authors_", "lib_books_")
+    LaunchedEffect(pagerState) {
+        var previousPage = pagerState.currentPage
+        snapshotFlow { pagerState.currentPage }.collect { page ->
+            if (page != previousPage) {
+                val leftPrefix = libraryTabPrefixes.getOrNull(previousPage)
+                if (leftPrefix != null) {
+                    adsVm.releaseBanners(leftPrefix)
+                    adsVm.releaseAllNatives(leftPrefix)
+                }
+                previousPage = page
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         loading = true
         // Tüm sorgular paralel — N+1 yerine collectionGroup tek sorguda
