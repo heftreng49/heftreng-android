@@ -182,28 +182,7 @@ class MainActivity : ComponentActivity() {
         // dahil) bunları YUKARI doğru arayarak otomatik miras alır — normal
         // setContent() akışı da zaten bu mekanizmaya güvenir, ekstra bir şey
         // yapmaz.
-        val composeView = androidx.compose.ui.platform.ComposeView(this).apply {
-            setContent {
-                // ÇÖZÜLDÜ: Eskiden sadece settingsVm.darkMode (sabit Boolean)
-                // okunuyordu — "system" tercihi hiç ele alınmıyordu, uygulama
-                // telefonun karanlık/aydınlık mod değişikliğine hiç tepki
-                // vermiyordu. Artık themeMode "system" ise gerçek zamanlı
-                // isSystemInDarkTheme() kullanılıyor — telefonun teması
-                // değişince (örn. güneş batımı otomatik koyu moda geçince)
-                // uygulama da anında buna uyuyor.
-                val themeMode by settingsVm.themeMode.collectAsState()
-                val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
-                val isDark = when (themeMode) {
-                    "light" -> false
-                    "dark"  -> true
-                    else    -> systemDark   // "system"
-                }
-                HeftrangTheme(darkMode = isDark) {
-                    HeftrangNavHost(initialRoute = pendingNavTarget)
-                }
-            }
-        }
-        setContentView(composeView)
+        safeSetContent()
 
         // Bildirim izni iste (FCM → GMS gerektirir)
         if (gmsAvailable) requestNotificationPermission()
@@ -216,6 +195,75 @@ class MainActivity : ComponentActivity() {
 
         // Günlük Kurdî ders hatırlatıcısı — her gün saat 20:00
         com.heftreng.app.worker.KurdiReminderWorker.schedule(this, hourOfDay = 20)
+    }
+
+    // ── Play Console crash raporu (Redmi Note 8 Pro / Android 10, build 1462) ──
+    // NullPointerException: "ViewGroup.getChildAt(int) on a null object reference"
+    // androidx.activity.compose.ComponentActivityKt.setContent içinde oluşuyordu.
+    //
+    // O raporun ait olduğu build'de bu ekran hâlâ AndroidX'in DOĞRUDAN
+    // `setContent { }` extension'ını kullanıyordu — bu extension, ilk
+    // çağrıldığında window.decorView.findViewById<ViewGroup>(android.R.id.content)
+    // üzerinden VAR OLAN bir ComposeView arar (yeniden kullanmak için); bazı
+    // MIUI/EMUI sürümlerinde bu view beklenen hiyerarşide bulunamıyor ve
+    // getChildAt(0) çağrısı null referans üzerinde patlıyor.
+    //
+    // Çözüm iki katmanlı:
+    //  1) setContent {} yerine KENDİ ComposeView'imizi oluşturup doğrudan
+    //     setContentView() ile bağlıyoruz — bu, AndroidX'in problemli "var
+    //     olan ComposeView'i bul" adımını tamamen atlıyor (kök sebep düzeltmesi).
+    //  2) Ek güvenlik ağı: setContentView()'in kendisi de (Window/decorView
+    //     kurulumuna dokunduğu için) teorik olarak aynı aileden bir NPE'ye
+    //     açık olabilir — bu yüzden tüm blok try-catch ile sarmalanıyor.
+    //     Başarısız olursa boş bir Compose ekranı yerine, kullanıcıyı en
+    //     azından çökmeden bir hata ekranıyla karşılıyoruz (activity'yi
+    //     sonlandırıp yeniden başlatmaya yönlendirmek yerine, sessiz crash'ten
+    //     çok daha iyi bir kullanıcı deneyimi).
+    private fun safeSetContent() {
+        try {
+            val composeView = androidx.compose.ui.platform.ComposeView(this).apply {
+                setContent {
+                    // ÇÖZÜLDÜ: Eskiden sadece settingsVm.darkMode (sabit Boolean)
+                    // okunuyordu — "system" tercihi hiç ele alınmıyordu, uygulama
+                    // telefonun karanlık/aydınlık mod değişikliğine hiç tepki
+                    // vermiyordu. Artık themeMode "system" ise gerçek zamanlı
+                    // isSystemInDarkTheme() kullanılıyor — telefonun teması
+                    // değişince (örn. güneş batımı otomatik koyu moda geçince)
+                    // uygulama da anında buna uyuyor.
+                    val themeMode by settingsVm.themeMode.collectAsState()
+                    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+                    val isDark = when (themeMode) {
+                        "light" -> false
+                        "dark"  -> true
+                        else    -> systemDark   // "system"
+                    }
+                    HeftrangTheme(darkMode = isDark) {
+                        HeftrangNavHost(initialRoute = pendingNavTarget)
+                    }
+                }
+            }
+            setContentView(composeView)
+        } catch (e: Exception) {
+            // Son çare: en azından uygulama sessizce çökmesin. Bu durumda
+            // kullanıcıya basit, Compose'a bağımlı olmayan bir View tabanlı
+            // hata ekranı gösteriyoruz — Play Console'a yine hata raporu
+            // düşer ama kullanıcı en azından uygulamayı kapatıp tekrar
+            // açabileceğini anlayan bir ekran görür, ani kapanma yaşamaz.
+            Log.e("MainActivity", "safeSetContent başarısız, fallback ekranı gösteriliyor", e)
+            try {
+                val fallback = android.widget.TextView(this).apply {
+                    text = "Heftreng şu anda açılamadı.\nLütfen uygulamayı kapatıp tekrar deneyin."
+                    gravity = android.view.Gravity.CENTER
+                    setPadding(48, 48, 48, 48)
+                    textSize = 16f
+                }
+                setContentView(fallback)
+            } catch (_: Exception) {
+                // Buraya kadar gelindiyse gerçekten sistem seviyesinde ciddi
+                // bir sorun var — yapılabilecek başka bir şey yok, activity
+                // Android tarafından zaten sonlandırılacaktır.
+            }
+        }
     }
 
     // ── Güncelleme kontrolü ────────────────────────────────────────────────────
