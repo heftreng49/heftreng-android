@@ -94,6 +94,17 @@ fun CmsScreen(
         }
     }
 
+    // FAZ -1: Yazılar sekmesindeki onay/red butonları YazarViewModel'i
+    // kullanıyor — yetkisiz bir kullanıcı butona basarsa (client kontrolü
+    // sayesinde) sessiz kalmak yerine burada da bir uyarı gösterilsin.
+    val yazarSubmitResult by yazarVm.submitResult.collectAsState()
+    LaunchedEffect(yazarSubmitResult) {
+        (yazarSubmitResult as? YazarViewModel.SubmitResult.Error)?.let {
+            snackState.showSnackbar(it.message)
+            yazarVm.clearResult()
+        }
+    }
+
     Scaffold(
         modifier = Modifier.imePadding(),
         containerColor = Background,

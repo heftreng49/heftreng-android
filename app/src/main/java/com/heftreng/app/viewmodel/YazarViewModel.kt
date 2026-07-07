@@ -46,6 +46,40 @@ class YazarViewModel @Inject constructor(
     val currentUser get() = auth.currentUser
     val uid get() = auth.currentUser?.uid ?: ""
 
+    // FAZ -1: Onay/red fonksiyonları öncesinde client tarafında da yetki
+    // kontrolü — sunucu (Firestore kuralı: isModerator() || isEditor() ||
+    // hasPermission("pending")) zaten güvenli, ama yetkisiz bir kullanıcı
+    // butona bastığında sessiz başarısızlık yerine anlamlı bir mesaj görsün.
+    private val _yazarPerms = MutableStateFlow<StaffPermissions?>(null)
+    val yazarPerms = _yazarPerms.asStateFlow()
+
+    val canModerate: Boolean get() = _yazarPerms.value?.can("pending") == true
+
+    init { loadYazarPerms() }
+
+    fun loadYazarPerms() {
+        viewModelScope.launch {
+            _yazarPerms.value = null
+            val user = auth.currentUser ?: run { _yazarPerms.value = StaffPermissions(); return@launch }
+            try {
+                val doc = firestore.collection("admins").document(user.uid).get().await()
+                if (doc.exists()) {
+                    val role  = doc.getString("role") ?: "none"
+                    val title = doc.getString("title") ?: role.replaceFirstChar { it.uppercase() }
+                    @Suppress("UNCHECKED_CAST")
+                    val legacy = doc.get("permissions") as? List<String>
+                    val permSet = if (!legacy.isNullOrEmpty()) legacy.toSet() else roleToPermissions(role)
+                    _yazarPerms.value = StaffPermissions(uid = user.uid, title = title, permissions = permSet)
+                } else {
+                    _yazarPerms.value = StaffPermissions()
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("YazarVM", "loadYazarPerms: ${e.message}")
+                _yazarPerms.value = StaffPermissions()
+            }
+        }
+    }
+
     private val _myPosts  = MutableStateFlow<List<PendingPost>>(emptyList())
     val myPosts = _myPosts.asStateFlow()
 
@@ -193,6 +227,7 @@ class YazarViewModel @Inject constructor(
 
     // Tüm pending yazıları yükle (admin)
     fun loadAllPendingPosts(filter: String = "all") {
+        if (!canModerate) return
         viewModelScope.launch {
             _pendingLoading.value = true
             try {
@@ -253,6 +288,10 @@ class YazarViewModel @Inject constructor(
 
     // Ortak yönetim fonksiyonu (Kod tekrarını engellemek için)
     private fun updatePostStatusInternal(postId: String, status: String, note: String) {
+        if (!canModerate) {
+            _submitResult.value = SubmitResult.Error("Bu işlem için yetkin yok")
+            return
+        }
         viewModelScope.launch {
             try {
                 firestore.collection("pendingPosts").document(postId).update(

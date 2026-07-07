@@ -12,8 +12,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
-private const val ADMIN_EMAIL = "siirgibi49@gmail.com"
-
 @HiltViewModel
 class CmsViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
@@ -21,7 +19,42 @@ class CmsViewModel @Inject constructor(
 ) : ViewModel() {
 
     // ── Yetki ─────────────────────────────────────────────────────────────────
-    val isAdmin: Boolean get() = auth.currentUser?.email == ADMIN_EMAIL
+    // FAZ -1: Eski sabit e-posta kontrolü kaldırıldı, yerine Firestore
+    // admins/{uid} rol/izin sistemi kullanılıyor (AdminViewModel.perms ile
+    // birebir aynı mantık — Firestore güvenlik kuralındaki
+    // "isEditor() || hasPermission('edit')" ile hizalı).
+    //
+    // null = izinler henüz yüklenmedi (loading), StaffPermissions() = yüklendi ama yetkisiz.
+    private val _perms = MutableStateFlow<StaffPermissions?>(null)
+    val perms = _perms.asStateFlow()
+
+    // CMS ekranı özelinde "edit" yetkisi var mı — null iken (yükleniyorken) false döner
+    val isAdmin: Boolean get() = _perms.value?.can("edit") == true
+
+    init { loadPerms() }
+
+    fun loadPerms() {
+        viewModelScope.launch {
+            _perms.value = null
+            val user = auth.currentUser ?: run { _perms.value = StaffPermissions(); return@launch }
+            try {
+                val doc = firestore.collection("admins").document(user.uid).get().await()
+                if (doc.exists()) {
+                    val role  = doc.getString("role") ?: "none"
+                    val title = doc.getString("title") ?: role.replaceFirstChar { it.uppercase() }
+                    @Suppress("UNCHECKED_CAST")
+                    val legacy = doc.get("permissions") as? List<String>
+                    val permSet = if (!legacy.isNullOrEmpty()) legacy.toSet() else roleToPermissions(role)
+                    _perms.value = StaffPermissions(uid = user.uid, title = title, permissions = permSet)
+                } else {
+                    _perms.value = StaffPermissions()
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("CmsVM", "loadPerms: ${e.message}")
+                _perms.value = StaffPermissions()
+            }
+        }
+    }
 
     // ── Sayfalar ──────────────────────────────────────────────────────────────
     private val _pages   = MutableStateFlow<List<CmsPage>>(emptyList())

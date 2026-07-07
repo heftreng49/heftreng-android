@@ -135,7 +135,41 @@ class LibraryViewModel @Inject constructor(
     val myName  get() = auth.currentUser?.displayName ?: ""
     val myPhoto get() = auth.currentUser?.photoUrl?.toString() ?: ""
     val myUser  get() = auth.currentUser?.email?.substringBefore("@") ?: ""
-    val isAdmin get() = auth.currentUser?.email == "siirgibi49@gmail.com"
+
+    // FAZ -1: Eski sabit e-posta kontrolü kaldırıldı, yerine Firestore
+    // admins/{uid} rol/izin sistemi kullanılıyor. "library" izni Firestore
+    // güvenlik kuralındaki isLibrarian() (role in [admin, kutuphaneci]) ile
+    // hizalı — "kutuphaneci" rolündeki bir moderatör artık başkasının
+    // yazdığı alıntı/yorumu düzenleyip silebilir.
+    private val _libraryPerms = MutableStateFlow<StaffPermissions?>(null)
+    val libraryPerms = _libraryPerms.asStateFlow()
+
+    val isAdmin: Boolean get() = _libraryPerms.value?.can("library") == true
+
+    init { loadLibraryPerms() }
+
+    fun loadLibraryPerms() {
+        viewModelScope.launch {
+            _libraryPerms.value = null
+            val user = auth.currentUser ?: run { _libraryPerms.value = StaffPermissions(); return@launch }
+            try {
+                val doc = firestore.collection("admins").document(user.uid).get().await()
+                if (doc.exists()) {
+                    val role  = doc.getString("role") ?: "none"
+                    val title = doc.getString("title") ?: role.replaceFirstChar { it.uppercase() }
+                    @Suppress("UNCHECKED_CAST")
+                    val legacy = doc.get("permissions") as? List<String>
+                    val permSet = if (!legacy.isNullOrEmpty()) legacy.toSet() else roleToPermissions(role)
+                    _libraryPerms.value = StaffPermissions(uid = user.uid, title = title, permissions = permSet)
+                } else {
+                    _libraryPerms.value = StaffPermissions()
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("LibraryVM", "loadLibraryPerms: ${e.message}")
+                _libraryPerms.value = StaffPermissions()
+            }
+        }
+    }
 
     // ── Authors ───────────────────────────────────────────────────────────────
 

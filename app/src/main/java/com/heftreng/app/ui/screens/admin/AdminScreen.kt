@@ -198,8 +198,12 @@ fun AdminScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { navController.navigate("cms") }) {
-                        Icon(Icons.Default.Tune, contentDescription = "CMS", tint = Amber)
+                    // FAZ -1: CMS kısayolu artık sadece "edit" yetkisi olanlara görünüyor
+                    // (önceden rolü ne olursa olsun tüm staff'a görünüyordu).
+                    if (perms?.can("edit") == true) {
+                        IconButton(onClick = { navController.navigate("cms") }) {
+                            Icon(Icons.Default.Tune, contentDescription = "CMS", tint = Amber)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),

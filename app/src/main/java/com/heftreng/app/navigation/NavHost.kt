@@ -702,7 +702,21 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     CmsPageScreen(navController = navController, slug = slug)
                 }
                 composable(Screen.Admin.route)    { AdminScreen(navController) }
-                composable(Screen.Cms.route)      { CmsScreen(navController) }
+                // FAZ -1: CMS route seviyesinde koruma eklendi — önceden hiç
+                // korunmuyordu, erişim tamamen CmsScreen'in kendi (eski,
+                // sabit e-postaya bakan) iç kontrolüne bırakılmıştı.
+                composable(Screen.Cms.route) {
+                    if (perms?.can("edit") == true) CmsScreen(navController)
+                    else { LaunchedEffect(Unit) { navController.popBackStack() } }
+                }
+                // NOT: Screen.Yazar rota seviyesinde KISITLANMIYOR — bu ekran
+                // "Yazar Paneli" (Yaz | Yazılarım), yani herhangi bir giriş
+                // yapmış kullanıcının kendi blog yazısını gönderebildiği
+                // genel-kullanıcı ekranı, admin ekranı değil. Erişim zaten
+                // YazarScreen içindeki `vm.isLoggedIn` kontrolüyle sağlanıyor.
+                // Ekranın İÇİNDEKİ admin fonksiyonları (approvePost/rejectPost/
+                // loadAllPendingPosts) ayrıca YazarViewModel.canModerate
+                // ("pending" izni) ile korunuyor — bkz. YazarViewModel.kt.
                 composable(Screen.Yazar.route)    { YazarScreen(navController) }
                 composable(Screen.KurdiAdmin.route) {
                     if (isAdmin) KurdiAdminScreen(navController)
