@@ -124,7 +124,7 @@ fun SinglePostScreen(
         )
     }
     LaunchedEffect(listState, singlePostAdPlan) {
-        adsVm.warmVisiblePositions(singlePostAdPlan, firstVisibleIndex = 0)
+        adsVm.warmVisiblePositions(singlePostAdPlan, firstVisibleIndex = 0, maxInitialAds = 3)
         snapshotFlow { listState.firstVisibleItemIndex }
             .debounce(300L)
             .collect { firstVisible ->

@@ -409,7 +409,7 @@ private fun LibraryQuotesTab(
     // önceden bu sekmede warmVisiblePositions hiç çağrılmıyordu, bu yüzden
     // native/banner reklamlar hiç yüklenmiyordu.
     LaunchedEffect(quotesListState, adPlan) {
-        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0)
+        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0, maxInitialAds = 3)
         snapshotFlow { quotesListState.firstVisibleItemIndex }
             .debounce(300L)
             .collect { firstVisible ->
@@ -473,7 +473,7 @@ private fun LibraryReviewsTab(
     }
     val reviewsListState = rememberLazyListState()
     LaunchedEffect(reviewsListState, adPlan) {
-        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0)
+        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0, maxInitialAds = 3)
         snapshotFlow { reviewsListState.firstVisibleItemIndex }
             .debounce(300L)
             .collect { firstVisible ->
@@ -508,7 +508,7 @@ private fun LibraryAuthorsTab(
     }
     val authorsListState = rememberLazyListState()
     LaunchedEffect(authorsListState, adPlan) {
-        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0)
+        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0, maxInitialAds = 3)
         snapshotFlow { authorsListState.firstVisibleItemIndex }
             .debounce(300L)
             .collect { firstVisible ->

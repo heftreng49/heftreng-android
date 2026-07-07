@@ -171,7 +171,7 @@ fun NotificationsScreen(
     val notifListState = rememberLazyListState()
 
     LaunchedEffect(notifListState, adPlan) {
-        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0)
+        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0, maxInitialAds = 3)
         snapshotFlow { notifListState.firstVisibleItemIndex }
             .debounce(300L)
             .collect { firstVisible ->

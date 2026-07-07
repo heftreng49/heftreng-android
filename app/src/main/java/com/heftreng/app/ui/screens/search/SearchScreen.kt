@@ -175,7 +175,7 @@ fun SearchScreen(
             // viewport + 3 kart penceresiyle, 300ms debounce ile ısıtma.
             LaunchedEffect(searchListState, searchAdPlan) {
                 if (searchAdPlan.isEmpty()) return@LaunchedEffect
-                adsVm.warmVisiblePositions(searchAdPlan, firstVisibleIndex = 0)
+                adsVm.warmVisiblePositions(searchAdPlan, firstVisibleIndex = 0, maxInitialAds = 3)
                 snapshotFlow { searchListState.firstVisibleItemIndex }
                     .debounce(300L)
                     .collect { firstVisible ->

@@ -320,7 +320,7 @@ fun ProfileScreen(
         // pozisyonuna gelse bile isLoaded hep false kalıyor, sonsuz shimmer
         // görünüyordu, gerçek reklam asla yüklenmiyordu.
         LaunchedEffect(listState, profileAdPlan) {
-            adsVm.warmVisiblePositions(profileAdPlan, firstVisibleIndex = 0)
+            adsVm.warmVisiblePositions(profileAdPlan, firstVisibleIndex = 0, maxInitialAds = 3)
             snapshotFlow { listState.firstVisibleItemIndex }
                 .debounce(300L)
                 .collect { firstVisible ->

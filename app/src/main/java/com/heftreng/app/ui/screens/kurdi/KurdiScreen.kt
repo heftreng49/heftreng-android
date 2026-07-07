@@ -868,7 +868,7 @@ private fun UnitsTab(
         // gerçek reklam asla yüklenmiyordu. AdMob envanteri bu ekranda hiç
         // kullanılmıyordu.
         LaunchedEffect(kurdiListState, kurdiAdPlan) {
-            adsVm.warmVisiblePositions(kurdiAdPlan, firstVisibleIndex = 0)
+            adsVm.warmVisiblePositions(kurdiAdPlan, firstVisibleIndex = 0, maxInitialAds = 3)
             snapshotFlow { kurdiListState.firstVisibleItemIndex }
                 .debounce(300L) // hızlı scroll'da her kart için istek atılmasın
                 .collect { firstVisible ->

@@ -70,7 +70,7 @@ fun BlogScreen(
     // gelse bile isLoaded hep false kalıyor, sonsuz shimmer görünüyordu,
     // gerçek reklam asla yüklenmiyordu.
     LaunchedEffect(blogListState, adPlan) {
-        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0)
+        adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0, maxInitialAds = 3)
         snapshotFlow { blogListState.firstVisibleItemIndex }
             .debounce(300L)
             .collect { firstVisible ->

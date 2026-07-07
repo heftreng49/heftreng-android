@@ -130,20 +130,38 @@ class AdsViewModel @Inject constructor(
      *
      * Ekranlar bunu tek bir snapshotFlow.collect içinde çağırır; kendi
      * index formüllerini YAZMAZ — plan zaten hesaplanmış durumda.
+     *
+     * @param maxInitialAds Adım 4: SADECE ilk çağrıda (firstVisibleIndex == 0)
+     *   uygulanan bir üst sınır — pencere içine kaç placement düşerse düşsün,
+     *   en fazla bu kadarı için istek atılır (varsayılan: sınır yok, mevcut
+     *   davranışla birebir uyumlu). Amaç: ekran ilk açıldığı an, kullanıcı
+     *   henüz hiç scroll etmemişken plandaki TÜM ileri pozisyonlara (örn.
+     *   frequency düşükse aynı pencerede 4-5 reklam) birden istek atılmasını
+     *   önlemek — "ilk 3'ü yükle, gerisini kullanıcı scroll ettikçe getir"
+     *   prensibi. firstVisibleIndex > 0 olan sonraki çağrılarda (kullanıcı
+     *   zaten scroll ediyor) bu sınır uygulanmaz — snapshotFlow.debounce
+     *   zaten kademeli tetiklemeyi doğal olarak sağlıyor.
      */
     fun warmVisiblePositions(
         plan             : Map<Int, AdPlacement>,
         firstVisibleIndex: Int,
         viewportItemCount: Int = 8,
+        maxInitialAds    : Int? = null,
     ) {
         // Pencere: görünür viewport + 3 kart öne bak.
         // Daha geniş pencere (eski: viewport*2=16) gereksiz yüzlerce istek atıyordu —
         // kullanıcının hiç görmeyeceği pozisyonlar önceden yükleniyor, istek/gösterim
         // oranı düşüyor, AdMob "low match rate" penaltısı uyguluyor.
         val windowEnd = firstVisibleIndex + viewportItemCount + 3
-        plan.forEach { (idx, placement) ->
-            if (idx < firstVisibleIndex) return@forEach
-            if (idx > windowEnd) return@forEach
+        val candidates = plan.entries
+            .filter { (idx, _) -> idx >= firstVisibleIndex && idx <= windowEnd }
+            .sortedBy { it.key }
+        val toWarm = if (firstVisibleIndex == 0 && maxInitialAds != null) {
+            candidates.take(maxInitialAds)
+        } else {
+            candidates
+        }
+        toWarm.forEach { (_, placement) ->
             when (placement) {
                 is AdPlacement.Banner -> requestBanner(placement.slotKey, placement.unitId, placement.size)
                 is AdPlacement.Native -> requestNative(placement.slotKey, placement.unitId)

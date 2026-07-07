@@ -402,7 +402,7 @@ fun FeedScreen(
             // Ekran artık kendi index formülünü YAZMAZ, banner/native ayrı ayrı
             // ısıtılmaz — ikisi de aynı plan'dan, aynı çağrıdan gelir.
             LaunchedEffect(feedListState, adPlan) {
-                adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0)
+                adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0, maxInitialAds = 3)
                 snapshotFlow { feedListState.firstVisibleItemIndex }
                     .debounce(300L) // hızlı scroll'da her kart için istek atılmasın
                     .collect { firstVisible ->
