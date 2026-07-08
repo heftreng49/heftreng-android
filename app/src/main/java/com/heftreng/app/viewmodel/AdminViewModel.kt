@@ -79,6 +79,7 @@ class AdminViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
     private val supabase : io.github.jan.supabase.SupabaseClient,
+    private val libraryRepository: com.heftreng.app.data.repository.LibraryRepository,
 ) : ViewModel() {
 
     // null = henüz yüklenmedi (loading), StaffPermissions() = yüklendi ama yetkisiz
@@ -1239,6 +1240,13 @@ class AdminViewModel @Inject constructor(
                     "moderationNote" to adminNote, "moderatedBy" to myUid,
                     "moderatedAt" to com.google.firebase.Timestamp.now(),
                 )).await()
+                // FAZ 1: Firestore feed'deki moderasyon durumu Supabase
+                // book_quotes/book_reviews'a da yansıtılıyor — aksi halde
+                // moderatör bir alıntıyı/incelemeyi kaldırsa bile Kütüphane
+                // ekranında görünmeye devam ediyordu (feed_post_id ile eşleşen
+                // satır bulunamazsa fonksiyon sessizce hiçbir şey yapmaz).
+                libraryRepository.setQuoteModerationStatusByFeedPostId(postId, status)
+                libraryRepository.setReviewModerationStatusByFeedPostId(postId, status)
                 val notifTitle = when (status) { "restricted" -> "Gönderiniz kısıtlandı"; "suspended" -> "Gönderiniz askıya alındı"; "removed" -> "Gönderiniz kaldırıldı"; else -> "Gönderi durumu güncellendi" }
                 val notifBody  = reason.ifBlank { when (status) { "restricted" -> "Gönderiniz yalnızca giriş yapmış kullanıcılara gösterilecek."; "suspended" -> "Gönderiniz inceleniyor."; "removed" -> "Gönderiniz platform kurallarına aykırı bulundu."; else -> "" } }
                 if (targetUid.isNotBlank()) {
@@ -1266,6 +1274,9 @@ class AdminViewModel @Inject constructor(
                 firestore.collection("feed").document(postId).update(mapOf(
                     "moderationStatus" to "active", "moderationReason" to "", "moderationNote" to "",
                 )).await()
+                // FAZ 1: bkz. moderatePost'taki aynı senkronizasyon açıklaması.
+                libraryRepository.setQuoteModerationStatusByFeedPostId(postId, "active")
+                libraryRepository.setReviewModerationStatusByFeedPostId(postId, "active")
                 if (targetUid.isNotBlank()) {
                     firestore.collection("userNotifs").document(targetUid).collection("msgs").add(mapOf(
                         "fromUid" to "", "fromName" to "Heftreng", "fromPhoto" to "",

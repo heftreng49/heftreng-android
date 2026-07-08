@@ -87,6 +87,14 @@ data class BookQuoteRow(
     val coverImg          : String  = "",
     @SerialName("created_at")
     val createdAt         : String  = "",
+    // FAZ 1: Yeni eklenen sütun. `ignoreUnknownKeys` supabase-kt'de
+    // varsayılan olarak açık DEĞİL (bilinen bir kütüphane kısıtlaması —
+    // bkz. supabase-kt issue #334) — bu alan data class'ta OLMAZSA
+    // sütun eklendikten sonra TÜM book_quotes sorguları
+    // SerializationException ile patlar. Bu yüzden bu alan migration'ın
+    // ayrılmaz bir parçası, atlanamaz.
+    @SerialName("moderation_status")
+    val moderationStatus  : String  = "active",
 )
 
 @Serializable
@@ -113,6 +121,9 @@ data class BookReviewRow(
     val likesCount        : Int     = 0,
     @SerialName("created_at")
     val createdAt         : String  = "",
+    // FAZ 1: bkz. BookQuoteRow'daki aynı açıklama — bu alan zorunlu.
+    @SerialName("moderation_status")
+    val moderationStatus  : String  = "active",
 )
 
 @Serializable
@@ -254,9 +265,14 @@ class LibraryRepository @Inject constructor(
 
     /** Keşfet → Alıntılar — en son eklenen kütüphane alıntıları.
      *  ÖNCEKİ: Firestore `feed` (type='library_quote' + 300'lük legacy tarama, 2 sorgu).
-     *  ŞİMDİ:  Supabase `book_quotes` — 1 sorgu, RLS public read. */
+     *  ŞİMDİ:  Supabase `book_quotes` — 1 sorgu, RLS public read.
+     *  FAZ 1: `moderation_status = 'active'` filtresi eklendi — moderatör
+     *  Firestore feed'de bir alıntıyı kaldırdığında (moderatePost), bu artık
+     *  book_quotes tarafına da yansıyor (bkz. setQuoteModerationStatusByFeedPostId)
+     *  ve buradaki filtre sayesinde Kütüphane ekranında görünmeye devam etmiyor. */
     suspend fun getRecentQuotes(limit: Int = 50): List<BookQuoteRow> =
         db["book_quotes"].select {
+            filter { eq("moderation_status", "active") }
             order("created_at", Order.DESCENDING)
             limit(limit.toLong())
         }.decodeList()
@@ -275,6 +291,26 @@ class LibraryRepository @Inject constructor(
     suspend fun updateQuoteTextByFeedPostId(feedPostId: String, newText: String) {
         db["book_quotes"].update(mapOf("text" to newText)) {
             filter { eq("feed_post_id", feedPostId) }
+        }
+    }
+
+    /** FAZ 1: Moderatör Firestore feed'de bir alıntıyı kaldırdığında/geri
+     *  getirdiğinde (AdminViewModel.moderatePost/restorePost), Supabase
+     *  tarafındaki karşılığını da güncelle. `status` "active" veya
+     *  "removed" (ya da moderatePost'un kullandığı diğer durumlarla aynı)
+     *  olmalı — Firestore'daki moderationStatus değeriyle birebir aynı
+     *  string kullanılıyor, ayrıca bir eşleme tablosu yok.
+     *  Satır bulunamazsa (ör. bu alıntı bir kitap alıntısı değilse) sessizce
+     *  hiçbir şey yapmaz — hata fırlatmaz, çünkü her feed post'u bir kitap
+     *  alıntısı olmak zorunda değil. */
+    suspend fun setQuoteModerationStatusByFeedPostId(feedPostId: String, status: String) {
+        if (feedPostId.isBlank()) return
+        try {
+            db["book_quotes"].update(mapOf("moderation_status" to status)) {
+                filter { eq("feed_post_id", feedPostId) }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("LibraryRepo", "setQuoteModerationStatusByFeedPostId: ${e.message}")
         }
     }
 
@@ -366,9 +402,12 @@ class LibraryRepository @Inject constructor(
     /** Kütüphane → İncelemeler sekmesi — en son eklenen tüm incelemeler.
      *  ÖNCEKİ: önce 100 kitap çekilip, her biri için ayrı ayrı (sıralı/N+1) inceleme sorgusu
      *  atılıyordu → kütüphane sekmesinin çok yavaş açılmasına sebep oluyordu.
-     *  ŞİMDİ: 1 sorgu, doğrudan en son incelemeler. */
+     *  ŞİMDİ: 1 sorgu, doğrudan en son incelemeler.
+     *  FAZ 1: `moderation_status = 'active'` filtresi eklendi — bkz.
+     *  getRecentQuotes'daki aynı açıklama. */
     suspend fun getRecentReviews(limit: Int = 50): List<BookReviewRow> =
         db["book_reviews"].select {
+            filter { eq("moderation_status", "active") }
             order("created_at", Order.DESCENDING)
             limit(limit.toLong())
         }.decodeList()
@@ -381,6 +420,19 @@ class LibraryRepository @Inject constructor(
         db["book_reviews"].update(
             mapOf("text" to newText, "rating" to newRating)
         ) { filter { eq("id", id) } }
+    }
+
+    /** FAZ 1: bkz. setQuoteModerationStatusByFeedPostId'deki aynı açıklama —
+     *  incelemeler için karşılık gelen senkron fonksiyonu. */
+    suspend fun setReviewModerationStatusByFeedPostId(feedPostId: String, status: String) {
+        if (feedPostId.isBlank()) return
+        try {
+            db["book_reviews"].update(mapOf("moderation_status" to status)) {
+                filter { eq("feed_post_id", feedPostId) }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("LibraryRepo", "setReviewModerationStatusByFeedPostId: ${e.message}")
+        }
     }
 
     suspend fun deleteReview(id: String) {
