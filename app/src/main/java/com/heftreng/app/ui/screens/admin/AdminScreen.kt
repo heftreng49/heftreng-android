@@ -33,6 +33,8 @@ import com.heftreng.app.viewmodel.LibraryViewModel
 import androidx.navigation.NavController
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.AdminViewModel
+import com.heftreng.app.viewmodel.YazarViewModel
+import com.heftreng.app.viewmodel.PendingPost
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
@@ -48,6 +50,7 @@ fun AdminScreen(
     navController: NavController,
     vm           : AdminViewModel = hiltViewModel(),
     libraryVm    : LibraryViewModel = hiltViewModel(),
+    yazarVm      : YazarViewModel = hiltViewModel(),
 ) {
     val isAdmin     by vm.isAdmin.collectAsState()
     val perms       by vm.perms.collectAsState()  // null = yükleniyor
@@ -55,6 +58,10 @@ fun AdminScreen(
     val users           by vm.users.collectAsState()
     val unverifiedUsers by vm.unverifiedUsers.collectAsState()
     val unverifiedLoading by vm.unverifiedLoading.collectAsState()
+    // "Yazılar" tabı — CmsScreen'den taşındı, blog yazısı onay akışı
+    val blogPendingPosts   by yazarVm.pendingPosts.collectAsState()
+    val blogPendingStats   by yazarVm.pendingStats.collectAsState()
+    val blogPendingLoading by yazarVm.pendingLoading.collectAsState()
     val pendingPosts by vm.pendingPosts.collectAsState()
     val loading     by vm.loading.collectAsState()
     val pushResult  by vm.pushResult.collectAsState()
@@ -114,12 +121,13 @@ fun AdminScreen(
     val reports     by vm.reports.collectAsState()
     val appeals     by vm.appeals.collectAsState()
 
-    data class AdminTab(val title: String, val key: String)
+    data class AdminTab(val title: String, val key: String, val permKey: String = key)
     val allTabs = listOf(
         AdminTab("Push",         "push"),
         AdminTab("Bildirim",     "notif"),
         AdminTab("Kullanıcılar", "users"),
         AdminTab("Bekleyenler",  "pending"),
+        AdminTab("Yazılar",      "blogPending", permKey = "pending"),
         AdminTab("Şikayetler",   "reports"),
         AdminTab("İtirazlar",    "appeals"),
         AdminTab("İstatistik",   "stats"),
@@ -128,7 +136,16 @@ fun AdminScreen(
         AdminTab("Kürtçe Admin", "kurdi"),
         AdminTab("Yardımcılar",  "staff"),
     )
-    val tabs = allTabs.filter { tab -> perms?.can(tab.key) == true }
+    // NOT: "Bekleyenler" ve "Yazılar" ikisi de "pending" iznine bağlı ama
+    // FARKLI veri kaynaklarını yönetiyor — "Bekleyenler" AdminViewModel
+    // üzerinden Firestore `feed`'e direkt eklenen genel gönderileri,
+    // "Yazılar" ise YazarViewModel üzerinden `pendingPosts` koleksiyonundaki
+    // (Yazar Paneli'nden gönderilen) blog yazısı onaylarını yönetir.
+    // Aynı izni (`permKey = "pending"`) paylaştıkları için birinin iznine
+    // sahip olan otomatik diğerini de görür — bu kasıtlı, çünkü ikisi de
+    // aynı "içerik onaylama" yetkisinin parçası. Her sekmenin kendi tekil
+    // `key`'i var (seçili sekme takibi karışmasın diye).
+    val tabs = allTabs.filter { tab -> perms?.can(tab.permKey) == true }
     var selectedTabKey by remember { mutableStateOf(tabs.firstOrNull()?.key ?: "push") }
 
     val platformStats by vm.platformStats.collectAsState()
@@ -144,6 +161,8 @@ fun AdminScreen(
         // Veri zaten AdminViewModel init bloğunda yükleniyor
         // Burada sadece stats listener'ı başlat (UI state gerektirir)
         if (perms?.can("stats") == true) vm.startStatsListener()
+        // "Yazılar" tabı (blog yazısı onayı) — "pending" izni olan yükler
+        if (perms?.can("pending") == true) yazarVm.loadAllPendingPosts()
     }
 
     // editResult bildirimi
@@ -928,6 +947,11 @@ fun AdminScreen(
                             }
                         }
                     }
+                }
+
+                // ── Yazılar (Blog Yazısı Onayı) ──────────────────────────────────
+                "blogPending" -> {
+                    PendingPostsTab(blogPendingPosts, blogPendingStats, blogPendingLoading, yazarVm)
                 }
 
                 // ── Şikayetler ─────────────────────────────────────────────────
@@ -1826,6 +1850,220 @@ private fun adminTextField(
 //  ADMIN KÜTÜPHANESİ — Yazar & Kitap Düzenleme Tabı
 //  AdminScreen içinde "Kütüphane" tabı seçildiğinde gösterilir.
 // ═══════════════════════════════════════════════════════════════════════════
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  YAZILAR — Blog Yazısı Onay Tabı (Yazar Paneli'nden gönderilen yazılar)
+//  FAZ -1 devamı: CmsScreen'den taşındı — artık burada, "pending" iznine
+//  bağlı, AdminScreen'in kendi sekmelerinden biri.
+// ═══════════════════════════════════════════════════════════════════════════
+// ── 7. Bekleyen Yazılar ───────────────────────────────────────────────────────
+@Composable
+private fun PendingPostsTab(
+    posts   : List<PendingPost>,
+    stats   : YazarViewModel.PendingStats,
+    loading : Boolean,
+    vm      : YazarViewModel,
+) {
+    var filter      by remember { mutableStateOf("all") }
+    var expandedId  by remember { mutableStateOf<String?>(null) }
+    var noteInput   by remember { mutableStateOf("") }
+    var actionPostId by remember { mutableStateOf<String?>(null) }
+    var actionType   by remember { mutableStateOf("") } // "approve" | "reject"
+
+    val filtered = when (filter) {
+        "pending"  -> posts.filter { it.status == "pending" }
+        "approved" -> posts.filter { it.status == "approved" }
+        "rejected" -> posts.filter { it.status == "rejected" }
+        else       -> posts
+    }
+
+    LazyColumn(
+        modifier       = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // İstatistik satırı
+        item {
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                StatChip("⏳ ${stats.pending}",  "Bekliyor",  filter == "pending",  Amber)   { filter = if (filter == "pending")  "all" else "pending" }
+                StatChip("✅ ${stats.approved}", "Onaylanan", filter == "approved", Success) { filter = if (filter == "approved") "all" else "approved" }
+                StatChip("❌ ${stats.rejected}", "Reddedilen",filter == "rejected", Error)   { filter = if (filter == "rejected") "all" else "rejected" }
+            }
+        }
+
+        if (loading) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Amber, modifier = Modifier.size(28.dp))
+                }
+            }
+        }
+
+        if (!loading && filtered.isEmpty()) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text("Yazı yok", color = Muted, fontSize = 14.sp)
+                }
+            }
+        }
+
+        items(filtered, key = { it.id }) { post ->
+            val isExpanded = expandedId == post.id
+            val statusColor = when (post.status) {
+                "approved" -> Success
+                "rejected" -> Error
+                else       -> Amber
+            }
+            val statusLabel = when (post.status) {
+                "approved" -> "✅ Onaylandı"
+                "rejected" -> "❌ Reddedildi"
+                else       -> "⏳ Bekliyor"
+            }
+
+            CmsCard {
+                // Başlık + status
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { expandedId = if (isExpanded) null else post.id },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            post.title,
+                            color      = OnBackground,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize   = 14.sp,
+                            maxLines   = 2,
+                            overflow   = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(post.authorName, color = Muted, fontSize = 11.sp)
+                            Text("·", color = Muted, fontSize = 11.sp)
+                            Text(post.category, color = Muted, fontSize = 11.sp)
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        Modifier
+                            .background(statusColor.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(statusLabel, color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Icon(
+                        if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        null, tint = Muted, modifier = Modifier.size(20.dp),
+                    )
+                }
+
+                // Genişletilmiş içerik
+                if (isExpanded) {
+                    Spacer(Modifier.height(10.dp))
+                    HorizontalDivider(color = Divider)
+                    Spacer(Modifier.height(10.dp))
+
+                    // Özet / İçerik
+                    if (post.summary.isNotBlank()) {
+                        Text("Özet", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Text(post.summary, color = OnSurface, fontSize = 13.sp, lineHeight = 19.sp)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    if (post.content.isNotBlank()) {
+                        Text("İçerik (ilk 400 karakter)", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            post.content.take(400) + if (post.content.length > 400) "…" else "",
+                            color    = OnSurface, fontSize = 13.sp, lineHeight = 19.sp,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+
+                    // Admin notu
+                    if (post.adminNote.isNotBlank()) {
+                        Surface(
+                            color  = SurfaceVar,
+                            shape  = RoundedCornerShape(8.dp),
+                        ) {
+                            Text(
+                                "Not: ${post.adminNote}",
+                                color    = Muted,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(8.dp),
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+
+                    // Not girişi
+                    OutlinedTextField(
+                        value         = if (actionPostId == post.id) noteInput else "",
+                        onValueChange = { noteInput = it; actionPostId = post.id },
+                        placeholder   = { Text("Admin notu (opsiyonel)", color = Muted, fontSize = 12.sp) },
+                        modifier      = Modifier.fillMaxWidth(),
+                        shape         = RoundedCornerShape(8.dp),
+                        colors        = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor   = Amber, unfocusedBorderColor = Divider,
+                            focusedTextColor     = OnBackground, unfocusedTextColor = OnBackground,
+                            focusedContainerColor = SurfaceVar, unfocusedContainerColor = SurfaceVar,
+                        ),
+                        singleLine = true,
+                    )
+                    Spacer(Modifier.height(10.dp))
+
+                    // Onayla / Reddet butonları
+                    if (post.status != "approved") {
+                        Button(
+                            onClick = {
+                                vm.approvePost(post.id, if (actionPostId == post.id) noteInput else "")
+                                noteInput = ""; actionPostId = null; expandedId = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape    = RoundedCornerShape(8.dp),
+                            colors   = ButtonDefaults.buttonColors(containerColor = Success, contentColor = Color.Black),
+                        ) {
+                            Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Onayla", fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+                    if (post.status != "rejected") {
+                        OutlinedButton(
+                            onClick = {
+                                vm.rejectPost(post.id, if (actionPostId == post.id) noteInput else "")
+                                noteInput = ""; actionPostId = null; expandedId = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape    = RoundedCornerShape(8.dp),
+                            border   = androidx.compose.foundation.BorderStroke(1.dp, Error),
+                        ) {
+                            Icon(Icons.Default.Close, null, tint = Error, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Reddet", color = Error, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (post.status != "pending") {
+                        Spacer(Modifier.height(6.dp))
+                        TextButton(
+                            onClick = {
+                                vm.updatePostStatus(post.id, "pending", "")
+                                expandedId = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Tekrar Bekleyene Al", color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun AdminLibraryTab(libraryVm: LibraryViewModel) {

@@ -31,8 +31,6 @@ import com.heftreng.app.ui.theme.*
 import com.heftreng.app.data.model.AppConfig
 import com.heftreng.app.viewmodel.AppConfigViewModel
 import com.heftreng.app.viewmodel.CmsViewModel
-import com.heftreng.app.viewmodel.YazarViewModel
-import com.heftreng.app.viewmodel.PendingPost
 import com.heftreng.app.data.model.Author
 import com.heftreng.app.data.model.LibraryBook
 import com.heftreng.app.data.model.BookQuote
@@ -48,7 +46,6 @@ fun CmsScreen(
     navController: NavController,
     vm       : CmsViewModel       = hiltViewModel(),
     configVm : AppConfigViewModel = hiltViewModel(),
-    yazarVm  : YazarViewModel     = hiltViewModel(),
 ) {
     val pages         by vm.pages.collectAsState()
     val banners       by vm.banners.collectAsState()
@@ -63,14 +60,18 @@ fun CmsScreen(
     // cevabı gelmeden (veya gecikirse hiç) "Erişim Yok" ekranına takılıyordu.
     // Çözüm: perms'i doğrudan collectAsState ile izle, null/false/true
     // durumlarını ayrı ele al.
+    // FAZ -1 devamı: CMS artık gerçekten sadece CMS içeriğiyle (Sayfalar,
+    // Bannerlar, Duyurular, Kategoriler, Özellikler) ilgili. "Yazılar",
+    // "Kütüphane", "Admin", "Kurdî Admin" sekmeleri CMS'nin altına gömülü
+    // değil — Admin Paneli (AdminScreen) kendi başına, "staff"/"library"/
+    // "kurdi"/"pending" izinlerine göre kendi sekmelerini gösteriyor.
+    // Kişi CMS'ye ("edit" izni) girmeden de, CMS'ye hiç bakmadan da
+    // Admin Paneli'ne erişebilir/erişemez — ikisi birbirinden bağımsız.
     val cmsPerms      by vm.perms.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val pendingPosts  by yazarVm.pendingPosts.collectAsState()
-    val pendingStats  by yazarVm.pendingStats.collectAsState()
-    val pendingLoad   by yazarVm.pendingLoading.collectAsState()
     val appConfig by configVm.config.collectAsState()
-    val tabs = listOf("Sayfalar", "Bannerlar", "Duyurular", "Kategoriler", "Özellikler", "Yazılar", "Kütüphane", "Admin", "Kurdî Admin")
+    val tabs = listOf("Sayfalar", "Bannerlar", "Duyurular", "Kategoriler", "Özellikler")
 
     LaunchedEffect(Unit) {
         vm.loadPages()
@@ -78,7 +79,6 @@ fun CmsScreen(
         vm.loadAnnouncements()
         vm.loadCategories()
         configVm.load()
-        yazarVm.loadAllPendingPosts()
     }
 
     // Erişim kontrolü
@@ -108,17 +108,6 @@ fun CmsScreen(
         if (result.isNotBlank()) {
             snackState.showSnackbar(result)
             vm.clearResult()
-        }
-    }
-
-    // FAZ -1: Yazılar sekmesindeki onay/red butonları YazarViewModel'i
-    // kullanıyor — yetkisiz bir kullanıcı butona basarsa (client kontrolü
-    // sayesinde) sessiz kalmak yerine burada da bir uyarı gösterilsin.
-    val yazarSubmitResult by yazarVm.submitResult.collectAsState()
-    LaunchedEffect(yazarSubmitResult) {
-        (yazarSubmitResult as? YazarViewModel.SubmitResult.Error)?.let {
-            snackState.showSnackbar(it.message)
-            yazarVm.clearResult()
         }
     }
 
@@ -191,10 +180,6 @@ fun CmsScreen(
                 2 -> AnnouncementsTab(announcements, vm)
                 3 -> CategoriesTab(categories, vm)
                 4 -> FeaturesTab(appConfig, configVm)
-                5 -> PendingPostsTab(pendingPosts, pendingStats, pendingLoad, yazarVm)
-                6 -> LibraryTab()
-                7 -> { LaunchedEffect(Unit) { navController.navigate("admin") } }
-                8 -> { LaunchedEffect(Unit) { navController.navigate("kurdi_admin") } }
             }
         }
     }
@@ -908,7 +893,7 @@ private fun FeatureToggle(
 }
 
 @Composable
-private fun CmsCard(content: @Composable ColumnScope.() -> Unit) {
+internal fun CmsCard(content: @Composable ColumnScope.() -> Unit) {
     Surface(
         shape    = RoundedCornerShape(12.dp),
         color    = HeftSurface,
@@ -950,216 +935,9 @@ private fun cmsField(
         ),
     )
 }
-// ── 7. Bekleyen Yazılar ───────────────────────────────────────────────────────
-@Composable
-private fun PendingPostsTab(
-    posts   : List<PendingPost>,
-    stats   : YazarViewModel.PendingStats,
-    loading : Boolean,
-    vm      : YazarViewModel,
-) {
-    var filter      by remember { mutableStateOf("all") }
-    var expandedId  by remember { mutableStateOf<String?>(null) }
-    var noteInput   by remember { mutableStateOf("") }
-    var actionPostId by remember { mutableStateOf<String?>(null) }
-    var actionType   by remember { mutableStateOf("") } // "approve" | "reject"
-
-    val filtered = when (filter) {
-        "pending"  -> posts.filter { it.status == "pending" }
-        "approved" -> posts.filter { it.status == "approved" }
-        "rejected" -> posts.filter { it.status == "rejected" }
-        else       -> posts
-    }
-
-    LazyColumn(
-        modifier       = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        // İstatistik satırı
-        item {
-            Row(
-                modifier              = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                StatChip("⏳ ${stats.pending}",  "Bekliyor",  filter == "pending",  Amber)   { filter = if (filter == "pending")  "all" else "pending" }
-                StatChip("✅ ${stats.approved}", "Onaylanan", filter == "approved", Success) { filter = if (filter == "approved") "all" else "approved" }
-                StatChip("❌ ${stats.rejected}", "Reddedilen",filter == "rejected", Error)   { filter = if (filter == "rejected") "all" else "rejected" }
-            }
-        }
-
-        if (loading) {
-            item {
-                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Amber, modifier = Modifier.size(28.dp))
-                }
-            }
-        }
-
-        if (!loading && filtered.isEmpty()) {
-            item {
-                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                    Text("Yazı yok", color = Muted, fontSize = 14.sp)
-                }
-            }
-        }
-
-        items(filtered, key = { it.id }) { post ->
-            val isExpanded = expandedId == post.id
-            val statusColor = when (post.status) {
-                "approved" -> Success
-                "rejected" -> Error
-                else       -> Amber
-            }
-            val statusLabel = when (post.status) {
-                "approved" -> "✅ Onaylandı"
-                "rejected" -> "❌ Reddedildi"
-                else       -> "⏳ Bekliyor"
-            }
-
-            CmsCard {
-                // Başlık + status
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { expandedId = if (isExpanded) null else post.id },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            post.title,
-                            color      = OnBackground,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize   = 14.sp,
-                            maxLines   = 2,
-                            overflow   = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(post.authorName, color = Muted, fontSize = 11.sp)
-                            Text("·", color = Muted, fontSize = 11.sp)
-                            Text(post.category, color = Muted, fontSize = 11.sp)
-                        }
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Box(
-                        Modifier
-                            .background(statusColor.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Text(statusLabel, color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Icon(
-                        if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        null, tint = Muted, modifier = Modifier.size(20.dp),
-                    )
-                }
-
-                // Genişletilmiş içerik
-                if (isExpanded) {
-                    Spacer(Modifier.height(10.dp))
-                    HorizontalDivider(color = Divider)
-                    Spacer(Modifier.height(10.dp))
-
-                    // Özet / İçerik
-                    if (post.summary.isNotBlank()) {
-                        Text("Özet", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                        Text(post.summary, color = OnSurface, fontSize = 13.sp, lineHeight = 19.sp)
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    if (post.content.isNotBlank()) {
-                        Text("İçerik (ilk 400 karakter)", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                        Text(
-                            post.content.take(400) + if (post.content.length > 400) "…" else "",
-                            color    = OnSurface, fontSize = 13.sp, lineHeight = 19.sp,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                    }
-
-                    // Admin notu
-                    if (post.adminNote.isNotBlank()) {
-                        Surface(
-                            color  = SurfaceVar,
-                            shape  = RoundedCornerShape(8.dp),
-                        ) {
-                            Text(
-                                "Not: ${post.adminNote}",
-                                color    = Muted,
-                                fontSize = 12.sp,
-                                modifier = Modifier.padding(8.dp),
-                            )
-                        }
-                        Spacer(Modifier.height(8.dp))
-                    }
-
-                    // Not girişi
-                    OutlinedTextField(
-                        value         = if (actionPostId == post.id) noteInput else "",
-                        onValueChange = { noteInput = it; actionPostId = post.id },
-                        placeholder   = { Text("Admin notu (opsiyonel)", color = Muted, fontSize = 12.sp) },
-                        modifier      = Modifier.fillMaxWidth(),
-                        shape         = RoundedCornerShape(8.dp),
-                        colors        = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor   = Amber, unfocusedBorderColor = Divider,
-                            focusedTextColor     = OnBackground, unfocusedTextColor = OnBackground,
-                            focusedContainerColor = SurfaceVar, unfocusedContainerColor = SurfaceVar,
-                        ),
-                        singleLine = true,
-                    )
-                    Spacer(Modifier.height(10.dp))
-
-                    // Onayla / Reddet butonları
-                    if (post.status != "approved") {
-                        Button(
-                            onClick = {
-                                vm.approvePost(post.id, if (actionPostId == post.id) noteInput else "")
-                                noteInput = ""; actionPostId = null; expandedId = null
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape    = RoundedCornerShape(8.dp),
-                            colors   = ButtonDefaults.buttonColors(containerColor = Success, contentColor = Color.Black),
-                        ) {
-                            Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Onayla", fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(Modifier.height(6.dp))
-                    }
-                    if (post.status != "rejected") {
-                        OutlinedButton(
-                            onClick = {
-                                vm.rejectPost(post.id, if (actionPostId == post.id) noteInput else "")
-                                noteInput = ""; actionPostId = null; expandedId = null
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape    = RoundedCornerShape(8.dp),
-                            border   = androidx.compose.foundation.BorderStroke(1.dp, Error),
-                        ) {
-                            Icon(Icons.Default.Close, null, tint = Error, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Reddet", color = Error, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    if (post.status != "pending") {
-                        Spacer(Modifier.height(6.dp))
-                        TextButton(
-                            onClick = {
-                                vm.updatePostStatus(post.id, "pending", "")
-                                expandedId = null
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Tekrar Bekleyene Al", color = Muted, fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
-private fun StatChip(
+internal fun StatChip(
     label   : String,
     sub     : String,
     selected: Boolean,
