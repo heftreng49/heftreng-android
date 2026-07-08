@@ -34,14 +34,16 @@ jobs:
           npm install
 
       - name: Configure env (2nd gen functions)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BLOGGER_API_KEY: ${{ secrets.BLOGGER_API_KEY }}
+          BLOGGER_BLOG_ID: ${{ secrets.BLOGGER_BLOG_ID }}
         run: |
-          cat > functions/.env.bloggerheftreng << EOF
-SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
-SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
-BLOGGER_API_KEY=${{ secrets.BLOGGER_API_KEY }}
-BLOGGER_BLOG_ID=${{ secrets.BLOGGER_BLOG_ID }}
-EOF
+          printf "SUPABASE_URL=%s\nSUPABASE_ANON_KEY=%s\nSUPABASE_SERVICE_KEY=%s\nBLOGGER_API_KEY=%s\nBLOGGER_BLOG_ID=%s\n" \
+            "$SUPABASE_URL" "$SUPABASE_ANON_KEY" "$SUPABASE_SERVICE_KEY" "$BLOGGER_API_KEY" "$BLOGGER_BLOG_ID" \
+            > functions/.env.bloggerheftreng
 
       - name: Deploy to Firebase
         run: firebase deploy --only functions,firestore:rules,firestore:indexes,remoteconfig --force --project bloggerheftreng --token "$FIREBASE_TOKEN"
