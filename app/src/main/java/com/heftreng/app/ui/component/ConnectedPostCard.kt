@@ -6,11 +6,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.screens.feed.PostCard
+import com.heftreng.app.viewmodel.AdminViewModel
 import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
 import java.net.URLEncoder
@@ -45,7 +47,19 @@ fun ConnectedPostCard(
     // için: repost/unrepost sonrası bu ekranın da kendi state'ini güncellemesi gerekir.
     onRepostOverride   : (() -> Unit)? = null,
     onUnrepostOverride : (() -> Unit)? = null,
+    adminVm            : AdminViewModel = hiltViewModel(),
 ) {
+    // FAZ 1 devamı: ConnectedPostCard tüm ekranların (Kütüphane, Profil,
+    // Blog, Kaydedilenler) ORTAK kart kaynağı — moderatör hızlı kaldırma
+    // menüsü burada bir kez eklenince tüm bu ekranlara otomatik yayılır.
+    // Bkz. FeedScreen.kt'deki PostCard'a doğrudan eklenen aynı mantık —
+    // burada FeedScreen'in kendi adminVm'i yerine ayrı bir instance
+    // kullanılıyor (her ekran kendi route-scoped ViewModel'ini alır),
+    // ama ikisi de aynı Firestore admins/{uid} dökümanını okur.
+    val adminPerms by adminVm.perms.collectAsState()
+    LaunchedEffect(Unit) { adminVm.checkAdmin() }
+    val canModeratePosts = adminPerms?.can("edit") == true
+
     // Twitter tarzı: repostu geri almadan önce onay iste — yanlışlıkla geri almayı önler.
     var showUnrepostConfirm by remember(post.id) { mutableStateOf(false) }
 
@@ -65,6 +79,12 @@ fun ConnectedPostCard(
         },
         onDelete = onDeleteOverride,
         onEdit   = onEditOverride,
+        canModerate = canModeratePosts,
+        isRemoved   = post.moderationStatus == "removed",
+        onModerate  = { status ->
+            if (status == "active") adminVm.restorePost(post.id, post.uid)
+            else adminVm.moderatePost(post.id, post.uid, post.displayName, status, "", "")
+        },
 
         // ── Navigation ────────────────────────────────────────────────────
         onProfile = { navController.navigate(Screen.Profile.go(post.uid)) },
