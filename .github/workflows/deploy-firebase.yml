@@ -33,12 +33,14 @@ jobs:
           rm -rf node_modules package-lock.json
           npm install
 
-      - name: Configure Supabase env (2nd gen functions)
+      - name: Configure env (2nd gen functions)
         run: |
           cat <<EOF > functions/.env.bloggerheftreng
           SUPABASE_URL=${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
+          BLOGGER_API_KEY=${{ secrets.BLOGGER_API_KEY }}
+          BLOGGER_BLOG_ID=${{ secrets.BLOGGER_BLOG_ID }}
           EOF
 
       - name: Deploy to Firebase

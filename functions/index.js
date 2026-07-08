@@ -1307,3 +1307,160 @@ exports.rewardedAdSsv = onRequest(
     }
   },
 );
+
+// ─── publishToBlogger — HTTPS Callable (v2) ──────────────────────────────────
+//
+// Admin panelinden "Onayla" butonuna basıldığında Android bu fonksiyonu çağırır.
+//   1. admins/{uid} kaydında "pending" izni kontrol edilir
+//   2. pendingPosts/{postId} Firestore'dan okunur
+//   3. Blogger API v3'e POST atılır → yazı yayınlanır
+//   4. bloggerPostId + bloggerPostUrl Firestore'a yazılır, status="approved"
+//
+// Secret kurulumu (bir kerelik):
+//   firebase functions:secrets:set BLOGGER_API_KEY   ← Google Cloud Credentials'tan
+//   firebase functions:secrets:set BLOGGER_BLOG_ID   ← ör: 6362476808834153672
+//
+// Bu secretlar GitHub Actions'ta functions/.env.bloggerheftreng dosyasına
+// inject edilir (aşağıdaki deploy-firebase.yml güncellemesine bakın).
+//
+exports.publishToBlogger = onCall(
+  {
+    region        : "europe-west1",
+    cors          : true,
+    timeoutSeconds: 60,
+  },
+  async (request) => {
+    // ── 1. Kimlik doğrulama ────────────────────────────────────────────────
+    if (!request.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+
+    const callerUid = request.auth.uid;
+    const db        = getFirestore();
+
+    // ── 2. Yetki kontrolü — "pending" izni gerekli ────────────────────────
+    let canPublish = false;
+    try {
+      const adminDoc = await db.collection("admins").doc(callerUid).get();
+      if (adminDoc.exists) {
+        const d     = adminDoc.data() || {};
+        const role  = d.role || "";
+        const perms = Array.isArray(d.permissions) ? d.permissions : [];
+        canPublish =
+          role === "admin" ||
+          role === "editor" ||
+          perms.includes("pending") ||
+          perms.includes("*");
+      }
+    } catch (_) {}
+
+    if (!canPublish) {
+      throw new HttpsError("permission-denied", "Bu işlem için yetkin yok.");
+    }
+
+    // ── 3. Parametreler ───────────────────────────────────────────────────
+    const { postId, adminNote = "" } = request.data || {};
+    if (!postId) throw new HttpsError("invalid-argument", "postId gerekli.");
+
+    // ── 4. Firestore'dan yazıyı oku ───────────────────────────────────────
+    const postSnap = await db.collection("pendingPosts").doc(postId).get();
+    if (!postSnap.exists) {
+      throw new HttpsError("not-found", `pendingPosts/${postId} bulunamadı.`);
+    }
+    const post = postSnap.data();
+
+    // İdempotent koruma — zaten yayınlanmışsa tekrar gitme
+    if (post.status === "approved" && post.bloggerPostId) {
+      return {
+        success          : true,
+        alreadyPublished : true,
+        bloggerPostId    : post.bloggerPostId,
+        bloggerPostUrl   : post.bloggerPostUrl,
+      };
+    }
+
+    // ── 5. HTML içerik oluştur ────────────────────────────────────────────
+    const coverHtml = post.cover
+      ? `<div class="hf-cover"><img src="${post.cover}" alt="${_escapeHtml(post.title)}" style="max-width:100%;border-radius:8px;" /></div>\n`
+      : "";
+
+    const bloggerContent = [
+      coverHtml,
+      post.content || "",
+      `\n<p class="hf-author-note" style="color:#888;font-size:0.9em;">— ${_escapeHtml(post.authorName || "Yazar")}</p>`,
+    ].join("");
+
+    const labels = [post.category, ...(Array.isArray(post.tags) ? post.tags : [])]
+      .filter(Boolean);
+
+    // ── 6. Blogger API v3 ─────────────────────────────────────────────────
+    const BLOGGER_API_KEY = process.env.BLOGGER_API_KEY;
+    const BLOGGER_BLOG_ID = process.env.BLOGGER_BLOG_ID;
+
+    if (!BLOGGER_API_KEY || !BLOGGER_BLOG_ID) {
+      throw new HttpsError(
+        "internal",
+        "BLOGGER_API_KEY veya BLOGGER_BLOG_ID eksik. GitHub Secret'ları kontrol et."
+      );
+    }
+
+    const bloggerEndpoint =
+      `https://www.googleapis.com/blogger/v3/blogs/${BLOGGER_BLOG_ID}/posts/?key=${BLOGGER_API_KEY}`;
+
+    let bloggerRes;
+    try {
+      bloggerRes = await fetch(bloggerEndpoint, {
+        method : "POST",
+        headers: { "Content-Type": "application/json" },
+        body   : JSON.stringify({
+          kind   : "blogger#post",
+          blog   : { id: BLOGGER_BLOG_ID },
+          title  : post.title  || "(Başlıksız)",
+          content: bloggerContent,
+          labels : labels,
+        }),
+      });
+    } catch (fetchErr) {
+      console.error("[publishToBlogger] Fetch hatası:", fetchErr.message);
+      throw new HttpsError("internal", `Blogger'a bağlanılamadı: ${fetchErr.message}`);
+    }
+
+    if (!bloggerRes.ok) {
+      const errBody = await bloggerRes.text().catch(() => "(okunamadı)");
+      console.error(`[publishToBlogger] Blogger API ${bloggerRes.status}:`, errBody);
+      throw new HttpsError(
+        "internal",
+        `Blogger API ${bloggerRes.status}: ${errBody.slice(0, 200)}`
+      );
+    }
+
+    const bloggerData    = await bloggerRes.json();
+    const bloggerPostId  = bloggerData.id  || "";
+    const bloggerPostUrl = bloggerData.url || "";
+
+    // ── 7. Firestore güncelle ─────────────────────────────────────────────
+    await db.collection("pendingPosts").doc(postId).update({
+      status         : "approved",
+      adminNote      : adminNote,
+      bloggerPostId  : bloggerPostId,
+      bloggerPostUrl : bloggerPostUrl,
+      approvedBy     : callerUid,
+      approvedAt     : new Date(),
+      updatedAt      : new Date(),
+    });
+
+    console.log(
+      `[publishToBlogger] ✓ "${post.title}" yayınlandı` +
+      ` — id:${bloggerPostId} caller:${callerUid}`
+    );
+
+    return { success: true, bloggerPostId, bloggerPostUrl };
+  }
+);
+
+// ─── Yardımcı: HTML karakterleri kaçır ───────────────────────────────────────
+function _escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}

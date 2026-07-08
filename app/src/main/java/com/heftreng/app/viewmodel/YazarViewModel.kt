@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import com.google.firebase.functions.FirebaseFunctions
 import javax.inject.Inject
 
 // ── Veri modeli ───────────────────────────────────────────────────────────────
@@ -271,9 +272,50 @@ class YazarViewModel @Inject constructor(
         }
     }
 
-    // Onayla
+    // Onayla — Cloud Function üzerinden Blogger'a yayınlar
     fun approvePost(postId: String, note: String = "") {
-        updatePostStatusInternal(postId, "approved", note)
+        if (!canModerate) {
+            _submitResult.value = SubmitResult.Error("Bu işlem için yetkin yok")
+            return
+        }
+        viewModelScope.launch {
+            _pendingLoading.value = true
+            try {
+                val payload = hashMapOf(
+                    "postId"    to postId,
+                    "adminNote" to note,
+                )
+                val result = FirebaseFunctions
+                    .getInstance("europe-west1")
+                    .getHttpsCallable("publishToBlogger")
+                    .call(payload)
+                    .await()
+
+                @Suppress("UNCHECKED_CAST")
+                val data           = result.data as? Map<String, Any>
+                val success        = data?.get("success") as? Boolean ?: false
+                val bloggerPostUrl = data?.get("bloggerPostUrl") as? String ?: ""
+
+                if (success) {
+                    _pendingPosts.value = _pendingPosts.value.map { post ->
+                        if (post.id == postId)
+                            post.copy(status = "approved", adminNote = note, bloggerPostUrl = bloggerPostUrl)
+                        else post
+                    }
+                    updateRealtimeStats()
+                    android.util.Log.i("YazarVM", "[$postId] Blogger'da yayınlandı → $bloggerPostUrl")
+                } else {
+                    _submitResult.value = SubmitResult.Error("Yayınlama başarısız")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("YazarVM", "approvePost hata: ${e.message}")
+                _submitResult.value = SubmitResult.Error(
+                    "Blogger'a gönderilemedi: ${e.message?.take(100) ?: "hata"}"
+                )
+            } finally {
+                _pendingLoading.value = false
+            }
+        }
     }
 
     // Reddet
