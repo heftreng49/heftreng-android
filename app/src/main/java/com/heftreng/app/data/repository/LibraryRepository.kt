@@ -263,19 +263,39 @@ class LibraryRepository @Inject constructor(
             limit(limit.toLong())
         }.decodeList()
 
+    /** FAZ 1 devamı: `users` tablosunda `banned = true` olan uid'lerin
+     *  kümesini döndürür. Supabase-kt doğrudan JOIN desteklemediği için
+     *  (bkz. FeedViewModel.fetchSuggestedUsersPage'deki aynı desen),
+     *  banlı uid'ler ayrı bir sorguyla çekilip client-side dışlanıyor.
+     *  Hata olursa boş küme döner — banned filtresi devre dışı kalır ama
+     *  ekran hiç açılmaz hale gelmez (fail-open, sadece bu filtre için). */
+    private suspend fun getBannedUids(): Set<String> = try {
+        db["users"].select {
+            filter { eq("banned", true) }
+        }.decodeList<com.heftreng.app.data.model.UserRow>().map { it.uid }.toSet()
+    } catch (e: Exception) {
+        android.util.Log.w("LibraryRepo", "getBannedUids: ${e.message}")
+        emptySet()
+    }
+
     /** Keşfet → Alıntılar — en son eklenen kütüphane alıntıları.
      *  ÖNCEKİ: Firestore `feed` (type='library_quote' + 300'lük legacy tarama, 2 sorgu).
      *  ŞİMDİ:  Supabase `book_quotes` — 1 sorgu, RLS public read.
      *  FAZ 1: `moderation_status = 'active'` filtresi eklendi — moderatör
      *  Firestore feed'de bir alıntıyı kaldırdığında (moderatePost), bu artık
      *  book_quotes tarafına da yansıyor (bkz. setQuoteModerationStatusByFeedPostId)
-     *  ve buradaki filtre sayesinde Kütüphane ekranında görünmeye devam etmiyor. */
-    suspend fun getRecentQuotes(limit: Int = 50): List<BookQuoteRow> =
-        db["book_quotes"].select {
+     *  ve buradaki filtre sayesinde Kütüphane ekranında görünmeye devam etmiyor.
+     *  FAZ 1 devamı: banlı kullanıcıların alıntıları da client-side dışlanıyor
+     *  (bkz. getBannedUids) — sayfalama limitinden az sonuç dönebilir ama
+     *  bu ekran zaten "son eklenenler" akışı, kesin toplam sayı garantisi yok. */
+    suspend fun getRecentQuotes(limit: Int = 50): List<BookQuoteRow> {
+        val banned = getBannedUids()
+        return db["book_quotes"].select {
             filter { eq("moderation_status", "active") }
             order("created_at", Order.DESCENDING)
             limit(limit.toLong())
-        }.decodeList()
+        }.decodeList<BookQuoteRow>().filter { it.uid !in banned }
+    }
 
     suspend fun insertQuote(row: BookQuoteRow) {
         db["book_quotes"].insert(row)
@@ -419,13 +439,16 @@ class LibraryRepository @Inject constructor(
      *  atılıyordu → kütüphane sekmesinin çok yavaş açılmasına sebep oluyordu.
      *  ŞİMDİ: 1 sorgu, doğrudan en son incelemeler.
      *  FAZ 1: `moderation_status = 'active'` filtresi eklendi — bkz.
-     *  getRecentQuotes'daki aynı açıklama. */
-    suspend fun getRecentReviews(limit: Int = 50): List<BookReviewRow> =
-        db["book_reviews"].select {
+     *  getRecentQuotes'daki aynı açıklama. Banned filtresi de aynı şekilde
+     *  eklendi (bkz. getBannedUids). */
+    suspend fun getRecentReviews(limit: Int = 50): List<BookReviewRow> {
+        val banned = getBannedUids()
+        return db["book_reviews"].select {
             filter { eq("moderation_status", "active") }
             order("created_at", Order.DESCENDING)
             limit(limit.toLong())
-        }.decodeList()
+        }.decodeList<BookReviewRow>().filter { it.uid !in banned }
+    }
 
     suspend fun insertReview(row: BookReviewRow) {
         db["book_reviews"].insert(row)
