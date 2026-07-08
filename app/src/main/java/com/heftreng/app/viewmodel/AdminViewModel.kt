@@ -421,11 +421,19 @@ class AdminViewModel @Inject constructor(
                 if (doc.exists()) {
                     val role  = doc.getString("role") ?: "none"
                     val title = doc.getString("title") ?: role.replaceFirstChar { it.uppercase() }
-                    // Hem role hem eski permissions array desteklenir
+                    // Hem role hem eski permissions array desteklenir.
+                    // Güvenlik: "admin" rolü hariç, ham permissions listesi role'ün
+                    // gerçekten izin verdiği kümenin dışına taşamaz — eski/bozuk
+                    // dökümanlarda (ör. moderator + "push") sızmış fazladan izinler
+                    // burada otomatik olarak süzülür (Firestore'a geri yazılmaz,
+                    // sadece bu oturumda uygulanır; kalıcı düzeltme için doküman
+                    // Firestore konsolundan veya Yardımcılar ekranından güncellenmeli).
                     @Suppress("UNCHECKED_CAST")
                     val legacy = doc.get("permissions") as? List<String>
-                    val perms  = if (!legacy.isNullOrEmpty()) legacy.toSet()
-                                 else roleToPermissions(role)
+                    val rawPerms = if (!legacy.isNullOrEmpty()) legacy.toSet()
+                                   else roleToPermissions(role)
+                    val perms = if (role == "admin") rawPerms
+                                else rawPerms.intersect(roleToPermissions(role).ifEmpty { rawPerms })
                     _perms.value = StaffPermissions(uid = user.uid, title = title, permissions = perms)
                 } else {
                     // Belge yok — email sahibiyse otomatik oluştur
@@ -497,10 +505,19 @@ class AdminViewModel @Inject constructor(
                     permissions.any { it in setOf("library","kurdi") } -> "kutuphaneci"
                     else -> "moderator"
                 }
+                // ── Güvenlik: izinler, çıkarılan role'ün izin verdiği kümenin
+                // dışına çıkamaz (ör. "moderator" seçilip "push" işaretlenemez).
+                // "admin" her izni alabilir; diğer roller kendi sabit kümesiyle sınırlı.
+                val allowedForRole = if (inferredRole == "admin") ALL_PERMISSIONS.keys.toSet()
+                                     else roleToPermissions(inferredRole)
+                val clampedPermissions = permissions.intersect(allowedForRole)
+                if (clampedPermissions.isEmpty()) {
+                    onResult(false, "Seçilen izinler bu rol için geçersiz"); return@launch
+                }
                 firestore.collection("admins").document(uid.trim()).set(mapOf(
                     "role"        to inferredRole,
                     "title"       to title.ifBlank { "Yardımcı" },
-                    "permissions" to permissions.toList(),
+                    "permissions" to clampedPermissions.toList(),
                     "addedBy"     to (auth.currentUser?.uid ?: ""),
                     "addedAt"     to com.google.firebase.Timestamp.now(),
                 )).await()
@@ -513,11 +530,22 @@ class AdminViewModel @Inject constructor(
     fun updateStaff(uid: String, title: String, permissions: Set<String>, onResult: (Boolean, String) -> Unit) {
         if (_perms.value?.can("staff") != true)    { onResult(false, "Yetkisiz işlem"); return }
         if (uid == auth.currentUser?.uid)  { onResult(false, "Kendi iznini değiştiremezsin"); return }
+        if (permissions.isEmpty())         { onResult(false, "En az bir izin seçmelisin"); return }
         viewModelScope.launch {
             try {
+                // Mevcut role'ü oku — güncellemede role değişmiyor, sadece
+                // izinler o role'ün izin verdiği kümeyle sınırlanıyor (bkz. addStaff).
+                val doc  = firestore.collection("admins").document(uid).get().await()
+                val role = doc.getString("role") ?: "moderator"
+                val allowedForRole = if (role == "admin") ALL_PERMISSIONS.keys.toSet()
+                                     else roleToPermissions(role)
+                val clampedPermissions = permissions.intersect(allowedForRole)
+                if (clampedPermissions.isEmpty()) {
+                    onResult(false, "Seçilen izinler bu rol için geçersiz"); return@launch
+                }
                 firestore.collection("admins").document(uid).update(mapOf(
                     "title"       to title.ifBlank { "Yardımcı" },
-                    "permissions" to permissions.toList(),
+                    "permissions" to clampedPermissions.toList(),
                 )).await()
                 onResult(true, "✓ Güncellendi")
                 loadStaff()
