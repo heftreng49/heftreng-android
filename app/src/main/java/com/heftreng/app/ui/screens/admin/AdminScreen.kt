@@ -1,6 +1,7 @@
 package com.heftreng.app.ui.screens.admin
 
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -55,11 +56,10 @@ fun AdminScreen(
     val isAdmin     by vm.isAdmin.collectAsState()
     val perms       by vm.perms.collectAsState()  // null = yükleniyor
     val staffList   by vm.staffList.collectAsState()
-    val users             by vm.users.collectAsState()
-    val hasMoreUsers      by vm.hasMoreUsers.collectAsState()
-    val usersPageLoading  by vm.usersPageLoading.collectAsState()
-    val unverifiedUsers   by vm.unverifiedUsers.collectAsState()
+    val users           by vm.users.collectAsState()
+    val unverifiedUsers by vm.unverifiedUsers.collectAsState()
     val unverifiedLoading by vm.unverifiedLoading.collectAsState()
+    val feedSyncProgress  by vm.feedSyncProgress.collectAsState()
     // "Yazılar" tabı — CmsScreen'den taşındı, blog yazısı onay akışı
     val blogPendingPosts   by yazarVm.pendingPosts.collectAsState()
     val blogPendingStats   by yazarVm.pendingStats.collectAsState()
@@ -836,6 +836,71 @@ fun AdminScreen(
 
                         if (!showUnverified) {
                             // ── Tüm kullanıcılar ──────────────────────────────
+
+                            // ── Geçmiş Feed Senkronizasyonu ───────────────────
+                            val syncState = feedSyncProgress.state
+                            androidx.compose.animation.AnimatedVisibility(visible = syncState != "idle") {
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = when (syncState) {
+                                        "done"  -> Color(0xFF166534).copy(alpha = 0.3f)
+                                        "error" -> Color(0xFF7F1D1D).copy(alpha = 0.3f)
+                                        else    -> Color(0xFF78350F).copy(alpha = 0.3f)
+                                    },
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        if (syncState == "running") {
+                                            CircularProgressIndicator(
+                                                color = Amber,
+                                                modifier = Modifier.size(16.dp),
+                                                strokeWidth = 2.dp,
+                                            )
+                                        }
+                                        Text(
+                                            text = when (syncState) {
+                                                "running" -> "Senkronize ediliyor… ${feedSyncProgress.processed} gönderi tarandı, ${feedSyncProgress.updated} güncellendi"
+                                                "done"    -> "✓ Tamamlandı — ${feedSyncProgress.processed} gönderi tarandı, ${feedSyncProgress.updated} gönderi güncellendi"
+                                                "error"   -> "✗ Hata: ${feedSyncProgress.errorMsg}"
+                                                else      -> ""
+                                            },
+                                            color    = if (syncState == "done") Color(0xFF86EFAC) else if (syncState == "error") Color(0xFFFCA5A5) else Amber,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    }
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick  = { vm.syncAllFeedUsernames() },
+                                enabled  = syncState != "running",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                                shape  = RoundedCornerShape(10.dp),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp, if (syncState != "running") Color(0xFF92400E) else Divider,
+                                ),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = if (syncState != "running") Color(0xFFFBBF24) else Muted,
+                                ),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text("Geçmiş Gönderileri Senkronize Et", fontSize = 13.sp)
+                            }
+
                             OutlinedTextField(
                                 value         = userSearch,
                                 onValueChange = { userSearch = it },
@@ -854,13 +919,11 @@ fun AdminScreen(
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                                 leadingIcon = { Icon(Icons.Default.Search, null, tint = Muted) },
                             )
-                            val isSearching = userSearch.isNotBlank()
-                            val filtered = if (isSearching) {
-                                users.filter {
-                                    it.displayName.contains(userSearch, ignoreCase = true) ||
-                                    it.email.contains(userSearch, ignoreCase = true)
-                                }
-                            } else users
+                            val filtered = users.filter {
+                                userSearch.isBlank() ||
+                                it.displayName.contains(userSearch, ignoreCase = true) ||
+                                it.email.contains(userSearch, ignoreCase = true)
+                            }
                             LazyColumn(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
                                 items(filtered, key = { it.uid }) { user ->
                                     AdminUserRow(
@@ -883,49 +946,6 @@ fun AdminScreen(
                                         onCancelEdit      = { editUser = null },
                                     )
                                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
-                                }
-
-                                // ── Sayfalama footer (arama modunda gizlenir) ──
-                                if (!isSearching) {
-                                    item(key = "pagination_footer") {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 12.dp),
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            when {
-                                                usersPageLoading -> {
-                                                    CircularProgressIndicator(
-                                                        color  = Amber,
-                                                        modifier = Modifier.size(28.dp),
-                                                        strokeWidth = 2.5.dp,
-                                                    )
-                                                }
-                                                hasMoreUsers -> {
-                                                    OutlinedButton(
-                                                        onClick = { vm.loadMoreUsers() },
-                                                        shape   = RoundedCornerShape(10.dp),
-                                                        border  = androidx.compose.foundation.BorderStroke(1.dp, Amber),
-                                                        colors  = ButtonDefaults.outlinedButtonColors(contentColor = Amber),
-                                                    ) {
-                                                        Text(
-                                                            "Daha Fazla Yükle",
-                                                            fontSize   = 13.sp,
-                                                            fontWeight = FontWeight.Medium,
-                                                        )
-                                                    }
-                                                }
-                                                users.isNotEmpty() -> {
-                                                    Text(
-                                                        "Tüm kullanıcılar yüklendi (${users.size})",
-                                                        color    = Muted,
-                                                        fontSize = 12.sp,
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
                                 }
                             }
                         } else {

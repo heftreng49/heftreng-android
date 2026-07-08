@@ -113,14 +113,6 @@ class AdminViewModel @Inject constructor(
     private val _users        = MutableStateFlow<List<User>>(emptyList())
     val users = _users.asStateFlow()
 
-    // ── Kullanıcı sayfalama ────────────────────────────────────────────
-    private val PAGE_SIZE = 30L
-    private var _lastUserDoc: com.google.firebase.firestore.DocumentSnapshot? = null
-    private val _hasMoreUsers = MutableStateFlow(true)
-    val hasMoreUsers = _hasMoreUsers.asStateFlow()
-    private val _usersPageLoading = MutableStateFlow(false)
-    val usersPageLoading = _usersPageLoading.asStateFlow()
-
     private val _pendingPosts = MutableStateFlow<List<Map<String, Any>>>(emptyList())
     val pendingPosts = _pendingPosts.asStateFlow()
 
@@ -598,71 +590,50 @@ class AdminViewModel @Inject constructor(
     }
 
     // ── Kullanıcıları listele ─────────────────────────────────────────────────
-    /** İlk sayfayı yükler (sekmeye ilk girildiğinde veya yenileme istendiğinde çağırılır). */
     fun loadUsers() {
         if (_perms.value?.can("users") != true) return
         viewModelScope.launch {
             _loading.value = true
-            _lastUserDoc   = null
-            _hasMoreUsers.value = true
-            _users.value   = emptyList()
-            loadUsersPage(isFirstPage = true)
-        }
-    }
-
-    /** Sonraki sayfayı yükler ("Daha Fazla Yükle" butonuna basıldığında çağırılır). */
-    fun loadMoreUsers() {
-        if (_usersPageLoading.value) return
-        if (!_hasMoreUsers.value) return
-        viewModelScope.launch { loadUsersPage(isFirstPage = false) }
-    }
-
-    private suspend fun loadUsersPage(isFirstPage: Boolean) {
-        val loadingFlow = if (isFirstPage) _loading else _usersPageLoading
-        loadingFlow.value = true
-        try {
-            // createdAt DESC: en son kayıt olan kullanıcı en üstte görünür.
-            var query = firestore.collection("users")
-                .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                .limit(PAGE_SIZE)
-            _lastUserDoc?.let { query = query.startAfter(it) }
-
-            val snap = try {
-                query.get().await()
-            } catch (e: Exception) {
-                // createdAt index yoksa sıralamasız çek, client-side sırala (yalnızca ilk sayfa)
-                if (isFirstPage) {
-                    val fallback = firestore.collection("users").limit(PAGE_SIZE).get().await()
-                    _users.value = fallback.documents.mapNotNull { mapUserDoc(it) }
-                        .sortedByDescending { it.createdAt }
-                    _hasMoreUsers.value = false   // fallback: index yoksa sayfalama devre dışı
+            try {
+                // ÖNCEKİ HATA: orderBy("displayName") kullanılıyordu — admin panelindeki
+                // kullanıcı listesi alfabetik sıralanıyordu, en son kayıt olanlar listenin
+                // ortasına/sonuna düşüyordu (hatta limit(100) yüzünden hiç görünmeyebiliyordu).
+                // Artık createdAt'e göre AZALAN sırada çekiliyor — en son kayıt olan en üstte.
+                val snap = firestore.collection("users")
+                    .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(100).get().await()
+                _users.value = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    User(
+                        uid           = doc.id,
+                        displayName   = d["displayName"] as? String ?: d["name"] as? String ?: "",
+                        email         = d["email"]    as? String ?: "",
+                        photoURL      = d["photoURL"] as? String ?: "",
+                        banned        = d["banned"]   as? Boolean ?: false,
+                        emailVerified = d["emailVerified"] as? Boolean ?: false,
+                        createdAt     = (d["createdAt"] as? com.google.firebase.Timestamp)?.toDate()?.time ?: 0L,
+                    )
                 }
-                return
-            }
-
-            val newUsers = snap.documents.mapNotNull { mapUserDoc(it) }
-            _users.value = if (isFirstPage) newUsers else _users.value + newUsers
-
-            if (snap.documents.isNotEmpty()) {
-                _lastUserDoc = snap.documents.last()
-            }
-            _hasMoreUsers.value = snap.documents.size.toLong() == PAGE_SIZE
-        } finally {
-            loadingFlow.value = false
+            } catch (e: Exception) {
+                // orderBy index yoksa (veya createdAt alanı eski kayıtlarda yoksa) sıralamasız
+                // çekip client-side'da createdAt'e göre sırala — yine de en yeni en üstte olsun.
+                try {
+                    val snap = firestore.collection("users").limit(100).get().await()
+                    _users.value = snap.documents.mapNotNull { doc ->
+                        val d = doc.data ?: return@mapNotNull null
+                        User(
+                            uid           = doc.id,
+                            displayName   = d["displayName"] as? String ?: d["name"] as? String ?: "",
+                            email         = d["email"]    as? String ?: "",
+                            photoURL      = d["photoURL"] as? String ?: "",
+                            banned        = d["banned"]   as? Boolean ?: false,
+                            emailVerified = d["emailVerified"] as? Boolean ?: false,
+                            createdAt     = (d["createdAt"] as? com.google.firebase.Timestamp)?.toDate()?.time ?: 0L,
+                        )
+                    }.sortedByDescending { it.createdAt }
+                } catch (e2: Exception) { e2.printStackTrace() }
+            } finally { _loading.value = false }
         }
-    }
-
-    private fun mapUserDoc(doc: com.google.firebase.firestore.DocumentSnapshot): User? {
-        val d = doc.data ?: return null
-        return User(
-            uid           = doc.id,
-            displayName   = d["displayName"] as? String ?: d["name"] as? String ?: "",
-            email         = d["email"]    as? String ?: "",
-            photoURL      = d["photoURL"] as? String ?: "",
-            banned        = d["banned"]   as? Boolean ?: false,
-            emailVerified = d["emailVerified"] as? Boolean ?: false,
-            createdAt     = (d["createdAt"] as? com.google.firebase.Timestamp)?.toDate()?.time ?: 0L,
-        )
     }
 
     // ── Admin kullanıcı araması — Firestore prefix query ──────────────────────
@@ -1485,6 +1456,108 @@ class AdminViewModel @Inject constructor(
             } catch (e: Exception) {
                 android.util.Log.e("AdminVM", "Migration FAILED: ${e.message}")
                 migrationState.value = "error:${e.message}"
+            }
+        }
+    }
+
+    // ── Geçmiş feed senkronizasyonu ───────────────────────────────────────────
+    // Tüm kullanıcıların feed gönderilerini users koleksiyonundaki güncel
+    // displayName / username ile eşleştirir. Admin panelinden tek seferlik çalıştırılır.
+
+    data class FeedSyncProgress(
+        val state      : String = "idle",   // idle | running | done | error
+        val processed  : Int    = 0,
+        val updated    : Int    = 0,
+        val total      : Int    = 0,
+        val errorMsg   : String = "",
+    )
+
+    private val _feedSyncProgress = MutableStateFlow(FeedSyncProgress())
+    val feedSyncProgress = _feedSyncProgress.asStateFlow()
+
+    fun syncAllFeedUsernames() {
+        if (_feedSyncProgress.value.state == "running") return
+        if (_perms.value?.can("users") != true) return
+        viewModelScope.launch {
+            _feedSyncProgress.value = FeedSyncProgress(state = "running")
+            try {
+                // 1. Tüm users dokümanlarını çek (uid → displayName + username)
+                val userMap = mutableMapOf<String, Pair<String, String>>() // uid → (displayName, username)
+                var lastUserDoc: com.google.firebase.firestore.DocumentSnapshot? = null
+                while (true) {
+                    var q = firestore.collection("users")
+                        .orderBy("__name__").limit(1000)
+                    lastUserDoc?.let { q = q.startAfter(it) }
+                    val snap = q.get().await()
+                    for (doc in snap.documents) {
+                        val name     = (doc.getString("displayName") ?: doc.getString("name") ?: "").trim()
+                        val username = (doc.getString("username") ?: "").trim()
+                        if (name.isNotBlank() || username.isNotBlank()) {
+                            userMap[doc.id] = Pair(name, username)
+                        }
+                    }
+                    if (snap.documents.size < 1000) break
+                    lastUserDoc = snap.documents.last()
+                }
+
+                // 2. Tüm feed dokümanlarını 400'erlik batch ile güncelle
+                var processed = 0
+                var updated   = 0
+                var lastFeedDoc: com.google.firebase.firestore.DocumentSnapshot? = null
+
+                while (true) {
+                    var q = firestore.collection("feed")
+                        .orderBy("__name__").limit(400)
+                    lastFeedDoc?.let { q = q.startAfter(it) }
+                    val snap = q.get().await()
+                    if (snap.isEmpty) break
+
+                    val batch = firestore.batch()
+                    var batchHasWrite = false
+
+                    for (doc in snap.documents) {
+                        val uid      = doc.getString("uid") ?: continue
+                        val current  = userMap[uid] ?: continue
+
+                        val freshName     = current.first
+                        val freshUsername = current.second
+
+                        val storedName     = (doc.getString("displayName") ?: doc.getString("name") ?: "").trim()
+                        val storedUsername = (doc.getString("username") ?: "").trim()
+
+                        val needsUpdate = (freshName.isNotBlank() && storedName != freshName) ||
+                                          (freshUsername.isNotBlank() && storedUsername != freshUsername)
+
+                        if (needsUpdate) {
+                            val updates = mutableMapOf<String, Any>()
+                            if (freshName.isNotBlank())     { updates["displayName"] = freshName; updates["name"] = freshName }
+                            if (freshUsername.isNotBlank()) { updates["username"]     = freshUsername }
+                            batch.update(doc.reference, updates)
+                            batchHasWrite = true
+                            updated++
+                        }
+                        processed++
+                    }
+
+                    if (batchHasWrite) batch.commit().await()
+
+                    _feedSyncProgress.value = _feedSyncProgress.value.copy(
+                        processed = processed,
+                        updated   = updated,
+                    )
+
+                    if (snap.documents.size < 400) break
+                    lastFeedDoc = snap.documents.last()
+                }
+
+                _feedSyncProgress.value = FeedSyncProgress(
+                    state     = "done",
+                    processed = processed,
+                    updated   = updated,
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("AdminVM", "syncAllFeedUsernames failed: ${e.message}")
+                _feedSyncProgress.value = FeedSyncProgress(state = "error", errorMsg = e.message ?: "Hata")
             }
         }
     }
