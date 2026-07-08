@@ -178,8 +178,13 @@ fun LibraryScreen(
     // (val get()) — perms Firestore'dan asenkron dolduğunda burası
     // recompose olmuyordu, "kutuphaneci" rolündeki kullanıcı (hatta admin)
     // her zaman yetkisiz görünebiliyordu. libraryPerms'i doğrudan izliyoruz.
+    // NOT: Bu, kitap/yazar EKLEME yetkisi ("library" izni, kutuphaneci
+    // rolü) — başkasının alıntı/yorumunu silme/düzenleme (moderasyon,
+    // "pending" izni) ile KARIŞTIRILMAMALI, o kontrol BookQuoteCard/
+    // BookReviewCard içinde canModerateLibrary ile ayrı yapılıyor.
     val libraryPermsState by libraryVm.libraryPerms.collectAsState()
-    val isAdmin = libraryPermsState?.can("library") == true
+    val isLibrarian = libraryPermsState?.can("library") == true
+    val isAdmin = isLibrarian // geriye dönük uyumluluk için (aşağıda kullanılıyor)
     var showQuoteDialog        by remember { mutableStateOf(false) }
     var showReviewBookPicker   by remember { mutableStateOf(false) }
     var reviewTargetBook       by remember { mutableStateOf<LibraryBook?>(null) }

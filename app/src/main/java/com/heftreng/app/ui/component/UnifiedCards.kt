@@ -71,7 +71,11 @@ fun BookQuoteCard(
     val navController = actions.navController
     val myUid         = vm?.myUid ?: ""
     val isOwner       = myUid.isNotBlank() && myUid == quote.uid
-    val isAdmin       = vm?.isAdmin ?: false
+    // FAZ -1 devamı: "kutuphaneci" rolü sadece kitap/yazar yönetir, BAŞKASININ
+    // alıntısını düzenleme/silme/kısıtlama bir moderasyon yetkisi — bu yüzden
+    // vm.isAdmin ("library" izni) değil, vm.canModerateLibrary ("pending"
+    // izni, moderator/editor/admin rolleri) kullanılıyor.
+    val isAdmin       = vm?.canModerateLibrary ?: false
     val canEdit       = isOwner || isAdmin
     
     // ÇÖZÜLDÜ: 'likedBy' listesi yerine modeldeki boolean durum veya harici kontrol atandı
@@ -365,7 +369,10 @@ fun BookReviewCard(
     val navController = actions.navController
     val myUid         = vm?.myUid ?: ""
     val isOwner       = myUid.isNotBlank() && myUid == review.uid
-    val isAdmin       = vm?.isAdmin ?: false
+    // FAZ -1 devamı: bkz. BookQuoteCard'daki aynı düzeltme — moderasyon
+    // yetkisi (başkasının yorumunu düzenleme/silme) canModerateLibrary'e
+    // bağlı, isLibrarian'a (eski isAdmin) değil.
+    val isAdmin       = vm?.canModerateLibrary ?: false
     val canEdit       = isOwner || isAdmin
     
     // ÇÖZÜLDÜ: 'likedBy' listesi yerine modeldeki boolean durum veya harici kontrol atandı

@@ -136,15 +136,29 @@ class LibraryViewModel @Inject constructor(
     val myPhoto get() = auth.currentUser?.photoUrl?.toString() ?: ""
     val myUser  get() = auth.currentUser?.email?.substringBefore("@") ?: ""
 
-    // FAZ -1: Eski sabit e-posta kontrolü kaldırıldı, yerine Firestore
-    // admins/{uid} rol/izin sistemi kullanılıyor. "library" izni Firestore
-    // güvenlik kuralındaki isLibrarian() (role in [admin, kutuphaneci]) ile
-    // hizalı — "kutuphaneci" rolündeki bir moderatör artık başkasının
-    // yazdığı alıntı/yorumu düzenleyip silebilir.
+    // FAZ -1 devamı: Kütüphaneci ve moderatör yetkileri birbirinden AYRI.
+    // "kutuphaneci" rolü sadece kitap/yazar ekleme-düzenleme (createAuthor,
+    // updateAuthor, createLibraryBook, updateLibraryBook) yapabilir —
+    // bu "library" iznine bağlı. Başkasının yazdığı alıntı/yorumu
+    // silme-düzenleme (deleteQuote/editQuote/deleteReview/editReview) ise
+    // bir MODERASYON işlemi, "kutuphaneci" rolünün kapsamında değil —
+    // bu "pending" iznine (moderator/editor/admin rolleri) bağlı.
+    // Önceden ikisi de tek bir `isAdmin` ("library" iznine bağlı) altında
+    // birleşmişti; bu yanlıştı çünkü kütüphaneci rolü moderasyon yetkisi
+    // içermiyor.
     private val _libraryPerms = MutableStateFlow<StaffPermissions?>(null)
     val libraryPerms = _libraryPerms.asStateFlow()
 
-    val isAdmin: Boolean get() = _libraryPerms.value?.can("library") == true
+    // Kitap/yazar ekleme-düzenleme yetkisi ("kutuphaneci" veya "admin")
+    val isLibrarian: Boolean get() = _libraryPerms.value?.can("library") == true
+    // Başkasının alıntı/yorumunu silme-düzenleme yetkisi ("moderator"/"editor"/"admin")
+    val canModerateLibrary: Boolean get() = _libraryPerms.value?.can("pending") == true
+
+    // Geriye dönük uyumluluk: eski kod `isAdmin`'i "kitap/yazar ekleyebilir
+    // mi" anlamında kullanıyordu — LibraryScreen'deki ekleme butonları için
+    // isLibrarian'a eşit tutuyoruz. Silme/düzenleme kontrolleri artık
+    // doğrudan canModerateLibrary kullanıyor (bkz. deleteQuote vb. altta).
+    val isAdmin: Boolean get() = isLibrarian
 
     init { loadLibraryPerms() }
 
@@ -577,7 +591,7 @@ class LibraryViewModel @Inject constructor(
     // ── Sil / Düzenle ─────────────────────────────────────────────────────────
 
     fun deleteQuote(bookId: String, quoteId: String, quoteUid: String) {
-        if (myUid != quoteUid && !isAdmin) return
+        if (myUid != quoteUid && !canModerateLibrary) return
         viewModelScope.launch {
             try {
                 library.deleteQuote(quoteId)
@@ -589,7 +603,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun editQuote(bookId: String, quoteId: String, quoteUid: String, newText: String) {
-        if (myUid != quoteUid && !isAdmin) return
+        if (myUid != quoteUid && !canModerateLibrary) return
         viewModelScope.launch {
             try {
                 library.updateQuoteText(quoteId, newText)
@@ -601,7 +615,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun deleteReview(bookId: String, reviewId: String, reviewUid: String) {
-        if (myUid != reviewUid && !isAdmin) return
+        if (myUid != reviewUid && !canModerateLibrary) return
         viewModelScope.launch {
             try {
                 library.deleteReview(reviewId)
@@ -611,7 +625,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun editReview(bookId: String, reviewId: String, reviewUid: String, newText: String, newRating: Float) {
-        if (myUid != reviewUid && !isAdmin) return
+        if (myUid != reviewUid && !canModerateLibrary) return
         viewModelScope.launch {
             try {
                 library.updateReviewText(reviewId, newText, newRating)
