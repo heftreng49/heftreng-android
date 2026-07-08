@@ -408,6 +408,12 @@ class AdminViewModel @Inject constructor(
     private val _staffList = MutableStateFlow<List<StaffMember>>(emptyList())
     val staffList = _staffList.asStateFlow()
 
+    // loadStaff() Firestore'dan okurken hata alırsa (ör. permission-denied)
+    // burada tutulur, ekran "Henüz yardımcı eklenmemiş" yerine gerçek
+    // hatayı gösterebilsin diye.
+    private val _staffLoadError = MutableStateFlow<String?>(null)
+    val staffLoadError = _staffLoadError.asStateFlow()
+
     // ── Oturum açan kullanıcının izinlerini yükle ─────────────────────────────
     fun checkAdmin() {
         viewModelScope.launch {
@@ -432,8 +438,15 @@ class AdminViewModel @Inject constructor(
                     val legacy = doc.get("permissions") as? List<String>
                     val rawPerms = if (!legacy.isNullOrEmpty()) legacy.toSet()
                                    else roleToPermissions(role)
+                    // Güvenlik: "admin" hariç her role, o role'ün gerçekten izin
+                    // verdiği kümeyle SIKI şekilde sınırlanır. Önceki mantıkta
+                    // roleToPermissions(role) boş dönerse (ör. role alanı eksik/
+                    // "none"/bozuk) rawPerms hiç kırpılmadan kabul ediliyordu —
+                    // bu da eski/bozuk dökümanlarda push gibi izinlerin sızmasına
+                    // yol açıyordu. Artık tanınmayan/eksik role için de izin
+                    // kümesi boş kabul edilir (fail-closed).
                     val perms = if (role == "admin") rawPerms
-                                else rawPerms.intersect(roleToPermissions(role).ifEmpty { rawPerms })
+                                else rawPerms.intersect(roleToPermissions(role))
                     _perms.value = StaffPermissions(uid = user.uid, title = title, permissions = perms)
                 } else {
                     // Belge yok — email sahibiyse otomatik oluştur
@@ -468,13 +481,17 @@ class AdminViewModel @Inject constructor(
     fun loadStaff() {
         if (_perms.value?.can("staff") != true) return
         viewModelScope.launch {
+            _staffLoadError.value = null
             try {
                 val snap = firestore.collection("admins").limit(50).get().await()
                 _staffList.value = snap.documents.mapNotNull { doc ->
                     val uid     = doc.id
                     @Suppress("UNCHECKED_CAST")
                     val permList = doc.get("permissions") as? List<String> ?: emptyList()
-                    val addedAt  = doc.getLong("addedAt") ?: 0L
+                    // addedAt Firestore'da Timestamp olarak yazılıyor (bkz. addStaff),
+                    // getLong() ile okunursa tip uyuşmazlığından dolayı hep null/0
+                    // dönüyordu ve sıralama bozuluyordu — getTimestamp() kullanılmalı.
+                    val addedAt  = doc.getTimestamp("addedAt")?.toDate()?.time ?: 0L
                     val title    = doc.getString("title") ?: ""
                     val userDoc  = try { firestore.collection("users").document(uid).get().await() } catch (_: Exception) { null }
                     StaffMember(
@@ -487,7 +504,14 @@ class AdminViewModel @Inject constructor(
                         addedAt     = addedAt,
                     )
                 }.sortedByDescending { it.addedAt }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                // Artık sessizce yutulmuyor — ekran tarafı staffLoadError'ı
+                // gözlemleyip kullanıcıya gösterebilir (ör. Firestore rules
+                // reddi burada yakalanır, "Henüz yardımcı eklenmemiş" ile
+                // karıştırılmaz).
+                android.util.Log.w("AdminVM", "loadStaff failed: ${e.message}", e)
+                _staffLoadError.value = e.message ?: "Yardımcılar yüklenemedi"
+            }
         }
     }
 

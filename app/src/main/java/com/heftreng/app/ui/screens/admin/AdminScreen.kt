@@ -146,7 +146,17 @@ fun AdminScreen(
     // aynı "içerik onaylama" yetkisinin parçası. Her sekmenin kendi tekil
     // `key`'i var (seçili sekme takibi karışmasın diye).
     val tabs = allTabs.filter { tab -> perms?.can(tab.permKey) == true }
-    var selectedTabKey by remember { mutableStateOf(tabs.firstOrNull()?.key ?: "push") }
+    var selectedTabKey by remember { mutableStateOf<String?>(null) }
+
+    // perms ilk kez yüklendiğinde (veya değiştiğinde) seçili sekme hâlâ
+    // erişilebilir tab listesinde değilse ilk izinli sekmeye düş.
+    // Bu, "push" sekmesinin varsayılan olarak takılı kalıp izni olmayan
+    // kullanıcılara (ör. moderatör) gösterilmesini engeller.
+    LaunchedEffect(tabs) {
+        if (selectedTabKey == null || tabs.none { it.key == selectedTabKey }) {
+            selectedTabKey = tabs.firstOrNull()?.key
+        }
+    }
 
     val platformStats by vm.platformStats.collectAsState()
 
@@ -238,7 +248,9 @@ fun AdminScreen(
                 edgePadding      = 0.dp,
                 indicator        = { tabPositions ->
                     val idx = tabs.indexOfFirst { it.key == selectedTabKey }.coerceAtLeast(0)
-                    Box(Modifier.tabIndicatorOffset(tabPositions[idx]).height(2.dp).background(Amber))
+                    if (idx in tabPositions.indices) {
+                        Box(Modifier.tabIndicatorOffset(tabPositions[idx]).height(2.dp).background(Amber))
+                    }
                 },
             ) {
                 tabs.forEachIndexed { _, tab ->
@@ -2658,6 +2670,8 @@ private fun StaffTab(
     var editPerms    by remember { mutableStateOf(setOf<String>()) }
     var editTitle    by remember { mutableStateOf("") }
 
+    val staffLoadError by vm.staffLoadError.collectAsState()
+
     // Renk paleti
     val permColors = mapOf(
         "push"    to Color(0xFFF59E0B),
@@ -2686,6 +2700,17 @@ private fun StaffTab(
                 color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp,
             )
             Spacer(Modifier.height(4.dp))
+            // Liste boş görünüp aslında yükleme hatası (ör. Firestore rules
+            // reddi) varsa bunu "Henüz yardımcı eklenmemiş" ile karıştırmadan
+            // ayrıca gösteriyoruz.
+            if (staffLoadError != null) {
+                Text(
+                    "Yardımcılar yüklenemedi: $staffLoadError",
+                    color = Error, fontSize = 12.sp,
+                )
+                Spacer(Modifier.height(4.dp))
+                TextButton(onClick = { vm.loadStaff() }) { Text("Tekrar dene") }
+            }
         }
 
         items(staffList, key = { it.uid }) { member ->

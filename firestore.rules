@@ -97,8 +97,13 @@ service cloud.firestore {
 
     // ─── ADMINS ───────────────────────────────────────────────
     match /admins/{uid} {
-      allow get:    if isAuth() && request.auth.uid == uid;
-      allow list:   if isAdmin();
+      allow get:    if isAuth() && (request.auth.uid == uid || isAdmin() || hasPermission('staff'));
+      // "staff" izni verilmiş yardımcılar da (rolü admin olmasa bile)
+      // Yardımcılar sekmesinde listeyi görebilmeli — önceden sadece
+      // isAdmin() burada true dönüyordu, "staff" iznine sahip admin
+      // olmayan biri için liste sorgusu permission-denied ile reddedilip
+      // uygulama tarafında sessizce yutuluyordu.
+      allow list:   if isAdmin() || hasPermission('staff');
       allow create: if isAuth() && (isAdmin() || request.auth.uid == uid);
       allow update: if isAdmin();
       allow delete: if isAdmin() && request.auth.uid != uid;
