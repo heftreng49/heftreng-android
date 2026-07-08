@@ -973,9 +973,15 @@ class AdminViewModel @Inject constructor(
             try {
                 // 1. Firestore feed
                 firestore.collection("feed").document(postId).delete().await()
-                // 2. Supabase — book_quotes (feed_post_id eşleşmesi)
+                // 2. Supabase — book_quotes / book_reviews (feed_post_id eşleşmesi)
+                // FAZ 1 devamı: book_reviews eksikti, sadece book_quotes
+                // temizleniyordu — bir kitap incelemesi gönderisi admin
+                // tarafından silinince Kütüphane'de görünmeye devam ediyordu.
                 try {
                     supabase.postgrest["book_quotes"].delete {
+                        filter { eq("feed_post_id", postId) }
+                    }
+                    supabase.postgrest["book_reviews"].delete {
                         filter { eq("feed_post_id", postId) }
                     }
                 } catch (_: Exception) {}

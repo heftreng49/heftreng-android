@@ -314,6 +314,21 @@ class LibraryRepository @Inject constructor(
         }
     }
 
+    /** FAZ 1 devamı: Kullanıcı feed'deki kitap alıntısı gönderisini normal
+     *  şekilde sildiğinde (FeedViewModel.deletePost), Supabase'deki
+     *  book_quotes satırı da silinsin — aksi halde alıntı feed'den
+     *  kaybolduğu halde Kütüphane ekranında görünmeye devam ediyordu.
+     *  feed_post_id ile eşleşen satır yoksa (bu gönderi bir kitap alıntısı
+     *  değilse) sessizce hiçbir şey yapmaz. */
+    suspend fun deleteQuoteByFeedPostId(feedPostId: String) {
+        if (feedPostId.isBlank()) return
+        try {
+            db["book_quotes"].delete { filter { eq("feed_post_id", feedPostId) } }
+        } catch (e: Exception) {
+            android.util.Log.w("LibraryRepo", "deleteQuoteByFeedPostId: ${e.message}")
+        }
+    }
+
     suspend fun deleteQuote(id: String) {
         db["book_quotes"].delete { filter { eq("id", id) } }
     }
@@ -432,6 +447,17 @@ class LibraryRepository @Inject constructor(
             }
         } catch (e: Exception) {
             android.util.Log.w("LibraryRepo", "setReviewModerationStatusByFeedPostId: ${e.message}")
+        }
+    }
+
+    /** FAZ 1 devamı: bkz. deleteQuoteByFeedPostId'deki aynı açıklama —
+     *  incelemeler için karşılık gelen fonksiyon. */
+    suspend fun deleteReviewByFeedPostId(feedPostId: String) {
+        if (feedPostId.isBlank()) return
+        try {
+            db["book_reviews"].delete { filter { eq("feed_post_id", feedPostId) } }
+        } catch (e: Exception) {
+            android.util.Log.w("LibraryRepo", "deleteReviewByFeedPostId: ${e.message}")
         }
     }
 

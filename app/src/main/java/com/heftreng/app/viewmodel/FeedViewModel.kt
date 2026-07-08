@@ -1283,6 +1283,15 @@ class FeedViewModel @Inject constructor(
                 if (postDoc.getString("uid") != uid) return@launch
                 firestore.collection("feed").document(postId).delete().await()
                 _posts.value = _posts.value.filter { it.id != postId }
+                _libraryQuotes.value = _libraryQuotes.value.filter { it.id != postId }
+                // FAZ 1 devamı: gönderi bir kitap alıntısı/incelemesiyse,
+                // Supabase'deki karşılığı da silinsin — aksi halde alıntı
+                // feed'den kaybolduğu halde Kütüphane ekranında görünmeye
+                // devam ediyordu. Hangi tablo olduğunu bilmediğimiz için
+                // ikisini de deniyoruz; feed_post_id eşleşmeyen tabloda
+                // fonksiyon sessizce hiçbir şey yapmaz.
+                library.deleteQuoteByFeedPostId(postId)
+                library.deleteReviewByFeedPostId(postId)
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
