@@ -618,6 +618,9 @@ class ProfileViewModel @Inject constructor(
                 } catch (e: Exception) {
                     android.util.Log.w("ProfileVM", "Supabase users sync failed: ${e.message}")
                 }
+
+                // Feed gönderilerindeki displayName'i de güncelle (denormalization sync)
+                syncUserFieldsInFeed(displayName = displayName, username = null)
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
@@ -966,10 +969,54 @@ class ProfileViewModel @Inject constructor(
                     "usernameLower" to handle.lowercase(),
                 )).await()
                 _user.value = _user.value?.copy(username = handle)
+
+                // Feed gönderilerindeki username'i de güncelle (denormalization sync)
+                syncUserFieldsInFeed(displayName = null, username = handle)
+
                 onSuccess()
             } catch (e: Exception) { onError(e.message ?: "Hata") }
         }
     }
 
+    /**
+     * Kullanıcının tüm feed gönderilerinde [displayName] ve/veya [username] alanını günceller.
+     * Firestore batch limiti 500 olduğundan 400'erli gruplar hâlinde yazılır.
+     * null geçilen alan güncellenmez.
+     */
+    private suspend fun syncUserFieldsInFeed(displayName: String?, username: String?) {
+        if (displayName == null && username == null) return
+        try {
+            var lastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
+            val batchSize = 400
+            while (true) {
+                var query = firestore.collection("feed")
+                    .whereEqualTo("uid", myUid)
+                    .limit(batchSize.toLong())
+                lastDoc?.let { query = query.startAfter(it) }
+
+                val snap = query.get().await()
+                if (snap.isEmpty) break
+
+                val batch = firestore.batch()
+                for (doc in snap.documents) {
+                    val updates = mutableMapOf<String, Any>()
+                    if (displayName != null) {
+                        updates["displayName"] = displayName
+                        updates["name"]        = displayName
+                    }
+                    if (username != null) {
+                        updates["username"] = username
+                    }
+                    batch.update(doc.reference, updates)
+                }
+                batch.commit().await()
+
+                if (snap.documents.size < batchSize) break
+                lastDoc = snap.documents.last()
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("ProfileVM", "syncUserFieldsInFeed failed: ${e.message}")
+        }
+    }
 
 }
