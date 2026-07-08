@@ -701,7 +701,21 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     val slug = back.arguments?.getString("slug") ?: ""
                     CmsPageScreen(navController = navController, slug = slug)
                 }
-                composable(Screen.Admin.route)    { AdminScreen(navController) }
+                // FAZ 0: Route seviyesinde ek koruma — AdminScreen zaten kendi
+                // içinde perms==null/isStaff kontrolü yapıyor, ama bu route
+                // seviyesinde de aynı kontrolü tekrarlamak (savunma derinliği)
+                // — önceden sadece Ayarlar ekranındaki linkin gizlenmesine
+                // güveniliyordu, tek başına yeterli bir sınır değildi.
+                composable(Screen.Admin.route) {
+                    if (perms == null) {
+                        // Henüz yükleniyor — AdminScreen kendi loading'ini gösterecek
+                        AdminScreen(navController)
+                    } else if (isAdmin) {
+                        AdminScreen(navController)
+                    } else {
+                        LaunchedEffect(Unit) { navController.popBackStack() }
+                    }
+                }
                 // FAZ -1: CMS route seviyesinde koruma eklendi — önceden hiç
                 // korunmuyordu, erişim tamamen CmsScreen'in kendi (eski,
                 // sabit e-postaya bakan) iç kontrolüne bırakılmıştı.
@@ -719,7 +733,12 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 // ("pending" izni) ile korunuyor — bkz. YazarViewModel.kt.
                 composable(Screen.Yazar.route)    { YazarScreen(navController) }
                 composable(Screen.KurdiAdmin.route) {
-                    if (isAdmin) KurdiAdminScreen(navController)
+                    // FAZ 0: Genel isAdmin (isStaff — herhangi bir staff rolü)
+                    // yerine spesifik "kurdi" izni kontrol ediliyor. Önceden
+                    // "moderator"/"editor" rolündeki biri, sekme listesinde
+                    // bu ekranı görmese bile, route'a doğrudan ulaşabilseydi
+                    // (deep-link, geri-ileri navigasyon vb.) girebiliyordu.
+                    if (perms?.can("kurdi") == true) KurdiAdminScreen(navController)
                     else { LaunchedEffect(Unit) { navController.popBackStack() } }
                 }
                 composable(Screen.Settings.route) { SettingsScreen(navController, vm = settingsVm) }
