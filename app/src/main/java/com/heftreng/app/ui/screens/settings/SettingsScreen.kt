@@ -92,6 +92,13 @@ fun SettingsScreen(
             } catch (_: ApiException) {}
         }
     }
+    // FAZ: Admin Paneli/CMS ayrımı devamı — bu ekran `adminVm.perms`'i
+    // "Admin" menü öğesini göstermek için okuyor, ama checkAdmin() hiç
+    // tetiklenmiyordu. Sonuç: perms sonsuza kadar null kalıyor, isAdmin
+    // hep false oluyor, süper admin dahil HERKES "Admin" menü öğesini
+    // hiç göremiyordu — Admin Paneli'ne tek bağımsız giriş noktası burada.
+    LaunchedEffect(Unit) { adminVm.checkAdmin() }
+
     LaunchedEffect(switchToGoogle) {
         if (switchToGoogle) {
             val client = authVm.getGoogleSignInClient(context)
