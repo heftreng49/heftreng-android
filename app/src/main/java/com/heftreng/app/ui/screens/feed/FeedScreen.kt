@@ -55,6 +55,7 @@ import com.heftreng.app.ads.RemoteConfigManager
 import com.heftreng.app.ui.component.AdSlotView
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.viewmodel.AdsViewModel
+import com.heftreng.app.viewmodel.AdminViewModel
 import com.heftreng.app.viewmodel.BlogViewModel
 import com.heftreng.app.ui.component.QuoteCard
 import com.heftreng.app.ui.component.MentionSuggestionBar
@@ -103,7 +104,16 @@ fun FeedScreen(
     adsVm        : AdsViewModel    = hiltViewModel(),
     settingsVm   : SettingsViewModel = hiltViewModel(),
     blogVm       : BlogViewModel    = hiltViewModel(),
+    adminVm      : AdminViewModel   = hiltViewModel(),
 ) {
+    // FAZ 1 devamı: Moderatör/editör artık feed'i gezerken bir gönderiyi
+    // doğrudan karttan kaldırabiliyor — önceden bunun için Admin
+    // Paneli'ndeki "Bekleyenler" sekmesine gidip gönderiyi aramak
+    // gerekiyordu. `perms.can("edit")` zaten moderatePost/restorePost'un
+    // kendi içindeki kontrolle birebir aynı (bkz. AdminViewModel.kt).
+    val adminPerms by adminVm.perms.collectAsState()
+    LaunchedEffect(Unit) { adminVm.checkAdmin() }
+    val canModeratePosts = adminPerms?.can("edit") == true
     val posts       by vm.posts.collectAsState()
     val repostError by vm.repostError.collectAsState()
     val suggestedUsers by vm.suggestedUsers.collectAsState()
@@ -542,6 +552,12 @@ fun FeedScreen(
                         onDelete  = { vm.deletePost(post.id) },
                         onEdit    = { newTitle, newText -> vm.editPost(post.id, newTitle, newText) },
                         onEditQuote = { newQ, newB, newA -> vm.editQuote(post.id, newQ, newB, newA) },
+                        canModerate = canModeratePosts,
+                        isRemoved   = post.moderationStatus == "removed",
+                        onModerate  = { status ->
+                            if (status == "active") adminVm.restorePost(post.id, post.uid)
+                            else adminVm.moderatePost(post.id, post.uid, post.displayName, status, "", "")
+                        },
                         onTap        = { navController.navigate(Screen.PostDetail.go(post.id)) },
                         onDoubleTap  = {
                             if (!post.isLikedByMe) vm.toggleLike(post)
@@ -1160,6 +1176,11 @@ fun PostCard(
     onTapMention : ((uid: String) -> Unit)? = null,
     onReport     : (() -> Unit)? = null,
     onBlock      : (() -> Unit)? = null,
+    // FAZ 1 devamı: moderatör/editör hızlı işlem menüsü — bkz. FeedScreen
+    // çağrı noktasındaki açıklama.
+    canModerate  : Boolean = false,
+    isRemoved    : Boolean = false,
+    onModerate   : ((status: String) -> Unit)? = null,
     language     : String = "tr",
 ) {
     val ku = language == "ku"
@@ -1330,6 +1351,32 @@ fun PostCard(
                                 onBlock?.invoke()
                             },
                         )
+                        // FAZ 1 devamı: moderatör/editör için hızlı kaldırma —
+                        // önceden bu işlem sadece Admin Paneli'nden mümkündü,
+                        // moderatör feed'i gezerken karttan doğrudan işlem
+                        // yapamıyordu.
+                        if (canModerate && onModerate != null) {
+                            HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                            if (isRemoved) {
+                                DropdownMenuItem(
+                                    text        = { Text(if (ku) "Ji Nû Ve Çalak Bike" else "Gönderiyi Geri Getir", color = Color(0xFF10B981)) },
+                                    leadingIcon = { Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF10B981)) },
+                                    onClick     = {
+                                        menuExpanded = false
+                                        onModerate("active")
+                                    },
+                                )
+                            } else {
+                                DropdownMenuItem(
+                                    text        = { Text(if (ku) "Post Rake (Moderator)" else "Gönderiyi Kaldır (Moderatör)", color = Color(0xFFEF4444)) },
+                                    leadingIcon = { Icon(Icons.Default.Gavel, null, tint = Color(0xFFEF4444)) },
+                                    onClick     = {
+                                        menuExpanded = false
+                                        onModerate("removed")
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
