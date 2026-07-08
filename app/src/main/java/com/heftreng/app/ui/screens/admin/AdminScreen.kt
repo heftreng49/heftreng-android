@@ -55,8 +55,10 @@ fun AdminScreen(
     val isAdmin     by vm.isAdmin.collectAsState()
     val perms       by vm.perms.collectAsState()  // null = yükleniyor
     val staffList   by vm.staffList.collectAsState()
-    val users           by vm.users.collectAsState()
-    val unverifiedUsers by vm.unverifiedUsers.collectAsState()
+    val users             by vm.users.collectAsState()
+    val hasMoreUsers      by vm.hasMoreUsers.collectAsState()
+    val usersPageLoading  by vm.usersPageLoading.collectAsState()
+    val unverifiedUsers   by vm.unverifiedUsers.collectAsState()
     val unverifiedLoading by vm.unverifiedLoading.collectAsState()
     // "Yazılar" tabı — CmsScreen'den taşındı, blog yazısı onay akışı
     val blogPendingPosts   by yazarVm.pendingPosts.collectAsState()
@@ -852,11 +854,13 @@ fun AdminScreen(
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                                 leadingIcon = { Icon(Icons.Default.Search, null, tint = Muted) },
                             )
-                            val filtered = users.filter {
-                                userSearch.isBlank() ||
-                                it.displayName.contains(userSearch, ignoreCase = true) ||
-                                it.email.contains(userSearch, ignoreCase = true)
-                            }
+                            val isSearching = userSearch.isNotBlank()
+                            val filtered = if (isSearching) {
+                                users.filter {
+                                    it.displayName.contains(userSearch, ignoreCase = true) ||
+                                    it.email.contains(userSearch, ignoreCase = true)
+                                }
+                            } else users
                             LazyColumn(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
                                 items(filtered, key = { it.uid }) { user ->
                                     AdminUserRow(
@@ -879,6 +883,49 @@ fun AdminScreen(
                                         onCancelEdit      = { editUser = null },
                                     )
                                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                                }
+
+                                // ── Sayfalama footer (arama modunda gizlenir) ──
+                                if (!isSearching) {
+                                    item(key = "pagination_footer") {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 12.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            when {
+                                                usersPageLoading -> {
+                                                    CircularProgressIndicator(
+                                                        color  = Amber,
+                                                        modifier = Modifier.size(28.dp),
+                                                        strokeWidth = 2.5.dp,
+                                                    )
+                                                }
+                                                hasMoreUsers -> {
+                                                    OutlinedButton(
+                                                        onClick = { vm.loadMoreUsers() },
+                                                        shape   = RoundedCornerShape(10.dp),
+                                                        border  = androidx.compose.foundation.BorderStroke(1.dp, Amber),
+                                                        colors  = ButtonDefaults.outlinedButtonColors(contentColor = Amber),
+                                                    ) {
+                                                        Text(
+                                                            "Daha Fazla Yükle",
+                                                            fontSize   = 13.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                        )
+                                                    }
+                                                }
+                                                users.isNotEmpty() -> {
+                                                    Text(
+                                                        "Tüm kullanıcılar yüklendi (${users.size})",
+                                                        color    = Muted,
+                                                        fontSize = 12.sp,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         } else {

@@ -113,6 +113,14 @@ class AdminViewModel @Inject constructor(
     private val _users        = MutableStateFlow<List<User>>(emptyList())
     val users = _users.asStateFlow()
 
+    // ── Kullanıcı sayfalama ────────────────────────────────────────────
+    private val PAGE_SIZE = 30L
+    private var _lastUserDoc: com.google.firebase.firestore.DocumentSnapshot? = null
+    private val _hasMoreUsers = MutableStateFlow(true)
+    val hasMoreUsers = _hasMoreUsers.asStateFlow()
+    private val _usersPageLoading = MutableStateFlow(false)
+    val usersPageLoading = _usersPageLoading.asStateFlow()
+
     private val _pendingPosts = MutableStateFlow<List<Map<String, Any>>>(emptyList())
     val pendingPosts = _pendingPosts.asStateFlow()
 
@@ -590,50 +598,71 @@ class AdminViewModel @Inject constructor(
     }
 
     // ── Kullanıcıları listele ─────────────────────────────────────────────────
+    /** İlk sayfayı yükler (sekmeye ilk girildiğinde veya yenileme istendiğinde çağırılır). */
     fun loadUsers() {
         if (_perms.value?.can("users") != true) return
         viewModelScope.launch {
             _loading.value = true
-            try {
-                // ÖNCEKİ HATA: orderBy("displayName") kullanılıyordu — admin panelindeki
-                // kullanıcı listesi alfabetik sıralanıyordu, en son kayıt olanlar listenin
-                // ortasına/sonuna düşüyordu (hatta limit(100) yüzünden hiç görünmeyebiliyordu).
-                // Artık createdAt'e göre AZALAN sırada çekiliyor — en son kayıt olan en üstte.
-                val snap = firestore.collection("users")
-                    .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(100).get().await()
-                _users.value = snap.documents.mapNotNull { doc ->
-                    val d = doc.data ?: return@mapNotNull null
-                    User(
-                        uid           = doc.id,
-                        displayName   = d["displayName"] as? String ?: d["name"] as? String ?: "",
-                        email         = d["email"]    as? String ?: "",
-                        photoURL      = d["photoURL"] as? String ?: "",
-                        banned        = d["banned"]   as? Boolean ?: false,
-                        emailVerified = d["emailVerified"] as? Boolean ?: false,
-                        createdAt     = (d["createdAt"] as? com.google.firebase.Timestamp)?.toDate()?.time ?: 0L,
-                    )
-                }
-            } catch (e: Exception) {
-                // orderBy index yoksa (veya createdAt alanı eski kayıtlarda yoksa) sıralamasız
-                // çekip client-side'da createdAt'e göre sırala — yine de en yeni en üstte olsun.
-                try {
-                    val snap = firestore.collection("users").limit(100).get().await()
-                    _users.value = snap.documents.mapNotNull { doc ->
-                        val d = doc.data ?: return@mapNotNull null
-                        User(
-                            uid           = doc.id,
-                            displayName   = d["displayName"] as? String ?: d["name"] as? String ?: "",
-                            email         = d["email"]    as? String ?: "",
-                            photoURL      = d["photoURL"] as? String ?: "",
-                            banned        = d["banned"]   as? Boolean ?: false,
-                            emailVerified = d["emailVerified"] as? Boolean ?: false,
-                            createdAt     = (d["createdAt"] as? com.google.firebase.Timestamp)?.toDate()?.time ?: 0L,
-                        )
-                    }.sortedByDescending { it.createdAt }
-                } catch (e2: Exception) { e2.printStackTrace() }
-            } finally { _loading.value = false }
+            _lastUserDoc   = null
+            _hasMoreUsers.value = true
+            _users.value   = emptyList()
+            loadUsersPage(isFirstPage = true)
         }
+    }
+
+    /** Sonraki sayfayı yükler ("Daha Fazla Yükle" butonuna basıldığında çağırılır). */
+    fun loadMoreUsers() {
+        if (_usersPageLoading.value) return
+        if (!_hasMoreUsers.value) return
+        viewModelScope.launch { loadUsersPage(isFirstPage = false) }
+    }
+
+    private suspend fun loadUsersPage(isFirstPage: Boolean) {
+        val loadingFlow = if (isFirstPage) _loading else _usersPageLoading
+        loadingFlow.value = true
+        try {
+            // createdAt DESC: en son kayıt olan kullanıcı en üstte görünür.
+            var query = firestore.collection("users")
+                .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                .limit(PAGE_SIZE)
+            _lastUserDoc?.let { query = query.startAfter(it) }
+
+            val snap = try {
+                query.get().await()
+            } catch (e: Exception) {
+                // createdAt index yoksa sıralamasız çek, client-side sırala (yalnızca ilk sayfa)
+                if (isFirstPage) {
+                    val fallback = firestore.collection("users").limit(PAGE_SIZE).get().await()
+                    _users.value = fallback.documents.mapNotNull { mapUserDoc(it) }
+                        .sortedByDescending { it.createdAt }
+                    _hasMoreUsers.value = false   // fallback: index yoksa sayfalama devre dışı
+                }
+                return
+            }
+
+            val newUsers = snap.documents.mapNotNull { mapUserDoc(it) }
+            _users.value = if (isFirstPage) newUsers else _users.value + newUsers
+
+            if (snap.documents.isNotEmpty()) {
+                _lastUserDoc = snap.documents.last()
+            }
+            _hasMoreUsers.value = snap.documents.size.toLong() == PAGE_SIZE
+        } finally {
+            loadingFlow.value = false
+        }
+    }
+
+    private fun mapUserDoc(doc: com.google.firebase.firestore.DocumentSnapshot): User? {
+        val d = doc.data ?: return null
+        return User(
+            uid           = doc.id,
+            displayName   = d["displayName"] as? String ?: d["name"] as? String ?: "",
+            email         = d["email"]    as? String ?: "",
+            photoURL      = d["photoURL"] as? String ?: "",
+            banned        = d["banned"]   as? Boolean ?: false,
+            emailVerified = d["emailVerified"] as? Boolean ?: false,
+            createdAt     = (d["createdAt"] as? com.google.firebase.Timestamp)?.toDate()?.time ?: 0L,
+        )
     }
 
     // ── Admin kullanıcı araması — Firestore prefix query ──────────────────────
