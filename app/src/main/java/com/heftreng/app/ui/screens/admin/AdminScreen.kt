@@ -72,7 +72,8 @@ fun AdminScreen(
     // olmuyormuş gibi görünüyordu; post pending listesinde kalmaya devam
     // ediyordu çünkü sunucu tarafı gerçekten başarısız oluyordu.
     val yazarSubmitResult by yazarVm.submitResult.collectAsState()
-    val pendingPosts by vm.pendingPosts.collectAsState()
+    // NOT: "Bekleyenler" sekmesi kaldırıldığı için vm.pendingPosts (AdminViewModel)
+    // artık burada okunmuyor — bkz. tabs listesindeki açıklama.
     val loading     by vm.loading.collectAsState()
     val pushResult  by vm.pushResult.collectAsState()
     val stats       by vm.stats.collectAsState()
@@ -136,7 +137,6 @@ fun AdminScreen(
         AdminTab("Push",         "push"),
         AdminTab("Bildirim",     "notif"),
         AdminTab("Kullanıcılar", "users"),
-        AdminTab("Bekleyenler",  "pending"),
         AdminTab("Yazılar",      "blogPending", permKey = "pending"),
         AdminTab("Şikayetler",   "reports"),
         AdminTab("İtirazlar",    "appeals"),
@@ -146,15 +146,13 @@ fun AdminScreen(
         AdminTab("Kürtçe Admin", "kurdi"),
         AdminTab("Yardımcılar",  "staff"),
     )
-    // NOT: "Bekleyenler" ve "Yazılar" ikisi de "pending" iznine bağlı ama
-    // FARKLI veri kaynaklarını yönetiyor — "Bekleyenler" AdminViewModel
-    // üzerinden Firestore `feed`'e direkt eklenen genel gönderileri,
-    // "Yazılar" ise YazarViewModel üzerinden `pendingPosts` koleksiyonundaki
-    // (Yazar Paneli'nden gönderilen) blog yazısı onaylarını yönetir.
-    // Aynı izni (`permKey = "pending"`) paylaştıkları için birinin iznine
-    // sahip olan otomatik diğerini de görür — bu kasıtlı, çünkü ikisi de
-    // aynı "içerik onaylama" yetkisinin parçası. Her sekmenin kendi tekil
-    // `key`'i var (seçili sekme takibi karışmasın diye).
+    // NOT: "Bekleyenler" sekmesi kaldırıldı (bkz. sohbet geçmişi) — hem o
+    // hem "Yazılar" aynı `pendingPosts` koleksiyonunu okuyordu ama
+    // "Bekleyenler" tarafındaki approvePost, Cloud Function/Blogger akışını
+    // tamamen atlayıp dökümanı direkt Firestore `feed`'e kopyalayıp
+    // siliyordu — bu, bir moderatörün yanlışlıkla buradan onaylaması
+    // durumunda yazının Blogger'a hiç gitmeden kaybolmasına yol açabiliyordu.
+    // Artık "Yazılar" (YazarViewModel → publishToBlogger) tek onay yolu.
     val tabs = allTabs.filter { tab -> perms?.can(tab.permKey) == true }
     var selectedTabKey by remember { mutableStateOf<String?>(null) }
 
@@ -998,55 +996,6 @@ fun AdminScreen(
                                             onVerify    = { vm.verifyUser(user.uid) },
                                         )
                                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ── Bekleyen Gönderiler ─────────────────────────────────────────
-                "pending" -> {
-                    if (loading) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = Amber)
-                        }
-                    } else if (pendingPosts.isEmpty()) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.CheckCircle, null, tint = Success, modifier = Modifier.size(44.dp))
-                                Spacer(Modifier.height(8.dp))
-                                Text("Bekleyen gönderi yok", color = Muted)
-                            }
-                        }
-                    } else {
-                        LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(pendingPosts, key = { it["id"] as? String ?: "" }) { post ->
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = HeftSurface,
-                                ) {
-                                    Column(Modifier.padding(12.dp)) {
-                                        Text(post["text"] as? String ?: "", color = OnBackground, fontSize = 13.sp, maxLines = 3)
-                                        Spacer(Modifier.height(4.dp))
-                                        Text("Yazar: ${post["authorName"] as? String ?: "?"}", color = Muted, fontSize = 11.sp)
-                                        Spacer(Modifier.height(8.dp))
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Button(
-                                                onClick = { vm.approvePost(post["id"] as? String ?: "") },
-                                                shape   = RoundedCornerShape(8.dp),
-                                                colors  = ButtonDefaults.buttonColors(containerColor = Success, contentColor = Color.Black),
-                                                modifier = Modifier.weight(1f),
-                                                contentPadding = PaddingValues(vertical = 6.dp),
-                                            ) { Text("Onayla", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-                                            OutlinedButton(
-                                                onClick = { vm.rejectPost(post["id"] as? String ?: "") },
-                                                shape   = RoundedCornerShape(8.dp),
-                                                border  = androidx.compose.foundation.BorderStroke(1.dp, Error),
-                                                modifier = Modifier.weight(1f),
-                                                contentPadding = PaddingValues(vertical = 6.dp),
-                                            ) { Text("Reddet", fontSize = 12.sp, color = Error) }
-                                        }
                                     }
                                 }
                             }
@@ -1963,6 +1912,22 @@ private fun adminTextField(
 //  bağlı, AdminScreen'in kendi sekmelerinden biri.
 // ═══════════════════════════════════════════════════════════════════════════
 // ── 7. Bekleyen Yazılar ───────────────────────────────────────────────────────
+/** Zengin metin editöründen gelen ham HTML'i moderatör önizlemesi için düz
+ *  metne çevirir. Tam bir HTML parser değildir — sadece etiketleri ve en
+ *  yaygın HTML entity'lerini temizler, moderasyon amaçlı okunabilirlik
+ *  yeterlidir. */
+private fun stripHtmlTags(html: String): String =
+    html
+        .replace(Regex("<(br|/p|/div|/li)\\s*/?>", RegexOption.IGNORE_CASE), "\n")
+        .replace(Regex("<[^>]*>"), "")
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace(Regex("\n{3,}"), "\n\n")
+        .trim()
+
 @Composable
 private fun PendingPostsTab(
     posts   : List<PendingPost>,
@@ -1983,6 +1948,9 @@ private fun PendingPostsTab(
         else       -> posts
     }
 
+    val backfillRunning by vm.backfillRunning.collectAsState()
+    val backfillResult  by vm.backfillResult.collectAsState()
+
     LazyColumn(
         modifier       = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -1997,6 +1965,47 @@ private fun PendingPostsTab(
                 StatChip("⏳ ${stats.pending}",  "Bekliyor",  filter == "pending",  Amber)   { filter = if (filter == "pending")  "all" else "pending" }
                 StatChip("✅ ${stats.approved}", "Onaylanan", filter == "approved", Success) { filter = if (filter == "approved") "all" else "approved" }
                 StatChip("❌ ${stats.rejected}", "Reddedilen",filter == "rejected", Error)   { filter = if (filter == "rejected") "all" else "rejected" }
+            }
+        }
+
+        // Geçmişe dönük düzeltme — daha önce yazar kartı olmadan yayınlanmış
+        // Blogger yazılarına sonradan kart ekler. Tek seferlik kullanım
+        // içindir, tekrar tekrar çalıştırmak zararsızdır (idempotent —
+        // Cloud Function zaten kartı olanları atlıyor).
+        item {
+            Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Sync, null, tint = Primary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Eski Yazılara Yazar Kartı Ekle", color = OnBackground,
+                            fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Yazar kartı özelliğinden önce yayınlanmış Blogger yazılarını " +
+                        "günceller. Kartı zaten olanlar otomatik atlanır.",
+                        color = Muted, fontSize = 12.sp, lineHeight = 18.sp,
+                    )
+                    if (backfillResult.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(backfillResult, color = Primary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Button(
+                        onClick  = { if (!backfillRunning) vm.backfillAuthorCards() },
+                        enabled  = !backfillRunning,
+                        colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                        shape    = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (backfillRunning) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("Çalıştır", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
         }
 
@@ -2080,9 +2089,15 @@ private fun PendingPostsTab(
                         Spacer(Modifier.height(8.dp))
                     }
                     if (post.content.isNotBlank()) {
-                        Text("İçerik (ilk 400 karakter)", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Text("İçerik (tam metin)", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                         Text(
-                            post.content.take(400) + if (post.content.length > 400) "…" else "",
+                            // Moderatör onaylamadan önce içeriğin TAMAMINI
+                            // görebilmeli — 400 karakterlik kesme, sonradan
+                            // uygunsuz çıkabilecek kısımların gözden kaçmasına
+                            // yol açabiliyordu. HTML etiketleri kaba bir
+                            // regex ile temizleniyor (post.content zengin
+                            // metin editöründen geldiği için ham HTML içerir).
+                            remember(post.content) { stripHtmlTags(post.content) },
                             color    = OnSurface, fontSize = 13.sp, lineHeight = 19.sp,
                         )
                         Spacer(Modifier.height(8.dp))

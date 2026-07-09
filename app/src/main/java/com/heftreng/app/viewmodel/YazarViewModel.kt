@@ -284,8 +284,43 @@ class YazarViewModel @Inject constructor(
         }
     }
 
-    // Onayla — Cloud Function üzerinden Refresh Token ile Blogger'a yayınlar
-    fun approvePost(postId: String, note: String = "") {
+    // Geçmişe dönük düzeltme — eski (kartsız) Blogger yazılarına yazar
+    // kartını sonradan ekler. Tek seferlik kullanım için, bkz. Cloud
+    // Function backfillAuthorCards. Sonucu _backfillResult'a yazar.
+    fun backfillAuthorCards() {
+        if (!canModerate) {
+            _backfillResult.value = "Bu işlem için yetkin yok"
+            return
+        }
+        viewModelScope.launch {
+            _backfillRunning.value = true
+            _backfillResult.value  = "Çalışıyor…"
+            try {
+                val result = FirebaseFunctions
+                    .getInstance("europe-west1")
+                    .getHttpsCallable("backfillAuthorCards")
+                    .call()
+                    .await()
+
+                @Suppress("UNCHECKED_CAST")
+                val data    = result.data as? Map<String, Any>
+                val updated = (data?.get("updated") as? List<*>)?.size ?: 0
+                val skipped = (data?.get("skipped") as? List<*>)?.size ?: 0
+                val failed  = (data?.get("failed")  as? List<*>)?.size ?: 0
+                _backfillResult.value =
+                    "✓ Güncellendi: $updated · Atlandı: $skipped · Hata: $failed"
+            } catch (e: Exception) {
+                android.util.Log.e("YazarVM", "backfillAuthorCards hata: ${e.message}")
+                _backfillResult.value = "Hata: ${e.message?.take(120) ?: "bilinmeyen"}"
+            } finally {
+                _backfillRunning.value = false
+            }
+        }
+    }
+    private val _backfillRunning = MutableStateFlow(false)
+    val backfillRunning = _backfillRunning.asStateFlow()
+    private val _backfillResult = MutableStateFlow("")
+    val backfillResult = _backfillResult.asStateFlow()
         if (!canModerate) {
             _submitResult.value = SubmitResult.Error("Bu işlem için yetkin yok")
             return

@@ -1333,6 +1333,61 @@ exports.rewardedAdSsv = onRequest(
 // Bu secretlar GitHub Actions'ta functions/.env.bloggerheftreng dosyasına
 // inject edilir (aşağıdaki deploy-firebase.yml güncellemesine bakın).
 //
+// ── Blogger OAuth2 + yazar kartı — ortak yardımcılar ─────────────────────────
+// publishToBlogger ve backfillAuthorCards (geçmişe dönük düzeltme) tarafından
+// paylaşılıyor, tek yerden bakım yapılabilsin diye ayrıldı.
+
+function _buildAuthorCardHtml(post) {
+  const authorName    = post.authorName || "Heftreng Kullanıcısı";
+  const authorPhoto   = post.authorPhotoURL || "";
+  const authorInitial = _escapeHtml(authorName.trim().charAt(0).toUpperCase() || "H");
+  const appLink        = "https://play.google.com/store/apps/details?id=com.heftreng.app";
+
+  const avatarHtml = authorPhoto
+    ? `<img src="${authorPhoto}" alt="${_escapeHtml(authorName)}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0;" />`
+    : `<div style="width:44px;height:44px;border-radius:50%;background:#F59E0B;color:#09090B;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex-shrink:0;">${authorInitial}</div>`;
+
+  return `
+<div class="hf-author-card" style="display:flex;align-items:center;gap:12px;padding:12px 14px;margin:0 0 18px 0;border-radius:12px;background:#09090B0d;border:1px solid #09090B1a;">
+  ${avatarHtml}
+  <div style="display:flex;flex-direction:column;">
+    <span style="font-weight:600;font-size:15px;color:#09090B;">${_escapeHtml(authorName)}</span>
+    <a href="${appLink}" style="font-size:12.5px;color:#F59E0B;text-decoration:none;">Heftreng'de yazar →</a>
+  </div>
+</div>
+`;
+}
+
+async function _getBloggerAccessToken() {
+  const BLOGGER_CLIENT_ID     = process.env.BLOGGER_CLIENT_ID;
+  const BLOGGER_CLIENT_SECRET = process.env.BLOGGER_CLIENT_SECRET;
+  const BLOGGER_REFRESH_TOKEN = process.env.BLOGGER_REFRESH_TOKEN;
+
+  if (!BLOGGER_CLIENT_ID || !BLOGGER_CLIENT_SECRET || !BLOGGER_REFRESH_TOKEN) {
+    throw new HttpsError("internal", "BLOGGER_CLIENT_ID/SECRET/REFRESH_TOKEN eksik.");
+  }
+
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method : "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body   : new URLSearchParams({
+      client_id    : BLOGGER_CLIENT_ID,
+      client_secret: BLOGGER_CLIENT_SECRET,
+      refresh_token: BLOGGER_REFRESH_TOKEN,
+      grant_type   : "refresh_token",
+    }),
+  });
+  const tokenData = await tokenRes.json();
+  if (!tokenRes.ok || !tokenData.access_token) {
+    console.error("[bloggerAuth] Token yenileme hatası:", tokenData);
+    throw new HttpsError(
+      "internal",
+      `OAuth2 token yenilenemedi: ${tokenData.error_description || tokenData.error || tokenRes.status}`
+    );
+  }
+  return tokenData.access_token;
+}
+
 exports.publishToBlogger = onCall(
   {
     region        : "europe-west1",
@@ -1394,24 +1449,7 @@ exports.publishToBlogger = onCall(
     // (Firestore pendingPosts.authorName / authorPhotoURL, kullanıcı yazıyı
     // gönderirken zaten dolduruluyor, bkz. YazarViewModel.submitPost) görsel
     // olarak öne çıkarır. Fotoğraf yoksa baş harften basit bir rozet gösterilir.
-    const authorName  = post.authorName || "Heftreng Kullanıcısı";
-    const authorPhoto = post.authorPhotoURL || "";
-    const authorInitial = _escapeHtml(authorName.trim().charAt(0).toUpperCase() || "H");
-    const appLink = "https://play.google.com/store/apps/details?id=com.heftreng.app";
-
-    const avatarHtml = authorPhoto
-      ? `<img src="${authorPhoto}" alt="${_escapeHtml(authorName)}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0;" />`
-      : `<div style="width:44px;height:44px;border-radius:50%;background:#F59E0B;color:#09090B;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex-shrink:0;">${authorInitial}</div>`;
-
-    const authorCardHtml = `
-<div class="hf-author-card" style="display:flex;align-items:center;gap:12px;padding:12px 14px;margin:0 0 18px 0;border-radius:12px;background:#09090B0d;border:1px solid #09090B1a;">
-  ${avatarHtml}
-  <div style="display:flex;flex-direction:column;">
-    <span style="font-weight:600;font-size:15px;color:#09090B;">${_escapeHtml(authorName)}</span>
-    <a href="${appLink}" style="font-size:12.5px;color:#F59E0B;text-decoration:none;">Heftreng'de yazar →</a>
-  </div>
-</div>
-`;
+    const authorCardHtml = _buildAuthorCardHtml(post);
 
     const coverHtml = post.cover
       ? `<div class="hf-cover"><img src="${post.cover}" alt="${_escapeHtml(post.title)}" style="max-width:100%;border-radius:8px;" /></div>\n`
@@ -1427,39 +1465,14 @@ exports.publishToBlogger = onCall(
       .filter(Boolean);
 
     // ── 6. OAuth2 — refresh token'dan geçici access token al ──────────────
-    const BLOGGER_CLIENT_ID     = process.env.BLOGGER_CLIENT_ID;
-    const BLOGGER_CLIENT_SECRET = process.env.BLOGGER_CLIENT_SECRET;
-    const BLOGGER_REFRESH_TOKEN = process.env.BLOGGER_REFRESH_TOKEN;
-    const BLOGGER_BLOG_ID       = process.env.BLOGGER_BLOG_ID;
-
-    if (!BLOGGER_CLIENT_ID || !BLOGGER_CLIENT_SECRET || !BLOGGER_REFRESH_TOKEN || !BLOGGER_BLOG_ID) {
-      throw new HttpsError(
-        "internal",
-        "BLOGGER_CLIENT_ID, BLOGGER_CLIENT_SECRET, BLOGGER_REFRESH_TOKEN veya BLOGGER_BLOG_ID eksik. GitHub Secret'ları kontrol et."
-      );
+    const BLOGGER_BLOG_ID = process.env.BLOGGER_BLOG_ID;
+    if (!BLOGGER_BLOG_ID) {
+      throw new HttpsError("internal", "BLOGGER_BLOG_ID eksik. GitHub Secret'ları kontrol et.");
     }
 
     let accessToken;
     try {
-      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-        method : "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body   : new URLSearchParams({
-          client_id    : BLOGGER_CLIENT_ID,
-          client_secret: BLOGGER_CLIENT_SECRET,
-          refresh_token: BLOGGER_REFRESH_TOKEN,
-          grant_type   : "refresh_token",
-        }),
-      });
-      const tokenData = await tokenRes.json();
-      if (!tokenRes.ok || !tokenData.access_token) {
-        console.error("[publishToBlogger] Token yenileme hatası:", tokenData);
-        throw new HttpsError(
-          "internal",
-          `OAuth2 token yenilenemedi: ${tokenData.error_description || tokenData.error || tokenRes.status}`
-        );
-      }
-      accessToken = tokenData.access_token;
+      accessToken = await _getBloggerAccessToken();
     } catch (tokenErr) {
       if (tokenErr instanceof HttpsError) throw tokenErr;
       console.error("[publishToBlogger] Token isteği hatası:", tokenErr.message);
@@ -1521,6 +1534,116 @@ exports.publishToBlogger = onCall(
     );
 
     return { success: true, bloggerPostId, bloggerPostUrl };
+  }
+);
+
+// ─── Geçmişe dönük düzeltme: eski Blogger yazılarına yazar kartı ekle ───────
+// publishToBlogger'ın eski (kartsız) sürümüyle yayınlanmış yazıları tek
+// seferlik günceller. pendingPosts içinde bloggerPostId dolu olan ve
+// içeriğinde henüz "hf-author-card" bulunmayan kayıtları bulup Blogger'daki
+// karşılıklarını PATCH ile günceller. Admin panelinden çağrılabilir ya da
+// Firebase Console → Functions → Testing'den tek seferlik tetiklenebilir.
+exports.backfillAuthorCards = onCall(
+  {
+    region        : "europe-west1",
+    cors          : true,
+    timeoutSeconds: 540, // birden fazla yazı olabileceği için geniş tutuldu
+  },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+
+    const callerUid = request.auth.uid;
+    const db        = getFirestore();
+
+    let canPublish = false;
+    try {
+      const adminDoc = await db.collection("admins").doc(callerUid).get();
+      if (adminDoc.exists) {
+        const d     = adminDoc.data() || {};
+        const role  = d.role || "";
+        const perms = Array.isArray(d.permissions) ? d.permissions : [];
+        canPublish =
+          role === "admin" ||
+          role === "editor" ||
+          perms.includes("pending") ||
+          perms.includes("*");
+      }
+    } catch (_) {}
+    if (!canPublish) throw new HttpsError("permission-denied", "Bu işlem için yetkin yok.");
+
+    const BLOGGER_BLOG_ID = process.env.BLOGGER_BLOG_ID;
+    if (!BLOGGER_BLOG_ID) throw new HttpsError("internal", "BLOGGER_BLOG_ID eksik.");
+
+    let accessToken;
+    try {
+      accessToken = await _getBloggerAccessToken();
+    } catch (tokenErr) {
+      if (tokenErr instanceof HttpsError) throw tokenErr;
+      throw new HttpsError("internal", `OAuth2 token isteği başarısız: ${tokenErr.message}`);
+    }
+
+    // Sadece daha önce Blogger'a gönderilmiş kayıtlar aday
+    const snap = await db.collection("pendingPosts")
+      .where("status", "==", "approved")
+      .get();
+
+    const results = { updated: [], skipped: [], failed: [] };
+
+    for (const doc of snap.docs) {
+      const post = doc.data();
+      const bloggerPostId = post.bloggerPostId;
+      if (!bloggerPostId) { results.skipped.push({ id: doc.id, reason: "bloggerPostId yok" }); continue; }
+
+      try {
+        // Blogger'daki güncel içeriği çek — kartın zaten eklenip
+        // eklenmediğini kontrol etmek ve mevcut içeriği korumak için.
+        const getRes = await fetch(
+          `https://www.googleapis.com/blogger/v3/blogs/${BLOGGER_BLOG_ID}/posts/${bloggerPostId}`,
+          { headers: { "Authorization": `Bearer ${accessToken}` } }
+        );
+        if (!getRes.ok) {
+          results.failed.push({ id: doc.id, bloggerPostId, reason: `GET ${getRes.status}` });
+          continue;
+        }
+        const bloggerPost = await getRes.json();
+        const currentContent = bloggerPost.content || "";
+
+        if (currentContent.includes("hf-author-card")) {
+          results.skipped.push({ id: doc.id, bloggerPostId, reason: "kart zaten var" });
+          continue;
+        }
+
+        const authorCardHtml = _buildAuthorCardHtml(post);
+        const newContent = authorCardHtml + currentContent;
+
+        const patchRes = await fetch(
+          `https://www.googleapis.com/blogger/v3/blogs/${BLOGGER_BLOG_ID}/posts/${bloggerPostId}`,
+          {
+            method : "PATCH",
+            headers: {
+              "Content-Type" : "application/json",
+              "Authorization": `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ content: newContent }),
+          }
+        );
+        if (!patchRes.ok) {
+          const errBody = await patchRes.text().catch(() => "");
+          results.failed.push({ id: doc.id, bloggerPostId, reason: `PATCH ${patchRes.status}: ${errBody.slice(0, 150)}` });
+          continue;
+        }
+        results.updated.push({ id: doc.id, bloggerPostId });
+      } catch (err) {
+        results.failed.push({ id: doc.id, bloggerPostId, reason: err.message });
+      }
+    }
+
+    console.log(
+      `[backfillAuthorCards] caller:${callerUid} — ` +
+      `güncellendi:${results.updated.length} atlandı:${results.skipped.length} hata:${results.failed.length}`
+    );
+
+    return { success: true, ...results };
   }
 );
 
