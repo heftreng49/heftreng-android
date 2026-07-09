@@ -351,7 +351,10 @@ class YazarViewModel @Inject constructor(
                 // İstatistikleri sunucudan güvenli güncelle
                 updateRealtimeStats()
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.e("YazarVM", "updatePostStatusInternal hata: ${e.message}")
+                _submitResult.value = SubmitResult.Error(
+                    "Durum güncellenemedi: ${e.message?.take(100) ?: "hata"}"
+                )
             }
         }
     }
