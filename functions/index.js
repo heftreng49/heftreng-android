@@ -1388,14 +1388,39 @@ exports.publishToBlogger = onCall(
     }
 
     // ── 5. HTML içerik oluştur ────────────────────────────────────────────
+    // Yazar profil kartı — içeriğin EN BAŞINA ekleniyor. Blogger'ın kendi
+    // "author" alanı her zaman API isteğini atan hesabı (site sahibi)
+    // gösterir; bu kart, yazıyı gerçekten yazan uygulama kullanıcısını
+    // (Firestore pendingPosts.authorName / authorPhotoURL, kullanıcı yazıyı
+    // gönderirken zaten dolduruluyor, bkz. YazarViewModel.submitPost) görsel
+    // olarak öne çıkarır. Fotoğraf yoksa baş harften basit bir rozet gösterilir.
+    const authorName  = post.authorName || "Heftreng Kullanıcısı";
+    const authorPhoto = post.authorPhotoURL || "";
+    const authorInitial = _escapeHtml(authorName.trim().charAt(0).toUpperCase() || "H");
+    const appLink = "https://play.google.com/store/apps/details?id=com.heftreng.app";
+
+    const avatarHtml = authorPhoto
+      ? `<img src="${authorPhoto}" alt="${_escapeHtml(authorName)}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0;" />`
+      : `<div style="width:44px;height:44px;border-radius:50%;background:#F59E0B;color:#09090B;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex-shrink:0;">${authorInitial}</div>`;
+
+    const authorCardHtml = `
+<div class="hf-author-card" style="display:flex;align-items:center;gap:12px;padding:12px 14px;margin:0 0 18px 0;border-radius:12px;background:#09090B0d;border:1px solid #09090B1a;">
+  ${avatarHtml}
+  <div style="display:flex;flex-direction:column;">
+    <span style="font-weight:600;font-size:15px;color:#09090B;">${_escapeHtml(authorName)}</span>
+    <a href="${appLink}" style="font-size:12.5px;color:#F59E0B;text-decoration:none;">Heftreng'de yazar →</a>
+  </div>
+</div>
+`;
+
     const coverHtml = post.cover
       ? `<div class="hf-cover"><img src="${post.cover}" alt="${_escapeHtml(post.title)}" style="max-width:100%;border-radius:8px;" /></div>\n`
       : "";
 
     const bloggerContent = [
+      authorCardHtml,
       coverHtml,
       post.content || "",
-      `\n<p class="hf-author-note" style="color:#888;font-size:0.9em;">— ${_escapeHtml(post.authorName || "Yazar")}</p>`,
     ].join("");
 
     const labels = [post.category, ...(Array.isArray(post.tags) ? post.tags : [])]

@@ -134,20 +134,18 @@ class BlogViewModel @Inject constructor() : ViewModel() {
     }
 
     private fun parsePost(obj: JSONObject): BlogPost {
-        val author        = obj.optJSONObject("author")
-        val authorImg     = author?.optJSONObject("image")
-        val content       = obj.optString("content")
-        val labelArr      = obj.optJSONArray("labels")
-        val labels        = (0 until (labelArr?.length() ?: 0)).map { labelArr!!.getString(it) }
-        // Blogger her zaman API isteğini atan hesabı (ör. site sahibinin
-        // Google hesabı) "author" olarak döndürür — bu, yazıyı gerçekten
-        // yazan kullanıcı değildir. Yayınlama sırasında (bkz. Cloud Function
-        // publishToBlogger, "hf-author-note" class'lı imza paragrafı)
-        // içeriğin sonuna "— Gerçek Yazar Adı" satırı ekleniyor; burada bu
-        // satırı ayıklayıp asıl yazar adı olarak kullanıyoruz. Bulunamazsa
-        // (eski yazılar veya elle Blogger'a girilmiş yazılar için) Blogger
-        // hesap adına geri düşülüyor.
-        val realAuthor    = extractRealAuthorName(content)
+        val author     = obj.optJSONObject("author")
+        val authorImg  = author?.optJSONObject("image")
+        val content    = obj.optString("content")
+        val labelArr   = obj.optJSONArray("labels")
+        val labels     = (0 until (labelArr?.length() ?: 0)).map { labelArr!!.getString(it) }
+        // NOT: Blogger'ın "author" alanı her zaman API isteğini atan hesabı
+        // (site sahibi) döndürür, yazıyı gerçekten yazan kullanıcıyı değil.
+        // Gerçek yazar artık içeriğin İÇİNDE görsel bir kart olarak geliyor
+        // (bkz. Cloud Function publishToBlogger → hf-author-card), o yüzden
+        // burada authorName/authorPhoto'yu ayrıca değiştirmeye gerek yok —
+        // bu alanlar sadece Blogger'a elle girilen (uygulama dışı) yazılarda
+        // fallback olarak kullanılabilir.
         return BlogPost(
             id          = obj.optString("id"),
             title       = obj.optString("title"),
@@ -155,26 +153,11 @@ class BlogViewModel @Inject constructor() : ViewModel() {
             summary     = htmlToPlainText(content).take(180).trimEnd() + if (content.length > 180) "…" else "",
             published   = obj.optString("published"),
             url         = obj.optString("url"),
-            authorName  = realAuthor ?: (author?.optString("displayName") ?: ""),
-            // Gerçek yazarın Blogger hesap fotoğrafı yok — sahibinkini
-            // (Heft Reng hesabı) göstermek yanıltıcı olacağından, gerçek
-            // yazar tespit edildiğinde avatar boş bırakılıyor (UI baş harf
-            // rozetine düşer); tespit edilemezse Blogger hesap fotoğrafı kalır.
-            authorPhoto = if (realAuthor != null) "" else (authorImg?.optString("url") ?: ""),
+            authorName  = author?.optString("displayName") ?: "",
+            authorPhoto = authorImg?.optString("url") ?: "",
             thumbnail   = extractFirstImage(content),
             labels      = labels,
         )
-    }
-
-    /** İçeriğin sonunda `hf-author-note` class'lı paragrafta yer alan
-     *  "— İsim" imzasını ayıklar. Bulunamazsa null döner. */
-    private fun extractRealAuthorName(html: String): String? {
-        val m = Regex(
-            """class=["']hf-author-note["'][^>]*>\s*—\s*([^<]+?)\s*</p>""",
-            RegexOption.IGNORE_CASE
-        ).find(html) ?: return null
-        val name = htmlToPlainText(m.groupValues[1]).trim()
-        return name.takeIf { it.isNotBlank() && it != "Yazar" }
     }
 
     private fun httpGet(urlStr: String): String {

@@ -30,6 +30,7 @@ data class PendingPost(
     val authorId      : String = "",
     val authorName    : String = "",
     val authorEmail   : String = "",
+    val authorPhotoURL: String = "",
     val status        : String = "pending",   // pending | approved | rejected
     val adminNote     : String = "",
     val bloggerPostId : String = "",
@@ -157,6 +158,16 @@ class YazarViewModel @Inject constructor(
             _loading.value = true
             try {
                 val userName = user.displayName ?: user.email?.substringBefore("@") ?: "?"
+                // Kart yapısı için gerçek profil fotoğrafını Firestore'dan çek —
+                // Auth.photoUrl (Google/e-posta girişindeki ilk foto) yerine
+                // users/{uid}.photoURL kullanılıyor çünkü kullanıcı profil
+                // fotoğrafını uygulama içinden sonradan değiştirmiş olabilir,
+                // Auth tarafı bu değişikliği yansıtmıyor.
+                val userPhoto = try {
+                    firestore.collection("users").document(user.uid)
+                        .get().await().getString("photoURL") ?: ""
+                } catch (e: Exception) { "" }
+
                 firestore.collection("pendingPosts").add(
                     mapOf(
                         "title"         to title.trim(),
@@ -169,6 +180,7 @@ class YazarViewModel @Inject constructor(
                         "authorId"      to user.uid,
                         "authorEmail"   to (user.email ?: ""),
                         "authorName"    to userName,
+                        "authorPhotoURL" to userPhoto,
                         "status"        to "pending",
                         "adminNote"     to "",
                         "bloggerPostId" to "",
@@ -378,6 +390,7 @@ class YazarViewModel @Inject constructor(
             authorId       = d["authorId"]       as? String ?: "",
             authorName     = d["authorName"]     as? String ?: "",
             authorEmail    = d["authorEmail"]    as? String ?: "",
+            authorPhotoURL = d["authorPhotoURL"] as? String ?: "",
             status         = d["status"]         as? String ?: "pending",
             adminNote      = d["adminNote"]      as? String ?: "",
             bloggerPostId  = d["bloggerPostId"]  as? String ?: "",
