@@ -1317,8 +1317,18 @@ exports.rewardedAdSsv = onRequest(
 //   4. bloggerPostId + bloggerPostUrl Firestore'a yazılır, status="approved"
 //
 // Secret kurulumu (bir kerelik):
-//   firebase functions:secrets:set BLOGGER_API_KEY   ← Google Cloud Credentials'tan
+//   firebase functions:secrets:set BLOGGER_CLIENT_ID
+//   firebase functions:secrets:set BLOGGER_CLIENT_SECRET
+//   firebase functions:secrets:set BLOGGER_REFRESH_TOKEN
 //   firebase functions:secrets:set BLOGGER_BLOG_ID   ← ör: 6362476808834153672
+//
+// DÜZELTME: Blogger API v3'te yazı OLUŞTURMA (POST /posts) işlemi salt API
+// key ile YAPILAMAZ — Google, yazma uçlarında OAuth2 Bearer token zorunlu
+// tutar (API key sadece GET/okuma çağrılarında geçerlidir). Önceki sürüm
+// `?key=BLOGGER_API_KEY` ile POST atıyordu, bu her zaman Blogger API'den
+// 401/403 döndürüyordu — "Blogger'a gönderilemedi" hatasının kök nedeni buydu.
+// Artık BLOGGER_REFRESH_TOKEN kullanılarak Google OAuth2 token endpoint'inden
+// kısa ömürlü bir access_token alınıyor, Blogger isteği buna Bearer ile imzalanıyor.
 //
 // Bu secretlar GitHub Actions'ta functions/.env.bloggerheftreng dosyasına
 // inject edilir (aşağıdaki deploy-firebase.yml güncellemesine bakın).
@@ -1391,25 +1401,58 @@ exports.publishToBlogger = onCall(
     const labels = [post.category, ...(Array.isArray(post.tags) ? post.tags : [])]
       .filter(Boolean);
 
-    // ── 6. Blogger API v3 ─────────────────────────────────────────────────
-    const BLOGGER_API_KEY = process.env.BLOGGER_API_KEY;
-    const BLOGGER_BLOG_ID = process.env.BLOGGER_BLOG_ID;
+    // ── 6. OAuth2 — refresh token'dan geçici access token al ──────────────
+    const BLOGGER_CLIENT_ID     = process.env.BLOGGER_CLIENT_ID;
+    const BLOGGER_CLIENT_SECRET = process.env.BLOGGER_CLIENT_SECRET;
+    const BLOGGER_REFRESH_TOKEN = process.env.BLOGGER_REFRESH_TOKEN;
+    const BLOGGER_BLOG_ID       = process.env.BLOGGER_BLOG_ID;
 
-    if (!BLOGGER_API_KEY || !BLOGGER_BLOG_ID) {
+    if (!BLOGGER_CLIENT_ID || !BLOGGER_CLIENT_SECRET || !BLOGGER_REFRESH_TOKEN || !BLOGGER_BLOG_ID) {
       throw new HttpsError(
         "internal",
-        "BLOGGER_API_KEY veya BLOGGER_BLOG_ID eksik. GitHub Secret'ları kontrol et."
+        "BLOGGER_CLIENT_ID, BLOGGER_CLIENT_SECRET, BLOGGER_REFRESH_TOKEN veya BLOGGER_BLOG_ID eksik. GitHub Secret'ları kontrol et."
       );
     }
 
+    let accessToken;
+    try {
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method : "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body   : new URLSearchParams({
+          client_id    : BLOGGER_CLIENT_ID,
+          client_secret: BLOGGER_CLIENT_SECRET,
+          refresh_token: BLOGGER_REFRESH_TOKEN,
+          grant_type   : "refresh_token",
+        }),
+      });
+      const tokenData = await tokenRes.json();
+      if (!tokenRes.ok || !tokenData.access_token) {
+        console.error("[publishToBlogger] Token yenileme hatası:", tokenData);
+        throw new HttpsError(
+          "internal",
+          `OAuth2 token yenilenemedi: ${tokenData.error_description || tokenData.error || tokenRes.status}`
+        );
+      }
+      accessToken = tokenData.access_token;
+    } catch (tokenErr) {
+      if (tokenErr instanceof HttpsError) throw tokenErr;
+      console.error("[publishToBlogger] Token isteği hatası:", tokenErr.message);
+      throw new HttpsError("internal", `OAuth2 token isteği başarısız: ${tokenErr.message}`);
+    }
+
+    // ── 7. Blogger API v3 — Bearer token ile POST ──────────────────────────
     const bloggerEndpoint =
-      `https://www.googleapis.com/blogger/v3/blogs/${BLOGGER_BLOG_ID}/posts/?key=${BLOGGER_API_KEY}`;
+      `https://www.googleapis.com/blogger/v3/blogs/${BLOGGER_BLOG_ID}/posts/`;
 
     let bloggerRes;
     try {
       bloggerRes = await fetch(bloggerEndpoint, {
         method : "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type" : "application/json",
+          "Authorization": `Bearer ${accessToken}`,
+        },
         body   : JSON.stringify({
           kind   : "blogger#post",
           blog   : { id: BLOGGER_BLOG_ID },
@@ -1436,7 +1479,7 @@ exports.publishToBlogger = onCall(
     const bloggerPostId  = bloggerData.id  || "";
     const bloggerPostUrl = bloggerData.url || "";
 
-    // ── 7. Firestore güncelle ─────────────────────────────────────────────
+    // ── 8. Firestore güncelle ─────────────────────────────────────────────
     await db.collection("pendingPosts").doc(postId).update({
       status         : "approved",
       adminNote      : adminNote,
