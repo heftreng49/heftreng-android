@@ -2,7 +2,6 @@ package com.heftreng.app.ui.screens.admin
 
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -1945,7 +1944,6 @@ private fun PendingPostsTab(
     loading : Boolean,
     vm      : YazarViewModel,
 ) {
-    val context     = LocalContext.current
     var filter      by remember { mutableStateOf("all") }
     var expandedId  by remember { mutableStateOf<String?>(null) }
     var noteInput   by remember { mutableStateOf("") }
@@ -2100,7 +2098,7 @@ private fun PendingPostsTab(
                     if (post.status != "approved") {
                         Button(
                             onClick = {
-                                vm.approvePost(post.id, if (actionPostId == post.id) noteInput else "", context)
+                                vm.approvePost(post.id, if (actionPostId == post.id) noteInput else "")
                                 noteInput = ""; actionPostId = null; expandedId = null
                             },
                             modifier = Modifier.fillMaxWidth(),
