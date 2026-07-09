@@ -13,8 +13,12 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
-import com.google.firebase.functions.FirebaseFunctions
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import com.google.android.gms.auth.api.signin.GoogleSignIn
 import javax.inject.Inject
 
 // ── Veri modeli ───────────────────────────────────────────────────────────────
@@ -272,8 +276,8 @@ class YazarViewModel @Inject constructor(
         }
     }
 
-    // Onayla — Cloud Function üzerinden Blogger'a yayınlar
-    fun approvePost(postId: String, note: String = "") {
+    // Onayla — Google OAuth token ile Blogger API'ye direkt POST
+    fun approvePost(postId: String, note: String = "", context: android.content.Context) {
         if (!canModerate) {
             _submitResult.value = SubmitResult.Error("Bu işlem için yetkin yok")
             return
@@ -281,36 +285,103 @@ class YazarViewModel @Inject constructor(
         viewModelScope.launch {
             _pendingLoading.value = true
             try {
-                val payload = hashMapOf(
-                    "postId"    to postId,
-                    "adminNote" to note,
-                )
-                val result = FirebaseFunctions
-                    .getInstance("europe-west1")
-                    .getHttpsCallable("publishToBlogger")
-                    .call(payload)
-                    .await()
+                // ── 1. Post'u Firestore'dan al ────────────────────────────
+                val snap = firestore.collection("pendingPosts").document(postId).get().await()
+                val post = snap.toPendingPost()
+                    ?: throw Exception("Yazı bulunamadı")
 
-                @Suppress("UNCHECKED_CAST")
-                val data           = result.data as? Map<String, Any>
-                val success        = data?.get("success") as? Boolean ?: false
-                val bloggerPostUrl = data?.get("bloggerPostUrl") as? String ?: ""
-
-                if (success) {
-                    _pendingPosts.value = _pendingPosts.value.map { post ->
-                        if (post.id == postId)
-                            post.copy(status = "approved", adminNote = note, bloggerPostUrl = bloggerPostUrl)
-                        else post
-                    }
-                    updateRealtimeStats()
-                    android.util.Log.i("YazarVM", "[$postId] Blogger'da yayınlandı → $bloggerPostUrl")
-                } else {
-                    _submitResult.value = SubmitResult.Error("Yayınlama başarısız")
+                // İdempotent koruma
+                if (post.status == "approved" && post.bloggerPostId.isNotEmpty()) {
+                    android.util.Log.i("YazarVM", "[$postId] zaten yayınlanmış")
+                    _pendingLoading.value = false
+                    return@launch
                 }
+
+                // ── 2. Google OAuth access token al ──────────────────────
+                val account = GoogleSignIn.getLastSignedInAccount(context)
+                    ?: throw Exception("Google hesabına giriş yapman gerekiyor")
+
+                val accessToken = withContext(Dispatchers.IO) {
+                    com.google.android.gms.auth.GoogleAuthUtil.getToken(
+                        context,
+                        account.account!!,
+                        "oauth2:https://www.googleapis.com/auth/blogger"
+                    )
+                }
+
+                // ── 3. Blogger API'ye POST at ─────────────────────────────
+                val BLOG_ID = "6362476808834153672"
+
+                val coverHtml = if (post.cover.isNotEmpty())
+                    """<div class="hf-cover"><img src="${post.cover}" style="max-width:100%;border-radius:8px;" /></div>""" + "\n"
+                else ""
+
+                val content = coverHtml + post.content +
+                    """\n<p style="color:#888;font-size:0.9em;">— ${post.authorName.ifEmpty { "Yazar" }}</p>"""
+
+                val labels = JSONArray().apply {
+                    if (post.category.isNotEmpty()) put(post.category)
+                    post.tags.forEach { put(it) }
+                }
+
+                val body = JSONObject().apply {
+                    put("title", post.title)
+                    put("content", content)
+                    put("labels", labels)
+                }
+
+                val url = java.net.URL("https://www.googleapis.com/blogger/v3/blogs/$BLOG_ID/posts/")
+                val response = withContext(Dispatchers.IO) {
+                    val conn = url.openConnection() as java.net.HttpURLConnection
+                    conn.requestMethod = "POST"
+                    conn.setRequestProperty("Authorization", "Bearer $accessToken")
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.doOutput = true
+                    conn.outputStream.use { it.write(body.toString().toByteArray()) }
+                    val code = conn.responseCode
+                    val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+                    val text = stream.bufferedReader().readText()
+                    Pair(code, text)
+                }
+
+                val (code, responseText) = response
+                if (code !in 200..299) {
+                    throw Exception("Blogger API $code: ${responseText.take(200)}")
+                }
+
+                val json          = JSONObject(responseText)
+                val bloggerPostId  = json.optString("id", "")
+                val bloggerPostUrl = json.optString("url", "")
+
+                // ── 4. Firestore güncelle ─────────────────────────────────
+                firestore.collection("pendingPosts").document(postId).update(
+                    mapOf(
+                        "status"         to "approved",
+                        "adminNote"      to note,
+                        "bloggerPostId"  to bloggerPostId,
+                        "bloggerPostUrl" to bloggerPostUrl,
+                        "approvedAt"     to FieldValue.serverTimestamp(),
+                        "updatedAt"      to FieldValue.serverTimestamp(),
+                    )
+                ).await()
+
+                // ── 5. Lokal liste güncelle ───────────────────────────────
+                _pendingPosts.value = _pendingPosts.value.map {
+                    if (it.id == postId) it.copy(
+                        status         = "approved",
+                        adminNote      = note,
+                        bloggerPostId  = bloggerPostId,
+                        bloggerPostUrl = bloggerPostUrl,
+                    ) else it
+                }
+
+                updateRealtimeStats()
+                android.util.Log.i("YazarVM", "[$postId] Blogger'da yayınlandı → $bloggerPostUrl")
+
             } catch (e: Exception) {
                 android.util.Log.e("YazarVM", "approvePost hata: ${e.message}")
                 _submitResult.value = SubmitResult.Error(
-                    "Blogger'a gönderilemedi: ${e.message?.take(100) ?: "hata"}"
+                    "Yayınlanamadı: ${e.message?.take(120) ?: "hata"}"
                 )
             } finally {
                 _pendingLoading.value = false
