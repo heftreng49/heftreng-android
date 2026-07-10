@@ -223,6 +223,20 @@ class LibraryRepository @Inject constructor(
         db["library_books"].upsert(row)
     }
 
+    /** Sorun 2: Kapak değişince book_quotes'taki eski kayıtları güncelle */
+    suspend fun updateQuotesCover(bookId: String, coverImg: String) {
+        db["book_quotes"].update(mapOf("cover_img" to coverImg)) {
+            filter { eq("book_id", bookId) }
+        }
+    }
+
+    /** Sorun 2: Kapak değişince reading_status'taki okuma listesi kayıtlarını güncelle */
+    suspend fun updateReadingStatusCover(bookId: String, coverImg: String) {
+        db["reading_status"].update(mapOf("cover_img" to coverImg)) {
+            filter { and { eq("book_id", bookId); eq("source", "library") } }
+        }
+    }
+
     suspend fun updateBookCounters(
         id          : String,
         quoteCount  : Int?   = null,

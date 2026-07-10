@@ -386,9 +386,54 @@ class LibraryViewModel @Inject constructor(
                     pageCount   = pageCount,
                 ))
                 loadLibraryBook(bookId)
+
+                // Sorun 2 düzeltmesi: kapak değiştiyse (boştan doluysa veya
+                // farklı URL'ye geçildiyse) o kitaba bağlı tüm kayıtları
+                // güncelle. Yoksa Firestore'daki eski alıntılar ve okuma
+                // listesi kayıtları boş/eski kapakla kalmaya devam ederdi.
+                if (coverImg.isNotBlank() && coverImg != current.coverImg) {
+                    propagateCoverUpdate(bookId, coverImg)
+                }
             } catch (e: Exception) {
                 _error.value = e.message
             }
+        }
+    }
+
+    /** Kapak fotoğrafı değiştiğinde ilgili tüm tablolara yansıt.
+     *  1. Supabase book_quotes  — kütüphane alıntı kartları
+     *  2. Supabase reading_status — okuma listesi kartları
+     *  3. Firestore feed — sosyal akış alıntı postları (Firestore batch) */
+    private suspend fun propagateCoverUpdate(bookId: String, coverImg: String) {
+        // 1. Supabase book_quotes
+        try {
+            library.updateQuotesCover(bookId, coverImg)
+        } catch (e: Exception) {
+            android.util.Log.w("LibraryVM", "book_quotes cover güncelleme: ${e.message}")
+        }
+
+        // 2. Supabase reading_status
+        try {
+            library.updateReadingStatusCover(bookId, coverImg)
+        } catch (e: Exception) {
+            android.util.Log.w("LibraryVM", "reading_status cover güncelleme: ${e.message}")
+        }
+
+        // 3. Firestore feed — libraryBookId ile eşleşen alıntı postları
+        try {
+            val snap = firestore.collection("feed")
+                .whereEqualTo("libraryBookId", bookId)
+                .whereEqualTo("type", "library_quote")
+                .get().await()
+            if (snap.documents.isNotEmpty()) {
+                val batch = firestore.batch()
+                snap.documents.forEach { doc ->
+                    batch.update(doc.reference, "coverImg", coverImg)
+                }
+                batch.commit().await()
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("LibraryVM", "feed cover güncelleme: ${e.message}")
         }
     }
 
