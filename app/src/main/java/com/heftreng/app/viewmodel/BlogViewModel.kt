@@ -179,26 +179,51 @@ class BlogViewModel @Inject constructor() : ViewModel() {
     )
 
     private fun extractAuthorCard(html: String): AuthorCardResult {
-        val cardRegex = Regex(
-            """<div[^>]*class=["']hf-author-card["'][^>]*>.*?</div>\s*""",
-            setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)
-        )
-        val cardMatch = cardRegex.find(html) ?: return AuthorCardResult(html, "", "", "")
-        val cardHtml  = cardMatch.value
+        // hf-author-card div'inin başlangıcını bul
+        val startTag  = Regex("""<div[^>]*class=["']hf-author-card["'][^>]*>""", RegexOption.IGNORE_CASE)
+        val startMatch = startTag.find(html) ?: return AuthorCardResult(html, "", "", "")
+        val blockStart = startMatch.range.first
+        val innerStart = startMatch.range.last + 1
 
-        // İsim: <span> içindeki metin
-        val name = Regex("""<span[^>]*font-weight:600[^>]*>([^<]+)</span>""", RegexOption.IGNORE_CASE)
+        // İç içe <div> sayacıyla gerçek kapanış </div>'ini bul
+        var depth  = 1
+        var i      = innerStart
+        val len    = html.length
+        val openRx  = Regex("""<div""",  RegexOption.IGNORE_CASE)
+        val closeRx = Regex("""</div>""", RegexOption.IGNORE_CASE)
+
+        while (i < len && depth > 0) {
+            val nextOpen  = openRx.find(html, i)
+            val nextClose = closeRx.find(html, i)
+            when {
+                nextClose == null -> break
+                nextOpen != null && nextOpen.range.first < nextClose.range.first -> {
+                    depth++; i = nextOpen.range.last + 1
+                }
+                else -> {
+                    depth--; i = nextClose.range.last + 1
+                }
+            }
+        }
+
+        val blockEnd = i  // </div>'in hemen sonrası
+        val cardHtml = html.substring(blockStart, blockEnd)
+
+        // İsim: <span> içindeki metin (font-weight:600 ya da font-weight:700)
+        val name = Regex("""<span[^>]*font-weight:\s*[67]00[^>]*>([^<]+)</span>""", RegexOption.IGNORE_CASE)
             .find(cardHtml)?.groupValues?.getOrNull(1)?.trim() ?: ""
 
-        // Foto: <img src="..."> — var ise
+        // Foto: <img src="...">
         val photo = Regex("""<img[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
             .find(cardHtml)?.groupValues?.getOrNull(1) ?: ""
 
-        // UID: data-uid attribute olarak gömülü (aşağıda Cloud Function'da ekliyoruz)
+        // UID: data-uid attribute
         val uid = Regex("""data-uid=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
             .find(cardHtml)?.groupValues?.getOrNull(1) ?: ""
 
-        val strippedContent = html.removeRange(cardMatch.range).trimStart()
+        // Kartı ve ardından gelen boşlukları içerikten çıkar
+        val strippedContent = (html.substring(0, blockStart) +
+                html.substring(blockEnd)).trimStart()
         return AuthorCardResult(strippedContent, name, photo, uid)
     }
 
