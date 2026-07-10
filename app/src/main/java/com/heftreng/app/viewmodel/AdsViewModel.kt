@@ -413,8 +413,9 @@ class AdsViewModel @Inject constructor(
 
     fun onAppBackground() {
         engine.pauseAllBanners()
-        // Native'leri arka planda silmiyoruz — 30dk stale timeout zaten yönetiyor.
-        // Silsek kullanıcı geri dönünce shimmer görünür + yeni istek gider (gereksiz).
+        engine.releaseUnseenNativesOnBackground()  // DÜZELTME: görünmemiş native'leri temizle
+        // Stale timeout (30dk) hâlâ aktif — ancak arka planda gereksiz bellek tutmamak için
+        // görünmemiş (PENDING) native'leri anında serbest bırakıyoruz.
     }
 
     override fun onCleared() {

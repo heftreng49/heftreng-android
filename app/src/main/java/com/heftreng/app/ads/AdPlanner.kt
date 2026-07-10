@@ -110,7 +110,7 @@ fun buildAdPlan(
                 )
                 occupied += target
             }
-            idx += spec.position
+            idx += spec.frequency  // DÜZELTME: position değil frequency
         }
     }
 
