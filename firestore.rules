@@ -421,8 +421,17 @@ service cloud.firestore {
             && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants
             && onlyChanging(['seen','seenAt','seenByPhoto','seenByName',
                              'read_at','readAt','deleted','deletedAt',
-                             'read','liked_by','edited','text']);
+                             'read','liked_by','likedByUids','likesCount','edited','text']);
         allow delete: if isAdmin();
+
+        // Mesaj beğeni alt koleksiyonu
+        match /likes/{likeUid} {
+          allow read: if isAuth()
+              && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants;
+          allow create: if isAuth() && likeUid == request.auth.uid
+              && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants;
+          allow delete: if isAuth() && likeUid == request.auth.uid;
+        }
       }
     }
 
