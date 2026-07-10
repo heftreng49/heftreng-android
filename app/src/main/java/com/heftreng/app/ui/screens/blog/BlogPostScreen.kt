@@ -66,6 +66,23 @@ fun BlogPostScreen(
         // gitmek gereksiz gecikme yaratıyordu.
     }
 
+    // Banner yükleme: BlogPostScreen LazyColumn değil verticalScroll'lu Column
+    // kullandığı için warmVisiblePositions kullanılamaz. Her iki banner slotu
+    // (üst/alt) için requestBanner doğrudan burada çağrılır. bannerUnitId veya
+    // postId değişirse (farklı yazı açılırsa) otomatik yenilenir.
+    // DisposableEffect ile ekran kapanınca slotlar temizlenir.
+    LaunchedEffect(bannerUnitId, postId) {
+        val unitId = bannerUnitId ?: return@LaunchedEffect
+        adsVm.requestBanner("blogpost_${postId}_top",    unitId, blogBannerSize)
+        adsVm.requestBanner("blogpost_${postId}_bottom", unitId, blogBannerSize)
+    }
+    DisposableEffect(postId) {
+        onDispose {
+            adsVm.releaseBanner("blogpost_${postId}_top")
+            adsVm.releaseBanner("blogpost_${postId}_bottom")
+        }
+    }
+
     Scaffold(
         containerColor = Background,
         topBar = {
