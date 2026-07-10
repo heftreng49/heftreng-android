@@ -1,6 +1,7 @@
 package com.heftreng.app.ui.screens.blog
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -139,21 +140,58 @@ fun BlogPostScreen(
 
                         Spacer(Modifier.height(12.dp))
 
-                        // Yazar + tarih
+                        // Yazar kartı — feed ile aynı navigasyon mantığı:
+                        // tıklayınca "profile/{uid}" rotasına gider.
+                        // authorUid boşsa (Blogger'a elle girilmiş yazılar,
+                        // ya da backfill'de uid henüz eklenmemişse) tıklama
+                        // devre dışı bırakılır, sadece isim/foto gösterilir.
+                        val hasProfile = p.authorUid.isNotBlank()
                         Row(
                             verticalAlignment     = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier              = Modifier
+                                .then(
+                                    if (hasProfile)
+                                        Modifier.clickable { navController.navigate("profile/${p.authorUid}") }
+                                    else Modifier
+                                )
+                                .padding(vertical = 4.dp),
                         ) {
                             if (p.authorPhoto.isNotBlank()) {
                                 AsyncImage(
-                                    model = p.authorPhoto, contentDescription = null,
-                                    modifier = Modifier.size(28.dp).clip(CircleShape).background(SurfaceVar),
-                                    contentScale = ContentScale.Crop,
+                                    model            = p.authorPhoto,
+                                    contentDescription = null,
+                                    modifier         = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(SurfaceVar),
+                                    contentScale     = ContentScale.Crop,
                                 )
+                            } else if (p.authorName.isNotBlank()) {
+                                // Fotoğraf yoksa baş harf rozeti
+                                Box(
+                                    modifier        = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(Amber),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        p.authorName.first().uppercase(),
+                                        color      = Color.Black,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize   = 16.sp,
+                                    )
+                                }
                             }
                             Column {
                                 if (p.authorName.isNotBlank())
-                                    Text(p.authorName, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                    Text(
+                                        p.authorName,
+                                        color      = if (hasProfile) Amber else OnBackground,
+                                        fontSize   = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
                                 Text(formatBlogDate(p.published), color = Muted, fontSize = 11.sp)
                             }
                         }

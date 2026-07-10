@@ -1348,7 +1348,7 @@ function _buildAuthorCardHtml(post) {
     : `<div style="width:44px;height:44px;border-radius:50%;background:#F59E0B;color:#09090B;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex-shrink:0;">${authorInitial}</div>`;
 
   return `
-<div class="hf-author-card" style="display:flex;align-items:center;gap:12px;padding:12px 14px;margin:0 0 18px 0;border-radius:12px;background:#09090B0d;border:1px solid #09090B1a;">
+<div class="hf-author-card" data-uid="${post.authorId || ""}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;margin:0 0 18px 0;border-radius:12px;background:#09090B0d;border:1px solid #09090B1a;">
   ${avatarHtml}
   <div style="display:flex;flex-direction:column;">
     <span style="font-weight:600;font-size:15px;color:#09090B;">${_escapeHtml(authorName)}</span>

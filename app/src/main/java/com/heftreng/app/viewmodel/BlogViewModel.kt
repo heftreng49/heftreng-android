@@ -17,12 +17,13 @@ import javax.inject.Inject
 data class BlogPost(
     val id          : String,
     val title       : String,
-    val content     : String,       // tam HTML içerik
+    val content     : String,       // tam HTML içerik (hf-author-card striplendi)
     val summary     : String,       // ilk 180 karakter, düz metin
     val published   : String,       // ISO 8601
     val url         : String,
     val authorName  : String,
     val authorPhoto : String,
+    val authorUid   : String,       // Firestore users/{uid} — profile navigasyonu için
     val thumbnail   : String,       // ilk <img> src
     val labels      : List<String>,
 )
@@ -136,28 +137,69 @@ class BlogViewModel @Inject constructor() : ViewModel() {
     private fun parsePost(obj: JSONObject): BlogPost {
         val author     = obj.optJSONObject("author")
         val authorImg  = author?.optJSONObject("image")
-        val content    = obj.optString("content")
+        val rawContent = obj.optString("content")
         val labelArr   = obj.optJSONArray("labels")
         val labels     = (0 until (labelArr?.length() ?: 0)).map { labelArr!!.getString(it) }
-        // NOT: Blogger'ın "author" alanı her zaman API isteğini atan hesabı
-        // (site sahibi) döndürür, yazıyı gerçekten yazan kullanıcıyı değil.
-        // Gerçek yazar artık içeriğin İÇİNDE görsel bir kart olarak geliyor
-        // (bkz. Cloud Function publishToBlogger → hf-author-card), o yüzden
-        // burada authorName/authorPhoto'yu ayrıca değiştirmeye gerek yok —
-        // bu alanlar sadece Blogger'a elle girilen (uygulama dışı) yazılarda
-        // fallback olarak kullanılabilir.
+
+        // HTML içeriğinden hf-author-card bloğunu çıkar — bu blok
+        // publishToBlogger tarafından ekleniyor (bkz. Cloud Function),
+        // Android tarafında android.text.Html.fromHtml() tarafından
+        // düz metin olarak bozuk render ediliyordu. Gerçek yazar bilgisini
+        // (isim, foto, uid) bu bloktan çekip native Kotlin kartına aktarıyoruz.
+        val (content, realAuthorName, realAuthorPhoto, realAuthorUid) =
+            extractAuthorCard(rawContent)
+
+        // Blogger'ın kendi "author" alanı site sahibini döndürür (Heft Reng
+        // hesabı). Gerçek yazar karttan çıkarılamazsa bu alana fallback.
         return BlogPost(
             id          = obj.optString("id"),
             title       = obj.optString("title"),
             content     = content,
-            summary     = htmlToPlainText(content).take(180).trimEnd() + if (content.length > 180) "…" else "",
+            summary     = htmlToPlainText(content).take(180).trimEnd() +
+                          if (content.length > 180) "…" else "",
             published   = obj.optString("published"),
             url         = obj.optString("url"),
-            authorName  = author?.optString("displayName") ?: "",
-            authorPhoto = authorImg?.optString("url") ?: "",
-            thumbnail   = extractFirstImage(content),
+            authorName  = realAuthorName.ifBlank { author?.optString("displayName") ?: "" },
+            authorPhoto = realAuthorPhoto.ifBlank { authorImg?.optString("url") ?: "" },
+            authorUid   = realAuthorUid,
+            thumbnail   = extractFirstImage(rawContent), // kapak görseli orijinal içerikten
             labels      = labels,
         )
+    }
+
+    /** hf-author-card bloğunu içerikten ayırır. Blok varsa:
+     *  - içerikten striplenmiş HTML döner
+     *  - isim, foto URL, uid (data attribute olarak gömülü) çıkarılır
+     *  Blok yoksa orijinal içerik + boş yazar bilgileri döner. */
+    private data class AuthorCardResult(
+        val content    : String,
+        val authorName : String,
+        val authorPhoto: String,
+        val authorUid  : String,
+    )
+
+    private fun extractAuthorCard(html: String): AuthorCardResult {
+        val cardRegex = Regex(
+            """<div[^>]*class=["']hf-author-card["'][^>]*>.*?</div>\s*""",
+            setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)
+        )
+        val cardMatch = cardRegex.find(html) ?: return AuthorCardResult(html, "", "", "")
+        val cardHtml  = cardMatch.value
+
+        // İsim: <span> içindeki metin
+        val name = Regex("""<span[^>]*font-weight:600[^>]*>([^<]+)</span>""", RegexOption.IGNORE_CASE)
+            .find(cardHtml)?.groupValues?.getOrNull(1)?.trim() ?: ""
+
+        // Foto: <img src="..."> — var ise
+        val photo = Regex("""<img[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+            .find(cardHtml)?.groupValues?.getOrNull(1) ?: ""
+
+        // UID: data-uid attribute olarak gömülü (aşağıda Cloud Function'da ekliyoruz)
+        val uid = Regex("""data-uid=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+            .find(cardHtml)?.groupValues?.getOrNull(1) ?: ""
+
+        val strippedContent = html.removeRange(cardMatch.range).trimStart()
+        return AuthorCardResult(strippedContent, name, photo, uid)
     }
 
     private fun httpGet(urlStr: String): String {
