@@ -985,6 +985,7 @@ fun MessageDetailScreen(
                                             replyToId   = replyTo?.id ?: "",
                                             replyToText = replyTo?.text ?: "",
                                             replyToName = replyTo?.let { senderLabel(it.senderId, vm.uid, otherUser?.displayName ?: "", ku) } ?: "",
+                                            mentions    = mentionedUids,
                                         )
                                         presenceVm.setTyping(convId, false)
                                         replyTo = null
