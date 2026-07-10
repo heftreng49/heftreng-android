@@ -321,6 +321,9 @@ class YazarViewModel @Inject constructor(
     val backfillRunning = _backfillRunning.asStateFlow()
     private val _backfillResult = MutableStateFlow("")
     val backfillResult = _backfillResult.asStateFlow()
+
+    // Onayla — Cloud Function üzerinden Refresh Token ile Blogger'a yayınlar
+    fun approvePost(postId: String, note: String = "") {
         if (!canModerate) {
             _submitResult.value = SubmitResult.Error("Bu işlem için yetkin yok")
             return
