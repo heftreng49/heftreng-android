@@ -134,13 +134,18 @@ class ReadingListViewModel @Inject constructor(
                 if (status == null) {
                     library.deleteReadingStatus(uid, bookId)
                 } else {
+                    // Sorun 3 düzeltmesi: coverImg çağıran tarafından boş gelebilir
+                    // (kitap henüz yüklenmemişse). Bu durumda Supabase'den taze değeri çek.
+                    val resolvedCoverImg = coverImg.ifBlank {
+                        try { library.getBook(bookId)?.coverImg ?: "" } catch (_: Exception) { "" }
+                    }
                     library.upsertReadingStatus(
                         ReadingStatusRow(
                             uid        = uid,
                             bookId     = bookId,
                             status     = status.key,
                             title      = title,
-                            coverImg   = coverImg,
+                            coverImg   = resolvedCoverImg,
                             bg         = "",
                             authorName = authorName,
                             source     = "library",
