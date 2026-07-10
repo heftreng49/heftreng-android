@@ -403,6 +403,20 @@ class LibraryViewModel @Inject constructor(
                     library.ensureAuthorAndBook(book.authorName, book.title)
                 else Pair(book.authorId, book.id)
 
+                // Kapak fotoğrafı: book.coverImg doluysa direkt kullan.
+                // Boşsa (book nesnesi oluşturulurken henüz yüklenmemişse)
+                // Supabase'den bir kez çek — addQuoteToLibrary da aynısını
+                // yapıyor ama Firestore tarafı için burada ayrıca gerekiyor.
+                // Sorun 1 düzeltmesi: daha önce feed'e coverImg hiç yazılmıyordu,
+                // enrichMissingCovers bunu sonradan kitap adıyla aratarak
+                // güvenilmez biçimde tamamlamaya çalışıyordu.
+                val resolvedCoverImg = book.coverImg.ifBlank {
+                    if (resolvedBookId.isNotBlank())
+                        try { library.getBook(resolvedBookId)?.coverImg ?: "" }
+                        catch (_: Exception) { "" }
+                    else ""
+                }
+
                 // Feed'e yaz (Firestore — sosyal akış)
                 val feedRef = firestore.collection("feed").add(
                     hashMapOf(
@@ -417,6 +431,7 @@ class LibraryViewModel @Inject constructor(
                         "quoteText"       to quoteText,
                         "bookName"        to book.title,
                         "authorName"      to book.authorName,
+                        "coverImg"        to resolvedCoverImg,
                         "libraryBookId"   to resolvedBookId,
                         "libraryAuthorId" to resolvedAuthorId,
                         "type"            to "library_quote",
