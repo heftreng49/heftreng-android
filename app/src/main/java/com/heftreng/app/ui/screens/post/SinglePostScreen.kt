@@ -360,6 +360,7 @@ fun SinglePostScreen(
                                 onLongPress = { menuTarget = cmt },
                                 onMentionClick = { uid -> navController.navigate("profile/$uid") },
                                 onHashtagClick = { taggedPostId -> navController.navigate(Screen.PostDetail.go(taggedPostId)) },
+                                onUserClick    = { uid -> navController.navigate("profile/$uid") },
                             )
 
                             // "N yanıtı gör" tıklacı — girintili, üst yorumun altında
@@ -430,6 +431,7 @@ fun SinglePostScreen(
                                             onLongPress = { menuTarget = reply },
                                             onMentionClick = { uid -> navController.navigate("profile/$uid") },
                                             onHashtagClick = { taggedPostId -> navController.navigate(Screen.PostDetail.go(taggedPostId)) },
+                                            onUserClick    = { uid -> navController.navigate("profile/$uid") },
                                         )
                                     }
                                 }
@@ -700,6 +702,7 @@ private fun SingleCommentRow(
     onLongPress    : () -> Unit,
     onMentionClick : (uid: String) -> Unit,
     onHashtagClick : (postId: String) -> Unit = {},
+    onUserClick    : (uid: String) -> Unit = {},
 ) {
     val ku = language == "ku"
     Row(
@@ -710,7 +713,11 @@ private fun SingleCommentRow(
         verticalAlignment = Alignment.Top,
     ) {
         Box(
-            modifier         = Modifier.size(36.dp).clip(CircleShape).background(SurfaceVar),
+            modifier         = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(SurfaceVar)
+                .clickable(enabled = cmt.uid.isNotBlank()) { onUserClick(cmt.uid) },
             contentAlignment = Alignment.Center,
         ) {
             if (cmt.photoURL.isNotBlank()) {
@@ -731,7 +738,13 @@ private fun SingleCommentRow(
         }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
-            Text(cmt.displayName, color = OnBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            Text(
+                cmt.displayName,
+                color      = OnBackground,
+                fontWeight = FontWeight.SemiBold,
+                fontSize   = 13.sp,
+                modifier   = Modifier.clickable(enabled = cmt.uid.isNotBlank()) { onUserClick(cmt.uid) },
+            )
 
             // Reply göstergesi
             if (cmt.replyTo != null && cmt.replyTo.displayName.isNotBlank()) {
