@@ -491,17 +491,39 @@ class FeedViewModel @Inject constructor(
 
             if (coverMap.isEmpty()) return@launch
 
-            _posts.value = _posts.value.map { post ->
+            // in-memory güncelleme
+            val updatedPosts = _posts.value.map { post ->
                 if (post.coverImg.isBlank() && post.bookName.isNotBlank()) {
                     val url = coverMap[post.bookName] ?: return@map post
                     post.copy(coverImg = url)
                 } else post
             }
-            _libraryQuotes.value = _libraryQuotes.value.map { post ->
+            _posts.value = updatedPosts
+
+            val updatedQuotes = _libraryQuotes.value.map { post ->
                 if (post.coverImg.isBlank() && post.bookName.isNotBlank()) {
                     val url = coverMap[post.bookName] ?: return@map post
                     post.copy(coverImg = url)
                 } else post
+            }
+            _libraryQuotes.value = updatedQuotes
+
+            // Sorun 4 düzeltmesi: Firestore'daki coverImg alanını da güncelle.
+            // Böylece sonraki açılışlarda aynı Supabase sorgusu tekrar atılmaz.
+            val postsToWrite = (updatedPosts + updatedQuotes)
+                .filter { it.coverImg.isNotBlank() && it.id.isNotBlank() }
+                .distinctBy { it.id }
+            if (postsToWrite.isNotEmpty()) {
+                try {
+                    val batch = firestore.batch()
+                    postsToWrite.forEach { post ->
+                        batch.update(
+                            firestore.collection("feed").document(post.id),
+                            "coverImg", post.coverImg
+                        )
+                    }
+                    batch.commit().await()
+                } catch (_: Exception) {}
             }
         }
     }
