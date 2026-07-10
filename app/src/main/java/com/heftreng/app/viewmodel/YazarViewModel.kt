@@ -199,6 +199,66 @@ class YazarViewModel @Inject constructor(
         }
     }
 
+    // ── Kendi yazısını güncelle (pending veya rejected iken) ─────────────────
+    private val _updateResult = MutableStateFlow<SubmitResult?>(null)
+    val updateResult = _updateResult.asStateFlow()
+
+    fun updateMyPost(
+        postId  : String,
+        title   : String,
+        content : String,
+        summary : String,
+        cover   : String,
+        category: String,
+        lang    : String,
+        tags    : List<String>,
+    ) {
+        if (uid.isEmpty()) { _updateResult.value = SubmitResult.Error("Giriş yapman gerekiyor"); return }
+        if (title.isBlank()) { _updateResult.value = SubmitResult.Error("Başlık zorunlu"); return }
+        if (content.length < 100) { _updateResult.value = SubmitResult.Error("İçerik en az 100 karakter olmalı"); return }
+        if (category.isBlank()) { _updateResult.value = SubmitResult.Error("Kategori seçmelisin"); return }
+
+        viewModelScope.launch {
+            _loading.value = true
+            try {
+                val docRef = firestore.collection("pendingPosts").document(postId)
+                val docSnap = docRef.get().await()
+                // Güvenlik: yalnızca kendi yazısını güncelleyebilir
+                if (docSnap.getString("authorId") != uid) {
+                    _updateResult.value = SubmitResult.Error("Bu yazıyı düzenleme yetkin yok")
+                    return@launch
+                }
+                // Onaylanmış (approved) yazı düzenlenemez
+                if (docSnap.getString("status") == "approved") {
+                    _updateResult.value = SubmitResult.Error("Onaylanan yazılar düzenlenemez")
+                    return@launch
+                }
+                docRef.update(
+                    mapOf(
+                        "title"     to title.trim(),
+                        "content"   to content.trim(),
+                        "summary"   to summary.ifBlank { title.take(120) },
+                        "cover"     to cover.trim(),
+                        "category"  to category.trim(),
+                        "lang"      to lang,
+                        "tags"      to tags,
+                        "status"    to "pending", // düzenleme sonrası tekrar incelemeye gönder
+                        "adminNote" to "",
+                        "updatedAt" to FieldValue.serverTimestamp(),
+                    )
+                ).await()
+                _updateResult.value = SubmitResult.Success
+                loadMyPosts()
+            } catch (e: Exception) {
+                _updateResult.value = SubmitResult.Error(e.message ?: "Güncelleme hatası")
+            } finally {
+                _loading.value = false
+            }
+        }
+    }
+
+    fun clearUpdateResult() { _updateResult.value = null }
+
     // ── Yazıyı geri çek (pending iken) ───────────────────────────────────────
     fun withdrawPost(postId: String) {
         if (uid.isEmpty()) return
@@ -321,6 +381,60 @@ class YazarViewModel @Inject constructor(
     val backfillRunning = _backfillRunning.asStateFlow()
     private val _backfillResult = MutableStateFlow("")
     val backfillResult = _backfillResult.asStateFlow()
+
+    // ── Admin: Yazı içeriğini düzenle (tüm statüslerde) ─────────────────────
+    private val _adminEditResult = MutableStateFlow<SubmitResult?>(null)
+    val adminEditResult = _adminEditResult.asStateFlow()
+
+    fun adminEditPost(
+        postId  : String,
+        title   : String,
+        content : String,
+        summary : String,
+        cover   : String,
+        category: String,
+        tags    : List<String>,
+    ) {
+        if (!canModerate) {
+            _adminEditResult.value = SubmitResult.Error("Bu işlem için yetkin yok")
+            return
+        }
+        if (title.isBlank() || content.length < 10) {
+            _adminEditResult.value = SubmitResult.Error("Başlık ve içerik zorunlu")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                firestore.collection("pendingPosts").document(postId).update(
+                    mapOf(
+                        "title"     to title.trim(),
+                        "content"   to content.trim(),
+                        "summary"   to summary.ifBlank { title.take(120) },
+                        "cover"     to cover.trim(),
+                        "category"  to category.trim(),
+                        "tags"      to tags,
+                        "updatedAt" to FieldValue.serverTimestamp(),
+                    )
+                ).await()
+                // Lokal listeyi güncelle
+                _pendingPosts.value = _pendingPosts.value.map { p ->
+                    if (p.id == postId) p.copy(
+                        title    = title.trim(),
+                        content  = content.trim(),
+                        summary  = summary.ifBlank { title.take(120) },
+                        cover    = cover.trim(),
+                        category = category.trim(),
+                        tags     = tags,
+                    ) else p
+                }
+                _adminEditResult.value = SubmitResult.Success
+            } catch (e: Exception) {
+                _adminEditResult.value = SubmitResult.Error(e.message ?: "Güncelleme hatası")
+            }
+        }
+    }
+
+    fun clearAdminEditResult() { _adminEditResult.value = null }
 
     // Onayla — Cloud Function üzerinden Refresh Token ile Blogger'a yayınlar
     fun approvePost(postId: String, note: String = "") {

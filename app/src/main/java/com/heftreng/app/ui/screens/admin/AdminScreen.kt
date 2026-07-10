@@ -44,6 +44,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.heightIn
+import kotlinx.coroutines.CoroutineScope
+import androidx.compose.runtime.rememberCoroutineScope
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1935,11 +1939,41 @@ private fun PendingPostsTab(
     loading : Boolean,
     vm      : YazarViewModel,
 ) {
-    var filter      by remember { mutableStateOf("all") }
-    var expandedId  by remember { mutableStateOf<String?>(null) }
-    var noteInput   by remember { mutableStateOf("") }
+    var filter       by remember { mutableStateOf("all") }
+    var expandedId   by remember { mutableStateOf<String?>(null) }
+    var noteInput    by remember { mutableStateOf("") }
     var actionPostId by remember { mutableStateOf<String?>(null) }
     var actionType   by remember { mutableStateOf("") } // "approve" | "reject"
+    var editingPost  by remember { mutableStateOf<PendingPost?>(null) }
+
+    val adminEditResult by vm.adminEditResult.collectAsState()
+    val snackState      = remember { SnackbarHostState() }
+    val scope           = rememberCoroutineScope()
+
+    LaunchedEffect(adminEditResult) {
+        adminEditResult?.let { result ->
+            when (result) {
+                is YazarViewModel.SubmitResult.Success ->
+                    scope.launch { snackState.showSnackbar("✓ Yazı güncellendi") }
+                is YazarViewModel.SubmitResult.Error ->
+                    scope.launch { snackState.showSnackbar("✗ ${result.message}") }
+            }
+            vm.clearAdminEditResult()
+            editingPost = null
+        }
+    }
+
+    // Admin düzenleme diyaloğu
+    editingPost?.let { post ->
+        AdminEditPostDialog(
+            post      = post,
+            loading   = loading,
+            onDismiss = { editingPost = null },
+            onConfirm = { title, content, summary, cover, category, tags ->
+                vm.adminEditPost(post.id, title, content, summary, cover, category, tags)
+            },
+        )
+    }
 
     val filtered = when (filter) {
         "pending"  -> posts.filter { it.status == "pending" }
@@ -2179,11 +2213,185 @@ private fun PendingPostsTab(
                             Text("Tekrar Bekleyene Al", color = Muted, fontSize = 12.sp)
                         }
                     }
+                    // Düzenle butonu — her statüde mevcut
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedButton(
+                        onClick  = { editingPost = post; expandedId = null },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape    = RoundedCornerShape(8.dp),
+                        border   = androidx.compose.foundation.BorderStroke(1.dp, Amber),
+                    ) {
+                        Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("İçeriği Düzenle", color = Amber, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
     }
 }
+
+// ── Admin: Yazı Düzenleme Diyaloğu ────────────────────────────────────────────
+@Composable
+private fun AdminEditPostDialog(
+    post     : PendingPost,
+    loading  : Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (title: String, content: String, summary: String, cover: String, category: String, tags: List<String>) -> Unit,
+) {
+    var title    by remember(post.id) { mutableStateOf(post.title) }
+    var content  by remember(post.id) { mutableStateOf(post.content) }
+    var summary  by remember(post.id) { mutableStateOf(post.summary) }
+    var cover    by remember(post.id) { mutableStateOf(post.cover) }
+    var category by remember(post.id) { mutableStateOf(post.category) }
+    var tags     by remember(post.id) { mutableStateOf(post.tags) }
+    var tagInput by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("İçeriği Düzenle", fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 16.sp)
+            }
+        },
+        text = {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                item {
+                    OutlinedTextField(
+                        value         = title,
+                        onValueChange = { if (it.length <= 150) title = it },
+                        label         = { Text("Başlık *", fontSize = 12.sp) },
+                        modifier      = Modifier.fillMaxWidth(),
+                        shape         = RoundedCornerShape(10.dp),
+                        singleLine    = true,
+                        colors        = adminEditFieldColors(),
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value         = content,
+                        onValueChange = { content = it },
+                        label         = { Text("İçerik * (HTML)", fontSize = 12.sp) },
+                        modifier      = Modifier.fillMaxWidth().heightIn(min = 140.dp),
+                        shape         = RoundedCornerShape(10.dp),
+                        minLines      = 5,
+                        colors        = adminEditFieldColors(),
+                    )
+                    Text("${content.length} karakter",
+                        color    = if (content.length < 10) Error else Muted,
+                        fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp))
+                }
+                item {
+                    OutlinedTextField(
+                        value         = summary,
+                        onValueChange = { if (it.length <= 280) summary = it },
+                        label         = { Text("Özet", fontSize = 12.sp) },
+                        modifier      = Modifier.fillMaxWidth(),
+                        shape         = RoundedCornerShape(10.dp),
+                        minLines      = 2,
+                        colors        = adminEditFieldColors(),
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value         = cover,
+                        onValueChange = { cover = it },
+                        label         = { Text("Kapak Görseli URL", fontSize = 12.sp) },
+                        modifier      = Modifier.fillMaxWidth(),
+                        shape         = RoundedCornerShape(10.dp),
+                        singleLine    = true,
+                        colors        = adminEditFieldColors(),
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value         = category,
+                        onValueChange = { category = it },
+                        label         = { Text("Kategori *", fontSize = 12.sp) },
+                        modifier      = Modifier.fillMaxWidth(),
+                        shape         = RoundedCornerShape(10.dp),
+                        singleLine    = true,
+                        colors        = adminEditFieldColors(),
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value         = tagInput,
+                        onValueChange = { tagInput = it },
+                        label         = { Text("Etiket ekle", fontSize = 12.sp) },
+                        modifier      = Modifier.fillMaxWidth(),
+                        shape         = RoundedCornerShape(10.dp),
+                        singleLine    = true,
+                        colors        = adminEditFieldColors(),
+                        trailingIcon  = {
+                            if (tagInput.isNotBlank() && tags.size < 8) {
+                                IconButton(onClick = {
+                                    val v = tagInput.trim()
+                                    if (v.isNotBlank() && !tags.contains(v)) tags = tags + v
+                                    tagInput = ""
+                                }) { Icon(Icons.Default.Add, null, tint = Amber) }
+                            }
+                        },
+                    )
+                    if (tags.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            tags.forEach { tag ->
+                                Surface(shape = RoundedCornerShape(99.dp), color = Amber.copy(alpha = 0.12f)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(start = 7.dp, end = 4.dp, top = 3.dp, bottom = 3.dp),
+                                    ) {
+                                        Text("#$tag", color = Amber, fontSize = 11.sp)
+                                        Spacer(Modifier.width(4.dp))
+                                        Icon(Icons.Default.Close, null, tint = Muted,
+                                            modifier = Modifier.size(12.dp).clickable { tags = tags - tag })
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick  = { onConfirm(title, content, summary, cover, category, tags) },
+                enabled  = !loading && title.isNotBlank() && content.length >= 10 && category.isNotBlank(),
+                colors   = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                shape    = RoundedCornerShape(8.dp),
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text("Kaydet", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("İptal", color = Muted) }
+        },
+    )
+}
+
+@Composable
+private fun adminEditFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor      = Amber,
+    unfocusedBorderColor    = Divider,
+    focusedTextColor        = OnBackground,
+    unfocusedTextColor      = OnBackground,
+    unfocusedContainerColor = SurfaceVar,
+    focusedContainerColor   = SurfaceVar,
+    focusedLabelColor       = Amber,
+    unfocusedLabelColor     = Muted,
+    cursorColor             = Amber,
+)
 
 @Composable
 private fun AdminLibraryTab(libraryVm: LibraryViewModel) {
