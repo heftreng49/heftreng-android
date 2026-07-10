@@ -1608,13 +1608,12 @@ exports.backfillAuthorCards = onCall(
         const bloggerPost = await getRes.json();
         const currentContent = bloggerPost.content || "";
 
-        if (currentContent.includes("hf-author-card")) {
-          results.skipped.push({ id: doc.id, bloggerPostId, reason: "kart zaten var" });
-          continue;
-        }
-
-        const authorCardHtml = _buildAuthorCardHtml(post);
-        const newContent = authorCardHtml + currentContent;
+        // Eski kart (data-uid olmayan) da dahil tüm hf-author-card bloklarını
+        // temizleyip yeni data-uid'li kartı başa ekle — idempotent:
+        // yeni kart zaten data-uid içeriyorsa da üzerine yazar, sorun yok.
+        const strippedContent = stripAuthorCard(currentContent);
+        const authorCardHtml  = _buildAuthorCardHtml(post);
+        const newContent      = authorCardHtml + strippedContent;
 
         const patchRes = await fetch(
           `https://www.googleapis.com/blogger/v3/blogs/${BLOGGER_BLOG_ID}/posts/${bloggerPostId}`,
@@ -1648,6 +1647,30 @@ exports.backfillAuthorCards = onCall(
 );
 
 // ─── Yardımcı: HTML karakterleri kaçır ───────────────────────────────────────
+
+/** hf-author-card div bloğunu HTML içeriğinden temizler.
+ *  İç içe <div> sayacıyla gerçek kapanışı bulur (regex'in erken bitmesini önler).
+ *  Kart yoksa orijinal içeriği döner. backfillAuthorCards tarafından kullanılır. */
+function stripAuthorCard(html) {
+  const startMatch = html.match(/<div[^>]*class=["']hf-author-card["'][^>]*>/i);
+  if (!startMatch) return html;
+
+  const blockStart = html.indexOf(startMatch[0]);
+  const innerStart = blockStart + startMatch[0].length;
+
+  let depth = 1, i = innerStart;
+  while (i < html.length && depth > 0) {
+    const nextOpen  = html.indexOf("<div",  i);
+    const nextClose = html.indexOf("</div>", i);
+    if (nextClose === -1) break;
+    if (nextOpen !== -1 && nextOpen < nextClose) {
+      depth++; i = nextOpen + 4;
+    } else {
+      depth--; i = nextClose + 6;
+    }
+  }
+  return (html.substring(0, blockStart) + html.substring(i)).trimStart();
+}
 function _escapeHtml(str) {
   return String(str || "")
     .replace(/&/g, "&amp;")
