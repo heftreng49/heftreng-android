@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FormatQuote
@@ -78,9 +79,8 @@ fun QuoteCard(
             )
             .padding(14.dp),
     ) {
-        // Büyük alıntı ikonu — arka plan süsü
         Text(
-            "“",
+            "\u201c",
             fontSize = 56.sp,
             color    = Amber.copy(alpha = 0.12f),
             fontWeight = FontWeight.Black,
@@ -101,8 +101,6 @@ fun QuoteCard(
                     verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    // Kapak resmi avatarı — varsa göster, yoksa AutoStories ikonu
-                    // Kitap adına tıklamayla aynı davranış: kitap sayfasına git
                     Box(
                         modifier = Modifier
                             .width(28.dp)
@@ -175,7 +173,7 @@ fun QuoteButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-// ── Alıntı oluşturma dialog — autocomplete destekli ──────────────────────────
+// ── Tam ekran alıntı oluşturma ekranı ────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuoteDialog(
@@ -191,29 +189,22 @@ fun QuoteDialog(
     var author   by remember { mutableStateOf(initialAuthor) }
     var coverImg by remember { mutableStateOf("") }
 
-    // Firestore'dan önceki alıntı kitap+yazar geçmişi
     val db  = remember { FirebaseFirestore.getInstance() }
     val uid = remember { FirebaseAuth.getInstance().currentUser?.uid ?: "" }
 
-    var bookSuggestions     by remember { mutableStateOf<List<QuoteSuggestion>>(emptyList()) }
-    var authorSuggestions   by remember { mutableStateOf<List<QuoteSuggestion>>(emptyList()) }
-    var showBookDrop        by remember { mutableStateOf(false) }
-    var showAuthorDrop      by remember { mutableStateOf(false) }
+    var bookSuggestions   by remember { mutableStateOf<List<QuoteSuggestion>>(emptyList()) }
+    var authorSuggestions by remember { mutableStateOf<List<QuoteSuggestion>>(emptyList()) }
+    var showBookDrop      by remember { mutableStateOf(false) }
+    var showAuthorDrop    by remember { mutableStateOf(false) }
 
-    // Feed'deki tüm alıntıları çek — eski nested ve yeni flat format her ikisi desteklenir
     LaunchedEffect(Unit) {
         try {
-            // 1. Yeni format: type == "library_quote", quoteText dolu, bookName/authorName flat
             val newSnap = db.collection("feed")
                 .whereEqualTo("type", "library_quote")
                 .limit(50).get().await()
-
-            // 2. Eski format: type == "quote" veya nested quote map var
             val oldSnap = db.collection("feed")
                 .whereEqualTo("type", "quote")
                 .limit(50).get().await()
-
-            // 3. library_books/{id}/quotes collectionGroup — en zengin kaynak
             val cgSnap = try {
                 db.collectionGroup("quotes").limit(50).get().await()
             } catch (_: Exception) { null }
@@ -242,29 +233,25 @@ fun QuoteDialog(
                 }
             }
 
-            // Yeni flat format
             newSnap.documents.forEach { doc ->
-                val bName = doc.getString("bookName")?.trim() ?: ""
-                val aName = doc.getString("authorName")?.trim() ?: ""
-                processEntry(bName, aName)
+                processEntry(
+                    doc.getString("bookName")?.trim() ?: "",
+                    doc.getString("authorName")?.trim() ?: "",
+                )
             }
-
-            // Eski nested format
             oldSnap.documents.forEach { doc ->
                 val qObj  = doc.get("quote") as? Map<*, *>
-                val bName = (qObj?.get("book")   as? String)?.trim()
-                    ?: doc.getString("bookName")?.trim() ?: ""
-                val aName = (qObj?.get("author") as? String)?.trim()
-                    ?: doc.getString("authorName")?.trim() ?: ""
-                processEntry(bName, aName)
+                processEntry(
+                    (qObj?.get("book") as? String)?.trim() ?: doc.getString("bookName")?.trim() ?: "",
+                    (qObj?.get("author") as? String)?.trim() ?: doc.getString("authorName")?.trim() ?: "",
+                )
             }
-
-            // CollectionGroup (library_books alıntıları)
             cgSnap?.documents?.forEach { doc ->
-                val bName = (doc.getString("bookTitle") ?: doc.getString("bookName") ?: "").trim()
-                val aName = (doc.getString("authorName") ?: "").trim()
-                val cover = (doc.getString("coverImg") ?: doc.getString("cover_img") ?: "").trim()
-                processEntry(bName, aName, cover)
+                processEntry(
+                    (doc.getString("bookTitle") ?: doc.getString("bookName") ?: "").trim(),
+                    (doc.getString("authorName") ?: "").trim(),
+                    (doc.getString("coverImg") ?: doc.getString("cover_img") ?: "").trim(),
+                )
             }
 
             bookSuggestions   = bookMap.values.sortedByDescending { it.count }
@@ -272,55 +259,90 @@ fun QuoteDialog(
         } catch (_: Exception) {}
     }
 
-    // Kitap yazınca — kitap + yazarı getir
     LaunchedEffect(book) {
         if (book.isBlank()) { showBookDrop = false; return@LaunchedEffect }
-        val match = bookSuggestions.filter {
-            it.bookName.contains(book, ignoreCase = true)
-        }
-        showBookDrop = match.isNotEmpty()
+        showBookDrop = bookSuggestions.any { it.bookName.contains(book, ignoreCase = true) }
     }
 
-    // Kitap adı sabitlenince ve kapak boşsa Supabase'den kapağı çek
     LaunchedEffect(book, coverImg) {
         if (book.isBlank() || coverImg.isNotBlank() || onLookupCover == null) return@LaunchedEffect
-        if (showBookDrop) return@LaunchedEffect  // Kullanıcı hâlâ yazıyor
+        if (showBookDrop) return@LaunchedEffect
         val fetched = onLookupCover(book)
         if (fetched.isNotBlank()) coverImg = fetched
     }
 
-    // Yazar yazınca — yazar + kitabı getir
     LaunchedEffect(author) {
         if (author.isBlank()) { showAuthorDrop = false; return@LaunchedEffect }
-        val match = authorSuggestions.filter {
-            it.authorName.contains(author, ignoreCase = true)
-        }
-        showAuthorDrop = match.isNotEmpty()
+        showAuthorDrop = authorSuggestions.any { it.authorName.contains(author, ignoreCase = true) }
     }
 
-    AlertDialog(
+    val canConfirm = text.isNotBlank() || book.isNotBlank()
+
+    androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
-        containerColor   = HeftSurface,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.FormatQuote, null, tint = Primary, modifier = Modifier.size(22.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Alıntı Ekle", color = OnBackground, fontWeight = FontWeight.Bold)
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                // Alıntı metni
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows  = false,
+        ),
+    ) {
+    Scaffold(
+        containerColor = Background,
+        topBar = {
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
+                    }
+                },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.FormatQuote, null, tint = Primary, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Alıntı Ekle", color = OnBackground, fontWeight = FontWeight.Bold)
+                    }
+                },
+                actions = {
+                    TextButton(
+                        onClick  = {
+                            if (canConfirm) onConfirm(QuotePayload(text = text, bookName = book, authorName = author, coverImg = coverImg))
+                        },
+                        enabled  = canConfirm,
+                    ) {
+                        Text(
+                            "Paylaş",
+                            color      = if (canConfirm) Primary else Muted,
+                            fontWeight = FontWeight.Bold,
+                            fontSize   = 15.sp,
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier       = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp),
+        ) {
+
+            // ── Alıntı metni ──────────────────────────────────────────────
+            item {
                 OutlinedTextField(
                     value         = text,
                     onValueChange = { text = it },
                     label         = { Text("ALINTI METNİ *") },
-                    minLines      = 3,
+                    minLines      = 5,
                     modifier      = Modifier.fillMaxWidth(),
                     colors        = quoteTextFieldColors(),
                 )
+            }
 
-                // Kitap adı + autocomplete dropdown
+            // ── Kitap adı + autocomplete ───────────────────────────────────
+            item {
                 Box {
                     OutlinedTextField(
                         value         = book,
@@ -329,28 +351,28 @@ fun QuoteDialog(
                             showBookDrop = it.isNotBlank() &&
                                 bookSuggestions.any { s -> s.bookName.contains(it, ignoreCase = true) }
                         },
-                        label         = { Text("KİTAP ADI") },
-                        singleLine    = true,
-                        modifier      = Modifier.fillMaxWidth(),
-                        colors        = quoteTextFieldColors(),
-                        leadingIcon   = {
+                        label      = { Text("KİTAP ADI") },
+                        singleLine = true,
+                        modifier   = Modifier.fillMaxWidth(),
+                        colors     = quoteTextFieldColors(),
+                        leadingIcon = {
                             Icon(Icons.Default.AutoStories, null, tint = Muted, modifier = Modifier.size(18.dp))
                         },
-                        trailingIcon  = if (book.isNotBlank()) {{
+                        trailingIcon = if (book.isNotBlank()) {{
                             IconButton(onClick = { book = ""; showBookDrop = false }) {
                                 Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
                             }
                         }} else null,
                     )
-                    // Kitap öneri dropdown
                     if (showBookDrop) {
                         Surface(
-                            shape  = RoundedCornerShape(10.dp),
-                            color  = HeftSurface,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Divider),
+                            modifier       = Modifier.fillMaxWidth(),
+                            shape          = RoundedCornerShape(10.dp),
+                            color          = HeftSurface,
+                            border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
                             tonalElevation = 4.dp,
                         ) {
-                            LazyColumn(modifier = Modifier.heightIn(max = 160.dp)) {
+                            LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
                                 val filtered = bookSuggestions.filter {
                                     it.bookName.contains(book, ignoreCase = true)
                                 }
@@ -359,7 +381,7 @@ fun QuoteDialog(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clickable {
-                                                book     = s.bookName
+                                                book           = s.bookName
                                                 if (s.authorName.isNotBlank()) author = s.authorName
                                                 coverImg       = s.coverImg
                                                 showBookDrop   = false
@@ -384,8 +406,10 @@ fun QuoteDialog(
                         }
                     }
                 }
+            }
 
-                // Yazar + autocomplete
+            // ── Yazar + autocomplete ───────────────────────────────────────
+            item {
                 Box {
                     OutlinedTextField(
                         value         = author,
@@ -394,39 +418,38 @@ fun QuoteDialog(
                             showAuthorDrop = it.isNotBlank() &&
                                 authorSuggestions.any { s -> s.authorName.contains(it, ignoreCase = true) }
                         },
-                        label         = { Text("YAZAR") },
-                        singleLine    = true,
-                        modifier      = Modifier.fillMaxWidth(),
-                        colors        = quoteTextFieldColors(),
-                        leadingIcon   = {
+                        label      = { Text("YAZAR") },
+                        singleLine = true,
+                        modifier   = Modifier.fillMaxWidth(),
+                        colors     = quoteTextFieldColors(),
+                        leadingIcon = {
                             Icon(Icons.Default.Person, null, tint = Muted, modifier = Modifier.size(18.dp))
                         },
-                        trailingIcon  = if (author.isNotBlank()) {{
+                        trailingIcon = if (author.isNotBlank()) {{
                             IconButton(onClick = { author = ""; showAuthorDrop = false }) {
                                 Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
                             }
                         }} else null,
                     )
-                    // Yazar öneri dropdown — yazar adı + kitap adı + alıntı sayısı
                     if (showAuthorDrop) {
                         val filtered = authorSuggestions.filter {
                             it.authorName.contains(author, ignoreCase = true)
                         }.take(8)
                         if (filtered.isNotEmpty()) {
                             Surface(
+                                modifier       = Modifier.fillMaxWidth(),
                                 shape          = RoundedCornerShape(10.dp),
                                 color          = HeftSurface,
                                 border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
                                 tonalElevation = 4.dp,
                             ) {
-                                LazyColumn(modifier = Modifier.heightIn(max = 160.dp)) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
                                     items(filtered) { s ->
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .clickable {
-                                                    author         = s.authorName
-                                                    // Kitap boşsa yazara ait kitabı da doldur
+                                                    author = s.authorName
                                                     if (book.isBlank() && s.bookName.isNotBlank())
                                                         book = s.bookName
                                                     showAuthorDrop = false
@@ -451,14 +474,15 @@ fun QuoteDialog(
                         }
                     }
                 }
+            }
 
-                // Önizleme
-                if (text.isNotBlank() || book.isNotBlank() || author.isNotBlank()) {
-                    Spacer(Modifier.height(4.dp))
+            // ── Önizleme ──────────────────────────────────────────────────
+            if (text.isNotBlank() || book.isNotBlank() || author.isNotBlank()) {
+                item {
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     Spacer(Modifier.height(4.dp))
                     Text("Önizleme", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(8.dp))
                     QuoteCard(
                         quoteText  = text.ifBlank { "…" },
                         bookName   = book,
@@ -466,21 +490,9 @@ fun QuoteDialog(
                     )
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    if (text.isNotBlank() || book.isNotBlank()) {
-                        onConfirm(QuotePayload(text = text, bookName = book, authorName = author, coverImg = coverImg))
-                    }
-                },
-                enabled = text.isNotBlank() || book.isNotBlank(),
-            ) { Text("Ekle", color = Primary, fontWeight = FontWeight.Bold) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("İptal", color = Muted) }
-        },
-    )
+        }
+    }
+    } // Dialog
 }
 
 @Composable
