@@ -1779,30 +1779,23 @@ class FeedViewModel @Inject constructor(
      * feed_likes tablosundan _libraryQuotes için gerçek beğeni sayısını ve
      * kullanıcının beğenip beğenmediğini çekip state'e yansıtır.
      * book_quotes.likes_count artık güncellenmediğinden bu tek doğru kaynaktır.
+     *
+     * İki sorgu: tüm satırlar (sayım için) + kullanıcının beğendikleri.
+     * groupBy Supabase Kotlin client'ta desteklenmediğinden client-side sayım yapılır.
      */
     private suspend fun syncLibraryQuoteLikeStates(quotes: List<Post>) {
         val currentUid = auth.currentUser?.uid ?: return
         val postIds = quotes.map { it.id }.filter { it.isNotBlank() }
         if (postIds.isEmpty()) return
         try {
-            // Kullanıcının beğendikleri
-            val likedByMe = supabase.postgrest["feed_likes"]
-                .select { filter { eq("uid", currentUid); isIn("post_id", postIds) } }
+            // Tüm beğenileri çek — hem sayım hem de isLikedByMe için
+            val allLikes = supabase.postgrest["feed_likes"]
+                .select { filter { isIn("post_id", postIds) } }
                 .decodeList<FeedLikeRow>()
-                .map { it.postId }.toSet()
 
-            // Her post için toplam beğeni sayısı
-            data class CountRow(
-                @kotlinx.serialization.SerialName("post_id") val postId: String = "",
-                val count: Int = 0,
-            )
-            val countRows = supabase.postgrest["feed_likes"]
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("post_id, count:post_id.count()")) {
-                    filter { isIn("post_id", postIds) }
-                    groupBy("post_id")
-                }
-                .decodeList<CountRow>()
-            val countMap = countRows.associate { it.postId to it.count }
+            // Client-side gruplama
+            val countMap   = allLikes.groupingBy { it.postId }.eachCount()
+            val likedByMe  = allLikes.filter { it.uid == currentUid }.map { it.postId }.toSet()
 
             // State'i güncelle
             _libraryQuotes.value = _libraryQuotes.value.map { post ->
