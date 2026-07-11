@@ -155,20 +155,6 @@ fun RichTextEditor(
     val stripped = remember(value) { htmlStrip(value) }
     var tfv by remember { mutableStateOf(TextFieldValue(text = stripped)) }
 
-    // Dışarıdan farklı bir metin gelirse (örn. düzenle butonuna basıldı) sync et
-    LaunchedEffect(stripped) {
-        if (tfv.text != stripped) {
-            tfv      = TextFieldValue(text = stripped)
-            spans    = emptyList()          // önceki span listesini temizle
-            boldOn   = false                // format bayraklarını sıfırla
-            italicOn = false
-            underOn  = false
-            strikeOn = false
-            fontSize  = null
-            textColor = null
-        }
-    }
-
     var spans     by remember { mutableStateOf(listOf<RichSpan>()) }
     var isFocused by remember { mutableStateOf(false) }
 
@@ -181,6 +167,20 @@ fun RichTextEditor(
     var textColor by remember { mutableStateOf<Color?>(null) }
     var showSize  by remember { mutableStateOf(false) }
     var showColor by remember { mutableStateOf(false) }
+
+    // Dışarıdan farklı bir metin gelirse (örn. düzenle butonuna basıldı) sync et
+    LaunchedEffect(stripped) {
+        if (tfv.text != stripped) {
+            tfv      = TextFieldValue(text = stripped)
+            spans    = emptyList()
+            boldOn   = false
+            italicOn = false
+            underOn  = false
+            strikeOn = false
+            fontSize  = null
+            textColor = null
+        }
+    }
 
     // Tema renkleri
     val surface    = HeftSurface
