@@ -261,7 +261,19 @@ fun FeedScreen(
             initialBook   = inlineQuote?.bookName ?: "",
             initialAuthor = inlineQuote?.authorName ?: "",
             onDismiss     = { showInlineQuote = false },
-            onConfirm     = { p -> inlineQuote = p; showInlineQuote = false },
+            onConfirm     = { p ->
+                // Compose kutusuna set etmek yerine direkt paylaş —
+                // kullanıcı ayrıca Paylaş butonuna basmak zorunda kalmasın.
+                vm.createPost(
+                    text       = "",
+                    quoteText  = p.text,
+                    authorName = p.authorName,
+                    bookName   = p.bookName,
+                    coverImg   = p.coverImg,
+                    type       = "library_quote",
+                )
+                showInlineQuote = false
+            },
             onLookupCover = { title -> vm.findCoverImgByTitle(title) },
         )
     }
