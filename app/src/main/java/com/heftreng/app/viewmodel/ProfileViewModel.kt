@@ -62,6 +62,9 @@ class ProfileViewModel @Inject constructor(
     private val _hasMorePosts = MutableStateFlow(false)
     val hasMorePosts = _hasMorePosts.asStateFlow()
 
+    private val _postCount = MutableStateFlow<Int?>(null)
+    val postCount = _postCount.asStateFlow()
+
     // ── İlerleme kartı detayları: "X alıntı" tıklanınca açılan liste ─────────
     private val _userQuotes = MutableStateFlow<List<com.heftreng.app.data.repository.BookQuoteRow>>(emptyList())
     val userQuotes = _userQuotes.asStateFlow()
@@ -221,6 +224,20 @@ class ProfileViewModel @Inject constructor(
                     .limit(POST_PAGE).get().await()
                 if (snap.documents.isNotEmpty()) lastPostDoc = snap.documents.last()
                 _hasMorePosts.value = snap.documents.size >= POST_PAGE.toInt()
+
+                // Gerçek gönderi sayısı — count() aggregation, tek istek, döküman okumaz
+                viewModelScope.launch {
+                    try {
+                        val countSnap = firestore.collection("feed")
+                            .whereEqualTo("uid", targetUid)
+                            .count().get(com.google.firebase.firestore.AggregateSource.SERVER).await()
+                        _postCount.value = countSnap.count.toInt()
+                    } catch (e: Exception) {
+                        // count() başarısız olursa yüklenen sayfa boyutunu göster
+                        android.util.Log.w("ProfileVM", "postCount fallback: ${e.message}")
+                        _postCount.value = snap.documents.size
+                    }
+                }
 
                 // Beğenilen ID'leri tek toplu sorguyla al
                 val postIds = snap.documents.map { it.id }

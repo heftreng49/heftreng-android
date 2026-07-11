@@ -85,6 +85,7 @@ fun ProfileScreen(
     val isFollowing    by vm.isFollowing.collectAsState()
     val followRequestStatus by vm.followRequestStatus.collectAsState()
     val hasMorePosts   by vm.hasMorePosts.collectAsState()
+    val postCountState by vm.postCount.collectAsState()
     val loadingMore    by vm.loadingMorePosts.collectAsState()
     val hasMoreFollowers by socialVm.hasMoreFollowers.collectAsState()
     val hasMoreFollowing by socialVm.hasMoreFollowing.collectAsState()
@@ -343,7 +344,7 @@ fun ProfileScreen(
                     followRequestStatus = followRequestStatus,
                     followersCount = followersCount,
                     followingCount = followingCount,
-                    postsCount     = posts.size,
+                    postsCount     = postCountState ?: posts.size,
                     onFollow       = { vm.toggleFollow(targetUid) },
                     onEditProfile  = { navController.navigate(Screen.EditProfile.route) },
                     onFollowers    = {
