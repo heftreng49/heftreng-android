@@ -65,7 +65,7 @@ fun buildAnnotated(text: String, spans: List<RichSpan>): AnnotatedString {
                         s.strike -> TextDecoration.LineThrough
                         else     -> null
                     },
-                    fontSize = s.size?.sp ?: 15.sp,
+                    fontSize = s.size?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
                     color    = s.color ?: Color.Unspecified,
                 ),
                 start, end,
@@ -158,7 +158,14 @@ fun RichTextEditor(
     // Dışarıdan farklı bir metin gelirse (örn. düzenle butonuna basıldı) sync et
     LaunchedEffect(stripped) {
         if (tfv.text != stripped) {
-            tfv = TextFieldValue(text = stripped)
+            tfv      = TextFieldValue(text = stripped)
+            spans    = emptyList()          // önceki span listesini temizle
+            boldOn   = false                // format bayraklarını sıfırla
+            italicOn = false
+            underOn  = false
+            strikeOn = false
+            fontSize  = null
+            textColor = null
         }
     }
 
@@ -417,6 +424,22 @@ fun RichTextEditor(
                 val diff    = newText.length - oldText.length
                 // FIX: annotatedString'i temizleyerek cursor pozisyonunu koru
                 tfv = new.copy(annotatedString = AnnotatedString(new.text))
+
+                if (diff > 0 && (boldOn || italicOn || underOn || strikeOn || fontSize != null || textColor != null)) {
+                    // Yeni karakter yazıldı ve aktif format var — o karaktere span uygula
+                    val cursor = new.selection.start
+                    val charStart = cursor - diff
+                    val charEnd   = cursor
+                    if (charStart >= 0 && charEnd <= newText.length && charStart < charEnd) {
+                        val newSpan = RichSpan(
+                            start  = charStart, end = charEnd,
+                            bold   = boldOn, italic = italicOn,
+                            under  = underOn, strike = strikeOn,
+                            size   = fontSize, color = textColor,
+                        )
+                        spans = spans + newSpan
+                    }
+                }
 
                 if (diff != 0) {
                     val cursor = new.selection.start
