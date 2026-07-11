@@ -904,12 +904,20 @@ class KurdiViewModel @Inject constructor(
     private val _reportsLoading = MutableStateFlow(false)
     val reportsLoading = _reportsLoading.asStateFlow()
 
-    fun reportLessonError(lessonId: String, lessonName: String, message: String, onDone: () -> Unit) {
+    fun reportLessonError(
+        lessonId: String,
+        lessonName: String,
+        message: String,
+        exerciseIndex: Int? = null,
+        exerciseType: String? = null,
+        exerciseQuestion: String? = null,
+        onDone: () -> Unit,
+    ) {
         viewModelScope.launch {
             try {
                 val uid = auth.currentUser?.uid ?: "anonymous"
                 val name = auth.currentUser?.displayName ?: "Anonim"
-                firestore.collection("kf_reports").add(mapOf(
+                val data = mutableMapOf<String, Any?>(
                     "lessonId"   to lessonId,
                     "lessonName" to lessonName,
                     "message"    to message,
@@ -917,7 +925,11 @@ class KurdiViewModel @Inject constructor(
                     "userName"   to name,
                     "resolved"   to false,
                     "ts"         to com.google.firebase.Timestamp.now(),
-                )).await()
+                )
+                if (exerciseIndex != null) data["exerciseIndex"] = exerciseIndex + 1 // 1-tabanlı göster
+                if (!exerciseType.isNullOrBlank()) data["exerciseType"] = exerciseType
+                if (!exerciseQuestion.isNullOrBlank()) data["exerciseQuestion"] = exerciseQuestion
+                firestore.collection("kf_reports").add(data).await()
                 onDone()
             } catch (e: Exception) { _toast.value = "Gönderilemedi: ${e.message}" }
         }

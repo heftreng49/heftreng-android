@@ -1939,6 +1939,10 @@ fun LessonScreen(
     // -- Hata Bildir Dialog ----------------------------------------------------
     if (showReportDialog) {
         var reportText by remember { mutableStateOf("") }
+        // Dialog açıldığı andaki egzersiz bilgisini yakala
+        val reportExIndex    = remember { exStep.takeIf { !vocabDone.not() && it >= 0 } }
+        val reportExType     = remember { currentEx?.type }
+        val reportExQuestion = remember { currentEx?.tr ?: currentEx?.answer }
         AlertDialog(
             onDismissRequest = { showReportDialog = false },
             title = {
@@ -1949,7 +1953,8 @@ fun LessonScreen(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("«${lesson.nameTr}» dersinde bir hata mı buldun?", color = Muted, fontSize = 13.sp)
+                    val exerciseInfo = if (reportExIndex != null) " · Egzersiz ${reportExIndex + 1}" else ""
+                    Text("«${lesson.nameTr}»$exerciseInfo dersinde bir hata mı buldun?", color = Muted, fontSize = 13.sp)
                     OutlinedTextField(
                         value = reportText, onValueChange = { reportText = it },
                         placeholder = { Text("Hatayı açıkla…", color = Muted, fontSize = 13.sp) },
@@ -1965,9 +1970,15 @@ fun LessonScreen(
                 Button(
                     onClick = {
                         if (reportText.isNotBlank()) {
-                            vm.reportLessonError(lesson.id, lesson.nameTr, reportText) {
-                                reportSent = true; showReportDialog = false
-                            }
+                            vm.reportLessonError(
+                                lessonId          = lesson.id,
+                                lessonName        = lesson.nameTr,
+                                message           = reportText,
+                                exerciseIndex     = reportExIndex,
+                                exerciseType      = reportExType,
+                                exerciseQuestion  = reportExQuestion,
+                                onDone            = { reportSent = true; showReportDialog = false },
+                            )
                         }
                     },
                     enabled = reportText.isNotBlank(),
