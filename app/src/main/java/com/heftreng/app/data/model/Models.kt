@@ -401,23 +401,6 @@ data class CmsCategory(
     val order  : Int    = 0
 )
 
-// ─── KURDİ AI DERS ──────────────────────────────────────
-data class AiLesson(
-    val topic    : String           = "",
-    val level    : String           = "destpêk",
-    val exercises: List<AiExercise> = emptyList()
-)
-
-data class AiExercise(
-    val type    : String                    = "mcq",
-    val ku      : String                    = "",
-    val tr      : String                    = "",
-    val options : List<String>              = emptyList(),
-    val answer  : String                    = "",
-    val pairs   : List<Pair<String,String>> = emptyList(),
-    val words   : List<String>              = emptyList()
-)
-
 // ─── CMS REKLAM KONFİGÜRASYONU ─────────────────────────────
 enum class AdBannerSize { ADAPTIVE, BANNER, MEDIUM_RECTANGLE, LARGE_BANNER }
 enum class AdPlacement { IN_LIST, TOP, BOTTOM, OVERLAY, BETWEEN_SECTIONS }
@@ -493,7 +476,6 @@ data class AppConfig(
     val profileShowStreak   : Boolean = true,
     val profileShowBadges   : Boolean = true,
     val profileShowReadList : Boolean = true,
-    val kurdiShowAiLesson   : Boolean = true,
     val kurdiShowWordOfDay  : Boolean = true,
     val maintenanceMode     : Boolean = false,
     val maintenanceMessage  : String  = "Uygulama güncelleniyor, lütfen bekleyin.",

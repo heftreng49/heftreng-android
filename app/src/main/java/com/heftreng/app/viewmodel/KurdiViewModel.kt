@@ -10,7 +10,6 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import com.heftreng.app.data.model.AiExercise
 import com.heftreng.app.worker.KurdiReminderWorker
-import com.heftreng.app.data.model.AiLesson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Context
@@ -207,12 +206,6 @@ class KurdiViewModel @Inject constructor(
     val toast = _toast.asStateFlow()
 
     // ── AI ────────────────────────────────────────────────────────────────────
-    private val _aiLesson  = MutableStateFlow<AiLesson?>(null)
-    val aiLesson  = _aiLesson.asStateFlow()
-    private val _aiLoading = MutableStateFlow(false)
-    val aiLoading = _aiLoading.asStateFlow()
-    private val _aiError   = MutableStateFlow<String?>(null)
-    val aiError   = _aiError.asStateFlow()
 
     // ── Sözlük ────────────────────────────────────────────────────────────────
     private val _dictEntries  = MutableStateFlow<List<DictEntry>>(emptyList())
@@ -673,136 +666,6 @@ class KurdiViewModel @Inject constructor(
         _lessons.value.sortedWith(compareBy({ it.unitId }, { it.order }))
             .firstOrNull { !it.completed }
 
-    // ── AI Ders ───────────────────────────────────────────────────────────────
-    fun generateAiLesson(apiKey: String, topic: String, level: String = "destpêk") {
-        if (apiKey.isBlank() || topic.isBlank()) return
-        _aiLoading.value = true; _aiError.value = null
-        viewModelScope.launch {
-            try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                val payload = JSONObject().apply {
-                    put("model", "google/gemini-2.0-flash-001")
-                    put("messages", JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("role", "system")
-                            put("content",
-                                "Sen bir Kürtçe (Kurmancî) öğretmenisin. Tam olarak şu JSON formatında döndür, başka hiçbir şey yazma:\n" +
-                                "{\n" +
-                                "  \"topic\": \"...\",\n" +
-                                "  \"exercises\": [\n" +
-                                "    {\"type\":\"mcq\",\"question\":\"Silav ne demek?\",\"questionTr\":\"Merhaba ne demek?\",\"optA\":\"Merhaba\",\"optB\":\"Günaydın\",\"optC\":\"İyi\",\"optD\":\"Hoşça kal\",\"answer\":\"Merhaba\"},\n" +
-                                "    {\"type\":\"fill\",\"question\":\"Ez ___ im.\",\"questionTr\":\"Ben ___ ım.\",\"answer\":\"xwendekar\",\"options\":[\"xwendekar\",\"mamoste\",\"doktor\",\"kar\"]},\n" +
-                                "    {\"type\":\"build\",\"tr\":\"Ben okula gidiyorum.\",\"answer\":\"Ez diçim dibistanê.\",\"words\":[\"Ez\",\"diçim\",\"dibistanê\",\"malê\",\"têm\"]},\n" +
-                                "    {\"type\":\"match\",\"pairs\":[[\"Silav\",\"Merhaba\"],[\"Spas\",\"Teşekkür\"],[\"Belê\",\"Evet\"],[\"Na\",\"Hayır\"],[\"Baş e\",\"Tamam\"]]}\n" +
-                                "  ]\n" +
-                                "}\n" +
-                                "KURALLAR:\n" +
-                                "1) mcq: question=Kürtçe soru, questionTr=Türkçe çeviri, optA-D=4 seçenek, answer=doğru seçenek metni\n" +
-                                "2) fill: question=boşluklu Kürtçe cümle (___ ile), questionTr=Türkçesi, answer=doğru kelime, options=4 kelime (doğru dahil)\n" +
-                                "3) build: tr=Türkçe cümle, answer=Kürtçe cümle, words=tüm kelimeler + 2 bozucu\n" +
-                                "4) match: pairs=tam 5 çift [[Kürtçe,Türkçe],...]\n" +
-                                "5) Sadece JSON döndür, markdown veya açıklama ekleme."
-                            )
-                        })
-                        put(JSONObject().apply {
-                            put("role", "user")
-                            put("content", "Konu: $topic | Seviye: $level | Tam olarak: 5 fill + 5 build + 5 mcq + 1 match = 12 egzersiz üret.")
-                        })
-                    })
-                    put("max_tokens", 2500)
-                }
-                val url  = URL("https://openrouter.ai/api/v1/chat/completions")
-                val conn = (url.openConnection() as HttpsURLConnection).also {
-                    it.requestMethod = "POST"
-                    it.setRequestProperty("Content-Type", "application/json")
-                    it.setRequestProperty("Authorization", "Bearer $apiKey")
-                    it.setRequestProperty("HTTP-Referer", "https://heft-reng.blogspot.com")
-                    it.setRequestProperty("X-Title", "Heftreng Kurdî")
-                    it.doOutput = true
-                    it.connectTimeout = 15000
-                    it.readTimeout    = 40000
-                }
-                conn.outputStream.use { it.write(payload.toString().toByteArray()) }
-                val code = conn.responseCode
-                val raw  = if (code in 200..299) {
-                    conn.inputStream.bufferedReader().readText()
-                } else {
-                    val errBody = conn.errorStream?.bufferedReader()?.readText() ?: ""
-                    val errMsg = try {
-                        JSONObject(errBody).optJSONObject("error")?.optString("message") ?: errBody
-                    } catch (_: Exception) { errBody }
-                    throw Exception(
-                        when (code) {
-                            401  -> "API key geçersiz (401) — openrouter.ai/keys adresinden sk-or- ile başlayan key al"
-                            402  -> "Hesap bakiyesi yetersiz (402)"
-                            429  -> "İstek limiti aşıldı (429) — biraz bekle"
-                            else -> "Sunucu hatası ($code): $errMsg"
-                        }
-                    )
-                }
-                val txt  = JSONObject(raw)
-                    .getJSONArray("choices").getJSONObject(0)
-                    .getJSONObject("message").getString("content")
-                    .trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-                val lj = JSONObject(txt)
-                val ea = lj.optJSONArray("exercises") ?: JSONArray()
-                _aiLesson.value = AiLesson(
-                    topic = topic, level = level,
-                    exercises = (0 until ea.length()).mapNotNull { i ->
-                        val ex  = ea.getJSONObject(i)
-                        val type = ex.optString("type", "mcq")
-                        when (type) {
-                            "fill" -> AiExercise(
-                                type       = "fill",
-                                ku         = ex.optString("question", ""),
-                                tr         = ex.optString("questionTr", ""),
-                                answer     = ex.optString("answer", ""),
-                                options    = ex.optJSONArray("options")?.let { arr ->
-                                    (0 until arr.length()).map { arr.getString(it) }
-                                } ?: emptyList(),
-                            )
-                            "build" -> {
-                                val wordsArr = ex.optJSONArray("words")
-                                AiExercise(
-                                    type   = "build",
-                                    tr     = ex.optString("tr", ""),
-                                    answer = ex.optString("answer", ""),
-                                    words  = if (wordsArr != null)
-                                        (0 until wordsArr.length()).map { wordsArr.getString(it) }
-                                    else ex.optString("answer","").split(" ").shuffled(),
-                                )
-                            }
-                            "match" -> {
-                                val pairsArr = ex.optJSONArray("pairs")
-                                AiExercise(
-                                    type  = "match",
-                                    pairs = if (pairsArr != null) (0 until pairsArr.length()).mapNotNull { j ->
-                                        val p = pairsArr.optJSONArray(j)
-                                        if (p != null && p.length() >= 2) p.getString(0) to p.getString(1) else null
-                                    } else emptyList(),
-                                )
-                            }
-                            else /* mcq */ -> {
-                                val op = ex.optJSONArray("options")
-                                AiExercise(
-                                    type    = "mcq",
-                                    ku      = ex.optString("question", ""),
-                                    tr      = ex.optString("questionTr", ""),
-                                    options = if (op != null) (0 until op.length()).map { op.getString(it) } else emptyList(),
-                                    answer  = ex.optString("answer", ""),
-                                )
-                            }
-                        }
-                    }
-                )
-            } } catch (e: Exception) {
-                _aiError.value = "Hata: ${e.message ?: e.javaClass.simpleName} — API key geçersiz veya ağ hatası"
-            } finally {
-                _aiLoading.value = false
-            }
-        }
-    }
-
-    fun clearAiLesson() { _aiLesson.value = null; _aiError.value = null }
 
     // ── Sözlük (kf_dict) ──────────────────────────────────────────────────────
     fun loadDict() {
@@ -1387,65 +1250,6 @@ class KurdiViewModel @Inject constructor(
 
     // ── Eski uyumluluk ────────────────────────────────────────────────────────
     fun startLesson(lesson: com.heftreng.app.data.model.KurdiLesson) = openLesson(lesson.id)
-
-    // ── AI Ders → kf_exercises'e kaydet ────────────────────────────────────
-    fun saveAiLessonToFirestore(
-        targetLessonId: String,
-        lesson        : com.heftreng.app.data.model.AiLesson,
-        onDone        : (Int) -> Unit,
-        onError       : (String) -> Unit,
-    ) {
-        viewModelScope.launch {
-            try {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    var saved = 0
-                    lesson.exercises.forEach { ex ->
-                        val data = mutableMapOf<String, Any>(
-                            "lessonId" to targetLessonId,
-                            "type"     to (ex.type.takeIf { it.isNotBlank() } ?: "mcq"),
-                        )
-                        when (ex.type) {
-                            "mcq" -> {
-                                data["question"]   = ex.ku
-                                data["questionTr"] = ex.tr
-                                data["optA"] = ex.options.getOrElse(0) { "" }
-                                data["optB"] = ex.options.getOrElse(1) { "" }
-                                data["optC"] = ex.options.getOrElse(2) { "" }
-                                data["optD"] = ex.options.getOrElse(3) { "" }
-                                data["answer"]     = ex.answer.ifBlank { ex.options.getOrElse(0) { "" } }
-                            }
-                            "fill" -> {
-                                data["question"] = ex.ku
-                                data["answer"]   = ex.answer
-                            }
-                            "build" -> {
-                                data["tr"]     = ex.tr
-                                data["answer"] = ex.ku
-                                data["words"]  = ex.words.ifEmpty { ex.tr.split(" ").filter { it.isNotBlank() } }
-                            }
-                            "match" -> {
-                                // pairs → [[ku, tr], ...] formatında sakla (importFromJson ile tutarlı)
-                                data["pairs"] = ex.pairs.map { (a, b) ->
-                                    listOf(a, b)
-                                }
-                            }
-                            else -> {
-                                data["question"] = ex.ku
-                                data["answer"]   = ex.answer
-                            }
-                        }
-                        firestore.collection("kf_exercises").add(data).await()
-                        saved++
-                    }
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        onDone(saved)
-                    }
-                }
-            } catch (e: Exception) {
-                onError(e.message ?: "Kaydetme hatası")
-            }
-        }
-    }
 
 }
 

@@ -790,7 +790,6 @@ private fun FeaturesTab(config: AppConfig, vm: AppConfigViewModel) {
         // ── Kurdî Fêrbibe ─────────────────────────────────────────────────
         item {
             FeatureSection("Kurdî Fêrbibe") {
-                FeatureToggle("AI Ders",           current.kurdiShowAiLesson)   { current = current.copy(kurdiShowAiLesson = it) }
                 FeatureToggle("Günün Kelimesi",    current.kurdiShowWordOfDay)  { current = current.copy(kurdiShowWordOfDay = it) }
                 Spacer(Modifier.height(4.dp))
                 cmsField(current.kurdiTitle, { current = current.copy(kurdiTitle = it) }, "Kurdî sayfası başlığı")
