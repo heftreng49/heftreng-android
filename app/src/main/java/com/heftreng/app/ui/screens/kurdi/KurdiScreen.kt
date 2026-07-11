@@ -2642,10 +2642,10 @@ private fun GrammarRuleCard(
     onDelete: () -> Unit,
     onEdit: ((GrammarRule) -> Unit)? = null,
 ) {
-    var expanded    by remember { mutableStateOf(false) }
+    var showDetail  by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf(false) }
 
-    val accentColor = Color(grammarCardAccents[index % grammarCardAccents.size])
+    val accentColor    = Color(grammarCardAccents[index % grammarCardAccents.size])
     val displayTitle   = if (language == "ku") rule.title else rule.titleTr.ifBlank { rule.title }
     val displayContent = if (language == "ku") rule.content else rule.contentTr.ifBlank { rule.content }
     val hasKuSubtitle  = language != "ku" && rule.title.isNotBlank() && rule.title != rule.titleTr
@@ -2656,96 +2656,158 @@ private fun GrammarRuleCard(
         modifier = Modifier.fillMaxWidth(),
         shadowElevation = 0.dp,
     ) {
-        Column {
-            // ── Başlık satırı ────────────────────────────────────────────────
-            Row(
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showDetail = true }
+                .padding(start = 0.dp, end = 12.dp, top = 0.dp, bottom = 0.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Sol renkli şerit + numara
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded }
-                    .padding(start = 0.dp, end = 12.dp, top = 0.dp, bottom = 0.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .width(4.dp)
+                    .height(64.dp)
+                    .background(
+                        color = accentColor,
+                        shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
+                    )
+            )
+            Box(
+                modifier = Modifier
+                    .padding(start = 12.dp)
+                    .size(32.dp)
+                    .background(accentColor.copy(alpha = 0.12f), CircleShape),
+                contentAlignment = Alignment.Center,
             ) {
-                // Sol renkli şerit + numara
-                Box(
-                    modifier = Modifier
-                        .width(4.dp)
-                        .height(64.dp)
-                        .background(
-                            color = accentColor,
-                            shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
-                        )
-                )
-                // Numara balonu
-                Box(
-                    modifier = Modifier
-                        .padding(start = 12.dp)
-                        .size(32.dp)
-                        .background(accentColor.copy(alpha = 0.12f), CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        "${index + 1}",
-                        color      = accentColor,
-                        fontSize   = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-                Spacer(Modifier.width(10.dp))
-                // Başlık ve Kürtçe alt başlık
-                Column(modifier = Modifier.weight(1f).padding(vertical = 14.dp)) {
-                    Text(
-                        displayTitle,
-                        fontWeight = FontWeight.Bold,
-                        color      = OnBackground,
-                        fontSize   = 14.sp,
-                        lineHeight = 18.sp,
-                    )
-                    if (hasKuSubtitle) {
-                        Text(
-                            rule.title,
-                            color    = accentColor,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(top = 2.dp),
-                        )
-                    }
-                }
-                // Admin düzenle + sil butonları
-                if (isAdmin) {
-                    if (onEdit != null) {
-                        IconButton(onClick = { onEdit(rule) }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Edit, null, tint = Primary.copy(alpha = 0.7f), modifier = Modifier.size(15.dp))
-                        }
-                    }
-                    IconButton(onClick = { showConfirm = true }, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(16.dp))
-                    }
-                }
-                // Aç/kapat ikonu
-                Icon(
-                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint     = if (expanded) accentColor else Muted,
-                    modifier = Modifier.size(22.dp),
+                Text(
+                    "${index + 1}",
+                    color      = accentColor,
+                    fontSize   = 13.sp,
+                    fontWeight = FontWeight.Bold,
                 )
             }
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f).padding(vertical = 14.dp)) {
+                Text(
+                    displayTitle,
+                    fontWeight = FontWeight.Bold,
+                    color      = OnBackground,
+                    fontSize   = 14.sp,
+                    lineHeight = 18.sp,
+                )
+                if (hasKuSubtitle) {
+                    Text(
+                        rule.title,
+                        color    = accentColor,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+            // Admin butonları
+            if (isAdmin) {
+                if (onEdit != null) {
+                    IconButton(onClick = { onEdit(rule) }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Edit, null, tint = Primary.copy(alpha = 0.7f), modifier = Modifier.size(15.dp))
+                    }
+                }
+                IconButton(onClick = { showConfirm = true }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(16.dp))
+                }
+            }
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint     = accentColor.copy(alpha = 0.6f),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
 
-            // ── Açılan içerik ────────────────────────────────────────────────
-            AnimatedVisibility(visible = expanded) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(accentColor.copy(alpha = 0.04f))
-                        .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
-                ) {
-                    HorizontalDivider(
-                        color     = accentColor.copy(alpha = 0.20f),
-                        thickness = 1.dp,
-                        modifier  = Modifier.padding(bottom = 12.dp),
-                    )
-                    GrammarRichContent(
-                        html       = displayContent,
-                        accentColor = accentColor,
-                    )
+    // ── Tam ekran içerik Dialog'u ────────────────────────────────────────────
+    if (showDetail) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showDetail = false },
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows  = false,
+            ),
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color    = Background,
+            ) {
+                Scaffold(
+                    containerColor = Background,
+                    topBar = {
+                        TopAppBar(
+                            title = {
+                                Column {
+                                    Text(
+                                        displayTitle,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color      = OnBackground,
+                                        fontSize   = 16.sp,
+                                    )
+                                    if (hasKuSubtitle) {
+                                        Text(
+                                            rule.title,
+                                            color    = accentColor,
+                                            fontSize = 11.sp,
+                                        )
+                                    }
+                                }
+                            },
+                            navigationIcon = {
+                                IconButton(onClick = { showDetail = false }) {
+                                    Icon(Icons.Default.Close, null, tint = OnBackground)
+                                }
+                            },
+                            actions = {
+                                // Sol renkli numara rozeti
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = accentColor.copy(alpha = 0.15f),
+                                ) {
+                                    Text(
+                                        "${index + 1}",
+                                        color      = accentColor,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize   = 12.sp,
+                                        modifier   = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                        )
+                    },
+                ) { pad ->
+                    // Üst renkli şerit
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(3.dp)
+                                .background(accentColor),
+                        )
+                        androidx.compose.foundation.lazy.LazyColumn(
+                            modifier       = Modifier
+                                .fillMaxSize()
+                                .padding(pad),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                start = 20.dp, end = 20.dp, top = 16.dp, bottom = 32.dp,
+                            ),
+                        ) {
+                            item {
+                                GrammarRichContent(
+                                    html        = displayContent,
+                                    accentColor = accentColor,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
