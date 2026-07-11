@@ -470,39 +470,50 @@ class FeedViewModel @Inject constructor(
     /** coverImg boş alıntı postlarını Supabase library_books'tan tamamlar */
     internal fun enrichMissingCovers(posts: List<Post>) {
         val needsCover = posts.filter {
-            it.coverImg.isBlank() && it.bookName.isNotBlank()
+            it.coverImg.isBlank() && (it.libraryBookId.isNotBlank() || it.bookName.isNotBlank())
         }
         if (needsCover.isEmpty()) return
 
         viewModelScope.launch {
-            val titles = needsCover.map { it.bookName }.distinct()
-            val coverMap = mutableMapOf<String, String>() // bookName -> coverImg URL
+            // bookId -> coverImg: önce ID ile direkt çek (daha güvenilir), yoksa isimle ara
+            val coverByIdMap   = mutableMapOf<String, String>() // libraryBookId -> coverImg
+            val coverByNameMap = mutableMapOf<String, String>() // bookName -> coverImg
 
-            titles.forEach { title ->
-                try {
-                    val url = library.searchBooks(title)
-                        .firstOrNull { it.title.equals(title.trim(), ignoreCase = true) }
-                        ?.coverImg
-                        ?: library.searchBooks(title).firstOrNull()?.coverImg
-                        ?: ""
-                    if (url.isNotBlank()) coverMap[title] = url
-                } catch (_: Exception) {}
-            }
+            needsCover.filter { it.libraryBookId.isNotBlank() }
+                .map { it.libraryBookId }.distinct()
+                .forEach { bookId ->
+                    try {
+                        val url = library.getBook(bookId)?.coverImg ?: ""
+                        if (url.isNotBlank()) coverByIdMap[bookId] = url
+                    } catch (_: Exception) {}
+                }
 
-            if (coverMap.isEmpty()) return@launch
+            // ID'si olmayanlar için fallback: isimle arama
+            needsCover.filter { it.libraryBookId.isBlank() && it.bookName.isNotBlank() }
+                .map { it.bookName }.distinct()
+                .forEach { title ->
+                    try {
+                        val url = library.searchBooks(title)
+                            .firstOrNull { it.title.equals(title.trim(), ignoreCase = true) }
+                            ?.coverImg ?: ""
+                        if (url.isNotBlank()) coverByNameMap[title] = url
+                    } catch (_: Exception) {}
+                }
+
+            if (coverByIdMap.isEmpty() && coverByNameMap.isEmpty()) return@launch
 
             // in-memory güncelleme
             val updatedPosts = _posts.value.map { post ->
-                if (post.coverImg.isBlank() && post.bookName.isNotBlank()) {
-                    val url = coverMap[post.bookName] ?: return@map post
+                if (post.coverImg.isBlank()) {
+                    val url = coverByIdMap[post.libraryBookId] ?: coverByNameMap[post.bookName] ?: return@map post
                     post.copy(coverImg = url)
                 } else post
             }
             _posts.value = updatedPosts
 
             val updatedQuotes = _libraryQuotes.value.map { post ->
-                if (post.coverImg.isBlank() && post.bookName.isNotBlank()) {
-                    val url = coverMap[post.bookName] ?: return@map post
+                if (post.coverImg.isBlank()) {
+                    val url = coverByIdMap[post.libraryBookId] ?: coverByNameMap[post.bookName] ?: return@map post
                     post.copy(coverImg = url)
                 } else post
             }
@@ -1799,6 +1810,8 @@ class FeedViewModel @Inject constructor(
             // feed_likes tablosundan çekip state'e yansıt.
             // book_quotes.likes_count artık yazılmıyor (feed_likes tek kaynak).
             syncLibraryQuoteLikeStates(sorted)
+            // Eski kayıtlarda cover_img boş olabilir — Supabase library_books'tan tamamla.
+            enrichMissingCovers(sorted)
         } else {
             // Ağ sonucu boş — internet yoksa son önbelleğe düş
             try {
