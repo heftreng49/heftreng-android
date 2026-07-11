@@ -276,7 +276,7 @@ fun QuoteDialog(
         showAuthorDrop = authorSuggestions.any { it.authorName.contains(author, ignoreCase = true) }
     }
 
-    val canConfirm = text.isNotBlank() || book.isNotBlank()
+    val canConfirm = text.isNotBlank() && book.isNotBlank() && author.isNotBlank()
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
@@ -304,7 +304,7 @@ fun QuoteDialog(
                 actions = {
                     TextButton(
                         onClick  = {
-                            if (canConfirm) onConfirm(QuotePayload(text = text, bookName = book, authorName = author, coverImg = coverImg))
+                            onConfirm(QuotePayload(text = text, bookName = book, authorName = author, coverImg = coverImg))
                         },
                         enabled  = canConfirm,
                     ) {
