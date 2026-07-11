@@ -173,11 +173,50 @@ class LibraryRepository @Inject constructor(
             limit(20)
         }.decodeList()
 
+    /**
+     * QuoteDialog için: yazar adı aratıp öneri formatında döner
+     * (isim + varsa en güncel kitap adı + kitap sayısı). Firestore limit(50)
+     * sınırından etkilenmez, doğrudan Supabase'de arar.
+     */
+    suspend fun searchAuthorsForQuote(query: String): List<com.heftreng.app.ui.component.QuoteSuggestion> {
+        if (query.isBlank()) return emptyList()
+        return try {
+            searchAuthors(query).map { a ->
+                val firstBook = try {
+                    getBooksByAuthor(a.id).firstOrNull()?.title ?: ""
+                } catch (_: Exception) { "" }
+                com.heftreng.app.ui.component.QuoteSuggestion(
+                    bookName   = firstBook,
+                    authorName = a.name,
+                    count      = a.quoteCount,
+                )
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
     suspend fun searchBooks(query: String): List<LibraryBookRow> =
         db["library_books"].select {
             filter { ilike("title", "%$query%") }
             limit(20)
         }.decodeList()
+
+    /**
+     * QuoteDialog için: kitap adı aratıp öneri formatında döner.
+     * Firestore limit(50) sınırından etkilenmez, doğrudan Supabase'de arar.
+     */
+    suspend fun searchBooksForQuote(query: String): List<com.heftreng.app.ui.component.QuoteSuggestion> {
+        if (query.isBlank()) return emptyList()
+        return try {
+            searchBooks(query).map { b ->
+                com.heftreng.app.ui.component.QuoteSuggestion(
+                    bookName   = b.title,
+                    authorName = b.authorName,
+                    coverImg   = b.coverImg,
+                    count      = b.quoteCount,
+                )
+            }
+        } catch (_: Exception) { emptyList() }
+    }
 
     suspend fun upsertAuthor(row: AuthorRow) {
         db["authors"].upsert(row)

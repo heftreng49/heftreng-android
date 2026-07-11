@@ -177,12 +177,14 @@ fun QuoteButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuoteDialog(
-    initialText    : String = "",
-    initialBook    : String = "",
-    initialAuthor  : String = "",
-    onDismiss      : () -> Unit,
-    onConfirm      : (QuotePayload) -> Unit,
-    onLookupCover  : (suspend (String) -> String)? = null,
+    initialText     : String = "",
+    initialBook     : String = "",
+    initialAuthor   : String = "",
+    onDismiss       : () -> Unit,
+    onConfirm       : (QuotePayload) -> Unit,
+    onLookupCover   : (suspend (String) -> String)? = null,
+    onSearchBooks   : (suspend (String) -> List<QuoteSuggestion>)? = null,
+    onSearchAuthors : (suspend (String) -> List<QuoteSuggestion>)? = null,
 ) {
     var text     by remember { mutableStateOf(initialText) }
     var book     by remember { mutableStateOf(initialBook) }
@@ -197,7 +199,32 @@ fun QuoteDialog(
     var showBookDrop      by remember { mutableStateOf(false) }
     var showAuthorDrop    by remember { mutableStateOf(false) }
 
+    // ── Kitap adı yazıldıkça Supabase'de canlı arama (limit(50) önyükleme sorununu çözer) ──
+    LaunchedEffect(book) {
+        if (onSearchBooks == null) return@LaunchedEffect
+        if (book.isBlank()) { showBookDrop = false; return@LaunchedEffect }
+        kotlinx.coroutines.delay(250) // debounce
+        try {
+            val results = onSearchBooks(book.trim())
+            bookSuggestions = results
+            showBookDrop = results.isNotEmpty()
+        } catch (_: Exception) {}
+    }
+
+    // ── Yazar adı yazıldıkça Supabase'de canlı arama ──────────────────────────
+    LaunchedEffect(author) {
+        if (onSearchAuthors == null) return@LaunchedEffect
+        if (author.isBlank()) { showAuthorDrop = false; return@LaunchedEffect }
+        kotlinx.coroutines.delay(250) // debounce
+        try {
+            val results = onSearchAuthors(author.trim())
+            authorSuggestions = results
+            showAuthorDrop = results.isNotEmpty()
+        } catch (_: Exception) {}
+    }
+
     LaunchedEffect(Unit) {
+        if (onSearchBooks != null || onSearchAuthors != null) return@LaunchedEffect // Supabase araması varsa Firestore önyüklemeye gerek yok
         try {
             val newSnap = db.collection("feed")
                 .whereEqualTo("type", "library_quote")
@@ -260,6 +287,7 @@ fun QuoteDialog(
     }
 
     LaunchedEffect(book) {
+        if (onSearchBooks != null) return@LaunchedEffect // Supabase araması yukarıda hallediyor
         if (book.isBlank()) { showBookDrop = false; return@LaunchedEffect }
         showBookDrop = bookSuggestions.any { it.bookName.contains(book, ignoreCase = true) }
     }
@@ -272,6 +300,7 @@ fun QuoteDialog(
     }
 
     LaunchedEffect(author) {
+        if (onSearchAuthors != null) return@LaunchedEffect // Supabase araması yukarıda hallediyor
         if (author.isBlank()) { showAuthorDrop = false; return@LaunchedEffect }
         showAuthorDrop = authorSuggestions.any { it.authorName.contains(author, ignoreCase = true) }
     }

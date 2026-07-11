@@ -320,8 +320,8 @@ fun LibraryScreen(
     // ── Alıntı Ekle — Feed'deki QuoteDialog ──────────────────────────────
     if (showQuoteDialog) {
         QuoteDialog(
-            onDismiss = { showQuoteDialog = false },
-            onConfirm = { payload ->
+            onDismiss       = { showQuoteDialog = false },
+            onConfirm       = { payload ->
                 showQuoteDialog = false
                 // Feed'deki ile aynı sistem: createPost quoteText ile çağrılır
                 // ensureAuthorAndBook otomatik çalışır, library_books'a da yazar
@@ -333,6 +333,8 @@ fun LibraryScreen(
                     type       = "library_quote",
                 )
             },
+            onSearchBooks   = { q -> feedVm.searchBooksForQuote(q) },
+            onSearchAuthors = { q -> feedVm.searchAuthorsForQuote(q) },
         )
     }
 

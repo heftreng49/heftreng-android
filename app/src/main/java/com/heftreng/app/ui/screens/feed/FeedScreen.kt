@@ -65,6 +65,7 @@ import com.heftreng.app.ui.component.FullScreenImageViewer
 import com.heftreng.app.ui.component.QuoteDialog
 import com.heftreng.app.ui.component.QuoteInputSection
 import com.heftreng.app.ui.component.QuotePayload
+import com.heftreng.app.ui.component.QuoteSuggestion
 import com.heftreng.app.ui.component.SharePreviewDialog
 import com.heftreng.app.utils.ShareTarget
 import com.heftreng.app.ui.theme.*
@@ -274,7 +275,9 @@ fun FeedScreen(
                 )
                 showInlineQuote = false
             },
-            onLookupCover = { title -> vm.findCoverImgByTitle(title) },
+            onLookupCover   = { title -> vm.findCoverImgByTitle(title) },
+            onSearchBooks   = { q -> vm.searchBooksForQuote(q) },
+            onSearchAuthors = { q -> vm.searchAuthorsForQuote(q) },
         )
     }
 
@@ -1038,10 +1041,12 @@ private fun InlineComposeBox(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ComposeBottomSheet(
-    language    : String,
-    currentUser : FirebaseUser?,
-    onDismiss   : () -> Unit,
-    onPost      : (String, QuotePayload?) -> Unit,
+    language        : String,
+    currentUser     : FirebaseUser?,
+    onDismiss       : () -> Unit,
+    onPost          : (String, QuotePayload?) -> Unit,
+    onSearchBooks   : (suspend (String) -> List<QuoteSuggestion>)? = null,
+    onSearchAuthors : (suspend (String) -> List<QuoteSuggestion>)? = null,
 ) {
     var text         by remember { mutableStateOf("") }
     var quotePayload by remember { mutableStateOf<QuotePayload?>(null) }
@@ -1049,11 +1054,13 @@ private fun ComposeBottomSheet(
 
     if (showQuote) {
         QuoteDialog(
-            initialText   = quotePayload?.text ?: "",
-            initialBook   = quotePayload?.bookName ?: "",
-            initialAuthor = quotePayload?.authorName ?: "",
-            onDismiss     = { showQuote = false },
-            onConfirm     = { p -> quotePayload = p; showQuote = false },
+            initialText     = quotePayload?.text ?: "",
+            initialBook     = quotePayload?.bookName ?: "",
+            initialAuthor   = quotePayload?.authorName ?: "",
+            onDismiss       = { showQuote = false },
+            onConfirm       = { p -> quotePayload = p; showQuote = false },
+            onSearchBooks   = onSearchBooks,
+            onSearchAuthors = onSearchAuthors,
         )
     }
 

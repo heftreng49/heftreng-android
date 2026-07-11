@@ -1297,6 +1297,12 @@ class FeedViewModel @Inject constructor(
         } catch (_: Exception) { "" }
     }
 
+    /** QuoteDialog için: kitap adı aratıp öneri döner — Supabase'den, canlı arama. */
+    suspend fun searchBooksForQuote(query: String) = library.searchBooksForQuote(query)
+
+    /** QuoteDialog için: yazar adı aratıp öneri döner — Supabase'den, canlı arama. */
+    suspend fun searchAuthorsForQuote(query: String) = library.searchAuthorsForQuote(query)
+
     fun deletePost(postId: String) {
         if (uid.isEmpty()) return
         viewModelScope.launch {
