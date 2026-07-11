@@ -1741,6 +1741,7 @@ class FeedViewModel @Inject constructor(
 
         // ── Öncelik 4: Offline cache (Room) ──────────────────────────────────
         if (sorted.isNotEmpty()) {
+            // Önce ham veriyi göster (likesCount = book_quotes.likes_count, isLikedByMe = false)
             _libraryQuotes.value = sorted
             _libraryQuotesOffline.value = false
             try {
@@ -1748,6 +1749,10 @@ class FeedViewModel @Inject constructor(
             } catch (e: Exception) {
                 android.util.Log.w("FeedVM", "quoteDao.replaceAll: ${e.message}")
             }
+            // Gerçek beğeni sayısını ve kullanıcının beğenip beğenmediğini
+            // feed_likes tablosundan çekip state'e yansıt.
+            // book_quotes.likes_count artık yazılmıyor (feed_likes tek kaynak).
+            syncLibraryQuoteLikeStates(sorted)
         } else {
             // Ağ sonucu boş — internet yoksa son önbelleğe düş
             try {
@@ -1768,6 +1773,47 @@ class FeedViewModel @Inject constructor(
 
     fun loadLibraryQuotes() {
         viewModelScope.launch { loadLibraryQuotesAsync() }
+    }
+
+    /**
+     * feed_likes tablosundan _libraryQuotes için gerçek beğeni sayısını ve
+     * kullanıcının beğenip beğenmediğini çekip state'e yansıtır.
+     * book_quotes.likes_count artık güncellenmediğinden bu tek doğru kaynaktır.
+     */
+    private suspend fun syncLibraryQuoteLikeStates(quotes: List<Post>) {
+        val currentUid = auth.currentUser?.uid ?: return
+        val postIds = quotes.map { it.id }.filter { it.isNotBlank() }
+        if (postIds.isEmpty()) return
+        try {
+            // Kullanıcının beğendikleri
+            val likedByMe = supabase.postgrest["feed_likes"]
+                .select { filter { eq("uid", currentUid); isIn("post_id", postIds) } }
+                .decodeList<FeedLikeRow>()
+                .map { it.postId }.toSet()
+
+            // Her post için toplam beğeni sayısı
+            data class CountRow(
+                @kotlinx.serialization.SerialName("post_id") val postId: String = "",
+                val count: Int = 0,
+            )
+            val countRows = supabase.postgrest["feed_likes"]
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("post_id, count:post_id.count()")) {
+                    filter { isIn("post_id", postIds) }
+                    groupBy("post_id")
+                }
+                .decodeList<CountRow>()
+            val countMap = countRows.associate { it.postId to it.count }
+
+            // State'i güncelle
+            _libraryQuotes.value = _libraryQuotes.value.map { post ->
+                post.copy(
+                    likesCount  = countMap[post.id] ?: post.likesCount,
+                    isLikedByMe = post.id in likedByMe,
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("FeedVM", "syncLibraryQuoteLikeStates: ${e.message}")
+        }
     }
 
     // ══════════════════════════════════════════════════════════════════════
