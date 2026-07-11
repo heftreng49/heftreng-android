@@ -123,14 +123,17 @@ data class GrammarRule(
 )
 
 data class LessonReport(
-    val id         : String  = "",
-    val lessonId   : String  = "",
-    val lessonName : String  = "",
-    val message    : String  = "",
-    val uid        : String  = "",
-    val userName   : String  = "",
-    val resolved   : Boolean = false,
-    val ts         : Long    = 0L,
+    val id              : String  = "",
+    val lessonId        : String  = "",
+    val lessonName      : String  = "",
+    val message         : String  = "",
+    val uid             : String  = "",
+    val userName        : String  = "",
+    val resolved        : Boolean = false,
+    val ts              : Long    = 0L,
+    val exerciseIndex   : Int?    = null,   // 1-tabanlı, null = vocab bölümü
+    val exerciseType    : String  = "",     // mcq, fill, match, build
+    val exerciseQuestion: String  = "",     // sorunun metni
 )
 
 @HiltViewModel
@@ -945,14 +948,17 @@ class KurdiViewModel @Inject constructor(
                 _reports.value = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     LessonReport(
-                        id         = doc.id,
-                        lessonId   = d["lessonId"]   as? String ?: "",
-                        lessonName = d["lessonName"] as? String ?: "",
-                        message    = d["message"]    as? String ?: "",
-                        uid        = d["uid"]        as? String ?: "",
-                        userName   = d["userName"]   as? String ?: "",
-                        resolved   = d["resolved"]   as? Boolean ?: false,
-                        ts         = (d["ts"] as? com.google.firebase.Timestamp)?.toDate()?.time ?: 0L,
+                        id               = doc.id,
+                        lessonId         = d["lessonId"]         as? String ?: "",
+                        lessonName       = d["lessonName"]       as? String ?: "",
+                        message          = d["message"]          as? String ?: "",
+                        uid              = d["uid"]              as? String ?: "",
+                        userName         = d["userName"]         as? String ?: "",
+                        resolved         = d["resolved"]         as? Boolean ?: false,
+                        ts               = (d["ts"] as? com.google.firebase.Timestamp)?.toDate()?.time ?: 0L,
+                        exerciseIndex    = (d["exerciseIndex"]   as? Long)?.toInt(),
+                        exerciseType     = d["exerciseType"]     as? String ?: "",
+                        exerciseQuestion = d["exerciseQuestion"] as? String ?: "",
                     )
                 }
             } catch (e: Exception) { e.printStackTrace() }

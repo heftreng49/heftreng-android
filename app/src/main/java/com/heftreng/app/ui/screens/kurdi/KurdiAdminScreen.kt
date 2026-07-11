@@ -117,7 +117,10 @@ fun KurdiAdminScreen(
                 2 -> UnitManagerTab(vm = vm)
                 3 -> AdminAiLessonTab(vm = vm, lessons = lessons)
                 4 -> JsonImportTab(vm = vm)
-                5 -> ReportsTab(vm = vm)
+                5 -> ReportsTab(vm = vm, onOpenLesson = { lessonId ->
+                    val lesson = lessons.find { it.id == lessonId }
+                    if (lesson != null) { selectedLesson = lesson; selectedTab = 0 }
+                })
             }
         }
     }
@@ -1557,7 +1560,7 @@ private fun JsonImportTab(vm: KurdiViewModel) {
 
 // ── Hata Raporları ────────────────────────────────────────────────────────────
 @Composable
-private fun ReportsTab(vm: KurdiViewModel) {
+private fun ReportsTab(vm: KurdiViewModel, onOpenLesson: (lessonId: String) -> Unit) {
     val reports by vm.reports.collectAsState()
     val loading by vm.reportsLoading.collectAsState()
 
@@ -1609,7 +1612,8 @@ private fun ReportsTab(vm: KurdiViewModel) {
                         modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)) }
                     items(pending, key = { it.id }) { report ->
                         ReportCard(report, onResolve = { vm.resolveReport(report.id) },
-                            onDelete = { vm.deleteReport(report.id) })
+                            onDelete = { vm.deleteReport(report.id) },
+                            onOpenLesson = onOpenLesson)
                     }
                 }
                 if (resolved.isNotEmpty()) {
@@ -1618,7 +1622,8 @@ private fun ReportsTab(vm: KurdiViewModel) {
                         modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)) }
                     items(resolved, key = { it.id }) { report ->
                         ReportCard(report, onResolve = {},
-                            onDelete = { vm.deleteReport(report.id) })
+                            onDelete = { vm.deleteReport(report.id) },
+                            onOpenLesson = onOpenLesson)
                     }
                 }
                 item { Spacer(Modifier.height(80.dp)) }
@@ -1628,13 +1633,19 @@ private fun ReportsTab(vm: KurdiViewModel) {
 }
 
 @Composable
-private fun ReportCard(report: LessonReport, onResolve: () -> Unit, onDelete: () -> Unit) {
+private fun ReportCard(
+    report: LessonReport,
+    onResolve: () -> Unit,
+    onDelete: () -> Unit,
+    onOpenLesson: (lessonId: String) -> Unit,
+) {
     val dateStr = remember(report.ts) {
         if (report.ts > 0) java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault())
             .format(java.util.Date(report.ts)) else ""
     }
     Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
+            // Başlık satırı
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(Icons.Default.Flag, null,
                     tint = if (report.resolved) Color(0xFF22C55E) else Color(0xFFEF4444),
@@ -1643,13 +1654,46 @@ private fun ReportCard(report: LessonReport, onResolve: () -> Unit, onDelete: ()
                     fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
                 if (dateStr.isNotEmpty()) Text(dateStr, color = Muted, fontSize = 10.sp)
             }
+            // Egzersiz bilgisi (varsa)
+            if (report.exerciseIndex != null || report.exerciseType.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                val exLabel = buildString {
+                    if (report.exerciseIndex != null) append("Egzersiz ${report.exerciseIndex}")
+                    if (report.exerciseType.isNotBlank()) {
+                        if (isNotEmpty()) append(" · ")
+                        append(when (report.exerciseType) {
+                            "mcq"   -> "Çoktan seçmeli"
+                            "fill"  -> "Boşluk doldurma"
+                            "match" -> "Eşleştirme"
+                            "build" -> "Cümle kurma"
+                            else    -> report.exerciseType
+                        })
+                    }
+                }
+                Text(exLabel, color = Amber, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                if (report.exerciseQuestion.isNotBlank()) {
+                    Text("❓ ${report.exerciseQuestion}", color = Muted, fontSize = 11.sp, lineHeight = 15.sp)
+                }
+            }
             Spacer(Modifier.height(6.dp))
             Text(report.message, color = OnBackground, fontSize = 13.sp, lineHeight = 18.sp)
             Spacer(Modifier.height(4.dp))
             Text("👤 ${report.userName}", color = Muted, fontSize = 11.sp)
-            if (!report.resolved) {
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(8.dp))
+            // Aksiyon butonları
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Derse Git butonu — her zaman göster
+                OutlinedButton(
+                    onClick = { onOpenLesson(report.lessonId) },
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Primary),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Icon(Icons.Default.Edit, null, modifier = Modifier.size(13.dp), tint = Primary)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Derse Git", fontSize = 12.sp, color = Primary)
+                }
+                if (!report.resolved) {
                     Button(onClick = onResolve,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
                         shape = RoundedCornerShape(8.dp),
@@ -1658,14 +1702,10 @@ private fun ReportCard(report: LessonReport, onResolve: () -> Unit, onDelete: ()
                         Spacer(Modifier.width(4.dp))
                         Text("Çözüldü", fontSize = 12.sp, color = Color.White)
                     }
-                    TextButton(onClick = onDelete,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)) {
-                        Text("Sil", color = Muted, fontSize = 12.sp)
-                    }
                 }
-            } else {
-                TextButton(onClick = onDelete, contentPadding = PaddingValues(0.dp)) {
-                    Text("Sil", color = Muted, fontSize = 11.sp)
+                TextButton(onClick = onDelete,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)) {
+                    Text("Sil", color = Muted, fontSize = 12.sp)
                 }
             }
         }
