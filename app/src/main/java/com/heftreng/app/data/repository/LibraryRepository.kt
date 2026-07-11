@@ -563,10 +563,44 @@ class LibraryRepository @Inject constructor(
         return Pair(authorId, bookId)
     }
 
+    /**
+     * Benzer isimde yazar var mı diye arar (yazım hatalarını da yakalar).
+     * SADECE bilgi amaçlıdır — otomatik birleştirme yapmaz. UI'da
+     * "Böyle bir yazar zaten var, bunu mu demek istediniz?" onayı için kullan.
+     */
+    suspend fun findSimilarAuthors(name: String, minSimilarity: Double = 0.35): List<AuthorRow> {
+        if (name.isBlank()) return emptyList()
+        return try {
+            db.rpc(
+                "find_similar_author",
+                mapOf("search_name" to name.trim(), "min_similarity" to minSimilarity)
+            ).decodeList<AuthorRow>()
+        } catch (_: Exception) { emptyList() }
+    }
+
+    suspend fun findSimilarBooks(title: String, minSimilarity: Double = 0.35): List<LibraryBookRow> {
+        if (title.isBlank()) return emptyList()
+        return try {
+            db.rpc(
+                "find_similar_book",
+                mapOf("search_title" to title.trim(), "min_similarity" to minSimilarity)
+            ).decodeList<LibraryBookRow>()
+        } catch (_: Exception) { emptyList() }
+    }
+
+    private fun normalizeName(s: String) =
+        s.trim().lowercase().replace(Regex("\\s+"), " ")
+
+    /**
+     * Yazarı normalize edilmiş isimle arar (trim + boşluk + case farklarını yakalar).
+     * Bulunamazsa yeni kayıt açar. Fuzzy/yazım-hatası eşleştirmesi YAPMAZ —
+     * yanlışlıkla iki farklı yazarı birleştirme riskini almamak için.
+     */
     private suspend fun findOrCreateAuthor(name: String): String {
         return try {
+            // name_normalized sütunu üzerinden TAM eşleşme (bkz. scripts/add_author_dedup.sql)
             val existing = db["authors"].select {
-                filter { ilike("name", name) }
+                filter { eq("name_normalized", normalizeName(name)) }
                 limit(1)
             }.decodeSingleOrNull<AuthorRow>()
             if (existing != null) return existing.id
@@ -584,7 +618,7 @@ class LibraryRepository @Inject constructor(
     ): String {
         return try {
             val existing = db["library_books"].select {
-                filter { ilike("title", title) }
+                filter { eq("title_normalized", normalizeName(title)) }
                 limit(1)
             }.decodeSingleOrNull<LibraryBookRow>()
             if (existing != null) return existing.id
@@ -605,6 +639,7 @@ class LibraryRepository @Inject constructor(
             newId
         } catch (_: Exception) { "" }
     }
+
 
     // ── addQuoteToLibrary ─────────────────────────────────────────────────────
 
