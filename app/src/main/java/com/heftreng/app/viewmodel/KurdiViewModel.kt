@@ -763,6 +763,31 @@ class KurdiViewModel @Inject constructor(
         }
     }
 
+    fun updateGrammarRule(
+        id: String, title: String, titleTr: String,
+        content: String, contentTr: String, onDone: () -> Unit,
+    ) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("kf_grammar").document(id).set(mapOf(
+                    "title" to title, "titleTr" to titleTr,
+                    "content" to content, "contentTr" to contentTr,
+                    "ts" to com.google.firebase.Timestamp.now(),
+                ), com.google.firebase.firestore.SetOptions.merge()).await()
+                _grammarRules.value = _grammarRules.value.map { r ->
+                    if (r.id == id) r.copy(title = title, titleTr = titleTr, content = content, contentTr = contentTr)
+                    else r
+                }
+                onDone()
+            } catch (e: Exception) { _toast.value = "Güncellenemedi: ${e.message}" }
+        }
+    }
+
+    fun reloadGrammar() {
+        _grammarRules.value = emptyList()
+        loadGrammar()
+    }
+
     // ── Hata Raporları (kf_reports) ───────────────────────────────────────────
     private val _reports = MutableStateFlow<List<LessonReport>>(emptyList())
     val reports = _reports.asStateFlow()

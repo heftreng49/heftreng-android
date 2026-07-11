@@ -27,6 +27,8 @@ import androidx.navigation.NavController
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.heftreng.app.ui.theme.*
+import com.heftreng.app.ui.component.RichTextEditor
+import com.heftreng.app.ui.component.htmlStrip
 import com.heftreng.app.viewmodel.*
 import com.heftreng.app.viewmodel.AdminViewModel
 import kotlinx.coroutines.launch
@@ -100,7 +102,7 @@ fun KurdiAdminScreen(
                 },
                 divider = { HorizontalDivider(color = Divider, thickness = 0.5.dp) },
             ) {
-                listOf("📚 Dersler", "➕ Yeni Ders", "🏛 Üniteler", "📥 JSON", "🚩 Raporlar").forEachIndexed { i, t ->
+                listOf("📚 Dersler", "➕ Yeni Ders", "🏛 Üniteler", "📖 Rêziman", "📥 JSON", "🚩 Raporlar").forEachIndexed { i, t ->
                     Tab(
                         selected = selectedTab == i,
                         onClick  = { selectedTab = i },
@@ -115,8 +117,9 @@ fun KurdiAdminScreen(
                 0 -> LessonListTab(lessons = lessons, vm = vm, onSelect = { selectedLesson = it })
                 1 -> NewLessonTab(vm = vm, onCreated = { selectedTab = 0 })
                 2 -> UnitManagerTab(vm = vm)
-                3 -> JsonImportTab(vm = vm)
-                4 -> ReportsTab(vm = vm, onOpenLesson = { lessonId ->
+                3 -> GrammarAdminTab(vm = vm)
+                4 -> JsonImportTab(vm = vm)
+                5 -> ReportsTab(vm = vm, onOpenLesson = { lessonId ->
                     val lesson = lessons.find { it.id == lessonId }
                     if (lesson != null) { selectedLesson = lesson; selectedTab = 0 }
                 })
@@ -1883,4 +1886,446 @@ private fun UnitFormDialog(
         dismissButton = { TextButton(onDismiss) { Text("İptal", color = Muted) } },
         containerColor = HeftSurface,
     )
+}
+
+// ── Rêziman / Dilbilgisi Admin Sekmesi ───────────────────────────────────────
+@Composable
+private fun GrammarAdminTab(vm: KurdiViewModel) {
+    val rules   by vm.grammarRules.collectAsState()
+    val loading by vm.grammarLoading.collectAsState()
+    val scope   = rememberCoroutineScope()
+    val snack   = remember { SnackbarHostState() }
+
+    var showAddDialog  by remember { mutableStateOf(false) }
+    var editTarget     by remember { mutableStateOf<GrammarRule?>(null) }
+    var deleteTarget   by remember { mutableStateOf<GrammarRule?>(null) }
+
+    LaunchedEffect(Unit) { vm.loadGrammar() }
+
+    Scaffold(
+        containerColor = Background,
+        snackbarHost   = { SnackbarHost(snack) },
+        floatingActionButton = {
+            androidx.compose.material3.FloatingActionButton(
+                onClick        = { showAddDialog = true },
+                containerColor = Primary,
+                contentColor   = Color.White,
+                shape          = RoundedCornerShape(16.dp),
+            ) {
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier              = Modifier.padding(horizontal = 16.dp),
+                ) {
+                    Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                    Text("Kural Ekle", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            }
+        },
+    ) { pad ->
+        Box(Modifier.fillMaxSize().padding(pad)) {
+            when {
+                loading -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Primary, strokeWidth = 2.dp)
+                    }
+                }
+                rules.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text("📖", fontSize = 48.sp)
+                            Text("Henüz dilbilgisi kuralı eklenmemiş", color = Muted, fontSize = 14.sp)
+                            Text("Sağ alttaki + butonuna basarak başlayın", color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                }
+                else -> {
+                    LazyColumn(
+                        contentPadding      = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 100.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        // Üst bilgi
+                        item {
+                            Surface(
+                                shape    = RoundedCornerShape(14.dp),
+                                color    = Primary.copy(alpha = 0.10f),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier              = Modifier.padding(14.dp),
+                                    verticalAlignment     = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Text("📖", fontSize = 26.sp)
+                                    Column {
+                                        Text(
+                                            "Dilbilgisi Kuralları",
+                                            fontWeight = FontWeight.Bold, color = Primary, fontSize = 14.sp,
+                                        )
+                                        Text(
+                                            "${rules.size} kural • Tablo, kalın, eğik, renk desteği",
+                                            color = Muted, fontSize = 11.sp,
+                                        )
+                                    }
+                                    Spacer(Modifier.weight(1f))
+                                    IconButton(onClick = { vm.reloadGrammar() }) {
+                                        Icon(Icons.Default.Refresh, null, tint = Primary, modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                            }
+                        }
+
+                        // Kural kartları
+                        items(rules, key = { it.id }) { rule ->
+                            GrammarAdminCard(
+                                rule     = rule,
+                                onEdit   = { editTarget = it },
+                                onDelete = { deleteTarget = it },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Yeni Kural Dialog ──────────────────────────────────────────────────
+    if (showAddDialog) {
+        GrammarEditDialog(
+            initial   = null,
+            onDismiss = { showAddDialog = false },
+            onSave    = { title, titleTr, content, contentTr ->
+                vm.addGrammarRule(title, titleTr, content, contentTr) {
+                    showAddDialog = false
+                    scope.launch { snack.showSnackbar("✓ Kural eklendi") }
+                }
+            },
+        )
+    }
+
+    // ── Düzenleme Dialog ──────────────────────────────────────────────────
+    editTarget?.let { target ->
+        GrammarEditDialog(
+            initial   = target,
+            onDismiss = { editTarget = null },
+            onSave    = { title, titleTr, content, contentTr ->
+                vm.updateGrammarRule(target.id, title, titleTr, content, contentTr) {
+                    editTarget = null
+                    scope.launch { snack.showSnackbar("✓ Kural güncellendi") }
+                }
+            },
+        )
+    }
+
+    // ── Silme Onay Dialog ─────────────────────────────────────────────────
+    deleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            containerColor   = HeftSurface,
+            title = {
+                Text("Kuralı Sil?", color = OnBackground, fontWeight = FontWeight.Bold)
+            },
+            text  = {
+                Text(
+                    "«${target.titleTr.ifBlank { target.title }}» kalıcı olarak silinecek.",
+                    color = Muted,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteGrammarRule(target.id)
+                    scope.launch { snack.showSnackbar("🗑 Kural silindi") }
+                    deleteTarget = null
+                }) {
+                    Text("Sil", color = androidx.compose.material3.MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) { Text("İptal", color = Muted) }
+            },
+        )
+    }
+}
+
+// ── Admin kural kartı (listede gösterim) ─────────────────────────────────────
+@Composable
+private fun GrammarAdminCard(
+    rule    : GrammarRule,
+    onEdit  : (GrammarRule) -> Unit,
+    onDelete: (GrammarRule) -> Unit,
+) {
+    val purpleAccent = Color(0xFF8B5CF6)
+    Surface(
+        shape    = RoundedCornerShape(14.dp),
+        color    = HeftSurface,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier          = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Sol şerit
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(48.dp)
+                    .background(purpleAccent, RoundedCornerShape(2.dp))
+            )
+            Spacer(Modifier.width(12.dp))
+            // Başlıklar
+            Column(Modifier.weight(1f)) {
+                Text(
+                    rule.titleTr.ifBlank { rule.title },
+                    color      = OnBackground,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 14.sp,
+                )
+                if (rule.title.isNotBlank() && rule.title != rule.titleTr) {
+                    Text(rule.title, color = purpleAccent, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                }
+                val preview = htmlStrip(rule.contentTr.ifBlank { rule.content })
+                    .take(60).let { if (it.length == 60) "$it…" else it }
+                if (preview.isNotBlank()) {
+                    Text(preview, color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
+                }
+                // Tablo etiketi
+                if (rule.content.contains("<table", ignoreCase = true) ||
+                    rule.contentTr.contains("<table", ignoreCase = true)) {
+                    Spacer(Modifier.height(4.dp))
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = purpleAccent.copy(alpha = 0.15f),
+                    ) {
+                        Text(
+                            "📊 Tablo",
+                            color    = purpleAccent,
+                            fontSize = 9.sp,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+            }
+            // Düzenle
+            IconButton(onClick = { onEdit(rule) }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.Edit, null, tint = Primary, modifier = Modifier.size(18.dp))
+            }
+            // Sil
+            IconButton(onClick = { onDelete(rule) }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+// ── Tam ekran Kural Düzenleme Dialog (RichTextEditor + Tablo desteği) ─────────
+@Composable
+private fun GrammarEditDialog(
+    initial  : GrammarRule?,
+    onDismiss: () -> Unit,
+    onSave   : (String, String, String, String) -> Unit,
+) {
+    var title     by remember { mutableStateOf(initial?.title     ?: "") }
+    var titleTr   by remember { mutableStateOf(initial?.titleTr   ?: "") }
+    var content   by remember { mutableStateOf(initial?.content   ?: "") }
+    var contentTr by remember { mutableStateOf(initial?.contentTr ?: "") }
+    var editorTab by remember { mutableIntStateOf(0) }
+    val isEdit    = initial != null
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth    = false,
+            decorFitsSystemWindows     = false,
+        ),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.97f)
+                .fillMaxHeight(0.93f),
+            shape = RoundedCornerShape(20.dp),
+            color = Background,
+        ) {
+            Scaffold(
+                containerColor = Background,
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text(
+                                    if (isEdit) "Kuralı Düzenle" else "Yeni Kural Ekle",
+                                    fontWeight = FontWeight.ExtraBold, color = OnBackground, fontSize = 16.sp,
+                                )
+                                if (isEdit && initial!!.id.isNotBlank()) {
+                                    Text("ID: ${initial.id}", color = Muted, fontSize = 10.sp)
+                                }
+                            }
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = onDismiss) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Muted)
+                            }
+                        },
+                        actions = {
+                            Button(
+                                onClick = {
+                                    if (title.isNotBlank() && titleTr.isNotBlank())
+                                        onSave(title, titleTr, content, contentTr)
+                                },
+                                enabled = title.isNotBlank() && titleTr.isNotBlank(),
+                                colors  = ButtonDefaults.buttonColors(containerColor = Primary),
+                                shape   = RoundedCornerShape(10.dp),
+                                modifier = Modifier.padding(end = 8.dp),
+                            ) {
+                                Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Kaydet", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                    )
+                },
+            ) { pad ->
+                LazyColumn(
+                    modifier           = Modifier.fillMaxSize().padding(pad),
+                    contentPadding     = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    // ── Başlık alanları ───────────────────────────────────
+                    item {
+                        Text("BAŞLIKLAR", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 6.dp))
+                        OutlinedTextField(
+                            value       = title, onValueChange = { title = it },
+                            label       = { Text("📚 Kurmancî Başlık *", fontSize = 12.sp) },
+                            modifier    = Modifier.fillMaxWidth(), singleLine = true,
+                            colors      = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor   = Primary, unfocusedBorderColor = SurfaceVar,
+                                focusedTextColor     = OnBackground, unfocusedTextColor = OnBackground,
+                                focusedLabelColor    = Primary, unfocusedLabelColor = Muted,
+                            ),
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value       = titleTr, onValueChange = { titleTr = it },
+                            label       = { Text("🇹🇷 Türkçe Başlık *", fontSize = 12.sp) },
+                            modifier    = Modifier.fillMaxWidth(), singleLine = true,
+                            colors      = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor   = Primary, unfocusedBorderColor = SurfaceVar,
+                                focusedTextColor     = OnBackground, unfocusedTextColor = OnBackground,
+                                focusedLabelColor    = Primary, unfocusedLabelColor = Muted,
+                            ),
+                        )
+                    }
+
+                    // ── Sekme seçici ──────────────────────────────────────
+                    item {
+                        HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                        Spacer(Modifier.height(8.dp))
+                        Text("İÇERİK", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("📚 Kurmancî", "🇹🇷 Türkçe").forEachIndexed { i, label ->
+                                FilterChip(
+                                    selected = editorTab == i,
+                                    onClick  = { editorTab = i },
+                                    label    = { Text(label, fontSize = 12.sp) },
+                                    colors   = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Primary,
+                                        selectedLabelColor     = Color.White,
+                                        containerColor         = HeftSurface,
+                                        labelColor             = Muted,
+                                    ),
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape    = RoundedCornerShape(14.dp),
+                            color    = HeftSurface,
+                        ) {
+                            Column(modifier = Modifier.padding(6.dp)) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Icon(Icons.Default.Edit, null, tint = Primary, modifier = Modifier.size(14.dp))
+                                    Text(
+                                        if (editorTab == 0) "Kurmancî metin — kalın, eğik, altı çizili, renk, boyut"
+                                        else "Türkçe metin — kalın, eğik, altı çizili, renk, boyut",
+                                        color = Muted, fontSize = 11.sp,
+                                    )
+                                }
+                                if (editorTab == 0) {
+                                    RichTextEditor(
+                                        value       = content,
+                                        onChange    = { content = it },
+                                        modifier    = Modifier.fillMaxWidth(),
+                                        placeholder = "Kurmancî dilbilgisi kuralını buraya yazın...",
+                                    )
+                                } else {
+                                    RichTextEditor(
+                                        value       = contentTr,
+                                        onChange    = { contentTr = it },
+                                        modifier    = Modifier.fillMaxWidth(),
+                                        placeholder = "Türkçe açıklamayı buraya yazın...",
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Tablo ipucu kartı ─────────────────────────────────
+                    item {
+                        Surface(
+                            shape    = RoundedCornerShape(12.dp),
+                            color    = Primary.copy(alpha = 0.08f),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                modifier            = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("📊", fontSize = 16.sp)
+                                    Text("Tablo Ekleme", color = Primary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                                Text(
+                                    "İçeriğe HTML tablo etiketi yapıştırın:",
+                                    color = Muted, fontSize = 11.sp,
+                                )
+                                Surface(
+                                    shape    = RoundedCornerShape(8.dp),
+                                    color    = Background.copy(alpha = 0.6f),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        "<table>\n" +
+                                        "  <tr><th>Kurmancî</th><th>Türkçe</th></tr>\n" +
+                                        "  <tr><td>Silav</td><td>Merhaba</td></tr>\n" +
+                                        "  <tr><td>Spas</td><td>Teşekkür</td></tr>\n" +
+                                        "</table>",
+                                        color      = Color(0xFF10B981),
+                                        fontSize   = 10.sp,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                        lineHeight = 16.sp,
+                                        modifier   = Modifier.padding(10.dp),
+                                    )
+                                }
+                                Text(
+                                    "Tablo içeriği ders ekranında otomatik stillendirilir.",
+                                    color = Muted, fontSize = 10.sp,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
