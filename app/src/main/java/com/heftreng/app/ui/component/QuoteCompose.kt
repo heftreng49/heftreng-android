@@ -408,6 +408,31 @@ fun QuoteDialog(
                 }
             }
 
+            // ── Kitap bulunamadı → yeni oluşturulacak uyarısı ───────────────
+            if (book.isNotBlank() && !showBookDrop &&
+                bookSuggestions.none { it.bookName.equals(book.trim(), ignoreCase = true) }
+            ) {
+                item {
+                    Row(
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Amber.copy(alpha = 0.10f))
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                    ) {
+                        Icon(Icons.Default.AutoStories, null, tint = Amber, modifier = Modifier.size(15.dp))
+                        Text(
+                            "\"${book.trim()}\" sistemde yok — yeni kitap olarak eklenecek",
+                            color      = Amber,
+                            fontSize   = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
+            }
+
             // ── Yazar + autocomplete ───────────────────────────────────────
             item {
                 Box {
@@ -472,6 +497,31 @@ fun QuoteDialog(
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            // ── Yazar bulunamadı → yeni oluşturulacak uyarısı ───────────────
+            if (author.isNotBlank() && !showAuthorDrop &&
+                authorSuggestions.none { it.authorName.equals(author.trim(), ignoreCase = true) }
+            ) {
+                item {
+                    Row(
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Amber.copy(alpha = 0.10f))
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                    ) {
+                        Icon(Icons.Default.Person, null, tint = Amber, modifier = Modifier.size(15.dp))
+                        Text(
+                            "\"${author.trim()}\" sistemde yok — yeni yazar olarak eklenecek",
+                            color      = Amber,
+                            fontSize   = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
                     }
                 }
             }
