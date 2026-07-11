@@ -573,7 +573,10 @@ class LibraryRepository @Inject constructor(
         return try {
             db.rpc(
                 "find_similar_author",
-                mapOf("search_name" to name.trim(), "min_similarity" to minSimilarity)
+                kotlinx.serialization.json.buildJsonObject {
+                    put("search_name", kotlinx.serialization.json.JsonPrimitive(name.trim()))
+                    put("min_similarity", kotlinx.serialization.json.JsonPrimitive(minSimilarity))
+                }
             ).decodeList<AuthorRow>()
         } catch (_: Exception) { emptyList() }
     }
@@ -583,7 +586,10 @@ class LibraryRepository @Inject constructor(
         return try {
             db.rpc(
                 "find_similar_book",
-                mapOf("search_title" to title.trim(), "min_similarity" to minSimilarity)
+                kotlinx.serialization.json.buildJsonObject {
+                    put("search_title", kotlinx.serialization.json.JsonPrimitive(title.trim()))
+                    put("min_similarity", kotlinx.serialization.json.JsonPrimitive(minSimilarity))
+                }
             ).decodeList<LibraryBookRow>()
         } catch (_: Exception) { emptyList() }
     }
