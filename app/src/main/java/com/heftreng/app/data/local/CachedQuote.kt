@@ -24,6 +24,7 @@ data class CachedQuote(
     val likesCount      : Int     = 0,
     val commentsCount   : Int     = 0,
     val repostsCount    : Int     = 0,
+    val coverImg        : String  = "",
     val libraryBookId   : String  = "",
     val libraryAuthorId : String  = "",
     val feedPostId      : String  = "",
