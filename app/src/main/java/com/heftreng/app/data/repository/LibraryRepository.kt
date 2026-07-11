@@ -308,6 +308,34 @@ class LibraryRepository @Inject constructor(
             limit(limit.toLong())
         }.decodeList()
 
+    /** Yazar/Kitap detay ekranı için: aktif + banlı olmayan alıntılar.
+     *  LegacyQuoteListPage'in (Firestore, 2×limit(50)) yerini alır. */
+    suspend fun getActiveQuotesByBookName(bookName: String, limit: Int = 50): List<BookQuoteRow> {
+        if (bookName.isBlank()) return emptyList()
+        val banned = getBannedUids()
+        return db["book_quotes"].select {
+            filter {
+                ilike("book_title", bookName.trim())
+                eq("moderation_status", "active")
+            }
+            order("created_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList<BookQuoteRow>().filter { it.uid !in banned }
+    }
+
+    suspend fun getActiveQuotesByAuthorName(authorName: String, limit: Int = 50): List<BookQuoteRow> {
+        if (authorName.isBlank()) return emptyList()
+        val banned = getBannedUids()
+        return db["book_quotes"].select {
+            filter {
+                ilike("author_name", authorName.trim())
+                eq("moderation_status", "active")
+            }
+            order("created_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList<BookQuoteRow>().filter { it.uid !in banned }
+    }
+
     /** Profil — "X alıntı" kartına basınca kullanıcının paylaştığı tüm alıntılar */
     suspend fun getQuotesByUser(uid: String, limit: Int = 100): List<BookQuoteRow> =
         db["book_quotes"].select {

@@ -1303,6 +1303,44 @@ class FeedViewModel @Inject constructor(
     /** QuoteDialog için: yazar adı aratıp öneri döner — Supabase'den, canlı arama. */
     suspend fun searchAuthorsForQuote(query: String) = library.searchAuthorsForQuote(query)
 
+    /** LegacyQuoteListPage için: kitap adına göre alıntıları Supabase'den çeker, Post'a çevirir. */
+    suspend fun getQuotesAsPostsByBookName(bookName: String): List<Post> {
+        return try {
+            library.getActiveQuotesByBookName(bookName).map { q ->
+                Post(
+                    id          = q.feedPostId.ifBlank { q.id },
+                    uid         = q.uid,
+                    displayName = q.userDisplayName,
+                    photoURL    = q.userPhotoUrl,
+                    quoteText   = q.text,
+                    bookName    = q.bookTitle,
+                    authorName  = q.authorName,
+                    coverImg    = q.coverImg,
+                    ts          = parseSupabaseTimestamp(q.createdAt),
+                )
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    /** LegacyQuoteListPage için: yazar adına göre alıntıları Supabase'den çeker, Post'a çevirir. */
+    suspend fun getQuotesAsPostsByAuthorName(authorName: String): List<Post> {
+        return try {
+            library.getActiveQuotesByAuthorName(authorName).map { q ->
+                Post(
+                    id          = q.feedPostId.ifBlank { q.id },
+                    uid         = q.uid,
+                    displayName = q.userDisplayName,
+                    photoURL    = q.userPhotoUrl,
+                    quoteText   = q.text,
+                    bookName    = q.bookTitle,
+                    authorName  = q.authorName,
+                    coverImg    = q.coverImg,
+                    ts          = parseSupabaseTimestamp(q.createdAt),
+                )
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
     fun deletePost(postId: String) {
         if (uid.isEmpty()) return
         viewModelScope.launch {

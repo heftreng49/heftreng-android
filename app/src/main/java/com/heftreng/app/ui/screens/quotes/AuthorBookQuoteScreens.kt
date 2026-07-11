@@ -1055,35 +1055,21 @@ private fun LegacyQuoteListPage(
     navController: NavController? = null,
     feedVm       : com.heftreng.app.viewmodel.FeedViewModel? = null,
 ) {
-    val db      = remember { FirebaseFirestore.getInstance() }
     var posts   by remember { mutableStateOf<List<Post>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(value) {
         loading = true
         try {
-            val snap1 = db.collection("feed").whereEqualTo(field, value).limit(50).get().await()
-            val snap2 = db.collection("feed").whereEqualTo(flatField, value).limit(50).get().await()
-            val all   = (snap1.documents + snap2.documents).distinctBy { it.id }
-                .sortedByDescending { (it.data?.get("ts") as? com.google.firebase.Timestamp)?.seconds ?: 0L }
-
-            posts = all.mapNotNull { doc ->
-                val d = doc.data ?: return@mapNotNull null
-                val qObj   = d["quote"] as? Map<*, *>
-                val qText  = (qObj?.get("text") as? String)?.takeIf { it.isNotBlank() }
-                    ?: d["quoteText"] as? String ?: return@mapNotNull null
-                Post(
-                    id          = doc.id,
-                    uid         = d["uid"]          as? String ?: "",
-                    displayName = (d["name"]        as? String)?.takeIf { it.isNotBlank() }
-                        ?: d["displayName"] as? String ?: "",
-                    photoURL    = d["photoURL"]     as? String ?: "",
-                    quoteText   = qText,
-                    bookName    = (qObj?.get("book")   as? String)?.takeIf { it.isNotBlank() } ?: d["bookName"]   as? String ?: "",
-                    authorName  = (qObj?.get("author") as? String)?.takeIf { it.isNotBlank() } ?: d["authorName"] as? String ?: "",
-                    ts          = d["ts"] as? com.google.firebase.Timestamp,
-                )
-            }
+            posts = if (feedVm != null) {
+                // flatField "authorName" için yazar adına, "bookName" için kitap adına göre ara.
+                // Supabase book_quotes tablosundan — Firestore'daki eski 2×limit(50) taramasının yerine.
+                if (flatField == "authorName") {
+                    feedVm.getQuotesAsPostsByAuthorName(value)
+                } else {
+                    feedVm.getQuotesAsPostsByBookName(value)
+                }
+            } else emptyList()
         } catch (e: Exception) { e.printStackTrace() } finally { loading = false }
     }
 
