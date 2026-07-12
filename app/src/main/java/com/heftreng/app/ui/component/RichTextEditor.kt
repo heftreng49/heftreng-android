@@ -141,6 +141,115 @@ fun htmlStrip(html: String): String = html
     .replace("&nbsp;", " ")
     .trimEnd()
 
+// ── HTML → (düz metin + span listesi) ────────────────────────────────────────
+// Editörü açarken mevcut HTML içeriğini parse eder; format kaybolmaz.
+data class HtmlParseResult(val text: String, val spans: List<RichSpan>)
+
+fun htmlToSpans(html: String): HtmlParseResult {
+    if (html.isBlank()) return HtmlParseResult("", emptyList())
+
+    // Ön işleme: <br>, <p> → newline; html entity decode
+    val normalized = html
+        .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
+        .replace(Regex("<p[^>]*>",   RegexOption.IGNORE_CASE), "")
+        .replace(Regex("</p>",       RegexOption.IGNORE_CASE), "\n")
+        .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&nbsp;", " ")
+
+    // Desteklenen tag'ler
+    val tagRegex = Regex(
+        "<(/?)(b|strong|i|em|u|s|strike|span)([^>]*)>",
+        RegexOption.IGNORE_CASE,
+    )
+
+    data class OpenTag(val tag: String, val startIndex: Int, val style: RichSpan)
+
+    val plainBuilder = StringBuilder()
+    val spans        = mutableListOf<RichSpan>()
+    val stack        = mutableListOf<OpenTag>() // açık tag'ler
+    var lastEnd      = 0
+
+    tagRegex.findAll(normalized).forEach { match ->
+        // Tag öncesi düz metin
+        val before = normalized.substring(lastEnd, match.range.first)
+        plainBuilder.append(before)
+        lastEnd = match.range.last + 1
+
+        val closing = match.groupValues[1] == "/"
+        val tag     = match.groupValues[2].lowercase()
+        val attrs   = match.groupValues[3]
+
+        if (!closing) {
+            // Açılış tag'i → stack'e ekle
+            val baseSpan = RichSpan(
+                start  = plainBuilder.length,
+                end    = plainBuilder.length, // şimdilik
+                bold   = tag == "b" || tag == "strong",
+                italic = tag == "i" || tag == "em",
+                under  = tag == "u",
+                strike = tag == "s" || tag == "strike",
+                // <span style="..."> renk / boyut
+                color  = if (tag == "span") parseHtmlColor(attrs) else null,
+                size   = if (tag == "span") parseHtmlFontSize(attrs) else null,
+            )
+            stack.add(OpenTag(tag, plainBuilder.length, baseSpan))
+        } else {
+            // Kapanış tag'i → eşleşen stack elemanını bul
+            val idx = stack.indexOfLast {
+                when (tag) {
+                    "b", "strong" -> it.tag == "b" || it.tag == "strong"
+                    "i", "em"     -> it.tag == "i" || it.tag == "em"
+                    "s", "strike" -> it.tag == "s" || it.tag == "strike"
+                    else          -> it.tag == tag
+                }
+            }
+            if (idx >= 0) {
+                val open = stack.removeAt(idx)
+                val end  = plainBuilder.length
+                if (end > open.startIndex) {
+                    spans.add(open.style.copy(start = open.startIndex, end = end))
+                }
+            }
+        }
+    }
+
+    // Kalan düz metin
+    if (lastEnd < normalized.length) plainBuilder.append(normalized.substring(lastEnd))
+
+    // Hâlâ açık kalan tag'leri kapat
+    stack.forEach { open ->
+        val end = plainBuilder.length
+        if (end > open.startIndex) spans.add(open.style.copy(start = open.startIndex, end = end))
+    }
+
+    // Geriye kalan ham tag'leri temizle (bilinmeyen tag'ler)
+    val cleanText = plainBuilder.toString()
+        .replace(Regex("<[^>]+>"), "")
+        .trimEnd()
+
+    // Span indekslerini temiz metin uzunluğuna kırp
+    val clampedSpans = spans.map { s ->
+        s.copy(
+            start = s.start.coerceIn(0, cleanText.length),
+            end   = s.end.coerceIn(0, cleanText.length),
+        )
+    }.filter { it.start < it.end }
+
+    return HtmlParseResult(cleanText, clampedSpans)
+}
+
+/** style="color:#rrggbb" veya style="color:rgb(...)" ayrıştırır */
+private fun parseHtmlColor(attrs: String): Color? {
+    val hex = Regex("color\\s*:\\s*(#[0-9a-fA-F]{3,8})", RegexOption.IGNORE_CASE)
+        .find(attrs)?.groupValues?.get(1) ?: return null
+    return try { Color(android.graphics.Color.parseColor(hex)) } catch (_: Exception) { null }
+}
+
+/** style="font-size:NNpx" ayrıştırır */
+private fun parseHtmlFontSize(attrs: String): Int? {
+    return Regex("font-size\\s*:\\s*(\\d+)px", RegexOption.IGNORE_CASE)
+        .find(attrs)?.groupValues?.get(1)?.toIntOrNull()
+}
+
 // ── Ana RichTextEditor ───────────────────────────────────────────────────────
 @Composable
 fun RichTextEditor(
@@ -149,13 +258,11 @@ fun RichTextEditor(
     modifier   : Modifier = Modifier,
     placeholder: String   = "İçeriğinizi buraya yazın...",
 ) {
-    // FIX: remember(value) her onChange'de cursor pozisyonunu sıfırlıyordu.
-    // Şimdi sadece ilk açılışta (rememberSaveable boş) ya da dışarıdan gerçek
-    // bir reset geldiğinde (örn. "yeni bölüm aç") TFV güncelleniyor.
-    val stripped = remember(value) { htmlStrip(value) }
-    var tfv by remember { mutableStateOf(TextFieldValue(text = stripped)) }
+    // HTML → düz metin + span listesi olarak parse et (format korunur)
+    val parsed = remember(value) { htmlToSpans(value) }
+    var tfv by remember { mutableStateOf(TextFieldValue(text = parsed.text)) }
 
-    var spans     by remember { mutableStateOf(listOf<RichSpan>()) }
+    var spans     by remember { mutableStateOf(parsed.spans) }
     var isFocused by remember { mutableStateOf(false) }
 
     // Aktif format bayrakları
@@ -168,11 +275,11 @@ fun RichTextEditor(
     var showSize  by remember { mutableStateOf(false) }
     var showColor by remember { mutableStateOf(false) }
 
-    // Dışarıdan farklı bir metin gelirse (örn. düzenle butonuna basıldı) sync et
-    LaunchedEffect(stripped) {
-        if (tfv.text != stripped) {
-            tfv      = TextFieldValue(text = stripped)
-            spans    = emptyList()
+    // Dışarıdan farklı bir içerik gelirse (örn. düzenle butonuna basıldı) sync et
+    LaunchedEffect(parsed) {
+        if (tfv.text != parsed.text) {
+            tfv      = TextFieldValue(text = parsed.text)
+            spans    = parsed.spans
             boldOn   = false
             italicOn = false
             underOn  = false
