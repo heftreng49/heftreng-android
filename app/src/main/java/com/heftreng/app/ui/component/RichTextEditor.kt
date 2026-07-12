@@ -38,41 +38,82 @@ import com.heftreng.app.ui.theme.*
 
 /**
  * Tek bir format aralığı. [start, end) — end dahil değil.
- * Bu model değişmedi; Firestore/Supabase'de saklanan HTML ile uyumlu.
+ *
+ * [heading] → null = normal paragraf, 2 = <h2>, 3 = <h3>
+ * Başlık satırları otomatik bold + büyük font alır; üstü çizili OLMAZ.
  */
 data class RichSpan(
-    val start  : Int,
-    val end    : Int,
-    val bold   : Boolean = false,
-    val italic : Boolean = false,
-    val under  : Boolean = false,
-    val strike : Boolean = false,
-    val size   : Int?    = null,   // sp; null = varsayılan
-    val color  : Color?  = null,
+    val start   : Int,
+    val end     : Int,
+    val bold    : Boolean = false,
+    val italic  : Boolean = false,
+    val under   : Boolean = false,
+    val strike  : Boolean = false,
+    val size    : Int?    = null,    // sp; null = varsayılan
+    val color   : Color?  = null,
+    val heading : Int?    = null,    // 2 veya 3; diğer alanları override eder
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HTML ↔ Span dönüşümleri  (public — KurdiScreen ve AdminScreen bunları kullanır)
+// HTML ↔ Span / Tablo dönüşümleri  (public)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Span listesi + düz metin → tek <p> içinde HTML */
+/** Span listesi + düz metin → HTML.
+ *  Başlıklar <h2>/<h3> olarak, tablolar <table> bloğu olarak çıkar. */
 fun spansToHtml(text: String, spans: List<RichSpan>): String {
     if (text.isBlank() && spans.isEmpty()) return ""
-    if (spans.isEmpty()) return "<p>${text.replace("\n", "<br/>")}</p>"
 
-    // Her karakter için hangi span'ların aktif olduğunu bul; aynı bloğu birleştir.
+    // Tablo bloklarını önce ayıkla — bunlar span ile değil, kendi tag'leriyle saklanır.
+    // Tablo metni "\u0000TABLE:<html>\u0000" sentinel formatındadır.
+    val tableRegex = Regex("\u0000TABLE:(.*?)\u0000", RegexOption.DOT_MATCHES_ALL)
+
     return buildString {
-        append("<p>")
+        var cursor = 0
+        for (tableMatch in tableRegex.findAll(text)) {
+            // Tablo öncesindeki normal metin
+            val before = text.substring(cursor, tableMatch.range.first)
+            if (before.isNotEmpty()) {
+                append(segmentToHtml(before, cursor, spans))
+            }
+            // Tablo HTML'sini doğrudan ekle (zaten <table>…</table>)
+            append(tableMatch.groupValues[1])
+            cursor = tableMatch.range.last + 1
+        }
+        // Kalan metin
+        val tail = text.substring(cursor)
+        if (tail.isNotEmpty()) append(segmentToHtml(tail, cursor, spans))
+    }
+}
+
+/** Normal metin segmentini (tablo dışı) HTML'ye çevirir. */
+private fun segmentToHtml(segment: String, offset: Int, spans: List<RichSpan>): String {
+    if (segment.isEmpty()) return ""
+    if (spans.isEmpty()) return "<p>${segment.replace("\n", "<br/>")}</p>"
+
+    return buildString {
         var i = 0
-        while (i < text.length) {
-            val ch      = text[i]
-            val active  = spans.filter { i >= it.start && i < it.end }
-            val bold    = active.any { it.bold }
-            val italic  = active.any { it.italic }
-            val under   = active.any { it.under }
-            val strike  = active.any { it.strike }
-            val size    = active.mapNotNull { it.size }.maxOrNull()
-            val color   = active.mapNotNull { it.color }.lastOrNull()
+        while (i < segment.length) {
+            val absI   = i + offset
+            val ch     = segment[i]
+            val active = spans.filter { absI >= it.start && absI < it.end }
+
+            val headingSpan = active.firstOrNull { it.heading != null }
+            if (headingSpan != null) {
+                // Başlık satırı — sadece tag, strikethrough/underline yok
+                val tag = "h${headingSpan.heading}"
+                append("<$tag>")
+                append(if (ch == '\n') "<br/>" else ch.htmlEscape())
+                append("</$tag>")
+                i++
+                continue
+            }
+
+            val bold   = active.any { it.bold }
+            val italic = active.any { it.italic }
+            val under  = active.any { it.under }
+            val strike = active.any { it.strike }
+            val size   = active.mapNotNull { it.size }.maxOrNull()
+            val color  = active.mapNotNull { it.color }.lastOrNull()
 
             val styleAttr = buildString {
                 if (size  != null) append("font-size:${size}px;")
@@ -95,20 +136,38 @@ fun spansToHtml(text: String, spans: List<RichSpan>): String {
 
             i++
         }
-        append("</p>")
     }
 }
 
 data class HtmlParseResult(val text: String, val spans: List<RichSpan>)
 
 /** HTML → düz metin + span listesi.
- *  Desteklenen tag'ler: b, strong, i, em, u, s, strike, span(style).
- */
+ *  <table> blokları sentinel formatına çevrilir, diğer tag'ler span'a dönüşür. */
 fun htmlToSpans(html: String): HtmlParseResult {
     if (html.isBlank()) return HtmlParseResult("", emptyList())
 
+    // Tablo bloklarını önce sentinel'e çevir
+    val tableRegex = Regex("<table[^>]*>.*?</table>", RegexOption.IGNORE_CASE or RegexOption.DOT_MATCHES_ALL)
+    var preprocessed = html
+    val tableMap = mutableMapOf<String, String>() // sentinel → html
+    for (m in tableRegex.findAll(html)) {
+        val sentinel = "\u0000TABLE:${m.value}\u0000"
+        tableMap[sentinel] = m.value
+        preprocessed = preprocessed.replace(m.value, sentinel)
+    }
+
+    // Başlıkları işle: <h2>…</h2> ve <h3>…</h3>
+    val headingRegex = Regex("<(h[23])[^>]*>(.*?)</\\1>", RegexOption.IGNORE_CASE or RegexOption.DOT_MATCHES_ALL)
+    preprocessed = headingRegex.replace(preprocessed) { mr ->
+        val level   = mr.groupValues[1].removePrefix("h")
+        val content = mr.groupValues[2]
+            .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
+            .replace(Regex("<[^>]+>"), "")
+        "\u0001H${level}:${content}\u0001"
+    }
+
     // <br> / <p> → newline; entity decode
-    val normalized = html
+    val normalized = preprocessed
         .replace(Regex("<br\\s*/?>",  RegexOption.IGNORE_CASE), "\n")
         .replace(Regex("<p[^>]*>",    RegexOption.IGNORE_CASE), "")
         .replace(Regex("</p>",        RegexOption.IGNORE_CASE), "\n")
@@ -124,64 +183,85 @@ fun htmlToSpans(html: String): HtmlParseResult {
 
     data class OpenTag(val tag: String, val startIndex: Int, val proto: RichSpan)
 
-    val plain   = StringBuilder()
-    val spans   = mutableListOf<RichSpan>()
-    val stack   = mutableListOf<OpenTag>()
-    var cursor  = 0
+    val plain  = StringBuilder()
+    val spans  = mutableListOf<RichSpan>()
+    val stack  = mutableListOf<OpenTag>()
+    var cursor = 0
 
-    for (match in tagRegex.findAll(normalized)) {
-        // Tag öncesi düz metin ekle
+    // Başlık sentinel'lerini bul ve işle
+    val headingSentinelRegex = Regex("\u0001H([23]):(.*?)\u0001", RegexOption.DOT_MATCHES_ALL)
+
+    // Tüm özel blokları (heading sentinel) ve tag'leri birlikte işle
+    val allMatches = (
+        tagRegex.findAll(normalized).map { "tag" to it } +
+        headingSentinelRegex.findAll(normalized).map { "heading" to it }
+    ).sortedBy { it.second.range.first }
+
+    for ((type, match) in allMatches) {
+        if (match.range.first < cursor) continue
+        // Araya giren düz metin
         if (match.range.first > cursor) {
             plain.append(normalized.substring(cursor, match.range.first))
         }
         cursor = match.range.last + 1
 
-        val closing = match.groupValues[1] == "/"
-        val tag     = match.groupValues[2].lowercase()
-        val attrs   = match.groupValues[3]
-
-        if (!closing) {
-            val proto = RichSpan(
-                start  = plain.length,
-                end    = plain.length,
-                bold   = tag == "b" || tag == "strong",
-                italic = tag == "i" || tag == "em",
-                under  = tag == "u",
-                strike = tag == "s" || tag == "strike",
-                color  = if (tag == "span") parseHtmlColor(attrs) else null,
-                size   = if (tag == "span") parseHtmlFontSize(attrs) else null,
-            )
-            stack.add(OpenTag(tag, plain.length, proto))
-        } else {
-            // En yakın eşleşen açık tag'i bul (last match first)
-            val idx = stack.indexOfLast { open ->
-                when (tag) {
-                    "b", "strong" -> open.tag == "b" || open.tag == "strong"
-                    "i", "em"     -> open.tag == "i" || open.tag == "em"
-                    "s", "strike" -> open.tag == "s" || open.tag == "strike"
-                    else          -> open.tag == tag
+        when (type) {
+            "heading" -> {
+                val level   = match.groupValues[1].toIntOrNull() ?: 2
+                val content = match.groupValues[2]
+                val start   = plain.length
+                plain.append(content)
+                val end = plain.length
+                if (end > start) {
+                    spans.add(RichSpan(start = start, end = end, heading = level, bold = true))
                 }
             }
-            if (idx >= 0) {
-                val open = stack.removeAt(idx)
-                val end  = plain.length
-                if (end > open.startIndex) {
-                    spans.add(open.proto.copy(start = open.startIndex, end = end))
+            "tag" -> {
+                val closing = match.groupValues[1] == "/"
+                val tag     = match.groupValues[2].lowercase()
+                val attrs   = match.groupValues[3]
+
+                if (!closing) {
+                    val proto = RichSpan(
+                        start  = plain.length,
+                        end    = plain.length,
+                        bold   = tag == "b" || tag == "strong",
+                        italic = tag == "i" || tag == "em",
+                        under  = tag == "u",
+                        strike = tag == "s" || tag == "strike",
+                        color  = if (tag == "span") parseHtmlColor(attrs) else null,
+                        size   = if (tag == "span") parseHtmlFontSize(attrs) else null,
+                    )
+                    stack.add(OpenTag(tag, plain.length, proto))
+                } else {
+                    val idx = stack.indexOfLast { open ->
+                        when (tag) {
+                            "b", "strong" -> open.tag == "b" || open.tag == "strong"
+                            "i", "em"     -> open.tag == "i" || open.tag == "em"
+                            "s", "strike" -> open.tag == "s" || open.tag == "strike"
+                            else          -> open.tag == tag
+                        }
+                    }
+                    if (idx >= 0) {
+                        val open = stack.removeAt(idx)
+                        val end  = plain.length
+                        if (end > open.startIndex) {
+                            spans.add(open.proto.copy(start = open.startIndex, end = end))
+                        }
+                    }
                 }
             }
         }
     }
 
-    // Son kalan düz metin
     if (cursor < normalized.length) plain.append(normalized.substring(cursor))
 
-    // Kapatılmamış tag'leri kapat
     stack.forEach { open ->
         val end = plain.length
         if (end > open.startIndex) spans.add(open.proto.copy(start = open.startIndex, end = end))
     }
 
-    // Bilinmeyen tag kalıntılarını temizle
+    // Bilinmeyen tag kalıntılarını temizle; sentinel'leri koru
     val cleanText = plain.toString()
         .replace(Regex("<[^>]+>"), "")
         .trimEnd()
@@ -198,12 +278,15 @@ fun htmlToSpans(html: String): HtmlParseResult {
     return HtmlParseResult(cleanText, clampedSpans)
 }
 
-/** HTML'yi düz metne indirger (önizleme, bildirim özeti için). */
+/** HTML'yi düz metne indirger (bildirim özeti vb.). */
 fun htmlStrip(html: String): String = html
-    .replace(Regex("<br/?>",  RegexOption.IGNORE_CASE), "\n")
-    .replace(Regex("<hr/?>",  RegexOption.IGNORE_CASE), "\n───────────────\n")
-    .replace(Regex("<p>",     RegexOption.IGNORE_CASE), "")
-    .replace(Regex("</p>",    RegexOption.IGNORE_CASE), "\n")
+    .replace(Regex("<br/?>",   RegexOption.IGNORE_CASE), "\n")
+    .replace(Regex("<hr/?>",   RegexOption.IGNORE_CASE), "\n───────────────\n")
+    .replace(Regex("<h[1-6][^>]*>", RegexOption.IGNORE_CASE), "")
+    .replace(Regex("</h[1-6]>",     RegexOption.IGNORE_CASE), "\n")
+    .replace(Regex("<p>",      RegexOption.IGNORE_CASE), "")
+    .replace(Regex("</p>",     RegexOption.IGNORE_CASE), "\n")
+    .replace(Regex("<td[^>]*>",RegexOption.IGNORE_CASE), " | ")
     .replace(Regex("<[^>]+>"), "")
     .replace("&amp;",  "&")
     .replace("&lt;",   "<")
@@ -212,7 +295,7 @@ fun htmlStrip(html: String): String = html
     .trimEnd()
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AnnotatedString oluşturucu  (public — önizleme bileşenleri kullanır)
+// AnnotatedString oluşturucu  (public)
 // ─────────────────────────────────────────────────────────────────────────────
 
 fun buildAnnotated(text: String, spans: List<RichSpan>): AnnotatedString =
@@ -222,6 +305,22 @@ fun buildAnnotated(text: String, spans: List<RichSpan>): AnnotatedString =
             val start = s.start.coerceIn(0, text.length)
             val end   = s.end.coerceIn(0, text.length)
             if (start >= end) return@forEach
+
+            if (s.heading != null) {
+                // Başlık: büyük + bold, ASLA strikethrough/underline yok
+                val headingSize = if (s.heading == 2) 22.sp else 18.sp
+                addStyle(
+                    SpanStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = headingSize,
+                        color      = s.color ?: Color.Unspecified,
+                        // textDecoration = null → varsayılan, üstü çizili kesinlikle yok
+                    ),
+                    start, end,
+                )
+                return@forEach
+            }
+
             addStyle(
                 SpanStyle(
                     fontWeight     = if (s.bold)   FontWeight.Bold   else null,
@@ -241,6 +340,28 @@ fun buildAnnotated(text: String, spans: List<RichSpan>): AnnotatedString =
             )
         }
     }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tablo HTML yardımcısı
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** [rows] × [cols] boyutunda boş tablo HTML'si üretir. */
+fun buildTableHtml(rows: Int, cols: Int): String = buildString {
+    append("<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse;width:100%;\">")
+    repeat(rows) { r ->
+        append("<tr>")
+        repeat(cols) {
+            if (r == 0) append("<th style=\"background:#f0f0f0;\">Başlık</th>")
+            else        append("<td>&nbsp;</td>")
+        }
+        append("</tr>")
+    }
+    append("</table>")
+}
+
+/** Tablo sentinel'i oluşturur (metne gömülür). */
+fun tableBlock(rows: Int, cols: Int): String =
+    "\u0000TABLE:${buildTableHtml(rows, cols)}\u0000"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Yardımcı fonksiyonlar
@@ -271,16 +392,9 @@ private fun parseHtmlFontSize(attrs: String): Int? =
         .find(attrs)?.groupValues?.get(1)?.toIntOrNull()
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Span güncelleme yardımcısı
+// Span kaydırma yardımcısı
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Metin değiştiğinde span listesini metin farkına göre güvenle kaydırır.
- *
- * [insertAt]  → yeni karakterlerin eklendiği konum  (diff > 0 ise)
- * [deleteAt]  → silinen karakterlerin başlangıç konumu (diff < 0 ise)
- * [diff]      → uzunluk farkı (pozitif = ekleme, negatif = silme)
- */
 private fun shiftSpans(
     spans    : List<RichSpan>,
     insertAt : Int,
@@ -292,12 +406,10 @@ private fun shiftSpans(
         val newStart: Int
         val newEnd: Int
         if (diff > 0) {
-            // Ekleme: [insertAt] noktasından itibaren kaydır
             newStart = if (s.start >= insertAt) s.start + diff else s.start
             newEnd   = if (s.end   >  insertAt) s.end   + diff else s.end
         } else {
-            // Silme: [insertAt .. insertAt - diff] aralığı silindi
-            val delStart = insertAt + diff   // diff negatif, bu yüzden gerçek başlangıç
+            val delStart = insertAt + diff
             val delEnd   = insertAt
             newStart = when {
                 s.start <= delStart -> s.start
@@ -310,10 +422,66 @@ private fun shiftSpans(
                 else              -> delStart
             }
         }
-        val clampedStart = newStart.coerceIn(0, newLen)
-        val clampedEnd   = newEnd.coerceIn(0, newLen)
-        if (clampedStart < clampedEnd) s.copy(start = clampedStart, end = clampedEnd) else null
+        val cs = newStart.coerceIn(0, newLen)
+        val ce = newEnd.coerceIn(0, newLen)
+        if (cs < ce) s.copy(start = cs, end = ce) else null
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tablo ekleme dialog'u
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun InsertTableDialog(
+    onDismiss : () -> Unit,
+    onInsert  : (rows: Int, cols: Int) -> Unit,
+) {
+    var rows by remember { mutableStateOf(3) }
+    var cols by remember { mutableStateOf(3) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title   = { Text("Tablo Ekle") },
+        text    = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Satır sayısı
+                Text("Satır sayısı: $rows", fontSize = 13.sp)
+                Slider(
+                    value         = rows.toFloat(),
+                    onValueChange = { rows = it.toInt() },
+                    valueRange    = 1f..10f,
+                    steps         = 8,
+                    colors        = SliderDefaults.colors(thumbColor = Amber, activeTrackColor = Amber),
+                )
+                // Sütun sayısı
+                Text("Sütun sayısı: $cols", fontSize = 13.sp)
+                Slider(
+                    value         = cols.toFloat(),
+                    onValueChange = { cols = it.toInt() },
+                    valueRange    = 1f..6f,
+                    steps         = 4,
+                    colors        = SliderDefaults.colors(thumbColor = Amber, activeTrackColor = Amber),
+                )
+                // Önizleme etiketi
+                Text(
+                    "${rows} satır × ${cols} sütun",
+                    color    = Muted,
+                    fontSize = 12.sp,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onInsert(rows, cols) }) {
+                Text("Ekle", color = Amber)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("İptal")
+            }
+        },
+    )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -327,14 +495,13 @@ fun RichTextEditor(
     modifier   : Modifier = Modifier,
     placeholder: String   = "İçeriğinizi buraya yazın...",
 ) {
-    // ── İlk parse ─────────────────────────────────────────────────────────
     val initialParsed = remember(value) { htmlToSpans(value) }
 
     var tfv       by remember { mutableStateOf(TextFieldValue(text = initialParsed.text)) }
     var spans     by remember { mutableStateOf(initialParsed.spans) }
     var isFocused by remember { mutableStateOf(false) }
 
-    // Aktif format bayrakları (imleç konumundaki format)
+    // Format bayrakları
     var boldOn    by remember { mutableStateOf(false) }
     var italicOn  by remember { mutableStateOf(false) }
     var underOn   by remember { mutableStateOf(false) }
@@ -343,8 +510,8 @@ fun RichTextEditor(
     var textColor by remember { mutableStateOf<Color?>(null) }
     var showSize  by remember { mutableStateOf(false) }
     var showColor by remember { mutableStateOf(false) }
+    var showTableDialog by remember { mutableStateOf(false) }
 
-    // Dışarıdan farklı bir value gelirse (örn. "Düzenle" butonu) yeniden senkronize et
     LaunchedEffect(initialParsed) {
         if (tfv.text != initialParsed.text) {
             tfv      = TextFieldValue(text = initialParsed.text)
@@ -354,71 +521,67 @@ fun RichTextEditor(
         }
     }
 
-    // Tema renkleri
     val surface    = HeftSurface
     val surfaceVar = SurfaceVar
     val onBg       = OnBackground
     val muted      = Muted
     val divider    = Divider
 
-    // ── Seçili aralığa format uygula ──────────────────────────────────────
+    // ── Seçime format uygula ──────────────────────────────────────────────
     fun applyToSelection(
-        bold   : Boolean? = null,
-        italic : Boolean? = null,
-        under  : Boolean? = null,
-        strike : Boolean? = null,
-        size   : Int?     = null,
-        color  : Color?   = null,
+        bold    : Boolean? = null,
+        italic  : Boolean? = null,
+        under   : Boolean? = null,
+        strike  : Boolean? = null,
+        size    : Int?     = null,
+        color   : Color?   = null,
+        heading : Int?     = null,
     ) {
         val sel = tfv.selection
-        if (sel.collapsed) return          // seçim yok → sadece flag değişir
+        if (sel.collapsed) return
         val start = sel.min
         val end   = sel.max
 
-        // Seçimle çakışan eski span'ları böl / kırp / çıkar
         val updated = mutableListOf<RichSpan>()
         for (s in spans) {
             when {
-                s.end <= start || s.start >= end -> updated.add(s)   // çakışmıyor
+                s.end <= start || s.start >= end -> updated.add(s)
                 else -> {
-                    // Seçim öncesi kısım
                     if (s.start < start) updated.add(s.copy(end = start))
-                    // Seçim sonrası kısım
-                    if (s.end > end)     updated.add(s.copy(start = end))
-                    // Seçim içindeki kısım — aynı türü güncelle, diğerini koru
+                    if (s.end   > end)   updated.add(s.copy(start = end))
                     val inside = s.copy(
-                        start  = maxOf(s.start, start),
-                        end    = minOf(s.end,   end),
-                        bold   = bold   ?: s.bold,
-                        italic = italic ?: s.italic,
-                        under  = under  ?: s.under,
-                        strike = strike ?: s.strike,
-                        size   = size   ?: s.size,
-                        color  = color  ?: s.color,
+                        start   = maxOf(s.start, start),
+                        end     = minOf(s.end,   end),
+                        bold    = bold    ?: s.bold,
+                        italic  = italic  ?: s.italic,
+                        under   = under   ?: s.under,
+                        // Başlık span'ına strike uygulanmaz
+                        strike  = if (s.heading != null) false else (strike ?: s.strike),
+                        size    = size    ?: s.size,
+                        color   = color   ?: s.color,
+                        heading = heading ?: s.heading,
                     )
                     if (inside.bold || inside.italic || inside.under || inside.strike
-                        || inside.size != null || inside.color != null
-                    ) {
-                        updated.add(inside)
-                    }
+                        || inside.size != null || inside.color != null || inside.heading != null
+                    ) updated.add(inside)
                 }
             }
         }
 
-        // Eğer seçim aralığı hiç span'la kaplı değilse yeni span ekle
         val covered = updated.any { it.start <= start && it.end >= end }
         if (!covered && (bold == true || italic == true || under == true || strike == true
-                || size != null || color != null)
+                || size != null || color != null || heading != null)
         ) {
             updated.add(
                 RichSpan(
-                    start  = start, end = end,
-                    bold   = bold   == true,
-                    italic = italic == true,
-                    under  = under  == true,
-                    strike = strike == true,
-                    size   = size,
-                    color  = color,
+                    start   = start, end = end,
+                    bold    = bold   == true || heading != null,
+                    italic  = italic == true,
+                    under   = under  == true,
+                    strike  = if (heading != null) false else (strike == true),
+                    size    = size,
+                    color   = color,
+                    heading = heading,
                 )
             )
         }
@@ -427,35 +590,63 @@ fun RichTextEditor(
         onChange(spansToHtml(tfv.text, spans))
     }
 
-    // ── Toggle: seçimde format var mı? ────────────────────────────────────
-    fun selectionHas(
-        check: (RichSpan) -> Boolean,
-    ): Boolean {
+    fun selectionHas(check: (RichSpan) -> Boolean): Boolean {
         val sel = tfv.selection
         if (sel.collapsed) return false
-        return spans.any { s ->
-            s.start < sel.max && s.end > sel.min && check(s)
-        }
+        return spans.any { s -> s.start < sel.max && s.end > sel.min && check(s) }
     }
 
-    // ── Toolbar toggle: format varsa kaldır, yoksa uygula ─────────────────
     fun toggleFormat(
         flag     : Boolean,
         setFlag  : (Boolean) -> Unit,
         checkSpan: (RichSpan) -> Boolean,
         applySpan: (Boolean) -> Unit,
     ) {
-        val sel = tfv.selection
-        if (!sel.collapsed) {
-            val hasFormat = selectionHas(checkSpan)
-            applySpan(!hasFormat)
+        if (!tfv.selection.collapsed) {
+            applySpan(!selectionHas(checkSpan))
         } else {
-            val newFlag = !flag
-            setFlag(newFlag)
+            setFlag(!flag)
         }
     }
 
+    // ── Başlık satırı ekle ────────────────────────────────────────────────
+    fun insertHeading(level: Int) {
+        val cursor  = tfv.selection.start
+        val text    = tfv.text
+        // İmleç satırının başını bul
+        val lineStart = text.lastIndexOf('\n', cursor - 1).let { if (it < 0) 0 else it + 1 }
+        val lineEnd   = text.indexOf('\n', cursor).let { if (it < 0) text.length else it }
+        val lineText  = text.substring(lineStart, lineEnd)
+
+        // Satıra başlık span'ı ekle/değiştir
+        val updatedSpans = spans.mapNotNull { s ->
+            when {
+                s.end <= lineStart || s.start >= lineEnd -> s
+                else -> null // mevcut span'ları temizle
+            }
+        } + RichSpan(start = lineStart, end = lineEnd, heading = level, bold = true)
+
+        spans = updatedSpans.filter { it.start < it.end }
+        onChange(spansToHtml(tfv.text, spans))
+    }
+
     // ─────────────────────────────────────────────────────────────────────
+    if (showTableDialog) {
+        InsertTableDialog(
+            onDismiss = { showTableDialog = false },
+            onInsert  = { rows, cols ->
+                showTableDialog = false
+                val sentinel = tableBlock(rows, cols)
+                val cursor   = tfv.selection.start
+                val newText  = tfv.text.substring(0, cursor) + "\n" + sentinel + "\n" + tfv.text.substring(cursor)
+                val newCursor = cursor + sentinel.length + 2
+                spans = shiftSpans(spans, cursor, sentinel.length + 2, newText.length)
+                tfv   = TextFieldValue(text = newText, selection = TextRange(newCursor))
+                onChange(spansToHtml(newText, spans))
+            }
+        )
+    }
+
     Column(modifier = modifier) {
 
         // ── Toolbar ───────────────────────────────────────────────────────
@@ -475,69 +666,59 @@ fun RichTextEditor(
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                     verticalAlignment     = Alignment.CenterVertically,
                 ) {
-                    // Kalın
+                    // H2
+                    FmtBtn(Icons.Filled.Title, "Başlık H2", false, onBg) { insertHeading(2) }
+                    // H3
+                    FmtBtn(Icons.Filled.TextFields, "Başlık H3", false, onBg) { insertHeading(3) }
+
+                    ThinDivider(divider)
+
                     FmtBtn(Icons.Filled.FormatBold, "Kalın", boldOn, onBg) {
-                        toggleFormat(boldOn, { boldOn = it }, { it.bold }) { v ->
-                            boldOn = v
-                            applyToSelection(bold = v)
+                        toggleFormat(boldOn, { boldOn = it }, { it.bold && it.heading == null }) { v ->
+                            boldOn = v; applyToSelection(bold = v)
                         }
                     }
-                    // İtalik
                     FmtBtn(Icons.Filled.FormatItalic, "İtalik", italicOn, onBg) {
                         toggleFormat(italicOn, { italicOn = it }, { it.italic }) { v ->
-                            italicOn = v
-                            applyToSelection(italic = v)
+                            italicOn = v; applyToSelection(italic = v)
                         }
                     }
-                    // Altı çizili
                     FmtBtn(Icons.Filled.FormatUnderlined, "Altı Çizili", underOn, onBg) {
                         toggleFormat(underOn, { underOn = it }, { it.under }) { v ->
-                            underOn = v
-                            applyToSelection(under = v)
+                            underOn = v; applyToSelection(under = v)
                         }
                     }
-                    // Üstü çizili
                     FmtBtn(Icons.Filled.FormatStrikethrough, "Üstü Çizili", strikeOn, onBg) {
                         toggleFormat(strikeOn, { strikeOn = it }, { it.strike }) { v ->
-                            strikeOn = v
-                            applyToSelection(strike = v)
+                            strikeOn = v; applyToSelection(strike = v)
                         }
                     }
 
                     ThinDivider(divider)
 
-                    // Yazı boyutu
                     FmtBtn(Icons.Filled.FormatSize, "Yazı Boyutu", showSize, onBg) {
-                        showSize  = !showSize
-                        showColor = false
+                        showSize = !showSize; showColor = false
                     }
-                    // Renk
                     FmtBtn(Icons.Filled.Palette, "Renk", showColor, onBg) {
-                        showColor = !showColor
-                        showSize  = false
+                        showColor = !showColor; showSize = false
+                    }
+                    FmtBtn(Icons.Filled.TableChart, "Tablo Ekle", false, onBg) {
+                        showTableDialog = true; showSize = false; showColor = false
                     }
 
                     ThinDivider(divider)
 
-                    // Tümünü temizle
                     FmtBtn(Icons.Filled.FormatClear, "Formatı Temizle", false, onBg) {
                         val sel = tfv.selection
                         if (!sel.collapsed) {
-                            spans = spans.mapNotNull { s ->
-                                when {
-                                    s.end <= sel.min || s.start >= sel.max -> s
-                                    else -> null          // seçim içindeki span'ları sil
-                                }
-                            }
-                            onChange(spansToHtml(tfv.text, spans))
+                            spans = spans.filter { s -> s.end <= sel.min || s.start >= sel.max }
                         } else {
                             spans = emptyList()
                             boldOn = false; italicOn = false; underOn = false; strikeOn = false
                             fontSize = null; textColor = null
-                            onChange(spansToHtml(tfv.text, emptyList()))
                         }
-                        showSize  = false
-                        showColor = false
+                        showSize = false; showColor = false
+                        onChange(spansToHtml(tfv.text, spans))
                     }
                 }
 
@@ -554,15 +735,11 @@ fun RichTextEditor(
                     ) {
                         Text("Boyut:", color = muted, fontSize = 11.sp)
                         listOf(null to "Varsayılan", 12 to "Küçük", 16 to "Normal",
-                               20 to "Büyük", 24 to "Başlık").forEach { (s, label) ->
+                               20 to "Büyük").forEach { (s, label) ->
                             val isSel = fontSize == s
                             FilterChip(
                                 selected = isSel,
-                                onClick  = {
-                                    fontSize = s
-                                    showSize = false
-                                    applyToSelection(size = s)
-                                },
+                                onClick  = { fontSize = s; showSize = false; applyToSelection(size = s) },
                                 label    = { Text(label, fontSize = 12.sp) },
                                 colors   = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = Amber.copy(alpha = .2f),
@@ -586,17 +763,17 @@ fun RichTextEditor(
                     ) {
                         Text("Renk:", color = muted, fontSize = 11.sp)
                         listOf(
-                            null                 to "Varsayılan",
-                            Color(0xFFF59E0B)    to "Amber",
-                            Color(0xFF3B82F6)    to "Mavi",
-                            Color(0xFF22C55E)    to "Yeşil",
-                            Color(0xFFEF4444)    to "Kırmızı",
-                            Color(0xFFA855F7)    to "Mor",
-                            Color(0xFFEC4899)    to "Pembe",
-                            Color(0xFF6B7280)    to "Gri",
-                            Color(0xFFFF6B35)    to "Turuncu",
-                            Color(0xFF06B6D4)    to "Cam Göbeği",
-                        ).forEach { (c, name) ->
+                            null              to "Varsayılan",
+                            Color(0xFFF59E0B) to "Amber",
+                            Color(0xFF3B82F6) to "Mavi",
+                            Color(0xFF22C55E) to "Yeşil",
+                            Color(0xFFEF4444) to "Kırmızı",
+                            Color(0xFFA855F7) to "Mor",
+                            Color(0xFFEC4899) to "Pembe",
+                            Color(0xFF6B7280) to "Gri",
+                            Color(0xFFFF6B35) to "Turuncu",
+                            Color(0xFF06B6D4) to "Cam Göbeği",
+                        ).forEach { (c, _) ->
                             val isSel = textColor == c
                             Box(
                                 modifier = Modifier
@@ -613,22 +790,19 @@ fun RichTextEditor(
                                         indication        = null,
                                         interactionSource = remember { MutableInteractionSource() },
                                     ) {
-                                        textColor = c
-                                        showColor = false
+                                        textColor = c; showColor = false
                                         if (c != null) {
                                             applyToSelection(color = c)
                                         } else {
-                                            // Varsayılan: seçim aralığından renk span'larını çıkar
                                             val sel = tfv.selection
                                             if (!sel.collapsed) {
                                                 spans = spans.mapNotNull { s ->
                                                     when {
                                                         s.start >= sel.max || s.end <= sel.min -> s
                                                         else -> {
-                                                            val updated = s.copy(color = null)
-                                                            if (updated.bold || updated.italic || updated.under
-                                                                || updated.strike || updated.size != null
-                                                            ) updated else null
+                                                            val u = s.copy(color = null)
+                                                            if (u.bold || u.italic || u.under || u.strike
+                                                                || u.size != null || u.heading != null) u else null
                                                         }
                                                     }
                                                 }
@@ -653,21 +827,15 @@ fun RichTextEditor(
         BasicTextField(
             value         = tfv.copy(annotatedString = annotated),
             onValueChange = { new ->
-                val oldText  = tfv.text
-                val newText  = new.text
-                val lenDiff  = newText.length - oldText.length
-
-                // annotatedString temizlenerek yazılır (imleç bozulmasın)
+                val newText = new.text
+                val lenDiff = newText.length - tfv.text.length
                 tfv = new.copy(annotatedString = AnnotatedString(newText))
 
                 if (lenDiff != 0) {
-                    // Değişim noktasını bul
-                    val changePos = new.selection.start   // yeni imleç konumu
+                    val changePos = new.selection.start
                     val insertAt  = if (lenDiff > 0) changePos else changePos - lenDiff
-
                     spans = shiftSpans(spans, insertAt, lenDiff, newText.length)
 
-                    // Ekleme: aktif format varsa yeni karakterlere uygula
                     if (lenDiff > 0 &&
                         (boldOn || italicOn || underOn || strikeOn || fontSize != null || textColor != null)
                     ) {
@@ -683,7 +851,6 @@ fun RichTextEditor(
                         }
                     }
                 }
-
                 onChange(spansToHtml(newText, spans))
             },
             cursorBrush   = SolidColor(Amber),
@@ -697,35 +864,25 @@ fun RichTextEditor(
                 .fillMaxWidth()
                 .fillMaxHeight()
                 .heightIn(min = 160.dp)
-                .background(
-                    color = surfaceVar,
-                    shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),
-                )
-                .border(
-                    width = 1.dp,
-                    color = if (isFocused) Amber else divider,
-                    shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),
-                )
+                .background(color = surfaceVar,
+                    shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+                .border(1.dp, if (isFocused) Amber else divider,
+                    RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
                 .padding(14.dp)
                 .onFocusChanged { isFocused = it.isFocused },
             decorationBox = { inner ->
                 Box {
-                    if (tfv.text.isEmpty()) {
-                        Text(placeholder, color = muted, fontSize = 15.sp)
-                    }
+                    if (tfv.text.isEmpty()) Text(placeholder, color = muted, fontSize = 15.sp)
                     inner()
                 }
             },
         )
 
-        // Kelime sayacı
-        val wordCount = tfv.text.trim().split(Regex("\\s+")).count { it.isNotBlank() }
-        Text(
-            "$wordCount kelime",
-            color    = muted,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 4.dp, start = 2.dp),
-        )
+        val wordCount = tfv.text
+            .replace(Regex("\u0000TABLE:.*?\u0000", RegexOption.DOT_MATCHES_ALL), "")
+            .trim().split(Regex("\\s+")).count { it.isNotBlank() }
+        Text("$wordCount kelime", color = muted, fontSize = 11.sp,
+            modifier = Modifier.padding(top = 4.dp, start = 2.dp))
     }
 }
 
@@ -735,11 +892,11 @@ fun RichTextEditor(
 
 @Composable
 private fun FmtBtn(
-    icon     : ImageVector,
-    tooltip  : String,
-    active   : Boolean,
-    onBg     : Color,
-    onClick  : () -> Unit,
+    icon    : ImageVector,
+    tooltip : String,
+    active  : Boolean,
+    onBg    : Color,
+    onClick : () -> Unit,
 ) {
     IconButton(
         onClick  = onClick,
@@ -748,21 +905,12 @@ private fun FmtBtn(
             .clip(RoundedCornerShape(6.dp))
             .background(if (active) Amber.copy(alpha = .2f) else Color.Transparent),
     ) {
-        Icon(
-            imageVector        = icon,
-            contentDescription = tooltip,
-            tint               = if (active) Amber else onBg,
-            modifier           = Modifier.size(18.dp),
-        )
+        Icon(imageVector = icon, contentDescription = tooltip,
+            tint = if (active) Amber else onBg, modifier = Modifier.size(18.dp))
     }
 }
 
 @Composable
 private fun ThinDivider(color: Color) {
-    Box(
-        modifier = Modifier
-            .width(1.dp)
-            .height(22.dp)
-            .background(color),
-    )
+    Box(Modifier.width(1.dp).height(22.dp).background(color))
 }
