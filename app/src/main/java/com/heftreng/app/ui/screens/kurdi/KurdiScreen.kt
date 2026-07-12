@@ -50,6 +50,7 @@ import com.heftreng.app.ui.component.AdSlotView
 import com.heftreng.app.ui.component.RichTextEditor
 import com.heftreng.app.ui.component.spansToHtml
 import com.heftreng.app.ui.component.htmlStrip
+import com.heftreng.app.ui.component.htmlToSpans
 import com.heftreng.app.viewmodel.*
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -2832,72 +2833,91 @@ private fun GrammarRuleCard(
 }
 
 // ── Zengin İçerik Renderer (kart içi HTML gösterimi) ─────────────────────────
+// HTML'yi <table> bloklarına ve metin bloklarına ayırır; her birini ayrı render eder.
 @Composable
 private fun GrammarRichContent(html: String, accentColor: Color) {
     if (html.isBlank()) return
-    // Basit HTML → görsel render: tablo, paragraf, bold/italic
-    val lines = html
-        .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
-        .replace(Regex("<p[^>]*>", RegexOption.IGNORE_CASE), "")
-        .replace(Regex("</p>", RegexOption.IGNORE_CASE), "\n")
-        .replace(Regex("</?(?:ul|ol|li)[^>]*>", RegexOption.IGNORE_CASE), "\n• ")
-        .replace(Regex("<[^>]+>"), "")
-        .trim()
-    // Tablo algılama
-    if (html.contains("<table", ignoreCase = true)) {
-        GrammarHtmlTable(html = html, accentColor = accentColor)
-    } else {
-        val annotated = buildRichAnnotatedString(html)
-        androidx.compose.foundation.text.ClickableText(
-            text  = annotated,
-            style = androidx.compose.ui.text.TextStyle(
-                color      = OnBackground.copy(alpha = 0.88f),
-                fontSize   = 13.5.sp,
-                lineHeight = 22.sp,
-            ),
-            onClick = {},
-        )
+
+    // HTML'yi tablo ve metin bloklarına böl
+    val blocks = splitHtmlBlocks(html)
+
+    Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+        blocks.forEach { block ->
+            if (block.isTable) {
+                GrammarHtmlTable(html = block.content, accentColor = accentColor)
+            } else {
+                GrammarTextBlock(html = block.content, accentColor = accentColor)
+            }
+        }
     }
 }
 
-// Inline bold/italic parse
-private fun buildRichAnnotatedString(html: String): androidx.compose.ui.text.AnnotatedString {
-    return androidx.compose.ui.text.buildAnnotatedString {
-        var remaining = html
-            .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
-            .replace(Regex("<p[^>]*>", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("</p>", RegexOption.IGNORE_CASE), "\n")
-        val tagRegex = Regex("<(/?)(b|strong|i|em|u|s|strike)[^>]*>", RegexOption.IGNORE_CASE)
-        val boldStyle   = androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)
-        val italicStyle = androidx.compose.ui.text.SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
-        val underStyle  = androidx.compose.ui.text.SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)
-        val strikeStyle = androidx.compose.ui.text.SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough)
-        val styleStack = mutableListOf<androidx.compose.ui.text.SpanStyle>()
-        var lastIndex = 0
-        tagRegex.findAll(remaining).forEach { match ->
-            val before = remaining.substring(lastIndex, match.range.first)
-            if (before.isNotEmpty()) append(before)
-            val closing = match.groupValues[1] == "/"
-            val tag     = match.groupValues[2].lowercase()
-            val style   = when (tag) {
-                "b","strong" -> boldStyle
-                "i","em"     -> italicStyle
-                "u"          -> underStyle
-                "s","strike" -> strikeStyle
-                else         -> null
-            }
-            if (!closing && style != null) {
-                pushStyle(style); styleStack.add(style)
-            } else if (closing && styleStack.isNotEmpty()) {
-                pop(); styleStack.removeLastOrNull()
-            }
-            lastIndex = match.range.last + 1
+private data class HtmlBlock(val content: String, val isTable: Boolean)
+
+/** HTML'yi <table>…</table> ve metin parçalarına böler */
+private fun splitHtmlBlocks(html: String): List<HtmlBlock> {
+    val result  = mutableListOf<HtmlBlock>()
+    val tableRx = Regex("<table[^>]*>.*?</table>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+    var last    = 0
+    tableRx.findAll(html).forEach { m ->
+        if (m.range.first > last) {
+            val text = html.substring(last, m.range.first).trim()
+            if (text.isNotEmpty()) result.add(HtmlBlock(text, false))
         }
-        val rest = remaining.substring(lastIndex)
-            .replace(Regex("<[^>]+>"), "").trim()
-        if (rest.isNotEmpty()) append(rest)
-        repeat(styleStack.size) { pop() }
+        result.add(HtmlBlock(m.value, true))
+        last = m.range.last + 1
     }
+    if (last < html.length) {
+        val text = html.substring(last).trim()
+        if (text.isNotEmpty()) result.add(HtmlBlock(text, false))
+    }
+    return result
+}
+
+/** Metin bloğunu htmlToSpans ile parse edip AnnotatedString olarak render eder */
+@Composable
+private fun GrammarTextBlock(html: String, accentColor: Color) {
+    val parsed = remember(html) {
+        com.heftreng.app.ui.component.htmlToSpans(html)
+    }
+    val annotated = remember(parsed) {
+        androidx.compose.ui.text.buildAnnotatedString {
+            append(parsed.text)
+            parsed.spans.forEach { s ->
+                val start = s.start.coerceIn(0, parsed.text.length)
+                val end   = s.end.coerceIn(0, parsed.text.length)
+                if (start >= end) return@forEach
+                addStyle(
+                    androidx.compose.ui.text.SpanStyle(
+                        fontWeight     = if (s.bold)   FontWeight.Bold else null,
+                        fontStyle      = if (s.italic) androidx.compose.ui.text.font.FontStyle.Italic else null,
+                        textDecoration = when {
+                            s.under && s.strike -> androidx.compose.ui.text.style.TextDecoration.combine(
+                                listOf(
+                                    androidx.compose.ui.text.style.TextDecoration.Underline,
+                                    androidx.compose.ui.text.style.TextDecoration.LineThrough,
+                                )
+                            )
+                            s.under  -> androidx.compose.ui.text.style.TextDecoration.Underline
+                            s.strike -> androidx.compose.ui.text.style.TextDecoration.LineThrough
+                            else     -> null
+                        },
+                        fontSize = s.size?.let { it.sp } ?: androidx.compose.ui.unit.TextUnit.Unspecified,
+                        color    = s.color ?: Color.Unspecified,
+                    ),
+                    start, end,
+                )
+            }
+        }
+    }
+    androidx.compose.foundation.text.BasicText(
+        text  = annotated,
+        style = androidx.compose.ui.text.TextStyle(
+            color      = OnBackground.copy(alpha = 0.88f),
+            fontSize   = 13.5.sp,
+            lineHeight = 22.sp,
+        ),
+    )
 }
 
 // Tablo renderer
@@ -2923,9 +2943,9 @@ private fun GrammarHtmlTable(html: String, accentColor: Color) {
 
     val colCount = rows.maxOf { it.size }
     Surface(
-        shape = RoundedCornerShape(10.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, accentColor.copy(alpha = 0.25f)),
-        color  = Color.Transparent,
+        shape    = RoundedCornerShape(10.dp),
+        border   = androidx.compose.foundation.BorderStroke(1.dp, accentColor.copy(alpha = 0.25f)),
+        color    = Color.Transparent,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column {
@@ -2935,9 +2955,11 @@ private fun GrammarHtmlTable(html: String, accentColor: Color) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            if (isHeader) accentColor.copy(alpha = 0.15f)
-                            else if (ri % 2 == 0) accentColor.copy(alpha = 0.04f)
-                            else Color.Transparent
+                            when {
+                                isHeader  -> accentColor.copy(alpha = 0.15f)
+                                ri % 2 == 0 -> accentColor.copy(alpha = 0.04f)
+                                else      -> Color.Transparent
+                            }
                         ),
                 ) {
                     for (ci in 0 until colCount) {
@@ -2945,10 +2967,12 @@ private fun GrammarHtmlTable(html: String, accentColor: Color) {
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .then(if (ci > 0) Modifier.border(
-                                    start = 1.dp,
-                                    color = accentColor.copy(alpha = 0.18f),
-                                ) else Modifier)
+                                .then(
+                                    if (ci > 0) Modifier.border(
+                                        start = 1.dp,
+                                        color = accentColor.copy(alpha = 0.18f),
+                                    ) else Modifier
+                                )
                                 .padding(horizontal = 10.dp, vertical = 8.dp),
                         ) {
                             Text(
