@@ -320,6 +320,7 @@ fun LibraryScreen(
     // ── Alıntı Ekle — Feed'deki QuoteDialog ──────────────────────────────
     if (showQuoteDialog) {
         QuoteDialog(
+            language        = language,
             onDismiss       = { showQuoteDialog = false },
             onConfirm       = { payload ->
                 showQuoteDialog = false

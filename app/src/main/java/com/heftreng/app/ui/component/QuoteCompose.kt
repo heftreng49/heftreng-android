@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.ui.theme.*
+import com.heftreng.app.ui.i18n.Strings
 import kotlinx.coroutines.tasks.await
 
 data class QuotePayload(
@@ -53,6 +54,7 @@ fun QuoteCard(
     bookName       : String = "",
     authorName     : String = "",
     coverImg       : String = "",
+    language       : String = "tr",
     onTapBook      : ((String) -> Unit)? = null,
     onTapAuthor    : ((String) -> Unit)? = null,
     expandByDefault: Boolean = false,   // true → detail ekranı, kırpma yok
@@ -107,7 +109,7 @@ fun QuoteCard(
             if (isLong) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text       = if (expanded) "Kapat ▲" else "Devamını oku ▼",
+                    text       = if (expanded) Strings.quoteShowMore(language) else Strings.quoteReadMore(language),
                     color      = Amber,
                     fontSize   = 12.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -174,10 +176,10 @@ fun QuoteCard(
 
 // ── Compose alanında seçili alıntı + kaldır ───────────────────────────────────
 @Composable
-fun QuoteInputSection(quote: QuotePayload?, onRemove: () -> Unit, modifier: Modifier = Modifier) {
+fun QuoteInputSection(quote: QuotePayload?, onRemove: () -> Unit, language: String = "tr", modifier: Modifier = Modifier) {
     if (quote == null) return
     Box(modifier = modifier) {
-        QuoteCard(quoteText = quote.text, bookName = quote.bookName, authorName = quote.authorName)
+        QuoteCard(quoteText = quote.text, bookName = quote.bookName, authorName = quote.authorName, language = language)
         IconButton(onClick = onRemove, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) {
             Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
         }
@@ -199,6 +201,7 @@ fun QuoteDialog(
     initialText     : String = "",
     initialBook     : String = "",
     initialAuthor   : String = "",
+    language        : String = "tr",
     onDismiss       : () -> Unit,
     onConfirm       : (QuotePayload) -> Unit,
     onLookupCover   : (suspend (String) -> String)? = null,
@@ -346,7 +349,7 @@ fun QuoteDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.FormatQuote, null, tint = Primary, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Alıntı Ekle", color = OnBackground, fontWeight = FontWeight.Bold)
+                        Text(Strings.quoteDialogTitle(language), color = OnBackground, fontWeight = FontWeight.Bold)
                     }
                 },
                 actions = {
@@ -357,7 +360,7 @@ fun QuoteDialog(
                         enabled  = canConfirm,
                     ) {
                         Text(
-                            "Paylaş",
+                            Strings.share(language),
                             color      = if (canConfirm) Primary else Muted,
                             fontWeight = FontWeight.Bold,
                             fontSize   = 15.sp,
@@ -382,7 +385,7 @@ fun QuoteDialog(
                 OutlinedTextField(
                     value         = text,
                     onValueChange = { text = it },
-                    label         = { Text("ALINTI METNİ *") },
+                    label         = { Text(Strings.quoteTextLabel(language)) },
                     minLines      = 5,
                     modifier      = Modifier.fillMaxWidth(),
                     colors        = quoteTextFieldColors(),
@@ -399,7 +402,7 @@ fun QuoteDialog(
                             showBookDrop = it.isNotBlank() &&
                                 bookSuggestions.any { s -> s.bookName.contains(it, ignoreCase = true) }
                         },
-                        label      = { Text("KİTAP ADI") },
+                        label      = { Text(Strings.bookNameLabel(language)) },
                         singleLine = true,
                         modifier   = Modifier.fillMaxWidth(),
                         colors     = quoteTextFieldColors(),
@@ -446,7 +449,7 @@ fun QuoteDialog(
                                                 Text(s.authorName, color = Muted, fontSize = 11.sp)
                                         }
                                         Spacer(Modifier.weight(1f))
-                                        Text("${s.count} alıntı", color = Muted, fontSize = 10.sp)
+                                        Text(Strings.quoteCountSuffix(language, s.count), color = Muted, fontSize = 10.sp)
                                     }
                                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                                 }
@@ -472,7 +475,7 @@ fun QuoteDialog(
                     ) {
                         Icon(Icons.Default.AutoStories, null, tint = Amber, modifier = Modifier.size(15.dp))
                         Text(
-                            "\"${book.trim()}\" sistemde yok — yeni kitap olarak eklenecek",
+                            Strings.bookNotFoundWillAdd(language, book.trim()),
                             color      = Amber,
                             fontSize   = 12.sp,
                             fontWeight = FontWeight.Medium,
@@ -491,7 +494,7 @@ fun QuoteDialog(
                             showAuthorDrop = it.isNotBlank() &&
                                 authorSuggestions.any { s -> s.authorName.contains(it, ignoreCase = true) }
                         },
-                        label      = { Text("YAZAR") },
+                        label      = { Text(Strings.authorNameLabel(language)) },
                         singleLine = true,
                         modifier   = Modifier.fillMaxWidth(),
                         colors     = quoteTextFieldColors(),
@@ -538,7 +541,7 @@ fun QuoteDialog(
                                                 if (s.bookName.isNotBlank())
                                                     Text(s.bookName, color = Muted, fontSize = 11.sp)
                                             }
-                                            Text("${s.count} alıntı", color = Muted, fontSize = 10.sp)
+                                            Text(Strings.quoteCountSuffix(language, s.count), color = Muted, fontSize = 10.sp)
                                         }
                                         HorizontalDivider(color = Divider, thickness = 0.5.dp)
                                     }
@@ -565,7 +568,7 @@ fun QuoteDialog(
                     ) {
                         Icon(Icons.Default.Person, null, tint = Amber, modifier = Modifier.size(15.dp))
                         Text(
-                            "\"${author.trim()}\" sistemde yok — yeni yazar olarak eklenecek",
+                            Strings.authorNotFoundWillAdd(language, author.trim()),
                             color      = Amber,
                             fontSize   = 12.sp,
                             fontWeight = FontWeight.Medium,
@@ -579,12 +582,13 @@ fun QuoteDialog(
                 item {
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     Spacer(Modifier.height(4.dp))
-                    Text("Önizleme", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text(Strings.quotePreview(language), color = Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
                     QuoteCard(
                         quoteText  = text.ifBlank { "…" },
                         bookName   = book,
                         authorName = author,
+                        language   = language,
                     )
                 }
             }

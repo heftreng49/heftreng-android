@@ -523,7 +523,7 @@ fun FeedScreen(
                         // ── Alıntı önizleme ─────────────────────────────
                         if (inlineQuote != null) {
                             item {
-                                QuoteInputSection(quote = inlineQuote, onRemove = { inlineQuote = null })
+                                QuoteInputSection(quote = inlineQuote, onRemove = { inlineQuote = null }, language = language)
                             }
                         }
                         // ── Görsel önizleme ─────────────────────────────
@@ -637,6 +637,7 @@ fun FeedScreen(
             initialText   = inlineQuote?.text ?: "",
             initialBook   = inlineQuote?.bookName ?: "",
             initialAuthor = inlineQuote?.authorName ?: "",
+            language      = language,
             onDismiss     = { showInlineQuote = false },
             onConfirm     = { p ->
                 vm.createPost(
@@ -1240,7 +1241,7 @@ private fun InlineComposeBox(
             }
             if (quote != null) {
                 Spacer(Modifier.height(8.dp))
-                QuoteInputSection(quote = quote, onRemove = onQuoteRemove)
+                QuoteInputSection(quote = quote, onRemove = onQuoteRemove, language = language)
             }
             if (imageUri != null) {
                 Spacer(Modifier.height(8.dp))
@@ -1380,6 +1381,7 @@ private fun ComposeBottomSheet(
             initialText     = quotePayload?.text ?: "",
             initialBook     = quotePayload?.bookName ?: "",
             initialAuthor   = quotePayload?.authorName ?: "",
+            language        = language,
             onDismiss       = { showQuote = false },
             onConfirm       = { p -> quotePayload = p; showQuote = false },
             onSearchBooks   = onSearchBooks,
@@ -1459,7 +1461,7 @@ private fun ComposeBottomSheet(
             }
             if (quotePayload != null) {
                 Spacer(Modifier.height(10.dp))
-                QuoteInputSection(quote = quotePayload, onRemove = { quotePayload = null })
+                QuoteInputSection(quote = quotePayload, onRemove = { quotePayload = null }, language = language)
             }
             Spacer(Modifier.height(10.dp))
             HorizontalDivider(color = Divider, thickness = 0.5.dp)
@@ -1740,6 +1742,7 @@ fun PostCard(
                     bookName        = post.bookName,
                     authorName      = post.authorName,
                     coverImg        = post.coverImg,
+                    language        = language,
                     onTapBook       = onTapBook,
                     onTapAuthor     = onTapAuthor,
                     expandByDefault = isDetailScreen,
@@ -2102,7 +2105,7 @@ fun EditQuoteDialog(
         ) {
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    if (ku) "Gotinê Biguherîne" else "Alıntıyı Düzenle",
+                    if (ku) "Jêgirtê Biguherîne" else "Alıntıyı Düzenle",
                     fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 16.sp,
                 )
                 // Alıntı metni
@@ -2110,7 +2113,7 @@ fun EditQuoteDialog(
                     value         = quoteText,
                     onValueChange = { quoteText = it },
                     modifier      = Modifier.fillMaxWidth().heightIn(min = 100.dp),
-                    label         = { Text(if (ku) "Gotin" else "Alıntı metni", color = Muted, fontSize = 12.sp) },
+                    label         = { Text(if (ku) "Nivîsa Jêgirtê" else "Alıntı metni", color = Muted, fontSize = 12.sp) },
                     colors        = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor      = Primary,
                         unfocusedBorderColor    = Divider,

@@ -1,0 +1,2331 @@
+package com.heftreng.app.ui.screens.kurdi
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.ui.text.style.TextAlign
+
+import androidx.compose.animation.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.shape.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.runtime.*
+import androidx.compose.ui.*
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.*
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import com.heftreng.app.ui.theme.*
+import com.heftreng.app.ui.component.RichTextEditor
+import com.heftreng.app.ui.component.htmlStrip
+import com.heftreng.app.viewmodel.*
+import com.heftreng.app.viewmodel.AdminViewModel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import javax.inject.Inject
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// KURDİ ADMİN EKRANI — Ders / Kelime / Egzersiz düzenleme
+// ═══════════════════════════════════════════════════════════════════════════════
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun KurdiAdminScreen(
+    navController: NavController,
+    vm        : KurdiViewModel = hiltViewModel(),
+    adminVm   : AdminViewModel = hiltViewModel(),
+) {
+    val perms   by adminVm.perms.collectAsState()
+    val isAdmin  = perms?.isStaff() == true
+
+    // ── Güvenlik: sadece kurdi izni olanlar erişebilir ────────────
+    if (perms != null && !isAdmin) {
+        LaunchedEffect(Unit) { navController.popBackStack() }
+        return
+    }
+
+    // Admin dersleri yükle
+    LaunchedEffect(Unit) { vm.loadAdminLessons() }
+
+    val lessons by vm.lessons.collectAsState()
+    var selectedTab    by remember { mutableIntStateOf(0) }
+    var selectedLesson by remember { mutableStateOf<KfLesson?>(null) }
+
+    // Ders seçilmişse düzenleme ekranı
+    if (selectedLesson != null) {
+        LessonEditScreen(
+            lesson = selectedLesson!!,
+            onBack = { selectedLesson = null },
+        )
+        return
+    }
+
+    Scaffold(
+        containerColor = Background,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("Kurdî Admin", fontWeight = FontWeight.ExtraBold, color = Amber, fontSize = 18.sp)
+                        Text("Ders & İçerik Yönetimi", color = Muted, fontSize = 11.sp)
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+            )
+        },
+    ) { pad ->
+        Column(Modifier.fillMaxSize().padding(pad)) {
+
+            // ── Sekmeler ──────────────────────────────────────────────────────
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor   = Background,
+                contentColor     = Amber,
+                indicator = { tabs ->
+                    Box(Modifier.tabIndicatorOffset(tabs[selectedTab]).height(2.dp).background(Amber))
+                },
+                divider = { HorizontalDivider(color = Divider, thickness = 0.5.dp) },
+            ) {
+                listOf("📚 Dersler", "➕ Yeni Ders", "🏛 Üniteler", "📖 Rêziman", "📥 JSON", "🚩 Raporlar").forEachIndexed { i, t ->
+                    Tab(
+                        selected = selectedTab == i,
+                        onClick  = { selectedTab = i },
+                        text     = { Text(t, fontSize = 11.sp) },
+                        selectedContentColor   = Amber,
+                        unselectedContentColor = Muted,
+                    )
+                }
+            }
+
+            when (selectedTab) {
+                0 -> LessonListTab(lessons = lessons, vm = vm, onSelect = { selectedLesson = it })
+                1 -> NewLessonTab(vm = vm, onCreated = { selectedTab = 0 })
+                2 -> UnitManagerTab(vm = vm)
+                3 -> GrammarAdminTab(vm = vm)
+                4 -> JsonImportTab(vm = vm)
+                5 -> ReportsTab(vm = vm, onOpenLesson = { lessonId ->
+                    val lesson = lessons.find { it.id == lessonId }
+                    if (lesson != null) { selectedLesson = lesson; selectedTab = 0 }
+                })
+            }
+        }
+    }
+}
+
+// ── Ders listesi ──────────────────────────────────────────────────────────────
+@Composable
+private fun LessonListTab(
+    lessons  : List<KfLesson>,
+    vm       : KurdiViewModel,
+    onSelect : (KfLesson) -> Unit,
+) {
+    if (lessons.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Ders bulunamadı", color = Muted)
+        }
+        return
+    }
+
+    var editTarget   by remember { mutableStateOf<KfLesson?>(null) }
+    var deleteTarget by remember { mutableStateOf<KfLesson?>(null) }
+
+    LazyColumn(
+        modifier        = Modifier.fillMaxSize(),
+        contentPadding  = PaddingValues(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(lessons, key = { it.id }) { lesson ->
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape    = RoundedCornerShape(14.dp),
+                color    = HeftSurface,
+            ) {
+                Row(
+                    Modifier.padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(lesson.emoji, fontSize = 26.sp)
+                    Column(Modifier.weight(1f).clickable { onSelect(lesson) }) {
+                        Text(lesson.nameTr, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(lesson.nameKu, color = Muted, fontSize = 12.sp)
+                        Text("${lesson.id} • ${lesson.unitId}",
+                            color = Muted, fontSize = 10.sp)
+                    }
+                    // Düzenle
+                    IconButton(onClick = { editTarget = lesson }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(18.dp))
+                    }
+                    // Sil
+                    IconButton(onClick = { deleteTarget = lesson }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Ders Düzenleme Dialog ─────────────────────────────────────────────────
+    editTarget?.let { lesson ->
+        LessonEditDialog(
+            lesson    = lesson,
+            vm        = vm,
+            onDismiss = { editTarget = null },
+            onSave    = { nameTr, nameKu, emoji, xp, order, unitId ->
+                vm.updateLesson(lesson.id, nameTr, nameKu, emoji, xp, order, unitId,
+                    onDone  = { editTarget = null },
+                    onError = { editTarget = null },
+                )
+            },
+        )
+    }
+
+    // ── Silme Onayı ───────────────────────────────────────────────────────────
+    deleteTarget?.let { lesson ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("Dersi Sil?", color = OnBackground, fontWeight = FontWeight.Bold) },
+            text  = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("«${lesson.nameTr}» silinecek.", color = OnBackground)
+                    Text("Bu derse ait tüm kelime ve egzersizler de kalıcı olarak silinir.",
+                        color = Color(0xFFEF4444), fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        vm.deleteLesson(lesson.id,
+                            onDone  = { deleteTarget = null },
+                            onError = { deleteTarget = null },
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape  = RoundedCornerShape(10.dp),
+                ) { Text("Sil", color = Color.White, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) { Text("İptal", color = Muted) }
+            },
+            containerColor = HeftSurface,
+        )
+    }
+}
+
+// ── Ders Düzenleme Dialog ─────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LessonEditDialog(
+    lesson    : KfLesson,
+    vm        : KurdiViewModel,
+    onDismiss : () -> Unit,
+    onSave    : (String, String, String, Int, Int, String) -> Unit,
+) {
+    val units  by vm.units.collectAsState()
+    var nameTr by remember { mutableStateOf(lesson.nameTr) }
+    var nameKu by remember { mutableStateOf(lesson.nameKu) }
+    var emoji  by remember { mutableStateOf(lesson.emoji) }
+    var xp     by remember { mutableStateOf(lesson.xp.toString()) }
+    var order  by remember { mutableStateOf(lesson.order.toString()) }
+    var selectedUnit     by remember(units) { mutableStateOf(units.find { it.id == lesson.unitId }) }
+    var unitDropExpanded by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(emoji, fontSize = 20.sp)
+                Text("Dersi Düzenle", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("ID: ${lesson.id}", color = Muted, fontSize = 11.sp)
+                AdminField(nameTr, { nameTr = it }, "Türkçe Ad *")
+                AdminField(nameKu, { nameKu = it }, "Kürtçe Ad")
+                AdminField(emoji,  { emoji  = it }, "Emoji")
+
+                // ── Ünite Dropdown ────────────────────────────────────────────
+                ExposedDropdownMenuBox(
+                    expanded         = unitDropExpanded,
+                    onExpandedChange = { unitDropExpanded = !unitDropExpanded },
+                ) {
+                    OutlinedTextField(
+                        value         = selectedUnit?.let { "${it.icon} ${it.ttl}" } ?: "Ünite seç…",
+                        onValueChange = {},
+                        readOnly      = true,
+                        label         = { Text("Ünite", fontSize = 12.sp) },
+                        trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = unitDropExpanded) },
+                        modifier      = Modifier.fillMaxWidth().menuAnchor(),
+                        colors        = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Amber, unfocusedBorderColor = Divider,
+                            focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
+                            unfocusedContainerColor = HeftSurface, focusedContainerColor = HeftSurface,
+                        ),
+                    )
+                    ExposedDropdownMenu(
+                        expanded         = unitDropExpanded,
+                        onDismissRequest = { unitDropExpanded = false },
+                        modifier         = Modifier.background(HeftSurface),
+                    ) {
+                        units.forEach { unit ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(unit.icon, fontSize = 16.sp)
+                                        Column {
+                                            Text(unit.ttl, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                            Text(unit.id, color = Muted, fontSize = 10.sp)
+                                        }
+                                    }
+                                },
+                                onClick = { selectedUnit = unit; unitDropExpanded = false },
+                            )
+                        }
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AdminField(xp,    { xp    = it }, "XP (yedek — artık egzersizlerden otomatik hesaplanıyor)", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
+                    AdminField(order, { order = it }, "Sıra", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (nameTr.isNotBlank())
+                        onSave(nameTr, nameKu, emoji, xp.toIntOrNull() ?: lesson.xp,
+                            order.toIntOrNull() ?: lesson.order, selectedUnit?.id ?: lesson.unitId)
+                },
+                enabled = nameTr.isNotBlank(),
+                colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                shape   = RoundedCornerShape(10.dp),
+            ) { Text("Kaydet", fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onDismiss) { Text("İptal", color = Muted) } },
+        containerColor = HeftSurface,
+    )
+}
+
+// ── Yeni ders oluştur ─────────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NewLessonTab(vm: KurdiViewModel, onCreated: () -> Unit) {
+    val scope   = rememberCoroutineScope()
+    val db      = remember { FirebaseFirestore.getInstance() }
+    val units   by vm.units.collectAsState()
+    var id      by remember { mutableStateOf("") }
+    var nameTr  by remember { mutableStateOf("") }
+    var nameKu  by remember { mutableStateOf("") }
+    var emoji   by remember { mutableStateOf("📖") }
+    var xp      by remember { mutableStateOf("10") }
+    var order   by remember { mutableStateOf("1") }
+    var saving  by remember { mutableStateOf(false) }
+    var error   by remember { mutableStateOf("") }
+    val snack   = remember { SnackbarHostState() }
+
+    // Ünite dropdown state
+    var unitDropExpanded by remember { mutableStateOf(false) }
+    var selectedUnit     by remember(units) { mutableStateOf(units.firstOrNull()) }
+    // units yüklenince ilk üniteyi otomatik seç
+    LaunchedEffect(units) { if (selectedUnit == null && units.isNotEmpty()) selectedUnit = units.first() }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snack) },
+        containerColor = Background,
+    ) { pad ->
+        LazyColumn(
+            modifier       = Modifier.fillMaxSize().padding(pad),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item { Text("Yeni Ders Oluştur", color = OnBackground, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp) }
+            item { AdminField(id, { id = it }, "Ders ID (örn: l7)", hint = "l7") }
+
+            // ── Ünite Seçici ──────────────────────────────────────────────────
+            item {
+                ExposedDropdownMenuBox(
+                    expanded         = unitDropExpanded,
+                    onExpandedChange = { unitDropExpanded = !unitDropExpanded },
+                ) {
+                    OutlinedTextField(
+                        value = selectedUnit?.let { "${it.icon} ${it.ttl} (${it.id})" } ?: "Ünite seç…",
+                        onValueChange = {},
+                        readOnly  = true,
+                        label     = { Text("Ünite *", fontSize = 12.sp) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = unitDropExpanded) },
+                        modifier  = Modifier.fillMaxWidth().menuAnchor(),
+                        colors    = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor   = Amber, unfocusedBorderColor = Divider,
+                            focusedTextColor     = OnBackground, unfocusedTextColor = OnBackground,
+                            unfocusedContainerColor = HeftSurface, focusedContainerColor = HeftSurface,
+                        ),
+                    )
+                    ExposedDropdownMenu(
+                        expanded         = unitDropExpanded,
+                        onDismissRequest = { unitDropExpanded = false },
+                        modifier         = Modifier.background(HeftSurface),
+                    ) {
+                        if (units.isEmpty()) {
+                            DropdownMenuItem(
+                                text    = { Text("Henüz ünite yok — önce ünite ekle", color = Muted, fontSize = 12.sp) },
+                                onClick = { unitDropExpanded = false },
+                            )
+                        }
+                        units.forEach { unit ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(unit.icon, fontSize = 18.sp)
+                                        Column {
+                                            Text(unit.ttl, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                            Text(unit.id, color = Muted, fontSize = 10.sp)
+                                        }
+                                    }
+                                },
+                                onClick = { selectedUnit = unit; unitDropExpanded = false },
+                            )
+                        }
+                    }
+                }
+            }
+
+            item { AdminField(nameTr, { nameTr = it }, "Türkçe Ad") }
+            item { AdminField(nameKu, { nameKu = it }, "Kürtçe Ad") }
+            item { AdminField(emoji, { emoji = it }, "Emoji", hint = "📖") }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AdminField(xp, { xp = it }, "XP (yedek — artık egzersizlerden otomatik hesaplanıyor)", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
+                    AdminField(order, { order = it }, "Sıra", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
+                }
+            }
+            if (error.isNotBlank()) item {
+                Text(error, color = Color(0xFFEF4444), fontSize = 12.sp)
+            }
+            item {
+                Button(
+                    onClick = {
+                        if (id.isBlank() || nameTr.isBlank() || selectedUnit == null) {
+                            error = "ID, Türkçe ad ve ünite zorunlu"; return@Button
+                        }
+                        scope.launch {
+                            saving = true
+                            try {
+                                db.collection("kf_lessons").document(id).set(
+                                    mapOf(
+                                        "id"     to id,
+                                        "unitId" to selectedUnit!!.id,
+                                        "nameTr" to nameTr,
+                                        "nameKu" to nameKu,
+                                        "emoji"  to emoji,
+                                        "xp"     to (xp.toIntOrNull() ?: 10),
+                                        "order"  to (order.toIntOrNull() ?: 1),
+                                    )
+                                ).await()
+                                snack.showSnackbar("✓ Ders oluşturuldu")
+                                onCreated()
+                            } catch (e: Exception) {
+                                error = e.message ?: "Hata"
+                            }
+                            saving = false
+                        }
+                    },
+                    enabled  = !saving,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = RoundedCornerShape(12.dp),
+                    colors   = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                ) { Text(if (saving) "Kaydediliyor..." else "Ders Oluştur", fontWeight = FontWeight.Bold) }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DERS DÜZENLEME EKRANI — Kelimeler + Egzersizler
+// ═══════════════════════════════════════════════════════════════════════════════
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LessonEditScreen(lesson: KfLesson, onBack: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val db    = remember { FirebaseFirestore.getInstance() }
+    var tab   by remember { mutableIntStateOf(0) }
+
+    // Kelimeler
+    var vocabs    by remember { mutableStateOf<List<Map<String,Any>>>(emptyList()) }
+    // Egzersizler
+    var exercises by remember { mutableStateOf<List<Map<String,Any>>>(emptyList()) }
+    var loading   by remember { mutableStateOf(true) }
+    val snack     = remember { SnackbarHostState() }
+
+    // Yükle
+    LaunchedEffect(lesson.id) {
+        loading = true
+        try {
+            val vs = db.collection("kf_vocab").whereEqualTo("lessonId", lesson.id).get().await()
+            vocabs = vs.documents.map { doc ->
+                (doc.data ?: emptyMap<String,Any>()).toMutableMap().also { it["_docId"] = doc.id }
+            }
+            val es = db.collection("kf_exercises").whereEqualTo("lessonId", lesson.id).get().await()
+            exercises = es.documents.map { doc ->
+                (doc.data ?: emptyMap<String,Any>()).toMutableMap().also { it["_docId"] = doc.id }
+            }
+        } catch (_: Exception) {}
+        loading = false
+    }
+
+    Scaffold(
+        containerColor = Background,
+        snackbarHost   = { SnackbarHost(snack) },
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(lesson.emoji, fontSize = 20.sp)
+                        Column {
+                            Text(lesson.nameTr, fontWeight = FontWeight.ExtraBold, color = OnBackground, fontSize = 15.sp)
+                            Text(lesson.nameKu, color = Muted, fontSize = 11.sp)
+                        }
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+            )
+        },
+    ) { pad ->
+        Column(Modifier.fillMaxSize().padding(pad)) {
+            TabRow(
+                selectedTabIndex = tab,
+                containerColor   = Background,
+                contentColor     = Amber,
+                indicator = { tabs -> Box(Modifier.tabIndicatorOffset(tabs[tab]).height(2.dp).background(Amber)) },
+                divider   = { HorizontalDivider(color = Divider, thickness = 0.5.dp) },
+            ) {
+                listOf("📝 Kelimeler (${vocabs.size})", "❓ Egzersizler (${exercises.size})").forEachIndexed { i, t ->
+                    Tab(selected = tab == i, onClick = { tab = i },
+                        text = { Text(t, fontSize = 12.sp) },
+                        selectedContentColor = Amber, unselectedContentColor = Muted)
+                }
+            }
+
+            if (loading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Amber)
+                }
+            } else when (tab) {
+                0 -> VocabTab(
+                    lessonId = lesson.id,
+                    vocabs   = vocabs,
+                    db       = db,
+                    snack    = snack,
+                    onReload = {
+                        scope.launch {
+                            val vs = db.collection("kf_vocab").whereEqualTo("lessonId", lesson.id).get().await()
+                            vocabs = vs.documents.map { doc ->
+                                (doc.data ?: emptyMap<String,Any>()).toMutableMap().also { it["_docId"] = doc.id }
+                            }
+                        }
+                    },
+                )
+                1 -> ExerciseTab(
+                    lessonId  = lesson.id,
+                    exercises = exercises,
+                    db        = db,
+                    snack     = snack,
+                    onReload  = {
+                        scope.launch {
+                            val es = db.collection("kf_exercises").whereEqualTo("lessonId", lesson.id).get().await()
+                            exercises = es.documents.map { doc ->
+                                (doc.data ?: emptyMap<String,Any>()).toMutableMap().also { it["_docId"] = doc.id }
+                            }
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+// ── Kelime sekmesi ────────────────────────────────────────────────────────────
+@Composable
+private fun VocabTab(
+    lessonId: String,
+    vocabs  : List<Map<String,Any>>,
+    db      : FirebaseFirestore,
+    snack   : SnackbarHostState,
+    onReload: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var showAdd by remember { mutableStateOf(false) }
+    var editDoc by remember { mutableStateOf<Map<String,Any>?>(null) }
+
+    if (editDoc != null) {
+        VocabEditDialog(
+            doc      = editDoc!!,
+            lessonId = lessonId,
+            db       = db,
+            onSave   = { scope.launch { snack.showSnackbar("✓ Kelime güncellendi"); onReload() } },
+            onDelete = { scope.launch { snack.showSnackbar("🗑 Kelime silindi"); onReload() } },
+            onDismiss = { editDoc = null },
+        )
+    }
+    if (showAdd) {
+        VocabEditDialog(
+            doc      = emptyMap(),
+            lessonId = lessonId,
+            db       = db,
+            onSave   = { scope.launch { snack.showSnackbar("✓ Kelime eklendi"); onReload() } },
+            onDelete = null,
+            onDismiss = { showAdd = false },
+        )
+    }
+
+    LazyColumn(
+        modifier       = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item {
+            Button(
+                onClick  = { showAdd = true },
+                modifier = Modifier.fillMaxWidth(),
+                shape    = RoundedCornerShape(10.dp),
+                colors   = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+            ) {
+                Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Yeni Kelime Ekle", fontWeight = FontWeight.Bold)
+            }
+        }
+        items(vocabs, key = { it["_docId"] as? String ?: "" }) { v ->
+            Surface(
+                modifier = Modifier.fillMaxWidth().clickable { editDoc = v },
+                shape    = RoundedCornerShape(12.dp),
+                color    = HeftSurface,
+            ) {
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(v["e"] as? String ?: "📖", fontSize = 24.sp)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(v["ku"] as? String ?: "", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(v["tr"] as? String ?: "", color = Muted, fontSize = 12.sp)
+                        if ((v["kp"] as? String)?.isNotBlank() == true)
+                            Text("/${v["kp"]}/", color = Primary, fontSize = 11.sp)
+                    }
+                    Icon(Icons.Default.Edit, null, tint = Muted, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+    }
+}
+
+// ── Kelime düzenleme dialog ───────────────────────────────────────────────────
+@Composable
+private fun VocabEditDialog(
+    doc      : Map<String,Any>,
+    lessonId : String,
+    db       : FirebaseFirestore,
+    onSave   : () -> Unit,
+    onDelete : (() -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    val scope   = rememberCoroutineScope()
+    var ku      by remember { mutableStateOf(doc["ku"] as? String ?: "") }
+    var tr      by remember { mutableStateOf(doc["tr"] as? String ?: "") }
+    var kp      by remember { mutableStateOf(doc["kp"] as? String ?: "") }
+    var e       by remember { mutableStateOf(doc["e"]  as? String ?: "") }
+    var saving  by remember { mutableStateOf(false) }
+    val docId   = doc["_docId"] as? String ?: ""
+    var showDel by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = { Text(if (docId.isBlank()) "Yeni Kelime" else "Kelimeyi Düzenle", color = OnBackground, fontWeight = FontWeight.ExtraBold) },
+        text  = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                AdminField(ku, { ku = it }, "Kürtçe *")
+                AdminField(tr, { tr = it }, "Türkçe *")
+                AdminField(kp, { kp = it }, "Telaffuz (opsiyonel)")
+                AdminField(e,  { e  = it  }, "Emoji (opsiyonel)", hint = "📖")
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onDelete != null) {
+                    TextButton(onClick = { showDel = true }) {
+                        Text("Sil", color = Color(0xFFEF4444))
+                    }
+                }
+                TextButton(onClick = onDismiss) { Text("İptal", color = Muted) }
+                Button(
+                    onClick = {
+                        if (ku.isBlank() || tr.isBlank()) return@Button
+                        scope.launch {
+                            saving = true
+                            val data = mapOf("ku" to ku, "tr" to tr, "kp" to kp, "e" to e, "lessonId" to lessonId)
+                            if (docId.isBlank())
+                                db.collection("kf_vocab").add(data).await()
+                            else
+                                db.collection("kf_vocab").document(docId).set(data, SetOptions.merge()).await()
+                            saving = false
+                            onSave()
+                            onDismiss()
+                        }
+                    },
+                    enabled = !saving && ku.isNotBlank() && tr.isNotBlank(),
+                    colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                    shape   = RoundedCornerShape(8.dp),
+                ) { Text(if (saving) "..." else "Kaydet", fontWeight = FontWeight.Bold) }
+            }
+        },
+    )
+
+    if (showDel) {
+        AlertDialog(
+            onDismissRequest = { showDel = false },
+            containerColor   = HeftSurface,
+            title = { Text("Kelimeyi sil?", color = OnBackground) },
+            text  = { Text("Bu kelime kalıcı olarak silinecek.", color = Muted) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            db.collection("kf_vocab").document(docId).delete().await()
+                            onDelete?.invoke()
+                            onDismiss()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape  = RoundedCornerShape(8.dp),
+                ) { Text("Sil", color = Color.White) }
+            },
+            dismissButton = { TextButton(onClick = { showDel = false }) { Text("İptal", color = Muted) } },
+        )
+    }
+}
+
+// ── Egzersiz sekmesi ──────────────────────────────────────────────────────────
+@Composable
+private fun ExerciseTab(
+    lessonId : String,
+    exercises: List<Map<String,Any>>,
+    db       : FirebaseFirestore,
+    snack    : SnackbarHostState,
+    onReload : () -> Unit,
+) {
+    val scope   = rememberCoroutineScope()
+    var showAdd by remember { mutableStateOf(false) }
+    var editDoc by remember { mutableStateOf<Map<String,Any>?>(null) }
+
+    if (editDoc != null) {
+        ExerciseEditDialog(
+            doc      = editDoc!!,
+            lessonId = lessonId,
+            db       = db,
+            onSave   = { scope.launch { snack.showSnackbar("✓ Egzersiz güncellendi"); onReload() } },
+            onDelete = { scope.launch { snack.showSnackbar("🗑 Egzersiz silindi"); onReload() } },
+            onDismiss = { editDoc = null },
+        )
+    }
+    if (showAdd) {
+        ExerciseEditDialog(
+            doc      = emptyMap(),
+            lessonId = lessonId,
+            db       = db,
+            onSave   = { scope.launch { snack.showSnackbar("✓ Egzersiz eklendi"); onReload() } },
+            onDelete = null,
+            onDismiss = { showAdd = false },
+        )
+    }
+
+    LazyColumn(
+        modifier       = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item {
+            Button(
+                onClick  = { showAdd = true },
+                modifier = Modifier.fillMaxWidth(),
+                shape    = RoundedCornerShape(10.dp),
+                colors   = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Color.White),
+            ) {
+                Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Yeni Egzersiz Ekle", fontWeight = FontWeight.Bold)
+            }
+        }
+        items(exercises, key = { it["_docId"] as? String ?: "" }) { ex ->
+            val type = ex["type"] as? String ?: "mcq"
+            val typeColor = when (type) {
+                "mcq"   -> Color(0xFF6366F1)
+                "fill"  -> Color(0xFF22C55E)
+                "match" -> Color(0xFFF59E0B)
+                "build" -> Color(0xFFEC4899)
+                else    -> Muted
+            }
+            Surface(
+                modifier = Modifier.fillMaxWidth().clickable { editDoc = ex },
+                shape    = RoundedCornerShape(12.dp),
+                color    = HeftSurface,
+            ) {
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = RoundedCornerShape(6.dp), color = typeColor.copy(0.15f)) {
+                        Text(type.uppercase(), color = typeColor, fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        ex["question"] as? String ?: "",
+                        color    = OnBackground,
+                        fontSize = 13.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(Icons.Default.Edit, null, tint = Muted, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+    }
+}
+
+// ── Egzersiz düzenleme dialog ─────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExerciseEditDialog(
+    doc      : Map<String,Any>,
+    lessonId : String,
+    db       : FirebaseFirestore,
+    onSave   : () -> Unit,
+    onDelete : (() -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    val scope  = rememberCoroutineScope()
+    val docId  = doc["_docId"] as? String ?: ""
+
+    var type     by remember { mutableStateOf(doc["type"]       as? String ?: "mcq") }
+    var question by remember { mutableStateOf(doc["question"]   as? String ?: "") }
+    var optA     by remember { mutableStateOf(doc["optA"]       as? String ?: "") }
+    var optB     by remember { mutableStateOf(doc["optB"]       as? String ?: "") }
+    var optC     by remember { mutableStateOf(doc["optC"]       as? String ?: "") }
+    var optD     by remember { mutableStateOf(doc["optD"]       as? String ?: "") }
+    var answer     by remember { mutableStateOf(doc["answer"]     as? String ?: "") }
+    var tr         by remember { mutableStateOf(doc["tr"]         as? String ?: "") }
+    // fill tipinin Türkçe çevirisi "questionTr" alanında tutulur (mcq ile aynı isimlendirme);
+    // "tr" alanı build tipine ait. Eskiden fill burada "tr"yi okuyordu, bu yüzden
+    // JSON'dan questionTr olarak gelen çeviriler ekranda hep boş görünüyordu.
+    var questionTr by remember { mutableStateOf(doc["questionTr"] as? String ?: "") }
+    var wordsRaw by remember { mutableStateOf(
+        (doc["words"] as? List<*>)?.joinToString(" ") ?: ""
+    )}
+    // match tipi: "kürtçe=türkçe" satır satır
+    var pairsRaw by remember { mutableStateOf(
+        (doc["pairs"] as? List<*>)?.joinToString("\n") { row ->
+            val r = row as? List<*>
+            if (r != null && r.size >= 2) "${r[0]}=${r[1]}" else row.toString()
+        } ?: ""
+    )}
+    var saving   by remember { mutableStateOf(false) }
+    var showDel  by remember { mutableStateOf(false) }
+    var error    by remember { mutableStateOf("") }
+
+    val types = listOf("mcq", "fill", "build", "match")
+    val typeLabels = mapOf("mcq" to "Çoktan Seçmeli", "fill" to "Boşluk Doldur", "build" to "Cümle Kur", "match" to "Eşleştir")
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor   = HeftSurface,
+        title = {
+            Text(
+                if (docId.isBlank()) "Yeni Egzersiz" else "Egzersizi Düzenle",
+                color = OnBackground, fontWeight = FontWeight.ExtraBold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // Tip seçimi
+                Text("Egzersiz Tipi", color = Muted, fontSize = 11.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    types.forEach { t ->
+                        FilterChip(
+                            selected = type == t,
+                            onClick  = { type = t },
+                            label    = { Text(typeLabels[t] ?: t, fontSize = 11.sp) },
+                            colors   = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Amber.copy(0.2f),
+                                selectedLabelColor     = Amber,
+                            ),
+                        )
+                    }
+                }
+
+                // Soru
+                AdminField(question, { question = it }, "Soru *", minLines = 2)
+
+                when (type) {
+                    "mcq" -> {
+                        AdminField(questionTr, { questionTr = it }, "Türkçe çeviri (opsiyonel)", hint = "Sorunun Türkçe karşılığı")
+                        AdminField(optA, { optA = it }, "Seçenek A *")
+                        AdminField(optB, { optB = it }, "Seçenek B")
+                        AdminField(optC, { optC = it }, "Seçenek C")
+                        AdminField(optD, { optD = it }, "Seçenek D")
+                        AdminField(answer, { answer = it }, "Doğru Cevap * (A seçeneğiyle aynı yazılmalı)", hint = "optA değeriyle birebir aynı")
+                    }
+                    "fill" -> {
+                        AdminField(answer, { answer = it }, "Doğru Cevap *", hint = "Boşluğa gelecek kelime")
+                        AdminField(questionTr, { questionTr = it }, "Türkçe çeviri (opsiyonel)", hint = "Cümlenin tam Türkçe karşılığı")
+                        if (!question.contains("___")) {
+                            Text("⚠️ Soru içinde ___ (üç alt çizgi) olmalı — boşluğun yeri", color = Color(0xFFEF9A00), fontSize = 11.sp)
+                        }
+                    }
+                    "build" -> {
+                        AdminField(wordsRaw, { wordsRaw = it }, "Kelimeler (boşlukla ayır) *", hint = "Şev baş, xewn xweş!")
+                        AdminField(tr, { tr = it }, "Türkçe çeviri *", hint = "İyi akşamlar, sana da.")
+                    }
+                    "match" -> {
+                        Text("Her satıra bir çift: kürtçe=türkçe", color = Muted, fontSize = 11.sp)
+                        AdminField(
+                            pairsRaw, { pairsRaw = it },
+                            "Eşleştirme Çiftleri *",
+                            hint    = "rast=sag / cep=sol / nezik=yakin",
+                            minLines = 5,
+                        )
+                        Text("💡 En az 3, en fazla 6 çift önerilir", color = Muted, fontSize = 11.sp)
+                    }
+                }
+
+                if (error.isNotBlank()) Text(error, color = Color(0xFFEF4444), fontSize = 11.sp)
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onDelete != null) {
+                    TextButton(onClick = { showDel = true }) { Text("Sil", color = Color(0xFFEF4444)) }
+                }
+                TextButton(onClick = onDismiss) { Text("İptal", color = Muted) }
+                Button(
+                    onClick = {
+                        if (question.isBlank()) { error = "Soru zorunlu"; return@Button }
+                        if (type == "mcq"   && (optA.isBlank() || answer.isBlank())) { error = "Seçenek A ve cevap zorunlu"; return@Button }
+                        if (type == "fill"  && answer.isBlank()) { error = "Cevap zorunlu"; return@Button }
+                        if (type == "fill"  && !question.contains("___")) { error = "Soru içinde ___ olmalı"; return@Button }
+                        if (type == "build" && wordsRaw.isBlank()) { error = "Kelimeler zorunlu"; return@Button }
+                        // Kaydedilecek çiftlerle AYNI mantıkla hesapla — validasyon ve kayıt
+                        // birbirinden kopuk olmasın (trim edilmemiş "=" sayımı yanlış
+                        // sonuç veriyordu: boşluklu satırlar veya tek taraf boşken
+                        // sayım kayıt sonucuyla uyuşmuyordu).
+                        val parsedPairs = pairsRaw.lines()
+                            .map { it.trim() }
+                            .filter { it.contains("=") }
+                            .map { line ->
+                                val idx = line.indexOf("=")
+                                listOf(line.substring(0, idx).trim(), line.substring(idx + 1).trim())
+                            }
+                            .filter { it[0].isNotBlank() && it[1].isNotBlank() }
+
+                        if (type == "match" && pairsRaw.isBlank()) { error = "En az bir çift gerekli"; return@Button }
+                        if (type == "match" && parsedPairs.size < 2) { error = "En az 2 geçerli çift giriniz (kürtçe=türkçe biçiminde, her iki taraf da dolu olmalı)"; return@Button }
+
+                        scope.launch {
+                            saving = true
+                            try {
+                                val data = mutableMapOf<String, Any>(
+                                    "type"     to type,
+                                    "question" to question.trim(),
+                                    "lessonId" to lessonId,
+                                )
+                                when (type) {
+                                    "mcq" -> {
+                                        data["optA"]   = optA.trim()
+                                        data["optB"]   = optB.trim()
+                                        data["optC"]   = optC.trim()
+                                        data["optD"]   = optD.trim()
+                                        data["answer"] = optA.trim() // web temasıyla aynı: optA her zaman doğru
+                                        if (questionTr.isNotBlank()) data["questionTr"] = questionTr.trim()
+                                    }
+                                    "fill" -> {
+                                        data["answer"] = answer.trim()
+                                        if (questionTr.isNotBlank()) data["questionTr"] = questionTr.trim()
+                                    }
+                                    "build" -> {
+                                        data["words"] = wordsRaw.trim().split("\\s+".toRegex()).filter { it.isNotBlank() }
+                                        data["tr"]    = tr.trim()
+                                    }
+                                    "match" -> {
+                                        data["pairs"] = parsedPairs
+                                    }
+                                }
+                                if (docId.isBlank())
+                                    db.collection("kf_exercises").add(data).await()
+                                else
+                                    db.collection("kf_exercises").document(docId).set(data, SetOptions.merge()).await()
+                                onSave()
+                                onDismiss()
+                            } catch (e: Exception) {
+                                error = e.message ?: "Hata"
+                            }
+                            saving = false
+                        }
+                    },
+                    enabled = !saving,
+                    colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                    shape   = RoundedCornerShape(8.dp),
+                ) { Text(if (saving) "..." else "Kaydet", fontWeight = FontWeight.Bold) }
+            }
+        },
+    )
+
+    if (showDel) {
+        AlertDialog(
+            onDismissRequest = { showDel = false },
+            containerColor   = HeftSurface,
+            title = { Text("Egzersizi sil?", color = OnBackground) },
+            text  = { Text("Bu egzersiz kalıcı olarak silinecek.", color = Muted) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            db.collection("kf_exercises").document(docId).delete().await()
+                            onDelete?.invoke()
+                            onDismiss()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape  = RoundedCornerShape(8.dp),
+                ) { Text("Sil", color = Color.White) }
+            },
+            dismissButton = { TextButton(onClick = { showDel = false }) { Text("İptal", color = Muted) } },
+        )
+    }
+}
+
+// ── Ortak field bileşeni ──────────────────────────────────────────────────────
+@Composable
+fun AdminField(
+    value       : String,
+    onChange    : (String) -> Unit,
+    label       : String,
+    hint        : String       = "",
+    minLines    : Int          = 1,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    modifier    : Modifier     = Modifier,
+) {
+    OutlinedTextField(
+        value         = value,
+        onValueChange = onChange,
+        label         = { Text(label) },
+        placeholder   = if (hint.isNotBlank()) {{ Text(hint, color = Muted, fontSize = 12.sp) }} else null,
+        modifier      = modifier.fillMaxWidth(),
+        shape         = RoundedCornerShape(10.dp),
+        minLines      = minLines,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = keyboardType,
+            imeAction    = if (minLines > 1) ImeAction.Default else ImeAction.Next,
+        ),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor      = Amber,
+            unfocusedBorderColor    = Divider,
+            focusedTextColor        = OnBackground,
+            unfocusedTextColor      = OnBackground,
+            unfocusedContainerColor = SurfaceVar,
+            focusedContainerColor   = SurfaceVar,
+            focusedLabelColor       = Amber,
+            unfocusedLabelColor     = Muted,
+            cursorColor             = Amber,
+        ),
+    )
+}
+
+// ── JSON İçe / Dışa Aktar ────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun JsonImportTab(vm: KurdiViewModel) {
+    val importing    by vm.importing.collectAsState()
+    val importResult by vm.importResult.collectAsState()
+    val exportJson   by vm.exportJson.collectAsState()
+    val units        by vm.units.collectAsState()
+
+    val lessons         by vm.lessons.collectAsState()
+
+    var jsonText        by remember { mutableStateOf("") }
+    var showSchema      by remember { mutableStateOf(false) }
+    var overwrite       by remember { mutableStateOf(true) }
+    var preview         by remember { mutableStateOf<KurdiViewModel.JsonPreview?>(null) }
+    var activeTab       by remember { mutableStateOf(0) } // 0=Import, 1=Export
+    var exportUnitId    by remember { mutableStateOf<String?>(null) }
+    var exportExpanded  by remember { mutableStateOf(false) }
+
+    // Manuel ünite + ders seçimi (import için)
+    var targetUnitId      by remember { mutableStateOf("") }
+    var targetUnitName    by remember { mutableStateOf("") }
+    var targetLessonId    by remember { mutableStateOf("") }
+    var targetLessonName  by remember { mutableStateOf("") }
+    var unitDropExpanded  by remember { mutableStateOf(false) }
+    var lessonDropExpanded by remember { mutableStateOf(false) }
+    val filteredLessons   = lessons.filter { targetUnitId.isBlank() || it.unitId == targetUnitId }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // Dosya seçici
+    val filePicker = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            try {
+                val stream = context.contentResolver.openInputStream(it)
+                val text   = stream?.bufferedReader()?.readText() ?: ""
+                stream?.close()
+                jsonText = text
+                preview  = if (text.isNotBlank()) vm.validateJson(text) else null
+                vm.clearImportResult()
+            } catch (e: Exception) { /* ignore */ }
+        }
+    }
+
+    // Export clipboard
+    val clipboard = remember {
+        context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+    }
+
+    // Import/Export tab row
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        listOf("📥 İçe Aktar", "📤 Dışa Aktar").forEachIndexed { i, t ->
+            Surface(
+                shape    = RoundedCornerShape(20.dp),
+                color    = if (activeTab == i) Amber else SurfaceVar,
+                modifier = Modifier.weight(1f).clickable { activeTab = i },
+            ) {
+                Text(t, color = if (activeTab == i) Color.Black else Muted,
+                    fontWeight = if (activeTab == i) FontWeight.Bold else FontWeight.Normal,
+                    fontSize = 13.sp, textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 10.dp))
+            }
+        }
+    }
+
+    if (activeTab == 0) {
+        // ── IMPORT SEKMESİ ────────────────────────────────────────────────────
+        LazyColumn(
+            modifier        = Modifier.fillMaxSize(),
+            contentPadding  = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            // Şema ve açıklama
+            item {
+                Surface(
+                    shape    = RoundedCornerShape(12.dp),
+                    color    = HeftSurface,
+                    modifier = Modifier.fillMaxWidth().clickable { showSchema = !showSchema },
+                ) {
+                    Column {
+                        Row(modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween) {
+                            Row(verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.Code, null, tint = Primary, modifier = Modifier.size(18.dp))
+                                Text("JSON Şema ve Egzersiz Tipleri", color = OnBackground,
+                                    fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            }
+                            Icon(if (showSchema) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                null, tint = Muted)
+                        }
+                        AnimatedVisibility(visible = showSchema) {
+                            Column(modifier = Modifier.padding(horizontal = 14.dp).padding(bottom = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                // Egzersiz tipleri
+                                listOf(
+                                    "mcq"   to "question, questionTr, optA-D, answer (seçenek metni — optA ile aynı metin)",
+                                    "fill"  to "question, answer, options[doğru+yanlışlar]",
+                                    "match" to "pairs[[kürtçe,türkçe], ...]",
+                                    "build" to "tr (Türkçe cümle), answer (Kürtçe), words[kelimeler+bozucular]",
+                                ).forEach { (tip, desc) ->
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.Top) {
+                                        Surface(shape = RoundedCornerShape(4.dp),
+                                            color = Primary.copy(alpha = 0.15f)) {
+                                            Text(tip, color = Primary, fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                        }
+                                        Text(desc, color = Muted, fontSize = 11.sp,
+                                            modifier = Modifier.weight(1f), lineHeight = 15.sp)
+                                    }
+                                }
+                                HorizontalDivider(color = Divider)
+                                Text("💡 units[] veya unit{} desteklenir. unitId belirtilmezse otomatik bağlanır.",
+                                    color = Muted, fontSize = 11.sp, lineHeight = 15.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Dosya seç + JSON alanı
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { filePicker.launch("application/json") },
+                        colors  = ButtonDefaults.buttonColors(containerColor = SurfaceVar, contentColor = OnBackground),
+                        shape   = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                    ) {
+                        Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Dosyadan Seç", fontSize = 12.sp)
+                    }
+                    if (jsonText.isNotBlank()) {
+                        IconButton(onClick = {
+                            jsonText = ""; preview = null; vm.clearImportResult()
+                        }, modifier = Modifier
+                            .size(40.dp)
+                            .background(SurfaceVar, RoundedCornerShape(10.dp))) {
+                            Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+            item {
+                OutlinedTextField(
+                    value         = jsonText,
+                    onValueChange = {
+                        jsonText = it
+                        preview  = if (it.isNotBlank()) vm.validateJson(it) else null
+                        vm.clearImportResult()
+                    },
+                    placeholder   = { Text("JSON yapıştır veya dosyadan seç…", color = Muted, fontSize = 12.sp) },
+                    modifier      = Modifier.fillMaxWidth().height(160.dp),
+                    colors        = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Amber, unfocusedBorderColor = Divider,
+                        focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
+                        unfocusedContainerColor = HeftSurface, focusedContainerColor = HeftSurface,
+                    ),
+                    shape     = RoundedCornerShape(12.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 10.sp,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                )
+            }
+
+            // Preview
+            preview?.let { pv ->
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (pv.isValid) Primary.copy(alpha = 0.08f) else Color(0xFFEF4444).copy(alpha = 0.08f),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Önizleme", color = if (pv.isValid) Primary else Color(0xFFEF4444),
+                                fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                listOf("🏛 ${pv.unitCount} ünite","📚 ${pv.lessonCount} ders",
+                                    "📝 ${pv.vocabTotal} kelime","🎯 ${pv.exerciseTotal} egzersiz")
+                                    .forEach { Text(it, color = OnBackground, fontSize = 11.sp) }
+                            }
+                            pv.warnings.forEach { w ->
+                                Text(w, color = if (w.startsWith("❌")) Color(0xFFEF4444) else Color(0xFFD97706),
+                                    fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Ünite ve Ders Seçimi (Manuel override)
+            if (jsonText.isNotBlank()) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Başlık
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.FolderSpecial, null, tint = Amber,
+                                modifier = Modifier.size(15.dp))
+                            Text("Ünite / Ders Seçimi", color = OnBackground,
+                                fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("(opsiyonel — JSON'daki değerleri geçersiz kılar)",
+                                color = Muted, fontSize = 10.sp)
+                        }
+
+                        // Ünite seçici
+                        ExposedDropdownMenuBox(
+                            expanded        = unitDropExpanded,
+                            onExpandedChange = { unitDropExpanded = it },
+                        ) {
+                            OutlinedTextField(
+                                value         = if (targetUnitId.isBlank()) "JSON'daki ünite kullanılır" else targetUnitName,
+                                onValueChange = {},
+                                readOnly      = true,
+                                label         = { Text("Hedef Ünite", fontSize = 12.sp) },
+                                trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = unitDropExpanded) },
+                                modifier      = Modifier.fillMaxWidth().menuAnchor(),
+                                shape         = RoundedCornerShape(10.dp),
+                                colors        = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor   = Amber,
+                                    unfocusedBorderColor = Divider,
+                                    focusedTextColor     = OnBackground,
+                                    unfocusedTextColor   = if (targetUnitId.isBlank()) Muted else OnBackground,
+                                    focusedContainerColor   = HeftSurface,
+                                    unfocusedContainerColor = HeftSurface,
+                                ),
+                            )
+                            ExposedDropdownMenu(
+                                expanded         = unitDropExpanded,
+                                onDismissRequest = { unitDropExpanded = false },
+                                modifier         = Modifier.background(HeftSurface),
+                            ) {
+                                DropdownMenuItem(
+                                    text    = { Text("— JSON'daki ünite kullanılır —", color = Muted, fontSize = 12.sp) },
+                                    onClick = {
+                                        targetUnitId = ""; targetUnitName = ""
+                                        targetLessonId = ""; targetLessonName = ""
+                                        unitDropExpanded = false
+                                    }
+                                )
+                                units.forEach { u ->
+                                    DropdownMenuItem(
+                                        text    = { Text("${u.icon} ${u.ttl}", color = OnBackground, fontSize = 13.sp) },
+                                        onClick = {
+                                            targetUnitId   = u.id
+                                            targetUnitName = "${u.icon} ${u.ttl}"
+                                            targetLessonId = ""; targetLessonName = ""
+                                            unitDropExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Ders seçici (ünite seçildiyse aktif)
+                        ExposedDropdownMenuBox(
+                            expanded         = lessonDropExpanded,
+                            onExpandedChange = { if (filteredLessons.isNotEmpty() || targetUnitId.isBlank()) lessonDropExpanded = it },
+                        ) {
+                            OutlinedTextField(
+                                value         = when {
+                                    targetLessonId.isNotBlank() -> targetLessonName
+                                    targetUnitId.isNotBlank()   -> "Yeni ders oluşturulacak"
+                                    else                        -> "JSON'daki ders kullanılır"
+                                },
+                                onValueChange = {},
+                                readOnly      = true,
+                                label         = { Text("Hedef Ders", fontSize = 12.sp) },
+                                trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = lessonDropExpanded) },
+                                modifier      = Modifier.fillMaxWidth().menuAnchor(),
+                                shape         = RoundedCornerShape(10.dp),
+                                colors        = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor   = Amber,
+                                    unfocusedBorderColor = Divider,
+                                    focusedTextColor     = OnBackground,
+                                    unfocusedTextColor   = Muted,
+                                    focusedContainerColor   = HeftSurface,
+                                    unfocusedContainerColor = HeftSurface,
+                                ),
+                            )
+                            ExposedDropdownMenu(
+                                expanded         = lessonDropExpanded,
+                                onDismissRequest = { lessonDropExpanded = false },
+                                modifier         = Modifier.background(HeftSurface),
+                            ) {
+                                DropdownMenuItem(
+                                    text    = { Text("— Yeni ders oluştur —", color = Muted, fontSize = 12.sp) },
+                                    onClick = { targetLessonId = ""; targetLessonName = ""; lessonDropExpanded = false }
+                                )
+                                filteredLessons.forEach { l ->
+                                    DropdownMenuItem(
+                                        text    = { Text("${l.emoji} ${l.nameTr}", color = OnBackground, fontSize = 13.sp) },
+                                        onClick = {
+                                            targetLessonId   = l.id
+                                            targetLessonName = "${l.emoji} ${l.nameTr}"
+                                            lessonDropExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Çakışma modu
+            if (jsonText.isNotBlank()) {
+                item {
+                    Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface,
+                        modifier = Modifier.fillMaxWidth()) {
+                        Row(modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column {
+                                Text("Var olan dersler", color = OnBackground,
+                                    fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                Text(if (overwrite) "Üzerine yazılacak" else "Atlanacak",
+                                    color = Muted, fontSize = 11.sp)
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Atla", color = if (!overwrite) Amber else Muted, fontSize = 12.sp)
+                                Switch(checked = overwrite, onCheckedChange = { overwrite = it },
+                                    colors = SwitchDefaults.colors(checkedThumbColor = Color.White,
+                                        checkedTrackColor = Amber))
+                                Text("Üzerine Yaz", color = if (overwrite) Amber else Muted, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Import butonu
+            item {
+                Button(
+                    onClick  = { if (jsonText.isNotBlank()) vm.importFromJson(jsonText, overwrite, targetUnitId, targetLessonId) },
+                    enabled  = jsonText.isNotBlank() && !importing && (preview?.isValid != false),
+                    colors   = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                    shape    = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                ) {
+                    if (importing) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp),
+                            color = Color.Black, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Yükleniyor…", fontWeight = FontWeight.Bold)
+                    } else {
+                        Icon(Icons.Default.Upload, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Firestore'a Aktar", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
+            }
+
+            // Sonuç
+            importResult?.let { r ->
+                item {
+                    val ok = r.errors.isEmpty()
+                    Surface(shape = RoundedCornerShape(12.dp),
+                        color = if (ok) Color(0xFF22C55E).copy(alpha=0.1f) else Color(0xFFEF4444).copy(alpha=0.1f),
+                        modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(if (ok) "✅ Import tamamlandı" else "⚠️ Kısmen tamamlandı",
+                                color = if (ok) Color(0xFF22C55E) else Color(0xFFEF4444),
+                                fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                listOf("🏛 ${r.unitsAdded}","📚 ${r.lessonsAdded}",
+                                    "📝 ${r.vocabAdded}","🎯 ${r.exercisesAdded}",
+                                    if (r.skipped > 0) "⏭ ${r.skipped} atlandı" else null)
+                                    .filterNotNull()
+                                    .forEach { Text(it, color = OnBackground, fontSize = 12.sp) }
+                            }
+                            r.errors.forEach { Text("• $it", color = Color(0xFFEF4444), fontSize = 11.sp) }
+                        }
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(60.dp)) }
+        }
+    } else {
+        // ── EXPORT SEKMESİ ────────────────────────────────────────────────────
+        LazyColumn(modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            item {
+                Text("📤 Mevcut Dersleri Dışa Aktar", color = OnBackground,
+                    fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                Spacer(Modifier.height(2.dp))
+                Text("Seçili üniteyi veya tüm dersleri JSON formatında indir.",
+                    color = Muted, fontSize = 12.sp)
+            }
+            // Ünite seçici
+            item {
+                ExposedDropdownMenuBox(expanded = exportExpanded,
+                    onExpandedChange = { exportExpanded = !exportExpanded }) {
+                    OutlinedTextField(
+                        value = exportUnitId?.let { id -> units.find { it.id==id }?.let{"${it.icon} ${it.ttl}"} } ?: "Tüm üniteler",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Ünite", fontSize = 12.sp) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = exportExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Amber, unfocusedBorderColor = Divider,
+                            focusedTextColor = OnBackground, unfocusedTextColor = OnBackground,
+                            unfocusedContainerColor = HeftSurface, focusedContainerColor = HeftSurface),
+                    )
+                    ExposedDropdownMenu(expanded = exportExpanded,
+                        onDismissRequest = { exportExpanded = false },
+                        modifier = Modifier.background(HeftSurface)) {
+                        DropdownMenuItem(text = { Text("Tüm üniteler", color = OnBackground) },
+                            onClick = { exportUnitId = null; exportExpanded = false })
+                        units.forEach { u ->
+                            DropdownMenuItem(text = {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    Text(u.icon, fontSize = 18.sp)
+                                    Text(u.ttl, color = OnBackground, fontSize = 13.sp)
+                                }
+                            }, onClick = { exportUnitId = u.id; exportExpanded = false })
+                        }
+                    }
+                }
+            }
+            item {
+                Button(
+                    onClick  = { vm.exportLessonsAsJson(exportUnitId) },
+                    colors   = ButtonDefaults.buttonColors(containerColor = Primary),
+                    shape    = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                ) {
+                    Icon(Icons.Default.Download, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("JSON Oluştur", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            }
+            exportJson?.let { json ->
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                val clip = android.content.ClipData.newPlainText("json", json)
+                                clipboard.setPrimaryClip(clip)
+                            },
+                            colors  = ButtonDefaults.buttonColors(containerColor = SurfaceVar, contentColor = OnBackground),
+                            shape   = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Kopyala", fontSize = 12.sp)
+                        }
+                        Button(
+                            onClick = {
+                                try {
+                                    val fname = "heftreng_export_${System.currentTimeMillis()}.json"
+                                    val file  = java.io.File(context.getExternalFilesDir(null), fname)
+                                    file.writeText(json)
+                                    android.widget.Toast.makeText(context, "Kaydedildi: ${file.absolutePath}", android.widget.Toast.LENGTH_LONG).show()
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(context, "Kayıt hatası: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors  = ButtonDefaults.buttonColors(containerColor = SurfaceVar, contentColor = OnBackground),
+                            shape   = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(Icons.Default.SaveAlt, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Kaydet", fontSize = 12.sp)
+                        }
+                    }
+                }
+                item {
+                    Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface,
+                        modifier = Modifier.fillMaxWidth()) {
+                        Text(json.take(2000) + if (json.length > 2000) "\n…(${json.length} karakter)" else "",
+                            color = OnBackground.copy(alpha = 0.8f), fontSize = 10.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            modifier = Modifier.padding(12.dp))
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(60.dp)) }
+        }
+    }
+}
+
+// ── Hata Raporları ────────────────────────────────────────────────────────────
+@Composable
+private fun ReportsTab(vm: KurdiViewModel, onOpenLesson: (lessonId: String) -> Unit) {
+    val reports by vm.reports.collectAsState()
+    val loading by vm.reportsLoading.collectAsState()
+
+    LaunchedEffect(Unit) { vm.loadReports() }
+
+    val pending  = reports.filter { !it.resolved }
+    val resolved = reports.filter {  it.resolved }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Hata Raporları", fontWeight = FontWeight.Bold, color = OnBackground)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (pending.isNotEmpty()) {
+                    Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFFEF4444).copy(alpha = 0.15f)) {
+                        Text("${pending.size} bekliyor", color = Color(0xFFEF4444), fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+                    }
+                }
+                IconButton(onClick = { vm.loadReports() }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Refresh, null, tint = Muted, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Primary)
+            }
+        } else if (reports.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("✅", fontSize = 40.sp)
+                    Text("Rapor yok", color = Muted)
+                }
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (pending.isNotEmpty()) {
+                    item { Text("Bekleyen (${pending.size})", color = Color(0xFFEF4444),
+                        fontWeight = FontWeight.Bold, fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)) }
+                    items(pending, key = { it.id }) { report ->
+                        ReportCard(report, onResolve = { vm.resolveReport(report.id) },
+                            onDelete = { vm.deleteReport(report.id) },
+                            onOpenLesson = onOpenLesson)
+                    }
+                }
+                if (resolved.isNotEmpty()) {
+                    item { Text("Çözüldü (${resolved.size})", color = Color(0xFF22C55E),
+                        fontWeight = FontWeight.Bold, fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)) }
+                    items(resolved, key = { it.id }) { report ->
+                        ReportCard(report, onResolve = {},
+                            onDelete = { vm.deleteReport(report.id) },
+                            onOpenLesson = onOpenLesson)
+                    }
+                }
+                item { Spacer(Modifier.height(80.dp)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReportCard(
+    report: LessonReport,
+    onResolve: () -> Unit,
+    onDelete: () -> Unit,
+    onOpenLesson: (lessonId: String) -> Unit,
+) {
+    val dateStr = remember(report.ts) {
+        if (report.ts > 0) java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault())
+            .format(java.util.Date(report.ts)) else ""
+    }
+    Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            // Başlık satırı
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Default.Flag, null,
+                    tint = if (report.resolved) Color(0xFF22C55E) else Color(0xFFEF4444),
+                    modifier = Modifier.size(14.dp))
+                Text(report.lessonName.ifBlank { report.lessonId }, color = Primary,
+                    fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                if (dateStr.isNotEmpty()) Text(dateStr, color = Muted, fontSize = 10.sp)
+            }
+            // Egzersiz bilgisi (varsa)
+            if (report.exerciseIndex != null || report.exerciseType.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                val exLabel = buildString {
+                    if (report.exerciseIndex != null) append("Egzersiz ${report.exerciseIndex}")
+                    if (report.exerciseType.isNotBlank()) {
+                        if (isNotEmpty()) append(" · ")
+                        append(when (report.exerciseType) {
+                            "mcq"   -> "Çoktan seçmeli"
+                            "fill"  -> "Boşluk doldurma"
+                            "match" -> "Eşleştirme"
+                            "build" -> "Cümle kurma"
+                            else    -> report.exerciseType
+                        })
+                    }
+                }
+                Text(exLabel, color = Amber, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                if (report.exerciseQuestion.isNotBlank()) {
+                    Text("❓ ${report.exerciseQuestion}", color = Muted, fontSize = 11.sp, lineHeight = 15.sp)
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(report.message, color = OnBackground, fontSize = 13.sp, lineHeight = 18.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("👤 ${report.userName}", color = Muted, fontSize = 11.sp)
+            Spacer(Modifier.height(8.dp))
+            // Aksiyon butonları
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Derse Git butonu — her zaman göster
+                OutlinedButton(
+                    onClick = { onOpenLesson(report.lessonId) },
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Primary),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Icon(Icons.Default.Edit, null, modifier = Modifier.size(13.dp), tint = Primary)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Derse Git", fontSize = 12.sp, color = Primary)
+                }
+                if (!report.resolved) {
+                    Button(onClick = onResolve,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
+                        Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Çözüldü", fontSize = 12.sp, color = Color.White)
+                    }
+                }
+                TextButton(onClick = onDelete,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)) {
+                    Text("Sil", color = Muted, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ADMİN AI DERS SEKMESİ — Yapay zeka ile egzersiz üret + Firestore'a kaydet
+// ── Ünite Yönetimi ────────────────────────────────────────────────────────────
+@Composable
+private fun UnitManagerTab(vm: KurdiViewModel) {
+    val units   by vm.units.collectAsState()
+    val lessons by vm.lessons.collectAsState()
+    var showAdd by remember { mutableStateOf(false) }
+    var editTarget   by remember { mutableStateOf<KfUnit?>(null) }
+    var deleteTarget by remember { mutableStateOf<KfUnit?>(null) }
+    var errorMsg     by remember { mutableStateOf("") }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Üniteler (${units.size})", fontWeight = FontWeight.Bold, color = OnBackground)
+            Button(
+                onClick = { showAdd = true },
+                colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                shape   = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+            ) {
+                Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Ünite Ekle", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        }
+
+        if (errorMsg.isNotBlank()) {
+            Surface(color = Color(0xFFEF4444).copy(alpha = 0.15f), shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()) {
+                Text(errorMsg, color = Color(0xFFEF4444), fontSize = 12.sp, modifier = Modifier.padding(10.dp))
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        if (units.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("🏛", fontSize = 40.sp)
+                    Text("Henüz ünite yok", color = Muted)
+                    Text("Ünite eklemeden ders oluşturamazsın", color = Muted, fontSize = 12.sp)
+                }
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(units, key = { it.id }) { unit ->
+                    val lessonCount = lessons.count { it.unitId == unit.id }
+                    Surface(shape = RoundedCornerShape(14.dp), color = HeftSurface, modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Box(modifier = Modifier.size(40.dp).background(
+                                try { Color(android.graphics.Color.parseColor(unit.color)) }
+                                catch (_: Exception) { Amber },
+                                RoundedCornerShape(10.dp),
+                            ), contentAlignment = Alignment.Center) {
+                                Text(unit.icon, fontSize = 20.sp)
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text(unit.ttl, color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(unit.nameKu, color = Muted, fontSize = 12.sp)
+                                Text("${unit.id} • $lessonCount ders • sıra: ${unit.order}", color = Muted, fontSize = 10.sp)
+                            }
+                            IconButton(onClick = { editTarget = unit }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(17.dp))
+                            }
+                            IconButton(onClick = { deleteTarget = unit }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444), modifier = Modifier.size(17.dp))
+                            }
+                        }
+                    }
+                }
+                item { Spacer(Modifier.height(80.dp)) }
+            }
+        }
+    }
+
+    if (showAdd) {
+        UnitFormDialog(unit = null, onDismiss = { showAdd = false },
+            onSave = { id, ttl, nameKu, desc, icon, color ->
+                vm.addUnit(id, ttl, nameKu, desc, icon, color,
+                    onDone = { showAdd = false; errorMsg = "" }, onError = { errorMsg = it })
+            })
+    }
+    editTarget?.let { unit ->
+        UnitFormDialog(unit = unit, onDismiss = { editTarget = null },
+            onSave = { _, ttl, nameKu, desc, icon, color ->
+                vm.updateUnit(unit.id, ttl, nameKu, desc, icon, color,
+                    onDone = { editTarget = null; errorMsg = "" }, onError = { errorMsg = it })
+            })
+    }
+    deleteTarget?.let { unit ->
+        val lessonCount = lessons.count { it.unitId == unit.id }
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("Üniteyi Sil?", color = OnBackground, fontWeight = FontWeight.Bold) },
+            text  = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("«${unit.ttl}» silinecek.", color = OnBackground)
+                    if (lessonCount > 0)
+                        Text("⚠️ Bu üniteye bağlı $lessonCount ders var. Önce dersleri sil.",
+                            color = Color(0xFFEF4444), fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    vm.deleteUnit(unit.id,
+                        onDone = { deleteTarget = null; errorMsg = "" },
+                        onError = { errorMsg = it; deleteTarget = null })
+                }, enabled = lessonCount == 0,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape  = RoundedCornerShape(10.dp),
+                ) { Text("Sil", color = Color.White, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("İptal", color = Muted) } },
+            containerColor = HeftSurface,
+        )
+    }
+}
+
+@Composable
+private fun UnitFormDialog(
+    unit: KfUnit?, onDismiss: () -> Unit,
+    onSave: (String, String, String, String, String, String) -> Unit,
+) {
+    val isEdit = unit != null
+    var id     by remember { mutableStateOf(unit?.id ?: "") }
+    var ttl    by remember { mutableStateOf(unit?.ttl ?: "") }
+    var nameKu by remember { mutableStateOf(unit?.nameKu ?: "") }
+    var desc   by remember { mutableStateOf(unit?.desc ?: "") }
+    var icon   by remember { mutableStateOf(unit?.icon ?: "📖") }
+    var color  by remember { mutableStateOf(unit?.color ?: "#8B5CF6") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (isEdit) "Üniteyi Düzenle" else "Yeni Ünite", color = OnBackground, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!isEdit) AdminField(id, { id = it }, "Ünite ID (örn: u6)", hint = "u6")
+                else Text("ID: ${unit!!.id}", color = Muted, fontSize = 11.sp)
+                AdminField(ttl,    { ttl    = it }, "Türkçe Ad *")
+                AdminField(nameKu, { nameKu = it }, "Kürtçe Ad")
+                AdminField(desc,   { desc   = it }, "Açıklama")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AdminField(icon,  { icon  = it }, "Emoji", modifier = Modifier.weight(1f))
+                    AdminField(color, { color = it }, "Renk (#hex)", modifier = Modifier.weight(1f))
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val finalId = if (isEdit) unit!!.id else id
+                    if (finalId.isNotBlank() && ttl.isNotBlank()) onSave(finalId, ttl, nameKu, desc, icon, color)
+                },
+                enabled = (if (isEdit) true else id.isNotBlank()) && ttl.isNotBlank(),
+                colors  = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                shape   = RoundedCornerShape(10.dp),
+            ) { Text("Kaydet", fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onDismiss) { Text("İptal", color = Muted) } },
+        containerColor = HeftSurface,
+    )
+}
+
+// ── Rêziman / Dilbilgisi Admin Sekmesi ───────────────────────────────────────
+@Composable
+private fun GrammarAdminTab(vm: KurdiViewModel) {
+    val rules   by vm.grammarRules.collectAsState()
+    val loading by vm.grammarLoading.collectAsState()
+    val scope   = rememberCoroutineScope()
+    val snack   = remember { SnackbarHostState() }
+
+    var showAddDialog  by remember { mutableStateOf(false) }
+    var editTarget     by remember { mutableStateOf<GrammarRule?>(null) }
+    var deleteTarget   by remember { mutableStateOf<GrammarRule?>(null) }
+
+    LaunchedEffect(Unit) { vm.loadGrammar() }
+
+    Scaffold(
+        containerColor = Background,
+        snackbarHost   = { SnackbarHost(snack) },
+        floatingActionButton = {
+            androidx.compose.material3.FloatingActionButton(
+                onClick        = { showAddDialog = true },
+                containerColor = Primary,
+                contentColor   = Color.White,
+                shape          = RoundedCornerShape(16.dp),
+            ) {
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier              = Modifier.padding(horizontal = 16.dp),
+                ) {
+                    Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                    Text("Kural Ekle", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            }
+        },
+    ) { pad ->
+        Box(Modifier.fillMaxSize().padding(pad)) {
+            when {
+                loading -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Primary, strokeWidth = 2.dp)
+                    }
+                }
+                rules.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text("📖", fontSize = 48.sp)
+                            Text("Henüz dilbilgisi kuralı eklenmemiş", color = Muted, fontSize = 14.sp)
+                            Text("Sağ alttaki + butonuna basarak başlayın", color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                }
+                else -> {
+                    LazyColumn(
+                        contentPadding      = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 100.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        // Üst bilgi
+                        item {
+                            Surface(
+                                shape    = RoundedCornerShape(14.dp),
+                                color    = Primary.copy(alpha = 0.10f),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier              = Modifier.padding(14.dp),
+                                    verticalAlignment     = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Text("📖", fontSize = 26.sp)
+                                    Column {
+                                        Text(
+                                            "Dilbilgisi Kuralları",
+                                            fontWeight = FontWeight.Bold, color = Primary, fontSize = 14.sp,
+                                        )
+                                        Text(
+                                            "${rules.size} kural • Tablo, kalın, eğik, renk desteği",
+                                            color = Muted, fontSize = 11.sp,
+                                        )
+                                    }
+                                    Spacer(Modifier.weight(1f))
+                                    IconButton(onClick = { vm.reloadGrammar() }) {
+                                        Icon(Icons.Default.Refresh, null, tint = Primary, modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                            }
+                        }
+
+                        // Kural kartları
+                        items(rules, key = { it.id }) { rule ->
+                            GrammarAdminCard(
+                                rule     = rule,
+                                onEdit   = { editTarget = it },
+                                onDelete = { deleteTarget = it },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Yeni Kural Dialog ──────────────────────────────────────────────────
+    if (showAddDialog) {
+        GrammarEditDialog(
+            initial   = null,
+            onDismiss = { showAddDialog = false },
+            onSave    = { title, titleTr, content, contentTr ->
+                vm.addGrammarRule(title, titleTr, content, contentTr) {
+                    showAddDialog = false
+                    scope.launch { snack.showSnackbar("✓ Kural eklendi") }
+                }
+            },
+        )
+    }
+
+    // ── Düzenleme Dialog ──────────────────────────────────────────────────
+    editTarget?.let { target ->
+        GrammarEditDialog(
+            initial   = target,
+            onDismiss = { editTarget = null },
+            onSave    = { title, titleTr, content, contentTr ->
+                vm.updateGrammarRule(target.id, title, titleTr, content, contentTr) {
+                    editTarget = null
+                    scope.launch { snack.showSnackbar("✓ Kural güncellendi") }
+                }
+            },
+        )
+    }
+
+    // ── Silme Onay Dialog ─────────────────────────────────────────────────
+    deleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            containerColor   = HeftSurface,
+            title = {
+                Text("Kuralı Sil?", color = OnBackground, fontWeight = FontWeight.Bold)
+            },
+            text  = {
+                Text(
+                    "«${target.titleTr.ifBlank { target.title }}» kalıcı olarak silinecek.",
+                    color = Muted,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteGrammarRule(target.id)
+                    scope.launch { snack.showSnackbar("🗑 Kural silindi") }
+                    deleteTarget = null
+                }) {
+                    Text("Sil", color = androidx.compose.material3.MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) { Text("İptal", color = Muted) }
+            },
+        )
+    }
+}
+
+// ── Admin kural kartı (listede gösterim) ─────────────────────────────────────
+@Composable
+private fun GrammarAdminCard(
+    rule    : GrammarRule,
+    onEdit  : (GrammarRule) -> Unit,
+    onDelete: (GrammarRule) -> Unit,
+) {
+    val purpleAccent = Color(0xFF8B5CF6)
+    Surface(
+        shape    = RoundedCornerShape(14.dp),
+        color    = HeftSurface,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier          = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Sol şerit
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(48.dp)
+                    .background(purpleAccent, RoundedCornerShape(2.dp))
+            )
+            Spacer(Modifier.width(12.dp))
+            // Başlıklar
+            Column(Modifier.weight(1f)) {
+                Text(
+                    rule.titleTr.ifBlank { rule.title },
+                    color      = OnBackground,
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 14.sp,
+                )
+                if (rule.title.isNotBlank() && rule.title != rule.titleTr) {
+                    Text(rule.title, color = purpleAccent, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                }
+                val preview = htmlStrip(rule.contentTr.ifBlank { rule.content })
+                    .take(60).let { if (it.length == 60) "$it…" else it }
+                if (preview.isNotBlank()) {
+                    Text(preview, color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
+                }
+                // Tablo etiketi
+                if (rule.content.contains("<table", ignoreCase = true) ||
+                    rule.contentTr.contains("<table", ignoreCase = true)) {
+                    Spacer(Modifier.height(4.dp))
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = purpleAccent.copy(alpha = 0.15f),
+                    ) {
+                        Text(
+                            "📊 Tablo",
+                            color    = purpleAccent,
+                            fontSize = 9.sp,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+            }
+            // Düzenle
+            IconButton(onClick = { onEdit(rule) }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.Edit, null, tint = Primary, modifier = Modifier.size(18.dp))
+            }
+            // Sil
+            IconButton(onClick = { onDelete(rule) }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+// ── Tam ekran Kural Düzenleme Dialog (RichTextEditor + Tablo desteği) ─────────
+@Composable
+private fun GrammarEditDialog(
+    initial  : GrammarRule?,
+    onDismiss: () -> Unit,
+    onSave   : (String, String, String, String) -> Unit,
+) {
+    var title     by remember { mutableStateOf(initial?.title     ?: "") }
+    var titleTr   by remember { mutableStateOf(initial?.titleTr   ?: "") }
+    var content   by remember { mutableStateOf(initial?.content   ?: "") }
+    var contentTr by remember { mutableStateOf(initial?.contentTr ?: "") }
+    var editorTab by remember { mutableIntStateOf(0) }
+    val isEdit    = initial != null
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth    = false,
+            decorFitsSystemWindows     = false,
+        ),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.97f)
+                .fillMaxHeight(0.93f),
+            shape = RoundedCornerShape(20.dp),
+            color = Background,
+        ) {
+            Scaffold(
+                containerColor = Background,
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text(
+                                    if (isEdit) "Kuralı Düzenle" else "Yeni Kural Ekle",
+                                    fontWeight = FontWeight.ExtraBold, color = OnBackground, fontSize = 16.sp,
+                                )
+                                if (isEdit && initial!!.id.isNotBlank()) {
+                                    Text("ID: ${initial.id}", color = Muted, fontSize = 10.sp)
+                                }
+                            }
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = onDismiss) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Muted)
+                            }
+                        },
+                        actions = {
+                            Button(
+                                onClick = {
+                                    if (title.isNotBlank() && titleTr.isNotBlank())
+                                        onSave(title, titleTr, content, contentTr)
+                                },
+                                enabled = title.isNotBlank() && titleTr.isNotBlank(),
+                                colors  = ButtonDefaults.buttonColors(containerColor = Primary),
+                                shape   = RoundedCornerShape(10.dp),
+                                modifier = Modifier.padding(end = 8.dp),
+                            ) {
+                                Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Kaydet", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                    )
+                },
+            ) { pad ->
+                LazyColumn(
+                    modifier           = Modifier.fillMaxSize().padding(pad),
+                    contentPadding     = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    // ── Başlık alanları ───────────────────────────────────
+                    item {
+                        Text("BAŞLIKLAR", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 6.dp))
+                        OutlinedTextField(
+                            value       = title, onValueChange = { title = it },
+                            label       = { Text("📚 Kurmancî Başlık *", fontSize = 12.sp) },
+                            modifier    = Modifier.fillMaxWidth(), singleLine = true,
+                            colors      = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor   = Primary, unfocusedBorderColor = SurfaceVar,
+                                focusedTextColor     = OnBackground, unfocusedTextColor = OnBackground,
+                                focusedLabelColor    = Primary, unfocusedLabelColor = Muted,
+                            ),
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value       = titleTr, onValueChange = { titleTr = it },
+                            label       = { Text("🇹🇷 Türkçe Başlık *", fontSize = 12.sp) },
+                            modifier    = Modifier.fillMaxWidth(), singleLine = true,
+                            colors      = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor   = Primary, unfocusedBorderColor = SurfaceVar,
+                                focusedTextColor     = OnBackground, unfocusedTextColor = OnBackground,
+                                focusedLabelColor    = Primary, unfocusedLabelColor = Muted,
+                            ),
+                        )
+                    }
+
+                    // ── Sekme seçici ──────────────────────────────────────
+                    item {
+                        HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                        Spacer(Modifier.height(8.dp))
+                        Text("İÇERİK", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("📚 Kurmancî", "🇹🇷 Türkçe").forEachIndexed { i, label ->
+                                FilterChip(
+                                    selected = editorTab == i,
+                                    onClick  = { editorTab = i },
+                                    label    = { Text(label, fontSize = 12.sp) },
+                                    colors   = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Primary,
+                                        selectedLabelColor     = Color.White,
+                                        containerColor         = HeftSurface,
+                                        labelColor             = Muted,
+                                    ),
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape    = RoundedCornerShape(14.dp),
+                            color    = HeftSurface,
+                        ) {
+                            Column(modifier = Modifier.padding(6.dp)) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Icon(Icons.Default.Edit, null, tint = Primary, modifier = Modifier.size(14.dp))
+                                    Text(
+                                        if (editorTab == 0) "Kurmancî metin — kalın, eğik, altı çizili, renk, boyut"
+                                        else "Türkçe metin — kalın, eğik, altı çizili, renk, boyut",
+                                        color = Muted, fontSize = 11.sp,
+                                    )
+                                }
+                                if (editorTab == 0) {
+                                    RichTextEditor(
+                                        value       = content,
+                                        onChange    = { content = it },
+                                        modifier    = Modifier.fillMaxWidth(),
+                                        placeholder = "Kurmancî dilbilgisi kuralını buraya yazın...",
+                                    )
+                                } else {
+                                    RichTextEditor(
+                                        value       = contentTr,
+                                        onChange    = { contentTr = it },
+                                        modifier    = Modifier.fillMaxWidth(),
+                                        placeholder = "Türkçe açıklamayı buraya yazın...",
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Tablo ipucu kartı ─────────────────────────────────
+                    item {
+                        Surface(
+                            shape    = RoundedCornerShape(12.dp),
+                            color    = Primary.copy(alpha = 0.08f),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                modifier            = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("📊", fontSize = 16.sp)
+                                    Text("Tablo Ekleme", color = Primary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                                Text(
+                                    "İçeriğe HTML tablo etiketi yapıştırın:",
+                                    color = Muted, fontSize = 11.sp,
+                                )
+                                Surface(
+                                    shape    = RoundedCornerShape(8.dp),
+                                    color    = Background.copy(alpha = 0.6f),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        "<table>\n" +
+                                        "  <tr><th>Kurmancî</th><th>Türkçe</th></tr>\n" +
+                                        "  <tr><td>Silav</td><td>Merhaba</td></tr>\n" +
+                                        "  <tr><td>Spas</td><td>Teşekkür</td></tr>\n" +
+                                        "</table>",
+                                        color      = Color(0xFF10B981),
+                                        fontSize   = 10.sp,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                        lineHeight = 16.sp,
+                                        modifier   = Modifier.padding(10.dp),
+                                    )
+                                }
+                                Text(
+                                    "Tablo içeriği ders ekranında otomatik stillendirilir.",
+                                    color = Muted, fontSize = 10.sp,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

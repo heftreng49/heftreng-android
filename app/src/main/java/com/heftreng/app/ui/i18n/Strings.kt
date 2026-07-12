@@ -84,7 +84,7 @@ object Strings {
     val postTopics = listOf("genel", "kitap", "alinti", "soru", "tartisma", "siir")
     fun topicLabel(l: String, key: String) = when (key) {
         "kitap"    -> t(l, "Kitap",     "Pirtûk")
-        "alinti"   -> t(l, "Alıntı",    "Vegotin")
+        "alinti"   -> t(l, "Alıntı",    "Jêgirt")
         "soru"     -> t(l, "Soru",      "Pirs")
         "tartisma" -> t(l, "Tartışma",  "Niqaş")
         "siir"     -> t(l, "Şiir",      "Helbest")
@@ -124,7 +124,7 @@ object Strings {
     fun readingList(l: String)     = t(l, "Okuma Listesi",    "Lîsteya Xwendinê")
     fun addToList(l: String)       = t(l, "Listeye Ekle",     "Lîsteyê zêde bike")
     fun removeFromList(l: String)  = t(l, "Listeden Çıkar",   "Ji lîsteyê derxe")
-    fun quotes(l: String)          = t(l, "Alıntılar",        "Gotinên Bijarte")
+    fun quotes(l: String)          = t(l, "Alıntılar",        "Jêgirt")
     fun authors(l: String)         = t(l, "Yazarlar",         "Nivîskar")
     fun serials(l: String)         = t(l, "Seriler",          "Rêze")
 
@@ -260,7 +260,7 @@ object Strings {
         "library_author" -> t(l, "Yazar",           "Nivîskar")
         "book"           -> t(l, "Kitap",           "Pirtûk")
         "author"         -> t(l, "Yazar",           "Nivîskar")
-        "book_quote"     -> t(l, "Kitap Alıntısı",  "Gotina Pirtûkê")
+        "book_quote"     -> t(l, "Kitap Alıntısı",  "Jêgirta Pirtûkê")
         else             -> t(l, "Kişi",            "Kes")
     }
 
@@ -337,7 +337,7 @@ object Strings {
     // ── Feed - PostCard / Dialog metinleri ────────────────────────────────────
     fun showMoreBtn(l: String)           = t(l, "Daha Fazla Göster",          "Zêdetir Nîşan Bide")
     fun postThinkHint(l: String)         = t(l, "Ne düşünüyorsun?",           "Tu çi difikire?")
-    fun addQuote(l: String)              = t(l, "Alıntı ekle",                "Girtebêj")
+    fun addQuote(l: String)              = t(l, "Alıntı ekle",                "Jêgirtê zêde bike")
     fun shareAction(l: String)           = t(l, "Paylaş",                     "Parve bike")
     fun cancelAction(l: String)          = t(l, "İptal",                      "Betal bike")
     fun newPostTitle(l: String)          = t(l, "Yeni Gönderi",               "Nivîsek Nû")
@@ -418,18 +418,37 @@ object Strings {
     // ── Kütüphane Ekranı ─────────────────────────────────────────────────────
     fun libraryTitle(l: String)          = t(l, "Kütüphane",                  "Pirtûkxane")
     fun discoverTitle(l: String)         = t(l, "Keşfet",                     "Vedîtin")
-    fun libraryTabQuotes(l: String)      = t(l, "Alıntılar",                  "Gotinên Bijarte")
+    fun libraryTabQuotes(l: String)      = t(l, "Alıntılar",                  "Jêgirt")
     fun libraryTabReviews(l: String)     = t(l, "İncelemeler",                "Nirxandin")
     fun libraryTabAuthors(l: String)     = t(l, "Yazarlar",                   "Nivîskar")
     fun libraryTabBooks(l: String)       = t(l, "Kitaplar",                   "Pirtûk")
-    fun libraryAddQuote(l: String)       = t(l, "Alıntı Ekle",                "Gotinê Zêde Bike")
+    fun libraryAddQuote(l: String)       = t(l, "Alıntı Ekle",                "Jêgirtê Zêde Bike")
     fun libraryAddReview(l: String)      = t(l, "İnceleme Ekle",              "Nirxandinê Zêde Bike")
-    fun libraryQuoteHint(l: String)      = t(l, "Alıntı metnini girin...",    "Nivîsa gotinê binivîse...")
+    fun libraryQuoteHint(l: String)      = t(l, "Alıntı metnini girin...",    "Nivîsa jêgirtê binivîse...")
     fun libraryReviewHint(l: String)     = t(l, "İncelemenizi yazın...",      "Nirxandina xwe binivîse...")
-    fun libraryNoQuotes(l: String)       = t(l, "Henüz alıntı yok",           "Gotinên bijarte tune")
+    fun libraryNoQuotes(l: String)       = t(l, "Henüz alıntı yok",           "Hîn jêgirt tune")
     fun libraryNoReviews(l: String)      = t(l, "Henüz inceleme yok",         "Nirxandin tune")
     fun libraryNoAuthors(l: String)      = t(l, "Henüz yazar yok",            "Nivîskar tune")
     fun libraryNoBooks(l: String)        = t(l, "Henüz kitap yok",            "Pirtûk tune")
+
+    // ── Alıntı Ekle Ekranı (QuoteDialog) ─────────────────────────────────────
+    fun quoteDialogTitle(l: String)      = t(l, "Alıntı Ekle",                "Jêgirtê Zêde Bike")
+    fun quoteTextLabel(l: String)        = t(l, "ALINTI METNİ *",             "NIVÎSA JÊGIRTÊ *")
+    fun bookNameLabel(l: String)         = t(l, "KİTAP ADI",                  "NAVÊ PIRTÛKÊ")
+    fun authorNameLabel(l: String)       = t(l, "YAZAR",                      "NIVÎSKAR")
+    fun quoteCountSuffix(l: String, n: Int) = t(l, "$n alıntı",               "$n jêgirt")
+    fun bookNotFoundWillAdd(l: String, name: String) =
+        t(l, "\"$name\" sistemde yok — yeni kitap olarak eklenecek",
+             "\"$name\" di pergalê de tune — wê wekî pirtûkeke nû were zêdekirin")
+    fun authorNotFoundWillAdd(l: String, name: String) =
+        t(l, "\"$name\" sistemde yok — yeni yazar olarak eklenecek",
+             "\"$name\" di pergalê de tune — wê wekî nivîskarekî nû were zêdekirin")
+    fun quotePreview(l: String)          = t(l, "Önizleme",                   "Pêşdîtin")
+    fun quoteShowMore(l: String)         = t(l, "Kapat ▲",                    "Bigire ▲")
+    fun quoteReadMore(l: String)         = t(l, "Devamını oku ▼",             "Zêdetir bixwîne ▼")
+    fun editQuoteTitle(l: String)        = t(l, "Alıntıyı Düzenle",           "Jêgirtê Biguhêre")
+    fun deleteQuoteTitle(l: String)      = t(l, "Alıntıyı Sil",               "Jêgirtê Jê Bibe")
+    fun deleteQuoteConfirm(l: String)    = t(l, "Bu alıntıyı silmek istiyor musunuz?", "Tu dixwazî vê jêgirtê jê bibî?")
     fun libraryQuoteBook(l: String)      = t(l, "Kitap adı",                  "Navê pirtûkê")
     fun libraryQuoteAuthor(l: String)    = t(l, "Yazar adı",                  "Navê nivîskar")
     fun libraryReviewBook(l: String)     = t(l, "Kitap seçin",                "Pirtûkê hilbijêre")
@@ -508,7 +527,7 @@ object Strings {
 
     // ── Profil: Okuma Özeti Hero ─────────────────────────────────────────────
     fun profileBooksRead(l: String, n: Int)   = t(l, "$n kitap okudum",  "$n pirtûk min xwendin")
-    fun profileQuotesCount(l: String, n: Int) = t(l, "$n alıntı",        "$n gotin")
+    fun profileQuotesCount(l: String, n: Int) = t(l, "$n alıntı",        "$n jêgirt")
     fun profileStreakDays(l: String, n: Int)  = t(l, "$n gün streak",    "$n roj streak")
 
     // ── Feed: Arkadaşlar ne okuyor? şeridi ───────────────────────────────────

@@ -132,7 +132,7 @@ fun notifDefaultMessage(type: String, ku: Boolean = false): String {
         "moderation"              -> if (ku) "Nîşedariyek li ser naveroka te" else "İçeriğin hakkında bildirim"
         "serial", "chapter",
         "book_chapter"            -> if (ku) "Beşek nû hate weşandin" else "Yeni bölüm yayınlandı"
-        "library_quote"           -> if (ku) "Gotinek nû hat zêdekirin" else "Yeni alıntı eklendi"
+        "library_quote"           -> if (ku) "Jêgirtek nû hat zêdekirin" else "Yeni alıntı eklendi"
         "library_review"          -> if (ku) "Nêrînek nû hat nivîsîn" else "Yeni inceleme yazıldı"
         "sys", "default"          -> if (ku) "Agahdarî" else "Duyuru"
         "message"                 -> if (ku) "Peyamek nû" else "Yeni mesaj"
@@ -479,7 +479,7 @@ fun DailyNotifCard(
                     Text(
                         notif.message.ifBlank {
                             if (isQuote)
-                                if (ku) "Gotina Rojê" else "Günün Alıntısı"
+                                if (ku) "Jêgirta Rojê" else "Günün Alıntısı"
                             else
                                 if (ku) "Peyvа Rojê" else "Günün Kelimesi"
                         },

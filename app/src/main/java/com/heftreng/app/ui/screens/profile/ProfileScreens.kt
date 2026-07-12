@@ -1117,7 +1117,7 @@ private fun UserQuotesSheet(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                if (ku) "Gotinên min (${quotes.size})" else "Alıntılarım (${quotes.size})",
+                if (ku) "Jêgirtên min (${quotes.size})" else "Alıntılarım (${quotes.size})",
                 color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp,
             )
             IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null, tint = Muted) }
@@ -1198,7 +1198,7 @@ fun ReadingSummaryHero(
         ReadingHeroStat(
             icon  = Icons.Outlined.FormatQuote,
             value = quotesCount.toString(),
-            label = if (language == "ku") "gotin" else "alıntı",
+            label = if (language == "ku") "jêgirt" else "alıntı",
             onClick = onQuotesClick,
         )
         ReadingHeroDivider()

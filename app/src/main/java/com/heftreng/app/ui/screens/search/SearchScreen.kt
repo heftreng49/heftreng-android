@@ -73,7 +73,7 @@ fun SearchScreen(
         Triple(if (ku) "Nivîs"     else "Gönderi", Icons.Outlined.DynamicFeed,   2),
         Triple(if (ku) "Rêzik"     else "Seri",    Icons.Outlined.AutoStories,   3),
         Triple(if (ku) "Pirtûk"    else "Kitap",   Icons.Outlined.MenuBook,      4),
-        Triple(if (ku) "Gotinên"   else "Alıntı",  Icons.Outlined.FormatQuote,   5),
+        Triple(if (ku) "Jêgirt"    else "Alıntı",  Icons.Outlined.FormatQuote,   5),
     )
 
     LaunchedEffect(Unit) { vm.loadSuggestions() }

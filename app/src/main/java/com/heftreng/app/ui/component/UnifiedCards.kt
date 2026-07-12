@@ -33,6 +33,7 @@ import coil.request.ImageRequest
 import com.google.firebase.Timestamp
 import com.heftreng.app.data.model.BookQuote
 import com.heftreng.app.data.model.BookReview
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.data.model.LibraryBook
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.LibraryViewModel
@@ -292,7 +293,7 @@ fun BookQuoteCard(
             containerColor   = HeftSurface,
             title = {
                 Text(
-                    if (language == "ku") "Gotinê biguhere" else "Alıntıyı Düzenle",
+                    Strings.editQuoteTitle(language),
                     color = OnBackground, fontWeight = FontWeight.Bold,
                 )
             },
@@ -325,8 +326,8 @@ fun BookQuoteCard(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             containerColor   = HeftSurface,
-            title = { Text(if (language == "ku") "Gotinê jê bibe" else "Alıntıyı Sil", color = OnBackground, fontWeight = FontWeight.Bold) },
-            text  = { Text(if (language == "ku") "Tu dixwazî vê gotinê jê bibî?" else "Bu alıntıyı silmek istiyor musunuz?", color = Muted) },
+            title = { Text(Strings.deleteQuoteTitle(language), color = OnBackground, fontWeight = FontWeight.Bold) },
+            text  = { Text(Strings.deleteQuoteConfirm(language), color = Muted) },
             confirmButton = {
                 TextButton(onClick = {
                     vm?.deleteQuote(quote.bookId, quote.id, quote.uid)
