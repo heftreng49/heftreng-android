@@ -723,7 +723,7 @@ fun FeedScreen(
     // simgeleri) ARKASINDA/ALTINDA kalıp tıklanamaz veya görünmez oluyordu.
     // navigationBarsPadding() zaten aşağıda mevcut yerlerde vardı, üstte de
     // aynı mantıkla statusBarsPadding() ekleniyor.
-    Box(modifier = Modifier.fillMaxSize().background(Background).imePadding().statusBarsPadding()) {
+    Box(modifier = Modifier.fillMaxSize().background(Background).imePadding()) {
         Column(Modifier.fillMaxSize()) {
             // ── Sekme satırı ────────────────────────────────────────────────
             TabRow(
