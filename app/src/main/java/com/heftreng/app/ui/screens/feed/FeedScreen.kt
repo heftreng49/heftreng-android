@@ -635,6 +635,7 @@ fun FeedScreen(
     if (showInlineQuote) {
         QuoteDialog(
             initialText   = inlineQuote?.text ?: "",
+            initialTitle  = "",
             initialBook   = inlineQuote?.bookName ?: "",
             initialAuthor = inlineQuote?.authorName ?: "",
             language      = language,
@@ -642,6 +643,7 @@ fun FeedScreen(
             onConfirm     = { p ->
                 vm.createPost(
                     text       = "",
+                    title      = p.title,
                     quoteText  = p.text,
                     authorName = p.authorName,
                     bookName   = p.bookName,

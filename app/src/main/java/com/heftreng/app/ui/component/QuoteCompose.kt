@@ -32,6 +32,7 @@ import com.heftreng.app.ui.i18n.Strings
 import kotlinx.coroutines.tasks.await
 
 data class QuotePayload(
+    val title     : String = "",
     val text      : String = "",
     val authorName: String = "",
     val bookName  : String = "",
@@ -200,6 +201,7 @@ fun QuoteButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
 @Composable
 fun QuoteDialog(
     initialText     : String = "",
+    initialTitle    : String = "",
     initialBook     : String = "",
     initialAuthor   : String = "",
     language        : String = "tr",
@@ -209,6 +211,7 @@ fun QuoteDialog(
     onSearchBooks   : (suspend (String) -> List<QuoteSuggestion>)? = null,
     onSearchAuthors : (suspend (String) -> List<QuoteSuggestion>)? = null,
 ) {
+    var title    by remember { mutableStateOf(initialTitle) }
     var text     by remember { mutableStateOf(initialText) }
     var book     by remember { mutableStateOf(initialBook) }
     var author   by remember { mutableStateOf(initialAuthor) }
@@ -356,7 +359,7 @@ fun QuoteDialog(
                 actions = {
                     TextButton(
                         onClick  = {
-                            onConfirm(QuotePayload(text = text, bookName = book, authorName = author, coverImg = coverImg))
+                            onConfirm(QuotePayload(title = title, text = text, bookName = book, authorName = author, coverImg = coverImg))
                         },
                         enabled  = canConfirm,
                     ) {
@@ -380,6 +383,31 @@ fun QuoteDialog(
             verticalArrangement = Arrangement.spacedBy(14.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp),
         ) {
+
+            // ── Başlık alanı ──────────────────────────────────────────────
+            item {
+                androidx.compose.foundation.text.BasicTextField(
+                    value           = title,
+                    onValueChange   = { if (it.length <= 120) title = it },
+                    modifier        = Modifier.fillMaxWidth(),
+                    textStyle       = androidx.compose.ui.text.TextStyle(
+                        color      = OnBackground,
+                        fontSize   = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    cursorBrush     = androidx.compose.ui.graphics.SolidColor(Primary),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
+                    ),
+                    singleLine      = true,
+                    decorationBox   = { inner ->
+                        if (title.isEmpty()) {
+                            Text(Strings.postTitleHint(language), color = Muted, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        }
+                        inner()
+                    },
+                )
+            }
 
             // ── Alıntı metni ──────────────────────────────────────────────
             item {
