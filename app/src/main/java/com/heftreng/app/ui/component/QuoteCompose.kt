@@ -92,9 +92,9 @@ fun QuoteCard(
         val isLong = quoteText.length > 280
         var expanded by remember(quoteText) { mutableStateOf(expandByDefault) }
         val displayText = when {
-            !isLong  -> quoteText
-            expanded -> quoteText
-            else     -> quoteText.take(280).trimEnd() + "…"
+            !isLong          -> quoteText
+            expanded         -> quoteText
+            else             -> quoteText.take(280).trimEnd() + "…"
         }
 
         Column(modifier = Modifier.padding(start = 8.dp)) {
@@ -106,7 +106,8 @@ fun QuoteCard(
                 lineHeight = 22.sp,
                 fontWeight = FontWeight.Medium,
             )
-            if (isLong) {
+            // Detail ekranında (expandByDefault=true) buton gösterilmez — her zaman tam açık
+            if (isLong && !expandByDefault) {
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text       = if (expanded) Strings.quoteShowMore(language) else Strings.quoteReadMore(language),
