@@ -231,6 +231,9 @@ fun FeedScreen(
     }
     var showInlineQuote  by remember { mutableStateOf(false) }
     var inlineImageUri   by remember { mutableStateOf<Uri?>(null) }
+    // FAB menü state'leri
+    var showFabMenu      by remember { mutableStateOf(false) }
+    var showComposeDialog by remember { mutableStateOf(false) }
     val uploading        by vm.uploading.collectAsState()
     val context          = LocalContext.current
 
@@ -256,6 +259,379 @@ fun FeedScreen(
         }
     }
 
+    // ── FAB Menü — bottom sheet ───────────────────────────────────────────────
+    if (showFabMenu) {
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest   = { showFabMenu = false },
+            containerColor     = HeftSurface,
+            dragHandle         = {
+                Box(
+                    Modifier
+                        .padding(top = 12.dp, bottom = 8.dp)
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Muted.copy(alpha = 0.4f)),
+                )
+            },
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    if (language == "ku") "Çi dixwazî parve bikî?" else "Ne paylaşmak istersin?",
+                    color      = Muted,
+                    fontSize   = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier   = Modifier.padding(bottom = 8.dp, top = 4.dp),
+                )
+                // ── Gönderi Yaz ──────────────────────────────────────────
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = RoundedCornerShape(14.dp),
+                    color    = Background,
+                    onClick  = { showFabMenu = false; showComposeDialog = true },
+                ) {
+                    Row(
+                        modifier          = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .background(Primary.copy(alpha = 0.12f), CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Default.Edit, null, tint = Primary, modifier = Modifier.size(20.dp))
+                        }
+                        Column {
+                            Text(
+                                if (language == "ku") "Nivîs Binivîse" else "Gönderi Yaz",
+                                color      = OnBackground,
+                                fontWeight = FontWeight.Bold,
+                                fontSize   = 15.sp,
+                            )
+                            Text(
+                                if (language == "ku") "Ramanên xwe parve bike" else "Düşüncelerini paylaş",
+                                color    = Muted,
+                                fontSize = 12.sp,
+                            )
+                        }
+                    }
+                }
+                // ── Alıntı Paylaş ────────────────────────────────────────
+                if (appConfig.feedAllowQuotes) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape    = RoundedCornerShape(14.dp),
+                        color    = Background,
+                        onClick  = { showFabMenu = false; showInlineQuote = true },
+                    ) {
+                        Row(
+                            modifier          = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .background(Amber.copy(alpha = 0.12f), CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(Icons.Default.FormatQuote, null, tint = Amber, modifier = Modifier.size(22.dp))
+                            }
+                            Column {
+                                Text(
+                                    if (language == "ku") "Alıntı Parve Bike" else "Alıntı Paylaş",
+                                    color      = OnBackground,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize   = 15.sp,
+                                )
+                                Text(
+                                    if (language == "ku") "Pirtûkê alıntı bike" else "Kitaptan bir alıntı ekle",
+                                    color    = Muted,
+                                    fontSize = 12.sp,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Tam ekran compose dialog ──────────────────────────────────────────────
+    if (showComposeDialog) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showComposeDialog = false },
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows  = false,
+            ),
+        ) {
+            Surface(modifier = Modifier.fillMaxSize(), color = Background) {
+                Scaffold(
+                    containerColor = Background,
+                    topBar = {
+                        TopAppBar(
+                            navigationIcon = {
+                                IconButton(onClick = { showComposeDialog = false }) {
+                                    Icon(Icons.Default.Close, null, tint = OnBackground)
+                                }
+                            },
+                            title = {
+                                AsyncImage(
+                                    model              = myPhotoURL.ifEmpty { null },
+                                    contentDescription = null,
+                                    modifier           = Modifier.size(30.dp).clip(CircleShape).background(SurfaceVar),
+                                    contentScale       = ContentScale.Crop,
+                                )
+                            },
+                            actions = {
+                                val canSend = inlineText.isNotBlank() || inlineQuote != null || inlineImageUri != null
+                                Button(
+                                    onClick = {
+                                        if (canSend) {
+                                            val uri = inlineImageUri
+                                            if (uri != null) {
+                                                vm.uploadImageAndCreatePost(
+                                                    imageUri   = uri,
+                                                    text       = inlineText.trim(),
+                                                    title      = inlineTitle.trim(),
+                                                    category   = inlineTopic,
+                                                    quoteText  = inlineQuote?.text ?: "",
+                                                    authorName = inlineQuote?.authorName ?: "",
+                                                    bookName   = inlineQuote?.bookName ?: "",
+                                                    coverImg   = inlineQuote?.coverImg ?: "",
+                                                    context    = context,
+                                                )
+                                            } else {
+                                                vm.createPost(
+                                                    text       = inlineText.trim(),
+                                                    title      = inlineTitle.trim(),
+                                                    category   = inlineTopic,
+                                                    quoteText  = inlineQuote?.text ?: "",
+                                                    authorName = inlineQuote?.authorName ?: "",
+                                                    bookName   = inlineQuote?.bookName ?: "",
+                                                    coverImg   = inlineQuote?.coverImg ?: "",
+                                                    mentions   = inlineMentionedUids,
+                                                )
+                                            }
+                                            inlineText          = ""
+                                            inlineTitle         = ""
+                                            inlineTopic         = ""
+                                            inlineQuote         = null
+                                            inlineImageUri      = null
+                                            inlineMentionedUids = emptyList()
+                                            vm.clearMentionSuggestions()
+                                            showComposeDialog = false
+                                        }
+                                    },
+                                    enabled = canSend,
+                                    shape   = RoundedCornerShape(20.dp),
+                                    colors  = ButtonDefaults.buttonColors(
+                                        containerColor         = Primary,
+                                        disabledContainerColor = Primary.copy(alpha = 0.3f),
+                                    ),
+                                    modifier = Modifier.height(36.dp).padding(end = 8.dp),
+                                ) {
+                                    if (uploading) {
+                                        CircularProgressIndicator(
+                                            modifier    = Modifier.size(16.dp),
+                                            color       = androidx.compose.ui.graphics.Color.White,
+                                            strokeWidth = 2.dp,
+                                        )
+                                    } else {
+                                        Text(
+                                            if (language == "ku") "Parve Bike" else "Paylaş",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize   = 14.sp,
+                                        )
+                                    }
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = HeftSurface),
+                        )
+                    },
+                ) { pad ->
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        modifier       = Modifier.fillMaxSize().padding(pad),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        item {
+                            // ── Başlık alanı ───────────────────────────
+                            BasicTextField(
+                                value           = inlineTitle,
+                                onValueChange   = { if (it.length <= 120) inlineTitle = it },
+                                modifier        = Modifier.fillMaxWidth(),
+                                textStyle       = androidx.compose.ui.text.TextStyle(
+                                    color      = OnBackground,
+                                    fontSize   = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                cursorBrush     = androidx.compose.ui.graphics.SolidColor(Primary),
+                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                                singleLine      = true,
+                                decorationBox   = { inner ->
+                                    if (inlineTitle.isEmpty()) {
+                                        Text(
+                                            Strings.postTitleHint(language),
+                                            color = Muted, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                                        )
+                                    }
+                                    inner()
+                                },
+                            )
+                        }
+                        item {
+                            // ── Gövde alanı ────────────────────────────
+                            BasicTextField(
+                                value           = inlineText,
+                                onValueChange   = { inlineText = it },
+                                modifier        = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                                textStyle       = androidx.compose.ui.text.TextStyle(
+                                    color    = OnBackground,
+                                    fontSize = 16.sp,
+                                    lineHeight = androidx.compose.ui.unit.TextUnit(24f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                ),
+                                cursorBrush     = androidx.compose.ui.graphics.SolidColor(Primary),
+                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                                decorationBox   = { inner ->
+                                    if (inlineText.isEmpty()) {
+                                        Text(Strings.whatsOnMind(language), color = Muted, fontSize = 16.sp)
+                                    }
+                                    inner()
+                                },
+                            )
+                        }
+                        // ── Mention öneri barı ──────────────────────────
+                        if (mentionSuggestions.isNotEmpty()) {
+                            item {
+                                MentionSuggestionBar(
+                                    suggestions = mentionSuggestions,
+                                    onSelect    = { onInlineMentionSelected(it) },
+                                    modifier    = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
+                        // ── Alıntı önizleme ─────────────────────────────
+                        if (inlineQuote != null) {
+                            item {
+                                QuoteInputSection(quote = inlineQuote, onRemove = { inlineQuote = null })
+                            }
+                        }
+                        // ── Görsel önizleme ─────────────────────────────
+                        if (inlineImageUri != null) {
+                            item {
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    AsyncImage(
+                                        model              = inlineImageUri,
+                                        contentDescription = null,
+                                        modifier           = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp)),
+                                        contentScale       = ContentScale.Crop,
+                                    )
+                                    IconButton(
+                                        onClick  = { inlineImageUri = null },
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(4.dp)
+                                            .size(28.dp)
+                                            .background(Color.Black.copy(alpha = 0.5f), CircleShape),
+                                    ) {
+                                        Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                            }
+                        }
+                        // ── Konu seçici ──────────────────────────────────
+                        item {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(Strings.postTopics) { key ->
+                                    val selected = inlineTopic == key
+                                    FilterChip(
+                                        selected = selected,
+                                        onClick  = { inlineTopic = if (selected) "" else key },
+                                        label    = { Text(Strings.topicLabel(language, key), fontSize = 12.sp) },
+                                        colors   = FilterChipDefaults.filterChipColors(
+                                            containerColor         = SurfaceVar,
+                                            labelColor             = Muted,
+                                            selectedContainerColor = Primary.copy(alpha = 0.16f),
+                                            selectedLabelColor     = Primary,
+                                        ),
+                                        border   = FilterChipDefaults.filterChipBorder(
+                                            enabled = true, selected = selected,
+                                            borderColor         = Divider,
+                                            selectedBorderColor = Primary,
+                                            borderWidth          = 1.dp,
+                                            selectedBorderWidth  = 1.dp,
+                                        ),
+                                        modifier = Modifier.height(30.dp),
+                                    )
+                                }
+                            }
+                        }
+                        // ── Sayaç + araç çubuğu ──────────────────────────
+                        item {
+                            HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                            Row(
+                                modifier          = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                // Alıntı ekle
+                                if (appConfig.feedAllowQuotes) {
+                                    IconButton(onClick = { showInlineQuote = true }, modifier = Modifier.size(36.dp)) {
+                                        Icon(
+                                            Icons.Default.FormatQuote, null,
+                                            tint     = if (inlineQuote != null) Amber else Muted,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    }
+                                }
+                                // Görsel ekle
+                                if (appConfig.feedShowImages) {
+                                    IconButton(
+                                        onClick  = {
+                                            val perm = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU)
+                                                android.Manifest.permission.READ_MEDIA_IMAGES
+                                            else android.Manifest.permission.READ_EXTERNAL_STORAGE
+                                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, perm)
+                                                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                                imagePicker.launch("image/*")
+                                            } else {
+                                                imagePermLauncher.launch(perm)
+                                            }
+                                        },
+                                        modifier = Modifier.size(36.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Image, null,
+                                            tint     = if (inlineImageUri != null) Primary else Muted,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    "${inlineText.length}/1000",
+                                    color    = if (inlineText.length > 900) Error else Muted,
+                                    fontSize = 11.sp,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     if (showInlineQuote) {
         QuoteDialog(
             initialText   = inlineQuote?.text ?: "",
@@ -263,8 +639,6 @@ fun FeedScreen(
             initialAuthor = inlineQuote?.authorName ?: "",
             onDismiss     = { showInlineQuote = false },
             onConfirm     = { p ->
-                // Compose kutusuna set etmek yerine direkt paylaş —
-                // kullanıcı ayrıca Paylaş butonuna basmak zorunda kalmasın.
                 vm.createPost(
                     text       = "",
                     quoteText  = p.text,
@@ -440,77 +814,6 @@ fun FeedScreen(
                 modifier       = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = 6.dp, bottom = 100.dp),
             ) {
-                // ── Inline compose — tema .compose ────────────────────────
-                if (selectedFeedTab == 0) item {
-                    InlineComposeBox(
-                        listState     = feedListState,
-                        text          = inlineText,
-                        onTextChange  = { inlineText = it },
-                        title         = inlineTitle,
-                        onTitleChange = { inlineTitle = it },
-                        topic         = inlineTopic,
-                        onTopicChange = { inlineTopic = it },
-                        quote         = inlineQuote,
-                        onQuoteAdd    = { if (appConfig.feedAllowQuotes) showInlineQuote = true },
-                        onQuoteRemove = { inlineQuote = null },
-                        onSend        = {
-                            if (inlineText.isNotBlank() || inlineQuote != null || inlineImageUri != null) {
-                                val uri = inlineImageUri
-                                if (uri != null) {
-                                    vm.uploadImageAndCreatePost(
-                                        imageUri   = uri,
-                                        text       = inlineText.trim(),
-                                        title      = inlineTitle.trim(),
-                                        category   = inlineTopic,
-                                        quoteText  = inlineQuote?.text ?: "",
-                                        authorName = inlineQuote?.authorName ?: "",
-                                        bookName   = inlineQuote?.bookName ?: "",
-                                        coverImg   = inlineQuote?.coverImg ?: "",
-                                        context    = context,
-                                    )
-                                } else {
-                                    vm.createPost(
-                                        text       = inlineText.trim(),
-                                        title      = inlineTitle.trim(),
-                                        category   = inlineTopic,
-                                        quoteText  = inlineQuote?.text ?: "",
-                                        authorName = inlineQuote?.authorName ?: "",
-                                        bookName   = inlineQuote?.bookName ?: "",
-                                        coverImg   = inlineQuote?.coverImg ?: "",
-                                        mentions   = inlineMentionedUids,
-                                    )
-                                }
-                                inlineText          = ""
-                                inlineTitle         = ""
-                                inlineTopic         = ""
-                                inlineQuote         = null
-                                inlineImageUri      = null
-                                inlineMentionedUids = emptyList()
-                                vm.clearMentionSuggestions()
-                            }
-                        },
-                        photoURL     = myPhotoURL,
-                        language     = language,
-                        imageUri     = inlineImageUri,
-                        uploading    = uploading,
-                        onImagePick  = {
-                            if (appConfig.feedShowImages) {
-                                val perm = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU)
-                                    android.Manifest.permission.READ_MEDIA_IMAGES
-                                else android.Manifest.permission.READ_EXTERNAL_STORAGE
-                                if (androidx.core.content.ContextCompat.checkSelfPermission(context, perm)
-                                    == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                    imagePicker.launch("image/*")
-                                } else {
-                                    imagePermLauncher.launch(perm)
-                                }
-                            }
-                        },
-                        onImageClear = { inlineImageUri = null },
-                        mentionSuggestions = mentionSuggestions,
-                        onMentionSelected  = { onInlineMentionSelected(it) },
-                    )
-                }
                 // ── Gönderi listesi ───────────────────────────────────
 
                 // ── Blog Yazıları — heft-reng.blogspot.com içeriği ─────────
@@ -728,6 +1031,26 @@ fun FeedScreen(
                     modifier   = Modifier.align(Alignment.TopCenter),
                     contentColor = Primary,
                 )
+
+                // ── Compose FAB ───────────────────────────────────────────
+                if (selectedFeedTab == 0) {
+                    androidx.compose.material3.FloatingActionButton(
+                        onClick          = { showFabMenu = true },
+                        modifier         = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 20.dp, bottom = 24.dp),
+                        containerColor   = Primary,
+                        contentColor     = androidx.compose.ui.graphics.Color.White,
+                        shape            = CircleShape,
+                        elevation        = androidx.compose.material3.FloatingActionButtonDefaults.elevation(6.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = if (language == "ku") "Binivîse" else "Yaz",
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
             } // pullRefresh Box
         }
         } // Column
@@ -1197,11 +1520,10 @@ fun PostCard(
     onBlock      : (() -> Unit)? = null,
     // FAZ 1 devamı: moderatör/editör hızlı işlem menüsü — bkz. FeedScreen
     // çağrı noktasındaki açıklama.
-    canModerate    : Boolean = false,
-    isRemoved      : Boolean = false,
-    onModerate     : ((status: String) -> Unit)? = null,
-    language       : String = "tr",
-    isDetailScreen : Boolean = false,
+    canModerate  : Boolean = false,
+    isRemoved    : Boolean = false,
+    onModerate   : ((status: String) -> Unit)? = null,
+    language     : String = "tr",
 ) {
     val ku = language == "ku"
     val myUid            = FirebaseAuth.getInstance().currentUser?.uid ?: ""
@@ -1413,14 +1735,13 @@ fun PostCard(
         ) {
             if (post.quoteText.isNotBlank()) {
                 QuoteCard(
-                    quoteText       = post.quoteText,
-                    bookName        = post.bookName,
-                    authorName      = post.authorName,
-                    coverImg        = post.coverImg,
-                    onTapBook       = onTapBook,
-                    onTapAuthor     = onTapAuthor,
-                    expandByDefault = isDetailScreen,
-                    modifier        = Modifier.padding(bottom = 8.dp),
+                    quoteText   = post.quoteText,
+                    bookName    = post.bookName,
+                    authorName  = post.authorName,
+                    coverImg    = post.coverImg,
+                    onTapBook   = onTapBook,
+                    onTapAuthor = onTapAuthor,
+                    modifier    = Modifier.padding(bottom = 8.dp),
                 )
             }
             if (post.category.isNotBlank()) {
@@ -1450,9 +1771,7 @@ fun PostCard(
             }
             if (post.text.isNotBlank()) {
                 LinkifyText(
-                    post.text, fontSize = 15.sp, lineHeight = 22.sp,
-                    expandable     = !isDetailScreen,
-                    language       = language,
+                    post.text, fontSize = 15.sp, lineHeight = 22.sp, expandable = true, language = language,
                     onHashtagClick = onTapHashtag,
                     mentionUids    = post.mentions,
                     onMentionClick = onTapMention,
@@ -1527,7 +1846,7 @@ fun PostCard(
                         if (post.repostTitle.isNotBlank())  Text(post.repostTitle,  color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
                         if (post.serialTitle.isNotBlank())  Text(post.serialTitle,  color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
                         if (post.chapterTitle.isNotBlank()) Text("${Strings.chapter(language)} ${post.chapterOrder}: ${post.chapterTitle}", color = Muted, fontSize = 12.sp)
-                        if (post.repostText.isNotBlank())   Text(post.repostText,   color = OnSurface,    fontSize = 13.sp, maxLines = if (isDetailScreen) Int.MAX_VALUE else 4, lineHeight = 19.sp)
+                        if (post.repostText.isNotBlank())   Text(post.repostText,   color = OnSurface,    fontSize = 13.sp, maxLines = 4, lineHeight = 19.sp)
                         val rImg = listOf(post.repostImg, post.serialCover).firstOrNull { it.isNotBlank() } ?: ""
                         if (rImg.isNotBlank()) {
                             AsyncImage(model = rImg, contentDescription = null,
