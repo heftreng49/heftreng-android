@@ -1520,10 +1520,11 @@ fun PostCard(
     onBlock      : (() -> Unit)? = null,
     // FAZ 1 devamı: moderatör/editör hızlı işlem menüsü — bkz. FeedScreen
     // çağrı noktasındaki açıklama.
-    canModerate  : Boolean = false,
-    isRemoved    : Boolean = false,
-    onModerate   : ((status: String) -> Unit)? = null,
-    language     : String = "tr",
+    canModerate    : Boolean = false,
+    isRemoved      : Boolean = false,
+    onModerate     : ((status: String) -> Unit)? = null,
+    language       : String = "tr",
+    isDetailScreen : Boolean = false,
 ) {
     val ku = language == "ku"
     val myUid            = FirebaseAuth.getInstance().currentUser?.uid ?: ""
@@ -1735,13 +1736,14 @@ fun PostCard(
         ) {
             if (post.quoteText.isNotBlank()) {
                 QuoteCard(
-                    quoteText   = post.quoteText,
-                    bookName    = post.bookName,
-                    authorName  = post.authorName,
-                    coverImg    = post.coverImg,
-                    onTapBook   = onTapBook,
-                    onTapAuthor = onTapAuthor,
-                    modifier    = Modifier.padding(bottom = 8.dp),
+                    quoteText       = post.quoteText,
+                    bookName        = post.bookName,
+                    authorName      = post.authorName,
+                    coverImg        = post.coverImg,
+                    onTapBook       = onTapBook,
+                    onTapAuthor     = onTapAuthor,
+                    expandByDefault = isDetailScreen,
+                    modifier        = Modifier.padding(bottom = 8.dp),
                 )
             }
             if (post.category.isNotBlank()) {
@@ -1771,7 +1773,9 @@ fun PostCard(
             }
             if (post.text.isNotBlank()) {
                 LinkifyText(
-                    post.text, fontSize = 15.sp, lineHeight = 22.sp, expandable = true, language = language,
+                    post.text, fontSize = 15.sp, lineHeight = 22.sp,
+                    expandable     = !isDetailScreen,
+                    language       = language,
                     onHashtagClick = onTapHashtag,
                     mentionUids    = post.mentions,
                     onMentionClick = onTapMention,
@@ -1846,7 +1850,7 @@ fun PostCard(
                         if (post.repostTitle.isNotBlank())  Text(post.repostTitle,  color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
                         if (post.serialTitle.isNotBlank())  Text(post.serialTitle,  color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
                         if (post.chapterTitle.isNotBlank()) Text("${Strings.chapter(language)} ${post.chapterOrder}: ${post.chapterTitle}", color = Muted, fontSize = 12.sp)
-                        if (post.repostText.isNotBlank())   Text(post.repostText,   color = OnSurface,    fontSize = 13.sp, maxLines = 4, lineHeight = 19.sp)
+                        if (post.repostText.isNotBlank())   Text(post.repostText,   color = OnSurface,    fontSize = 13.sp, maxLines = if (isDetailScreen) Int.MAX_VALUE else 4, lineHeight = 19.sp)
                         val rImg = listOf(post.repostImg, post.serialCover).firstOrNull { it.isNotBlank() } ?: ""
                         if (rImg.isNotBlank()) {
                             AsyncImage(model = rImg, contentDescription = null,
