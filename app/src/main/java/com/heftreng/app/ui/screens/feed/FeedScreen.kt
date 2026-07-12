@@ -347,13 +347,13 @@ fun FeedScreen(
                             }
                             Column {
                                 Text(
-                                    if (language == "ku") "Alıntı Parve Bike" else "Alıntı Paylaş",
+                                    if (language == "ku") "Jêgirt Parve Bike" else "Alıntı Paylaş",
                                     color      = OnBackground,
                                     fontWeight = FontWeight.Bold,
                                     fontSize   = 15.sp,
                                 )
                                 Text(
-                                    if (language == "ku") "Pirtûkê alıntı bike" else "Kitaptan bir alıntı ekle",
+                                    if (language == "ku") "Pirtûkê jêgirtê bike" else "Kitaptan bir alıntı ekle",
                                     color    = Muted,
                                     fontSize = 12.sp,
                                 )
