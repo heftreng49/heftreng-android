@@ -86,15 +86,33 @@ fun QuoteCard(
             fontWeight = FontWeight.Black,
             modifier = Modifier.align(Alignment.TopStart).offset(x = (-4).dp, y = (-10).dp),
         )
+        val isLong = quoteText.length > 280
+        var expanded by remember(quoteText) { mutableStateOf(false) }
+        val displayText = when {
+            !isLong  -> quoteText
+            expanded -> quoteText
+            else     -> quoteText.take(280).trimEnd() + "…"
+        }
+
         Column(modifier = Modifier.padding(start = 8.dp)) {
             Text(
-                "${quoteText.take(300)}${if (quoteText.length > 300) "…" else ""}",
+                displayText,
                 color      = OnSurface,
                 fontSize   = 14.sp,
                 fontStyle  = FontStyle.Italic,
                 lineHeight = 22.sp,
                 fontWeight = FontWeight.Medium,
             )
+            if (isLong) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text       = if (expanded) "Kapat ▲" else "Devamını oku ▼",
+                    color      = Amber,
+                    fontSize   = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier   = Modifier.clickable { expanded = !expanded },
+                )
+            }
             if (bookName.isNotBlank() || authorName.isNotBlank()) {
                 Spacer(Modifier.height(10.dp))
                 Row(
