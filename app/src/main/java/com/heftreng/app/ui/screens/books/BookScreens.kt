@@ -1292,7 +1292,7 @@ fun CreateBookDialog(
                 }
                 OutlinedTextField(
                     value = title, onValueChange = { title = it },
-                    label = { Text(Strings.bookNameLabel(language)) },
+                    label = { Text(Strings.bookNewNameLabel(language)) },
                     singleLine = true, modifier = Modifier.fillMaxWidth(), colors = hfTextFieldColors(),
                 )
                 OutlinedTextField(

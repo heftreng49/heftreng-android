@@ -457,7 +457,7 @@ object Strings {
     fun bookChaptersTitle(l: String, n: Int) = t(l, "Bölümler ($n)",          "Beş ($n)")
     fun bookChaptersEmpty(l: String)     = t(l, "Henüz bölüm eklenmemiş",    "Beş tune")
     fun bookNewTitle(l: String)          = t(l, "Yeni Kitap",                 "Pirtûk Nû")
-    fun bookNameLabel(l: String)         = t(l, "Kitap Adı *",                "Sernavê Pirtûkê *")
+    fun bookNewNameLabel(l: String)      = t(l, "Kitap Adı *",                "Sernavê Pirtûkê *")
     fun bookDescLabel(l: String)         = t(l, "Açıklama",                   "Danasîn")
     fun bookGenreLabel(l: String)        = t(l, "Tür",                        "Cûre")
     fun bookCreateBtn(l: String)         = t(l, "Oluştur",                    "Çêke")
