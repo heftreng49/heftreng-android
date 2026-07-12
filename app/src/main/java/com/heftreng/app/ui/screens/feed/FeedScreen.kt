@@ -353,7 +353,7 @@ fun FeedScreen(
                                     fontSize   = 15.sp,
                                 )
                                 Text(
-                                    if (language == "ku") "Pirtûkê jêgirtê bike" else "Kitaptan bir alıntı ekle",
+                                    if (language == "ku") "Jêgirtê pirtûkan zêde bike" else "Kitaptan bir alıntı ekle",
                                     color    = Muted,
                                     fontSize = 12.sp,
                                 )
