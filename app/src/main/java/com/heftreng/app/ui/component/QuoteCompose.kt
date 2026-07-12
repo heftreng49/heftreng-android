@@ -49,13 +49,14 @@ data class QuoteSuggestion(
 // ── Gönderi kartında alıntı gösterimi ─────────────────────────────────────────
 @Composable
 fun QuoteCard(
-    quoteText   : String,
-    bookName    : String = "",
-    authorName  : String = "",
-    coverImg    : String = "",
-    onTapBook   : ((String) -> Unit)? = null,
-    onTapAuthor : ((String) -> Unit)? = null,
-    modifier    : Modifier = Modifier,
+    quoteText      : String,
+    bookName       : String = "",
+    authorName     : String = "",
+    coverImg       : String = "",
+    onTapBook      : ((String) -> Unit)? = null,
+    onTapAuthor    : ((String) -> Unit)? = null,
+    expandByDefault: Boolean = false,   // true → detail ekranı, kırpma yok
+    modifier       : Modifier = Modifier,
 ) {
     if (quoteText.isBlank()) return
     Box(
@@ -87,7 +88,7 @@ fun QuoteCard(
             modifier = Modifier.align(Alignment.TopStart).offset(x = (-4).dp, y = (-10).dp),
         )
         val isLong = quoteText.length > 280
-        var expanded by remember(quoteText) { mutableStateOf(false) }
+        var expanded by remember(quoteText) { mutableStateOf(expandByDefault) }
         val displayText = when {
             !isLong  -> quoteText
             expanded -> quoteText

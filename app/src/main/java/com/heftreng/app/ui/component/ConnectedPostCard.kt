@@ -64,8 +64,9 @@ fun ConnectedPostCard(
     var showUnrepostConfirm by remember(post.id) { mutableStateOf(false) }
 
     PostCard(
-        post     = post,
-        language = language,
+        post           = post,
+        language       = language,
+        isDetailScreen = isDetailScreen,
 
         // ── Sosyal aksiyonlar ──────────────────────────────────────────────
         onLike   = { feedVm.toggleLike(post) },
