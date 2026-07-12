@@ -147,17 +147,21 @@ fun htmlToSpans(html: String): HtmlParseResult {
     if (html.isBlank()) return HtmlParseResult("", emptyList())
 
     // Tablo bloklarını önce sentinel'e çevir
-    val tableRegex = Regex("<table[^>]*>.*?</table>", RegexOption.IGNORE_CASE or RegexOption.DOT_MATCHES_ALL)
+    val tableRegex = Regex(
+        "<table[^>]*>.*?</table>",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+    )
     var preprocessed = html
-    val tableMap = mutableMapOf<String, String>() // sentinel → html
     for (m in tableRegex.findAll(html)) {
         val sentinel = "\u0000TABLE:${m.value}\u0000"
-        tableMap[sentinel] = m.value
         preprocessed = preprocessed.replace(m.value, sentinel)
     }
 
     // Başlıkları işle: <h2>…</h2> ve <h3>…</h3>
-    val headingRegex = Regex("<(h[23])[^>]*>(.*?)</\\1>", RegexOption.IGNORE_CASE or RegexOption.DOT_MATCHES_ALL)
+    val headingRegex = Regex(
+        "<(h[23])[^>]*>(.*?)</\\1>",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+    )
     preprocessed = headingRegex.replace(preprocessed) { mr ->
         val level   = mr.groupValues[1].removePrefix("h")
         val content = mr.groupValues[2]
@@ -192,9 +196,9 @@ fun htmlToSpans(html: String): HtmlParseResult {
     val headingSentinelRegex = Regex("\u0001H([23]):(.*?)\u0001", RegexOption.DOT_MATCHES_ALL)
 
     // Tüm özel blokları (heading sentinel) ve tag'leri birlikte işle
-    val allMatches = (
-        tagRegex.findAll(normalized).map { "tag" to it } +
-        headingSentinelRegex.findAll(normalized).map { "heading" to it }
+    val allMatches: List<Pair<String, MatchResult>> = (
+        tagRegex.findAll(normalized).map { "tag" to it as MatchResult }.toList() +
+        headingSentinelRegex.findAll(normalized).map { "heading" to it as MatchResult }.toList()
     ).sortedBy { it.second.range.first }
 
     for ((type, match) in allMatches) {
