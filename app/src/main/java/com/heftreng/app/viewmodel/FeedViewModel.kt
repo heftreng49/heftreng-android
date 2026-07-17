@@ -85,6 +85,13 @@ class FeedViewModel @Inject constructor(
     private val _libraryQuotesOffline = MutableStateFlow(false)
     val libraryQuotesOffline = _libraryQuotesOffline.asStateFlow()
 
+    // Kütüphane alıntıları sayfalama
+    private val LIBRARY_PAGE_SIZE = 20
+    private val _libraryHasMore = MutableStateFlow(false)
+    val libraryHasMore = _libraryHasMore.asStateFlow()
+    private val _libraryLoadingMore = MutableStateFlow(false)
+    val libraryLoadingMore = _libraryLoadingMore.asStateFlow()
+
     // ── Arkadaşlar ne okuyor? — Feed üst şeridi ──────────────────────────────
     private val _friendsReading = MutableStateFlow<List<com.heftreng.app.data.model.FriendReadingItem>>(emptyList())
     val friendsReading = _friendsReading.asStateFlow()
@@ -140,7 +147,7 @@ class FeedViewModel @Inject constructor(
     private var myRepostMap = emptyMap<String, String>()
     private val interactionCache = CacheEntry<Unit>(ttlMs = 3 * 60_000L)
     private var lastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
-    private val PAGE_SIZE = 30L
+    private val PAGE_SIZE = 20L
     private var lastServerFetchMs: Long = 0L
     private val AUTO_REFRESH_INTERVAL_MS: Long = 5L * 60L * 1000L // 5 dk — otomatik yenileme aralığı
     
@@ -1902,13 +1909,16 @@ class FeedViewModel @Inject constructor(
         val result = mutableListOf<Post>()
 
         try {
-            val rows = library.getRecentQuotes(50)
-            rows.forEach { row ->
+            // Sayfa boyutundan 1 fazla çek — daha fazlası var mı bileceğiz
+            val rows = library.getRecentQuotes(LIBRARY_PAGE_SIZE + 1)
+            rows.take(LIBRARY_PAGE_SIZE).forEach { row ->
                 if (row.feedPostId.isBlank() || row.text.isBlank()) return@forEach
                 result.add(row.toPost())
             }
+            _libraryHasMore.value = rows.size > LIBRARY_PAGE_SIZE
         } catch (e: Exception) {
             android.util.Log.w("FeedVM", "loadLibraryQuotes book_quotes: ${e.message}")
+            _libraryHasMore.value = false
         }
 
         val sorted = result
@@ -1919,7 +1929,7 @@ class FeedViewModel @Inject constructor(
             _libraryQuotes.value = sorted
             _libraryQuotesOffline.value = false
             try {
-                quoteDao.replaceAll(sorted.take(50).map { it.toCachedQuote() })
+                quoteDao.replaceAll(sorted.take(LIBRARY_PAGE_SIZE).map { it.toCachedQuote() })
             } catch (e: Exception) {
                 android.util.Log.w("FeedVM", "quoteDao.replaceAll: ${e.message}")
             }
@@ -1932,7 +1942,7 @@ class FeedViewModel @Inject constructor(
         } else {
             // Ağ sonucu boş — internet yoksa son önbelleğe düş
             try {
-                val cached = quoteDao.getCachedQuotes(50)
+                val cached = quoteDao.getCachedQuotes(LIBRARY_PAGE_SIZE)
                 if (cached.isNotEmpty()) {
                     _libraryQuotes.value = cached.map { it.toPost() }
                     _libraryQuotesOffline.value = true
@@ -1949,6 +1959,33 @@ class FeedViewModel @Inject constructor(
 
     fun loadLibraryQuotes() {
         viewModelScope.launch { loadLibraryQuotesAsync() }
+    }
+
+    /** Kütüphane alıntıları için "Daha Fazla Göster" — offset ile bir sonraki sayfa */
+    fun loadMoreLibraryQuotes() {
+        if (_libraryLoadingMore.value || !_libraryHasMore.value) return
+        viewModelScope.launch {
+            _libraryLoadingMore.value = true
+            try {
+                val currentSize = _libraryQuotes.value.size
+                // Supabase offset: mevcut liste boyutu kadar atla, 1 fazla çek
+                val rows = library.getRecentQuotes(LIBRARY_PAGE_SIZE + 1, offset = currentSize)
+                val newPosts = rows.take(LIBRARY_PAGE_SIZE)
+                    .filter { it.feedPostId.isNotBlank() && it.text.isNotBlank() }
+                    .map { it.toPost() }
+                _libraryHasMore.value = rows.size > LIBRARY_PAGE_SIZE
+                if (newPosts.isNotEmpty()) {
+                    val merged = _libraryQuotes.value + newPosts
+                    _libraryQuotes.value = merged
+                    syncLibraryQuoteLikeStates(newPosts)
+                    enrichMissingCovers(newPosts)
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("FeedVM", "loadMoreLibraryQuotes: ${e.message}")
+            } finally {
+                _libraryLoadingMore.value = false
+            }
+        }
     }
 
     /**

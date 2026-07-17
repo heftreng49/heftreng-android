@@ -369,12 +369,13 @@ class LibraryRepository @Inject constructor(
      *  FAZ 1 devamı: banlı kullanıcıların alıntıları da client-side dışlanıyor
      *  (bkz. getBannedUids) — sayfalama limitinden az sonuç dönebilir ama
      *  bu ekran zaten "son eklenenler" akışı, kesin toplam sayı garantisi yok. */
-    suspend fun getRecentQuotes(limit: Int = 50): List<BookQuoteRow> {
+    suspend fun getRecentQuotes(limit: Int = 20, offset: Int = 0): List<BookQuoteRow> {
         val banned = getBannedUids()
         return db["book_quotes"].select {
             filter { eq("moderation_status", "active") }
             order("created_at", Order.DESCENDING)
             limit(limit.toLong())
+            if (offset > 0) range(offset.toLong(), (offset + limit - 1).toLong())
         }.decodeList<BookQuoteRow>().filter { it.uid !in banned }
     }
 

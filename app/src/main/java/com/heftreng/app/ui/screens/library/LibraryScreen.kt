@@ -110,6 +110,8 @@ fun LibraryScreen(
 
     val quotes by feedVm.libraryQuotes.collectAsState()
     val quotesOffline by feedVm.libraryQuotesOffline.collectAsState()
+    val quotesHasMore by feedVm.libraryHasMore.collectAsState()
+    val quotesLoadingMore by feedVm.libraryLoadingMore.collectAsState()
     var reviews by remember { mutableStateOf<List<BookReview>>(emptyList()) }
     val authors by libraryVm.authors.collectAsState()
     var books   by remember { mutableStateOf<List<LibraryBook>>(emptyList()) }
@@ -299,7 +301,7 @@ fun LibraryScreen(
                     modifier                = Modifier.fillMaxSize(),
                 ) { page ->
                     when (page) {
-                        0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, adsVm = adsVm, isOffline = quotesOffline)
+                        0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, adsVm = adsVm, isOffline = quotesOffline, hasMore = quotesHasMore, loadingMore = quotesLoadingMore, onLoadMore = { feedVm.loadMoreLibraryQuotes() })
                         1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm, adsVm = adsVm)
                         2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language, adsVm = adsVm)
                         3 -> LibraryBooksTab(books = books, navController = navController, language = language, adsVm = adsVm)
@@ -403,6 +405,9 @@ private fun LibraryQuotesTab(
     feedVm       : FeedViewModel,
     adsVm        : com.heftreng.app.viewmodel.AdsViewModel,
     isOffline    : Boolean = false,
+    hasMore      : Boolean = false,
+    loadingMore  : Boolean = false,
+    onLoadMore   : () -> Unit = {},
 ) {
     if (quotes.isEmpty()) {
         EmptyState(Icons.Outlined.FormatQuote, Strings.libraryNoQuotes(language))
@@ -463,6 +468,31 @@ private fun LibraryQuotesTab(
             // yapısal olarak imkansız (bkz. AdPlanner.kt).
             adPlan[index]?.let { placement ->
                 AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(vertical = 4.dp))
+            }
+        }
+        // "Daha Fazla Göster" butonu — sadece daha fazla alıntı varsa göster
+        if (hasMore) {
+            item(key = "load_more_quotes") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (loadingMore) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(28.dp),
+                            strokeWidth = 2.5.dp,
+                        )
+                    } else {
+                        OutlinedButton(onClick = onLoadMore) {
+                            Text(
+                                if (language == "ku") "Bêtir Nîşan Bide"
+                                else "Daha Fazla Göster"
+                            )
+                        }
+                    }
+                }
             }
         }
     }
