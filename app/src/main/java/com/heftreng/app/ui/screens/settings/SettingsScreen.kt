@@ -38,6 +38,7 @@ import com.heftreng.app.ui.i18n.Strings
 
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.component.ThemeSelector
+import com.heftreng.app.ui.component.ThemeSelector
 import com.heftreng.app.viewmodel.AuthViewModel
 import android.app.Activity
 import android.net.Uri
@@ -199,6 +200,7 @@ fun SettingsScreen(
                     // Görsel tema seçimi
                     ThemeSelector(
                         selectedVariant  = themeVariant,
+                        language         = language,
                         isDarkMode       = themeMode == "dark" || (themeMode == "system" && androidx.compose.foundation.isSystemInDarkTheme()),
                         onVariantChange  = { vm.setThemeVariant(it) },
                         onDarkModeChange = { /* dark/light toggle butonları yukarıda yönetiliyor */ },

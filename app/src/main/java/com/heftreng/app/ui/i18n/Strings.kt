@@ -564,4 +564,16 @@ object Strings {
     // ── Feed: Arkadaşlar ne okuyor? şeridi ───────────────────────────────────
     fun friendsReadingTitle(l: String)        = t(l, "Arkadaşların ne okuyor?", "Hevalên te çi dixwînin?")
     fun friendsReadingPage(l: String, n: Int) = t(l, "$n. sayfada",             "rûpel $n")
+
+    // ── Tema Seçici ───────────────────────────────────────────────
+    fun themeTitle(l: String)           = if (l == "ku") "Reng"             else "Tema"
+    fun themeDarkMode(l: String)        = if (l == "ku") "Moda Tarî"        else "Koyu Mod"
+    fun themeDarkModeToLight(l: String) = if (l == "ku") "Biçe moda ronî"   else "Açık moda geç"
+    fun themeDarkModeToDark(l: String)  = if (l == "ku") "Biçe moda tarî"   else "Koyu moda geç"
+    fun themeCharcoal(l: String)        = if (l == "ku") "Mûrekkeba Komirê" else "Kömür Mürekkebi"
+    fun themeBook(l: String)            = if (l == "ku") "Pirtûk"           else "Kitap"
+    fun themeForest(l: String)          = if (l == "ku") "Daristân"         else "Orman"
+    fun themeOcean(l: String)           = if (l == "ku") "Okyanûs"          else "Okyanus"
+    fun themeSunset(l: String)          = if (l == "ku") "Rojavabûn"        else "Gün Batımı"
+    fun themeMonochrome(l: String)      = if (l == "ku") "Yekrêng"          else "Tek Renk"
 }

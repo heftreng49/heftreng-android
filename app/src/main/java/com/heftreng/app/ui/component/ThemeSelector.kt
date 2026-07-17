@@ -4,9 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -23,10 +20,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Tema renk önizleme verileri (Tema seçici için)
+//  Tema renk önizleme verileri
 // ─────────────────────────────────────────────────────────────────────────────
 data class ThemePreviewColors(
     val bg: Color,
@@ -43,6 +41,15 @@ fun HeftrangThemeVariant.previewColors(isDark: Boolean): ThemePreviewColors {
     )
 }
 
+fun HeftrangThemeVariant.localizedName(language: String): String = when (this) {
+    HeftrangThemeVariant.CHARCOAL_INK -> Strings.themeCharcoal(language)
+    HeftrangThemeVariant.BOOK         -> Strings.themeBook(language)
+    HeftrangThemeVariant.FOREST       -> Strings.themeForest(language)
+    HeftrangThemeVariant.OCEAN        -> Strings.themeOcean(language)
+    HeftrangThemeVariant.SUNSET       -> Strings.themeSunset(language)
+    HeftrangThemeVariant.MONOCHROME   -> Strings.themeMonochrome(language)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Tek tema kartı
 // ─────────────────────────────────────────────────────────────────────────────
@@ -51,14 +58,16 @@ private fun ThemeCard(
     variant    : HeftrangThemeVariant,
     isDark     : Boolean,
     isSelected : Boolean,
+    language   : String,
+    modifier   : Modifier = Modifier,
     onClick    : () -> Unit,
 ) {
-    val preview = variant.previewColors(isDark)
+    val preview     = variant.previewColors(isDark)
     val borderColor = if (isSelected) Primary else Divider
     val borderWidth = if (isSelected) 2.dp else 1.dp
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .border(borderWidth, borderColor, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
@@ -74,15 +83,13 @@ private fun ThemeCard(
                 .clip(RoundedCornerShape(8.dp))
                 .background(preview.bg),
         ) {
-            // Gradyan şerit (accent rengi temsili)
+            // Gradyan şerit
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(4.dp)
                     .background(
-                        Brush.horizontalGradient(
-                            listOf(preview.primary, preview.secondary)
-                        )
+                        Brush.horizontalGradient(listOf(preview.primary, preview.secondary))
                     )
             )
 
@@ -97,10 +104,10 @@ private fun ThemeCard(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Check,
+                        imageVector        = Icons.Default.Check,
                         contentDescription = null,
-                        tint  = Color.White,
-                        modifier = Modifier.size(12.dp)
+                        tint               = Color.White,
+                        modifier           = Modifier.size(12.dp),
                     )
                 }
             }
@@ -124,9 +131,9 @@ private fun ThemeCard(
             }
         }
 
-        // Tema adı
+        // Tema adı — dile göre
         Text(
-            text       = "${variant.emoji()} ${variant.displayName()}",
+            text       = "${variant.emoji()} ${variant.localizedName(language)}",
             fontSize   = 12.sp,
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
             color      = if (isSelected) Primary else OnSurface,
@@ -135,23 +142,29 @@ private fun ThemeCard(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Tema Seçici Ana Bileşeni  — Ayarlar ekranına yerleştirin
+//  Tema Seçici Ana Bileşeni
+//  NOT: LazyVerticalGrid KULLANILMAZ — LazyColumn içinde sonsuz yükseklik
+//  kısıtlamasına yol açar (crash). Bunun yerine sabit Row × 2 düzeni.
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun ThemeSelector(
     selectedVariant : HeftrangThemeVariant,
     isDarkMode      : Boolean,
+    language        : String,
     onVariantChange : (HeftrangThemeVariant) -> Unit,
     onDarkModeChange: (Boolean) -> Unit,
     modifier        : Modifier = Modifier,
 ) {
+    // 6 tema → 2 satır × 3 sütun (sabit, Lazy değil)
+    val rows = HeftrangThemeVariant.entries.chunked(3)
+
     Column(
-        modifier = modifier,
+        modifier            = modifier,
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // Başlık
         Text(
-            text       = "Tema",
+            text       = Strings.themeTitle(language),
             fontSize   = 18.sp,
             fontWeight = FontWeight.Bold,
             color      = OnBackground,
@@ -165,17 +178,20 @@ fun ThemeSelector(
                 .background(HeftSurface)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment     = Alignment.CenterVertically,
         ) {
             Column {
                 Text(
-                    text       = "Koyu Mod",
+                    text       = Strings.themeDarkMode(language),
                     fontSize   = 15.sp,
                     fontWeight = FontWeight.Medium,
                     color      = OnBackground,
                 )
                 Text(
-                    text     = if (isDarkMode) "Açık moda geç" else "Koyu moda geç",
+                    text     = if (isDarkMode)
+                        Strings.themeDarkModeToLight(language)
+                    else
+                        Strings.themeDarkModeToDark(language),
                     fontSize = 12.sp,
                     color    = Muted,
                 )
@@ -186,22 +202,28 @@ fun ThemeSelector(
             )
         }
 
-        // Tema ızgarası
-        LazyVerticalGrid(
-            columns             = GridCells.Fixed(3),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement   = Arrangement.spacedBy(10.dp),
-            modifier            = Modifier.fillMaxWidth(),
-            // İç kaydırma devre dışı — ana kaydırma alanına bırak
-            userScrollEnabled   = false,
-        ) {
-            items(HeftrangThemeVariant.entries) { variant ->
-                ThemeCard(
-                    variant    = variant,
-                    isDark     = isDarkMode,
-                    isSelected = variant == selectedVariant,
-                    onClick    = { onVariantChange(variant) },
-                )
+        // Tema ızgarası — Row × 2, Lazy yok
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            rows.forEach { rowVariants ->
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    rowVariants.forEach { variant ->
+                        ThemeCard(
+                            variant    = variant,
+                            isDark     = isDarkMode,
+                            isSelected = variant == selectedVariant,
+                            language   = language,
+                            modifier   = Modifier.weight(1f),
+                            onClick    = { onVariantChange(variant) },
+                        )
+                    }
+                    // Satırda 3'ten az tema varsa boşluk doldur
+                    repeat(3 - rowVariants.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
             }
         }
     }
