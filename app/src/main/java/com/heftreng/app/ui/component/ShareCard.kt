@@ -43,6 +43,7 @@ fun SharePreviewDialog(
     post     : Post,
     target   : ShareTarget,
     onDismiss: () -> Unit,
+    language : String = "tr",
 ) {
     val context       = LocalContext.current
     val scope         = rememberCoroutineScope()
@@ -63,7 +64,7 @@ fun SharePreviewDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "Paylaşım Önizlemesi",
+                        if (language == "ku") "Pêşdîtina Parvekirinê" else "Paylaşım Önizlemesi",
                         color      = OnBackground,
                         fontWeight = FontWeight.SemiBold,
                         fontSize   = 15.sp,
@@ -85,7 +86,7 @@ fun SharePreviewDialog(
                             drawLayer(graphicsLayer)
                         },
                 ) {
-                    ShareCardContent(post = post)
+                    ShareCardContent(post = post, shareLanguage = language)
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -123,9 +124,9 @@ fun SharePreviewDialog(
                         Spacer(Modifier.width(8.dp))
                         Text(
                             when (target) {
-                                ShareTarget.WHATSAPP  -> "WhatsApp'ta Paylaş"
-                                ShareTarget.INSTAGRAM -> "Instagram'da Paylaş"
-                                ShareTarget.ANY       -> "Paylaş"
+                                ShareTarget.WHATSAPP  -> if (language == "ku") "Li WhatsApp Parve Bike" else "WhatsApp'ta Paylaş"
+                                ShareTarget.INSTAGRAM -> if (language == "ku") "Li Instagram Parve Bike" else "Instagram'da Paylaş"
+                                ShareTarget.ANY       -> if (language == "ku") "Parve Bike" else "Paylaş"
                             },
                             fontWeight = FontWeight.Bold,
                         )
@@ -138,7 +139,7 @@ fun SharePreviewDialog(
 
 // ── Paylaşım kartı içeriği ────────────────────────────────────────────────────
 @Composable
-fun ShareCardContent(post: Post) {
+fun ShareCardContent(post: Post, shareLanguage: String = "tr") {
     val colors = LocalHeftrangColors.current
 
     // Tema renkleriyle uyumlu — hardcoded eski mor tema renkleri kaldırıldı
@@ -189,6 +190,50 @@ fun ShareCardContent(post: Post) {
         }
 
         Spacer(Modifier.height(14.dp))
+
+        // Kurdî başarı kartı — seviye/XP/streak, feed'deki gradient tasarımla aynı
+        if (post.repostType == "kf_achievement") {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFFF5A623), Color(0xFFE8871E), Color(0xFFD9691B)),
+                        ),
+                    )
+                    .padding(18.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("🏆", fontSize = 30.sp)
+                        Text(
+                            com.heftreng.app.ui.i18n.Strings.achievementLevelLabel(shareLanguage, post.repostLevel),
+                            color      = Color.White,
+                            fontSize   = 19.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                        Column {
+                            Text("${post.repostXp}", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                            Text(com.heftreng.app.ui.i18n.Strings.xpLabel(shareLanguage), color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
+                        }
+                        Column {
+                            Text("${post.repostStreak}", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                            Text(com.heftreng.app.ui.i18n.Strings.streakDaysLabel(shareLanguage), color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
+                        }
+                    }
+                    Text(
+                        com.heftreng.app.ui.i18n.Strings.achievementCaption(shareLanguage),
+                        color      = Color.White.copy(alpha = 0.9f),
+                        fontSize   = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
 
         // Alıntı
         if (post.quoteText.isNotBlank()) {

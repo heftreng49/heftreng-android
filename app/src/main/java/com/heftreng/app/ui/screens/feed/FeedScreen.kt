@@ -2050,6 +2050,7 @@ fun PostCard(
             post      = post,
             target    = shareTarget!!,
             onDismiss = { shareTarget = null },
+            language  = language,
         )
     }
 
