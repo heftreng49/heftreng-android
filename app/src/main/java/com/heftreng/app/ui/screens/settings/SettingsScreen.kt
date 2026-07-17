@@ -64,8 +64,9 @@ fun SettingsScreen(
     authVm        : AuthViewModel     = hiltViewModel(),
     adminVm       : AdminViewModel    = hiltViewModel(),
 ) {
-    val themeMode      by vm.themeMode.collectAsState()
-    val themeVariant   by vm.themeVariant.collectAsState()
+    val themeMode          by vm.themeMode.collectAsState()
+    val themeVariant       by vm.themeVariant.collectAsState()
+    val textColorOverride  by vm.textColorOverride.collectAsState()
     val adminPerms     by adminVm.perms.collectAsState()
     val isAdmin        = adminPerms?.isStaff() == true
     val language       by vm.language.collectAsState()
@@ -198,12 +199,14 @@ fun SettingsScreen(
 
                     // Görsel tema seçimi
                     ThemeSelector(
-                        selectedVariant  = themeVariant,
-                        language         = language,
-                        isDarkMode       = themeMode == "dark" || (themeMode == "system" && androidx.compose.foundation.isSystemInDarkTheme()),
-                        onVariantChange  = { vm.setThemeVariant(it) },
-                        onDarkModeChange = { /* dark/light toggle butonları yukarıda yönetiliyor */ },
-                        modifier         = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        selectedVariant   = themeVariant,
+                        language          = language,
+                        isDarkMode        = themeMode == "dark" || (themeMode == "system" && androidx.compose.foundation.isSystemInDarkTheme()),
+                        onVariantChange   = { vm.setThemeVariant(it) },
+                        onDarkModeChange  = { /* dark/light toggle butonları yukarıda yönetiliyor */ },
+                        textColorOverride = textColorOverride,
+                        onTextColorChange = { vm.setTextColorOverride(it) },
+                        modifier          = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     )
 
                     HorizontalDivider(color = Divider, modifier = Modifier.padding(horizontal = 16.dp))

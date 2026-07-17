@@ -19,11 +19,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Yazı rengi seçenekleri
+// ─────────────────────────────────────────────────────────────────────────────
+data class TextColorOption(
+    val color: Color?,   // null = tema varsayılanı
+    val label: String,
+)
+
+fun textColorOptions(language: String) = listOf(
+    TextColorOption(null,                  Strings.textColorDefault(language)),
+    TextColorOption(Color(0xFFF8F8F8),     if (language == "ku") "Spî Geş"  else "Parlak Beyaz"),
+    TextColorOption(Color(0xFFE8E8E8),     if (language == "ku") "Spî Nerm" else "Yumuşak Beyaz"),
+    TextColorOption(Color(0xFFCCCCCC),     if (language == "ku") "Gewr Sivik" else "Açık Gri"),
+    TextColorOption(Color(0xFFFFE4B5),     if (language == "ku") "Zerê Nerm" else "Krem Sarısı"),
+    TextColorOption(Color(0xFFB0E0E6),     if (language == "ku") "Şîna Sivik" else "Açık Mavi"),
+    TextColorOption(Color(0xFFB8F0C8),     if (language == "ku") "Keska Sivik" else "Açık Yeşil"),
+    TextColorOption(Color(0xFFFFD6E0),     if (language == "ku") "Pembe Sivik" else "Açık Pembe"),
+)
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Renk önizleme verisi
@@ -113,12 +133,14 @@ private fun ThemeListItem(
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun ThemeSelector(
-    selectedVariant : HeftrangThemeVariant,
-    isDarkMode      : Boolean,
-    language        : String,
-    onVariantChange : (HeftrangThemeVariant) -> Unit,
-    onDarkModeChange: (Boolean) -> Unit,   // imza korunuyor, kullanılmıyor
-    modifier        : Modifier = Modifier,
+    selectedVariant      : HeftrangThemeVariant,
+    isDarkMode           : Boolean,
+    language             : String,
+    onVariantChange      : (HeftrangThemeVariant) -> Unit,
+    onDarkModeChange     : (Boolean) -> Unit,   // imza korunuyor, kullanılmıyor
+    textColorOverride    : Color? = null,
+    onTextColorChange    : (Color?) -> Unit = {},
+    modifier             : Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selected = selectedVariant
@@ -206,6 +228,72 @@ fun ThemeSelector(
                     )
                 }
             }
+        }
+
+        // ── Yazı Rengi Seçici ─────────────────────────────────────────────────
+        Spacer(Modifier.height(14.dp))
+
+        Text(
+            text       = Strings.textColorTitle(language),
+            fontSize   = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color      = Muted,
+            modifier   = Modifier.padding(bottom = 8.dp),
+        )
+
+        Row(
+            modifier              = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            textColorOptions(language).forEach { option ->
+                val isSelected = textColorOverride == option.color
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(
+                            // null (varsayılan) seçeneği için tema primary rengi göster
+                            option.color ?: preview.primary
+                        )
+                        .border(
+                            width = if (isSelected) 2.5.dp else 1.dp,
+                            color = if (isSelected) preview.primary else Divider,
+                            shape = CircleShape,
+                        )
+                        .clickable { onTextColorChange(option.color) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    // Varsayılan seçenek için küçük "A" harfi göster
+                    if (option.color == null) {
+                        Text(
+                            text     = "A",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color    = preview.bg,
+                        )
+                    }
+                    // Seçili ise tik işareti
+                    if (isSelected && option.color != null) {
+                        Icon(
+                            imageVector        = Icons.Default.Check,
+                            contentDescription = null,
+                            tint               = if (option.color.luminance() > 0.5f) Color.Black else Color.White,
+                            modifier           = Modifier.size(16.dp),
+                        )
+                    }
+                }
+            }
+        }
+
+        // Seçili renk etiketi
+        val selectedOption = textColorOptions(language).find { it.color == textColorOverride }
+        if (selectedOption != null) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text     = selectedOption.label,
+                fontSize = 11.sp,
+                color    = Muted,
+            )
         }
     }
 }

@@ -8,6 +8,7 @@ import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.data.model.BlockedUser
+import androidx.compose.ui.graphics.Color
 import com.heftreng.app.ui.theme.HeftrangThemeVariant
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -48,6 +49,24 @@ class SettingsViewModel @Inject constructor(
         }.getOrDefault(HeftrangThemeVariant.CHARCOAL_INK)
     )
     val themeVariant = _themeVariant.asStateFlow()
+
+    // Yazı rengi override — null = tema varsayılanı
+    private val _textColorOverride = MutableStateFlow(loadTextColor())
+    val textColorOverride = _textColorOverride.asStateFlow()
+
+    fun setTextColorOverride(color: Color?) {
+        if (color == null) {
+            prefs.edit().remove("hf_text_color").apply()
+        } else {
+            prefs.edit().putLong("hf_text_color", color.value.toLong()).apply()
+        }
+        _textColorOverride.value = color
+    }
+
+    private fun loadTextColor(): Color? {
+        if (!prefs.contains("hf_text_color")) return null
+        return Color(prefs.getLong("hf_text_color", 0xFFF4F4FAL).toULong())
+    }
 
     // Geriye dönük uyumluluk: eski "hf_theme_dark" boolean'ını okuyan
     // yerler (varsa) için sabit bir Boolean değeri hâlâ sunuyoruz, ama

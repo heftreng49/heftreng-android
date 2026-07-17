@@ -576,4 +576,6 @@ object Strings {
     fun themeOcean(l: String)            = t(l, "Okyanus",            "Okyanûs")
     fun themeSunset(l: String)           = t(l, "Gün Batımı",         "Rojavabûn")
     fun themeMonochrome(l: String)       = t(l, "Tek Renk",           "Yekrêng")
+    fun textColorTitle(l: String)        = t(l, "Yazı Rengi",         "Rengê Nivîsê")
+    fun textColorDefault(l: String)      = t(l, "Tema Varsayılanı",   "Xwerû ya Temayê")
 }

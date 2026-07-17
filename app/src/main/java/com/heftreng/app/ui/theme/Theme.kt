@@ -41,18 +41,23 @@ data class HeftrangColors(
     val divider     : Color,
     val shimmer     : Color,
     val isDark      : Boolean,
-)
+    // Kullanıcının seçtiği yazı rengi override'ı (null = tema varsayılanı)
+    val textColorOverride: Color? = null,
+) {
+    // Yazı rengi: override varsa onu, yoksa tema onBackground'unu kullan
+    val effectiveTextColor: Color get() = textColorOverride ?: onBackground
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  1. CHARCOAL INK — Varsayılan (mevcut tema)
 // ─────────────────────────────────────────────────────────────────────────────
 private val charcoalDark = HeftrangColors(
-    background    = Color(0xFF0D0D0F),
-    surface       = Color(0xFF131316),
-    surfaceVar    = Color(0xFF1A1A1F),
-    card          = Color(0xFF17171C),
-    onBackground  = Color(0xFFF0F0F5),
-    onSurface     = Color(0xFFBDBDC8),
+    background    = Color(0xFF13131A),   // biraz daha açık → daha ferah
+    surface       = Color(0xFF1A1A22),
+    surfaceVar    = Color(0xFF22222C),
+    card          = Color(0xFF1E1E28),
+    onBackground  = Color(0xFFF4F4FA),   // daha parlak beyaz
+    onSurface     = Color(0xFFCCCCD8),
     primary       = Color(0xFF6C8EFF),
     primaryLight  = Color(0xFF8FAAFF),
     accent        = Color(0xFF6C8EFF),
@@ -87,12 +92,12 @@ private val charcoalLight = HeftrangColors(
 //  Eski kütüphane havası: sararmış sayfa, mürekkep kahverengisi, antika vurgu
 // ─────────────────────────────────────────────────────────────────────────────
 private val bookDark = HeftrangColors(
-    background    = Color(0xFF1C1610),   // koyu kahverengi-siyah (eski deri kapak)
-    surface       = Color(0xFF241E16),   // biraz daha açık, kitap sayfası gölgesi
-    surfaceVar    = Color(0xFF2E2620),   // hover yüzey
-    card          = Color(0xFF2A2218),   // kart arkaplanı — sıcak koyu kahve
-    onBackground  = Color(0xFFF2E8D5),   // krem/sepia beyazı — göze daha az batar
-    onSurface     = Color(0xFFC9B99A),   // ikincil metin — sararmış mürekkep
+    background    = Color(0xFF221A10),   // biraz daha açık kahve → daha ferah
+    surface       = Color(0xFF2C2418),
+    surfaceVar    = Color(0xFF362C22),
+    card          = Color(0xFF30281C),
+    onBackground  = Color(0xFFF8F0DC),   // daha parlak krem
+    onSurface     = Color(0xFFD8C8A8),   // daha okunabilir mürekkep
     primary       = Color(0xFFD4A853),   // altın-amber vurgu (kitap klipsi)
     primaryLight  = Color(0xFFE8C57A),   // daha açık altın
     accent        = Color(0xFFD4A853),
@@ -126,12 +131,12 @@ private val bookLight = HeftrangColors(
 //  3. FOREST — Orman Teması: Koyu Yeşil, Toprak, Doğa
 // ─────────────────────────────────────────────────────────────────────────────
 private val forestDark = HeftrangColors(
-    background    = Color(0xFF0A120E),   // neredeyse siyah-yeşil
-    surface       = Color(0xFF111A14),
-    surfaceVar    = Color(0xFF182218),
-    card          = Color(0xFF141D16),
-    onBackground  = Color(0xFFDFF0E4),   // açık nane beyazı
-    onSurface     = Color(0xFF9AB89F),   // orta yeşil-gri
+    background    = Color(0xFF111C15),   // biraz daha açık yeşil-siyah
+    surface       = Color(0xFF18261C),
+    surfaceVar    = Color(0xFF1F3023),
+    card          = Color(0xFF1C2A20),
+    onBackground  = Color(0xFFE8F5EC),   // daha parlak nane beyazı
+    onSurface     = Color(0xFFAAC8AF),   // daha okunabilir yeşil-gri
     primary       = Color(0xFF4CAF6F),   // canlı orman yeşili
     primaryLight  = Color(0xFF6FCB8A),
     accent        = Color(0xFF4CAF6F),
@@ -165,12 +170,12 @@ private val forestLight = HeftrangColors(
 //  4. OCEAN — Okyanus Teması: Derin Mavi, Lacivert, Turkuaz
 // ─────────────────────────────────────────────────────────────────────────────
 private val oceanDark = HeftrangColors(
-    background    = Color(0xFF050D1A),   // derin okyanus gecesi
-    surface       = Color(0xFF0A1525),
-    surfaceVar    = Color(0xFF0F1F32),
-    card          = Color(0xFF0D1B2E),
-    onBackground  = Color(0xFFDFEEFA),   // buz mavisi-beyaz
-    onSurface     = Color(0xFF8FBCD4),
+    background    = Color(0xFF0C1828),   // biraz daha açık okyanus gecesi
+    surface       = Color(0xFF122030),
+    surfaceVar    = Color(0xFF192B3E),
+    card          = Color(0xFF162436),
+    onBackground  = Color(0xFFEAF4FC),   // daha parlak buz mavisi-beyaz
+    onSurface     = Color(0xFFA0CCDF),
     primary       = Color(0xFF00B4D8),   // parlak turkuaz
     primaryLight  = Color(0xFF48CAE4),
     accent        = Color(0xFF00B4D8),
@@ -204,12 +209,12 @@ private val oceanLight = HeftrangColors(
 //  5. SUNSET — Gün Batımı: Turuncu, Pembe, Mor
 // ─────────────────────────────────────────────────────────────────────────────
 private val sunsetDark = HeftrangColors(
-    background    = Color(0xFF150A0F),   // koyu gece-mor
-    surface       = Color(0xFF1E1018),
-    surfaceVar    = Color(0xFF281520),
-    card          = Color(0xFF22131C),
-    onBackground  = Color(0xFFFAE8EE),   // açık pembe-beyaz
-    onSurface     = Color(0xFFD4A0B5),
+    background    = Color(0xFF1C1018),   // biraz daha açık gece-mor
+    surface       = Color(0xFF261822),
+    surfaceVar    = Color(0xFF301E2C),
+    card          = Color(0xFF2A1C26),
+    onBackground  = Color(0xFFFDF0F4),   // daha parlak pembe-beyaz
+    onSurface     = Color(0xFFE0B0C5),
     primary       = Color(0xFFFF6B8A),   // sıcak pembe-kırmızı
     primaryLight  = Color(0xFFFF8FA8),
     accent        = Color(0xFFFF6B8A),
@@ -243,12 +248,12 @@ private val sunsetLight = HeftrangColors(
 //  6. MONOCHROME — Saf Siyah-Beyaz
 // ─────────────────────────────────────────────────────────────────────────────
 private val monoDark = HeftrangColors(
-    background    = Color(0xFF000000),
-    surface       = Color(0xFF0A0A0A),
-    surfaceVar    = Color(0xFF141414),
-    card          = Color(0xFF0F0F0F),
+    background    = Color(0xFF0F0F0F),   // tam siyah yerine çok hafif gri → daha ferah
+    surface       = Color(0xFF171717),
+    surfaceVar    = Color(0xFF202020),
+    card          = Color(0xFF1A1A1A),
     onBackground  = Color(0xFFFFFFFF),
-    onSurface     = Color(0xFFB0B0B0),
+    onSurface     = Color(0xFFC0C0C0),
     primary       = Color(0xFFFFFFFF),
     primaryLight  = Color(0xFFE0E0E0),
     accent        = Color(0xFFFFFFFF),
@@ -322,7 +327,8 @@ fun HeftrangThemeVariant.emoji(): String = when (this) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Kolay erişim Composable getter'ları
 // ─────────────────────────────────────────────────────────────────────────────
-val Background    @Composable get() = LocalHeftrangColors.current.background
+val Background        @Composable get() = LocalHeftrangColors.current.background
+val EffectiveTextColor @Composable get() = LocalHeftrangColors.current.effectiveTextColor
 val HeftSurface   @Composable get() = LocalHeftrangColors.current.surface
 val SurfaceVar    @Composable get() = LocalHeftrangColors.current.surfaceVar
 val HeftCard      @Composable get() = LocalHeftrangColors.current.card
@@ -374,11 +380,13 @@ private fun buildColorScheme(colors: HeftrangColors) =
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun HeftrangTheme(
-    darkMode : Boolean = true,
-    variant  : HeftrangThemeVariant = HeftrangThemeVariant.CHARCOAL_INK,
-    content  : @Composable () -> Unit,
+    darkMode         : Boolean = true,
+    variant          : HeftrangThemeVariant = HeftrangThemeVariant.CHARCOAL_INK,
+    textColorOverride: Color? = null,
+    content          : @Composable () -> Unit,
 ) {
-    val colors      = getColors(variant, darkMode)
+    val base        = getColors(variant, darkMode)
+    val colors      = if (textColorOverride != null) base.copy(textColorOverride = textColorOverride) else base
     val colorScheme = buildColorScheme(colors)
 
     CompositionLocalProvider(LocalHeftrangColors provides colors) {
