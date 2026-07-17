@@ -327,12 +327,14 @@ fun HeftrangThemeVariant.emoji(): String = when (this) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Kolay erişim Composable getter'ları
 // ─────────────────────────────────────────────────────────────────────────────
-val Background        @Composable get() = LocalHeftrangColors.current.background
+// OnBackground artık kullanıcının seçtiği yazı rengini döndürür (override varsa).
+// Tüm ekranlar zaten OnBackground kullandığından tek değişiklikle etki eder.
+val OnBackground       @Composable get() = LocalHeftrangColors.current.effectiveTextColor
 val EffectiveTextColor @Composable get() = LocalHeftrangColors.current.effectiveTextColor
+val Background    @Composable get() = LocalHeftrangColors.current.background
 val HeftSurface   @Composable get() = LocalHeftrangColors.current.surface
 val SurfaceVar    @Composable get() = LocalHeftrangColors.current.surfaceVar
 val HeftCard      @Composable get() = LocalHeftrangColors.current.card
-val OnBackground  @Composable get() = LocalHeftrangColors.current.onBackground
 val OnSurface     @Composable get() = LocalHeftrangColors.current.onSurface
 val Primary       @Composable get() = LocalHeftrangColors.current.primary
 val PrimaryLight  @Composable get() = LocalHeftrangColors.current.primaryLight

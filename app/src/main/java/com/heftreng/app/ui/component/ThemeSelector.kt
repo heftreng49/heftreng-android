@@ -27,22 +27,33 @@ import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Yazı rengi seçenekleri
+//  Yazı rengi seçenekleri — koyu temada açık, açık temada koyu renkler
 // ─────────────────────────────────────────────────────────────────────────────
 data class TextColorOption(
     val color: Color?,   // null = tema varsayılanı
     val label: String,
 )
 
-fun textColorOptions(language: String) = listOf(
+fun textColorOptions(language: String, isDark: Boolean) = if (isDark) listOf(
+    // Koyu tema → açık renkler
     TextColorOption(null,                  Strings.textColorDefault(language)),
-    TextColorOption(Color(0xFFF8F8F8),     if (language == "ku") "Spî Geş"  else "Parlak Beyaz"),
-    TextColorOption(Color(0xFFE8E8E8),     if (language == "ku") "Spî Nerm" else "Yumuşak Beyaz"),
-    TextColorOption(Color(0xFFCCCCCC),     if (language == "ku") "Gewr Sivik" else "Açık Gri"),
-    TextColorOption(Color(0xFFFFE4B5),     if (language == "ku") "Zerê Nerm" else "Krem Sarısı"),
-    TextColorOption(Color(0xFFB0E0E6),     if (language == "ku") "Şîna Sivik" else "Açık Mavi"),
-    TextColorOption(Color(0xFFB8F0C8),     if (language == "ku") "Keska Sivik" else "Açık Yeşil"),
-    TextColorOption(Color(0xFFFFD6E0),     if (language == "ku") "Pembe Sivik" else "Açık Pembe"),
+    TextColorOption(Color(0xFFFAFAFA),     if (language == "ku") "Spî Geş"      else "Parlak Beyaz"),
+    TextColorOption(Color(0xFFE8E8E8),     if (language == "ku") "Spî Nerm"     else "Yumuşak Beyaz"),
+    TextColorOption(Color(0xFFCCCCCC),     if (language == "ku") "Gewr Sivik"   else "Açık Gri"),
+    TextColorOption(Color(0xFFFFE4B5),     if (language == "ku") "Zerê Nerm"    else "Krem Sarısı"),
+    TextColorOption(Color(0xFFB0E0E6),     if (language == "ku") "Şîna Sivik"   else "Açık Mavi"),
+    TextColorOption(Color(0xFFB8F0C8),     if (language == "ku") "Keska Sivik"  else "Açık Yeşil"),
+    TextColorOption(Color(0xFFFFD6E0),     if (language == "ku") "Pembe Sivik"  else "Açık Pembe"),
+) else listOf(
+    // Açık tema → koyu renkler
+    TextColorOption(null,                  Strings.textColorDefault(language)),
+    TextColorOption(Color(0xFF111111),     if (language == "ku") "Reş Geş"      else "Saf Siyah"),
+    TextColorOption(Color(0xFF2C2C2C),     if (language == "ku") "Gewr Tarî"    else "Koyu Gri"),
+    TextColorOption(Color(0xFF444444),     if (language == "ku") "Gewr Navîn"   else "Orta Gri"),
+    TextColorOption(Color(0xFF3B2A1A),     if (language == "ku") "Qehweyî Tarî" else "Koyu Kahve"),
+    TextColorOption(Color(0xFF1A2A4A),     if (language == "ku") "Şîna Tarî"    else "Koyu Mavi"),
+    TextColorOption(Color(0xFF1A3A22),     if (language == "ku") "Keska Tarî"   else "Koyu Yeşil"),
+    TextColorOption(Color(0xFF4A1A2A),     if (language == "ku") "Pembe Tarî"   else "Koyu Pembe"),
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -245,7 +256,7 @@ fun ThemeSelector(
             modifier              = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            textColorOptions(language).forEach { option ->
+            textColorOptions(language, isDarkMode).forEach { option ->
                 val isSelected = textColorOverride == option.color
                 Box(
                     modifier = Modifier
@@ -286,7 +297,7 @@ fun ThemeSelector(
         }
 
         // Seçili renk etiketi
-        val selectedOption = textColorOptions(language).find { it.color == textColorOverride }
+        val selectedOption = textColorOptions(language, isDarkMode).find { it.color == textColorOverride }
         if (selectedOption != null) {
             Spacer(Modifier.height(6.dp))
             Text(

@@ -220,6 +220,9 @@ class SettingsViewModel @Inject constructor(
         require(mode == "light" || mode == "dark" || mode == "system") { "Geçersiz tema modu: $mode" }
         _themeMode.value = mode
         prefs.edit().putString("hf_theme_mode", mode).apply()
+        // Koyu↔açık geçişinde yazı rengi override'ı sıfırla
+        // (koyu temadaki açık renk, açık temada okunaksız olur)
+        setTextColorOverride(null)
     }
 
     // Geriye dönük uyumluluk: eski UI kodu hâlâ toggleDarkMode() çağırıyorsa
