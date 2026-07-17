@@ -314,26 +314,39 @@ fun KurdiScreen(
 
         XpStreakCard(xp = xp, streak = streak, level = level, language = language,
             remainingAds = remainingAds,
-            onShare = {
-                feedVm.repostKfAchievement(
-                    level = level, xp = xp, streak = streak,
-                    onResult = { ok ->
-                        vm.showToast(if (ok) Strings.shareAchievementSuccess(language) else Strings.shareFailed(language))
-                    },
-                )
-            },
-            onShareImage = { showAchievementShareSheet = true })
+            onShare = { showAchievementShareSheet = true })
 
-        // Görsel olarak paylaş — hedef seçim menüsü (feed'deki dış paylaşım ile aynı mantık)
+        // Paylaş menüsü — Ana Sayfa (feed) / Instagram / WhatsApp / Diğer
         if (showAchievementShareSheet) {
             androidx.compose.material3.ModalBottomSheet(
                 onDismissRequest = { showAchievementShareSheet = false },
                 containerColor   = com.heftreng.app.ui.theme.HeftSurface,
             ) {
                 Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                    // Ana Sayfa — feed'e post olarak paylaş
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showAchievementShareSheet = false
+                                feedVm.repostKfAchievement(
+                                    level = level, xp = xp, streak = streak,
+                                    onResult = { ok ->
+                                        vm.showToast(if (ok) Strings.shareAchievementSuccess(language) else Strings.shareFailed(language))
+                                    },
+                                )
+                            }
+                            .padding(vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(Icons.Default.DynamicFeed, null, tint = Primary, modifier = Modifier.size(20.dp))
+                        Text(Strings.shareHomeFeed(language), color = com.heftreng.app.ui.theme.OnBackground, fontSize = 15.sp)
+                    }
+                    // Instagram / WhatsApp / Diğer — görsel kart olarak dışa paylaş
                     listOf(
-                        Triple("WhatsApp", Color(0xFF25D366), com.heftreng.app.utils.ShareTarget.WHATSAPP),
                         Triple("Instagram", Color(0xFFE1306C), com.heftreng.app.utils.ShareTarget.INSTAGRAM),
+                        Triple("WhatsApp", Color(0xFF25D366), com.heftreng.app.utils.ShareTarget.WHATSAPP),
                         Triple(if (language == "ku") "Yên Din" else "Diğer", com.heftreng.app.ui.theme.Muted, com.heftreng.app.utils.ShareTarget.ANY),
                     ).forEach { (label, tint, target) ->
                         Row(
@@ -404,6 +417,10 @@ fun KurdiScreen(
         }
 
         // İçerik
+        var lessonShareSheetFor by remember { mutableStateOf<KfLesson?>(null) }
+        var lessonSharePending by remember { mutableStateOf<KfLesson?>(null) }
+        var lessonShareTarget by remember { mutableStateOf<com.heftreng.app.utils.ShareTarget?>(null) }
+
         when (selectedTab) {
             0 -> UnitsTab(
                 units           = units,
@@ -429,17 +446,7 @@ fun KurdiScreen(
                         )
                     }
                 },
-                onShare = { lesson ->
-                    feedVm.repostKfLesson(
-                        lessonId    = lesson.id,
-                        lessonTitle = if (language == "ku") lesson.nameKu.ifBlank { lesson.nameTr } else lesson.nameTr,
-                        lessonTip   = lesson.tip,
-                        emoji       = lesson.emoji,
-                        onResult    = { ok ->
-                            vm.showToast(if (ok) Strings.shareLessonSuccess(language) else Strings.shareFailed(language))
-                        },
-                    )
-                },
+                onShare = { lesson -> lessonShareSheetFor = lesson },
             )
             // 1 -> DictionaryTab — Ferheng geçici olarak gizlendi
             1 -> GrammarTab(
@@ -460,6 +467,80 @@ fun KurdiScreen(
                     navController = navController,
                 )
             }
+        }
+
+        // Ders paylaşım menüsü — Ana Sayfa / Instagram / WhatsApp / Diğer
+        lessonShareSheetFor?.let { lesson ->
+            androidx.compose.material3.ModalBottomSheet(
+                onDismissRequest = { lessonShareSheetFor = null },
+                containerColor   = com.heftreng.app.ui.theme.HeftSurface,
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val l = lesson
+                                lessonShareSheetFor = null
+                                feedVm.repostKfLesson(
+                                    lessonId    = l.id,
+                                    lessonTitle = if (language == "ku") l.nameKu.ifBlank { l.nameTr } else l.nameTr,
+                                    lessonTip   = l.tip,
+                                    emoji       = l.emoji,
+                                    onResult    = { ok ->
+                                        vm.showToast(if (ok) Strings.shareLessonSuccess(language) else Strings.shareFailed(language))
+                                    },
+                                )
+                            }
+                            .padding(vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(Icons.Default.DynamicFeed, null, tint = Primary, modifier = Modifier.size(20.dp))
+                        Text(Strings.shareHomeFeed(language), color = com.heftreng.app.ui.theme.OnBackground, fontSize = 15.sp)
+                    }
+                    listOf(
+                        Triple("Instagram", Color(0xFFE1306C), com.heftreng.app.utils.ShareTarget.INSTAGRAM),
+                        Triple("WhatsApp", Color(0xFF25D366), com.heftreng.app.utils.ShareTarget.WHATSAPP),
+                        Triple(if (language == "ku") "Yên Din" else "Diğer", com.heftreng.app.ui.theme.Muted, com.heftreng.app.utils.ShareTarget.ANY),
+                    ).forEach { (label, tint, target) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    lessonSharePending = lesson
+                                    lessonShareTarget = target
+                                    lessonShareSheetFor = null
+                                }
+                                .padding(vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Icon(Icons.Default.Share, null, tint = tint, modifier = Modifier.size(20.dp))
+                            Text(label, color = com.heftreng.app.ui.theme.OnBackground, fontSize = 15.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+        }
+
+        // Paylaşım önizleme dialogu — ders kartını bitmap'e çevirip seçilen hedefe gönderir
+        if (lessonShareTarget != null) {
+            val lesson = lessonSharePending
+            val fbUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+            com.heftreng.app.ui.component.SharePreviewDialog(
+                post = com.heftreng.app.data.model.Post(
+                    displayName = fbUser?.displayName ?: "",
+                    photoURL    = fbUser?.photoUrl?.toString() ?: "",
+                    repostType  = "kf_lesson",
+                    repostTitle = lesson?.let { "${it.emoji} " + (if (language == "ku") it.nameKu.ifBlank { it.nameTr } else it.nameTr) } ?: "",
+                    repostText  = lesson?.tip ?: "",
+                ),
+                target    = lessonShareTarget!!,
+                onDismiss = { lessonShareTarget = null; lessonSharePending = null },
+                language  = language,
+            )
         }
     }
 
@@ -798,7 +879,6 @@ private fun XpStreakCard(
     language     : String,
     remainingAds : Int = 3,
     onShare      : (() -> Unit)? = null,
-    onShareImage : (() -> Unit)? = null,
 ) {
     val ku       = language == "ku"
     val progress = if (xp <= 0) 0f else ((xp % 100) / 100f).coerceIn(0f, 1f)
@@ -944,56 +1024,27 @@ private fun XpStreakCard(
                     }
                 }
 
-                // Başarını paylaş — feed'e veya görsel kart olarak (WhatsApp/Instagram/Diğer)
-                if (onShare != null || onShareImage != null) {
+                // Başarını paylaş — tıklayınca Ana Sayfa/Instagram/WhatsApp/Diğer seçim menüsü açılır
+                if (onShare != null) {
                     Spacer(Modifier.height(10.dp))
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onShare() }
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (onShare != null) {
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable { onShare() }
-                                    .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(Icons.Default.DynamicFeed, null, tint = Primary, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    Strings.shareAchievement(language),
-                                    color = Primary,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 12.sp,
-                                    maxLines = 1,
-                                )
-                            }
-                        }
-                        if (onShareImage != null) {
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Primary.copy(alpha = 0.1f))
-                                    .clickable { onShareImage() }
-                                    .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(Icons.Default.Share, null, tint = Primary, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    Strings.shareAsImage(language),
-                                    color = Primary,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 12.sp,
-                                    maxLines = 1,
-                                )
-                            }
-                        }
+                        Icon(Icons.Default.Share, null, tint = Primary, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            Strings.shareAchievement(language),
+                            color = Primary,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                        )
                     }
                 }
             }

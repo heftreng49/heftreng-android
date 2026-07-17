@@ -271,6 +271,7 @@ object Strings {
     fun streakDaysLabel(l: String)     = t(l, "Günlük Seri",                "Rojên Berdewam")
     fun achievementCaption(l: String)  = t(l, "Kurdî öğrenme yolculuğunda!", "Di rêwîtiya fêrbûna Kurdî de ye!")
     fun shareAsImage(l: String)        = t(l, "Görsel Olarak Paylaş",       "Wek Wêne Parve Bike")
+    fun shareHomeFeed(l: String)       = t(l, "Ana Sayfa",                  "Rûpela Sereke")
 
     // ── Arama (yeni) ──────────────────────────────────────────────────────────
     fun suggestedPeople(l: String)  = t(l, "Önerilen Kişiler",     "Kesên Pêşniyarkirî")

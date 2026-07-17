@@ -235,6 +235,35 @@ fun ShareCardContent(post: Post, shareLanguage: String = "tr") {
             Spacer(Modifier.height(10.dp))
         }
 
+        // Kurdî ders kartı — tamamlanan dersi paylaşırken
+        if (post.repostType == "kf_lesson") {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Primary, Accent),
+                        ),
+                    )
+                    .padding(18.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(post.repostTitle, color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
+                    if (post.repostText.isNotBlank()) {
+                        Text(post.repostText, color = Color.White.copy(alpha = 0.9f), fontSize = 13.sp, lineHeight = 19.sp)
+                    }
+                    Text(
+                        if (shareLanguage == "ku") "Dersek li Heft Reng qedand!" else "Heft Reng'de bir ders tamamladı!",
+                        color      = Color.White.copy(alpha = 0.85f),
+                        fontSize   = 11.5.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
+
         // Alıntı
         if (post.quoteText.isNotBlank()) {
             Box(
