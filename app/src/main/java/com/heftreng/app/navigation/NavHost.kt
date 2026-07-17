@@ -356,7 +356,6 @@ fun HeftrangNavHost(initialRoute: String? = null) {
         drawerContent = {
             DrawerContent(
                 currentUser  = currentUser,
-                isDark       = isDark,
                 language     = language,
                 isAdmin      = isAdmin,
                 staffPerms   = staffPerms,
@@ -873,7 +872,6 @@ fun HeftrangNavHost(initialRoute: String? = null) {
 @Composable
 fun DrawerContent(
     currentUser : com.google.firebase.auth.FirebaseUser?,
-    isDark      : Boolean,
     language    : String,
     isAdmin     : Boolean,
     staffPerms  : StaffPermissions = StaffPermissions(),
@@ -995,31 +993,6 @@ fun DrawerContent(
 
             HorizontalDivider(color = Divider)
             Spacer(Modifier.height(8.dp))
-
-            // ── Dark mode toggle ───────────────────────────────────────
-            Row(
-                modifier          = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    if (isDark) Icons.Filled.DarkMode else Icons.Outlined.LightMode,
-                    null, tint = Amber, modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(if (isDark) (if (language == "ku") "Moda Tarî" else "Karanlık") else (if (language == "ku") "Moda Ronahî" else "Aydınlık"), color = OnBackground, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                Switch(
-                    checked = isDark,
-                    onCheckedChange = { settingsVm.toggleDarkMode() },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor   = Amber,
-                        checkedTrackColor   = Amber.copy(alpha = 0.3f),
-                        uncheckedThumbColor = Muted,
-                        uncheckedTrackColor = Muted.copy(alpha = 0.2f),
-                    ),
-                )
-            }
-
-            Spacer(Modifier.height(6.dp))
 
             // ── Dil değişimi ───────────────────────────────────────────
             Row(
