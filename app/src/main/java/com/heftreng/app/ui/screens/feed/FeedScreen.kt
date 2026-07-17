@@ -1049,44 +1049,47 @@ fun FeedScreen(
                 )
 
                 // ── Twitter tarzı "yeni gönderi" pill ────────────────────────
-                AnimatedVisibility(
-                    visible = pendingNewPosts.isNotEmpty() && !isRefreshing,
-                    enter   = fadeIn() + slideInVertically(initialOffsetY = { -it }),
-                    exit    = fadeOut() + slideOutVertically(targetOffsetY = { -it }),
+                Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = 12.dp),
                 ) {
-                    Surface(
-                        onClick = {
-                            vm.commitPendingNewPosts()
-                            feedScope.launch { feedListState.animateScrollToItem(0) }
-                        },
-                        shape         = RoundedCornerShape(50),
-                        color         = Primary,
-                        shadowElevation = 6.dp,
-                        modifier      = Modifier.padding(horizontal = 16.dp),
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = pendingNewPosts.isNotEmpty() && !isRefreshing,
+                        enter   = fadeIn() + slideInVertically(initialOffsetY = { -it }),
+                        exit    = fadeOut() + slideOutVertically(targetOffsetY = { -it }),
                     ) {
-                        Row(
-                            modifier            = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
-                            verticalAlignment   = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        Surface(
+                            onClick = {
+                                vm.commitPendingNewPosts()
+                                feedScope.launch { feedListState.animateScrollToItem(0) }
+                            },
+                            shape           = RoundedCornerShape(50),
+                            color           = Primary,
+                            shadowElevation = 6.dp,
+                            modifier        = Modifier.padding(horizontal = 16.dp),
                         ) {
-                            Icon(
-                                Icons.Default.KeyboardArrowUp,
-                                contentDescription = null,
-                                tint     = Color.White,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Text(
-                                text  = if (language == "ku")
-                                    "${pendingNewPosts.size} nivîsên nû"
-                                else
-                                    "${pendingNewPosts.size} yeni gönderi",
-                                color     = Color.White,
-                                fontSize  = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
+                            Row(
+                                modifier              = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                                verticalAlignment     = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.KeyboardArrowUp,
+                                    contentDescription = null,
+                                    tint     = Color.White,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Text(
+                                    text = if (language == "ku")
+                                        "${pendingNewPosts.size} nivîsên nû"
+                                    else
+                                        "${pendingNewPosts.size} yeni gönderi",
+                                    color      = Color.White,
+                                    fontSize   = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
                         }
                     }
                 }
