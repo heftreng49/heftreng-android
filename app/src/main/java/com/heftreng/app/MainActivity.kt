@@ -29,6 +29,7 @@ import com.heftreng.app.util.ConsentHelper
 import com.google.android.gms.ads.MobileAds
 import com.heftreng.app.navigation.HeftrangNavHost
 import com.heftreng.app.ui.theme.HeftrangTheme
+import com.heftreng.app.ui.theme.HeftrangThemeVariant
 import com.heftreng.app.viewmodel.AuthViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -230,14 +231,15 @@ class MainActivity : ComponentActivity() {
                     // isSystemInDarkTheme() kullanılıyor — telefonun teması
                     // değişince (örn. güneş batımı otomatik koyu moda geçince)
                     // uygulama da anında buna uyuyor.
-                    val themeMode by settingsVm.themeMode.collectAsState()
+                    val themeMode    by settingsVm.themeMode.collectAsState()
+                    val themeVariant by settingsVm.themeVariant.collectAsState()
                     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
                     val isDark = when (themeMode) {
                         "light" -> false
                         "dark"  -> true
                         else    -> systemDark   // "system"
                     }
-                    HeftrangTheme(darkMode = isDark) {
+                    HeftrangTheme(darkMode = isDark, variant = themeVariant) {
                         HeftrangNavHost(initialRoute = pendingNavTarget)
                     }
                 }

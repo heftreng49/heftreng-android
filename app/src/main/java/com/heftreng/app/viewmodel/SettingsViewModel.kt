@@ -8,6 +8,7 @@ import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.data.model.BlockedUser
+import com.heftreng.app.ui.theme.HeftrangThemeVariant
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
@@ -37,6 +38,16 @@ class SettingsViewModel @Inject constructor(
     // isSystemInDarkTheme() ile canlı okunup HeftrangTheme'e geçiliyor.
     private val _themeMode = MutableStateFlow(prefs.getString("hf_theme_mode", "system") ?: "system")
     val themeMode = _themeMode.asStateFlow()
+
+    // Tema varyantı — 6 görsel tema arasından seçim
+    private val _themeVariant = MutableStateFlow(
+        runCatching {
+            HeftrangThemeVariant.valueOf(
+                prefs.getString("hf_theme_variant", HeftrangThemeVariant.CHARCOAL_INK.name) ?: ""
+            )
+        }.getOrDefault(HeftrangThemeVariant.CHARCOAL_INK)
+    )
+    val themeVariant = _themeVariant.asStateFlow()
 
     // Geriye dönük uyumluluk: eski "hf_theme_dark" boolean'ını okuyan
     // yerler (varsa) için sabit bir Boolean değeri hâlâ sunuyoruz, ama
@@ -177,6 +188,12 @@ class SettingsViewModel @Inject constructor(
                 onError(e.localizedMessage ?: "Hata oluştu")
             }
         }
+    }
+
+    // Görsel tema varyantı değiştir
+    fun setThemeVariant(variant: HeftrangThemeVariant) {
+        _themeVariant.value = variant
+        prefs.edit().putString("hf_theme_variant", variant.name).apply()
     }
 
     // ÇÖZÜLDÜ: Yeni 3-seviyeli tema seçimi — "light" | "dark" | "system".
