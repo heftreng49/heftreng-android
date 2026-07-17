@@ -335,7 +335,7 @@ fun buildAnnotated(text: String, spans: List<RichSpan>): AnnotatedString =
                         )
                         s.under  -> TextDecoration.Underline
                         s.strike -> TextDecoration.LineThrough
-                        else     -> null
+                        else     -> TextDecoration.None
                     },
                     fontSize = s.size?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
                     color    = s.color ?: Color.Unspecified,
@@ -851,6 +851,20 @@ fun RichTextEditor(
                                 bold   = boldOn,    italic = italicOn,
                                 under  = underOn,   strike = strikeOn,
                                 size   = fontSize,  color  = textColor,
+                            )
+                        }
+                    } else if (lenDiff > 0) {
+                        // Format aktif değil ama imleç strike/under span'ının içine girebilir.
+                        // Yeni karakteri sıfırlayan bir "temiz" span ekle — bulaşmayı önler.
+                        val charStart = changePos - lenDiff
+                        val charEnd   = changePos
+                        val contaminated = spans.any { s ->
+                            s.start < charEnd && s.end > charStart && (s.strike || s.under)
+                        }
+                        if (contaminated && charStart >= 0 && charEnd <= newText.length && charStart < charEnd) {
+                            spans = spans + RichSpan(
+                                start = charStart, end = charEnd,
+                                bold = false, italic = false, under = false, strike = false,
                             )
                         }
                     }
