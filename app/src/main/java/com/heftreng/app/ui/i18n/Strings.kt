@@ -257,7 +257,6 @@ object Strings {
     fun lessonLockedBody(l: String)    = t(l, "Bu ders kilitli. Kısa bir video izleyerek bu dersi hemen açabilirsin.", "Ev ders kilîtkirî ye. Tu dikarî vîdyoyekê temaşe bikî û vê dersê vekî.")
     fun noAdsToday(l: String)          = t(l, "Bugünkü reklam hakkın doldu.", "Îro mafê vîdyoyê nemaye.")
     fun watchAdUnlock(l: String)       = t(l, "Video izle ve aç",          "Vîdyo temaşe bike û veke")
-    fun cancelAction(l: String)        = t(l, "İptal",                    "Betal bike")
     fun doubleXpTitle(l: String, xp: Int) = t(l, "Tebrikler! +$xp XP Kazandın!", "Xwezî! +$xp XP Qezenç Kir!")
     fun doubleXpOffer(l: String, xp: Int) = t(l, "Kısa bir video izle, $xp XP kazan!", "Vîdyoyek kurt temaşe bike, $xp XP qezenç bike!")
     fun doubleXpClaim(l: String)       = t(l, "⚡ 2x XP Kazan",            "⚡ 2x XP Bistîne")
