@@ -565,15 +565,15 @@ object Strings {
     fun friendsReadingTitle(l: String)        = t(l, "Arkadaşların ne okuyor?", "Hevalên te çi dixwînin?")
     fun friendsReadingPage(l: String, n: Int) = t(l, "$n. sayfada",             "rûpel $n")
 
-    // ── Tema Seçici ───────────────────────────────────────────────
-    fun themeTitle(l: String)           = if (l == "ku") "Reng"             else "Tema"
-    fun themeDarkMode(l: String)        = if (l == "ku") "Moda Tarî"        else "Koyu Mod"
-    fun themeDarkModeToLight(l: String) = if (l == "ku") "Biçe moda ronî"   else "Açık moda geç"
-    fun themeDarkModeToDark(l: String)  = if (l == "ku") "Biçe moda tarî"   else "Koyu moda geç"
-    fun themeCharcoal(l: String)        = if (l == "ku") "Mûrekkeba Komirê" else "Kömür Mürekkebi"
-    fun themeBook(l: String)            = if (l == "ku") "Pirtûk"           else "Kitap"
-    fun themeForest(l: String)          = if (l == "ku") "Daristân"         else "Orman"
-    fun themeOcean(l: String)           = if (l == "ku") "Okyanûs"          else "Okyanus"
-    fun themeSunset(l: String)          = if (l == "ku") "Rojavabûn"        else "Gün Batımı"
-    fun themeMonochrome(l: String)      = if (l == "ku") "Yekrêng"          else "Tek Renk"
+    // ── Tema Seçici ───────────────────────────────────────────────────────────
+    fun themeTitle(l: String)            = t(l, "Tema",               "Reng")
+    fun themeDarkMode(l: String)         = t(l, "Koyu Mod",           "Moda Tarî")
+    fun themeDarkModeToLight(l: String)  = t(l, "Açık moda geç",     "Biçe moda ronî")
+    fun themeDarkModeToDark(l: String)   = t(l, "Koyu moda geç",     "Biçe moda tarî")
+    fun themeCharcoal(l: String)         = t(l, "Kömür Mürekkebi",   "Mûrekkeba Komirê")
+    fun themeBook(l: String)             = t(l, "Kitap",              "Pirtûk")
+    fun themeForest(l: String)           = t(l, "Orman",              "Daristân")
+    fun themeOcean(l: String)            = t(l, "Okyanus",            "Okyanûs")
+    fun themeSunset(l: String)           = t(l, "Gün Batımı",         "Rojavabûn")
+    fun themeMonochrome(l: String)       = t(l, "Tek Renk",           "Yekrêng")
 }
