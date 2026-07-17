@@ -4,6 +4,26 @@
 --  Güvenli: IF NOT EXISTS — defalarca çalıştırılabilir
 -- ══════════════════════════════════════════════════════════════
 
+-- ── Users — Takip önerileri ve profil referansları için ───────
+-- Firebase Auth/Firestore kullanıcılarının Supabase ayna tablosu.
+-- Yazma: ensureUserInSupabase() (FeedViewModel) + ProfileViewModel.updateProfile()
+-- Cloud Function (onUserCreated) da yazabilir — service_role key ile.
+create table if not exists users (
+    uid          text primary key,
+    display_name text    default '',
+    photo_url    text    default '',
+    bio          text    default '',
+    banned       boolean default false,
+    created_at   timestamptz default now()
+);
+alter table users enable row level security;
+create index if not exists users_created_at_idx on users (created_at desc);
+do $$ begin
+  if not exists (select 1 from pg_policies where tablename='users' and policyname='users_open') then
+    create policy "users_open" on users for all to anon, authenticated using (true) with check (true);
+  end if;
+end $$;
+
 -- ── Authors ───────────────────────────────────────────────────
 create table if not exists authors (
     id             text primary key,

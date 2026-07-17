@@ -1554,38 +1554,72 @@ class FeedViewModel @Inject constructor(
         val hasMore: Boolean
 
         if (page == 0) {
-            // Havuz büyütüldü (x20): yeni üyelerin dahil olma şansı arttı.
-            // eq("banned", false) → neq("banned", true): banned=null olan yeni
-            // kayıtlar artık dışlanmıyor.
             val poolSize = (SUGGEST_PAGE_SIZE * 20 + excludeUids.size).coerceAtLeast(200).toLong()
-            val rows = supabase.postgrest["users"].select {
-                filter { neq("banned", true) }
-                order("created_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
-                range(0, poolSize - 1)
-            }.decodeList<com.heftreng.app.data.model.UserRow>()
-
-            // displayName.isNotBlank() → uid.isNotBlank(): profil doldurmamış
-            // yeni üyeler de önerilere girebilsin.
-            val candidates = rows.filter { it.uid !in excludeUids && it.uid.isNotBlank() }
-            pageUsers = candidates.shuffled().take(SUGGEST_PAGE_SIZE).map { row ->
-                SuggestedUser(
-                    uid         = row.uid,
-                    name        = row.displayName.ifBlank { row.uid.take(8) },
-                    photoURL    = row.photoUrl,
-                    bio         = row.bio,
-                    isFollowing = false,
-                )
+            val rows = try {
+                supabase.postgrest["users"].select {
+                    // banned filtresi kaldırıldı — neq() null satırları da eliyor,
+                    // bu yüzden yeni kayıtlar (banned=null) öneri dışında kalıyordu.
+                    // Banned kullanıcılar zaten Firestore Rules + blok listesiyle engelleniyor.
+                    order("created_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                    range(0, poolSize - 1)
+                }.decodeList<com.heftreng.app.data.model.UserRow>()
+            } catch (e: Exception) {
+                android.util.Log.e("FeedVM", "fetchSuggestedUsers Supabase hatası: ${e.message}")
+                emptyList()
             }
-            hasMore = candidates.size > SUGGEST_PAGE_SIZE
+
+            if (rows.isEmpty()) {
+                // Supabase users tablosu boş veya erişilemiyor — Firestore fallback
+                android.util.Log.w("FeedVM", "Supabase users boş, Firestore fallback devrede")
+                val fsRows = try {
+                    firestore.collection("users")
+                        .orderBy("createdAt", Query.Direction.DESCENDING)
+                        .limit(poolSize)
+                        .get().await()
+                        .documents
+                        .filter { (it.getString("uid") ?: it.id) !in excludeUids }
+                } catch (e: Exception) {
+                    android.util.Log.e("FeedVM", "Firestore fallback hatası: ${e.message}")
+                    emptyList()
+                }
+                val candidates = fsRows.filter { it.id.isNotBlank() }
+                pageUsers = candidates.shuffled().take(SUGGEST_PAGE_SIZE).map { doc ->
+                    SuggestedUser(
+                        uid      = doc.id,
+                        name     = doc.getString("displayName") ?: doc.getString("name") ?: doc.id.take(8),
+                        photoURL = doc.getString("photoURL") ?: "",
+                        bio      = doc.getString("bio") ?: "",
+                        isFollowing = false,
+                    )
+                }
+                hasMore = candidates.size > SUGGEST_PAGE_SIZE
+            } else {
+                val candidates = rows.filter { it.uid !in excludeUids && it.uid.isNotBlank() }
+                android.util.Log.d("FeedVM", "fetchSuggestedUsers: havuz=${rows.size}, aday=${candidates.size}, exclude=${excludeUids.size}")
+                pageUsers = candidates.shuffled().take(SUGGEST_PAGE_SIZE).map { row ->
+                    SuggestedUser(
+                        uid         = row.uid,
+                        name        = row.displayName.ifBlank { row.uid.take(8) },
+                        photoURL    = row.photoUrl,
+                        bio         = row.bio,
+                        isFollowing = false,
+                    )
+                }
+                hasMore = candidates.size > SUGGEST_PAGE_SIZE
+            }
         } else {
             val offset = (page * SUGGEST_PAGE_SIZE).toLong()
             val fetchSize = (SUGGEST_PAGE_SIZE + excludeUids.size).coerceAtLeast(SUGGEST_PAGE_SIZE * 3).toLong()
 
-            val rows = supabase.postgrest["users"].select {
-                filter { neq("banned", true) }
-                order("created_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
-                range(offset, offset + fetchSize - 1)
-            }.decodeList<com.heftreng.app.data.model.UserRow>()
+            val rows = try {
+                supabase.postgrest["users"].select {
+                    order("created_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                    range(offset, offset + fetchSize - 1)
+                }.decodeList<com.heftreng.app.data.model.UserRow>()
+            } catch (e: Exception) {
+                android.util.Log.e("FeedVM", "fetchSuggestedUsers page=$page hatası: ${e.message}")
+                emptyList()
+            }
 
             pageUsers = rows
                 .filter { it.uid !in excludeUids && it.uid.isNotBlank() }
