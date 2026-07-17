@@ -1729,8 +1729,9 @@ class FeedViewModel @Inject constructor(
         lessonTip   : String = "",
         unitTitle   : String = "",
         emoji       : String = "📖",
+        onResult    : (Boolean) -> Unit = {},
     ) {
-        if (uid.isEmpty()) return
+        if (uid.isEmpty()) { onResult(false); return }
         viewModelScope.launch {
             try {
                 val d       = cachedUserDoc(uid) ?: emptyMap()
@@ -1755,7 +1756,8 @@ class FeedViewModel @Inject constructor(
                     "likes"  to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
                     "ts"     to Timestamp.now(),
                 )).await()
-            } catch (e: Exception) { e.printStackTrace() }
+                onResult(true)
+            } catch (e: Exception) { e.printStackTrace(); onResult(false) }
         }
     }
 
@@ -1764,8 +1766,9 @@ class FeedViewModel @Inject constructor(
         ruleId      : String,
         ruleTitle   : String,   // title veya titleTr (aktif dile göre çağıran taraf seçer)
         rulePreview : String = "",
+        onResult    : (Boolean) -> Unit = {},
     ) {
-        if (uid.isEmpty()) return
+        if (uid.isEmpty()) { onResult(false); return }
         viewModelScope.launch {
             try {
                 val d       = cachedUserDoc(uid) ?: emptyMap()
@@ -1790,7 +1793,8 @@ class FeedViewModel @Inject constructor(
                     "likes"  to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
                     "ts"     to Timestamp.now(),
                 )).await()
-            } catch (e: Exception) { e.printStackTrace() }
+                onResult(true)
+            } catch (e: Exception) { e.printStackTrace(); onResult(false) }
         }
     }
 
@@ -1799,8 +1803,9 @@ class FeedViewModel @Inject constructor(
         level  : Int,
         xp     : Int,
         streak : Int,
+        onResult : (Boolean) -> Unit = {},
     ) {
-        if (uid.isEmpty()) return
+        if (uid.isEmpty()) { onResult(false); return }
         viewModelScope.launch {
             try {
                 val d       = cachedUserDoc(uid) ?: emptyMap()
@@ -1824,7 +1829,8 @@ class FeedViewModel @Inject constructor(
                     "likes"  to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
                     "ts"     to Timestamp.now(),
                 )).await()
-            } catch (e: Exception) { e.printStackTrace() }
+                onResult(true)
+            } catch (e: Exception) { e.printStackTrace(); onResult(false) }
         }
     }
 

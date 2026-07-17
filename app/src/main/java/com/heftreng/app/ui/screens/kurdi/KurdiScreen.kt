@@ -217,16 +217,14 @@ fun KurdiScreen(
             ) {
                 Text("🎉", fontSize = 48.sp)
                 Text(
-                    if (language == "ku") "Xwezî! +$lastLessonXp XP Qezenç Kir!"
-                    else "Tebrikler! +$lastLessonXp XP Kazandın!",
+                    Strings.doubleXpTitle(language, lastLessonXp),
                     color = com.heftreng.app.ui.theme.OnBackground,
                     fontWeight = FontWeight.Bold, fontSize = 18.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
                 Surface(shape = RoundedCornerShape(12.dp), color = com.heftreng.app.ui.theme.Amber.copy(0.15f)) {
                     Text(
-                        if (language == "ku") "Vîdyoyek kurt temaşe bike, ${lastLessonXp * 2} XP qezenç bike!"
-                        else "Kısa bir video izle, ${lastLessonXp * 2} XP kazan!",
+                        Strings.doubleXpOffer(language, lastLessonXp * 2),
                         color = com.heftreng.app.ui.theme.Amber, fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -249,30 +247,32 @@ fun KurdiScreen(
                     colors   = androidx.compose.material3.ButtonDefaults.buttonColors(
                         containerColor = com.heftreng.app.ui.theme.Amber, contentColor = Color.Black,
                     ),
-                ) { Text(if (language == "ku") "⚡ 2x XP Bistîne" else "⚡ 2x XP Kazan", fontWeight = FontWeight.Bold) }
+                ) { Text(Strings.doubleXpClaim(language), fontWeight = FontWeight.Bold) }
                 // Dersi feed'de paylaş — tamamlanan son ders bilgisi vm.lastCompletedLesson'da
                 lastCompletedLesson?.let { lc ->
                     OutlinedButton(
                         onClick = {
+                            showDoubleXpSheet = false
                             feedVm.repostKfLesson(
                                 lessonId    = lc.id,
                                 lessonTitle = if (language == "ku") lc.nameKu.ifBlank { lc.nameTr } else lc.nameTr,
                                 lessonTip   = lc.tip,
                                 emoji       = lc.emoji,
+                                onResult    = { ok ->
+                                    vm.showToast(if (ok) Strings.shareLessonSuccess(language) else Strings.shareFailed(language))
+                                },
                             )
-                            vm.showToast(if (language == "ku") "Li Feed'ê hate parvekirin!" else "Feed'de paylaşıldı!")
-                            showDoubleXpSheet = false
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape    = RoundedCornerShape(12.dp),
                     ) {
                         Icon(Icons.Default.Share, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text(if (language == "ku") "Li Feed'ê Parve Bike" else "Feed'de Paylaş")
+                        Text(Strings.shareToFeed(language))
                     }
                 }
                 TextButton(onClick = { showDoubleXpSheet = false }) {
-                    Text(if (language == "ku") "Na spas" else "Hayır teşekkürler", color = com.heftreng.app.ui.theme.Muted)
+                    Text(Strings.noThanks(language), color = com.heftreng.app.ui.theme.Muted)
                 }
                 Spacer(Modifier.height(8.dp))
             }
@@ -312,8 +312,12 @@ fun KurdiScreen(
         XpStreakCard(xp = xp, streak = streak, level = level, language = language,
             remainingAds = remainingAds,
             onShare = {
-                feedVm.repostKfAchievement(level = level, xp = xp, streak = streak)
-                vm.showToast(if (language == "ku") "Li Feed'ê hate parvekirin!" else "Feed'de paylaşıldı!")
+                feedVm.repostKfAchievement(
+                    level = level, xp = xp, streak = streak,
+                    onResult = { ok ->
+                        vm.showToast(if (ok) Strings.shareAchievementSuccess(language) else Strings.shareFailed(language))
+                    },
+                )
             })
 
         Spacer(Modifier.height(8.dp))
@@ -370,6 +374,17 @@ fun KurdiScreen(
                             onAdNotReady = { vm.showAdNotReadyToast(language) },
                         )
                     }
+                },
+                onShare = { lesson ->
+                    feedVm.repostKfLesson(
+                        lessonId    = lesson.id,
+                        lessonTitle = if (language == "ku") lesson.nameKu.ifBlank { lesson.nameTr } else lesson.nameTr,
+                        lessonTip   = lesson.tip,
+                        emoji       = lesson.emoji,
+                        onResult    = { ok ->
+                            vm.showToast(if (ok) Strings.shareLessonSuccess(language) else Strings.shareFailed(language))
+                        },
+                    )
                 },
             )
             // 1 -> DictionaryTab — Ferheng geçici olarak gizlendi
@@ -889,7 +904,7 @@ private fun XpStreakCard(
                         Icon(Icons.Default.Share, null, tint = Primary, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            if (ku) "Serkeftina Xwe Parve Bike" else "Başarını Feed'de Paylaş",
+                            Strings.shareAchievement(language),
                             color = Primary,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 12.sp,
@@ -915,6 +930,7 @@ private fun UnitsTab(
     onNext          : () -> Unit,
     onOpen          : (String) -> Unit,
     onLockedClick   : (String) -> Unit = {},
+    onShare         : ((KfLesson) -> Unit)? = null,
 ) {
     when {
         loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1016,6 +1032,7 @@ private fun UnitsTab(
                             canWatchAd      = canWatchAd,
                             onOpen          = onOpen,
                             onLockedClick   = onLockedClick,
+                            onShare         = onShare,
                         )
                     }
                 }
@@ -1253,6 +1270,7 @@ private fun LessonPath(
     canWatchAd      : Boolean = false,
     onOpen          : (String) -> Unit,
     onLockedClick   : (String) -> Unit = {},
+    onShare         : ((KfLesson) -> Unit)? = null,
 ) {
     val firstNotDone = lessons.indexOfFirst { it.id !in doneIds }
         .let { if (it == -1) lessons.size else it }
@@ -1284,6 +1302,7 @@ private fun LessonPath(
                     if (!isLocked) onOpen(lesson.id)
                     else onLockedClick(lesson.id)
                 },
+                onShare    = onShare,
             )
         }
     }
@@ -1301,6 +1320,7 @@ private fun LessonPathNode(
     language    : String = "tr",
     canWatchAd  : Boolean = false,
     onClick     : () -> Unit,
+    onShare     : ((KfLesson) -> Unit)? = null,
 ) {
     val ku = language == "ku"
     var showUnlockDialog by remember { mutableStateOf(false) }
@@ -1480,23 +1500,38 @@ private fun LessonPathNode(
 
                 Spacer(Modifier.height(6.dp))
 
-                // Ders adı
-                Text(
-                    lesson.nameTr,
-                    color         = when {
-                        isActive -> OnBackground
-                        isLocked -> Muted.copy(alpha = 0.6f)
-                        isDone   -> OnSurface
-                        else     -> Muted
-                    },
-                    fontSize      = 10.sp,
-                    fontWeight    = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                    textAlign     = TextAlign.Center,
-                    maxLines      = 2,
-                    overflow      = TextOverflow.Ellipsis,
-                    letterSpacing = 0.1.sp,
-                    modifier      = Modifier.width(72.dp),
-                )
+                // Ders adı + tamamlanan derste yanında paylaş ikonu
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        lesson.nameTr,
+                        color         = when {
+                            isActive -> OnBackground
+                            isLocked -> Muted.copy(alpha = 0.6f)
+                            isDone   -> OnSurface
+                            else     -> Muted
+                        },
+                        fontSize      = 10.sp,
+                        fontWeight    = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                        textAlign     = TextAlign.Center,
+                        maxLines      = 2,
+                        overflow      = TextOverflow.Ellipsis,
+                        letterSpacing = 0.1.sp,
+                        modifier      = Modifier.width(if (isDone && onShare != null) 58.dp else 72.dp),
+                    )
+                    if (isDone && onShare != null) {
+                        Icon(
+                            Icons.Default.Share,
+                            contentDescription = Strings.shareLesson(language),
+                            tint     = color,
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clickable { onShare(lesson) },
+                        )
+                    }
+                }
 
                 // "BAŞLA" pill — sadece aktif ders
                 if (isActive) {
@@ -2669,6 +2704,7 @@ private fun GrammarTab(
                             autoOpen = rule.id == autoOpenRuleId,
                             onAutoOpenConsumed = { autoOpenRuleId = null },
                             feedVm   = feedVm,
+                            onShareResult = { msg -> vm.showToast(msg) },
                         )
                     }
                 }
@@ -2740,6 +2776,7 @@ private fun GrammarRuleCard(
     autoOpen: Boolean = false,
     onAutoOpenConsumed: () -> Unit = {},
     feedVm: FeedViewModel = hiltViewModel(),
+    onShareResult: (String) -> Unit = {},
 ) {
     var showDetail  by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf(false) }
@@ -2877,9 +2914,12 @@ private fun GrammarRuleCard(
                                         ruleId      = rule.id,
                                         ruleTitle   = displayTitle,
                                         rulePreview = displayContent,
+                                        onResult    = { ok ->
+                                            onShareResult(if (ok) Strings.shareGrammarSuccess(language) else Strings.shareFailed(language))
+                                        },
                                     )
                                 }) {
-                                    Icon(Icons.Default.Share, contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Share, contentDescription = Strings.shareGrammarRule(language), tint = accentColor, modifier = Modifier.size(18.dp))
                                 }
                                 // Sol renkli numara rozeti
                                 Surface(

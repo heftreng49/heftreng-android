@@ -1793,7 +1793,16 @@ fun PostCard(
                         if (post.repostType.isNotBlank() && post.repostType != "feed") {
                 Surface(shape = RoundedCornerShape(6.dp), color = Primary.copy(alpha = 0.12f),
                     modifier = Modifier.padding(bottom = 6.dp)) {
-                    Text(when(post.repostType){"serial"->"📖 Kitap";"chapter"->"📄 Bölüm";"book_chapter"->"📄 Kitap Bölümü";"blog"->"📝 Blog";"kf_lesson"->"🇰🇺 Kurdî Ders";"grammar"->"📚 Rêziman";"kf_achievement"->"🏆 Başarı";else->post.repostType},
+                    Text(when(post.repostType){
+                        "serial"->if(ku)"📖 Pirtûk" else "📖 Kitap"
+                        "chapter"->if(ku)"📄 Beş" else "📄 Bölüm"
+                        "book_chapter"->if(ku)"📄 Beşa Pirtûkê" else "📄 Kitap Bölümü"
+                        "blog"->if(ku)"📝 Gotar" else "📝 Blog"
+                        "kf_lesson"->if(ku)"🇰🇺 Dersa Kurdî" else "🇰🇺 Kurdî Ders"
+                        "grammar"->if(ku)"📚 Rêziman" else "📚 Dilbilgisi"
+                        "kf_achievement"->if(ku)"🏆 Serkeftin" else "🏆 Başarı"
+                        else->post.repostType
+                    },
                         color = Primary, fontSize = 11.sp,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                 }
