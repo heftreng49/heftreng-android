@@ -34,6 +34,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.heftreng.app.viewmodel.AdminViewModel
 import com.heftreng.app.viewmodel.StaffPermissions
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.navigation.compose.*
 import coil.compose.AsyncImage
 import com.heftreng.app.ui.screens.admin.AdminScreen
@@ -92,7 +94,11 @@ sealed class Screen(val route: String) {
     object Messages      : Screen("messages")
     object Notifications : Screen("notifications")
     object Settings      : Screen("settings")
-    object Kurdi         : Screen("kurdi")
+    object Kurdi         : Screen("kurdi?openLesson={openLesson}&openGrammar={openGrammar}") {
+        fun base() = "kurdi"
+        fun openLesson(id: String) = "kurdi?openLesson=$id"
+        fun openGrammar(id: String) = "kurdi?openGrammar=$id"
+    }
     object Serials       : Screen("serials")
     object Admin         : Screen("admin")
     object Cms           : Screen("cms")
@@ -119,7 +125,7 @@ data class BottomNavItem(val route: String, val label: String, val icon: ImageVe
 
 private val bottomNavRoutes = setOf(
     Screen.Feed.route, Screen.Library.route,
-    Screen.Kurdi.route, "profile/me",
+    Screen.Kurdi.route, Screen.Kurdi.base(), "profile/me",
 )
 
 // ── NavHost ───────────────────────────────────────────────────────────────────
@@ -210,7 +216,7 @@ fun HeftrangNavHost(initialRoute: String? = null) {
     val bottomNavItems = listOf(
         BottomNavItem(Screen.Feed.route,    Strings.navFeed(language),    Icons.Outlined.DynamicFeed,  Icons.Filled.DynamicFeed),
         BottomNavItem(Screen.Library.route, Strings.navLibrary(language), Icons.Outlined.MenuBook,     Icons.Filled.MenuBook),
-        BottomNavItem(Screen.Kurdi.route,   Strings.navKurdi(language),   Icons.Outlined.Translate,     Icons.Filled.Translate),
+        BottomNavItem(Screen.Kurdi.base(),  Strings.navKurdi(language),   Icons.Outlined.Translate,     Icons.Filled.Translate),
         BottomNavItem("profile/me",         Strings.navProfile(language), Icons.Outlined.PersonOutline, Icons.Filled.Person),
     )
     val unreadNotif by notifVm.unreadCount.collectAsState()
@@ -454,7 +460,8 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                     ) {
                         bottomNavItems.forEach { item ->
                             val selected = currentRoute == item.route ||
-                                (item.route == "profile/me" && currentRoute?.startsWith("profile/") == true)
+                                (item.route == "profile/me" && currentRoute?.startsWith("profile/") == true) ||
+                                (item.route == Screen.Kurdi.base() && currentRoute?.startsWith("kurdi") == true)
                             NavigationBarItem(
                                 selected = selected,
                                 onClick  = {
@@ -657,11 +664,24 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 ) { LibraryScreen(navController, language, adsVm = adsVm) }
                 composable(
                     Screen.Kurdi.route,
+                    arguments = listOf(
+                        navArgument("openLesson")  { type = NavType.StringType; nullable = true; defaultValue = null },
+                        navArgument("openGrammar") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    ),
                     enterTransition = { fadeIn(tween(180)) },
                     exitTransition  = { fadeOut(tween(140)) },
                     popEnterTransition  = { fadeIn(tween(180)) },
                     popExitTransition   = { fadeOut(tween(140)) },
-                ) { KurdiScreen(language = language, adminVm = adminVm, adsVm = adsVm, navController = navController) }
+                ) { back ->
+                    KurdiScreen(
+                        language      = language,
+                        adminVm       = adminVm,
+                        adsVm         = adsVm,
+                        navController = navController,
+                        deepLinkLessonId  = back.arguments?.getString("openLesson"),
+                        deepLinkGrammarId = back.arguments?.getString("openGrammar"),
+                    )
+                }
                 composable("profile/{uid}") { back ->
                     ProfileScreen(
                         uid           = back.arguments?.getString("uid") ?: "me",
@@ -905,7 +925,7 @@ fun DrawerContent(
                 Triple(Icons.Outlined.DynamicFeed,       Strings.navFeed(language),     Screen.Feed.route),
                 Triple(Icons.Outlined.Search,            Strings.navSearch(language),   Screen.Search.route),
                 Triple(Icons.Outlined.AutoStories,       Strings.navBooks(language),    Screen.Serials.route),
-                Triple(Icons.Outlined.Translate,         Strings.navKurdi(language),    Screen.Kurdi.route),
+                Triple(Icons.Outlined.Translate,         Strings.navKurdi(language),    Screen.Kurdi.base()),
                 Triple(Icons.Outlined.NotificationsNone, notifLabel,                    Screen.Notifications.route),
                 Triple(Icons.Outlined.ChatBubbleOutline, msgLabel,                      Screen.Messages.route),
                 Triple(Icons.Outlined.Settings,          Strings.navSettings(language), Screen.Settings.route),

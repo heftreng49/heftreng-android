@@ -1794,6 +1794,40 @@ class FeedViewModel @Inject constructor(
         }
     }
 
+    // Kurdî öğrenme başarısını (seviye/XP/streak) feed'de paylaş — repostType: "kf_achievement"
+    fun repostKfAchievement(
+        level  : Int,
+        xp     : Int,
+        streak : Int,
+    ) {
+        if (uid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val d       = cachedUserDoc(uid) ?: emptyMap()
+                val myName  = d["displayName"] as? String ?: d["name"] as? String
+                    ?: auth.currentUser?.displayName ?: ""
+                val myPhoto = d["photoURL"] as? String
+                    ?: auth.currentUser?.photoUrl?.toString() ?: ""
+                firestore.collection("feed").add(mapOf(
+                    "uid"          to uid,
+                    "name"         to myName,
+                    "displayName"  to myName,
+                    "username"     to (d["username"] as? String ?: ""),
+                    "photoURL"     to myPhoto,
+                    "text"         to "",
+                    "imageURL"     to "",
+                    "imgUrl"       to "",
+                    "repostType"   to "kf_achievement",
+                    "repostId"     to uid,
+                    "repostTitle"  to "🏆 Seviye $level",
+                    "repostText"   to "$xp XP · $streak günlük seri",
+                    "likes"  to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
+                    "ts"     to Timestamp.now(),
+                )).await()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
     // Kendi profilimizi cache'le — sendNotif her çağrıda Firestore okumaz
     private var _cachedMyName  : String = ""
     private var _cachedMyPhoto : String = ""

@@ -75,6 +75,8 @@ fun KurdiScreen(
     adsVm    : AdsViewModel = hiltViewModel(),
     navController : NavController? = null,
     feedVm   : FeedViewModel = hiltViewModel(),
+    deepLinkLessonId  : String? = null,
+    deepLinkGrammarId : String? = null,
 ) {
     val units       by vm.units.collectAsState()
     val lessons     by vm.lessons.collectAsState()
@@ -167,7 +169,7 @@ fun KurdiScreen(
         )
     }
 
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableStateOf(if (deepLinkGrammarId != null) 1 else 0) }
     // YZ Ders sekmesi sadece admin'e görünür
     val tabs = buildList {
         add(Strings.kurdiUnits(language))
@@ -175,6 +177,18 @@ fun KurdiScreen(
         add(Strings.kurdiGrammar(language))
         add(Strings.kurdiLeaderboard(language))
     }
+
+    // ── Deep-link: feed'den gelen "dersi aç" isteği — dersler yüklenince tetiklenir ──
+    var deepLinkLessonHandled by remember { mutableStateOf(false) }
+    LaunchedEffect(deepLinkLessonId, lessons) {
+        if (deepLinkLessonId != null && !deepLinkLessonHandled && lessons.any { it.id == deepLinkLessonId }) {
+            deepLinkLessonHandled = true
+            vm.openLesson(deepLinkLessonId)
+        }
+    }
+
+    // ── Deep-link: feed'den gelen "gramer kuralını aç" isteği — GrammarTab'a iletilir ──
+    var deepLinkGrammarHandled by remember { mutableStateOf(false) }
 
     // Toast
     LaunchedEffect(toast) {
@@ -296,7 +310,11 @@ fun KurdiScreen(
 
         // XP & Streak kartı
         XpStreakCard(xp = xp, streak = streak, level = level, language = language,
-            remainingAds = remainingAds)
+            remainingAds = remainingAds,
+            onShare = {
+                feedVm.repostKfAchievement(level = level, xp = xp, streak = streak)
+                vm.showToast(if (language == "ku") "Li Feed'ê hate parvekirin!" else "Feed'de paylaşıldı!")
+            })
 
         Spacer(Modifier.height(8.dp))
 
@@ -355,7 +373,12 @@ fun KurdiScreen(
                 },
             )
             // 1 -> DictionaryTab — Ferheng geçici olarak gizlendi
-            1 -> GrammarTab(language, isAdmin = isAdmin, vm = vm)
+            1 -> GrammarTab(
+                language, isAdmin = isAdmin, vm = vm,
+                deepLinkRuleId = if (!deepLinkGrammarHandled) deepLinkGrammarId else null,
+                onDeepLinkHandled = { deepLinkGrammarHandled = true },
+                feedVm = feedVm,
+            )
 
             2 -> {
                 val leaderboard        by vm.leaderboard.collectAsState()
@@ -705,6 +728,7 @@ private fun XpStreakCard(
     level        : Int,
     language     : String,
     remainingAds : Int = 3,
+    onShare      : (() -> Unit)? = null,
 ) {
     val ku       = language == "ku"
     val progress = if (xp <= 0) 0f else ((xp % 100) / 100f).coerceIn(0f, 1f)
@@ -846,6 +870,29 @@ private fun XpStreakCard(
                             else    "$remainingAds ödüllü reklam hakkı kaldı",
                             color    = Muted,
                             fontSize = 11.sp,
+                        )
+                    }
+                }
+
+                // Başarını feed'de paylaş
+                if (onShare != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onShare() }
+                            .padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Share, null, tint = Primary, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            if (ku) "Serkeftina Xwe Parve Bike" else "Başarını Feed'de Paylaş",
+                            color = Primary,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp,
                         )
                     }
                 }
@@ -2527,13 +2574,29 @@ private fun AddDictEntryDialog(language: String, onDismiss: () -> Unit, onSave: 
 
 // -- Dilbilgisi sekmesi -------------------------------------------------------
 @Composable
-private fun GrammarTab(language: String, isAdmin: Boolean = false, vm: KurdiViewModel) {
+private fun GrammarTab(
+    language: String,
+    isAdmin: Boolean = false,
+    vm: KurdiViewModel,
+    deepLinkRuleId: String? = null,
+    onDeepLinkHandled: () -> Unit = {},
+    feedVm: FeedViewModel,
+) {
     val rules   by vm.grammarRules.collectAsState()
     val loading by vm.grammarLoading.collectAsState()
     var showAdd   by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<GrammarRule?>(null) }
 
     LaunchedEffect(Unit) { vm.loadGrammar() }
+
+    // ── Deep-link: feed'den gelen gramer kuralı — kurallar yüklenince otomatik aç ──
+    var autoOpenRuleId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(deepLinkRuleId, rules) {
+        if (deepLinkRuleId != null && rules.any { it.id == deepLinkRuleId }) {
+            autoOpenRuleId = deepLinkRuleId
+            onDeepLinkHandled()
+        }
+    }
 
     // Kural sayısını banner olarak göster
     val ruleCount = rules.size
@@ -2603,6 +2666,9 @@ private fun GrammarTab(language: String, isAdmin: Boolean = false, vm: KurdiView
                             index    = rules.indexOf(rule),
                             onDelete = { vm.deleteGrammarRule(rule.id) },
                             onEdit   = if (isAdmin) { r -> editTarget = r } else null,
+                            autoOpen = rule.id == autoOpenRuleId,
+                            onAutoOpenConsumed = { autoOpenRuleId = null },
+                            feedVm   = feedVm,
                         )
                     }
                 }
@@ -2671,10 +2737,19 @@ private fun GrammarRuleCard(
     index: Int,
     onDelete: () -> Unit,
     onEdit: ((GrammarRule) -> Unit)? = null,
+    autoOpen: Boolean = false,
+    onAutoOpenConsumed: () -> Unit = {},
     feedVm: FeedViewModel = hiltViewModel(),
 ) {
     var showDetail  by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf(false) }
+
+    LaunchedEffect(autoOpen) {
+        if (autoOpen) {
+            showDetail = true
+            onAutoOpenConsumed()
+        }
+    }
 
     val accentColor    = Color(grammarCardAccents[index % grammarCardAccents.size])
     val displayTitle   = if (language == "ku") rule.title else rule.titleTr.ifBlank { rule.title }
