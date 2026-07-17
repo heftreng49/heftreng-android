@@ -41,6 +41,10 @@ class FeedViewModel @Inject constructor(
     private val _posts    = MutableStateFlow<List<Post>>(emptyList())
     val posts = _posts.asStateFlow()
 
+    // Twitter tarzı "yeni gönderi" pill — server'dan cache'de olmayan gönderiler burada bekler
+    private val _pendingNewPosts = MutableStateFlow<List<Post>>(emptyList())
+    val pendingNewPosts = _pendingNewPosts.asStateFlow()
+
     private val _suggestedUsers = MutableStateFlow<List<SuggestedUser>>(emptyList())
     val suggestedUsers = _suggestedUsers.asStateFlow()
 
@@ -366,6 +370,7 @@ class FeedViewModel @Inject constructor(
         lastDoc = null
         _hasMore.value = true
         _postNotFound.value = null
+        _pendingNewPosts.value = emptyList() // Her refresh'te pill sıfırla
 
         if (forceRefresh) {
             _serverRefreshing.value = true // Swipe spinner — server bitince kapanır
@@ -417,7 +422,32 @@ class FeedViewModel @Inject constructor(
                         _hasMore.value = serverSnap.documents.size >= PAGE_SIZE.toInt()
                         val rawPosts = serverSnap.documents.mapNotNull { it.toPost() }
                         val filtered = filterVisible(rawPosts.filter { it.moderationStatus != "removed" })
-                        _posts.value = mapInteractions(filtered)
+
+                        val currentIds = _posts.value.map { it.id }.toSet()
+                        if (currentIds.isEmpty() || forceRefresh) {
+                            // İlk açılış veya swipe-to-refresh: direkt göster
+                            _pendingNewPosts.value = emptyList()
+                            _posts.value = mapInteractions(filtered)
+                        } else {
+                            // Ekran zaten doluydu — sadece cache'de olmayan yenileri beklet
+                            val newOnes = filtered.filter { it.id !in currentIds }
+                            if (newOnes.isNotEmpty()) {
+                                _pendingNewPosts.value = newOnes
+                            }
+                            // Mevcut gönderileri server verisiyle sessizce güncelle (beğeni sayısı vs.)
+                            val updatedExisting = filtered.filter { it.id in currentIds }
+                            if (updatedExisting.isNotEmpty()) {
+                                val updatedMap = updatedExisting.associateBy { it.id }
+                                _posts.value = _posts.value.map { old ->
+                                    updatedMap[old.id]?.copy(
+                                        isLikedByMe    = old.isLikedByMe,
+                                        isSavedByMe    = old.isSavedByMe,
+                                        isRepostedByMe = old.isRepostedByMe,
+                                        myRepostId     = old.myRepostId,
+                                    ) ?: old
+                                }
+                            }
+                        }
                         enrichPostsInBackground(filtered)
                         refreshInteractionsForPage(filtered)
                     }
@@ -432,6 +462,14 @@ class FeedViewModel @Inject constructor(
                 _serverRefreshing.value = false
             }
         }
+    }
+
+    /** Pill'e tıklanınca bekleyen yeni gönderileri listenin başına ekle */
+    fun commitPendingNewPosts() {
+        val pending = _pendingNewPosts.value
+        if (pending.isEmpty()) return
+        _posts.value = mapInteractions(pending) + _posts.value
+        _pendingNewPosts.value = emptyList()
     }
 
     fun loadMore() {

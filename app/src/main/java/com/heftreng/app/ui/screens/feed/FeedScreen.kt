@@ -137,6 +137,7 @@ fun FeedScreen(
     val blockedUsers by settingsVm.blockedUsers.collectAsState()
 
     val serverRefreshing by vm.serverRefreshing.collectAsState()
+    val pendingNewPosts by vm.pendingNewPosts.collectAsState()
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing || serverRefreshing,
@@ -796,6 +797,14 @@ fun FeedScreen(
         } else {
             Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
             val feedListState = rememberLazyListState()
+            val feedScope = rememberCoroutineScope()
+
+            // Pill tıklanıp pending commit edilince otomatik olarak en başa scroll et
+            LaunchedEffect(pendingNewPosts.size) {
+                if (pendingNewPosts.isEmpty() && feedListState.firstVisibleItemIndex > 0) {
+                    feedListState.animateScrollToItem(0)
+                }
+            }
 
             // ── Reklam önden-ısıtma: TEK çağrı, motor kararı veriyor ─────────
             // Plan zaten hesaplanmış (adPlan) — hangi index'te ne var biliniyor.
@@ -1038,6 +1047,49 @@ fun FeedScreen(
                     modifier   = Modifier.align(Alignment.TopCenter),
                     contentColor = Primary,
                 )
+
+                // ── Twitter tarzı "yeni gönderi" pill ────────────────────────
+                AnimatedVisibility(
+                    visible = pendingNewPosts.isNotEmpty() && !isRefreshing,
+                    enter   = fadeIn() + slideInVertically(initialOffsetY = { -it }),
+                    exit    = fadeOut() + slideOutVertically(targetOffsetY = { -it }),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 12.dp),
+                ) {
+                    Surface(
+                        onClick = {
+                            vm.commitPendingNewPosts()
+                            feedScope.launch { feedListState.animateScrollToItem(0) }
+                        },
+                        shape         = RoundedCornerShape(50),
+                        color         = Primary,
+                        shadowElevation = 6.dp,
+                        modifier      = Modifier.padding(horizontal = 16.dp),
+                    ) {
+                        Row(
+                            modifier            = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                            verticalAlignment   = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.KeyboardArrowUp,
+                                contentDescription = null,
+                                tint     = Color.White,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Text(
+                                text  = if (language == "ku")
+                                    "${pendingNewPosts.size} nivîsên nû"
+                                else
+                                    "${pendingNewPosts.size} yeni gönderi",
+                                color     = Color.White,
+                                fontSize  = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                }
 
                 // ── Compose FAB ───────────────────────────────────────────
                 if (selectedFeedTab == 0) {
