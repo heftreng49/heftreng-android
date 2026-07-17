@@ -266,6 +266,10 @@ object Strings {
     fun kurdiAchievementLabel(l: String) = t(l, "Başarı",                 "Serkeftin")
     fun repostSharedAgain(l: String)   = t(l, "Paylaşım",                 "Dîsa Parvekirî")
     fun repostGeneric(l: String)       = t(l, "Paylaşım",                 "Parvekirî")
+    fun achievementLevelLabel(l: String, level: Int) = t(l, "Seviye $level", "Ast $level")
+    fun xpLabel(l: String)             = t(l, "XP",                        "XP")
+    fun streakDaysLabel(l: String)     = t(l, "Günlük Seri",                "Rojên Berdewam")
+    fun achievementCaption(l: String)  = t(l, "Kurdî öğrenme yolculuğunda!", "Di rêwîtiya fêrbûna Kurdî de ye!")
 
     // ── Arama (yeni) ──────────────────────────────────────────────────────────
     fun suggestedPeople(l: String)  = t(l, "Önerilen Kişiler",     "Kesên Pêşniyarkirî")

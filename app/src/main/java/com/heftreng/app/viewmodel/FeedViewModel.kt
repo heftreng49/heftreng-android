@@ -712,6 +712,9 @@ class FeedViewModel @Inject constructor(
             serialCover       = d["serialCover"]       as? String ?: d["serialBg"] as? String ?: "",
             chapterTitle      = d["chapterTitle"]      as? String ?: "",
             chapterOrder      = (d["chapterOrder"]     as? Long)?.toInt() ?: 0,
+            repostLevel       = (d["repostLevel"]      as? Long)?.toInt() ?: 0,
+            repostXp          = (d["repostXp"]         as? Long)?.toInt() ?: 0,
+            repostStreak      = (d["repostStreak"]     as? Long)?.toInt() ?: 0,
             likesCount    = (d["likes"]    as? Long)?.toInt() ?: 0,
             commentsCount = (d["cmtCount"] as? Long)?.toInt() ?: 0,
             repostsCount  = (d["reposts"]  as? Long)?.toInt() ?: 0,
@@ -1799,6 +1802,7 @@ class FeedViewModel @Inject constructor(
     }
 
     // Kurdî öğrenme başarısını (seviye/XP/streak) feed'de paylaş — repostType: "kf_achievement"
+    // Not: metin burada değil, görüntüleyenin diline göre FeedScreen'de üretilir (repostLevel/Xp/Streak sayısal alanlar).
     fun repostKfAchievement(
         level  : Int,
         xp     : Int,
@@ -1824,8 +1828,9 @@ class FeedViewModel @Inject constructor(
                     "imgUrl"       to "",
                     "repostType"   to "kf_achievement",
                     "repostId"     to uid,
-                    "repostTitle"  to "🏆 Seviye $level",
-                    "repostText"   to "$xp XP · $streak günlük seri",
+                    "repostLevel"  to level,
+                    "repostXp"     to xp,
+                    "repostStreak" to streak,
                     "likes"  to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
                     "ts"     to Timestamp.now(),
                 )).await()

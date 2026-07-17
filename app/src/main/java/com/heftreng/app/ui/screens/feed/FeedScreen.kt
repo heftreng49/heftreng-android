@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -1790,7 +1791,7 @@ fun PostCard(
                 )
                 Spacer(Modifier.height(8.dp))
             }
-                        if (post.repostType.isNotBlank() && post.repostType != "feed") {
+                        if (post.repostType.isNotBlank() && post.repostType != "feed" && post.repostType != "kf_achievement") {
                 Surface(shape = RoundedCornerShape(6.dp), color = Primary.copy(alpha = 0.12f),
                     modifier = Modifier.padding(bottom = 6.dp)) {
                     Text(when(post.repostType){
@@ -1807,8 +1808,61 @@ fun PostCard(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                 }
             }
+            // Kurdî başarı kartı (seviye/XP/streak) — özel görsel tasarım, tamamen dile göre üretilir
+            if (post.repostType == "kf_achievement") {
+                Surface(
+                    shape    = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .then(
+                            if (onTapRepost != null)
+                                Modifier.clickable { onTapRepost(post.repostId, post.repostType) }
+                            else Modifier
+                        ),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(Color(0xFFF5A623), Color(0xFFE8871E), Color(0xFFD9691B)),
+                                ),
+                            )
+                            .padding(18.dp),
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("🏆", fontSize = 28.sp)
+                                Text(
+                                    Strings.achievementLevelLabel(language, post.repostLevel),
+                                    color      = Color.White,
+                                    fontSize   = 18.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                                Column {
+                                    Text("${post.repostXp}", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                    Text(Strings.xpLabel(language), color = Color.White.copy(alpha = 0.85f), fontSize = 11.sp)
+                                }
+                                Column {
+                                    Text("${post.repostStreak}", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                    Text(Strings.streakDaysLabel(language), color = Color.White.copy(alpha = 0.85f), fontSize = 11.sp)
+                                }
+                            }
+                            Text(
+                                Strings.achievementCaption(language),
+                                color      = Color.White.copy(alpha = 0.9f),
+                                fontSize   = 11.5.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
+                    }
+                }
+            }
             // Repost embed kartı — tema buildRpEmbed() ile senkron
-            if (post.repostType.isNotBlank()) {
+            if (post.repostType.isNotBlank() && post.repostType != "kf_achievement") {
                 Surface(
                     shape    = RoundedCornerShape(13.dp),
                     color    = SurfaceVar,
