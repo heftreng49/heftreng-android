@@ -37,6 +37,7 @@ import com.heftreng.app.navigation.Screen
 import com.heftreng.app.ui.i18n.Strings
 
 import com.heftreng.app.ui.theme.*
+import com.heftreng.app.ui.component.ThemeSelector
 import com.heftreng.app.viewmodel.AuthViewModel
 import android.app.Activity
 import android.net.Uri
