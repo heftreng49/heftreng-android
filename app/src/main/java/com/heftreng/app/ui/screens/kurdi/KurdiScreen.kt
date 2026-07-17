@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import com.heftreng.app.utils.ShareTarget
 import com.heftreng.app.utils.shareBitmap
 import androidx.compose.ui.draw.shadow
@@ -1708,7 +1709,7 @@ fun LessonScreen(
     // Ekran görüntüsü paylaşımı — o anki kelime/egzersiz kartını yakalar
     val context           = androidx.compose.ui.platform.LocalContext.current
     val shareScope        = rememberCoroutineScope()
-    val lessonGraphicsLayer = androidx.compose.ui.graphics.layer.rememberGraphicsLayer()
+    val lessonGraphicsLayer = rememberGraphicsLayer()
     var showLessonShareSheet by remember { mutableStateOf(false) }
     var lessonCapturing   by remember { mutableStateOf(false) }
 
