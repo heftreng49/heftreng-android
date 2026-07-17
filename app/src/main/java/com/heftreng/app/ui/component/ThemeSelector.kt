@@ -1,5 +1,6 @@
 package com.heftreng.app.ui.component
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,10 +9,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,7 +26,7 @@ import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Tema renk önizleme verileri
+//  Renk önizleme verisi
 // ─────────────────────────────────────────────────────────────────────────────
 data class ThemePreviewColors(
     val bg: Color,
@@ -51,100 +53,63 @@ fun HeftrangThemeVariant.localizedName(language: String): String = when (this) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Tek tema kartı
+//  Tek satır — liste öğesi
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-private fun ThemeCard(
+private fun ThemeListItem(
     variant    : HeftrangThemeVariant,
     isDark     : Boolean,
     isSelected : Boolean,
     language   : String,
-    modifier   : Modifier = Modifier,
     onClick    : () -> Unit,
 ) {
-    val preview     = variant.previewColors(isDark)
-    val borderColor = if (isSelected) Primary else Divider
-    val borderWidth = if (isSelected) 2.dp else 1.dp
+    val preview = variant.previewColors(isDark)
 
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .border(borderWidth, borderColor, RoundedCornerShape(12.dp))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (isSelected) preview.primary.copy(alpha = 0.10f) else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        // Mini önizleme kutusu
+        // Küçük gradyan renk çipi
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(preview.bg),
-        ) {
-            // Gradyan şerit
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .background(
-                        Brush.horizontalGradient(listOf(preview.primary, preview.secondary))
-                    )
-            )
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(listOf(preview.primary, preview.secondary))
+                )
+        )
 
-            // Seçili işareti
-            if (isSelected) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                        .size(18.dp)
-                        .background(preview.primary, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector        = Icons.Default.Check,
-                        contentDescription = null,
-                        tint               = Color.White,
-                        modifier           = Modifier.size(12.dp),
-                    )
-                }
-            }
-
-            // Sahte içerik çizgileri
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(6.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                repeat(2) { i ->
-                    Box(
-                        modifier = Modifier
-                            .width(if (i == 0) 36.dp else 24.dp)
-                            .height(3.dp)
-                            .clip(CircleShape)
-                            .background(preview.primary.copy(alpha = if (i == 0) 0.9f else 0.5f))
-                    )
-                }
-            }
-        }
-
-        // Tema adı — dile göre
+        // Emoji + isim
         Text(
             text       = "${variant.emoji()} ${variant.localizedName(language)}",
-            fontSize   = 12.sp,
+            fontSize   = 15.sp,
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-            color      = if (isSelected) Primary else OnSurface,
+            color      = if (isSelected) preview.primary else OnBackground,
+            modifier   = Modifier.weight(1f),
         )
+
+        // Seçili işareti
+        if (isSelected) {
+            Icon(
+                imageVector        = Icons.Default.Check,
+                contentDescription = null,
+                tint               = preview.primary,
+                modifier           = Modifier.size(20.dp),
+            )
+        }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Tema Seçici Ana Bileşeni
-//  NOT: LazyVerticalGrid KULLANILMAZ — LazyColumn içinde sonsuz yükseklik
-//  kısıtlamasına yol açar (crash). Bunun yerine sabit Row × 2 düzeni.
+//  Tema Seçici — dropdown liste
+//  - Koyu mod switch'i YOK (yukarıda zaten Görünüm bölümünde var)
+//  - LazyVerticalGrid YOK (LazyColumn içinde crash yapar)
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun ThemeSelector(
@@ -152,77 +117,93 @@ fun ThemeSelector(
     isDarkMode      : Boolean,
     language        : String,
     onVariantChange : (HeftrangThemeVariant) -> Unit,
-    onDarkModeChange: (Boolean) -> Unit,
+    onDarkModeChange: (Boolean) -> Unit,   // imza korunuyor, kullanılmıyor
     modifier        : Modifier = Modifier,
 ) {
-    // 6 tema → 2 satır × 3 sütun (sabit, Lazy değil)
-    val rows = HeftrangThemeVariant.entries.chunked(3)
+    var expanded by remember { mutableStateOf(false) }
+    val selected = selectedVariant
+    val preview  = selected.previewColors(isDarkMode)
 
-    Column(
-        modifier            = modifier,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        // Başlık
+    Column(modifier = modifier) {
+
+        // ── Başlık ────────────────────────────────────────────────────────────
         Text(
             text       = Strings.themeTitle(language),
-            fontSize   = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color      = OnBackground,
+            fontSize   = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color      = Muted,
+            modifier   = Modifier.padding(bottom = 6.dp),
         )
 
-        // Koyu/Açık mod geçişi
+        // ── Seçili tema — tıklayınca liste açılır ────────────────────────────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(12.dp))
+                .border(
+                    width = 1.5.dp,
+                    color = if (expanded) preview.primary else Divider,
+                    shape = RoundedCornerShape(12.dp),
+                )
                 .background(HeftSurface)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 14.dp, vertical = 13.dp),
             verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column {
-                Text(
-                    text       = Strings.themeDarkMode(language),
-                    fontSize   = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                    color      = OnBackground,
-                )
-                Text(
-                    text     = if (isDarkMode)
-                        Strings.themeDarkModeToLight(language)
-                    else
-                        Strings.themeDarkModeToDark(language),
-                    fontSize = 12.sp,
-                    color    = Muted,
-                )
-            }
-            Switch(
-                checked         = isDarkMode,
-                onCheckedChange = onDarkModeChange,
+            // Renk chip'i
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(listOf(preview.primary, preview.secondary))
+                    )
+            )
+
+            Text(
+                text       = "${selected.emoji()} ${selected.localizedName(language)}",
+                fontSize   = 15.sp,
+                fontWeight = FontWeight.Medium,
+                color      = OnBackground,
+                modifier   = Modifier.weight(1f),
+            )
+
+            Icon(
+                imageVector        = if (expanded) Icons.Default.KeyboardArrowUp
+                                     else          Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                tint               = Muted,
+                modifier           = Modifier.size(22.dp),
             )
         }
 
-        // Tema ızgarası — Row × 2, Lazy yok
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            rows.forEach { rowVariants ->
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    rowVariants.forEach { variant ->
-                        ThemeCard(
-                            variant    = variant,
-                            isDark     = isDarkMode,
-                            isSelected = variant == selectedVariant,
-                            language   = language,
-                            modifier   = Modifier.weight(1f),
-                            onClick    = { onVariantChange(variant) },
-                        )
-                    }
-                    // Satırda 3'ten az tema varsa boşluk doldur
-                    repeat(3 - rowVariants.size) {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
+        // ── Açılır liste ──────────────────────────────────────────────────────
+        AnimatedVisibility(
+            visible = expanded,
+            enter   = fadeIn() + expandVertically(),
+            exit    = fadeOut() + shrinkVertically(),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(1.dp, Divider, RoundedCornerShape(12.dp))
+                    .background(HeftSurface)
+                    .padding(vertical = 4.dp),
+            ) {
+                HeftrangThemeVariant.entries.forEach { variant ->
+                    ThemeListItem(
+                        variant    = variant,
+                        isDark     = isDarkMode,
+                        isSelected = variant == selected,
+                        language   = language,
+                        onClick    = {
+                            onVariantChange(variant)
+                            expanded = false
+                        },
+                    )
                 }
             }
         }
