@@ -245,7 +245,7 @@ object Strings {
     // ── Kurdi — Feed'de Paylaşma ─────────────────────────────────────────────
     fun shareLesson(l: String)         = t(l, "Dersi paylaş",              "Dersê parve bike")
     fun shareGrammarRule(l: String)    = t(l, "Kuralı paylaş",             "Rêzimanê parve bike")
-    fun shareAchievement(l: String)    = t(l, "Başarını Feed'de Paylaş",   "Serkeftina Xwe Li Feed'ê Parve Bike")
+    fun shareAchievement(l: String)    = t(l, "Başarını Paylaş",            "Serkeftina Xwe Parve Bike")
     fun shareToFeed(l: String)         = t(l, "Feed'de Paylaş",            "Li Feed'ê Parve Bike")
     fun shareSuccess(l: String)        = t(l, "Feed'de paylaşıldı! 🎉",    "Li Feed'ê hate parvekirin! 🎉")
     fun shareLessonSuccess(l: String)  = t(l, "Ders feed'de paylaşıldı!",  "Ders li Feed'ê hate parvekirin!")

@@ -32,6 +32,10 @@ import androidx.compose.ui.*
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.asAndroidBitmap
+import com.heftreng.app.utils.ShareTarget
+import com.heftreng.app.utils.shareBitmap
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
@@ -417,10 +421,6 @@ fun KurdiScreen(
         }
 
         // İçerik
-        var lessonShareSheetFor by remember { mutableStateOf<KfLesson?>(null) }
-        var lessonSharePending by remember { mutableStateOf<KfLesson?>(null) }
-        var lessonShareTarget by remember { mutableStateOf<com.heftreng.app.utils.ShareTarget?>(null) }
-
         when (selectedTab) {
             0 -> UnitsTab(
                 units           = units,
@@ -446,7 +446,6 @@ fun KurdiScreen(
                         )
                     }
                 },
-                onShare = { lesson -> lessonShareSheetFor = lesson },
             )
             // 1 -> DictionaryTab — Ferheng geçici olarak gizlendi
             1 -> GrammarTab(
@@ -467,80 +466,6 @@ fun KurdiScreen(
                     navController = navController,
                 )
             }
-        }
-
-        // Ders paylaşım menüsü — Ana Sayfa / Instagram / WhatsApp / Diğer
-        lessonShareSheetFor?.let { lesson ->
-            androidx.compose.material3.ModalBottomSheet(
-                onDismissRequest = { lessonShareSheetFor = null },
-                containerColor   = com.heftreng.app.ui.theme.HeftSurface,
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                val l = lesson
-                                lessonShareSheetFor = null
-                                feedVm.repostKfLesson(
-                                    lessonId    = l.id,
-                                    lessonTitle = if (language == "ku") l.nameKu.ifBlank { l.nameTr } else l.nameTr,
-                                    lessonTip   = l.tip,
-                                    emoji       = l.emoji,
-                                    onResult    = { ok ->
-                                        vm.showToast(if (ok) Strings.shareLessonSuccess(language) else Strings.shareFailed(language))
-                                    },
-                                )
-                            }
-                            .padding(vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Icon(Icons.Default.DynamicFeed, null, tint = Primary, modifier = Modifier.size(20.dp))
-                        Text(Strings.shareHomeFeed(language), color = com.heftreng.app.ui.theme.OnBackground, fontSize = 15.sp)
-                    }
-                    listOf(
-                        Triple("Instagram", Color(0xFFE1306C), com.heftreng.app.utils.ShareTarget.INSTAGRAM),
-                        Triple("WhatsApp", Color(0xFF25D366), com.heftreng.app.utils.ShareTarget.WHATSAPP),
-                        Triple(if (language == "ku") "Yên Din" else "Diğer", com.heftreng.app.ui.theme.Muted, com.heftreng.app.utils.ShareTarget.ANY),
-                    ).forEach { (label, tint, target) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    lessonSharePending = lesson
-                                    lessonShareTarget = target
-                                    lessonShareSheetFor = null
-                                }
-                                .padding(vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Icon(Icons.Default.Share, null, tint = tint, modifier = Modifier.size(20.dp))
-                            Text(label, color = com.heftreng.app.ui.theme.OnBackground, fontSize = 15.sp)
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                }
-            }
-        }
-
-        // Paylaşım önizleme dialogu — ders kartını bitmap'e çevirip seçilen hedefe gönderir
-        if (lessonShareTarget != null) {
-            val lesson = lessonSharePending
-            val fbUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-            com.heftreng.app.ui.component.SharePreviewDialog(
-                post = com.heftreng.app.data.model.Post(
-                    displayName = fbUser?.displayName ?: "",
-                    photoURL    = fbUser?.photoUrl?.toString() ?: "",
-                    repostType  = "kf_lesson",
-                    repostTitle = lesson?.let { "${it.emoji} " + (if (language == "ku") it.nameKu.ifBlank { it.nameTr } else it.nameTr) } ?: "",
-                    repostText  = lesson?.tip ?: "",
-                ),
-                target    = lessonShareTarget!!,
-                onDismiss = { lessonShareTarget = null; lessonSharePending = null },
-                language  = language,
-            )
         }
     }
 
@@ -1066,7 +991,6 @@ private fun UnitsTab(
     onNext          : () -> Unit,
     onOpen          : (String) -> Unit,
     onLockedClick   : (String) -> Unit = {},
-    onShare         : ((KfLesson) -> Unit)? = null,
 ) {
     when {
         loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1168,7 +1092,6 @@ private fun UnitsTab(
                             canWatchAd      = canWatchAd,
                             onOpen          = onOpen,
                             onLockedClick   = onLockedClick,
-                            onShare         = onShare,
                         )
                     }
                 }
@@ -1406,7 +1329,6 @@ private fun LessonPath(
     canWatchAd      : Boolean = false,
     onOpen          : (String) -> Unit,
     onLockedClick   : (String) -> Unit = {},
-    onShare         : ((KfLesson) -> Unit)? = null,
 ) {
     val firstNotDone = lessons.indexOfFirst { it.id !in doneIds }
         .let { if (it == -1) lessons.size else it }
@@ -1433,12 +1355,9 @@ private fun LessonPath(
                 language   = language,
                 canWatchAd = canWatchAd,
                 onClick    = {
-                    // isLocked durumu artık LessonPathNode içindeki dialog yönetiyor
-                    // Buraya sadece "Onayla" butonundan gelinir
                     if (!isLocked) onOpen(lesson.id)
                     else onLockedClick(lesson.id)
                 },
-                onShare    = onShare,
             )
         }
     }
@@ -1456,7 +1375,6 @@ private fun LessonPathNode(
     language    : String = "tr",
     canWatchAd  : Boolean = false,
     onClick     : () -> Unit,
-    onShare     : ((KfLesson) -> Unit)? = null,
 ) {
     val ku = language == "ku"
     var showUnlockDialog by remember { mutableStateOf(false) }
@@ -1636,38 +1554,23 @@ private fun LessonPathNode(
 
                 Spacer(Modifier.height(6.dp))
 
-                // Ders adı + tamamlanan derste yanında paylaş ikonu
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(
-                        lesson.nameTr,
-                        color         = when {
-                            isActive -> OnBackground
-                            isLocked -> Muted.copy(alpha = 0.6f)
-                            isDone   -> OnSurface
-                            else     -> Muted
-                        },
-                        fontSize      = 10.sp,
-                        fontWeight    = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                        textAlign     = TextAlign.Center,
-                        maxLines      = 2,
-                        overflow      = TextOverflow.Ellipsis,
-                        letterSpacing = 0.1.sp,
-                        modifier      = Modifier.width(if (isDone && onShare != null) 58.dp else 72.dp),
-                    )
-                    if (isDone && onShare != null) {
-                        Icon(
-                            Icons.Default.Share,
-                            contentDescription = Strings.shareLesson(language),
-                            tint     = color,
-                            modifier = Modifier
-                                .size(14.dp)
-                                .clickable { onShare(lesson) },
-                        )
-                    }
-                }
+                // Ders adı
+                Text(
+                    lesson.nameTr,
+                    color         = when {
+                        isActive -> OnBackground
+                        isLocked -> Muted.copy(alpha = 0.6f)
+                        isDone   -> OnSurface
+                        else     -> Muted
+                    },
+                    fontSize      = 10.sp,
+                    fontWeight    = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                    textAlign     = TextAlign.Center,
+                    maxLines      = 2,
+                    overflow      = TextOverflow.Ellipsis,
+                    letterSpacing = 0.1.sp,
+                    modifier      = Modifier.width(72.dp),
+                )
 
                 // "BAŞLA" pill — sadece aktif ders
                 if (isActive) {
@@ -1802,6 +1705,13 @@ fun LessonScreen(
     var reportSent       by remember { mutableStateOf(false) }
     val lessonToast       by vm.toast.collectAsState()
 
+    // Ekran görüntüsü paylaşımı — o anki kelime/egzersiz kartını yakalar
+    val context           = androidx.compose.ui.platform.LocalContext.current
+    val shareScope        = rememberCoroutineScope()
+    val lessonGraphicsLayer = androidx.compose.ui.graphics.layer.rememberGraphicsLayer()
+    var showLessonShareSheet by remember { mutableStateOf(false) }
+    var lessonCapturing   by remember { mutableStateOf(false) }
+
     LaunchedEffect(lessonToast) {
         if (lessonToast != null) {
             kotlinx.coroutines.delay(2500)
@@ -1832,6 +1742,11 @@ fun LessonScreen(
                     }
                 },
                 actions = {
+                    // Ekran görüntüsü olarak paylaş — o anki kelime/egzersiz kartı
+                    IconButton(onClick = { showLessonShareSheet = true }) {
+                        Icon(Icons.Default.Share, contentDescription = Strings.shareAsImage(language),
+                            tint = Muted, modifier = Modifier.size(20.dp))
+                    }
                     // Hata Bildir butonu
                     IconButton(onClick = { showReportDialog = true }) {
                         Icon(Icons.Default.Flag, contentDescription = "Hata Bildir",
@@ -1928,6 +1843,14 @@ fun LessonScreen(
             }
         },
     ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .drawWithContent {
+                    lessonGraphicsLayer.record { this@drawWithContent.drawContent() }
+                    drawLayer(lessonGraphicsLayer)
+                },
+        ) {
         when {
             // -- Tamamlandı ----------------------------------------------------
             allDone -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
@@ -2184,6 +2107,7 @@ fun LessonScreen(
                 }
             }
         }
+        }
     }
 
     // -- Hata Bildir Dialog ----------------------------------------------------
@@ -2258,6 +2182,48 @@ fun LessonScreen(
                     fontSize   = 14.sp,
                     modifier   = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                 )
+            }
+        }
+    }
+
+    // Ekran görüntüsü paylaşım menüsü — o anki kelime/egzersiz kartını Instagram/WhatsApp/Diğer'e gönderir
+    if (showLessonShareSheet) {
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { showLessonShareSheet = false },
+            containerColor   = HeftSurface,
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                listOf(
+                    Triple("Instagram", Color(0xFFE1306C), ShareTarget.INSTAGRAM),
+                    Triple("WhatsApp", Color(0xFF25D366), ShareTarget.WHATSAPP),
+                    Triple(if (language == "ku") "Yên Din" else "Diğer", Muted, ShareTarget.ANY),
+                ).forEach { (label, tint, target) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (lessonCapturing) return@clickable
+                                lessonCapturing = true
+                                showLessonShareSheet = false
+                                shareScope.launch {
+                                    kotlinx.coroutines.delay(80)
+                                    val bmp = lessonGraphicsLayer
+                                        .toImageBitmap()
+                                        .asAndroidBitmap()
+                                        .copy(android.graphics.Bitmap.Config.ARGB_8888, false)
+                                    shareBitmap(context, bmp, target)
+                                    lessonCapturing = false
+                                }
+                            }
+                            .padding(vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(Icons.Default.Share, null, tint = tint, modifier = Modifier.size(20.dp))
+                        Text(label, color = OnBackground, fontSize = 15.sp)
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
             }
         }
     }
