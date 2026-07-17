@@ -129,6 +129,8 @@ fun ConnectedPostCard(
                     if (bid.isNotBlank()) navController.navigate("book_chapter/$bid/$cid")
                 }
                 "blog"         -> navController.navigate("blog/$repostId")
+                "kf_lesson"    -> navController.navigate(Screen.Kurdi.route)
+                "grammar"      -> navController.navigate(Screen.Kurdi.route)
                 else           -> navController.navigate(Screen.PostDetail.go(repostId))
             }
         },

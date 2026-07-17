@@ -74,6 +74,7 @@ fun KurdiScreen(
     adminVm  : AdminViewModel,
     adsVm    : AdsViewModel = hiltViewModel(),
     navController : NavController? = null,
+    feedVm   : FeedViewModel = hiltViewModel(),
 ) {
     val units       by vm.units.collectAsState()
     val lessons     by vm.lessons.collectAsState()
@@ -181,6 +182,9 @@ fun KurdiScreen(
         vm.clearToast()
     }
 
+    // Tamamlanan son dersi tutar — Çift XP sheet'inde "Feed'de Paylaş" butonu için
+    var lastCompletedLesson by remember { mutableStateOf<KfLesson?>(null) }
+
     // Aktif ders varsa ders ekranını göster
     // -- Senaryo 1 — Çift XP BottomSheet (ders tamamlandıktan sonra) ----------
     var showDoubleXpSheet by remember { mutableStateOf(false) }
@@ -232,6 +236,27 @@ fun KurdiScreen(
                         containerColor = com.heftreng.app.ui.theme.Amber, contentColor = Color.Black,
                     ),
                 ) { Text(if (language == "ku") "⚡ 2x XP Bistîne" else "⚡ 2x XP Kazan", fontWeight = FontWeight.Bold) }
+                // Dersi feed'de paylaş — tamamlanan son ders bilgisi vm.lastCompletedLesson'da
+                lastCompletedLesson?.let { lc ->
+                    OutlinedButton(
+                        onClick = {
+                            feedVm.repostKfLesson(
+                                lessonId    = lc.id,
+                                lessonTitle = if (language == "ku") lc.nameKu.ifBlank { lc.nameTr } else lc.nameTr,
+                                lessonTip   = lc.tip,
+                                emoji       = lc.emoji,
+                            )
+                            vm.showToast(if (language == "ku") "Li Feed'ê hate parvekirin!" else "Feed'de paylaşıldı!")
+                            showDoubleXpSheet = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape    = RoundedCornerShape(12.dp),
+                    ) {
+                        Icon(Icons.Default.Share, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (language == "ku") "Li Feed'ê Parve Bike" else "Feed'de Paylaş")
+                    }
+                }
                 TextButton(onClick = { showDoubleXpSheet = false }) {
                     Text(if (language == "ku") "Na spas" else "Hayır teşekkürler", color = com.heftreng.app.ui.theme.Muted)
                 }
@@ -244,7 +269,11 @@ fun KurdiScreen(
         LessonScreen(
             activeLesson = activeLesson!!,
             language     = language,
-            onComplete   = { earned -> vm.completeLesson(activeLesson!!.lesson.id, earned); vm.closeLesson() },
+            onComplete   = { earned ->
+                lastCompletedLesson = activeLesson!!.lesson
+                vm.completeLesson(activeLesson!!.lesson.id, earned)
+                vm.closeLesson()
+            },
             onClose      = { vm.closeLesson() },
         )
         return
@@ -2642,6 +2671,7 @@ private fun GrammarRuleCard(
     index: Int,
     onDelete: () -> Unit,
     onEdit: ((GrammarRule) -> Unit)? = null,
+    feedVm: FeedViewModel = hiltViewModel(),
 ) {
     var showDetail  by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf(false) }
@@ -2766,6 +2796,16 @@ private fun GrammarRuleCard(
                                 }
                             },
                             actions = {
+                                // Feed'de paylaş
+                                IconButton(onClick = {
+                                    feedVm.repostGrammarRule(
+                                        ruleId      = rule.id,
+                                        ruleTitle   = displayTitle,
+                                        rulePreview = displayContent,
+                                    )
+                                }) {
+                                    Icon(Icons.Default.Share, contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
+                                }
                                 // Sol renkli numara rozeti
                                 Surface(
                                     shape = RoundedCornerShape(20.dp),

@@ -923,6 +923,8 @@ fun FeedScreen(
                                     }
                                 }
                                 "blog"         -> navController.navigate("blog/$repostId")
+                                "kf_lesson"    -> navController.navigate(Screen.Kurdi.route)
+                                "grammar"      -> navController.navigate(Screen.Kurdi.route)
                                 else           -> navController.navigate(Screen.PostDetail.go(repostId))
                             }
                         },
@@ -1790,7 +1792,7 @@ fun PostCard(
                         if (post.repostType.isNotBlank() && post.repostType != "feed") {
                 Surface(shape = RoundedCornerShape(6.dp), color = Primary.copy(alpha = 0.12f),
                     modifier = Modifier.padding(bottom = 6.dp)) {
-                    Text(when(post.repostType){"serial"->"📖 Kitap";"chapter"->"📄 Bölüm";"book_chapter"->"📄 Kitap Bölümü";"blog"->"📝 Blog";else->post.repostType},
+                    Text(when(post.repostType){"serial"->"📖 Kitap";"chapter"->"📄 Bölüm";"book_chapter"->"📄 Kitap Bölümü";"blog"->"📝 Blog";"kf_lesson"->"🇰🇺 Kurdî Ders";"grammar"->"📚 Rêziman";else->post.repostType},
                         color = Primary, fontSize = 11.sp,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                 }
@@ -1818,6 +1820,8 @@ fun PostCard(
                                     "serial"       -> Icons.Outlined.MenuBook
                                     "book_chapter" -> Icons.Outlined.MenuBook
                                     "blog"         -> Icons.Outlined.Article
+                                    "kf_lesson"    -> Icons.Outlined.School
+                                    "grammar"      -> Icons.Outlined.MenuBook
                                     else           -> Icons.Default.Repeat
                                 },
                                 contentDescription = null, tint = Primary, modifier = Modifier.size(11.dp),
@@ -1828,6 +1832,8 @@ fun PostCard(
                                     "book_chapter" -> if (ku) "Beşa Pirtûkê" else "Kitap Bölümü"
                                     "blog"         -> if (ku) "Gotara Blogê" else "Blog Yazısı"
                                     "feed"         -> if (ku) "Dîsa Parvekirî" else "Paylaşım"
+                                    "kf_lesson"    -> if (ku) "Dersa Kurdî" else "Kurdî Dersi"
+                                    "grammar"      -> if (ku) "Rêziman" else "Dilbilgisi"
                                     else           -> if (ku) "Parvekirî" else "Paylaşım"
                                 },
                                 color = Primary, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp,

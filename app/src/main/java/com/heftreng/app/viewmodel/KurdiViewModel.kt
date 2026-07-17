@@ -606,6 +606,7 @@ class KurdiViewModel @Inject constructor(
     }
 
     fun clearToast() { _toast.value = null }
+    fun showToast(message: String) { _toast.value = message }
 
     /** Reklam (rewarded) o an yüklü değilken kullanıcıya bilgi vermek için. */
     fun showAdNotReadyToast(language: String) {

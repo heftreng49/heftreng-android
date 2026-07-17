@@ -1722,6 +1722,78 @@ class FeedViewModel @Inject constructor(
         }
     }
 
+    // Kurdî dersini feed'de paylaş — repostBookChapter ile aynı desen (repostType: "kf_lesson")
+    fun repostKfLesson(
+        lessonId    : String,
+        lessonTitle : String,   // nameTr veya nameKu (aktif dile göre çağıran taraf seçer)
+        lessonTip   : String = "",
+        unitTitle   : String = "",
+        emoji       : String = "📖",
+    ) {
+        if (uid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val d       = cachedUserDoc(uid) ?: emptyMap()
+                val myName  = d["displayName"] as? String ?: d["name"] as? String
+                    ?: auth.currentUser?.displayName ?: ""
+                val myPhoto = d["photoURL"] as? String
+                    ?: auth.currentUser?.photoUrl?.toString() ?: ""
+                firestore.collection("feed").add(mapOf(
+                    "uid"          to uid,
+                    "name"         to myName,
+                    "displayName"  to myName,
+                    "username"     to (d["username"] as? String ?: ""),
+                    "photoURL"     to myPhoto,
+                    "text"         to "",
+                    "imageURL"     to "",
+                    "imgUrl"       to "",
+                    "repostType"   to "kf_lesson",
+                    "repostId"     to lessonId,
+                    "repostTitle"  to "$emoji $lessonTitle",
+                    "repostText"   to lessonTip,
+                    "serialTitle"  to unitTitle,
+                    "likes"  to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
+                    "ts"     to Timestamp.now(),
+                )).await()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // Kurdî gramer kuralını feed'de paylaş — aynı desen (repostType: "grammar")
+    fun repostGrammarRule(
+        ruleId      : String,
+        ruleTitle   : String,   // title veya titleTr (aktif dile göre çağıran taraf seçer)
+        rulePreview : String = "",
+    ) {
+        if (uid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val d       = cachedUserDoc(uid) ?: emptyMap()
+                val myName  = d["displayName"] as? String ?: d["name"] as? String
+                    ?: auth.currentUser?.displayName ?: ""
+                val myPhoto = d["photoURL"] as? String
+                    ?: auth.currentUser?.photoUrl?.toString() ?: ""
+                val preview = rulePreview.replace(Regex("<[^>]+>"), "").trim().take(200)
+                firestore.collection("feed").add(mapOf(
+                    "uid"          to uid,
+                    "name"         to myName,
+                    "displayName"  to myName,
+                    "username"     to (d["username"] as? String ?: ""),
+                    "photoURL"     to myPhoto,
+                    "text"         to "",
+                    "imageURL"     to "",
+                    "imgUrl"       to "",
+                    "repostType"   to "grammar",
+                    "repostId"     to ruleId,
+                    "repostTitle"  to "📚 $ruleTitle",
+                    "repostText"   to preview,
+                    "likes"  to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
+                    "ts"     to Timestamp.now(),
+                )).await()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
     // Kendi profilimizi cache'le — sendNotif her çağrıda Firestore okumaz
     private var _cachedMyName  : String = ""
     private var _cachedMyPhoto : String = ""
