@@ -144,6 +144,9 @@ fun HeftrangNavHost(initialRoute: String? = null) {
 
     val currentUser by authVm.currentUser.collectAsState()
     val isDark         by settingsVm.darkMode.collectAsState()
+    val themeMode      by settingsVm.themeMode.collectAsState()
+    val themeVariant   by settingsVm.themeVariant.collectAsState()
+    val textColorOverride by settingsVm.textColorOverride.collectAsState()
     val savedAccounts  by authVm.savedAccounts.collectAsState()
     val switchToGoogle by authVm.switchToGoogle.collectAsState()
     val verificationPending by authVm.verificationPending.collectAsState()
@@ -355,9 +358,12 @@ fun HeftrangNavHost(initialRoute: String? = null) {
         drawerState   = drawerState,
         drawerContent = {
             DrawerContent(
-                currentUser  = currentUser,
-                language     = language,
-                isAdmin      = isAdmin,
+                currentUser       = currentUser,
+                language          = language,
+                themeMode         = themeMode,
+                themeVariant      = themeVariant,
+                textColorOverride = textColorOverride,
+                isAdmin           = isAdmin,
                 staffPerms   = staffPerms,
                 totalUnread  = totalUnread,
                 unreadNotif  = unreadNotif,
@@ -871,9 +877,12 @@ fun HeftrangNavHost(initialRoute: String? = null) {
 // ── Sol Drawer ────────────────────────────────────────────────────────────────
 @Composable
 fun DrawerContent(
-    currentUser : com.google.firebase.auth.FirebaseUser?,
-    language    : String,
-    isAdmin     : Boolean,
+    currentUser       : com.google.firebase.auth.FirebaseUser?,
+    language          : String,
+    themeMode         : String,
+    themeVariant      : HeftrangThemeVariant,
+    textColorOverride : androidx.compose.ui.graphics.Color?,
+    isAdmin           : Boolean,
     staffPerms  : StaffPermissions = StaffPermissions(),
     totalUnread : Int,
     unreadNotif : Int,
@@ -991,6 +1000,73 @@ fun DrawerContent(
                 )
             }
 
+            HorizontalDivider(color = Divider)
+            Spacer(Modifier.height(8.dp))
+
+            // ── Görünüm (Mod + Tema + Yazı Rengi) ─────────────────────
+            val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+            val isDarkNow  = when (themeMode) {
+                "dark"  -> true
+                "light" -> false
+                else    -> systemDark
+            }
+
+            // Koyu / Açık / Sistem çipleri
+            Row(
+                modifier              = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    when (themeMode) {
+                        "dark"  -> Icons.Filled.DarkMode
+                        "light" -> Icons.Outlined.LightMode
+                        else    -> Icons.Filled.BrightnessAuto
+                    },
+                    null, tint = Amber, modifier = Modifier.size(18.dp),
+                )
+                listOf(
+                    "light"  to (if (language == "ku") "Ronî"   else "Açık"),
+                    "dark"   to (if (language == "ku") "Tarî"   else "Koyu"),
+                    "system" to (if (language == "ku") "Sîstem" else "Sistem"),
+                ).forEach { (mode, label) ->
+                    val selected = themeMode == mode
+                    androidx.compose.material3.FilterChip(
+                        selected = selected,
+                        onClick  = { settingsVm.setThemeMode(mode) },
+                        label    = { Text(label, fontSize = 11.sp) },
+                        modifier = Modifier.weight(1f),
+                        colors   = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                            containerColor        = SurfaceVar,
+                            labelColor            = Muted,
+                            selectedContainerColor = Amber.copy(alpha = 0.16f),
+                            selectedLabelColor    = Amber,
+                        ),
+                        border = androidx.compose.material3.FilterChipDefaults.filterChipBorder(
+                            enabled = true, selected = selected,
+                            borderColor         = Divider,
+                            selectedBorderColor = Amber,
+                            borderWidth         = 1.dp,
+                            selectedBorderWidth = 1.dp,
+                        ),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Tema dropdown — kompakt
+            com.heftreng.app.ui.component.ThemeSelector(
+                selectedVariant   = themeVariant,
+                isDarkMode        = isDarkNow,
+                language          = language,
+                onVariantChange   = { settingsVm.setThemeVariant(it) },
+                onDarkModeChange  = {},
+                textColorOverride = textColorOverride,
+                onTextColorChange = { settingsVm.setTextColorOverride(it) },
+            )
+
+            Spacer(Modifier.height(8.dp))
             HorizontalDivider(color = Divider)
             Spacer(Modifier.height(8.dp))
 
