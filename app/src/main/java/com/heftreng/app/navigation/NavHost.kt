@@ -933,47 +933,110 @@ fun DrawerContent(
             HorizontalDivider(color = Divider)
             Spacer(Modifier.height(8.dp))
 
-            // ── Navigasyon ─────────────────────────────────────────────
+            // ── Navigasyon grid (3 sütun) ──────────────────────────────
             val notifLabel = Strings.navNotifs(language) + if (unreadNotif > 0) " ($unreadNotif)" else ""
             val msgLabel   = Strings.navMessages(language) + if (totalUnread > 0) " ($totalUnread)" else ""
-            val items = listOfNotNull(
-                Triple(Icons.Outlined.DynamicFeed,       Strings.navFeed(language),     Screen.Feed.route),
-                if (appConfig.searchEnabled)        Triple(Icons.Outlined.Search,            Strings.navSearch(language),   Screen.Search.route)        else null,
-                if (appConfig.serialsEnabled)       Triple(Icons.Outlined.AutoStories,       Strings.navBooks(language),    Screen.Serials.route)       else null,
-                if (appConfig.kurdiEnabled)         Triple(Icons.Outlined.Translate,         Strings.navKurdi(language),    Screen.Kurdi.base())         else null,
-                if (appConfig.notificationsEnabled) Triple(Icons.Outlined.NotificationsNone, notifLabel,                    Screen.Notifications.route) else null,
-                if (appConfig.messagesEnabled)      Triple(Icons.Outlined.ChatBubbleOutline, msgLabel,                      Screen.Messages.route)      else null,
-                Triple(Icons.Outlined.Settings,          Strings.navSettings(language), Screen.Settings.route),
-                Triple(Icons.Outlined.Bookmarks,         Strings.savedPosts(language),  Screen.SavedPosts.route),
+            val navItems = listOfNotNull(
+                Triple(Icons.Outlined.DynamicFeed,       Strings.navFeed(language),    Screen.Feed.route),
+                if (appConfig.searchEnabled)        Triple(Icons.Outlined.Search,            Strings.navSearch(language),  Screen.Search.route)        else null,
+                if (appConfig.serialsEnabled)       Triple(Icons.Outlined.AutoStories,       Strings.navBooks(language),   Screen.Serials.route)       else null,
+                if (appConfig.kurdiEnabled)         Triple(Icons.Outlined.Translate,         Strings.navKurdi(language),   Screen.Kurdi.base())         else null,
+                if (appConfig.notificationsEnabled) Triple(Icons.Outlined.NotificationsNone, notifLabel,                   Screen.Notifications.route) else null,
+                if (appConfig.messagesEnabled)      Triple(Icons.Outlined.ChatBubbleOutline, msgLabel,                     Screen.Messages.route)      else null,
+                Triple(Icons.Outlined.Settings,     Strings.navSettings(language),           Screen.Settings.route),
+                Triple(Icons.Outlined.Bookmarks,    Strings.savedPosts(language),             Screen.SavedPosts.route),
+                if (isAdmin || staffPerms.isStaff()) Triple(Icons.Default.Dashboard, if (language == "ku") "CMS" else "CMS", Screen.Cms.route) else null,
             )
 
-            items.forEach { (icon, label, route) ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable { onNavigate(route) }
-                        .padding(horizontal = 10.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(icon, null, tint = Muted, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text(label, color = OnBackground, fontSize = 14.sp)
-                }
-            }
-
-            if (isAdmin || staffPerms.isStaff()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable { onNavigate(Screen.Cms.route) }
-                        .padding(horizontal = 10.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Default.Dashboard, null, tint = Amber, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text(if (language == "ku") "CMS Birêvebirî" else "CMS Yönetimi", color = Amber, fontSize = 14.sp)
+            // 3'lü grid — satırlar ve sütunlar keskin çizgiyle ayrılır
+            Surface(
+                shape    = RoundedCornerShape(12.dp),
+                color    = SurfaceVar,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                val rows = navItems.chunked(3)
+                Column {
+                    rows.forEachIndexed { rowIdx, rowItems ->
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            // Eksik hücreleri boş kutuyla doldur
+                            val cells = rowItems + List(3 - rowItems.size) { null }
+                            cells.forEachIndexed { colIdx, item ->
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .then(
+                                            if (item != null)
+                                                Modifier.clickable { onNavigate(item.third) }
+                                            else Modifier
+                                        )
+                                        .padding(vertical = 14.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (item != null) {
+                                        val (icon, label, route) = item
+                                        val isCms   = route == Screen.Cms.route
+                                        val iconTint = if (isCms) Amber else OnBackground
+                                        val badge = when (route) {
+                                            Screen.Notifications.route -> unreadNotif
+                                            Screen.Messages.route      -> totalUnread
+                                            else -> 0
+                                        }
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            Box {
+                                                Icon(
+                                                    icon,
+                                                    contentDescription = null,
+                                                    tint     = iconTint,
+                                                    modifier = Modifier.size(22.dp),
+                                                )
+                                                if (badge > 0) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .align(Alignment.TopEnd)
+                                                            .offset(x = 5.dp, y = (-3).dp)
+                                                            .background(Error, RoundedCornerShape(50))
+                                                            .padding(horizontal = 4.dp, vertical = 1.dp),
+                                                    ) {
+                                                        Text(
+                                                            if (badge > 9) "9+" else badge.toString(),
+                                                            color      = Color.White,
+                                                            fontSize   = 8.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Text(
+                                                label.substringBefore(" ("),
+                                                color      = iconTint,
+                                                fontSize   = 10.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                maxLines   = 1,
+                                                overflow   = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                }
+                                // Dikey ayraç (son sütun hariç)
+                                if (colIdx < 2) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(0.5.dp)
+                                            .height(60.dp)
+                                            .align(Alignment.CenterVertically)
+                                            .background(Divider)
+                                    )
+                                }
+                            }
+                        }
+                        // Yatay ayraç (son satır hariç)
+                        if (rowIdx < rows.size - 1) {
+                            HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                        }
+                    }
                 }
             }
 
