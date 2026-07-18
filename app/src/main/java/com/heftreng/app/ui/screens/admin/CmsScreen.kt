@@ -551,10 +551,11 @@ private fun AnnouncementEditor(
     onSave  : (CmsAnnouncement) -> Unit,
     onCancel: () -> Unit,
 ) {
-    var title  by remember { mutableStateOf(initial.title) }
-    var body   by remember { mutableStateOf(initial.body) }
-    var type   by remember { mutableStateOf(initial.type) }
-    var active by remember { mutableStateOf(initial.active) }
+    var title   by remember { mutableStateOf(initial.title) }
+    var body    by remember { mutableStateOf(initial.body) }
+    var type    by remember { mutableStateOf(initial.type) }
+    var active  by remember { mutableStateOf(initial.active) }
+    var linkUrl by remember { mutableStateOf(initial.linkUrl) }
 
     LazyColumn(
         modifier       = Modifier.fillMaxSize(),
@@ -570,6 +571,8 @@ private fun AnnouncementEditor(
             cmsField(title, { title = it }, "Başlık *")
             Spacer(Modifier.height(6.dp))
             cmsField(body, { body = it }, "İçerik", minLines = 4)
+            Spacer(Modifier.height(6.dp))
+            cmsField(linkUrl, { linkUrl = it }, "Bağlantı URL'si (opsiyonel)")
             Spacer(Modifier.height(6.dp))
             Text("Tür", color = Muted, fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))
@@ -601,7 +604,7 @@ private fun AnnouncementEditor(
                 }
                 Button(
                     onClick = {
-                        onSave(initial.copy(title = title.trim(), body = body.trim(), type = type, active = active))
+                        onSave(initial.copy(title = title.trim(), body = body.trim(), type = type, active = active, linkUrl = linkUrl.trim()))
                     },
                     enabled  = title.isNotBlank(),
                     modifier = Modifier.weight(1f),

@@ -247,10 +247,11 @@ class CmsViewModel @Inject constructor(
                     val d = doc.data ?: return@mapNotNull null
                     CmsAnnouncement(
                         id     = doc.id,
-                        title  = d["title"]  as? String  ?: "",
-                        body   = d["body"]   as? String  ?: "",
-                        type   = d["type"]   as? String  ?: "info",
-                        active = d["active"] as? Boolean ?: true,
+                        title   = d["title"]   as? String  ?: "",
+                        body    = d["body"]    as? String  ?: "",
+                        type    = d["type"]    as? String  ?: "info",
+                        active  = d["active"]  as? Boolean ?: true,
+                        linkUrl = d["linkUrl"] as? String  ?: "",
                     )
                 }
             } catch (e: Exception) { e.printStackTrace() }
@@ -263,11 +264,12 @@ class CmsViewModel @Inject constructor(
             try {
                 _result.value = "Kaydediliyor…"
                 val data = hashMapOf(
-                    "title"  to ann.title,
-                    "body"   to ann.body,
-                    "type"   to ann.type,
-                    "active" to ann.active,
-                    "ts"     to FieldValue.serverTimestamp(),
+                    "title"   to ann.title,
+                    "body"    to ann.body,
+                    "type"    to ann.type,
+                    "active"  to ann.active,
+                    "linkUrl" to ann.linkUrl,
+                    "ts"      to FieldValue.serverTimestamp(),
                 )
                 if (ann.id.isBlank()) {
                     val ref = firestore.collection("cms_announcements").add(data).await()
@@ -387,10 +389,11 @@ class CmsViewModel @Inject constructor(
                     val d = doc.data ?: return@let null
                     CmsAnnouncement(
                         id     = doc.id,
-                        title  = d["title"]  as? String  ?: "",
-                        body   = d["body"]   as? String  ?: "",
-                        type   = d["type"]   as? String  ?: "info",
-                        active = d["active"] as? Boolean ?: true,
+                        title   = d["title"]   as? String  ?: "",
+                        body    = d["body"]    as? String  ?: "",
+                        type    = d["type"]    as? String  ?: "info",
+                        active  = d["active"]  as? Boolean ?: true,
+                        linkUrl = d["linkUrl"] as? String  ?: "",
                     )
                 }
             } catch (e: Exception) {

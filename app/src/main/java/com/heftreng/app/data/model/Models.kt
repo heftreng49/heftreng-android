@@ -388,12 +388,13 @@ data class CmsBanner(
 )
 
 data class CmsAnnouncement(
-    val id     : String     = "",
-    val title  : String     = "",
-    val body   : String     = "",
-    val type   : String     = "info",
-    val active : Boolean    = true,
-    val ts     : Timestamp? = null
+    val id      : String     = "",
+    val title   : String     = "",
+    val body    : String     = "",
+    val type    : String     = "info",
+    val active  : Boolean    = true,
+    val linkUrl : String     = "",
+    val ts      : Timestamp? = null
 )
 
 data class CmsCategory(

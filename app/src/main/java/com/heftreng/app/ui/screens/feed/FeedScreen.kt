@@ -2878,6 +2878,7 @@ private fun FeedAnnouncementBanner(
     announcement: com.heftreng.app.data.model.CmsAnnouncement,
     onDismiss   : () -> Unit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val bgColor = when (announcement.type) {
         "warning" -> Color(0xFFFEF3C7) // sarı
         "success" -> Color(0xFFDCFCE7) // yeşil
@@ -2902,7 +2903,18 @@ private fun FeedAnnouncementBanner(
             color    = bgColor,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .then(
+                    if (announcement.linkUrl.isNotBlank())
+                        Modifier.clickable {
+                            val intent = android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse(announcement.linkUrl)
+                            ).apply { flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK }
+                            context.startActivity(intent)
+                        }
+                    else Modifier
+                ),
         ) {
             Row(
                 modifier          = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
