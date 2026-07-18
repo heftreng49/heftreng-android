@@ -223,10 +223,12 @@ fun HeftrangNavHost(
     val appConfig   by appConfigVm.config.collectAsState()
     val configLoaded by appConfigVm.loaded.collectAsState()
     // Dile göre alt bar etiketleri
-    val bottomNavItems = listOf(
+    val bottomNavItems = listOfNotNull(
         BottomNavItem(Screen.Feed.route,    Strings.navFeed(language),    Icons.Outlined.DynamicFeed,  Icons.Filled.DynamicFeed),
-        BottomNavItem(Screen.Library.route, Strings.navLibrary(language), Icons.Outlined.MenuBook,     Icons.Filled.MenuBook),
-        BottomNavItem(Screen.Kurdi.base(),  Strings.navKurdi(language),   Icons.Outlined.Translate,     Icons.Filled.Translate),
+        if (appConfig.booksEnabled || appConfig.serialsEnabled)
+            BottomNavItem(Screen.Library.route, Strings.navLibrary(language), Icons.Outlined.MenuBook, Icons.Filled.MenuBook) else null,
+        if (appConfig.kurdiEnabled)
+            BottomNavItem(Screen.Kurdi.base(),  Strings.navKurdi(language),   Icons.Outlined.Translate, Icons.Filled.Translate) else null,
         BottomNavItem("profile/me",         Strings.navProfile(language), Icons.Outlined.PersonOutline, Icons.Filled.Person),
     )
     val unreadNotif by notifVm.unreadCount.collectAsState()
@@ -675,7 +677,13 @@ fun HeftrangNavHost(
                     exitTransition  = { fadeOut(tween(140)) },
                     popEnterTransition  = { fadeIn(tween(180)) },
                     popExitTransition   = { fadeOut(tween(140)) },
-                ) { BooksScreen(navController, language) }
+                ) {
+                    if (appConfig.booksEnabled || appConfig.serialsEnabled) {
+                        BooksScreen(navController, language)
+                    } else {
+                        LaunchedEffect(Unit) { navController.popBackStack() }
+                    }
+                }
                 composable(
                     Screen.Library.route,
                     enterTransition = { fadeIn(tween(180)) },
@@ -958,7 +966,7 @@ fun DrawerContent(
             val navItems = listOfNotNull(
                 Triple(Icons.Outlined.DynamicFeed,       Strings.navFeed(language),    Screen.Feed.route),
                 if (appConfig.searchEnabled)        Triple(Icons.Outlined.Search,            Strings.navSearch(language),  Screen.Search.route)        else null,
-                if (appConfig.serialsEnabled)       Triple(Icons.Outlined.AutoStories,       Strings.navBooks(language),   Screen.Serials.route)       else null,
+                if (appConfig.booksEnabled || appConfig.serialsEnabled) Triple(Icons.Outlined.AutoStories, Strings.navBooks(language), Screen.Serials.route) else null,
                 if (appConfig.kurdiEnabled)         Triple(Icons.Outlined.Translate,         Strings.navKurdi(language),   Screen.Kurdi.base())         else null,
                 if (appConfig.notificationsEnabled) Triple(Icons.Outlined.NotificationsNone, notifLabel,                   Screen.Notifications.route) else null,
                 if (appConfig.messagesEnabled)      Triple(Icons.Outlined.ChatBubbleOutline, msgLabel,                     Screen.Messages.route)      else null,
