@@ -294,7 +294,7 @@ val GradientEnd   = Color(0xFF38BDF8)
 //  CompositionLocal & Yardımcı Fonksiyonlar
 // ─────────────────────────────────────────────────────────────────────────────
 
-val LocalHeftrangColors = staticCompositionLocalOf { charcoalDark }
+val LocalHeftrangColors = compositionLocalOf { charcoalDark }
 
 fun getColors(variant: HeftrangThemeVariant, isDark: Boolean): HeftrangColors =
     when (variant) {
