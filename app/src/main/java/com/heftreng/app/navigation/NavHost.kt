@@ -367,6 +367,7 @@ fun HeftrangNavHost(
 
     LaunchedEffect(Unit) { adminVm.checkAdmin() }
 
+    HeftrangTheme(darkMode = isDarkNow, variant = themeVariant, textColorOverride = textColorOverride) {
     ModalNavigationDrawer(
         drawerState   = drawerState,
         drawerContent = {
@@ -893,6 +894,7 @@ fun HeftrangNavHost(
             }
         }
     }
+    } // HeftrangTheme
 }
 
 // ── Sol Drawer ────────────────────────────────────────────────────────────────
