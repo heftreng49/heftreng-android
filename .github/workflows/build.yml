@@ -55,7 +55,6 @@ jobs:
         with:
           path: |
             ~/.gradle/caches/build-cache-*
-            .gradle/configuration-cache
           key: gradle-build-${{ runner.os }}-${{ hashFiles('**/*.kt', '**/*.gradle*', '**/libs.versions.toml') }}
           restore-keys: |
             gradle-build-${{ runner.os }}-
