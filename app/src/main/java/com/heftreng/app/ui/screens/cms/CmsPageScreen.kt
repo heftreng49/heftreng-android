@@ -207,7 +207,7 @@ private fun MarkdownContent(
             TextView(ctx).apply {
                 setTextColor(textColorInt)
                 textSize        = 15f
-                lineSpacingMultiplier = 1.5f
+                setLineSpacing(0f, 1.5f)
                 movementMethod  = LinkMovementMethod.getInstance()
                 setPadding(0, 0, 0, 0)
             }
