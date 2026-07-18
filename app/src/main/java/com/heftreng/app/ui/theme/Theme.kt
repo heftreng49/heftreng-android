@@ -5,6 +5,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 
 // ── Semantik renkler ──────────────────────────────────────────────────────────
 val Amber   = Color(0xFFF59E0B)
@@ -387,6 +389,8 @@ fun HeftrangTheme(
     CompositionLocalProvider(LocalHeftrangColors provides colors) {
         MaterialTheme(
             colorScheme = colorScheme,
+            typography  = getTypography(variant),
+            shapes      = getShapes(variant),
             content     = content,
         )
     }
