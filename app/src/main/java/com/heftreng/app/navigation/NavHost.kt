@@ -7,6 +7,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
@@ -915,7 +917,10 @@ fun DrawerContent(
 
     ModalDrawerSheet(drawerContainerColor = HeftSurface) {
         Column(
-            modifier = Modifier.fillMaxHeight().padding(horizontal = 16.dp, vertical = 20.dp)
+            modifier = Modifier
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 20.dp)
         ) {
             // ── Logo ───────────────────────────────────────────────────
             Text("Heftreng", fontWeight = FontWeight.ExtraBold, color = Primary, fontSize = 22.sp)
@@ -1098,7 +1103,7 @@ fun DrawerContent(
                 }
             }
 
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(24.dp))
 
             // ── Uygulamayı Arkadaşlarına Öner ─────────────────────────
             val drawerContext = LocalContext.current
