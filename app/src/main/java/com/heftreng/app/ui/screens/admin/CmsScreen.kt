@@ -180,7 +180,7 @@ fun CmsScreen(
                 1 -> BannersTab(banners, vm)
                 2 -> AnnouncementsTab(announcements, vm)
                 3 -> CategoriesTab(categories, vm)
-                4 -> FeaturesTab(appConfig, vm, configVm)
+                4 -> FeaturesTab(appConfig, configVm)
             }
         }
     }
@@ -751,7 +751,7 @@ private fun CategoryEditor(
 
 // ── 6. Özellikler ─────────────────────────────────────────────────────────────
 @Composable
-private fun FeaturesTab(config: AppConfig, vm: AppConfigViewModel, configVm: AppConfigViewModel) {
+private fun FeaturesTab(config: AppConfig, vm: AppConfigViewModel) {
     var current  by remember(config) { mutableStateOf(config) }
     var saveResult by remember { mutableStateOf("") }
     var saving   by remember { mutableStateOf(false) }
@@ -859,7 +859,7 @@ private fun FeaturesTab(config: AppConfig, vm: AppConfigViewModel, configVm: App
                     vm.save(current) { success ->
                         saving     = false
                         saveResult = if (success) "✓ Kaydedildi" else "✗ Hata oluştu"
-                        if (success) configVm.load(forceServer = true)
+                        if (success) vm.load(forceServer = true)
                     }
                 },
                 enabled  = !saving,
