@@ -2955,10 +2955,12 @@ private fun FeedAnnouncementBanner(
                     if (announcement.linkUrl.isNotBlank()) {
                         Spacer(Modifier.height(4.dp))
                         androidx.compose.material3.Text(
-                            text       = "Devamını oku →",
+                            text       = announcement.linkUrl,
                             color      = accentColor,
                             fontSize   = 11.sp,
                             fontWeight = FontWeight.SemiBold,
+                            maxLines   = 1,
+                            overflow   = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         )
                     }
                 }
