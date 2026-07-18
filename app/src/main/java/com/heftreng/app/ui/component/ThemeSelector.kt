@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 
 // ─────────────────────────────────────────────────────────────────────────────
