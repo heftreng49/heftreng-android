@@ -33,7 +33,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
       aab_path: app/build/outputs/bundle/release
     steps:
@@ -47,15 +47,29 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: false
+
+      # Gradle dependency cache — bağımlılıklar değişmediği sürece indirilmez
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
+          restore-keys: |
+            gradle-
 
       - name: Decode Keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.jks
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.jks
 
       - name: Write google-services.json
         run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
 
-      - name: Build Release APK
+      # clean kaldırıldı — Gradle incremental build çalışsın
+      # assembleRelease + bundleRelease tek seferde: compile 1 kez olur
+      - name: Build Release APK + AAB
         env:
           KEYSTORE_PATH: keystore.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -63,17 +77,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: ./gradlew clean assembleRelease
-
-      - name: Build Release AAB
-        env:
-          KEYSTORE_PATH: keystore.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: ./gradlew bundleRelease
+        run: ./gradlew assembleRelease bundleRelease --build-cache --parallel
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -94,13 +98,11 @@ jobs:
           path: app/build/outputs/native-debug-symbols/release/native-debug-symbols.zip
           if-no-files-found: ignore
 
-  # ── Play Store'a gönderme — SADECE elle "Run workflow" ile tetiklenip ──────
-  # "publish_to_play" kutusu işaretlenirse çalışır. Normal push'larda bu job
-  # hiç çalışmaz, yani hiçbir otomatik sürüm Play Store'a gitmez.
+  # ── Play Store'a gönderme — SADECE elle tetiklenirse çalışır ────────────────
   publish:
     needs: build
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_to_play == true }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Download AAB artifact
         uses: actions/download-artifact@v4
