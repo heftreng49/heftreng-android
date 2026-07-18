@@ -68,6 +68,7 @@ import com.heftreng.app.ui.screens.quotes.BookQuotesSmartScreen
 import com.heftreng.app.ui.screens.library.LibraryScreen
 import com.heftreng.app.ui.screens.settings.SettingsScreen
 import com.heftreng.app.ui.theme.*
+import com.heftreng.app.data.model.AppConfig
 import com.heftreng.app.viewmodel.AppConfigViewModel
 import com.heftreng.app.viewmodel.AuthViewModel
 import com.heftreng.app.viewmodel.MessagesViewModel
@@ -131,11 +132,7 @@ private val bottomNavRoutes = setOf(
 // ── NavHost ───────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun HeftrangNavHost(
-    initialRoute     : String? = null,
-    updateDownloaded : Boolean = false,
-    onCompleteUpdate : () -> Unit = {},
-) {
+fun HeftrangNavHost(initialRoute: String? = null) {
     val navController  = rememberNavController()
     val authVm         : AuthViewModel          = hiltViewModel()
     val settingsVm     : SettingsViewModel      = hiltViewModel()
@@ -368,11 +365,10 @@ fun HeftrangNavHost(
                 themeVariant      = themeVariant,
                 textColorOverride = textColorOverride,
                 isAdmin           = isAdmin,
-                staffPerms       = staffPerms,
-                totalUnread      = totalUnread,
-                unreadNotif      = unreadNotif,
-                updateDownloaded = updateDownloaded,
-                onCompleteUpdate = onCompleteUpdate,
+                staffPerms   = staffPerms,
+                totalUnread  = totalUnread,
+                unreadNotif  = unreadNotif,
+                appConfig    = appConfig,
                 onNavigate   = { route ->
                     scope.launch { drawerState.close() }
                     navController.navigate(route) {
@@ -650,7 +646,7 @@ fun HeftrangNavHost(
                     popEnterTransition  = { fadeIn(tween(180)) },
                     popExitTransition   = { fadeOut(tween(140)) },
                 ) {
-                    FeedScreen(navController = navController, adsVm = adsVm, language = language)
+                    FeedScreen(navController = navController, adsVm = adsVm, language = language, appConfig = appConfig)
                 }
                 composable(
                     Screen.Search.route,
@@ -751,6 +747,11 @@ fun HeftrangNavHost(
                 // korunmuyordu, erişim tamamen CmsScreen'in kendi (eski,
                 // sabit e-postaya bakan) iç kontrolüne bırakılmıştı.
                 composable(Screen.Cms.route) {
+                    // CmsScreen'den çıkınca appConfig'i server'dan yenile
+                    // böylece Özellikler sekmesindeki değişiklikler anında yansır
+                    DisposableEffect(Unit) {
+                        onDispose { appConfigVm.load(forceServer = true) }
+                    }
                     if (perms?.can("edit") == true) CmsScreen(navController)
                     else { LaunchedEffect(Unit) { navController.popBackStack() } }
                 }
@@ -889,13 +890,12 @@ fun DrawerContent(
     themeVariant      : HeftrangThemeVariant,
     textColorOverride : androidx.compose.ui.graphics.Color?,
     isAdmin           : Boolean,
-    staffPerms        : StaffPermissions = StaffPermissions(),
-    totalUnread       : Int,
-    unreadNotif       : Int,
-    updateDownloaded  : Boolean = false,
-    onNavigate        : (String) -> Unit,
-    onCompleteUpdate  : () -> Unit = {},
-    onSignOut         : () -> Unit,
+    staffPerms  : StaffPermissions = StaffPermissions(),
+    totalUnread : Int,
+    unreadNotif : Int,
+    appConfig   : AppConfig = AppConfig(),
+    onNavigate  : (String) -> Unit,
+    onSignOut   : () -> Unit,
 ) {
     val settingsVm: SettingsViewModel = hiltViewModel()
 
@@ -936,13 +936,13 @@ fun DrawerContent(
             // ── Navigasyon ─────────────────────────────────────────────
             val notifLabel = Strings.navNotifs(language) + if (unreadNotif > 0) " ($unreadNotif)" else ""
             val msgLabel   = Strings.navMessages(language) + if (totalUnread > 0) " ($totalUnread)" else ""
-            val items = listOf(
+            val items = listOfNotNull(
                 Triple(Icons.Outlined.DynamicFeed,       Strings.navFeed(language),     Screen.Feed.route),
-                Triple(Icons.Outlined.Search,            Strings.navSearch(language),   Screen.Search.route),
-                Triple(Icons.Outlined.AutoStories,       Strings.navBooks(language),    Screen.Serials.route),
-                Triple(Icons.Outlined.Translate,         Strings.navKurdi(language),    Screen.Kurdi.base()),
-                Triple(Icons.Outlined.NotificationsNone, notifLabel,                    Screen.Notifications.route),
-                Triple(Icons.Outlined.ChatBubbleOutline, msgLabel,                      Screen.Messages.route),
+                if (appConfig.searchEnabled)        Triple(Icons.Outlined.Search,            Strings.navSearch(language),   Screen.Search.route)        else null,
+                if (appConfig.serialsEnabled)       Triple(Icons.Outlined.AutoStories,       Strings.navBooks(language),    Screen.Serials.route)       else null,
+                if (appConfig.kurdiEnabled)         Triple(Icons.Outlined.Translate,         Strings.navKurdi(language),    Screen.Kurdi.base())         else null,
+                if (appConfig.notificationsEnabled) Triple(Icons.Outlined.NotificationsNone, notifLabel,                    Screen.Notifications.route) else null,
+                if (appConfig.messagesEnabled)      Triple(Icons.Outlined.ChatBubbleOutline, msgLabel,                      Screen.Messages.route)      else null,
                 Triple(Icons.Outlined.Settings,          Strings.navSettings(language), Screen.Settings.route),
                 Triple(Icons.Outlined.Bookmarks,         Strings.savedPosts(language),  Screen.SavedPosts.route),
             )
@@ -1104,46 +1104,6 @@ fun DrawerContent(
             }
 
             Spacer(Modifier.height(8.dp))
-
-            // ── Güncelleme bildirimi ───────────────────────────────────
-            if (updateDownloaded) {
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Primary.copy(alpha = 0.10f))
-                        .border(1.dp, Primary.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment        = Alignment.CenterVertically,
-                    horizontalArrangement    = Arrangement.spacedBy(10.dp),
-                ) {
-                    Icon(
-                        Icons.Default.SystemUpdate,
-                        contentDescription = null,
-                        tint     = Primary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Text(
-                        text     = if (language == "ku") "Nûvekirinek amade ye" else "Yeni güncelleme hazır",
-                        color    = Primary,
-                        fontSize = 13.sp,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(
-                        onClick        = onCompleteUpdate,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    ) {
-                        Text(
-                            text       = if (language == "ku") "Nûve bike" else "Güncelle",
-                            color      = Primary,
-                            fontSize   = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-            }
 
             // Çıkış
             TextButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {

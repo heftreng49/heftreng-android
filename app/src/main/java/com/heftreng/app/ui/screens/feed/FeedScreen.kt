@@ -1917,7 +1917,7 @@ fun PostCard(
                 }
             }
             // Repost embed kartı — tema buildRpEmbed() ile senkron
-            if (post.repostType.isNotBlank() && post.repostType != "kf_achievement") {
+            if (appConfig.feedShowReposts && post.repostType.isNotBlank() && post.repostType != "kf_achievement") {
                 Surface(
                     shape    = RoundedCornerShape(13.dp),
                     color    = SurfaceVar,
