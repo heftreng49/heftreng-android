@@ -151,7 +151,8 @@ fun HeftrangNavHost(
     val isDark         by settingsVm.darkMode.collectAsState()
     val themeMode      by settingsVm.themeMode.collectAsState()
     val themeVariant   by settingsVm.themeVariant.collectAsState()
-    val textColorOverride by settingsVm.textColorOverride.collectAsState()
+    val textColorDark     by settingsVm.textColorDark.collectAsState()
+    val textColorLight    by settingsVm.textColorLight.collectAsState()
     val savedAccounts  by authVm.savedAccounts.collectAsState()
     val switchToGoogle by authVm.switchToGoogle.collectAsState()
     val verificationPending by authVm.verificationPending.collectAsState()
@@ -229,6 +230,13 @@ fun HeftrangNavHost(
     )
     val unreadNotif by notifVm.unreadCount.collectAsState()
 
+    val systemDark        = androidx.compose.foundation.isSystemInDarkTheme()
+    val isDarkNow         = when (themeMode) {
+        "dark"  -> true
+        "light" -> false
+        else    -> systemDark
+    }
+    val textColorOverride = if (isDarkNow) textColorDark else textColorLight
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope       = rememberCoroutineScope()
 
@@ -1186,7 +1194,7 @@ fun DrawerContent(
                 onVariantChange   = { settingsVm.setThemeVariant(it) },
                 onDarkModeChange  = {},
                 textColorOverride = textColorOverride,
-                onTextColorChange = { settingsVm.setTextColorOverride(it) },
+                onTextColorChange = { settingsVm.setTextColorOverride(it, isDark = isDarkNow) },
             )
 
             Spacer(Modifier.height(8.dp))

@@ -50,22 +50,49 @@ class SettingsViewModel @Inject constructor(
     )
     val themeVariant = _themeVariant.asStateFlow()
 
-    // Yazı rengi override — null = tema varsayılanı
-    private val _textColorOverride = MutableStateFlow(loadTextColor())
-    val textColorOverride = _textColorOverride.asStateFlow()
+    // Yazı rengi override — mod başına ayrı saklanır (dark / light)
+    // Böylece koyu modda seçilen renk açık modda geçersiz kalmaz.
+    private val _textColorDark  = MutableStateFlow(loadTextColor(isDark = true))
+    private val _textColorLight = MutableStateFlow(loadTextColor(isDark = false))
 
-    fun setTextColorOverride(color: Color?) {
+    // Dışarıya tek bir flow sunuyoruz; mevcut themeMode + sistem durumuna göre
+    // hangisinin aktif olduğu UI katmanında (NavHost) hesaplanıp
+    // textColorForMode() ile çekiliyor.
+    val textColorDark  = _textColorDark.asStateFlow()
+    val textColorLight = _textColorLight.asStateFlow()
+
+    /** UI katmanı mevcut isDark değerini geçirir; doğru override döner. */
+    fun textColorForMode(isDark: Boolean): Color? =
+        if (isDark) _textColorDark.value else _textColorLight.value
+
+    fun setTextColorOverride(color: Color?, isDark: Boolean) {
+        val key = if (isDark) "hf_text_color_dark" else "hf_text_color_light"
         if (color == null) {
-            prefs.edit().remove("hf_text_color").apply()
+            prefs.edit().remove(key).apply()
         } else {
-            prefs.edit().putLong("hf_text_color", color.value.toLong()).apply()
+            prefs.edit().putLong(key, color.value.toLong()).apply()
         }
-        _textColorOverride.value = color
+        if (isDark) _textColorDark.value  = color
+        else        _textColorLight.value = color
     }
 
-    private fun loadTextColor(): Color? {
-        if (!prefs.contains("hf_text_color")) return null
-        return Color(prefs.getLong("hf_text_color", 0xFFF4F4FAL).toULong())
+    // Geriye dönük uyumluluk — tek parametreli çağrılar için (null sıfırlama)
+    fun setTextColorOverride(color: Color?) {
+        setTextColorOverride(color, isDark = true)
+        setTextColorOverride(color, isDark = false)
+    }
+
+    private fun loadTextColor(isDark: Boolean): Color? {
+        val key = if (isDark) "hf_text_color_dark" else "hf_text_color_light"
+        // Eski tek-key'den migrate et (varsa)
+        if (!prefs.contains(key) && prefs.contains("hf_text_color")) {
+            val legacy = Color(prefs.getLong("hf_text_color", 0xFFF4F4FAL).toULong())
+            // Eski renk koyu mod için saklanmıştı, açık moda geçirme
+            if (isDark) return legacy
+            return null
+        }
+        if (!prefs.contains(key)) return null
+        return Color(prefs.getLong(key, 0xFFF4F4FAL).toULong())
     }
 
     // Geriye dönük uyumluluk: eski "hf_theme_dark" boolean'ını okuyan
