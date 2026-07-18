@@ -244,13 +244,15 @@ class MainActivity : ComponentActivity() {
                     // uygulama da anında buna uyuyor.
                     val themeMode         by settingsVm.themeMode.collectAsState()
                     val themeVariant      by settingsVm.themeVariant.collectAsState()
-                    val textColorOverride by settingsVm.textColorOverride.collectAsState()
+                    val textColorDark  by settingsVm.textColorDark.collectAsState()
+                    val textColorLight by settingsVm.textColorLight.collectAsState()
                     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
                     val isDark = when (themeMode) {
                         "light" -> false
                         "dark"  -> true
                         else    -> systemDark   // "system"
                     }
+                    val textColorOverride = if (isDark) textColorDark else textColorLight
                     HeftrangTheme(darkMode = isDark, variant = themeVariant, textColorOverride = textColorOverride) {
                         val updateReady by updateDownloaded.collectAsState()
                         HeftrangNavHost(
