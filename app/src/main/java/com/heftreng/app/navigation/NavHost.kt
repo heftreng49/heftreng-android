@@ -132,9 +132,9 @@ private val bottomNavRoutes = setOf(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HeftrangNavHost(
-    initialRoute: String? = null,
-    updateDownloaded: Boolean = false,
-    onCompleteUpdate: () -> Unit = {},
+    initialRoute     : String? = null,
+    updateDownloaded : Boolean = false,
+    onCompleteUpdate : () -> Unit = {},
 ) {
     val navController  = rememberNavController()
     val authVm         : AuthViewModel          = hiltViewModel()
@@ -368,9 +368,11 @@ fun HeftrangNavHost(
                 themeVariant      = themeVariant,
                 textColorOverride = textColorOverride,
                 isAdmin           = isAdmin,
-                staffPerms   = staffPerms,
-                totalUnread  = totalUnread,
-                unreadNotif  = unreadNotif,
+                staffPerms       = staffPerms,
+                totalUnread      = totalUnread,
+                unreadNotif      = unreadNotif,
+                updateDownloaded = updateDownloaded,
+                onCompleteUpdate = onCompleteUpdate,
                 onNavigate   = { route ->
                     scope.launch { drawerState.close() }
                     navController.navigate(route) {
@@ -616,55 +618,6 @@ fun HeftrangNavHost(
                         )
                         IconButton(onClick = { showVerifyBanner = false }, modifier = Modifier.size(24.dp)) {
                             Icon(Icons.Default.Close, null, tint = Amber, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                }
-            }
-
-            // ── Güncelleme banner'ı ───────────────────────────────────────
-            androidx.compose.animation.AnimatedVisibility(
-                visible = updateDownloaded,
-                enter   = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
-                exit    = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut(),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .padding(innerPadding)
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(com.heftreng.app.ui.theme.Primary.copy(alpha = 0.12f))
-                        .border(1.dp, com.heftreng.app.ui.theme.Primary.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                ) {
-                    Row(
-                        verticalAlignment        = Alignment.CenterVertically,
-                        horizontalArrangement    = Arrangement.spacedBy(10.dp),
-                        modifier                 = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(
-                            Icons.Default.SystemUpdate,
-                            contentDescription = null,
-                            tint     = com.heftreng.app.ui.theme.Primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Text(
-                            text     = if (language == "ku") "Nûvekirinek hat dakêşan. Ji kerema xwe nûve bike."
-                                       else "Yeni güncelleme indirildi. Uygulamayı güncelleyin.",
-                            color    = com.heftreng.app.ui.theme.Primary,
-                            fontSize = 12.sp,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(
-                            onClick         = onCompleteUpdate,
-                            contentPadding  = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        ) {
-                            Text(
-                                text     = if (language == "ku") "Nûve Bike" else "Güncelle",
-                                color    = com.heftreng.app.ui.theme.Primary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
                         }
                     }
                 }
@@ -936,11 +889,13 @@ fun DrawerContent(
     themeVariant      : HeftrangThemeVariant,
     textColorOverride : androidx.compose.ui.graphics.Color?,
     isAdmin           : Boolean,
-    staffPerms  : StaffPermissions = StaffPermissions(),
-    totalUnread : Int,
-    unreadNotif : Int,
-    onNavigate  : (String) -> Unit,
-    onSignOut   : () -> Unit,
+    staffPerms        : StaffPermissions = StaffPermissions(),
+    totalUnread       : Int,
+    unreadNotif       : Int,
+    updateDownloaded  : Boolean = false,
+    onNavigate        : (String) -> Unit,
+    onCompleteUpdate  : () -> Unit = {},
+    onSignOut         : () -> Unit,
 ) {
     val settingsVm: SettingsViewModel = hiltViewModel()
 
@@ -1149,6 +1104,46 @@ fun DrawerContent(
             }
 
             Spacer(Modifier.height(8.dp))
+
+            // ── Güncelleme bildirimi ───────────────────────────────────
+            if (updateDownloaded) {
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Primary.copy(alpha = 0.10f))
+                        .border(1.dp, Primary.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment        = Alignment.CenterVertically,
+                    horizontalArrangement    = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        Icons.Default.SystemUpdate,
+                        contentDescription = null,
+                        tint     = Primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text     = if (language == "ku") "Nûvekirinek amade ye" else "Yeni güncelleme hazır",
+                        color    = Primary,
+                        fontSize = 13.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick        = onCompleteUpdate,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            text       = if (language == "ku") "Nûve bike" else "Güncelle",
+                            color      = Primary,
+                            fontSize   = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
 
             // Çıkış
             TextButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {

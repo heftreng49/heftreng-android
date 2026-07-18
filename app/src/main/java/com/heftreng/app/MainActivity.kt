@@ -54,20 +54,19 @@ class MainActivity : ComponentActivity() {
     // ── In-App Update ──────────────────────────────────────────────────────────
     private val appUpdateManager by lazy { AppUpdateManagerFactory.create(this) }
 
-    // Güncelleme indirildiğinde NavHost'taki banner'ı tetikler
+    // Güncelleme indirilince true olur → DrawerContent'teki banner görünür
     private val _updateDownloaded = MutableStateFlow(false)
     val updateDownloaded: StateFlow<Boolean> = _updateDownloaded
 
-    private val installStateListener = InstallStateUpdatedListener { state ->
-        if (state.installStatus() == InstallStatus.DOWNLOADED) {
-            // İndirme tamamlandı — kullanıcıya banner göster, hemen uygulama
-            _updateDownloaded.value = true
-        }
-    }
-
-    // NavHost'tan çağrılır: "Güncelle" butonuna basınca
     fun completeAppUpdate() {
         appUpdateManager.completeUpdate()
+    }
+
+    private val installStateListener = InstallStateUpdatedListener { state ->
+        if (state.installStatus() == InstallStatus.DOWNLOADED) {
+            // İndirme tamamlandı — drawer'daki banner ile kullanıcıya sor
+            _updateDownloaded.value = true
+        }
     }
 
     private val updateResultLauncher = registerForActivityResult(
@@ -252,12 +251,12 @@ class MainActivity : ComponentActivity() {
                         "dark"  -> true
                         else    -> systemDark   // "system"
                     }
-                    val updateReady by updateDownloaded.collectAsState()
                     HeftrangTheme(darkMode = isDark, variant = themeVariant, textColorOverride = textColorOverride) {
+                        val updateReady by updateDownloaded.collectAsState()
                         HeftrangNavHost(
                             initialRoute     = pendingNavTarget,
                             updateDownloaded = updateReady,
-                            onCompleteUpdate = { completeAppUpdate() },
+                            onCompleteUpdate = ::completeAppUpdate,
                         )
                     }
                 }
