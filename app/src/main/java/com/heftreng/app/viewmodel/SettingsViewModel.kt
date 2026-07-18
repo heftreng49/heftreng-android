@@ -70,7 +70,8 @@ class SettingsViewModel @Inject constructor(
         if (color == null) {
             prefs.edit().remove(key).apply()
         } else {
-            prefs.edit().putLong(key, color.value.toLong()).apply()
+            // ULong hex string olarak sakla — toLong() ULong->Long cast bozar
+            prefs.edit().putString(key, color.value.toString(16)).apply()
         }
         if (isDark) _textColorDark.value  = color
         else        _textColorLight.value = color
@@ -84,15 +85,11 @@ class SettingsViewModel @Inject constructor(
 
     private fun loadTextColor(isDark: Boolean): Color? {
         val key = if (isDark) "hf_text_color_dark" else "hf_text_color_light"
-        // Eski tek-key'den migrate et (varsa)
-        if (!prefs.contains(key) && prefs.contains("hf_text_color")) {
-            val legacy = Color(prefs.getLong("hf_text_color", 0xFFF4F4FAL).toULong())
-            // Eski renk koyu mod için saklanmıştı, açık moda geçirme
-            if (isDark) return legacy
-            return null
-        }
         if (!prefs.contains(key)) return null
-        return Color(prefs.getLong(key, 0xFFF4F4FAL).toULong())
+        return try {
+            val hex = prefs.getString(key, null) ?: return null
+            Color(hex.toULong(16))
+        } catch (_: Exception) { null }
     }
 
     // Geriye dönük uyumluluk: eski "hf_theme_dark" boolean'ını okuyan
