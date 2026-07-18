@@ -131,7 +131,11 @@ private val bottomNavRoutes = setOf(
 // ── NavHost ───────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun HeftrangNavHost(initialRoute: String? = null) {
+fun HeftrangNavHost(
+    initialRoute: String? = null,
+    updateDownloaded: Boolean = false,
+    onCompleteUpdate: () -> Unit = {},
+) {
     val navController  = rememberNavController()
     val authVm         : AuthViewModel          = hiltViewModel()
     val settingsVm     : SettingsViewModel      = hiltViewModel()
@@ -612,6 +616,55 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                         )
                         IconButton(onClick = { showVerifyBanner = false }, modifier = Modifier.size(24.dp)) {
                             Icon(Icons.Default.Close, null, tint = Amber, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+
+            // ── Güncelleme banner'ı ───────────────────────────────────────
+            androidx.compose.animation.AnimatedVisibility(
+                visible = updateDownloaded,
+                enter   = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
+                exit    = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut(),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(innerPadding)
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(com.heftreng.app.ui.theme.Primary.copy(alpha = 0.12f))
+                        .border(1.dp, com.heftreng.app.ui.theme.Primary.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                ) {
+                    Row(
+                        verticalAlignment        = Alignment.CenterVertically,
+                        horizontalArrangement    = Arrangement.spacedBy(10.dp),
+                        modifier                 = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            Icons.Default.SystemUpdate,
+                            contentDescription = null,
+                            tint     = com.heftreng.app.ui.theme.Primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text(
+                            text     = if (language == "ku") "Nûvekirinek hat dakêşan. Ji kerema xwe nûve bike."
+                                       else "Yeni güncelleme indirildi. Uygulamayı güncelleyin.",
+                            color    = com.heftreng.app.ui.theme.Primary,
+                            fontSize = 12.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            onClick         = onCompleteUpdate,
+                            contentPadding  = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        ) {
+                            Text(
+                                text     = if (language == "ku") "Nûve Bike" else "Güncelle",
+                                color    = com.heftreng.app.ui.theme.Primary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
                         }
                     }
                 }

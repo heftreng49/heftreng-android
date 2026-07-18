@@ -13,6 +13,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import androidx.core.content.ContextCompat
 import com.google.android.play.core.appupdate.AppUpdateManagerFactory
 import com.google.android.play.core.appupdate.AppUpdateOptions
@@ -52,11 +54,20 @@ class MainActivity : ComponentActivity() {
     // ── In-App Update ──────────────────────────────────────────────────────────
     private val appUpdateManager by lazy { AppUpdateManagerFactory.create(this) }
 
+    // Güncelleme indirildiğinde NavHost'taki banner'ı tetikler
+    private val _updateDownloaded = MutableStateFlow(false)
+    val updateDownloaded: StateFlow<Boolean> = _updateDownloaded
+
     private val installStateListener = InstallStateUpdatedListener { state ->
         if (state.installStatus() == InstallStatus.DOWNLOADED) {
-            // İndirme tamamlandı — hemen uygula
-            appUpdateManager.completeUpdate()
+            // İndirme tamamlandı — kullanıcıya banner göster, hemen uygulama
+            _updateDownloaded.value = true
         }
+    }
+
+    // NavHost'tan çağrılır: "Güncelle" butonuna basınca
+    fun completeAppUpdate() {
+        appUpdateManager.completeUpdate()
     }
 
     private val updateResultLauncher = registerForActivityResult(
@@ -241,8 +252,13 @@ class MainActivity : ComponentActivity() {
                         "dark"  -> true
                         else    -> systemDark   // "system"
                     }
+                    val updateReady by updateDownloaded.collectAsState()
                     HeftrangTheme(darkMode = isDark, variant = themeVariant, textColorOverride = textColorOverride) {
-                        HeftrangNavHost(initialRoute = pendingNavTarget)
+                        HeftrangNavHost(
+                            initialRoute     = pendingNavTarget,
+                            updateDownloaded = updateReady,
+                            onCompleteUpdate = { completeAppUpdate() },
+                        )
                     }
                 }
             }
@@ -308,7 +324,7 @@ class MainActivity : ComponentActivity() {
         // Uygulama arka plandan dönünce güncelleme kontrol et
         appUpdateManager.appUpdateInfo.addOnSuccessListener { info ->
             if (info.installStatus() == InstallStatus.DOWNLOADED) {
-                appUpdateManager.completeUpdate()
+                _updateDownloaded.value = true
             }
         }
     }
