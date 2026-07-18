@@ -41,12 +41,7 @@ data class HeftrangColors(
     val divider     : Color,
     val shimmer     : Color,
     val isDark      : Boolean,
-    // Kullanıcının seçtiği yazı rengi override'ı (null = tema varsayılanı)
-    val textColorOverride: Color? = null,
-) {
-    // Yazı rengi: override varsa onu, yoksa tema onBackground'unu kullan
-    val effectiveTextColor: Color get() = textColorOverride ?: onBackground
-}
+)
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  1. CHARCOAL INK — Varsayılan (mevcut tema)
@@ -329,8 +324,8 @@ fun HeftrangThemeVariant.emoji(): String = when (this) {
 // ─────────────────────────────────────────────────────────────────────────────
 // OnBackground artık kullanıcının seçtiği yazı rengini döndürür (override varsa).
 // Tüm ekranlar zaten OnBackground kullandığından tek değişiklikle etki eder.
-val OnBackground       @Composable get() = LocalHeftrangColors.current.effectiveTextColor
-val EffectiveTextColor @Composable get() = LocalHeftrangColors.current.effectiveTextColor
+val OnBackground       @Composable get() = LocalHeftrangColors.current.onBackground
+val EffectiveTextColor @Composable get() = LocalHeftrangColors.current.onBackground
 val Background    @Composable get() = LocalHeftrangColors.current.background
 val HeftSurface   @Composable get() = LocalHeftrangColors.current.surface
 val SurfaceVar    @Composable get() = LocalHeftrangColors.current.surfaceVar
@@ -355,7 +350,7 @@ private fun buildColorScheme(colors: HeftrangColors) =
         secondary        = colors.accent,
         onSecondary      = Color.White,
         background       = colors.background,
-        onBackground     = colors.effectiveTextColor,   // override varsa onu kullan
+        onBackground     = colors.onBackground,
         surface          = colors.surface,
         onSurface        = colors.onSurface,
         surfaceVariant   = colors.surfaceVar,
@@ -368,7 +363,7 @@ private fun buildColorScheme(colors: HeftrangColors) =
         secondary        = colors.accent,
         onSecondary      = Color.White,
         background       = colors.background,
-        onBackground     = colors.effectiveTextColor,   // override varsa onu kullan
+        onBackground     = colors.onBackground,
         surface          = colors.surface,
         onSurface        = colors.onSurface,
         surfaceVariant   = colors.surfaceVar,
@@ -382,13 +377,11 @@ private fun buildColorScheme(colors: HeftrangColors) =
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun HeftrangTheme(
-    darkMode         : Boolean = true,
-    variant          : HeftrangThemeVariant = HeftrangThemeVariant.CHARCOAL_INK,
-    textColorOverride: Color? = null,
-    content          : @Composable () -> Unit,
+    darkMode : Boolean = true,
+    variant  : HeftrangThemeVariant = HeftrangThemeVariant.CHARCOAL_INK,
+    content  : @Composable () -> Unit,
 ) {
-    val base        = getColors(variant, darkMode)
-    val colors      = if (textColorOverride != null) base.copy(textColorOverride = textColorOverride) else base
+    val colors      = getColors(variant, darkMode)
     val colorScheme = buildColorScheme(colors)
 
     CompositionLocalProvider(LocalHeftrangColors provides colors) {

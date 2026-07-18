@@ -19,42 +19,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Yazı rengi seçenekleri — koyu temada açık, açık temada koyu renkler
-// ─────────────────────────────────────────────────────────────────────────────
-data class TextColorOption(
-    val color: Color?,   // null = tema varsayılanı
-    val label: String,
-)
-
-fun textColorOptions(language: String, isDark: Boolean) = if (isDark) listOf(
-    // Koyu tema → açık renkler
-    TextColorOption(null,                  Strings.textColorDefault(language)),
-    TextColorOption(Color(0xFFFAFAFA),     if (language == "ku") "Spî Geş"      else "Parlak Beyaz"),
-    TextColorOption(Color(0xFFE8E8E8),     if (language == "ku") "Spî Nerm"     else "Yumuşak Beyaz"),
-    TextColorOption(Color(0xFFCCCCCC),     if (language == "ku") "Gewr Sivik"   else "Açık Gri"),
-    TextColorOption(Color(0xFFFFE4B5),     if (language == "ku") "Zerê Nerm"    else "Krem Sarısı"),
-    TextColorOption(Color(0xFFB0E0E6),     if (language == "ku") "Şîna Sivik"   else "Açık Mavi"),
-    TextColorOption(Color(0xFFB8F0C8),     if (language == "ku") "Keska Sivik"  else "Açık Yeşil"),
-    TextColorOption(Color(0xFFFFD6E0),     if (language == "ku") "Pembe Sivik"  else "Açık Pembe"),
-) else listOf(
-    // Açık tema → koyu renkler
-    TextColorOption(null,                  Strings.textColorDefault(language)),
-    TextColorOption(Color(0xFF111111),     if (language == "ku") "Reş Geş"      else "Saf Siyah"),
-    TextColorOption(Color(0xFF2C2C2C),     if (language == "ku") "Gewr Tarî"    else "Koyu Gri"),
-    TextColorOption(Color(0xFF444444),     if (language == "ku") "Gewr Navîn"   else "Orta Gri"),
-    TextColorOption(Color(0xFF3B2A1A),     if (language == "ku") "Qehweyî Tarî" else "Koyu Kahve"),
-    TextColorOption(Color(0xFF1A2A4A),     if (language == "ku") "Şîna Tarî"    else "Koyu Mavi"),
-    TextColorOption(Color(0xFF1A3A22),     if (language == "ku") "Keska Tarî"   else "Koyu Yeşil"),
-    TextColorOption(Color(0xFF4A1A2A),     if (language == "ku") "Pembe Tarî"   else "Koyu Pembe"),
-)
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Renk önizleme verisi
@@ -144,14 +112,12 @@ private fun ThemeListItem(
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun ThemeSelector(
-    selectedVariant      : HeftrangThemeVariant,
-    isDarkMode           : Boolean,
-    language             : String,
-    onVariantChange      : (HeftrangThemeVariant) -> Unit,
-    onDarkModeChange     : (Boolean) -> Unit,   // imza korunuyor, kullanılmıyor
-    textColorOverride    : Color? = null,
-    onTextColorChange    : (Color?) -> Unit = {},
-    modifier             : Modifier = Modifier,
+    selectedVariant  : HeftrangThemeVariant,
+    isDarkMode       : Boolean,
+    language         : String,
+    onVariantChange  : (HeftrangThemeVariant) -> Unit,
+    onDarkModeChange : (Boolean) -> Unit,   // imza korunuyor, kullanılmıyor
+    modifier         : Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selected = selectedVariant
@@ -241,70 +207,5 @@ fun ThemeSelector(
             }
         }
 
-        // ── Yazı Rengi Seçici ─────────────────────────────────────────────────
-        Spacer(Modifier.height(14.dp))
-
-        Text(
-            text       = Strings.textColorTitle(language),
-            fontSize   = 13.sp,
-            fontWeight = FontWeight.Medium,
-            color      = Muted,
-            modifier   = Modifier.padding(bottom = 8.dp),
-        )
-
-        Row(
-            modifier              = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            textColorOptions(language, isDarkMode).forEach { option ->
-                val isSelected = textColorOverride == option.color
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(
-                            // null (varsayılan) seçeneği için tema primary rengi göster
-                            option.color ?: preview.primary
-                        )
-                        .border(
-                            width = if (isSelected) 2.5.dp else 1.dp,
-                            color = if (isSelected) preview.primary else Divider,
-                            shape = CircleShape,
-                        )
-                        .clickable { onTextColorChange(option.color) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    // Varsayılan seçenek için küçük "A" harfi göster
-                    if (option.color == null) {
-                        Text(
-                            text     = "A",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color    = preview.bg,
-                        )
-                    }
-                    // Seçili ise tik işareti
-                    if (isSelected && option.color != null) {
-                        Icon(
-                            imageVector        = Icons.Default.Check,
-                            contentDescription = null,
-                            tint               = if (option.color.luminance() > 0.5f) Color.Black else Color.White,
-                            modifier           = Modifier.size(16.dp),
-                        )
-                    }
-                }
-            }
-        }
-
-        // Seçili renk etiketi
-        val selectedOption = textColorOptions(language, isDarkMode).find { it.color == textColorOverride }
-        if (selectedOption != null) {
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text     = selectedOption.label,
-                fontSize = 11.sp,
-                color    = Muted,
-            )
-        }
     }
 }

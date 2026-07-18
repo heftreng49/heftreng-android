@@ -151,8 +151,7 @@ fun HeftrangNavHost(
     val isDark         by settingsVm.darkMode.collectAsState()
     val themeMode      by settingsVm.themeMode.collectAsState()
     val themeVariant   by settingsVm.themeVariant.collectAsState()
-    val textColorDark     by settingsVm.textColorDark.collectAsState()
-    val textColorLight    by settingsVm.textColorLight.collectAsState()
+
     val savedAccounts  by authVm.savedAccounts.collectAsState()
     val switchToGoogle by authVm.switchToGoogle.collectAsState()
     val verificationPending by authVm.verificationPending.collectAsState()
@@ -236,7 +235,6 @@ fun HeftrangNavHost(
         "light" -> false
         else    -> systemDark
     }
-    val textColorOverride = if (isDarkNow) textColorDark else textColorLight
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope       = rememberCoroutineScope()
 
@@ -367,7 +365,7 @@ fun HeftrangNavHost(
 
     LaunchedEffect(Unit) { adminVm.checkAdmin() }
 
-    HeftrangTheme(darkMode = isDarkNow, variant = themeVariant, textColorOverride = textColorOverride) {
+    HeftrangTheme(darkMode = isDarkNow, variant = themeVariant) {
     ModalNavigationDrawer(
         drawerState   = drawerState,
         drawerContent = {
@@ -376,7 +374,6 @@ fun HeftrangNavHost(
                 language          = language,
                 themeMode         = themeMode,
                 themeVariant      = themeVariant,
-                textColorOverride = textColorOverride,
                 isAdmin           = isAdmin,
                 staffPerms   = staffPerms,
                 totalUnread  = totalUnread,
@@ -904,7 +901,6 @@ fun DrawerContent(
     language          : String,
     themeMode         : String,
     themeVariant      : HeftrangThemeVariant,
-    textColorOverride : androidx.compose.ui.graphics.Color?,
     isAdmin           : Boolean,
     staffPerms  : StaffPermissions = StaffPermissions(),
     totalUnread : Int,
@@ -1193,10 +1189,8 @@ fun DrawerContent(
                 selectedVariant   = themeVariant,
                 isDarkMode        = isDarkNow,
                 language          = language,
-                onVariantChange   = { settingsVm.setThemeVariant(it) },
-                onDarkModeChange  = {},
-                textColorOverride = textColorOverride,
-                onTextColorChange = { settingsVm.setTextColorOverride(it, isDark = isDarkNow) },
+                onVariantChange  = { settingsVm.setThemeVariant(it) },
+                onDarkModeChange = {},
             )
 
             Spacer(Modifier.height(8.dp))
