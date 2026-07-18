@@ -119,7 +119,11 @@ fun FeedScreen(
     LaunchedEffect(Unit) { adminVm.checkAdmin() }
     val canModeratePosts = adminPerms?.can("edit") == true
     val feedAnnouncement by cmsVm.activeFeedAnnouncement.collectAsState()
-    LaunchedEffect(Unit) { cmsVm.loadActiveFeedAnnouncement() }
+    LaunchedEffect(Unit) {
+        if (cmsVm.activeFeedAnnouncement.value == null) {
+            cmsVm.loadActiveFeedAnnouncement()
+        }
+    }
     val posts       by vm.posts.collectAsState()
     val repostError by vm.repostError.collectAsState()
     val suggestedUsers by vm.suggestedUsers.collectAsState()
@@ -2946,6 +2950,15 @@ private fun FeedAnnouncementBanner(
                             color      = accentColor.copy(alpha = 0.85f),
                             fontSize   = 12.sp,
                             lineHeight = 17.sp,
+                        )
+                    }
+                    if (announcement.linkUrl.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        androidx.compose.material3.Text(
+                            text       = "Devamını oku →",
+                            color      = accentColor,
+                            fontSize   = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
                         )
                     }
                 }

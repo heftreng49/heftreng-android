@@ -18,6 +18,8 @@ class CmsViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
 ) : ViewModel() {
 
+    // Kullanıcının kapattığı duyuru ID'leri — session boyunca tutulur
+    private val dismissedAnnouncementIds = mutableSetOf<String>()
     // ── Yetki ─────────────────────────────────────────────────────────────────
     // FAZ -1: Eski sabit e-posta kontrolü kaldırıldı, yerine Firestore
     // admins/{uid} rol/izin sistemi kullanılıyor (AdminViewModel.perms ile
@@ -383,20 +385,21 @@ class CmsViewModel @Inject constructor(
             try {
                 val snap = firestore.collection("cms_announcements")
                     .whereEqualTo("active", true)
-                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(1)
                     .get().await()
-                _activeFeedAnnouncement.value = snap.documents.firstOrNull()?.let { doc ->
-                    val d = doc.data ?: return@let null
-                    CmsAnnouncement(
-                        id     = doc.id,
-                        title   = d["title"]   as? String  ?: "",
-                        body    = d["body"]    as? String  ?: "",
-                        type    = d["type"]    as? String  ?: "info",
-                        active  = d["active"]  as? Boolean ?: true,
-                        linkUrl = d["linkUrl"] as? String  ?: "",
-                    )
-                }
+                _activeFeedAnnouncement.value = snap.documents
+                    .filter { it.id !in dismissedAnnouncementIds }
+                    .mapNotNull { doc ->
+                        val d = doc.data ?: return@mapNotNull null
+                        CmsAnnouncement(
+                            id      = doc.id,
+                            title   = d["title"]   as? String  ?: "",
+                            body    = d["body"]    as? String  ?: "",
+                            type    = d["type"]    as? String  ?: "info",
+                            active  = d["active"]  as? Boolean ?: true,
+                            linkUrl = d["linkUrl"] as? String  ?: "",
+                        )
+                    }
+                    .maxByOrNull { it.id } // ts yerine id ile en yenisi
             } catch (e: Exception) {
                 android.util.Log.w("CmsVM", "loadActiveFeedAnnouncement: ${e.message}")
             }
@@ -404,6 +407,8 @@ class CmsViewModel @Inject constructor(
     }
 
     fun dismissFeedAnnouncement() {
+        val id = _activeFeedAnnouncement.value?.id ?: return
+        dismissedAnnouncementIds.add(id)
         _activeFeedAnnouncement.value = null
     }
 }
