@@ -1,6 +1,7 @@
 package com.heftreng.app.ui.screens.admin
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -374,7 +375,28 @@ private fun BannersTab(banners: List<CmsBanner>, vm: CmsViewModel) {
 
         items(banners, key = { it.id }) { banner ->
             CmsCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    if (banner.imageUrl.isNotBlank()) {
+                        coil.compose.AsyncImage(
+                            model             = banner.imageUrl,
+                            contentDescription = null,
+                            contentScale      = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier          = Modifier
+                                .fillMaxWidth()
+                                .height(100.dp)
+                                .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp)),
+                        )
+                    }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = if (banner.imageUrl.isNotBlank()) 8.dp else 0.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .background(Amber.copy(alpha = 0.2f), RoundedCornerShape(6.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("${banner.order}", color = Amber, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
                         Text(banner.title.ifBlank { "(başlıksız)" }, color = OnBackground, fontWeight = FontWeight.SemiBold)
                         if (banner.subtitle.isNotBlank())
@@ -399,6 +421,7 @@ private fun BannersTab(banners: List<CmsBanner>, vm: CmsViewModel) {
                     IconButton(onClick = { vm.deleteBanner(banner.id) }) {
                         Icon(Icons.Default.Delete, null, tint = Error, modifier = Modifier.size(18.dp))
                     }
+                }
                 }
             }
         }

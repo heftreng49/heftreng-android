@@ -164,8 +164,7 @@ class CmsViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
             try {
-                val snap = firestore.collection("cms_banners")
-                    .orderBy("order").get().await()
+                val snap = firestore.collection("cms_banners").get().await()
                 _banners.value = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     CmsBanner(
@@ -177,8 +176,10 @@ class CmsViewModel @Inject constructor(
                         active   = d["active"]   as? Boolean ?: true,
                         order    = (d["order"]   as? Long)?.toInt() ?: 0,
                     )
-                }
-            } catch (e: Exception) { e.printStackTrace() }
+                }.sortedBy { it.order }
+            } catch (e: Exception) {
+                _result.value = "✗ Banner yüklenemedi: ${e.message}"
+            }
             finally { _loading.value = false }
         }
     }
