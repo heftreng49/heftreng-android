@@ -71,6 +71,7 @@ import com.heftreng.app.ui.component.SharePreviewDialog
 import com.heftreng.app.utils.ShareTarget
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.ui.screens.social.LikerListSheet
+import com.heftreng.app.viewmodel.CmsViewModel
 import com.heftreng.app.viewmodel.FeedViewModel
 import com.heftreng.app.viewmodel.SocialViewModel
 import com.heftreng.app.viewmodel.SettingsViewModel
@@ -107,6 +108,7 @@ fun FeedScreen(
     settingsVm   : SettingsViewModel = hiltViewModel(),
     blogVm       : BlogViewModel    = hiltViewModel(),
     adminVm      : AdminViewModel   = hiltViewModel(),
+    cmsVm        : CmsViewModel     = hiltViewModel(),
 ) {
     // FAZ 1 devamı: Moderatör/editör artık feed'i gezerken bir gönderiyi
     // doğrudan karttan kaldırabiliyor — önceden bunun için Admin
@@ -116,6 +118,8 @@ fun FeedScreen(
     val adminPerms by adminVm.perms.collectAsState()
     LaunchedEffect(Unit) { adminVm.checkAdmin() }
     val canModeratePosts = adminPerms?.can("edit") == true
+    val feedAnnouncement by cmsVm.activeFeedAnnouncement.collectAsState()
+    LaunchedEffect(Unit) { cmsVm.loadActiveFeedAnnouncement() }
     val posts       by vm.posts.collectAsState()
     val repostError by vm.repostError.collectAsState()
     val suggestedUsers by vm.suggestedUsers.collectAsState()
@@ -838,6 +842,18 @@ fun FeedScreen(
                             onPostClick = { post -> navController.navigate("blog_post/${post.id}") },
                             onSeeAll    = { navController.navigate(Screen.Blog.route) },
                         )
+                    }
+                }
+
+                // ── Duyuru Kutusu ───────────────────────────────────────────
+                if (selectedFeedTab == 0) {
+                    feedAnnouncement?.let { ann ->
+                        item(key = "feed_announcement") {
+                            FeedAnnouncementBanner(
+                                announcement = ann,
+                                onDismiss    = { cmsVm.dismissFeedAnnouncement() },
+                            )
+                        }
                     }
                 }
 
@@ -2853,5 +2869,87 @@ private fun BlogPostCard(
             overflow   = TextOverflow.Ellipsis,
             lineHeight = 16.sp,
         )
+    }
+}
+
+// ── Feed Duyuru Kutusu ────────────────────────────────────────────────────────
+@Composable
+private fun FeedAnnouncementBanner(
+    announcement: com.heftreng.app.data.model.CmsAnnouncement,
+    onDismiss   : () -> Unit,
+) {
+    val bgColor = when (announcement.type) {
+        "warning" -> Color(0xFFFEF3C7) // sarı
+        "success" -> Color(0xFFDCFCE7) // yeşil
+        else      -> Color(0xFFDBEAFE) // mavi (info)
+    }
+    val accentColor = when (announcement.type) {
+        "warning" -> Color(0xFFD97706)
+        "success" -> Color(0xFF16A34A)
+        else      -> Color(0xFF2563EB)
+    }
+    val iconColor = accentColor
+
+    androidx.compose.animation.AnimatedVisibility(
+        visible = true,
+        enter   = androidx.compose.animation.fadeIn() +
+                  androidx.compose.animation.expandVertically(),
+        exit    = androidx.compose.animation.fadeOut() +
+                  androidx.compose.animation.shrinkVertically(),
+    ) {
+        androidx.compose.material3.Surface(
+            shape    = RoundedCornerShape(14.dp),
+            color    = bgColor,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+        ) {
+            Row(
+                modifier          = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                // Sol renk çizgisi
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(accentColor)
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    if (announcement.title.isNotBlank()) {
+                        androidx.compose.material3.Text(
+                            text       = announcement.title,
+                            color      = accentColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize   = 13.sp,
+                            lineHeight = 18.sp,
+                        )
+                        if (announcement.body.isNotBlank()) Spacer(Modifier.height(3.dp))
+                    }
+                    if (announcement.body.isNotBlank()) {
+                        androidx.compose.material3.Text(
+                            text       = announcement.body,
+                            color      = accentColor.copy(alpha = 0.85f),
+                            fontSize   = 12.sp,
+                            lineHeight = 17.sp,
+                        )
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                androidx.compose.material3.IconButton(
+                    onClick  = onDismiss,
+                    modifier = Modifier.size(24.dp),
+                ) {
+                    androidx.compose.material3.Icon(
+                        imageVector        = Icons.Default.Close,
+                        contentDescription = "Kapat",
+                        tint               = iconColor.copy(alpha = 0.6f),
+                        modifier           = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
     }
 }
