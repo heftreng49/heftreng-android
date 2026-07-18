@@ -572,10 +572,10 @@ object Strings {
     fun themeDarkModeToDark(l: String)   = t(l, "Koyu moda geç",     "Biçe moda tarî")
     fun themeCharcoal(l: String)         = t(l, "Kömür Mürekkebi",   "Mûrekkeba Komirê")
     fun themeBook(l: String)             = t(l, "Kitap",              "Pirtûk")
-    fun themeForest(l: String)           = t(l, "Orman",              "Daristân")
+    fun themeForest(l: String)           = t(l, "Orman",              "Daristan")
     fun themeOcean(l: String)            = t(l, "Okyanus",            "Okyanûs")
     fun themeSunset(l: String)           = t(l, "Gün Batımı",         "Rojavabûn")
-    fun themeMonochrome(l: String)       = t(l, "Tek Renk",           "Yekrêng")
+    fun themeMonochrome(l: String)       = t(l, "Tek Renk",           "Yek Reng")
     fun textColorTitle(l: String)        = t(l, "Yazı Rengi",         "Rengê Nivîsê")
     fun textColorDefault(l: String)      = t(l, "Tema Varsayılanı",   "Xwerû ya Temayê")
 }
