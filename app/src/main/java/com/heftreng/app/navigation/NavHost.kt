@@ -132,7 +132,11 @@ private val bottomNavRoutes = setOf(
 // ── NavHost ───────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun HeftrangNavHost(initialRoute: String? = null) {
+fun HeftrangNavHost(
+    initialRoute     : String? = null,
+    updateDownloaded : Boolean = false,
+    onCompleteUpdate : () -> Unit = {},
+) {
     val navController  = rememberNavController()
     val authVm         : AuthViewModel          = hiltViewModel()
     val settingsVm     : SettingsViewModel      = hiltViewModel()
@@ -368,7 +372,9 @@ fun HeftrangNavHost(initialRoute: String? = null) {
                 staffPerms   = staffPerms,
                 totalUnread  = totalUnread,
                 unreadNotif  = unreadNotif,
-                appConfig    = appConfig,
+                appConfig         = appConfig,
+                updateDownloaded  = updateDownloaded,
+                onCompleteUpdate  = onCompleteUpdate,
                 onNavigate   = { route ->
                     scope.launch { drawerState.close() }
                     navController.navigate(route) {
@@ -893,7 +899,9 @@ fun DrawerContent(
     staffPerms  : StaffPermissions = StaffPermissions(),
     totalUnread : Int,
     unreadNotif : Int,
-    appConfig   : AppConfig = AppConfig(),
+    appConfig        : AppConfig = AppConfig(),
+    updateDownloaded : Boolean = false,
+    onCompleteUpdate : () -> Unit = {},
     onNavigate  : (String) -> Unit,
     onSignOut   : () -> Unit,
 ) {
@@ -1036,6 +1044,50 @@ fun DrawerContent(
                         if (rowIdx < rows.size - 1) {
                             HorizontalDivider(color = Divider, thickness = 0.5.dp)
                         }
+                    }
+                }
+            }
+
+            // ── Güncelleme Banner'ı ────────────────────────────────
+            if (updateDownloaded) {
+                Spacer(Modifier.height(12.dp))
+                Surface(
+                    shape    = RoundedCornerShape(12.dp),
+                    color    = androidx.compose.ui.graphics.Color(0xFF1D7A3A),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onCompleteUpdate() },
+                ) {
+                    Row(
+                        modifier          = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            Icons.Outlined.SystemUpdate,
+                            contentDescription = null,
+                            tint     = androidx.compose.ui.graphics.Color.White,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                if (language == "ku") "Nûvekirinek amade ye" else "Güncelleme hazır",
+                                color      = androidx.compose.ui.graphics.Color.White,
+                                fontSize   = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                if (language == "ku") "Nûvekirin bike" else "Yüklemek için dokun",
+                                color    = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f),
+                                fontSize = 11.sp,
+                            )
+                        }
+                        Icon(
+                            Icons.Outlined.ChevronRight,
+                            contentDescription = null,
+                            tint     = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.size(18.dp),
+                        )
                     }
                 }
             }

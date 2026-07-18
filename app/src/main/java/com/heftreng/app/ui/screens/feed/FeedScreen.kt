@@ -953,6 +953,7 @@ fun FeedScreen(
                             showBlockDialog  = true
                         },
                         language = language,
+                        appConfig = appConfig,
                     )
                     com.heftreng.app.ui.component.HeartBurstOverlay(
                         visible = heartBurst,
@@ -1588,6 +1589,7 @@ fun PostCard(
     onModerate     : ((status: String) -> Unit)? = null,
     language       : String = "tr",
     isDetailScreen : Boolean = false,
+    appConfig      : AppConfig = AppConfig(),
 ) {
     val ku = language == "ku"
     val myUid            = FirebaseAuth.getInstance().currentUser?.uid ?: ""
