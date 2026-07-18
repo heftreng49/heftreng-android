@@ -44,22 +44,21 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'gradle'          # setup-java'nın kendi Gradle cache'i — wrapper dahil
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          cache-read-only: false
+      # setup-gradle ile setup-java cache çakışmasın diye setup-gradle'ı kaldırıyoruz.
+      # setup-java 'cache: gradle' zaten ~/.gradle/caches + wrapper/dists cache'ler.
 
-      # Gradle dependency cache — bağımlılıklar değişmediği sürece indirilmez
-      - name: Cache Gradle dependencies
+      # Build cache (compiled output) — bağımlılıktan ayrı tutuyoruz
+      - name: Cache Gradle build output
         uses: actions/cache@v4
         with:
           path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
+            ~/.gradle/caches/build-cache-*
+            .gradle/configuration-cache
+          key: gradle-build-${{ runner.os }}-${{ hashFiles('**/*.kt', '**/*.gradle*', '**/libs.versions.toml') }}
           restore-keys: |
-            gradle-
+            gradle-build-${{ runner.os }}-
 
       - name: Decode Keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.jks
@@ -67,8 +66,8 @@ jobs:
       - name: Write google-services.json
         run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
 
-      # clean kaldırıldı — Gradle incremental build çalışsın
-      # assembleRelease + bundleRelease tek seferde: compile 1 kez olur
+      # clean YOK — incremental build + build cache aktif
+      # assembleRelease + bundleRelease tek seferde: Kotlin sadece 1 kez derlenir
       - name: Build Release APK + AAB
         env:
           KEYSTORE_PATH: keystore.jks
@@ -98,7 +97,6 @@ jobs:
           path: app/build/outputs/native-debug-symbols/release/native-debug-symbols.zip
           if-no-files-found: ignore
 
-  # ── Play Store'a gönderme — SADECE elle tetiklenirse çalışır ────────────────
   publish:
     needs: build
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_to_play == true }}
