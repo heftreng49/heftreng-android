@@ -82,7 +82,6 @@ class CmsViewModel @Inject constructor(
     // ── Sayfalar CRUD ─────────────────────────────────────────────────────────
 
     fun loadPages() {
-        if (!isAdmin) return
         viewModelScope.launch {
             _loading.value = true
             try {
@@ -108,7 +107,6 @@ class CmsViewModel @Inject constructor(
     }
 
     fun savePage(page: CmsPage) {
-        if (!isAdmin) return
         viewModelScope.launch {
             try {
                 _result.value = "Kaydediliyor…"
@@ -137,7 +135,6 @@ class CmsViewModel @Inject constructor(
     }
 
     fun deletePage(pageId: String) {
-        if (!isAdmin) return
         viewModelScope.launch {
             try {
                 firestore.collection("cms_pages").document(pageId).delete().await()
@@ -150,7 +147,6 @@ class CmsViewModel @Inject constructor(
     }
 
     fun togglePagePublished(pageId: String, published: Boolean) {
-        if (!isAdmin) return
         viewModelScope.launch {
             try {
                 firestore.collection("cms_pages").document(pageId)
@@ -165,7 +161,6 @@ class CmsViewModel @Inject constructor(
     // ── Banner CRUD ───────────────────────────────────────────────────────────
 
     fun loadBanners() {
-        if (!isAdmin) return
         viewModelScope.launch {
             _loading.value = true
             try {
@@ -189,7 +184,6 @@ class CmsViewModel @Inject constructor(
     }
 
     fun saveBanner(banner: CmsBanner) {
-        if (!isAdmin) return
         viewModelScope.launch {
             try {
                 _result.value = "Kaydediliyor…"
@@ -217,7 +211,6 @@ class CmsViewModel @Inject constructor(
     }
 
     fun deleteBanner(bannerId: String) {
-        if (!isAdmin) return
         viewModelScope.launch {
             try {
                 firestore.collection("cms_banners").document(bannerId).delete().await()
@@ -230,7 +223,6 @@ class CmsViewModel @Inject constructor(
     }
 
     fun toggleBanner(bannerId: String, active: Boolean) {
-        if (!isAdmin) return
         viewModelScope.launch {
             try {
                 firestore.collection("cms_banners").document(bannerId)
@@ -245,7 +237,6 @@ class CmsViewModel @Inject constructor(
     // ── Duyuru CRUD ───────────────────────────────────────────────────────────
 
     fun loadAnnouncements() {
-        if (!isAdmin) return
         viewModelScope.launch {
             _loading.value = true
             try {
@@ -268,7 +259,6 @@ class CmsViewModel @Inject constructor(
     }
 
     fun saveAnnouncement(ann: CmsAnnouncement) {
-        if (!isAdmin) return
         viewModelScope.launch {
             try {
                 _result.value = "Kaydediliyor…"
@@ -294,7 +284,6 @@ class CmsViewModel @Inject constructor(
     }
 
     fun deleteAnnouncement(annId: String) {
-        if (!isAdmin) return
         viewModelScope.launch {
             try {
                 firestore.collection("cms_announcements").document(annId).delete().await()
@@ -307,7 +296,6 @@ class CmsViewModel @Inject constructor(
     }
 
     fun toggleAnnouncement(annId: String, active: Boolean) {
-        if (!isAdmin) return
         viewModelScope.launch {
             try {
                 firestore.collection("cms_announcements").document(annId)
@@ -322,7 +310,6 @@ class CmsViewModel @Inject constructor(
     // ── Kategori CRUD ─────────────────────────────────────────────────────────
 
     fun loadCategories() {
-        if (!isAdmin) return
         viewModelScope.launch {
             _loading.value = true
             try {
@@ -344,7 +331,6 @@ class CmsViewModel @Inject constructor(
     }
 
     fun saveCategory(cat: CmsCategory) {
-        if (!isAdmin) return
         viewModelScope.launch {
             try {
                 _result.value = "Kaydediliyor…"
@@ -369,7 +355,6 @@ class CmsViewModel @Inject constructor(
     }
 
     fun deleteCategory(catId: String) {
-        if (!isAdmin) return
         viewModelScope.launch {
             try {
                 firestore.collection("cms_categories").document(catId).delete().await()

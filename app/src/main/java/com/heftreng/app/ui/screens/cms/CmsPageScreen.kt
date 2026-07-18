@@ -52,7 +52,7 @@ fun CmsPageScreen(
             if (!snap.isEmpty) {
                 val doc = snap.documents.first()
                 title   = doc.getString("title")   ?: slug
-                content = doc.getString("content") ?: ""
+                content = doc.getString("body") ?: ""
             } else {
                 notFound = true
             }
