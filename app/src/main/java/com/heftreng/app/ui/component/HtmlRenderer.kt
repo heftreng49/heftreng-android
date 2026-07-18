@@ -65,17 +65,9 @@ fun HtmlContent(
                 }
 
                 is HtmlBlock.Paragraph -> {
-                    val parsed = remember(block.html) { htmlToSpans(block.html) }
-                    val annotated = remember(parsed) {
-                        buildAnnotated(parsed.text, parsed.spans)
-                    }
-                    Text(
-                        text  = annotated,
-                        style = TextStyle(
-                            color    = baseColor,
-                            fontSize = baseFontSize.sp,
-                            lineHeight = (baseFontSize * 1.6f).sp,
-                        ),
+                    MarkdownView(
+                        markdown = block.html,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
 

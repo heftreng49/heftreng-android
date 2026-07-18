@@ -3132,49 +3132,12 @@ private fun splitHtmlBlocks(html: String): List<HtmlBlock> {
     return result
 }
 
-/** Metin bloğunu htmlToSpans ile parse edip AnnotatedString olarak render eder */
+/** Markdown içeriği Markwon ile render eder */
 @Composable
 private fun GrammarTextBlock(html: String, accentColor: Color) {
-    val parsed = remember(html) {
-        com.heftreng.app.ui.component.htmlToSpans(html)
-    }
-    val annotated = remember(parsed) {
-        androidx.compose.ui.text.buildAnnotatedString {
-            append(parsed.text)
-            parsed.spans.forEach { s ->
-                val start = s.start.coerceIn(0, parsed.text.length)
-                val end   = s.end.coerceIn(0, parsed.text.length)
-                if (start >= end) return@forEach
-                addStyle(
-                    androidx.compose.ui.text.SpanStyle(
-                        fontWeight     = if (s.bold)   FontWeight.Bold else null,
-                        fontStyle      = if (s.italic) androidx.compose.ui.text.font.FontStyle.Italic else null,
-                        textDecoration = when {
-                            s.under && s.strike -> androidx.compose.ui.text.style.TextDecoration.combine(
-                                listOf(
-                                    androidx.compose.ui.text.style.TextDecoration.Underline,
-                                    androidx.compose.ui.text.style.TextDecoration.LineThrough,
-                                )
-                            )
-                            s.under  -> androidx.compose.ui.text.style.TextDecoration.Underline
-                            s.strike -> androidx.compose.ui.text.style.TextDecoration.LineThrough
-                            else     -> null
-                        },
-                        fontSize = s.size?.let { it.sp } ?: androidx.compose.ui.unit.TextUnit.Unspecified,
-                        color    = s.color ?: Color.Unspecified,
-                    ),
-                    start, end,
-                )
-            }
-        }
-    }
-    androidx.compose.foundation.text.BasicText(
-        text  = annotated,
-        style = androidx.compose.ui.text.TextStyle(
-            color      = OnBackground.copy(alpha = 0.88f),
-            fontSize   = 13.5.sp,
-            lineHeight = 22.sp,
-        ),
+    com.heftreng.app.ui.component.MarkdownView(
+        markdown = html,
+        modifier = Modifier.fillMaxWidth(),
     )
 }
 
@@ -3398,8 +3361,8 @@ private fun AddGrammarRuleDialog(
                                 ) {
                                     Icon(Icons.Default.Edit, null, tint = Primary, modifier = Modifier.size(14.dp))
                                     Text(
-                                        if (editorTab == 0) "Kurmancî içerik — Tablo, kalın, eğik, renk destekler"
-                                        else "Türkçe içerik — Tablo, kalın, eğik, renk destekler",
+                                if (editorTab == 0) "Kurmancî içerik — Markdown destekler"
+                                        else "Türkçe içerik — Markdown destekler",
                                         color = Muted, fontSize = 11.sp,
                                     )
                                 }
@@ -3422,7 +3385,6 @@ private fun AddGrammarRuleDialog(
                         }
                     }
 
-                    // Tablo ipucu
                     item {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
@@ -3430,11 +3392,12 @@ private fun AddGrammarRuleDialog(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("💡 Tablo Nasıl Eklenir?", color = Primary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("💡 Markdown Sözdizimi", color = Primary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 Text(
-                                    "HTML tablo sözdizimini metin olarak yazın:\n" +
-                                    "<table><tr><th>Kürtçe</th><th>Türkçe</th></tr>" +
-                                    "<tr><td>Silav</td><td>Merhaba</td></tr></table>",
+                                    "**kalın**  _italik_  ~~üstü çizili~~\n" +
+                                    "## Başlık  ### Alt Başlık\n" +
+                                    "- liste öğesi  > alıntı  `kod`\n" +
+                                    "| Kürtçe | Türkçe |\n|--------|--------|\n| Silav  | Merhaba |",
                                     color    = Muted,
                                     fontSize = 10.5.sp,
                                     lineHeight = 16.sp,
