@@ -176,4 +176,10 @@ dependencies {
 
     // WorkManager — Günlük Kurdî ders hatırlatıcısı
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // Markdown render — CMS sayfaları (Kullanım Koşulları, Gizlilik, Hakkında)
+    implementation("io.noties.markwon:core:4.6.2")
+    implementation("io.noties.markwon:ext-strikethrough:4.6.2")
+    implementation("io.noties.markwon:ext-tables:4.6.2")
+    implementation("io.noties.markwon:linkify:4.6.2")
 }

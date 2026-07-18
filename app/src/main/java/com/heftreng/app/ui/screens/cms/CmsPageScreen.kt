@@ -2,6 +2,8 @@ package com.heftreng.app.ui.screens.cms
 
 import android.content.Intent
 import android.net.Uri
+import android.text.method.LinkMovementMethod
+import android.widget.TextView
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -16,9 +18,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavController
 import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.ui.theme.*
+import io.noties.markwon.Markwon
+import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
+import io.noties.markwon.ext.tables.TablePlugin
+import io.noties.markwon.linkify.LinkifyPlugin
 import kotlinx.coroutines.tasks.await
 
 // Slug → Blogger sayfası URL eşlemesi
@@ -155,15 +162,59 @@ fun CmsPageScreen(
                             HorizontalDivider(color = Divider)
                             Spacer(Modifier.height(16.dp))
                         }
-                        Text(
-                            content,
-                            color      = OnSurface,
-                            fontSize   = 15.sp,
-                            lineHeight = 24.sp,
+                        MarkdownContent(
+                            markdown = content,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
             }
         }
     }
+}
+
+// ── Markdown Renderer ─────────────────────────────────────────────────────────
+@Composable
+private fun MarkdownContent(
+    markdown : String,
+    modifier : Modifier = Modifier,
+) {
+    val context = LocalContext.current
+
+    // Markwon instance — remember ile her recompose'da yeniden oluşturulmaz
+    val markwon = remember(context) {
+        Markwon.builder(context)
+            .usePlugin(StrikethroughPlugin.create())
+            .usePlugin(TablePlugin.create(context))
+            .usePlugin(LinkifyPlugin.create())
+            .build()
+    }
+
+    // Tema renklerini al — hex'e çevir
+    val textColorInt = OnSurface.copy(alpha = 1f)
+        .let { c ->
+            android.graphics.Color.argb(
+                (c.alpha * 255).toInt(),
+                (c.red   * 255).toInt(),
+                (c.green * 255).toInt(),
+                (c.blue  * 255).toInt(),
+            )
+        }
+
+    AndroidView(
+        modifier = modifier,
+        factory  = { ctx ->
+            TextView(ctx).apply {
+                setTextColor(textColorInt)
+                textSize        = 15f
+                lineSpacingMultiplier = 1.5f
+                movementMethod  = LinkMovementMethod.getInstance()
+                setPadding(0, 0, 0, 0)
+            }
+        },
+        update = { textView ->
+            markwon.setMarkdown(textView, markdown)
+            textView.setTextColor(textColorInt)
+        }
+    )
 }
