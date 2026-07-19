@@ -16,12 +16,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
 
       - name: Install dependencies
         working-directory: web
-        run: npm ci
+        run: npm install
 
       - name: Build
         working-directory: web
@@ -35,13 +33,3 @@ jobs:
           NEXT_PUBLIC_FIREBASE_APP_ID:              ${{ secrets.FIREBASE_APP_ID }}
           NEXT_PUBLIC_SUPABASE_URL:                 ${{ secrets.SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY:            ${{ secrets.SUPABASE_ANON_KEY }}
-
-      # Cloudflare Pages kurulunca açılacak:
-      # - name: Deploy to Cloudflare Pages
-      #   uses: cloudflare/pages-action@v1
-      #   with:
-      #     apiToken:        ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      #     accountId:       ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      #     projectName:     heftreng
-      #     directory:       web/out
-      #     workingDirectory: web
