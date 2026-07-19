@@ -47,7 +47,7 @@ export function AnnouncementBanner() {
       className="mx-3 my-2 rounded-xl px-4 py-3 flex items-start gap-3"
       style={{ background: c.bg }}
     >
-      <Icon size={16} style={{ color: c.text, marginTop: 2, shrink: 0 }} />
+      <Icon size={16} style={{ color: c.text, marginTop: 2, flexShrink: 0 }} />
       <div className="flex-1 min-w-0">
         {ann.title && (
           <p className="text-sm font-semibold" style={{ color: c.text }}>{ann.title}</p>
