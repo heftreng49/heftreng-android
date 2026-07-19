@@ -3,6 +3,8 @@ name: Android Build
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "web/**"
   workflow_dispatch:
     inputs:
       publish_to_play:
