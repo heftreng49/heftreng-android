@@ -1,27 +1,25 @@
 import { writable } from 'svelte/store';
-import { browser } from '$app/environment';
 
-type ThemeVariant = 'charcoal' | 'book' | 'forest' | 'ocean' | 'sunset' | 'mono';
-type ThemeMode = 'dark' | 'light' | 'system';
-
-interface Theme { variant: ThemeVariant; mode: ThemeMode; }
-
-const DEFAULT: Theme = { variant: 'charcoal', mode: 'dark' };
-
-function load(): Theme {
-  if (!browser) return DEFAULT;
-  try { return JSON.parse(localStorage.getItem('heft-theme') || '') as Theme; }
-  catch { return DEFAULT; }
+function createTheme() {
+  const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('heftreng-theme') : null;
+  const initial = stored ? JSON.parse(stored) : { variant: 'charcoal', mode: 'dark' };
+  const { subscribe, update } = writable(initial);
+  return {
+    subscribe,
+    set: (v: any) => update(() => {
+      if (typeof localStorage !== 'undefined') localStorage.setItem('heftreng-theme', JSON.stringify(v));
+      applyTheme(v.variant, v.mode);
+      return v;
+    })
+  };
 }
 
-export const theme = writable<Theme>(load());
-
-export function applyTheme(variant: ThemeVariant, mode: ThemeMode) {
-  if (!browser) return;
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const dark = mode === 'dark' || (mode === 'system' && prefersDark);
-  document.body.setAttribute('data-theme', `${variant}-${dark ? 'dark' : 'light'}`);
-  localStorage.setItem('heft-theme', JSON.stringify({ variant, mode }));
+export function applyTheme(variant: string, mode: string) {
+  if (typeof document === 'undefined') return;
+  const resolved = mode === 'system'
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : mode;
+  document.documentElement.setAttribute('data-theme', variant + '-' + resolved);
 }
 
-theme.subscribe(({ variant, mode }) => applyTheme(variant, mode));
+export const theme = createTheme();
