@@ -3,9 +3,12 @@ import { useEffect, useState } from "react"
 import { collection, query, where, getDocs } from "firebase/firestore"
 import { db } from "@/lib/firebase/config"
 import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer"
-import { notFound } from "next/navigation"
 import type { CmsPage } from "@/lib/types"
 import { use } from "react"
+
+export function generateStaticParams() {
+  return []
+}
 
 export default function CmsPageRoute({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params)
@@ -23,7 +26,7 @@ export default function CmsPageRoute({ params }: { params: Promise<{ slug: strin
   }, [slug])
 
   if (loading) return <div className="p-8 text-center" style={{ color: "var(--muted)" }}>Yükleniyor...</div>
-  if (!page) return notFound()
+  if (!page) return <div className="p-8 text-center" style={{ color: "var(--muted)" }}>Sayfa bulunamadı</div>
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
