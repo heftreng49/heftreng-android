@@ -1,3 +1,5 @@
+export const runtime = "edge"
+
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore"
 import { db }                  from "@/lib/firebase/config"
 import { MarkdownRenderer }    from "@/components/ui/MarkdownRenderer"
