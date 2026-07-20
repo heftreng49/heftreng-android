@@ -1,39 +1,33 @@
-export const runtime = "edge"
+"use client"
+import { useEffect, useState } from "react"
+import { collection, query, where, getDocs } from "firebase/firestore"
+import { db } from "@/lib/firebase/config"
+import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer"
+import { notFound } from "next/navigation"
+import type { CmsPage } from "@/lib/types"
+import { use } from "react"
 
-import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore"
-import { db }                  from "@/lib/firebase/config"
-import { MarkdownRenderer }    from "@/components/ui/MarkdownRenderer"
-import { notFound }            from "next/navigation"
-import type { Metadata }       from "next"
-import type { CmsPage }        from "@/lib/types"
+export default function CmsPageRoute({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = use(params)
+  const [page, setPage] = useState<CmsPage | null>(null)
+  const [loading, setLoading] = useState(true)
 
-interface Props { params: Promise<{ slug: string }> }
+  useEffect(() => {
+    getDocs(query(collection(db, "cms_pages"), where("slug", "==", slug), where("active", "==", true)))
+      .then((snap) => {
+        if (!snap.empty) {
+          setPage({ id: snap.docs[0].id, ...snap.docs[0].data() } as CmsPage)
+        }
+        setLoading(false)
+      })
+  }, [slug])
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { slug } = await params
-  const snap = await getDocs(
-    query(collection(db, "cms_pages"), where("slug", "==", slug), where("active", "==", true))
-  )
-  if (snap.empty) return { title: "Sayfa bulunamadı" }
-  const page = snap.docs[0].data() as CmsPage
-  return { title: `${page.title} — Heftreng`, description: page.body.slice(0, 160) }
-}
-
-export default async function CmsPageRoute({ params }: Props) {
-  const { slug } = await params
-  const snap = await getDocs(
-    query(collection(db, "cms_pages"), where("slug", "==", slug), where("active", "==", true))
-  )
-  if (snap.empty) notFound()
-
-  const page = { id: snap.docs[0].id, ...snap.docs[0].data() } as CmsPage
+  if (loading) return <div className="p-8 text-center" style={{ color: "var(--muted)" }}>Yükleniyor...</div>
+  if (!page) return notFound()
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
-      <h1
-        className="text-2xl font-bold mb-6"
-        style={{ color: "var(--on-bg)", fontFamily: "Playfair Display, serif" }}
-      >
+      <h1 className="text-2xl font-bold mb-6" style={{ color: "var(--on-bg)", fontFamily: "Playfair Display, serif" }}>
         {page.title}
       </h1>
       <MarkdownRenderer content={page.body} />
