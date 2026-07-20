@@ -29,7 +29,7 @@ export const useThemeStore = create<ThemeStore>()(
       resolvedTheme: () => {
         const { variant, mode } = get()
         const resolved = mode === "system"
-          ? (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+          ? (typeof window !== "undefined" && (typeof window !== 'undefined' && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light")
           : mode
         return `${variant}-${resolved}`
       },
@@ -40,7 +40,7 @@ export const useThemeStore = create<ThemeStore>()(
 
 export function applyTheme(variant: ThemeVariant, mode: ThemeMode) {
   const resolved = mode === "system"
-    ? (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+    ? (typeof window !== "undefined" && (typeof window !== 'undefined' && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light")
     : mode
   document.documentElement.setAttribute("data-theme", `${variant}-${resolved}`)
 }
