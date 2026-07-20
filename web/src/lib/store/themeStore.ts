@@ -7,7 +7,12 @@ interface ThemeStore {
   mode:    ThemeMode
   setVariant: (v: ThemeVariant) => void
   setMode:    (m: ThemeMode)    => void
-  resolvedTheme: () => string   // "charcoal-dark" gibi
+  resolvedTheme: () => string
+}
+
+function getSystemTheme(): "dark" | "light" {
+  if (typeof window === "undefined") return "dark"
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
 }
 
 export const useThemeStore = create<ThemeStore>()(
@@ -28,9 +33,7 @@ export const useThemeStore = create<ThemeStore>()(
 
       resolvedTheme: () => {
         const { variant, mode } = get()
-        const resolved = mode === "system"
-          ? (typeof window !== "undefined" && (typeof window !== 'undefined' && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light")
-          : mode
+        const resolved = mode === "system" ? getSystemTheme() : mode
         return `${variant}-${resolved}`
       },
     }),
@@ -39,8 +42,7 @@ export const useThemeStore = create<ThemeStore>()(
 )
 
 export function applyTheme(variant: ThemeVariant, mode: ThemeMode) {
-  const resolved = mode === "system"
-    ? (typeof window !== "undefined" && (typeof window !== 'undefined' && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light")
-    : mode
+  if (typeof window === "undefined" || typeof document === "undefined") return
+  const resolved = mode === "system" ? getSystemTheme() : mode
   document.documentElement.setAttribute("data-theme", `${variant}-${resolved}`)
 }

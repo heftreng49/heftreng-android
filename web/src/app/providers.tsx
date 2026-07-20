@@ -16,7 +16,7 @@ function ThemeInit() {
   useEffect(() => {
     applyTheme(variant, mode)
 
-    if (mode === "system") {
+    if (mode === "system" && typeof window !== "undefined") {
       const mq = window.matchMedia("(prefers-color-scheme: dark)")
       const handler = () => applyTheme(variant, "system")
       mq.addEventListener("change", handler)
