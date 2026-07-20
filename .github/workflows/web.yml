@@ -34,11 +34,9 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL:                 ${{ secrets.SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY:            ${{ secrets.SUPABASE_ANON_KEY }}
 
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
+      - name: Deploy to Cloudflare
+        uses: cloudflare/wrangler-action@v3
         with:
-          apiToken:         ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId:        ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName:      heftreng
-          directory:        .next
-          workingDirectory: web
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy web/.next --project-name=heftreng --branch=main
