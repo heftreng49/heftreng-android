@@ -1,5 +1,4 @@
 import { writable } from 'svelte/store';
-import type { User as FirebaseUser } from 'firebase/auth';
-
-export const currentUser = writable<FirebaseUser | null>(null);
+import type { User } from 'firebase/auth';
+export const currentUser = writable<User | null>(null);
 export const authLoading = writable(true);

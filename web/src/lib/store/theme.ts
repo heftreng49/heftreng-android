@@ -1,35 +1,25 @@
 import { writable } from 'svelte/store';
-import type { ThemeVariant, ThemeMode } from '$lib/types';
 
-function createThemeStore() {
+function createTheme() {
   const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('heftreng-theme') : null;
   const initial = stored ? JSON.parse(stored) : { variant: 'charcoal', mode: 'dark' };
-
-  const { subscribe, set, update } = writable(initial);
-
+  const { subscribe, update } = writable(initial);
   return {
     subscribe,
-    setVariant: (variant: ThemeVariant) => update(s => {
-      const next = { ...s, variant };
-      if (typeof localStorage !== 'undefined') localStorage.setItem('heftreng-theme', JSON.stringify(next));
-      applyTheme(next.variant, next.mode);
-      return next;
-    }),
-    setMode: (mode: ThemeMode) => update(s => {
-      const next = { ...s, mode };
-      if (typeof localStorage !== 'undefined') localStorage.setItem('heftreng-theme', JSON.stringify(next));
-      applyTheme(next.variant, next.mode);
-      return next;
-    }),
+    set: (v: any) => update(() => {
+      if (typeof localStorage !== 'undefined') localStorage.setItem('heftreng-theme', JSON.stringify(v));
+      applyTheme(v.variant, v.mode);
+      return v;
+    })
   };
 }
 
-export function applyTheme(variant: ThemeVariant, mode: ThemeMode) {
+export function applyTheme(variant: string, mode: string) {
   if (typeof document === 'undefined') return;
   const resolved = mode === 'system'
     ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     : mode;
-  document.documentElement.setAttribute('data-theme', `${variant}-${resolved}`);
+  document.documentElement.setAttribute('data-theme', variant + '-' + resolved);
 }
 
-export const theme = createThemeStore();
+export const theme = createTheme();
