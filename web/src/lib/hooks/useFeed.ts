@@ -22,8 +22,8 @@ export function useFeed() {
   const fetchPosts = useCallback(async (after?: DocumentSnapshot) => {
     setLoading(true)
     const q = after
-      ? query(collection(db, "posts"), orderBy("ts", "desc"), startAfter(after), limit(PAGE_SIZE))
-      : query(collection(db, "posts"), orderBy("ts", "desc"), limit(PAGE_SIZE))
+      ? query(collection(db, "feed"), orderBy("ts", "desc"), startAfter(after), limit(PAGE_SIZE))
+      : query(collection(db, "feed"), orderBy("ts", "desc"), limit(PAGE_SIZE))
 
     const snap = await getDocs(q)
     const newPosts = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Post))
@@ -40,7 +40,7 @@ export function useFeed() {
 
   const createPost = async (body: string, imageUrls: string[] = []) => {
     if (!user) return
-    await addDoc(collection(db, "posts"), {
+    await addDoc(collection(db, "feed"), {
       uid:         user.uid,
       username:    user.username,
       displayName: user.displayName,
