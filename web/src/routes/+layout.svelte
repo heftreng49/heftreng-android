@@ -5,6 +5,8 @@
   import { currentUser, authLoading } from '$lib/store/auth';
   import { theme, applyTheme } from '$lib/store/theme';
 
+  let { children } = $props();
+
   onMount(() => {
     applyTheme($theme.variant, $theme.mode);
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -15,4 +17,4 @@
   });
 </script>
 
-<slot />
+{@render children()}

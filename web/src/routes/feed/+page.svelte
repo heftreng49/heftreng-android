@@ -4,8 +4,8 @@
   import { db } from '$lib/firebase/config';
   import Navbar from '$lib/components/Navbar.svelte';
 
-  let posts: any[] = [];
-  let loading = true;
+  let posts = $state<any[]>([]);
+  let loading = $state(true);
 
   onMount(async () => {
     try {

@@ -3,7 +3,11 @@
   import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
   import { goto } from '$app/navigation';
 
-  let email = '', password = '', displayName = '', error = '', loading = false;
+  let email = $state('');
+  let password = $state('');
+  let displayName = $state('');
+  let error = $state('');
+  let loading = $state(false);
 
   async function register() {
     if (!email || !password || !displayName) { error = 'Tüm alanları doldurun.'; return; }
@@ -23,10 +27,10 @@
     <h1 class="logo">Heftreng</h1>
     <p class="sub">Hesap oluştur</p>
     {#if error}<div class="err">{error}</div>{/if}
-    <div class="field"><label>Ad Soyad</label><input type="text" bind:value={displayName} placeholder="Adın Soyadın"/></div>
-    <div class="field"><label>E-posta</label><input type="email" bind:value={email} placeholder="ornek@mail.com"/></div>
-    <div class="field"><label>Şifre</label><input type="password" bind:value={password} placeholder="En az 6 karakter"/></div>
-    <button class="btn" on:click={register} disabled={loading}>{loading ? 'Kayıt yapılıyor...' : 'Kayıt Ol'}</button>
+    <div class="field"><label for="name">Ad Soyad</label><input id="name" type="text" bind:value={displayName} placeholder="Adın Soyadın"/></div>
+    <div class="field"><label for="email">E-posta</label><input id="email" type="email" bind:value={email} placeholder="ornek@mail.com"/></div>
+    <div class="field"><label for="pass">Şifre</label><input id="pass" type="password" bind:value={password} placeholder="En az 6 karakter"/></div>
+    <button class="btn" onclick={register} disabled={loading}>{loading ? 'Kayıt yapılıyor...' : 'Kayıt Ol'}</button>
     <p class="foot">Zaten hesabın var mı? <a href="/login">Giriş Yap</a></p>
   </div>
 </div>
@@ -40,7 +44,7 @@
 .field label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
 .field input { width:100%; padding:12px 14px; background:var(--surface-var); border:1px solid var(--divider); border-radius:12px; color:var(--on-bg); font-size:15px; outline:none; }
 .field input:focus { border-color:var(--primary); }
-.btn { width:100%; padding:14px; background:var(--primary); color:#fff; border-radius:12px; font-size:16px; font-weight:600; margin-top:8px; }
+.btn { width:100%; padding:14px; background:var(--primary); color:#fff; border-radius:12px; font-size:16px; font-weight:600; margin-top:8px; cursor:pointer; border:none; }
 .btn:disabled { opacity:0.6; }
 .err { background:rgba(248,113,113,0.1); border:1px solid var(--error); color:var(--error); border-radius:10px; padding:10px 14px; font-size:14px; margin-bottom:16px; }
 .foot { text-align:center; margin-top:20px; font-size:14px; color:var(--muted); }

@@ -3,7 +3,10 @@
   import { signInWithEmailAndPassword } from 'firebase/auth';
   import { goto } from '$app/navigation';
 
-  let email = '', password = '', error = '', loading = false;
+  let email = $state('');
+  let password = $state('');
+  let error = $state('');
+  let loading = $state(false);
 
   async function login() {
     if (!email || !password) return;
@@ -19,9 +22,9 @@
     <h1 class="logo">Heftreng</h1>
     <p class="sub">Kürt edebiyatı ve dil topluluğu</p>
     {#if error}<div class="err">{error}</div>{/if}
-    <div class="field"><label>E-posta</label><input type="email" bind:value={email} placeholder="ornek@mail.com"/></div>
-    <div class="field"><label>Şifre</label><input type="password" bind:value={password} placeholder="••••••••"/></div>
-    <button class="btn" on:click={login} disabled={loading}>{loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}</button>
+    <div class="field"><label for="email">E-posta</label><input id="email" type="email" bind:value={email} placeholder="ornek@mail.com"/></div>
+    <div class="field"><label for="pass">Şifre</label><input id="pass" type="password" bind:value={password} placeholder="••••••••"/></div>
+    <button class="btn" onclick={login} disabled={loading}>{loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}</button>
     <p class="foot">Hesabın yok mu? <a href="/register">Kayıt Ol</a></p>
   </div>
 </div>
@@ -35,7 +38,7 @@
 .field label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
 .field input { width:100%; padding:12px 14px; background:var(--surface-var); border:1px solid var(--divider); border-radius:12px; color:var(--on-bg); font-size:15px; outline:none; }
 .field input:focus { border-color:var(--primary); }
-.btn { width:100%; padding:14px; background:var(--primary); color:#fff; border-radius:12px; font-size:16px; font-weight:600; margin-top:8px; }
+.btn { width:100%; padding:14px; background:var(--primary); color:#fff; border-radius:12px; font-size:16px; font-weight:600; margin-top:8px; cursor:pointer; border:none; }
 .btn:disabled { opacity:0.6; }
 .err { background:rgba(248,113,113,0.1); border:1px solid var(--error); color:var(--error); border-radius:10px; padding:10px 14px; font-size:14px; margin-bottom:16px; }
 .foot { text-align:center; margin-top:20px; font-size:14px; color:var(--muted); }
