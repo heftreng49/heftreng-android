@@ -1,6 +1,6 @@
 import CmsPageClient from "./CmsPageClient"
 
-export function generateStaticParams() {
+export async function generateStaticParams() {
   return []
 }
 
