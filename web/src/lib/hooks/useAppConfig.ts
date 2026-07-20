@@ -28,7 +28,7 @@ export function useAppConfig() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "app_config", "config"), (snap) => {
+    const unsub = onSnapshot(doc(db, "appConfig", "config"), (snap) => {
       if (snap.exists()) {
         setConfig({ ...DEFAULT_CONFIG, ...snap.data() } as AppConfig)
       }
