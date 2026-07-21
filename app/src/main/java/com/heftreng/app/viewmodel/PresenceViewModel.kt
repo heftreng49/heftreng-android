@@ -11,6 +11,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.postgrest.postgrest
 import javax.inject.Inject
 
 // Firestore: presence/{uid} → { online, lastSeen, uid }
@@ -20,6 +22,7 @@ import javax.inject.Inject
 class PresenceViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val supabase : SupabaseClient,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -86,6 +89,7 @@ class PresenceViewModel @Inject constructor(
             context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
         } catch (_: Exception) { "" }
         viewModelScope.launch {
+            // Firestore — eski surum uyumlulugu
             try {
                 firestore.collection("presence").document(uid).set(
                     mapOf(
@@ -97,6 +101,18 @@ class PresenceViewModel @Inject constructor(
                     )
                 ).await()
             } catch (e: Exception) { e.printStackTrace() }
+            // Supabase — yeni kaynak
+            try {
+                supabase.postgrest["presence"].upsert(
+                    mapOf(
+                        "uid"         to uid,
+                        "online"      to true,
+                        "last_seen"   to java.time.Instant.now().toString(),
+                        "platform"    to "android",
+                        "app_version" to appVersion,
+                    )
+                )
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
@@ -105,10 +121,21 @@ class PresenceViewModel @Inject constructor(
         heartbeatJob = null
         if (uid.isEmpty()) return
         viewModelScope.launch {
+            // Firestore — eski surum uyumlulugu
             try {
                 firestore.collection("presence").document(uid).update(
                     mapOf("online" to false, "lastSeen" to FieldValue.serverTimestamp())
                 ).await()
+            } catch (e: Exception) { e.printStackTrace() }
+            // Supabase
+            try {
+                supabase.postgrest["presence"].upsert(
+                    mapOf(
+                        "uid"       to uid,
+                        "online"    to false,
+                        "last_seen" to java.time.Instant.now().toString(),
+                    )
+                )
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
