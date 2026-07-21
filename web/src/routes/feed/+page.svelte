@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { collection, query, orderBy, limit, getDocs, doc, updateDoc, increment } from "firebase/firestore";
+  import { collection, query, orderBy, limit, getDocs } from "firebase/firestore";
   import { db } from "$lib/firebase/config";
+  import { supabase } from "$lib/supabase/config";
   import { currentUser } from "$lib/store/auth";
   import Navbar from "$lib/components/Navbar.svelte";
 
@@ -13,6 +14,7 @@
       const q = query(collection(db, "feed"), orderBy("ts", "desc"), limit(30));
       const snap = await getDocs(q);
       posts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      await loadInteractions(posts.map(p => p.id));
     } catch(e) { console.error(e); }
     finally { loading = false; }
   });
@@ -28,8 +30,49 @@
 
   async function like(p: any) {
     if (!$currentUser) return;
-    posts = posts.map(x => x.id === p.id ? {...x, likesCount: (x.likesCount??0)+1} : x);
-    await updateDoc(doc(db, "feed", p.id), { likesCount: increment(1) });
+    // Optimistic update
+    posts = posts.map(x => x.id === p.id ? {...x, likesCount: (x.likesCount??0)+1, liked: true} : x);
+    try {
+      await supabase.from('feed_likes').upsert({
+        id:       $currentUser.uid + '_' + p.id,
+        user_uid: $currentUser.uid,
+        post_id:  p.id,
+      });
+    } catch(e) { console.error(e); }
+  }
+
+  async function unlike(p: any) {
+    if (!$currentUser) return;
+    posts = posts.map(x => x.id === p.id ? {...x, likesCount: Math.max((x.likesCount??1)-1,0), liked: false} : x);
+    try {
+      await supabase.from('feed_likes').delete().eq('id', $currentUser.uid + '_' + p.id);
+    } catch(e) { console.error(e); }
+  }
+
+  async function save(p: any) {
+    if (!$currentUser) return;
+    posts = posts.map(x => x.id === p.id ? {...x, saved: true} : x);
+    try {
+      await supabase.from('feed_saves').upsert({
+        id:       $currentUser.uid + '_' + p.id,
+        user_uid: $currentUser.uid,
+        post_id:  p.id,
+      });
+    } catch(e) { console.error(e); }
+  }
+
+  // Kullanicinin begendigi ve kaydettigi postlari yukle
+  async function loadInteractions(postIds: string[]) {
+    if (!$currentUser || postIds.length === 0) return;
+    try {
+      const [likesRes, savesRes] = await Promise.all([
+        supabase.from('feed_likes').select('post_id').eq('user_uid', $currentUser.uid).in('post_id', postIds),
+        supabase.from('feed_saves').select('post_id').eq('user_uid', $currentUser.uid).in('post_id', postIds),
+      ]);
+      const likedIds = new Set((likesRes.data ?? []).map((r: any) => r.post_id));
+      const savedIds = new Set((savesRes.data ?? []).map((r: any) => r.post_id));
+      posts = posts.map(p => ({ ...p, liked: likedIds.has(p.id), saved: savedIds.has(p.id) }));
+    } catch(e) { console.error(e); }
   }
 </script>
 
@@ -56,7 +99,7 @@
         {#if p.text}<p class="body">{p.text}</p>{/if}
         {#if p.imgUrl || p.imageURL}<img src={p.imgUrl || p.imageURL} alt="" class="post-img"/>{/if}
         <div class="acts">
-          <button class="act" onclick={() => like(p)}>
+          <button class="act" class:active={p.liked} onclick={() => p.liked ? unlike(p) : like(p)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
             <span>{p.likesCount ?? 0}</span>
           </button>
