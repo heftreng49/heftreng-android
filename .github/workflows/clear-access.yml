@@ -1,0 +1,37 @@
+name: Clear Cloudflare Access App
+
+on:
+  workflow_dispatch:
+
+jobs:
+  delete-app:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List and Delete Access App
+        env:
+          # GitHub Secrets kısmındaki secret ismini aşağıda uyarlıyoruz:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }} 
+        run: |
+          ACCOUNT_ID="6224f4246a7ec6aeea0e64727cbfddab"
+          
+          echo "1. Cloudflare üzerindeki kilitli uygulamalar listeleniyor..."
+          RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps" \
+               -H "Authorization: Bearer $CF_TOKEN" \
+               -H "Content-Type: application/json")
+          
+          echo "Gelen Yanıt: $RESPONSE"
+          
+          # App ID'yi çekiyoruz
+          APP_ID=$(echo $RESPONSE | jq -r '.result[0].id // empty')
+          
+          if [ -n "$APP_ID" ] && [ "$APP_ID" != "null" ]; then
+            echo "Bulunan App ID: $APP_ID. Silme işlemi başlatılıyor..."
+            DELETE_RESP=$(curl -s -X DELETE "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps/$APP_ID" \
+                 -H "Authorization: Bearer $CF_TOKEN" \
+                 -H "Content-Type: application/json")
+            echo "Silme Yanıtı: $DELETE_RESP"
+            echo "İşlem Tamamlandı! Kilit kaldırıldı."
+          else
+            echo "Silinecek bir kilitli uygulama bulunamadı veya yetki yetersiz."
+          fi
+
