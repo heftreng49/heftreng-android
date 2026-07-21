@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { collection, query, orderBy, limit, getDocs } from "firebase/firestore";
+  import { collection, query, orderBy, limit, getDocs, doc, updateDoc, increment } from "firebase/firestore";
   import { db } from "$lib/firebase/config";
+  import { currentUser } from "$lib/store/auth";
   import Navbar from "$lib/components/Navbar.svelte";
 
   let posts = $state<any[]>([]);
@@ -19,10 +20,16 @@
   function ago(ts: any) {
     const ms = ts?.seconds ? ts.seconds * 1000 : Number(ts);
     const m = Math.floor((Date.now() - ms) / 60000);
-    if (m < 1) return "az önce";
+    if (m < 1) return "az once";
     if (m < 60) return m + " dk";
     if (m < 1440) return Math.floor(m/60) + " sa";
     return Math.floor(m/1440) + " g";
+  }
+
+  async function like(p: any) {
+    if (!$currentUser) return;
+    posts = posts.map(x => x.id === p.id ? {...x, likesCount: (x.likesCount??0)+1} : x);
+    await updateDoc(doc(db, "feed", p.id), { likesCount: increment(1) });
   }
 </script>
 
@@ -33,23 +40,34 @@
       <div class="skeleton"><div class="sk-av"></div><div class="sk-lines"><div class="sk-l"></div><div class="sk-l w80"></div></div></div>
     {/each}
   {:else if posts.length === 0}
-    <p class="empty">Henüz gönderi yok.</p>
+    <p class="empty">Henuz gonderi yok.</p>
   {:else}
     {#each posts as p (p.id)}
       <article class="card">
         <div class="head">
-          {#if p.photoURL}<img src={p.photoURL} alt="" class="av"/>{:else}<div class="av-ph">{(p.displayName??"?")[0]}</div>{/if}
-          <div>
-            <div class="name">{p.displayName ?? p.name ?? "Anonim"}</div>
+          <a href="/profile/{p.uid}" class="av-wrap">
+            {#if p.photoURL}<img src={p.photoURL} alt="" class="av"/>{:else}<div class="av-ph">{(p.displayName??"?")[0].toUpperCase()}</div>{/if}
+          </a>
+          <div class="meta">
+            <a href="/profile/{p.uid}" class="name">{p.displayName ?? p.name ?? "Anonim"}</a>
             <div class="time">{ago(p.ts)}</div>
           </div>
         </div>
         {#if p.text}<p class="body">{p.text}</p>{/if}
         {#if p.imgUrl || p.imageURL}<img src={p.imgUrl || p.imageURL} alt="" class="post-img"/>{/if}
         <div class="acts">
-          <span>❤️ {p.likesCount ?? 0}</span>
-          <span>💬 {p.commentsCount ?? 0}</span>
-          <span>🔁 {p.repostsCount ?? 0}</span>
+          <button class="act" onclick={() => like(p)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            <span>{p.likesCount ?? 0}</span>
+          </button>
+          <button class="act">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span>{p.commentsCount ?? 0}</span>
+          </button>
+          <button class="act">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            <span>{p.repostsCount ?? 0}</span>
+          </button>
         </div>
       </article>
     {/each}
@@ -57,20 +75,26 @@
 </main>
 
 <style>
-.feed { max-width:600px; margin:0 auto; padding-top:8px; }
+.feed { max-width:600px; margin:0 auto; padding:12px 12px 40px; display:flex; flex-direction:column; gap:10px; }
 .empty { text-align:center; padding:40px; color:var(--muted); }
-.card { padding:14px 16px; border-bottom:1px solid var(--divider); background:var(--card); }
+.card { background:var(--card); border-radius:16px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,.08); }
 .head { display:flex; gap:10px; margin-bottom:10px; align-items:center; }
-.av,.av-ph { width:40px; height:40px; border-radius:50%; object-fit:cover; flex-shrink:0; }
-.av-ph { background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; }
-.name { font-weight:600; font-size:15px; color:var(--on-bg); }
-.time { font-size:13px; color:var(--muted); }
-.body { font-size:15px; color:var(--on-bg); line-height:1.6; white-space:pre-wrap; margin-bottom:10px; }
-.post-img { width:100%; border-radius:12px; margin-bottom:10px; max-height:400px; object-fit:cover; }
-.acts { display:flex; gap:20px; font-size:14px; color:var(--muted); }
-.skeleton { display:flex; gap:10px; padding:14px 16px; border-bottom:1px solid var(--divider); }
-.sk-av { width:40px; height:40px; border-radius:50%; background:var(--shimmer); flex-shrink:0; }
+.av-wrap { flex-shrink:0; }
+.av,.av-ph { width:42px; height:42px; border-radius:50%; object-fit:cover; display:block; }
+.av-ph { background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:16px; }
+.meta { display:flex; flex-direction:column; gap:2px; }
+.name { font-weight:600; font-size:15px; color:var(--on-bg); text-decoration:none; }
+.name:hover { text-decoration:underline; }
+.time { font-size:12px; color:var(--muted); }
+.body { font-size:15px; color:var(--on-bg); line-height:1.65; white-space:pre-wrap; margin-bottom:12px; }
+.post-img { width:100%; border-radius:12px; margin-bottom:12px; max-height:400px; object-fit:cover; }
+.acts { display:flex; gap:4px; margin-top:4px; }
+.act { display:flex; align-items:center; gap:5px; padding:7px 14px; border-radius:20px; background:var(--surface-var); color:var(--muted); font-size:14px; font-weight:500; cursor:pointer; border:none; transition:background .15s, color .15s; }
+.act:hover { background:var(--primary); color:#fff; }
+.act svg { width:16px; height:16px; }
+.skeleton { display:flex; gap:10px; padding:14px 16px; border-radius:16px; background:var(--card); }
+.sk-av { width:42px; height:42px; border-radius:50%; background:var(--shimmer); flex-shrink:0; }
 .sk-lines { flex:1; display:flex; flex-direction:column; gap:8px; padding-top:4px; }
-.sk-l { height:14px; background:var(--shimmer); border-radius:6px; width:100%; }
+.sk-l { height:14px; background:var(--shimmer); border-radius:6px; }
 .w80 { width:80%; }
 </style>
