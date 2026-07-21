@@ -213,7 +213,8 @@
 .feed { max-width:600px; margin:0 auto; padding:12px 12px 40px; display:flex; flex-direction:column; gap:10px; }
 .empty { text-align:center; padding:40px; color:var(--muted); }
 .card { background:var(--card); border-radius:16px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,.08); }
-.head { display:flex; gap:10px; margin-bottom:10px; align-items:center; }
+.head { display:flex; gap:10px; margin-bottom:10px; align-items:flex-start; }
+.meta { flex:1; min-width:0; }
 .av-wrap { flex-shrink:0; }
 .av,.av-ph { width:42px; height:42px; border-radius:50%; object-fit:cover; display:block; }
 .av-ph { background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:16px; }
