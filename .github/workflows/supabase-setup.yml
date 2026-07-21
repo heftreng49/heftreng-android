@@ -26,4 +26,5 @@ jobs:
           psql "$SUPABASE_DB_URL" -f scripts/sync_user_display_info.sql --set ON_ERROR_STOP=1
           psql "$SUPABASE_DB_URL" -f scripts/add_moderation_status.sql --set ON_ERROR_STOP=1
           psql "$SUPABASE_DB_URL" -f scripts/add_author_dedup.sql --set ON_ERROR_STOP=1
+          psql "$SUPABASE_DB_URL" -f scripts/add_presence_table.sql --set ON_ERROR_STOP=1
           echo "✅ Tüm tablolar oluşturuldu"
