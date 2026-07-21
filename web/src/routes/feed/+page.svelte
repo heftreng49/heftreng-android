@@ -17,7 +17,7 @@
   });
 
   function ago(ts: any) {
-    const ms = ts.seconds ? ts.seconds * 1000 : Number(ts);
+    const ms = ts?.seconds ? ts.seconds * 1000 : Number(ts);
     const m = Math.floor((Date.now() - ms) / 60000);
     if (m < 1) return "az önce";
     if (m < 60) return m + " dk";
@@ -57,9 +57,9 @@
 </main>
 
 <style>
-.feed { max-width:600px; margin:0 auto; }
+.feed { max-width:600px; margin:0 auto; padding-top:8px; }
 .empty { text-align:center; padding:40px; color:var(--muted); }
-.card { padding:14px 16px; border-bottom:1px solid var(--divider); }
+.card { padding:14px 16px; border-bottom:1px solid var(--divider); background:var(--card); }
 .head { display:flex; gap:10px; margin-bottom:10px; align-items:center; }
 .av,.av-ph { width:40px; height:40px; border-radius:50%; object-fit:cover; flex-shrink:0; }
 .av-ph { background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; }
