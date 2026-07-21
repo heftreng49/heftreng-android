@@ -231,12 +231,18 @@ class FeedViewModel @Inject constructor(
         val myUid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             try {
+                // Gunde bir kez yaz — lastStreakDate bugunse atla
+                val today = java.time.LocalDate.now().toString()
+                val userSnap = firestore.collection("users").document(myUid).get().await()
+                val lastDate = userSnap.getString("lastStreakDate") ?: ""
+                if (lastDate == today) return@launch
+
                 library.recordDailyActivity(myUid)
                 val streak = library.computeStreak(myUid)
                 firestore.collection("users").document(myUid)
-                    .update("streak", streak)
+                    .update(mapOf("streak" to streak, "lastStreakDate" to today))
 
-                // ── Rozetler — Öncelik 4 ────────────────────────────────────
+                // ── Rozetler — Oncelik 4 ────────────────────────────────────
                 val booksRead    = library.getBooksReadCount(myUid)
                 val quotesShared = library.getQuotesSharedCount(myUid)
                 library.checkAndAwardBadges(myUid, booksRead, quotesShared, streak)
