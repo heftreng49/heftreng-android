@@ -175,39 +175,46 @@ class ProfileViewModel @Inject constructor(
                     else                                     -> "none"
                 }
 
-                // followersCount / followingCount — Supabase follows tablosundan gerçek sayı çek.
-                // Firestore'daki followersCount alanı stale olabilir (eski takip sisteminden kalma).
+                // followersCount / followingCount — Supabase follows tablosundan paralel çek.
+                // Firestore sync: sadece kendi profilimizde yapılır (başkasının profilini güncellemez).
                 viewModelScope.launch {
                     try {
-                        // count() — tum satirlari cekme, sadece sayi al
-                        val followersCount = supabase.postgrest["follows"].select {
-                            filter { eq("target_uid", targetUid) }
-                            count(io.github.jan.supabase.postgrest.query.Count.EXACT)
-                            limit(0)
-                        }.countOrNull() ?: 0L
+                        val followersDeferred = async {
+                            supabase.postgrest["follows"].select {
+                                filter { eq("target_uid", targetUid) }
+                                count(io.github.jan.supabase.postgrest.query.Count.EXACT)
+                                limit(0)
+                            }.countOrNull() ?: 0L
+                        }
+                        val followingDeferred = async {
+                            supabase.postgrest["follows"].select {
+                                filter { eq("from_uid", targetUid) }
+                                count(io.github.jan.supabase.postgrest.query.Count.EXACT)
+                                limit(0)
+                            }.countOrNull() ?: 0L
+                        }
 
-                        val followingCount = supabase.postgrest["follows"].select {
-                            filter { eq("from_uid", targetUid) }
-                            count(io.github.jan.supabase.postgrest.query.Count.EXACT)
-                            limit(0)
-                        }.countOrNull() ?: 0L
+                        val followersCount = followersDeferred.await().toInt()
+                        val followingCount = followingDeferred.await().toInt()
 
-                        _followersCount.value = followersCount.toInt()
-                        _followingCount.value = followingCount.toInt()
+                        _followersCount.value = followersCount
+                        _followingCount.value = followingCount
 
-                        // Firestore'u sadece farklıysa guncelle
-                        val storedFollowers = _user.value?.followersCount ?: -1
-                        val storedFollowing = _user.value?.followingCount ?: -1
-                        if (_followersCount.value != storedFollowers ||
-                            _followingCount.value != storedFollowing) {
-                            try {
-                                firestore.collection("users").document(targetUid).update(
-                                    mapOf(
-                                        "followersCount" to _followersCount.value,
-                                        "followingCount" to _followingCount.value,
-                                    )
-                                ).await()
-                            } catch (_: Exception) {}
+                        // Firestore'u sadece kendi profilimizde ve sayı farklıysa güncelle
+                        // Başkasının profilini her açışta güncellemek gereksiz yazma işlemi
+                        if (targetUid == myUid) {
+                            val storedFollowers = _user.value?.followersCount ?: -1
+                            val storedFollowing = _user.value?.followingCount ?: -1
+                            if (followersCount != storedFollowers || followingCount != storedFollowing) {
+                                try {
+                                    firestore.collection("users").document(targetUid).update(
+                                        mapOf(
+                                            "followersCount" to followersCount,
+                                            "followingCount" to followingCount,
+                                        )
+                                    ).await()
+                                } catch (_: Exception) {}
+                            }
                         }
                     } catch (e: Exception) {
                         _followersCount.value = _user.value?.followersCount ?: 0
@@ -376,16 +383,15 @@ class ProfileViewModel @Inject constructor(
                 }
             }
             // coverImg boş alıntı postları için Supabase'den kapak URL'ini çek
+            // searchBooks tek sorgu: önce tam eşleşme, yoksa ilk sonuç — çift çağrı yok
             val needsCover = posts.filter { it.coverImg.isBlank() && it.bookName.isNotBlank() }
             if (needsCover.isNotEmpty()) {
                 val coverMap = mutableMapOf<String, String>()
                 needsCover.map { it.bookName }.distinct().forEach { title ->
                     try {
-                        val url = library.searchBooks(title)
-                            .firstOrNull { it.title.equals(title.trim(), ignoreCase = true) }
-                            ?.coverImg
-                            ?: library.searchBooks(title).firstOrNull()?.coverImg
-                            ?: ""
+                        val results = library.searchBooks(title)
+                        val url = (results.firstOrNull { it.title.equals(title.trim(), ignoreCase = true) }
+                            ?: results.firstOrNull())?.coverImg ?: ""
                         if (url.isNotBlank()) coverMap[title] = url
                     } catch (_: Exception) {}
                 }
@@ -434,9 +440,16 @@ class ProfileViewModel @Inject constructor(
     private fun sendFollowRequest(targetUid: String) {
         viewModelScope.launch {
             try {
-                val myDoc     = firestore.collection("users").document(myUid).get().await()
-                val fromName  = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
-                val fromPhoto = myDoc.getString("photoURL") ?: ""
+                // Kendi profilimizi zaten yükledik — cache'den al, gereksiz Firestore get() yapma
+                val fromName  = _cachedMyName2.ifBlank {
+                    firestore.collection("users").document(myUid).get().await()
+                        .let { it.getString("displayName") ?: it.getString("name") ?: "" }
+                        .also { _cachedMyName2 = it }
+                }
+                val fromPhoto = _cachedMyPhoto2.ifBlank {
+                    firestore.collection("users").document(myUid).get().await()
+                        .getString("photoURL") ?: ""
+                }
 
                 // followRequests/{targetUid}/pending/{fromUid}
                 firestore.collection("followRequests").document(targetUid)
@@ -485,10 +498,13 @@ class ProfileViewModel @Inject constructor(
     private fun followUserDirectly(targetUid: String) {
         viewModelScope.launch {
             try {
-                val myDoc       = firestore.collection("users").document(myUid).get().await()
+                // İki Firestore get() paralel — biri diğerini beklemez
+                val myDocDeferred     = async { firestore.collection("users").document(myUid).get().await() }
+                val targetDocDeferred = async { firestore.collection("users").document(targetUid).get().await() }
+                val myDoc     = myDocDeferred.await()
+                val targetDoc = targetDocDeferred.await()
                 val fromName    = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
                 val fromPhoto   = myDoc.getString("photoURL") ?: ""
-                val targetDoc   = firestore.collection("users").document(targetUid).get().await()
                 val targetName  = targetDoc.getString("displayName") ?: targetDoc.getString("name") ?: ""
                 val targetPhoto = targetDoc.getString("photoURL") ?: ""
 
@@ -651,45 +667,73 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    /** Profil "okuma özet kartı" — booksRead (Supabase reading_status, status='okudum')
-     *  ve quotesShared (Supabase book_quotes uid sayısı) gerçek verilerle doldurulur. */
+    /** Profil "okuma özet kartı" — booksRead, quotesShared ve rozetler paralel çekilir.
+     *  Tüm sorgular count(EXACT)+limit(0) kullanır; satır verisi inmez. */
     private fun syncReadingSummary(targetUid: String) {
         viewModelScope.launch {
             try {
-                val completedBooks = try {
-                    supabase.postgrest["reading_status"]
-                        .select { filter { eq("uid", targetUid); eq("status", "okudum") } }
-                        .decodeList<com.heftreng.app.data.repository.ReadingStatusRow>().size
-                } catch (e: Exception) { 0 }
+                // 3 bağımsız Supabase isteği aynı anda
+                val booksDeferred = async {
+                    try {
+                        supabase.postgrest["reading_status"].select {
+                            filter { eq("uid", targetUid); eq("status", "okudum") }
+                            count(io.github.jan.supabase.postgrest.query.Count.EXACT)
+                            limit(0)
+                        }.countOrNull()?.toInt() ?: 0
+                    } catch (_: Exception) { 0 }
+                }
+                val quotesDeferred = async {
+                    try {
+                        supabase.postgrest["book_quotes"].select {
+                            filter { eq("uid", targetUid) }
+                            count(io.github.jan.supabase.postgrest.query.Count.EXACT)
+                            limit(0)
+                        }.countOrNull()?.toInt() ?: 0
+                    } catch (_: Exception) { 0 }
+                }
+                val badgesDeferred = async {
+                    try { library.getUserBadgeIds(targetUid) }
+                    catch (_: Exception) { emptySet() }
+                }
 
-                val quotesCount = try {
-                    supabase.postgrest["book_quotes"]
-                        .select { filter { eq("uid", targetUid) } }
-                        .decodeList<com.heftreng.app.data.repository.BookQuoteRow>().size
-                } catch (e: Exception) { 0 }
+                val completedBooks = booksDeferred.await()
+                val quotesCount    = quotesDeferred.await()
+                val badgeIds       = badgesDeferred.await()
 
                 _user.value = _user.value?.copy(
                     booksRead    = completedBooks,
                     quotesShared = quotesCount,
                 )
-
-                _badgeIds.value = library.getUserBadgeIds(targetUid)
+                _badgeIds.value = badgeIds
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
-    /** Beğeni / yorum sayılarını Supabase'den çek (feed.likesCount/commentsCount artık
-     *  Firestore'da güncellenmiyor — Supabase tek kaynak). */
+    /** Beğeni / yorum sayılarını Supabase'den çek.
+     *  Her post için ayrı count() yerine tek sorguda tüm id'leri filtreler,
+     *  sadece post_id alanını seçer — büyük veri indirmez. */
     private fun syncProfilePostCounts(postIds: List<String>) {
         val ids = postIds.filter { it.isNotBlank() }.distinct()
         if (ids.isEmpty()) return
         viewModelScope.launch {
             try {
-                val likeRows = supabase.postgrest["feed_likes"]
-                    .select { filter { isIn("post_id", ids) } }
-                    .decodeList<com.heftreng.app.data.model.FeedLikeRow>()
-                val commentRows = supabase.postgrest["feed_comments"]
-                    .select { filter { isIn("post_id", ids) } }
-                    .decodeList<com.heftreng.app.data.model.FeedCommentRow>()
+                // Paralel: beğeni ve yorum sayıları aynı anda
+                val likesDeferred = async {
+                    try {
+                        supabase.postgrest["feed_likes"]
+                            .select { filter { isIn("post_id", ids) }; columns("post_id") }
+                            .decodeList<com.heftreng.app.data.model.FeedLikeRow>()
+                    } catch (_: Exception) { emptyList() }
+                }
+                val commentsDeferred = async {
+                    try {
+                        supabase.postgrest["feed_comments"]
+                            .select { filter { isIn("post_id", ids) }; columns("post_id") }
+                            .decodeList<com.heftreng.app.data.model.FeedCommentRow>()
+                    } catch (_: Exception) { emptyList() }
+                }
+
+                val likeRows    = likesDeferred.await()
+                val commentRows = commentsDeferred.await()
 
                 val likeCounts    = likeRows.groupingBy { it.postId }.eachCount()
                 val commentCounts = commentRows.groupingBy { it.postId }.eachCount()

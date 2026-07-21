@@ -850,20 +850,26 @@ class LibraryRepository @Inject constructor(
     //  Katalog Kotlin'de (BadgeCatalog); burada sadece kazanılan rozetler
     //  saklanır/okunur.
 
-    /** "okudum" durumundaki kitap sayısı — Rozet/Profil özet kartı için. */
+    /** "okudum" durumundaki kitap sayısı — Rozet/Profil özet kartı için.
+     *  count(EXACT) + limit(0): tüm satırları çekmeden sadece sayı alır. */
     suspend fun getBooksReadCount(uid: String): Int =
         try {
             db["reading_status"].select {
                 filter { eq("uid", uid); eq("status", "okudum") }
-            }.decodeList<ReadingStatusRow>().size
+                count(io.github.jan.supabase.postgrest.query.Count.EXACT)
+                limit(0)
+            }.countOrNull()?.toInt() ?: 0
         } catch (_: Exception) { 0 }
 
-    /** Kullanıcının eklediği toplam alıntı sayısı — Rozet/Profil özet kartı için. */
+    /** Kullanıcının eklediği toplam alıntı sayısı — Rozet/Profil özet kartı için.
+     *  count(EXACT) + limit(0): tüm satırları çekmeden sadece sayı alır. */
     suspend fun getQuotesSharedCount(uid: String): Int =
         try {
             db["book_quotes"].select {
                 filter { eq("uid", uid) }
-            }.decodeList<BookQuoteRow>().size
+                count(io.github.jan.supabase.postgrest.query.Count.EXACT)
+                limit(0)
+            }.countOrNull()?.toInt() ?: 0
         } catch (_: Exception) { 0 }
 
     suspend fun getUserBadgeIds(uid: String): Set<String> {
