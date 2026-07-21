@@ -179,28 +179,37 @@ class ProfileViewModel @Inject constructor(
                 // Firestore'daki followersCount alanı stale olabilir (eski takip sisteminden kalma).
                 viewModelScope.launch {
                     try {
-                        val followersRows = supabase.postgrest["follows"].select {
+                        // count() — tum satirlari cekme, sadece sayi al
+                        val followersCount = supabase.postgrest["follows"].select {
                             filter { eq("target_uid", targetUid) }
-                        }.decodeList<FollowRow>()
-                        _followersCount.value = followersRows.size
+                            count(io.github.jan.supabase.postgrest.query.Count.EXACT)
+                            limit(0)
+                        }.countOrNull() ?: 0L
 
-                        val followingRows = supabase.postgrest["follows"].select {
+                        val followingCount = supabase.postgrest["follows"].select {
                             filter { eq("from_uid", targetUid) }
-                        }.decodeList<FollowRow>()
-                        _followingCount.value = followingRows.size
+                            count(io.github.jan.supabase.postgrest.query.Count.EXACT)
+                            limit(0)
+                        }.countOrNull() ?: 0L
 
-                        // Firestore'u da güncelle — bir sonraki açılışta stale olmasın
-                        if (_followersCount.value != (_user.value?.followersCount ?: -1) ||
-                            _followingCount.value != (_user.value?.followingCount ?: -1)) {
-                            firestore.collection("users").document(targetUid).update(
-                                mapOf(
-                                    "followersCount" to _followersCount.value,
-                                    "followingCount" to _followingCount.value,
-                                )
-                            ).await()
+                        _followersCount.value = followersCount.toInt()
+                        _followingCount.value = followingCount.toInt()
+
+                        // Firestore'u sadece farklıysa guncelle
+                        val storedFollowers = _user.value?.followersCount ?: -1
+                        val storedFollowing = _user.value?.followingCount ?: -1
+                        if (_followersCount.value != storedFollowers ||
+                            _followingCount.value != storedFollowing) {
+                            try {
+                                firestore.collection("users").document(targetUid).update(
+                                    mapOf(
+                                        "followersCount" to _followersCount.value,
+                                        "followingCount" to _followingCount.value,
+                                    )
+                                ).await()
+                            } catch (_: Exception) {}
                         }
                     } catch (e: Exception) {
-                        // Supabase başarısız → Firestore değerlerini kullan
                         _followersCount.value = _user.value?.followersCount ?: 0
                         _followingCount.value = _user.value?.followingCount ?: 0
                     }
