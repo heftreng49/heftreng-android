@@ -15,6 +15,7 @@
       const snap = await getDocs(q);
       posts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       await loadInteractions(posts.map(p => p.id));
+      await loadLikeCounts(posts.map(p => p.id));
     } catch(e) { console.error(e); }
     finally { loading = false; }
   });
@@ -58,6 +59,22 @@
         user_uid: $currentUser.uid,
         post_id:  p.id,
       });
+    } catch(e) { console.error(e); }
+  }
+
+  async function loadLikeCounts(postIds: string[]) {
+    if (postIds.length === 0) return;
+    try {
+      const { data } = await supabase
+        .from('feed_likes')
+        .select('post_id')
+        .in('post_id', postIds);
+      if (!data) return;
+      const counts: Record<string, number> = {};
+      for (const r of data) {
+        counts[r.post_id] = (counts[r.post_id] ?? 0) + 1;
+      }
+      posts = posts.map(p => ({ ...p, likesCount: counts[p.id] ?? p.likesCount ?? 0 }));
     } catch(e) { console.error(e); }
   }
 
