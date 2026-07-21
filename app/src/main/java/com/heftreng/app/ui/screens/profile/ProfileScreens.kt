@@ -67,17 +67,19 @@ import androidx.compose.ui.graphics.graphicsLayer
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalMaterialApi::class)
 @Composable
 fun ProfileScreen(
-    uid          : String,
-    navController: NavController,
-    language     : String = "tr",
-    vm           : ProfileViewModel     = hiltViewModel(),
-    feedVm       : FeedViewModel        = hiltViewModel(),
-    bookVm       : BookViewModel        = hiltViewModel(),
-    rlVm         : ReadingListViewModel = hiltViewModel(),
-    msgsVm       : MessagesViewModel    = hiltViewModel(),
-    socialVm     : SocialViewModel      = hiltViewModel(),
-    settingsVm   : SettingsViewModel    = hiltViewModel(),
-    adsVm        : com.heftreng.app.viewmodel.AdsViewModel = hiltViewModel(),
+    uid            : String,
+    preloadedName  : String = "",
+    preloadedPhoto : String = "",
+    navController  : NavController,
+    language       : String = "tr",
+    vm             : ProfileViewModel     = hiltViewModel(),
+    feedVm         : FeedViewModel        = hiltViewModel(),
+    bookVm         : BookViewModel        = hiltViewModel(),
+    rlVm           : ReadingListViewModel = hiltViewModel(),
+    msgsVm         : MessagesViewModel    = hiltViewModel(),
+    socialVm       : SocialViewModel      = hiltViewModel(),
+    settingsVm     : SettingsViewModel    = hiltViewModel(),
+    adsVm          : com.heftreng.app.viewmodel.AdsViewModel = hiltViewModel(),
 ) {
     val user           by vm.user.collectAsState()
     val badgeIds       by vm.badgeIds.collectAsState()
@@ -231,7 +233,8 @@ fun ProfileScreen(
             TopAppBar(
                 title = {
                     Text(
-                        user?.let { u -> if (u.username.isNotBlank()) "@${u.username}" else u.displayName.ifBlank { if (ku) "Profîl" else "Profil" } } ?: Strings.loading(language),
+                        user?.let { u -> if (u.username.isNotBlank()) "@${u.username}" else u.displayName.ifBlank { if (ku) "Profîl" else "Profil" } }
+                            ?: preloadedName.ifBlank { Strings.loading(language) },
                         color = OnBackground, fontWeight = FontWeight.SemiBold,
                     )
                 },

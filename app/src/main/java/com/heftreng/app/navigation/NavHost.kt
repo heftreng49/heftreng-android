@@ -106,7 +106,7 @@ sealed class Screen(val route: String) {
     object Admin         : Screen("admin")
     object Cms           : Screen("cms")
     object MessageDetail : Screen("message/{convId}") { fun go(id: String) = "message/$id" }
-    object Profile       : Screen("profile/{uid}")    { fun go(uid: String) = "profile/$uid" }
+    object Profile       : Screen("profile/{uid}")    { fun go(uid: String, name: String = "", photo: String = "") = "profile/$uid?name=${java.net.URLEncoder.encode(name, \"UTF-8\")}&photo=${java.net.URLEncoder.encode(photo, \"UTF-8\")}" }
     object PeopleHub     : Screen("people_hub?tab={tab}") { fun go(tab: Int = 2) = "people_hub?tab=$tab" }
     object EditProfile   : Screen("edit_profile")
     object PostDetail    : Screen("post/{postId}")    { fun go(id: String) = "post/$id" }
@@ -711,12 +711,23 @@ fun HeftrangNavHost(
                         deepLinkGrammarId = back.arguments?.getString("openGrammar"),
                     )
                 }
-                composable("profile/{uid}") { back ->
+                composable(
+                    "profile/{uid}?name={name}&photo={photo}",
+                    arguments = listOf(
+                        androidx.navigation.navArgument("uid")   { type = androidx.navigation.NavType.StringType },
+                        androidx.navigation.navArgument("name")  { type = androidx.navigation.NavType.StringType; defaultValue = "" },
+                        androidx.navigation.navArgument("photo") { type = androidx.navigation.NavType.StringType; defaultValue = "" },
+                    )
+                ) { back ->
+                    val preloadName  = back.arguments?.getString("name")?.let { java.net.URLDecoder.decode(it, "UTF-8") } ?: ""
+                    val preloadPhoto = back.arguments?.getString("photo")?.let { java.net.URLDecoder.decode(it, "UTF-8") } ?: ""
                     ProfileScreen(
-                        uid           = back.arguments?.getString("uid") ?: "me",
-                        navController = navController,
-                        language      = language,
-                        adsVm         = adsVm,
+                        uid            = back.arguments?.getString("uid") ?: "me",
+                        preloadedName  = preloadName,
+                        preloadedPhoto = preloadPhoto,
+                        navController  = navController,
+                        language       = language,
+                        adsVm          = adsVm,
                     )
                 }
                 composable(
