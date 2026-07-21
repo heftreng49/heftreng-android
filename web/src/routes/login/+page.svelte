@@ -12,7 +12,7 @@
     if (!email || !password) return;
     loading = true; error = '';
     try { await signInWithEmailAndPassword(auth, email, password); goto('/feed'); }
-    catch { error = 'E-posta veya şifre hatalı.'; }
+    catch(e: any) { error = e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password' ? 'E-posta veya sifre hatali.' : e.code === 'auth/user-not-found' ? 'Bu e-posta kayitli degil.' : e.code === 'auth/too-many-requests' ? 'Cok fazla deneme. Lutfen bekleyin.' : (e.message ?? 'Giris basarisiz.'); }
     finally { loading = false; }
   }
 </script>
