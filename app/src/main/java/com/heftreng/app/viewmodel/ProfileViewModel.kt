@@ -720,14 +720,14 @@ class ProfileViewModel @Inject constructor(
                 val likesDeferred = async {
                     try {
                         supabase.postgrest["feed_likes"]
-                            .select { filter { isIn("post_id", ids) }; columns("post_id") }
+                            .select { filter { isIn("post_id", ids) } }
                             .decodeList<com.heftreng.app.data.model.FeedLikeRow>()
                     } catch (_: Exception) { emptyList() }
                 }
                 val commentsDeferred = async {
                     try {
                         supabase.postgrest["feed_comments"]
-                            .select { filter { isIn("post_id", ids) }; columns("post_id") }
+                            .select { filter { isIn("post_id", ids) } }
                             .decodeList<com.heftreng.app.data.model.FeedCommentRow>()
                     } catch (_: Exception) { emptyList() }
                 }
