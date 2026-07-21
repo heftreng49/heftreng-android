@@ -2,7 +2,7 @@ import { writable } from 'svelte/store';
 
 function createTheme() {
   const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('heftreng-theme') : null;
-  const initial = stored ? JSON.parse(stored) : { variant: 'charcoal', mode: 'dark' };
+  const initial = stored ? JSON.parse(stored) : { variant: 'charcoal', mode: 'light' };
   const { subscribe, update } = writable(initial);
   return {
     subscribe,
