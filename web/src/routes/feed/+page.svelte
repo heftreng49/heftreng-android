@@ -116,17 +116,33 @@
         {#if p.text}<p class="body">{p.text}</p>{/if}
         {#if p.imgUrl || p.imageURL}<img src={p.imgUrl || p.imageURL} alt="" class="post-img"/>{/if}
         <div class="acts">
-          <button class="act" class:active={p.liked} onclick={() => p.liked ? unlike(p) : like(p)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-            <span>{p.likesCount ?? 0}</span>
+          <!-- Begeni -->
+          <button class="act-btn" class:liked={p.liked} onclick={(e) => { e.stopPropagation(); p.liked ? unlike(p) : like(p); }}>
+            <svg viewBox="0 0 24 24" fill={p.liked ? "currentColor" : "none"} stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+            {#if (p.likesCount ?? 0) > 0}<span>{p.likesCount}</span>{/if}
           </button>
-          <button class="act" onclick={() => window.location.href = '/post/' + p.id}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            <span>{p.commentsCount ?? 0}</span>
+          <!-- Yorum -->
+          <button class="act-btn" onclick={(e) => { e.stopPropagation(); window.location.href = '/post/' + p.id; }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            {#if (p.commentsCount ?? 0) > 0}<span>{p.commentsCount}</span>{/if}
           </button>
-          <button class="act">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-            <span>{p.repostsCount ?? 0}</span>
+          <!-- Repost -->
+          <button class="act-btn" class:reposted={p.repostedByMe} onclick={(e) => e.stopPropagation()}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+              <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+            </svg>
+            {#if (p.repostsCount ?? 0) > 0}<span>{p.repostsCount}</span>{/if}
+          </button>
+          <!-- Kaydet -->
+          <button class="act-btn save" class:saved={p.saved} onclick={(e) => { e.stopPropagation(); save(p); }} style="margin-left:auto">
+            <svg viewBox="0 0 24 24" fill={p.saved ? "currentColor" : "none"} stroke="currentColor" stroke-width="2">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            </svg>
           </button>
         </div>
       </article>
@@ -148,10 +164,14 @@
 .time { font-size:12px; color:var(--muted); }
 .body { font-size:15px; color:var(--on-bg); line-height:1.65; white-space:pre-wrap; margin-bottom:12px; }
 .post-img { width:100%; border-radius:12px; margin-bottom:12px; max-height:400px; object-fit:cover; }
-.acts { display:flex; gap:4px; margin-top:4px; }
-.act { display:flex; align-items:center; gap:5px; padding:7px 14px; border-radius:20px; background:var(--surface-var); color:var(--muted); font-size:14px; font-weight:500; cursor:pointer; border:none; transition:background .15s, color .15s; }
-.act:hover { background:var(--primary); color:#fff; }
-.act svg { width:16px; height:16px; }
+.acts { display:flex; align-items:center; gap:2px; margin-top:8px; }
+.act-btn { display:flex; align-items:center; gap:4px; padding:6px 10px; border-radius:20px; color:var(--muted); font-size:13px; font-weight:500; cursor:pointer; border:none; background:transparent; transition:color .15s, background .15s; }
+.act-btn:hover { background:var(--surface-var); color:var(--on-bg); }
+.act-btn.liked { color:#FF3A5C; }
+.act-btn.reposted { color:#F59E0B; }
+.act-btn.saved { color:#F59E0B; }
+.act-btn.save:hover { background:var(--surface-var); color:#F59E0B; }
+.act-btn svg { width:18px; height:18px; }
 .skeleton { display:flex; gap:10px; padding:14px 16px; border-radius:16px; background:var(--card); }
 .sk-av { width:42px; height:42px; border-radius:50%; background:var(--shimmer); flex-shrink:0; }
 .sk-lines { flex:1; display:flex; flex-direction:column; gap:8px; padding-top:4px; }
