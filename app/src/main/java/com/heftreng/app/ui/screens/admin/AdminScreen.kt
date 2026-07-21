@@ -827,12 +827,13 @@ fun AdminScreen(
                     var showUnverified by remember { mutableStateOf(false) }
 
                     Column(Modifier.fillMaxSize()) {
-                        // Alt sekme: Tümü / Doğrulanmamış
+                        // Alt sekme: Tümü / Doğrulanmamış + Refresh
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             listOf(false to "Tümü", true to "Doğrulanmamış").forEach { (isUnverified, label) ->
                                 val selected = showUnverified == isUnverified
@@ -859,6 +860,14 @@ fun AdminScreen(
                                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                                     )
                                 }
+                            }
+                            IconButton(
+                                onClick = {
+                                    if (showUnverified) vm.loadUnverifiedUsers() else vm.loadUsers()
+                                },
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Yenile", tint = Amber)
                             }
                         }
 
@@ -1019,7 +1028,13 @@ fun AdminScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     item {
-                        Text("Şikayetler (${reports.size})", color = Amber, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Şikayetler (${reports.size})", color = Amber, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Spacer(Modifier.weight(1f))
+                            IconButton(onClick = { vm.loadReports() }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Yenile", tint = Amber)
+                            }
+                        }
                     }
                     if (reports.isEmpty()) {
                         item {
@@ -1178,6 +1193,9 @@ fun AdminScreen(
                             Spacer(Modifier.weight(1f))
                             if (appeals.isEmpty()) {
                                 Text("Bekleyen itiraz yok", color = Muted, fontSize = 12.sp)
+                            }
+                            IconButton(onClick = { vm.loadAppeals() }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Yenile", tint = Amber)
                             }
                         }
                     }
@@ -1995,10 +2013,14 @@ private fun PendingPostsTab(
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment     = Alignment.CenterVertically,
             ) {
                 StatChip("⏳ ${stats.pending}",  "Bekliyor",  filter == "pending",  Amber)   { filter = if (filter == "pending")  "all" else "pending" }
                 StatChip("✅ ${stats.approved}", "Onaylanan", filter == "approved", Success) { filter = if (filter == "approved") "all" else "approved" }
                 StatChip("❌ ${stats.rejected}", "Reddedilen",filter == "rejected", Error)   { filter = if (filter == "rejected") "all" else "rejected" }
+                IconButton(onClick = { vm.loadAllPendingPosts() }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Yenile", tint = Amber)
+                }
             }
         }
 
@@ -3011,10 +3033,16 @@ private fun StaffTab(
 
         // ── Mevcut yardımcılar ─────────────────────────────────────────────
         item {
-            Text(
-                "Yardımcılar (${staffList.size})",
-                color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Yardımcılar (${staffList.size})",
+                    color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp,
+                )
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = { vm.loadStaff() }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Yenile", tint = Amber)
+                }
+            }
             Spacer(Modifier.height(4.dp))
             // Liste boş görünüp aslında yükleme hatası (ör. Firestore rules
             // reddi) varsa bunu "Henüz yardımcı eklenmemiş" ile karıştırmadan
