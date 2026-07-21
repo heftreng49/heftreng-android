@@ -106,7 +106,13 @@ sealed class Screen(val route: String) {
     object Admin         : Screen("admin")
     object Cms           : Screen("cms")
     object MessageDetail : Screen("message/{convId}") { fun go(id: String) = "message/$id" }
-    object Profile       : Screen("profile/{uid}")    { fun go(uid: String, name: String = "", photo: String = "") = "profile/$uid?name=${java.net.URLEncoder.encode(name, \"UTF-8\")}&photo=${java.net.URLEncoder.encode(photo, \"UTF-8\")}" }
+    object Profile       : Screen("profile/{uid}") {
+        fun go(uid: String, name: String = "", photo: String = ""): String {
+            val n = java.net.URLEncoder.encode(name, "UTF-8")
+            val p = java.net.URLEncoder.encode(photo, "UTF-8")
+            return "profile/$uid?name=$n&photo=$p"
+        }
+    }
     object PeopleHub     : Screen("people_hub?tab={tab}") { fun go(tab: Int = 2) = "people_hub?tab=$tab" }
     object EditProfile   : Screen("edit_profile")
     object PostDetail    : Screen("post/{postId}")    { fun go(id: String) = "post/$id" }
