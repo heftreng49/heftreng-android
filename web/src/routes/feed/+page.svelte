@@ -8,6 +8,35 @@
 
   let posts = $state<any[]>([]);
   let loading = $state(true);
+  let menuOpenId = $state<string | null>(null);
+
+  function toggleMenu(e: Event, id: string) {
+    e.stopPropagation();
+    menuOpenId = menuOpenId === id ? null : id;
+  }
+  function closeMenu() { menuOpenId = null; }
+
+  async function deletePost(p: any) {
+    if (!$currentUser || $currentUser.uid !== p.uid) return;
+    closeMenu();
+    if (!confirm("Gonderiyi silmek istediginize emin misiniz?")) return;
+    try {
+      const { deleteDoc, doc } = await import("firebase/firestore");
+      await deleteDoc(doc(db, "feed", p.id));
+      posts = posts.filter(x => x.id !== p.id);
+    } catch(e) { console.error(e); }
+  }
+
+  function sharePost(p: any) {
+    closeMenu();
+    const url = window.location.origin + "/post/" + p.id;
+    if (navigator.share) {
+      navigator.share({ title: p.displayName, text: p.text?.slice(0,100), url });
+    } else {
+      navigator.clipboard.writeText(url);
+      alert("Baglanti kopyalandi!");
+    }
+  }
 
   onMount(async () => {
     try {
@@ -105,12 +134,42 @@
     {#each posts as p (p.id)}
       <article class="card">
         <div class="head">
-          <a href="/profile/{p.uid}" class="av-wrap">
+          <a href="/profile/{p.uid}" class="av-wrap" onclick={(e) => e.stopPropagation()}>
             {#if p.photoURL}<img src={p.photoURL} alt="" class="av"/>{:else}<div class="av-ph">{(p.displayName??"?")[0].toUpperCase()}</div>{/if}
           </a>
           <div class="meta">
-            <a href="/profile/{p.uid}" class="name">{p.displayName ?? p.name ?? "Anonim"}</a>
+            <a href="/profile/{p.uid}" class="name" onclick={(e) => e.stopPropagation()}>{p.displayName ?? p.name ?? "Anonim"}</a>
             <div class="time">{ago(p.ts)}</div>
+          </div>
+          <div class="menu-wrap">
+            <button class="menu-btn" onclick={(e) => toggleMenu(e, p.id)}>
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
+              </svg>
+            </button>
+            {#if menuOpenId === p.id}
+              <div class="menu-dropdown" onclick={(e) => e.stopPropagation()}>
+                <button class="menu-item" onclick={() => sharePost(p)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                  Paylasim Baglantisi
+                </button>
+                {#if $currentUser?.uid === p.uid}
+                  <button class="menu-item" onclick={() => window.location.href = '/compose?edit=' + p.id}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    Duzenle
+                  </button>
+                  <button class="menu-item danger" onclick={() => deletePost(p)}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                    Sil
+                  </button>
+                {:else}
+                  <button class="menu-item danger" onclick={closeMenu}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    Sikayet Et
+                  </button>
+                {/if}
+              </div>
+            {/if}
           </div>
         </div>
         {#if p.text}<p class="body">{p.text}</p>{/if}
