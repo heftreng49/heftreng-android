@@ -1356,8 +1356,9 @@ private fun LessonPath(
         lessons.forEachIndexed { index, lesson ->
             val isDone         = lesson.id in doneIds
             val isTempUnlocked = lesson.id in tempUnlockedIds
-            val isActive       = index == firstNotDone || isTempUnlocked
-            val isLocked       = index > firstNotDone && !isTempUnlocked
+            // isDone dersler hiçbir zaman isActive sayılmaz; tempUnlock sadece kilitli dersleri açar
+            val isActive       = !isDone && (index == firstNotDone || isTempUnlocked)
+            val isLocked       = !isDone && index > firstNotDone && !isTempUnlocked
 
             LessonPathNode(
                 lesson     = lesson,
@@ -1589,7 +1590,7 @@ private fun LessonPathNode(
                     modifier      = Modifier.width(72.dp),
                 )
 
-                // "BAŞLA" pill — sadece aktif ders
+                // "BAŞLA" pill — sadece aktif (henüz tamamlanmamış, kilitli olmayan) ders
                 if (isActive) {
                     Spacer(Modifier.height(5.dp))
                     Box(
@@ -1599,9 +1600,6 @@ private fun LessonPathNode(
                                 Brush.horizontalGradient(listOf(color, GradientEnd)),
                             )
                             .graphicsLayer { alpha = pulseAlpha }
-                            // ÖNCEDEN: bu pilin hiç clickable'ı yoktu — sadece dekorasyondu.
-                            // Kullanıcı sadece üstteki yuvarlak ders düğmesine basınca açabiliyordu.
-                            // Aktif ders zaten kilitli olamayacağı için burada doğrudan onClick().
                             .clickable { onClick() }
                             .padding(horizontal = 12.dp, vertical = 4.dp),
                     ) {
@@ -1613,8 +1611,10 @@ private fun LessonPathNode(
                             letterSpacing = 0.5.sp,
                         )
                     }
-                } else if (isDone && onShare != null) {
-                    // "PAYLAŞ" pill — tamamlanan dersler için
+                }
+
+                // "PAYLAŞ" pill — tamamlanan dersler için (isActive'den bağımsız)
+                if (isDone && onShare != null) {
                     Spacer(Modifier.height(5.dp))
                     Box(
                         modifier = Modifier
@@ -1643,9 +1643,10 @@ private fun LessonPathNode(
                             )
                         }
                     }
-                } else if (isLocked) {
-                    // İSTENEN: kilitli dersin yanında/altında "video izleyerek aç" ipucu —
-                    // önceden bunu öğrenmenin tek yolu kilide tıklayıp dialog'u açmaktı.
+                }
+
+                // "VİDEO İZLE" pill — kilitli dersler için (isActive/isDone'dan bağımsız)
+                if (isLocked) {
                     Spacer(Modifier.height(5.dp))
                     Box(
                         modifier = Modifier
