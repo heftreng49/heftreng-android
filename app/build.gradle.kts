@@ -12,12 +12,12 @@ plugins {
 
 android {
     namespace = "com.heftreng.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.heftreng.app"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         // GitHub Actions'ta GITHUB_RUN_NUMBER her push'ta otomatik artar
         // Lokalde 1 olur, CI'da her build'de 1 artar — artık elle değiştirmene gerek yok
         versionCode = (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1)
