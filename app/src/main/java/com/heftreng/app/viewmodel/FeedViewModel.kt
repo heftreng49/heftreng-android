@@ -165,7 +165,11 @@ class FeedViewModel @Inject constructor(
     private suspend fun cachedUserDoc(targetUid: String): Map<String, Any>? {
         _userDocCache[targetUid]?.let { return it }
         return try {
-            val d = firestore.collection("users").document(targetUid).get().await().data
+            val d = try {
+                firestore.collection("users").document(targetUid).get(Source.SERVER).await().data
+            } catch (_: Exception) {
+                firestore.collection("users").document(targetUid).get(Source.CACHE).await().data
+            }
             if (d != null) _userDocCache[targetUid] = d
             d
         } catch (_: Exception) { null }

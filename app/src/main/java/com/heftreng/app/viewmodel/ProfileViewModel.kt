@@ -7,6 +7,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.Source
 import com.heftreng.app.data.model.Post
 import com.heftreng.app.data.model.User
 import com.heftreng.app.data.model.FollowRow
@@ -123,7 +124,8 @@ class ProfileViewModel @Inject constructor(
             try {
                 // user + follow durumu + followRequest paralel
                 val userDocDeferred = async {
-                    firestore.collection("users").document(targetUid).get().await()
+                    try { firestore.collection("users").document(targetUid).get(Source.SERVER).await() }
+                    catch (_: Exception) { firestore.collection("users").document(targetUid).get(Source.CACHE).await() }
                 }
                 val followDocDeferred = async {
                     if (targetUid != myUid && myUid.isNotEmpty()) {
@@ -506,8 +508,8 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 // İki Firestore get() paralel — biri diğerini beklemez
-                val myDocDeferred     = async { firestore.collection("users").document(myUid).get().await() }
-                val targetDocDeferred = async { firestore.collection("users").document(targetUid).get().await() }
+                val myDocDeferred     = async { try { firestore.collection("users").document(myUid).get(Source.SERVER).await() } catch (_: Exception) { firestore.collection("users").document(myUid).get(Source.CACHE).await() } }
+                val targetDocDeferred = async { try { firestore.collection("users").document(targetUid).get(Source.SERVER).await() } catch (_: Exception) { firestore.collection("users").document(targetUid).get(Source.CACHE).await() } }
                 val myDoc     = myDocDeferred.await()
                 val targetDoc = targetDocDeferred.await()
                 val fromName    = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
