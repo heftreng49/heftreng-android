@@ -1024,6 +1024,17 @@ fun FeedScreen(
                             onAvatarClick = { uid -> navController.navigate(Screen.Profile.go(uid)) },
                         )
                     }
+
+                    // ── Önerilen Kişiler — 6. postun hemen altına ────────────
+                    if (selectedFeedTab == 0 && postIndex == 5 && suggestedUsers.isNotEmpty()) {
+                        SuggestedUsersCarousel(
+                            users      = suggestedUsers,
+                            onFollow   = { uid -> vm.followSuggestedUser(uid) },
+                            onNavigate = { uid -> navController.navigate(Screen.Profile.go(uid)) },
+                            onSeeAll   = { navController.navigate(Screen.PeopleHub.go(2)) },
+                            language   = language,
+                        )
+                    }
                 }
                 // ── Daha Fazla Göster ─────────────────────────────────────
                 if (hasMore) {
@@ -1049,18 +1060,7 @@ fun FeedScreen(
                     }
                 }
 
-                // ── Feed Sonu: Önerilen Kişiler — Instagram tarzı yatay kaydırmalı şerit ──
-                if (selectedFeedTab == 0 && suggestedUsers.isNotEmpty()) {
-                    item(key = "suggestions_bottom") {
-                        SuggestedUsersCarousel(
-                            users      = suggestedUsers,
-                            onFollow   = { uid -> vm.followSuggestedUser(uid) },
-                            onNavigate = { uid -> navController.navigate(Screen.Profile.go(uid)) },
-                            onSeeAll   = { navController.navigate(Screen.PeopleHub.go(2)) },
-                            language   = language,
-                        )
-                    }
-                }
+                // ── Feed Sonu ──────────────────────────────────────────────────
             }
                 PullRefreshIndicator(
                     refreshing = isRefreshing,
