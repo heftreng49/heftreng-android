@@ -359,42 +359,55 @@ class ProfileViewModel @Inject constructor(
     ) {
         if (posts.isEmpty()) return
         viewModelScope.launch {
-            val uids = posts.map { it.uid }.filter { it.isNotBlank() }.distinct()
-            val userMap = mutableMapOf<String, Pair<String, String>>()
-            uids.chunked(10).forEach { chunk ->
-                try {
-                    val snap = firestore.collection("users")
-                        .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
-                        .get().await()
-                    snap.documents.forEach { doc ->
-                        val name  = (doc.getString("displayName") ?: doc.getString("name") ?: "").takeIf { it.isNotBlank() } ?: ""
-                        val photo = doc.getString("photoURL") ?: ""
-                        userMap[doc.id] = name to photo
+            // ── Avatar/isim: sadece eksik olanlar için Firestore'a git ─────────
+            val uidsNeedingEnrich = posts
+                .filter { it.displayName.isBlank() || it.photoURL.isBlank() }
+                .map { it.uid }.filter { it.isNotBlank() }.distinct()
+
+            if (uidsNeedingEnrich.isNotEmpty()) {
+                val userMap = mutableMapOf<String, Pair<String, String>>()
+                // chunk'ları paralel çalıştır
+                uidsNeedingEnrich.chunked(10).map { chunk ->
+                    async {
+                        try {
+                            firestore.collection("users")
+                                .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                                .get().await()
+                                .documents.forEach { doc ->
+                                    val name  = (doc.getString("displayName") ?: doc.getString("name") ?: "").takeIf { it.isNotBlank() } ?: ""
+                                    val photo = doc.getString("photoURL") ?: ""
+                                    synchronized(userMap) { userMap[doc.id] = name to photo }
+                                }
+                        } catch (_: Exception) {}
                     }
-                } catch (_: Exception) {}
-            }
-            if (userMap.isNotEmpty()) {
-                target.value = target.value.map { post ->
-                    val (freshName, freshPhoto) = userMap[post.uid] ?: return@map post
-                    post.copy(
-                        displayName = freshName.ifBlank { post.displayName },
-                        photoURL    = freshPhoto.ifBlank { post.photoURL },
-                    )
+                }.forEach { it.await() }
+
+                if (userMap.isNotEmpty()) {
+                    target.value = target.value.map { post ->
+                        val (freshName, freshPhoto) = userMap[post.uid] ?: return@map post
+                        post.copy(
+                            displayName = freshName.ifBlank { post.displayName },
+                            photoURL    = freshPhoto.ifBlank { post.photoURL },
+                        )
+                    }
                 }
             }
-            // coverImg boş alıntı postları için Supabase'den kapak URL'ini çek
-            // searchBooks tek sorgu: önce tam eşleşme, yoksa ilk sonuç — çift çağrı yok
+
+            // ── Kapak görseli: sadece eksik olanlar, paralel Supabase sorgusu ──
             val needsCover = posts.filter { it.coverImg.isBlank() && it.bookName.isNotBlank() }
             if (needsCover.isNotEmpty()) {
-                val coverMap = mutableMapOf<String, String>()
-                needsCover.map { it.bookName }.distinct().forEach { title ->
-                    try {
-                        val results = library.searchBooks(title)
-                        val url = (results.firstOrNull { it.title.equals(title.trim(), ignoreCase = true) }
-                            ?: results.firstOrNull())?.coverImg ?: ""
-                        if (url.isNotBlank()) coverMap[title] = url
-                    } catch (_: Exception) {}
-                }
+                val coverEntries = needsCover.map { it.bookName }.distinct().map { title ->
+                    async {
+                        try {
+                            val results = library.searchBooks(title)
+                            val url = (results.firstOrNull { it.title.equals(title.trim(), ignoreCase = true) }
+                                ?: results.firstOrNull())?.coverImg ?: ""
+                            title to url
+                        } catch (_: Exception) { title to "" }
+                    }
+                }.map { it.await() }
+
+                val coverMap = coverEntries.filter { it.second.isNotBlank() }.toMap()
                 if (coverMap.isNotEmpty()) {
                     target.value = target.value.map { post ->
                         if (post.coverImg.isBlank() && post.bookName.isNotBlank()) {
