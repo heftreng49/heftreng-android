@@ -361,7 +361,8 @@ class MessagesViewModel @Inject constructor(
             .whereArrayContains("participants", uid)
             .orderBy("updated_at", Query.Direction.DESCENDING)
             .limit(50)
-            .addSnapshotListener { snap, _ ->
+            .addSnapshotListener { snap, error ->
+                if (error != null) { _loading.value = false; return@addSnapshotListener }
                 if (snap == null) { _loading.value = false; return@addSnapshotListener }
                 viewModelScope.launch {
                     data class RawConv(
@@ -501,8 +502,8 @@ class MessagesViewModel @Inject constructor(
                 .collection("msgs")
                 .orderBy("createdAt", Query.Direction.ASCENDING)
                 .whereGreaterThan("createdAt", afterTs)
-                .addSnapshotListener { snap, _ ->
-                    if (snap == null || snap.isEmpty) return@addSnapshotListener
+                .addSnapshotListener { snap, error ->
+                    if (error != null || snap == null || snap.isEmpty) return@addSnapshotListener
                     val newMsgs = snap.documents.mapNotNull { it.toMessage(convId) }
                     if (newMsgs.isEmpty()) return@addSnapshotListener
                     val merged = mergeMessages(_messages.value, newMsgs)
@@ -529,8 +530,8 @@ class MessagesViewModel @Inject constructor(
                 .collection("msgs")
                 .whereEqualTo("senderUid", uid)
                 .whereEqualTo("read", false)
-                .addSnapshotListener { snap, _ ->
-                    if (snap == null) return@addSnapshotListener
+                .addSnapshotListener { snap, error ->
+                    if (error != null || snap == null) return@addSnapshotListener
                     var changed = false
                     var merged = _messages.value
                     snap.documentChanges.forEach { change ->

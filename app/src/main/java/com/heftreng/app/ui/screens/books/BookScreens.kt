@@ -501,7 +501,8 @@ fun BookChapterReadScreen(
             .collection("chapters").document(chapterId)
             .collection("comments")
             .orderBy("ts", Query.Direction.ASCENDING)
-            .addSnapshotListener { snap, _ ->
+            .addSnapshotListener { snap, error ->
+                if (error != null) { cmtLoading = false; return@addSnapshotListener }
                 if (snap == null) { cmtLoading = false; return@addSnapshotListener }
                 comments = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null

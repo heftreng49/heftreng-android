@@ -145,10 +145,7 @@ class PresenceViewModel @Inject constructor(
         presenceListener?.remove()
         presenceListener = firestore.collection("presence").document(targetUid)
             .addSnapshotListener { snap, error ->
-                if (error != null) {
-                    _onlineUsers.value = _onlineUsers.value - targetUid
-                    return@addSnapshotListener
-                }
+                if (error != null) { _onlineUsers.value = _onlineUsers.value - targetUid; return@addSnapshotListener }
                 if (snap == null || !snap.exists()) {
                     _onlineUsers.value = _onlineUsers.value - targetUid
                     return@addSnapshotListener
@@ -187,7 +184,8 @@ class PresenceViewModel @Inject constructor(
     fun listenTyping(convId: String, otherUid: String) {
         typingListener?.remove()
         typingListener = firestore.collection("typing").document("${convId}_$otherUid")
-            .addSnapshotListener { snap, _ ->
+            .addSnapshotListener { snap, error ->
+                if (error != null) { _typingUsers.value = _typingUsers.value - otherUid; return@addSnapshotListener }
                 val exists = snap?.exists() == true
                 if (!exists) {
                     _typingUsers.value = _typingUsers.value - otherUid
