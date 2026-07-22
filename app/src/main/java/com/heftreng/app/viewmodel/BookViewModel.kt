@@ -8,6 +8,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.Source
 import com.heftreng.app.data.model.Book
 import com.heftreng.app.data.model.BookChapter
 import com.heftreng.app.data.model.ChapterComment
@@ -57,8 +58,14 @@ class BookViewModel @Inject constructor(
     private var likedBookIds   = emptySet<String>()
     private var likedSerialIds = emptySet<String>()
     private var likedChapterIds = emptySet<String>() // Bölüm beğenileri için eklendi
-    
+
     private var isLikesLoaded = false
+
+    // TTL cache — 5 dk içinde aynı listeyi tekrar Firestore'dan çekme
+    private val BOOK_CACHE_TTL_MS   = 5L * 60_000L
+    private var lastBooksFetchMs    = 0L
+    private var lastMyBooksFetchUid = ""
+    private var lastMyBooksFetchMs  = 0L
 
     init {
         // ViewModel ilk yaratıldığında kullanıcının beğeni geçmişini bir kez önbelleğe alalım
@@ -87,7 +94,9 @@ class BookViewModel @Inject constructor(
     //  LİSTE — books + serials birleşik
     // ════════════════════════════════════════════════════════════════════════
 
-    fun loadBooks() {
+    fun loadBooks(forceRefresh: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!forceRefresh && _books.value.isNotEmpty() && (now - lastBooksFetchMs) < BOOK_CACHE_TTL_MS) return
         viewModelScope.launch {
             _loading.value = true
             try {
@@ -113,13 +122,18 @@ class BookViewModel @Inject constructor(
 
                 _books.value = (bookList + serialList)
                     .sortedByDescending { it.updatedAt?.seconds ?: it.ts?.seconds ?: 0L }
+                lastBooksFetchMs = System.currentTimeMillis()
             } catch (e: Exception) { e.printStackTrace() }
             finally { _loading.value = false }
         }
     }
 
-    fun loadMyBooks(targetUid: String = uid) {
+    fun loadMyBooks(targetUid: String = uid, forceRefresh: Boolean = false) {
         if (targetUid.isEmpty()) return
+        val now = System.currentTimeMillis()
+        if (!forceRefresh && lastMyBooksFetchUid == targetUid
+            && _myBooks.value.isNotEmpty()
+            && (now - lastMyBooksFetchMs) < BOOK_CACHE_TTL_MS) return
         viewModelScope.launch {
             try {
                 val (booksSnap, serialsSnap) = coroutineScope {
@@ -133,6 +147,8 @@ class BookViewModel @Inject constructor(
 
                 _myBooks.value = (bookList + serialList)
                     .sortedByDescending { it.updatedAt?.seconds ?: it.ts?.seconds ?: 0L }
+                lastMyBooksFetchUid = targetUid
+                lastMyBooksFetchMs  = System.currentTimeMillis()
             } catch (e: Exception) { e.printStackTrace() }
         }
     }

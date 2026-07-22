@@ -449,16 +449,20 @@ class ProfileViewModel @Inject constructor(
     private fun sendFollowRequest(targetUid: String) {
         viewModelScope.launch {
             try {
-                // Kendi profilimizi zaten yükledik — cache'den al, gereksiz Firestore get() yapma
-                val fromName  = _cachedMyName2.ifBlank {
-                    firestore.collection("users").document(myUid).get().await()
-                        .let { it.getString("displayName") ?: it.getString("name") ?: "" }
-                        .also { _cachedMyName2 = it }
+                // Tek Firestore çekimi — hem name hem photo için
+                if (_cachedMyName2.isBlank() || _cachedMyPhoto2.isBlank()) {
+                    val myDoc = try {
+                        firestore.collection("users").document(myUid).get(Source.SERVER).await()
+                    } catch (_: Exception) {
+                        firestore.collection("users").document(myUid).get(Source.CACHE).await()
+                    }
+                    if (_cachedMyName2.isBlank())
+                        _cachedMyName2  = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
+                    if (_cachedMyPhoto2.isBlank())
+                        _cachedMyPhoto2 = myDoc.getString("photoURL") ?: ""
                 }
-                val fromPhoto = _cachedMyPhoto2.ifBlank {
-                    firestore.collection("users").document(myUid).get().await()
-                        .getString("photoURL") ?: ""
-                }
+                val fromName  = _cachedMyName2
+                val fromPhoto = _cachedMyPhoto2
 
                 // followRequests/{targetUid}/pending/{fromUid}
                 firestore.collection("followRequests").document(targetUid)

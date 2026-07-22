@@ -201,6 +201,10 @@ class KurdiViewModel @Inject constructor(
     private val _loading      = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
+    // TTL cache — 5 dk içinde load() tekrar Firestore'a gitmesin
+    private val KURDI_CACHE_TTL_MS = 5L * 60_000L
+    private var lastKurdiFetchMs   = 0L
+
     private val _toast        = MutableStateFlow<String?>(null)
     val toast = _toast.asStateFlow()
 
@@ -267,7 +271,11 @@ class KurdiViewModel @Inject constructor(
     init { load() }
 
     // ── Ana yükleme — site ile tam senkron ────────────────────────────────────
-    fun load() {
+    fun load(forceRefresh: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!forceRefresh && _loading.value) return
+        if (!forceRefresh && (now - lastKurdiFetchMs) < KURDI_CACHE_TTL_MS
+            && _units.value.isNotEmpty()) return
         viewModelScope.launch {
             _loading.value = true
             try {
@@ -320,6 +328,7 @@ class KurdiViewModel @Inject constructor(
 
                 // ── 2. kf_units + kf_lessons yükle ────────────────────────────
                 loadUnitsAndLessons(completedIds)
+                lastKurdiFetchMs = System.currentTimeMillis()
 
             } catch (e: Exception) {
                 e.printStackTrace()
