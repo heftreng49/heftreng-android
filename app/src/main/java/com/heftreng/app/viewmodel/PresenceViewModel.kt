@@ -144,7 +144,11 @@ class PresenceViewModel @Inject constructor(
     fun listenPresence(targetUid: String) {
         presenceListener?.remove()
         presenceListener = firestore.collection("presence").document(targetUid)
-            .addSnapshotListener { snap, _ ->
+            .addSnapshotListener { snap, error ->
+                if (error != null) {
+                    _onlineUsers.value = _onlineUsers.value - targetUid
+                    return@addSnapshotListener
+                }
                 if (snap == null || !snap.exists()) {
                     _onlineUsers.value = _onlineUsers.value - targetUid
                     return@addSnapshotListener
