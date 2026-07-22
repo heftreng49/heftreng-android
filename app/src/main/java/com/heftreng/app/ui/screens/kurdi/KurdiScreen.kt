@@ -434,6 +434,17 @@ fun KurdiScreen(
                 adsVm           = adsVm,
                 onNext   = { vm.getNextLesson()?.let { vm.openLesson(it.id) } },
                 onOpen   = { lessonId -> vm.openLesson(lessonId) },
+                onShare  = { lesson ->
+                    feedVm.repostKfLesson(
+                        lessonId    = lesson.id,
+                        lessonTitle = if (language == "ku") lesson.nameKu.ifBlank { lesson.nameTr } else lesson.nameTr,
+                        lessonTip   = lesson.tip,
+                        emoji       = lesson.emoji,
+                        onResult    = { ok ->
+                            vm.showToast(if (ok) Strings.shareLessonSuccess(language) else Strings.shareFailed(language))
+                        },
+                    )
+                },
                 onLockedClick = { lessonId ->
                     activity?.let {
                         adsVm.showRewarded(
@@ -992,6 +1003,7 @@ private fun UnitsTab(
     onNext          : () -> Unit,
     onOpen          : (String) -> Unit,
     onLockedClick   : (String) -> Unit = {},
+    onShare         : ((KfLesson) -> Unit)? = null,
 ) {
     when {
         loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1093,6 +1105,7 @@ private fun UnitsTab(
                             canWatchAd      = canWatchAd,
                             onOpen          = onOpen,
                             onLockedClick   = onLockedClick,
+                            onShare         = onShare,
                         )
                     }
                 }
@@ -1330,6 +1343,7 @@ private fun LessonPath(
     canWatchAd      : Boolean = false,
     onOpen          : (String) -> Unit,
     onLockedClick   : (String) -> Unit = {},
+    onShare         : ((KfLesson) -> Unit)? = null,
 ) {
     val firstNotDone = lessons.indexOfFirst { it.id !in doneIds }
         .let { if (it == -1) lessons.size else it }
@@ -1359,6 +1373,7 @@ private fun LessonPath(
                     if (!isLocked) onOpen(lesson.id)
                     else onLockedClick(lesson.id)
                 },
+                onShare    = if (isDone && onShare != null) { { onShare(lesson) } } else null,
             )
         }
     }
@@ -1376,6 +1391,7 @@ private fun LessonPathNode(
     language    : String = "tr",
     canWatchAd  : Boolean = false,
     onClick     : () -> Unit,
+    onShare     : (() -> Unit)? = null,
 ) {
     val ku = language == "ku"
     var showUnlockDialog by remember { mutableStateOf(false) }
@@ -1596,6 +1612,36 @@ private fun LessonPathNode(
                             fontSize      = 9.sp,
                             letterSpacing = 0.5.sp,
                         )
+                    }
+                } else if (isDone && onShare != null) {
+                    // "PAYLAŞ" pill — tamamlanan dersler için
+                    Spacer(Modifier.height(5.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(color.copy(alpha = 0.15f))
+                            .border(1.dp, color.copy(alpha = 0.45f), RoundedCornerShape(20.dp))
+                            .clickable { onShare() }
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Share,
+                                contentDescription = null,
+                                tint     = color,
+                                modifier = Modifier.size(9.dp),
+                            )
+                            Text(
+                                Strings.shareToFeed(language),
+                                color         = color,
+                                fontWeight    = FontWeight.Bold,
+                                fontSize      = 8.5.sp,
+                                letterSpacing = 0.2.sp,
+                            )
+                        }
                     }
                 } else if (isLocked) {
                     // İSTENEN: kilitli dersin yanında/altında "video izleyerek aç" ipucu —
