@@ -89,6 +89,7 @@ fun ProfileScreen(
     val hasMorePosts   by vm.hasMorePosts.collectAsState()
     val postCountState by vm.postCount.collectAsState()
     val loadingMore    by vm.loadingMorePosts.collectAsState()
+    val postsLoading   by vm.postsLoading.collectAsState()
     val hasMoreFollowers by socialVm.hasMoreFollowers.collectAsState()
     val hasMoreFollowing by socialVm.hasMoreFollowing.collectAsState()
     val followersCountRaw by vm.followersCount.collectAsState()
@@ -488,7 +489,7 @@ fun ProfileScreen(
 
                 // ─── Gönderiler ───────────────────────────────────────────
                 0 -> {
-                    if (loading && posts.isEmpty()) {
+                    if ((loading || postsLoading) && posts.isEmpty()) {
                         items(3, key = { "post_skel_$it" }) {
                             com.heftreng.app.ui.component.PostCardSkeleton()
                         }

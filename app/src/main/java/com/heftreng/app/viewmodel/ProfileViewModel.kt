@@ -56,6 +56,9 @@ class ProfileViewModel @Inject constructor(
 
     private val _loading = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
+    // Post yükleme ayrı state — header göründükten sonra postlar yüklenirken spinner
+    private val _postsLoading = MutableStateFlow(false)
+    val postsLoading = _postsLoading.asStateFlow()
     // Profil cache: 3 dk TTL (aynı profili tekrar açınca beklemeden göster)
     private val profileCache = mutableMapOf<String, CacheEntry<Unit>>()
 
@@ -114,30 +117,31 @@ class ProfileViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            // Loading'i sadece liste boşsa göster — ikinci açılışta çark gözükmez
-            _loading.value = _posts.value.isEmpty()
+            // ── AŞAMA 1: Profil başlığı — fotoğraf, bio, takip butonu ─────────
+            // Sadece user null ise skeleton göster, cache'den geliyorsa direkt header
+            _loading.value = (_user.value == null)
             try {
-                // ── 2. Paralel fetch: user + follow durumu aynı anda ──────────
-                val userDocDeferred = viewModelScope.async {
+                // user + follow durumu + followRequest paralel
+                val userDocDeferred = async {
                     firestore.collection("users").document(targetUid).get().await()
                 }
-                val followDocDeferred = viewModelScope.async {
+                val followDocDeferred = async {
                     if (targetUid != myUid && myUid.isNotEmpty()) {
                         try {
-                            val rows = supabase.postgrest["follows"].select {
+                            supabase.postgrest["follows"].select {
                                 filter { eq("id", "${myUid}_$targetUid") }
                                 limit(1)
-                            }.decodeList<FollowRow>()
-                            rows.isNotEmpty()
+                            }.decodeList<FollowRow>().isNotEmpty()
                         } catch (_: Exception) { false }
                     } else false
                 }
-                val followRequestDeferred = viewModelScope.async {
+                val followRequestDeferred = async {
                     if (targetUid != myUid && myUid.isNotEmpty())
                         firestore.collection("followRequests").document(targetUid)
                             .collection("pending").document(myUid).get().await()
                     else null
                 }
+
                 val userDoc           = userDocDeferred.await()
                 val isFollowingResult = followDocDeferred.await()
                 val followRequestDoc  = followRequestDeferred.await()
@@ -165,18 +169,17 @@ class ProfileViewModel @Inject constructor(
                     isPrivate          = d["private"]           as? Boolean ?: false,
                     messagePermission  = d["messagePermission"] as? String  ?: "everyone",
                 )
-
                 _isFollowing.value = isFollowingResult
-
-                // Takip isteği durumu
                 _followRequestStatus.value = when {
-                    _isFollowing.value                       -> "accepted"
-                    followRequestDoc?.exists() == true       -> "pending"
-                    else                                     -> "none"
+                    _isFollowing.value                 -> "accepted"
+                    followRequestDoc?.exists() == true -> "pending"
+                    else                               -> "none"
                 }
 
-                // followersCount / followingCount — Supabase follows tablosundan paralel çek.
-                // Firestore sync: sadece kendi profilimizde yapılır (başkasının profilini güncellemez).
+                // ✅ AŞAMA 1 TAMAMLANDI — header hemen ekrana gelir
+                _loading.value = false
+
+                // Takipçi sayıları arka planda — header'ı bekletmez
                 viewModelScope.launch {
                     try {
                         val followersDeferred = async {
@@ -193,25 +196,17 @@ class ProfileViewModel @Inject constructor(
                                 limit(0)
                             }.countOrNull() ?: 0L
                         }
-
                         val followersCount = followersDeferred.await().toInt()
                         val followingCount = followingDeferred.await().toInt()
-
                         _followersCount.value = followersCount
                         _followingCount.value = followingCount
-
-                        // Firestore'u sadece kendi profilimizde ve sayı farklıysa güncelle
-                        // Başkasının profilini her açışta güncellemek gereksiz yazma işlemi
                         if (targetUid == myUid) {
                             val storedFollowers = _user.value?.followersCount ?: -1
                             val storedFollowing = _user.value?.followingCount ?: -1
                             if (followersCount != storedFollowers || followingCount != storedFollowing) {
                                 try {
                                     firestore.collection("users").document(targetUid).update(
-                                        mapOf(
-                                            "followersCount" to followersCount,
-                                            "followingCount" to followingCount,
-                                        )
+                                        mapOf("followersCount" to followersCount, "followingCount" to followingCount)
                                     ).await()
                                 } catch (_: Exception) {}
                             }
@@ -222,18 +217,22 @@ class ProfileViewModel @Inject constructor(
                     }
                 }
 
+                // Rozet + okuma özeti arka planda
+                syncReadingSummary(targetUid)
+
+                // ── AŞAMA 2: Postlar — header görünür, altında skeleton göster ─
                 val isOwnProfile  = (targetUid == myUid)
                 val isPrivate     = _user.value?.isPrivate ?: false
                 val canSeeContent = isOwnProfile || !isPrivate || _isFollowing.value
-
                 if (!canSeeContent) { _posts.value = emptyList(); return@launch }
 
-                // ── 3. Gönderileri çek — her post için ayrı likeDoc await() YOK ──
                 if (lastLoadedUid != targetUid) {
                     lastPostDoc   = null
                     lastLoadedUid = targetUid
                     _posts.value  = emptyList()
                 }
+
+                _postsLoading.value = true
                 val snap = firestore.collection("feed")
                     .whereEqualTo("uid", targetUid)
                     .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
@@ -241,7 +240,7 @@ class ProfileViewModel @Inject constructor(
                 if (snap.documents.isNotEmpty()) lastPostDoc = snap.documents.last()
                 _hasMorePosts.value = snap.documents.size >= POST_PAGE.toInt()
 
-                // Gerçek gönderi sayısı — count() aggregation, tek istek, döküman okumaz
+                // Gönderi sayısı arka planda
                 viewModelScope.launch {
                     try {
                         val countSnap = firestore.collection("feed")
@@ -249,13 +248,11 @@ class ProfileViewModel @Inject constructor(
                             .count().get(com.google.firebase.firestore.AggregateSource.SERVER).await()
                         _postCount.value = countSnap.count.toInt()
                     } catch (e: Exception) {
-                        // count() başarısız olursa yüklenen sayfa boyutunu göster
-                        android.util.Log.w("ProfileVM", "postCount fallback: ${e.message}")
                         _postCount.value = snap.documents.size
                     }
                 }
 
-                // Beğenilen ID'leri tek toplu sorguyla al
+                // Beğeniler
                 val postIds = snap.documents.map { it.id }
                 val likedIds = if (myUid.isNotEmpty() && postIds.isNotEmpty()) {
                     try {
@@ -331,16 +328,12 @@ class ProfileViewModel @Inject constructor(
                     )
                 }.sortedByDescending { it.ts?.seconds ?: 0L }
 
-                // ── 4. Denormalize veriyle anında ekrana bas ──────────────────
+                // ✅ AŞAMA 2 TAMAMLANDI — postlar ekrana gelir
                 _posts.value = rawPosts
-                _loading.value = false
+                _postsLoading.value = false
                 syncProfilePostCounts(rawPosts.map { it.id })
-                syncReadingSummary(targetUid)
-
-                // ── 5. Arka planda güncel avatar/isim ile sessizce güncelle ──
                 enrichPostsInBackground(rawPosts)
 
-                // Cache'e yaz
                 profileCache.getOrPut(targetUid) {
                     CacheEntry(ttlMs = 3 * 60_000L)
                 }.set(Unit)
@@ -349,6 +342,7 @@ class ProfileViewModel @Inject constructor(
                 e.printStackTrace()
             } finally {
                 _loading.value = false
+                _postsLoading.value = false
             }
         }
     }
