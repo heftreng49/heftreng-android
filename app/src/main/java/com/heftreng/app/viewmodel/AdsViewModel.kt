@@ -294,11 +294,14 @@ class AdsViewModel @Inject constructor(
                 override fun onAdFailedToLoad(adError: LoadAdError) {
                     rewardedAd      = null
                     rewardedLoading = false
-                    // Retry kaldırıldı — native/banner ile aynı politika.
-                    // No-fill durumunda tekrar denemek istek/gösterim oranını
-                    // bozar. Kullanıcı rewarded butona basınca showRewarded()
-                    // içinde preloadRewardedAd tekrar tetiklenir (o an yükler).
-                    // onAppForeground'da da tekrar denenecek.
+                    // No-fill veya ağ hatası — 30 sn sonra bir kez daha dene.
+                    // Sürekli retry fill rate'i bozar; tek gecikmiş deneme yeterli.
+                    viewModelScope.launch {
+                        kotlinx.coroutines.delay(30_000L)
+                        if (rewardedAd == null && !rewardedLoading) {
+                            preloadRewardedAd(unitId)
+                        }
+                    }
                 }
             },
         )
