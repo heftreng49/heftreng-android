@@ -116,6 +116,9 @@ class FeedViewModel @Inject constructor(
     private fun filterVisible(posts: List<Post>): List<Post> {
         val myUid = uid
         return posts.filter { p ->
+            // Silinen hesapların postları: displayName ve photoURL boş gelir, uid de Firestore'da yok
+            // Savunma katmanı — kök neden deleteAccount'ta temizleniyor ama eski veriler için filtre
+            if (p.uid.isBlank()) return@filter false
             when (p.visibility) {
                 "only_me" -> p.uid == myUid
                 "friends" -> p.uid == myUid || _followingUids.value.contains(p.uid)
@@ -1600,7 +1603,7 @@ class FeedViewModel @Inject constructor(
                 }
                 hasMore = candidates.size > SUGGEST_PAGE_SIZE
             } else {
-                val candidates = rows.filter { it.uid !in excludeUids && it.uid.isNotBlank() }
+                val candidates = rows.filter { it.uid !in excludeUids && it.uid.isNotBlank() && it.displayName.isNotBlank() }
                 android.util.Log.d("FeedVM", "fetchSuggestedUsers: havuz=${rows.size}, aday=${candidates.size}, exclude=${excludeUids.size}")
                 pageUsers = candidates.shuffled().take(SUGGEST_PAGE_SIZE).map { row ->
                     SuggestedUser(
@@ -1628,7 +1631,7 @@ class FeedViewModel @Inject constructor(
             }
 
             pageUsers = rows
-                .filter { it.uid !in excludeUids && it.uid.isNotBlank() }
+                .filter { it.uid !in excludeUids && it.uid.isNotBlank() && it.displayName.isNotBlank() }
                 .take(SUGGEST_PAGE_SIZE)
                 .map { row ->
                     SuggestedUser(

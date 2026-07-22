@@ -16,6 +16,8 @@ import android.content.SharedPreferences
 import javax.inject.Named
 import com.heftreng.app.utils.HeftrangMessagingService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -26,6 +28,7 @@ import javax.inject.Inject
 class AuthViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val supabase : SupabaseClient,
     @Named("auth_prefs") private val prefs: SharedPreferences,
 ) : ViewModel() {
 
@@ -671,19 +674,42 @@ class AuthViewModel @Inject constructor(
                 try { firestore.collection("userNotifs").document(uid).delete().await() }
                 catch (_: Exception) {}
 
-                // 3. Kayıtlı hesabı SharedPreferences'tan kaldır
+                // 3. Firestore feed postlarını sil — başkalarının feed'inde görünmesin
+                try {
+                    val postSnap = firestore.collection("feed")
+                        .whereEqualTo("uid", uid)
+                        .get().await()
+                    val batch = firestore.batch()
+                    postSnap.documents.forEach { batch.delete(it.reference) }
+                    if (postSnap.documents.isNotEmpty()) batch.commit().await()
+                } catch (_: Exception) {}
+
+                // 4. Supabase users tablosunu sil — takip önerilerinde çıkmasın
+                try {
+                    supabase.postgrest["users"].delete {
+                        filter { eq("uid", uid) }
+                    }
+                } catch (_: Exception) {}
+
+                // 5. Supabase follows tablosunu temizle (takip eden/edilenler)
+                try {
+                    supabase.postgrest["follows"].delete {
+                        filter { or { eq("from_uid", uid); eq("target_uid", uid) } }
+                    }
+                } catch (_: Exception) {}
+
+                // 6. Kayıtlı hesabı SharedPreferences'tan kaldır
                 try {
                     val saved = prefs.getString("saved_accounts", "") ?: ""
                     val remaining = saved.split("|").filter { !it.contains("::$uid") }.joinToString("|")
                     prefs.edit().putString("saved_accounts", remaining).apply()
                 } catch (_: Exception) {}
 
-                // 4. Firebase Auth hesabını sil (son adım — sonrası auth dinleyicisi tetiklenir)
+                // 7. Firebase Auth hesabını sil (son adım — sonrası auth dinleyicisi tetiklenir)
                 user.delete().await()
 
                 onSuccess()
             } catch (e: com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException) {
-                // Google hesapları yeniden giriş gerektirebilir
                 onError("Hesabı silmek için lütfen tekrar giriş yapın.")
             } catch (e: Exception) {
                 onError(e.message ?: "Hesap silinirken hata oluştu")
