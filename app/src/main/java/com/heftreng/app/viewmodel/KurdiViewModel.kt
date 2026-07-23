@@ -1082,7 +1082,9 @@ class KurdiViewModel @Inject constructor(
                 val uid  = u.optString("id").ifBlank { "u_${System.currentTimeMillis()}" }
                 val uRef = firestore.collection("kf_units").document(uid)
                 val ord  = (_units.value.maxOfOrNull { it.order } ?: 0) + 1
-                if (!uRef.get().await().exists()) {
+                // SERVER'a erişilemezse CACHE'e düş, yoksa false döndür (ekleme atla)
+                val alreadyExists = try { uRef.get().await().exists() } catch (_: Exception) { false }
+                if (!alreadyExists) {
                     uRef.set(mapOf("id" to uid, "ttl" to u.optString("ttl"),
                         "nameKu" to u.optString("nameKu"), "desc" to u.optString("desc"),
                         "icon" to u.optString("icon","📖"), "color" to u.optString("color","#8B5CF6"),
@@ -1141,10 +1143,12 @@ class KurdiViewModel @Inject constructor(
 
                         // Eski vocab/exercise temizle (overwrite modunda)
                         if (exists) {
-                            firestore.collection("kf_vocab").whereEqualTo("lessonId",lid).limit(200).get().await()
-                                .documents.forEach { it.reference.delete() }
-                            firestore.collection("kf_exercises").whereEqualTo("lessonId",lid).limit(200).get().await()
-                                .documents.forEach { it.reference.delete() }
+                            try {
+                                firestore.collection("kf_vocab").whereEqualTo("lessonId",lid).limit(200).get().await()
+                                    .documents.forEach { it.reference.delete() }
+                                firestore.collection("kf_exercises").whereEqualTo("lessonId",lid).limit(200).get().await()
+                                    .documents.forEach { it.reference.delete() }
+                            } catch (_: Exception) { /* Temizleme başarısız — yeni ekleme yine de devam eder */ }
                         }
 
                         val va = l.optJSONArray("vocab") ?: org.json.JSONArray()
