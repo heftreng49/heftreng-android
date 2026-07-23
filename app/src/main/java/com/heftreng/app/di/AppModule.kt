@@ -18,6 +18,10 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.realtime.Realtime
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpTimeout
+import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
 
@@ -92,12 +96,18 @@ object AppModule {
 
     @Provides @Singleton
     fun provideSupabaseClient(): SupabaseClient = createSupabaseClient(
-        // Değerler build.gradle.kts'de BuildConfig'e gömülür:
-        //   CI   → GitHub Secrets: SUPABASE_URL, SUPABASE_ANON_KEY
-        //   Lokal → local.properties: SUPABASE_URL=..., SUPABASE_ANON_KEY=...
         supabaseUrl = BuildConfig.SUPABASE_URL,
         supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
     ) {
+        // Varsayılan 10s timeout ağ dalgalanmalarında crash yapıyordu → 30s'ye çıkarıldı
+        httpEngine = OkHttp.create {
+            config {
+                connectTimeout(30, TimeUnit.SECONDS)
+                readTimeout(30, TimeUnit.SECONDS)
+                writeTimeout(30, TimeUnit.SECONDS)
+                retryOnConnectionFailure(true)
+            }
+        }
         install(Postgrest)
         install(Realtime)
     }
