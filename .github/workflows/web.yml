@@ -35,9 +35,14 @@ jobs:
           VITE_SUPABASE_URL:                 ${{ secrets.SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY:            ${{ secrets.SUPABASE_ANON_KEY }}
 
-      - name: Deploy to Cloudflare Pages
+      - name: Deploy to Render
         working-directory: web
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler pages deploy .svelte-kit/cloudflare --project-name=heftreng --branch=main --commit-dirty=true
+          RENDER_API_KEY:     ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID:  ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          curl -s -X POST \
+            "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache": false}'
