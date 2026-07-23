@@ -138,10 +138,17 @@ class ProfileViewModel @Inject constructor(
                     } else false
                 }
                 val followRequestDeferred = async {
-                    if (targetUid != myUid && myUid.isNotEmpty())
-                        firestore.collection("followRequests").document(targetUid)
-                            .collection("pending").document(myUid).get().await()
-                    else null
+                    if (targetUid != myUid && myUid.isNotEmpty()) {
+                        try {
+                            firestore.collection("followRequests").document(targetUid)
+                                .collection("pending").document(myUid).get(Source.SERVER).await()
+                        } catch (_: Exception) {
+                            try {
+                                firestore.collection("followRequests").document(targetUid)
+                                    .collection("pending").document(myUid).get(Source.CACHE).await()
+                            } catch (_: Exception) { null }
+                        }
+                    } else null
                 }
 
                 val userDoc           = userDocDeferred.await()

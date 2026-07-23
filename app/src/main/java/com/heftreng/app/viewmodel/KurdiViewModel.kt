@@ -829,7 +829,9 @@ class KurdiViewModel @Inject constructor(
                 if (exerciseIndex != null) data["exerciseIndex"] = exerciseIndex + 1 // 1-tabanlı göster
                 if (!exerciseType.isNullOrBlank()) data["exerciseType"] = exerciseType
                 if (!exerciseQuestion.isNullOrBlank()) data["exerciseQuestion"] = exerciseQuestion
-                firestore.collection("kf_reports").add(data).await()
+                // await() kullanmıyoruz — offline'da crash yapar.
+                // Firestore SDK yazmayı kuyruğa alır, bağlantı gelince otomatik gönderir.
+                firestore.collection("kf_reports").add(data)
                 onDone()
             } catch (e: Exception) { _toast.value = "Gönderilemedi: ${e.message}" }
         }
@@ -839,9 +841,15 @@ class KurdiViewModel @Inject constructor(
         viewModelScope.launch {
             _reportsLoading.value = true
             try {
-                val snap = firestore.collection("kf_reports")
-                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(100).get().await()
+                val snap = try {
+                    firestore.collection("kf_reports")
+                        .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                        .limit(100).get(com.google.firebase.firestore.Source.SERVER).await()
+                } catch (_: Exception) {
+                    firestore.collection("kf_reports")
+                        .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                        .limit(100).get(com.google.firebase.firestore.Source.CACHE).await()
+                }
                 _reports.value = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     LessonReport(
