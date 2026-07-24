@@ -88,7 +88,7 @@ fun ConnectedPostCard(
         },
 
         // ── Navigation ────────────────────────────────────────────────────
-        onProfile = { navController.navigate(Screen.Profile.go(post.uid, post.displayName, post.photoURL ?: "")) },
+        onProfile = { if (post.uid.isNotBlank()) navController.navigate(Screen.Profile.go(post.uid, post.displayName, post.photoURL ?: "")) },
         onComment = { navController.navigate(Screen.PostDetail.go(post.id)) },
         onTap     = if (isDetailScreen) null
                     else { { navController.navigate(Screen.PostDetail.go(post.id)) } },
@@ -139,7 +139,7 @@ fun ConnectedPostCard(
         onReport = onReport,
         onBlock  = onBlock,
         onTapHashtag = { taggedPostId -> navController.navigate(Screen.PostDetail.go(taggedPostId)) },
-        onTapMention = { mentionedUid -> navController.navigate("profile/$mentionedUid") },
+        onTapMention = { mentionedUid -> if (mentionedUid.isNotBlank()) navController.navigate("profile/$mentionedUid") },
     )
 
     if (showUnrepostConfirm) {

@@ -108,6 +108,13 @@ class ProfileViewModel @Inject constructor(
     fun load(uid: String, preloadedUser: User? = null, forceRefresh: Boolean = false) {
         val targetUid = if (uid == "me") myUid else uid
 
+        // ── Boş uid koruması: çevrimdışı veya oturumu olmayan kullanıcıda çökmeyi önler ──
+        if (targetUid.isBlank()) {
+            _userNotFound.value = true
+            _loading.value = false
+            return
+        }
+
         // ── 1. Eğer önceki ekrandan User verisi geldiyse anında göster ──────
         if (preloadedUser != null && _user.value == null) {
             _user.value = preloadedUser
@@ -246,10 +253,18 @@ class ProfileViewModel @Inject constructor(
                 }
 
                 _postsLoading.value = true
-                val snap = firestore.collection("feed")
-                    .whereEqualTo("uid", targetUid)
-                    .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(POST_PAGE).get().await()
+                val snap = try {
+                    firestore.collection("feed")
+                        .whereEqualTo("uid", targetUid)
+                        .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                        .limit(POST_PAGE).get(Source.SERVER).await()
+                } catch (_: Exception) {
+                    // Çevrimdışı: önbellekten yükle
+                    firestore.collection("feed")
+                        .whereEqualTo("uid", targetUid)
+                        .orderBy("ts", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                        .limit(POST_PAGE).get(Source.CACHE).await()
+                }
                 if (snap.documents.isNotEmpty()) lastPostDoc = snap.documents.last()
                 _hasMorePosts.value = snap.documents.size >= POST_PAGE.toInt()
 
