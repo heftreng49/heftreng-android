@@ -415,8 +415,8 @@ class FeedViewModel @Inject constructor(
                     
                     _posts.value = mapInteractions(filtered)
                     _loading.value = false // Önbellekten veri geldiği an yükleme çemberi biter!
-                    enrichPostsInBackground(filtered)
-                    refreshInteractionsForPage(filtered)
+                    // NOT: enrichPostsInBackground ve refreshInteractionsForPage burada çağrılmıyor.
+                    // Cache verisi yerel — network sorgusu gerekmez. Server aşaması zaten çalışacak.
                 }
             } catch (e: Exception) {
                 // Önbellek boşsa veya ilk yüklemeyse burası sessizce pas geçilir
@@ -668,19 +668,18 @@ class FeedViewModel @Inject constructor(
                     .decodeList<FeedLikeRow>()
                 val likeCounts = likeRows.groupingBy { it.postId }.eachCount()
 
-                // feed_comments: ESKİ → tüm satır içeriği (text, mentions vb.) çekiliyordu.
-                // YENİ → sadece post_id bazlı count, satır verisi gelmiyor.
-                val commentCounts = mutableMapOf<String, Int>()
-                for (postId in ids) {
-                    try {
-                        val count = supabase.postgrest["feed_comments"].select {
-                            filter { eq("post_id", postId) }
-                            count(io.github.jan.supabase.postgrest.query.Count.EXACT)
-                            limit(0)
-                        }.countOrNull()?.toInt() ?: 0
-                        commentCounts[postId] = count
-                    } catch (_: Exception) { /* sayaç alınamadı, mevcut değer korunur */ }
-                }
+                // feed_comments: tek sorguda tüm post_id'leri çek, istemcide grupla.
+                // ESKİ: her post için ayrı COUNT sorgusu (N post = N HTTP isteği).
+                // YENİ: tek SELECT + groupingBy → sayfa başına 1 istek.
+                val commentCounts: Map<String, Int> = try {
+                    supabase.postgrest["feed_comments"]
+                        .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("post_id")) {
+                            filter { isIn("post_id", ids) }
+                        }
+                        .decodeList<FeedCommentRow>()
+                        .groupingBy { it.postId }
+                        .eachCount()
+                } catch (_: Exception) { emptyMap() }
 
                 if (likeCounts.isEmpty() && commentCounts.isEmpty()) return@launch
 
