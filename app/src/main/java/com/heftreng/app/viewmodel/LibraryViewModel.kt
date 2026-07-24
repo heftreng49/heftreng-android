@@ -14,6 +14,10 @@ import com.heftreng.app.data.repository.BookQuoteRow
 import com.heftreng.app.data.repository.BookReviewRow
 import com.heftreng.app.data.repository.LibraryBookRow
 import com.heftreng.app.data.repository.LibraryRepository
+import com.heftreng.app.data.local.AuthorDao
+import com.heftreng.app.data.local.BookDao
+import com.heftreng.app.data.local.CachedAuthor
+import com.heftreng.app.data.local.CachedBook
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
@@ -90,11 +94,69 @@ private fun BookReviewRow.toDomain() = BookReview(
     likesCount      = likesCount,
 )
 
+private fun AuthorRow.toCached() = CachedAuthor(
+    id            = id,
+    name          = name,
+    bio           = bio,
+    photoUrl      = photoUrl,
+    birthYear     = birthYear,
+    nationality   = nationality,
+    bookCount     = bookCount,
+    quoteCount    = quoteCount,
+    reviewCount   = reviewCount,
+    followerCount = followerCount,
+)
+
+private fun LibraryBookRow.toCached() = CachedBook(
+    id          = id,
+    title       = title,
+    authorId    = authorId ?: "",
+    authorName  = authorName,
+    coverImg    = coverImg,
+    genre       = genre,
+    publishYear = publishYear,
+    synopsis    = synopsis,
+    pageCount   = pageCount,
+    quoteCount  = quoteCount,
+    reviewCount = reviewCount,
+    avgRating   = avgRating,
+)
+
+private fun CachedAuthor.toDomain() = Author(
+    id            = id,
+    name          = name,
+    bio           = bio,
+    photoURL      = photoUrl,
+    birthYear     = birthYear,
+    nationality   = nationality,
+    bookCount     = bookCount,
+    quoteCount    = quoteCount,
+    reviewCount   = reviewCount,
+    followerCount = followerCount,
+)
+
+private fun CachedBook.toDomain() = LibraryBook(
+    id          = id,
+    title       = title,
+    authorId    = authorId,
+    authorName  = authorName,
+    coverImg    = coverImg,
+    genre       = genre,
+    publishYear = publishYear,
+    synopsis    = synopsis,
+    pageCount   = pageCount,
+    quoteCount  = quoteCount,
+    reviewCount = reviewCount,
+    avgRating   = avgRating,
+)
+
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
-    private val auth     : FirebaseAuth,
-    private val firestore: FirebaseFirestore,
-    private val library  : LibraryRepository,
+    private val auth      : FirebaseAuth,
+    private val firestore : FirebaseFirestore,
+    private val library   : LibraryRepository,
+    private val bookDao   : BookDao,
+    private val authorDao : AuthorDao,
 ) : ViewModel() {
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -130,6 +192,9 @@ class LibraryViewModel @Inject constructor(
 
     private val _isFollowingAuthor = MutableStateFlow(false)
     val isFollowingAuthor = _isFollowingAuthor.asStateFlow()
+
+    private val _isOffline = MutableStateFlow(false)
+    val isOffline = _isOffline.asStateFlow()
 
     val myUid   get() = auth.currentUser?.uid ?: ""
     val myName  get() = auth.currentUser?.displayName ?: ""
