@@ -304,6 +304,8 @@ exports.fixNewUserDisplayName = functions
         uid: user.uid, banned: true, moderationStatus: "suspended",
         moderationNote: "Otomatik: şüpheli kayıt", createdAt: new Date(),
       }, { merge: true });
+      // Custom claim — firestore.rules notBanned() token'dan okur
+      try { await adm.setCustomUserClaims(user.uid, { banned: true }); } catch (_) {}
     }
 
     try {
@@ -1184,12 +1186,24 @@ exports.adminSetBan = onCall(
     const { uid, banned } = request.data || {};
     if (!uid) throw new HttpsError("invalid-argument", "uid gerekli.");
 
+    const auth = require("firebase-admin/auth").getAuth();
+
+    // 1. Supabase'i güncelle
     const { error } = await getSupabaseAdmin()
       .from("users")
       .update({ banned: !!banned })
       .eq("uid", uid);
-
     if (error) throw new HttpsError("internal", `Supabase hata: ${error.message}`);
+
+    // 2. Firestore users dokümanını güncelle (UI / yedek kontrol için)
+    await getFirestore().collection("users").doc(uid).update({ banned: !!banned });
+
+    // 3. Firebase Auth custom claim — firestore.rules notBanned() bunu okur, sıfır maliyet
+    await auth.setCustomUserClaims(uid, { banned: !!banned });
+
+    // 4. Ban ise refresh token'ları iptal et — ban anında geçerli olsun
+    if (!!banned) await auth.revokeRefreshTokens(uid);
+
     console.log(`[adminSetBan] uid=${uid} banned=${banned} caller=${callerUid}`);
     return { success: true };
   }

@@ -48,11 +48,19 @@ service cloud.firestore {
           && request.resource.data[field].size() <= n;
     }
 
-    // FATURA OPTİMİZASYONU: notBanned() sadece write işlemlerinde kullanılır.
-    // Read işlemlerinde çağrılmaz → gereksiz get() maliyeti sıfırlanır.
+    // FATURA OPTİMİZASYONU: notBanned() artık custom claim kullanıyor.
+    // Eski implementasyon her write'ta ekstra bir Firestore get() yapıyordu.
+    // Yeni implementasyon token'dan okur — sıfır ek maliyet.
+    //
+    // ÖNKOŞUL: Ban işlemi Cloud Function üzerinden yapılmalı:
+    //   admin.auth().setCustomUserClaims(uid, { banned: true })
+    // Unban:
+    //   admin.auth().setCustomUserClaims(uid, { banned: false })
+    // Token yenilenene kadar (~1 saat) gecikme olabilir; acil ban için
+    // users/{uid}.banned alanı da kontrol edilmek istenirse eski implementasyona
+    // geçici olarak dönülebilir.
     function notBanned() {
-      return !exists(/databases/$(database)/documents/users/$(request.auth.uid))
-          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('banned', false) == false;
+      return request.auth.token.get('banned', false) == false;
     }
 
     // ── Rol fonksiyonları ──────────────────────────────────────
