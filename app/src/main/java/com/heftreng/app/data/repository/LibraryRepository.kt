@@ -651,12 +651,14 @@ class LibraryRepository @Inject constructor(
 
     suspend fun followAuthor(authorId: String) {
         val uid = auth.currentUser?.uid ?: return
+        // upsert: aynı kullanıcı iki kez basarsa ikinci satır oluşmaz
         db["author_follows"].upsert(
             mapOf("author_id" to authorId, "user_id" to uid)
         )
-        val a = getAuthor(authorId) ?: return
+        // Sayaç: read-then-write yerine gerçek takipçi sayısını say (race condition yok)
+        val realCount = countFollowers(authorId)
         db["authors"].update(
-            mapOf("follower_count" to a.followerCount + 1)
+            mapOf("follower_count" to realCount)
         ) { filter { eq("id", authorId) } }
     }
 
@@ -668,11 +670,21 @@ class LibraryRepository @Inject constructor(
                 eq("user_id", uid)
             }
         }
-        val a = getAuthor(authorId) ?: return
+        // Sayaç: silme sonrası gerçek sayıyı yaz (race condition yok)
+        val realCount = countFollowers(authorId)
         db["authors"].update(
-            mapOf("follower_count" to (a.followerCount - 1).coerceAtLeast(0))
+            mapOf("follower_count" to realCount)
         ) { filter { eq("id", authorId) } }
     }
+
+    /** author_follows tablosundan gerçek takipçi sayısını döndürür. */
+    private suspend fun countFollowers(authorId: String): Int = try {
+        db["author_follows"].select {
+            filter { eq("author_id", authorId) }
+            count(io.github.jan.supabase.postgrest.query.Count.EXACT)
+            limit(0)
+        }.countOrNull()?.toInt() ?: 0
+    } catch (_: Exception) { 0 }
 
     // ── ensureAuthorAndBook ───────────────────────────────────────────────────
 
