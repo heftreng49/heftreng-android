@@ -138,10 +138,6 @@ class FeedViewModel @Inject constructor(
     private val _loadingMore   = MutableStateFlow(false)
     val loadingMore = _loadingMore.asStateFlow()
 
-    // Tek seferlik hata olayları (toast / snackbar için)
-    private val _errorEvent = MutableStateFlow<String?>(null)
-    val errorEvent = _errorEvent.asStateFlow()
-
     private val _postNotFound  = MutableStateFlow<String?>(null)
     val postNotFound = _postNotFound.asStateFlow()
 
@@ -163,6 +159,9 @@ class FeedViewModel @Inject constructor(
     private val AUTO_REFRESH_INTERVAL_MS: Long = 5L * 60L * 1000L // 5 dk — otomatik yenileme aralığı
     
     private val userCache = mutableMapOf<String, Pair<String, String>>()
+
+    // coverImg Firestore'a zaten yazılmış post ID'leri — tekrar yazma döngüsünü önler
+    private val coverImgWrittenIds = mutableSetOf<String>()
 
     // user dökümanı bellek cache — aynı uid'yi tekrar Firestore'dan çekmez
     private val _userDocCache = mutableMapOf<String, Map<String, Any>>()
@@ -584,8 +583,10 @@ class FeedViewModel @Inject constructor(
 
             // Sorun 4 düzeltmesi: Firestore'daki coverImg alanını da güncelle.
             // Böylece sonraki açılışlarda aynı Supabase sorgusu tekrar atılmaz.
+            // coverImgWrittenIds: Bu oturumda zaten yazılmış ID'leri tekrar yazmayı önler
+            // (write döngüsü: _posts güncelleme → observer → refresh → tekrar write)
             val postsToWrite = (updatedPosts + updatedQuotes)
-                .filter { it.coverImg.isNotBlank() && it.id.isNotBlank() }
+                .filter { it.coverImg.isNotBlank() && it.id.isNotBlank() && it.id !in coverImgWrittenIds }
                 .distinctBy { it.id }
             if (postsToWrite.isNotEmpty()) {
                 try {
@@ -597,6 +598,8 @@ class FeedViewModel @Inject constructor(
                         )
                     }
                     batch.commit().await()
+                    // Başarıyla yazılanları cache'e al — aynı oturumda tekrar yazma
+                    postsToWrite.forEach { coverImgWrittenIds.add(it.id) }
                 } catch (_: Exception) {}
             }
         }

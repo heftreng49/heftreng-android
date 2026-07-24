@@ -41,10 +41,11 @@ class PresenceViewModel @Inject constructor(
     // gösteriliyordu. Timeout artık heartbeat aralığının ~2.5 katı: son
     // heartbeat'ten bu kadar süre geçtiyse, uygulama kapanmış/arka planda
     // askıya alınmış kabul edilip offline sayılır.
-    private val HEARTBEAT_INTERVAL_MS = 60_000L   // 1 dakikada bir yaz — uygulama açıkken online kalır
-    private val ONLINE_TIMEOUT_MS     = 150_000L  // 2.5 dakika — bu süre heartbeat gelmezse offline say
+    private val HEARTBEAT_INTERVAL_MS = 120_000L  // 2 dakikada bir yaz — write sayısını yarıya indirir
+    private val ONLINE_TIMEOUT_MS     = 360_000L  // 6 dakika — heartbeat aralığının 3 katı (güvenli marj)
 
-    private var heartbeatJob     : kotlinx.coroutines.Job? = null
+    private var heartbeatJob        : kotlinx.coroutines.Job? = null
+    private var isFirstHeartbeat    = true  // İlk çağrıda set(), sonrasında update() — write maliyeti düşer
     private var presenceListener : com.google.firebase.firestore.ListenerRegistration? = null
     private var typingListener   : com.google.firebase.firestore.ListenerRegistration? = null
 
@@ -73,6 +74,7 @@ class PresenceViewModel @Inject constructor(
     // ── Online durumunu yaz + heartbeat başlat ────────────────────────────────
     fun goOnline() {
         if (uid.isEmpty()) return
+        isFirstHeartbeat = true  // goOnline her çağrıldığında set() ile başla (belge yoksa güvenli)
         sendHeartbeat()
         // Her 30 sn'de bir lastSeen güncelle — uygulama açıkken online kalır
         heartbeatJob?.cancel()
@@ -89,17 +91,22 @@ class PresenceViewModel @Inject constructor(
             context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
         } catch (_: Exception) { "" }
         viewModelScope.launch {
-            // Firestore — eski surum uyumlulugu
+            // Firestore — ilk heartbeat set() (belge oluşturur), sonrası update() (daha ucuz)
             try {
-                firestore.collection("presence").document(uid).set(
-                    mapOf(
-                        "online"     to true,
-                        "lastSeen"   to FieldValue.serverTimestamp(),
-                        "uid"        to uid,
-                        "appVersion" to appVersion,
-                        "platform"   to "android",
-                    )
-                ).await()
+                val ref = firestore.collection("presence").document(uid)
+                val data = mapOf(
+                    "online"     to true,
+                    "lastSeen"   to FieldValue.serverTimestamp(),
+                    "uid"        to uid,
+                    "appVersion" to appVersion,
+                    "platform"   to "android",
+                )
+                if (isFirstHeartbeat) {
+                    ref.set(data).await()
+                    isFirstHeartbeat = false
+                } else {
+                    ref.update(data).await()
+                }
             } catch (e: Exception) { e.printStackTrace() }
             // Supabase — yeni kaynak
             try {
