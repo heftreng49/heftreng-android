@@ -153,6 +153,14 @@ class LibraryRepository @Inject constructor(
     // ── Kısayol ───────────────────────────────────────────────────────────────
     private val db get() = supabase.postgrest
 
+    // ── getBannedUids TTL cache ───────────────────────────────────────────────
+    // Banlı uid listesi neredeyse statik veri — her alıntı/inceleme yüklemesinde
+    // Supabase'e ayrı sorgu atmak gereksiz (yavaş bağlantıda ekstra gecikme yaratır).
+    // 10 dakikada bir taze çekilir; arada cache'ten döner.
+    private var bannedUidsCache    : Set<String> = emptySet()
+    private var bannedUidsFetchedAt: Long        = 0L
+    private val BANNED_CACHE_TTL_MS              = 10 * 60 * 1000L  // 10 dakika
+
     // ── Authors ───────────────────────────────────────────────────────────────
 
     suspend fun getAuthors(limit: Int = 50): List<AuthorRow> =
@@ -350,13 +358,23 @@ class LibraryRepository @Inject constructor(
      *  banlı uid'ler ayrı bir sorguyla çekilip client-side dışlanıyor.
      *  Hata olursa boş küme döner — banned filtresi devre dışı kalır ama
      *  ekran hiç açılmaz hale gelmez (fail-open, sadece bu filtre için). */
-    private suspend fun getBannedUids(): Set<String> = try {
-        db["users"].select {
-            filter { eq("banned", true) }
-        }.decodeList<com.heftreng.app.data.model.UserRow>().map { it.uid }.toSet()
-    } catch (e: Exception) {
-        android.util.Log.w("LibraryRepo", "getBannedUids: ${e.message}")
-        emptySet()
+    private suspend fun getBannedUids(): Set<String> {
+        val now = System.currentTimeMillis()
+        // Cache hâlâ geçerliyse ağa gitme
+        if (now - bannedUidsFetchedAt < BANNED_CACHE_TTL_MS && bannedUidsCache.isNotEmpty()) {
+            return bannedUidsCache
+        }
+        return try {
+            val result = db["users"].select {
+                filter { eq("banned", true) }
+            }.decodeList<com.heftreng.app.data.model.UserRow>().map { it.uid }.toSet()
+            bannedUidsCache     = result
+            bannedUidsFetchedAt = now
+            result
+        } catch (e: Exception) {
+            android.util.Log.w("LibraryRepo", "getBannedUids: ${e.message}")
+            bannedUidsCache  // hata varsa son bilinen listeyi kullan (fail-safe)
+        }
     }
 
     /** Keşfet → Alıntılar — en son eklenen kütüphane alıntıları.
