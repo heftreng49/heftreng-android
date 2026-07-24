@@ -160,10 +160,14 @@ class SearchViewModel @Inject constructor(
     private suspend fun searchFirebase(q: String, qLower: String, qCap: String): List<SearchResult> {
         val results = mutableListOf<SearchResult>()
 
-        // Kullanıcı — displayName + name + username prefix (3 varyant, case-sensitive Firestore)
+        // Kullanıcı araması — ESKİ: displayName(×3) + username(×1) + name(×3) = 7 sorgu
+        // YENİ: displayName(qLower + qCap) + username(qLower) = 3 sorgu
+        // Türkçe/Kürtçe büyük harf farkı qCap ile yakalanıyor; q ≈ qLower veya qCap olduğundan
+        // distinct() listesi zaten 1-2 elemana düşüyor — ek bir varyant gerekmez.
+        // "name" alanı displayName ile büyük ölçüde örtüşüyor; displayName sorgusu yeterli.
         try {
             val seenIds = mutableSetOf<String>()
-            for (prefix in listOf(q, qLower, qCap).distinct()) {
+            for (prefix in listOf(qLower, qCap).distinct()) {
                 val snap = firestore.collection("users")
                     .orderBy("displayName")
                     .startAt(prefix).endAt(prefix + "\uF8FF")
@@ -178,15 +182,6 @@ class SearchViewModel @Inject constructor(
                 .limit(15).get().await()
             for (doc in uSnap.documents) {
                 if (seenIds.add(doc.id)) mapUser(doc)?.let { results += it }
-            }
-            for (prefix in listOf(q, qLower, qCap).distinct()) {
-                val snap = firestore.collection("users")
-                    .orderBy("name")
-                    .startAt(prefix).endAt(prefix + "\uF8FF")
-                    .limit(10).get().await()
-                for (doc in snap.documents) {
-                    if (seenIds.add(doc.id)) mapUser(doc)?.let { results += it }
-                }
             }
         } catch (e: Exception) { e.printStackTrace() }
 
@@ -227,34 +222,32 @@ class SearchViewModel @Inject constructor(
             }
         } catch (e: Exception) { e.printStackTrace() }
 
-        // Serials — titleLower prefix araması
+        // Serials — ESKİ: titleLower prefix × (qLower,q,qCap) = 3 sorgu + fallback
+        // YENİ: tek sorgu — titleLower zaten lowercase, sadece qLower yeterli.
+        // q ve qCap varyantları .lowercase() ile qLower'a dönüştürülüyordu — tekrardı.
         try {
             val seenSerialIds = mutableSetOf<String>()
-            var found = false
-            for (prefix in listOf(qLower, q, qCap).distinct()) {
-                val sSnap = firestore.collection("serials")
-                    .orderBy("titleLower")
-                    .startAt(prefix.lowercase()).endAt(prefix.lowercase() + "\uF8FF")
-                    .limit(10).get().await()
-                for (doc in sSnap.documents) {
-                    if (!seenSerialIds.add(doc.id)) continue
-                    val d     = doc.data ?: continue
-                    val title = d["title"] as? String ?: continue
-                    if (title.isBlank()) continue
-                    found = true
-                    results += SearchResult(
-                        id       = doc.id,
-                        type     = "serial",
-                        title    = title,
-                        subtitle = d["name"] as? String ?: d["authorName"] as? String ?: "",
-                        imageUrl = d["coverImg"] as? String ?: "",
-                    )
-                }
+            val sSnap = firestore.collection("serials")
+                .orderBy("titleLower")
+                .startAt(qLower).endAt(qLower + "\uF8FF")
+                .limit(10).get().await()
+            for (doc in sSnap.documents) {
+                if (!seenSerialIds.add(doc.id)) continue
+                val d     = doc.data ?: continue
+                val title = d["title"] as? String ?: continue
+                if (title.isBlank()) continue
+                results += SearchResult(
+                    id       = doc.id,
+                    type     = "serial",
+                    title    = title,
+                    subtitle = d["name"] as? String ?: d["authorName"] as? String ?: "",
+                    imageUrl = d["coverImg"] as? String ?: "",
+                )
             }
-            // titleLower yoksa fallback
-            if (!found && qLower.length >= 2) {
-                val sSnap = firestore.collection("serials").limit(30).get().await()
-                results += sSnap.documents.mapNotNull { doc ->
+            // titleLower indeksi boşsa fallback (eski belgeler için)
+            if (seenSerialIds.isEmpty() && qLower.length >= 2) {
+                val fbSnap = firestore.collection("serials").limit(30).get().await()
+                results += fbSnap.documents.mapNotNull { doc ->
                     if (doc.id in seenSerialIds) return@mapNotNull null
                     val d     = doc.data ?: return@mapNotNull null
                     val title = d["title"] as? String ?: return@mapNotNull null
