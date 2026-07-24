@@ -628,7 +628,10 @@ class LibraryViewModel @Inject constructor(
                     val s = states[q.feedPostId] ?: return@map q
                     q.copy(likesCount = s.first, isLikedByMe = s.second)
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                // Beğeni durumu senkronize edilemedi — sessiz geç (UI kritik değil)
+                android.util.Log.w("LibraryVM", "syncQuoteLikeStates: ${e.message}")
+            }
         }
     }
 
@@ -636,21 +639,13 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val current = _bookReviews.value.find { it.id == reviewId } ?: return@launch
-                if (current.feedPostId.isBlank()) return@launch
-                // Optimistic UI
-                val nowLiked = !current.isLikedByMe
-                val delta    = if (nowLiked) 1 else -1
+                val delta   = if (current.isLikedByMe) -1 else 1
+                library.incrementReviewLikes(reviewId, delta)
                 _bookReviews.value = _bookReviews.value.map {
                     if (it.id == reviewId) it.copy(
-                        isLikedByMe = nowLiked,
+                        isLikedByMe = !it.isLikedByMe,
                         likesCount  = (it.likesCount + delta).coerceAtLeast(0),
                     ) else it
-                }
-                // feed_likes üzerinden atomik beğeni — race condition yok
-                val (realCount, liked) = library.toggleReviewFeedLike(current.feedPostId, myName, myPhoto)
-                // Gerçek sayıyı yansıt
-                _bookReviews.value = _bookReviews.value.map {
-                    if (it.id == reviewId) it.copy(isLikedByMe = liked, likesCount = realCount) else it
                 }
             } catch (e: Exception) { _error.value = e.message }
         }
@@ -733,7 +728,9 @@ class LibraryViewModel @Inject constructor(
                 val existing = _authorQuotes.value
                 val ids = existing.map { it.id }.toSet()
                 _authorQuotes.value = existing + mapped.filter { it.id !in ids }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
         }
     }
 

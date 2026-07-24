@@ -195,6 +195,19 @@ fun LibraryScreen(
     var showAddBook            by remember { mutableStateOf(false) }
 
 
+    // ── Hata bildirimi — Snackbar ────────────────────────────────────────────
+    val snackbarHostState = remember { SnackbarHostState() }
+    val libraryError by libraryVm.error.collectAsState()
+    LaunchedEffect(libraryError) {
+        if (libraryError != null) {
+            snackbarHostState.showSnackbar(
+                message  = libraryError ?: "",
+                duration = SnackbarDuration.Short,
+            )
+            libraryVm.clearError()
+        }
+    }
+
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
@@ -205,7 +218,16 @@ fun LibraryScreen(
     )
     LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
     Scaffold(
-        containerColor = Background,
+        containerColor  = Background,
+        snackbarHost    = {
+            SnackbarHost(snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData     = data,
+                    containerColor   = MaterialTheme.colorScheme.errorContainer,
+                    contentColor     = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {
