@@ -11,8 +11,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.postgrest.postgrest
 import javax.inject.Inject
 
 // Firestore: presence/{uid} → { online, lastSeen, uid }
@@ -22,7 +20,6 @@ import javax.inject.Inject
 class PresenceViewModel @Inject constructor(
     private val auth     : FirebaseAuth,
     private val firestore: FirebaseFirestore,
-    private val supabase : SupabaseClient,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -108,18 +105,8 @@ class PresenceViewModel @Inject constructor(
                     ref.update(data).await()
                 }
             } catch (e: Exception) { e.printStackTrace() }
-            // Supabase — yeni kaynak
-            try {
-                supabase.postgrest["presence"].upsert(
-                    mapOf(
-                        "uid"         to uid,
-                        "online"      to true,
-                        "last_seen"   to java.time.Instant.now().toString(),
-                        "platform"    to "android",
-                        "app_version" to appVersion,
-                    )
-                )
-            } catch (e: Exception) { e.printStackTrace() }
+            // Supabase presence yazması KALDIRILDI: UI hiçbir yerde Supabase presence okumuyordu,
+            // sadece Firestore listener kullanılıyor. Gereksiz write bütçesi tüketiyordu.
         }
     }
 
@@ -128,21 +115,11 @@ class PresenceViewModel @Inject constructor(
         heartbeatJob = null
         if (uid.isEmpty()) return
         viewModelScope.launch {
-            // Firestore — eski surum uyumlulugu
+            // Belgeyi sil — online=false update yerine silmek daha temiz:
+            // listenPresence snap.exists()==false durumunda zaten offline sayıyor,
+            // ayrıca silinen belge listener'ı gereksiz yere tetiklemiyor.
             try {
-                firestore.collection("presence").document(uid).update(
-                    mapOf("online" to false, "lastSeen" to FieldValue.serverTimestamp())
-                ).await()
-            } catch (e: Exception) { e.printStackTrace() }
-            // Supabase
-            try {
-                supabase.postgrest["presence"].upsert(
-                    mapOf(
-                        "uid"       to uid,
-                        "online"    to false,
-                        "last_seen" to java.time.Instant.now().toString(),
-                    )
-                )
+                firestore.collection("presence").document(uid).delete().await()
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
