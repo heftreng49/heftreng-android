@@ -150,6 +150,8 @@ class KurdiViewModel @Inject constructor(
         val exercises : List<KfExercise>,
     )
     private val lessonContentCache = mutableMapOf<String, LessonContent>()
+    // Oturum başına viewCount — aynı ders tekrar açılırsa write yapılmaz
+    private val viewedLessonIds = mutableSetOf<String>()
 
     // OR API key — localStorage('kf_or_key') ile eşdeğer
     private val _orApiKey = MutableStateFlow(prefs.getString("kf_or_key", "") ?: "")
@@ -345,7 +347,7 @@ class KurdiViewModel @Inject constructor(
         try {
             val unitsSnap   = firestore.collection("kf_units")
                 .limit(100).get().await()
-            val lessonsSnap = firestore.collection("kf_lessons").get().await()
+            val lessonsSnap = firestore.collection("kf_lessons").limit(200).get().await() // limit: koleksiyon büyüdükçe tüm belgeleri çekmemek için
 
             val units = unitsSnap.documents.mapNotNull { doc ->
                 val d = doc.data ?: return@mapNotNull null
@@ -497,8 +499,10 @@ class KurdiViewModel @Inject constructor(
                     exercises = finalExercises,
                 )
 
-                // ── Görüntülenme sayacı — sadece ilk kez (henüz tamamlanmamışsa) ──
-                if (!lesson.completed && uid.isNotEmpty()) {
+                // ── Görüntülenme sayacı — oturum başına 1 kez (tamamlanmamış dersler için) ──
+                // ESKİ: her açılışta write. YENİ: viewedLessonIds ile oturum boyunca tekrar yazılmıyor.
+                if (!lesson.completed && uid.isNotEmpty() && lessonId !in viewedLessonIds) {
+                    viewedLessonIds.add(lessonId)
                     viewModelScope.launch {
                         try {
                             firestore.collection("kf_lessons").document(lessonId)
