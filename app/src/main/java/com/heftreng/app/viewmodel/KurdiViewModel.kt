@@ -347,7 +347,7 @@ class KurdiViewModel @Inject constructor(
         try {
             val unitsSnap   = firestore.collection("kf_units")
                 .limit(100).get().await()
-            val lessonsSnap = firestore.collection("kf_lessons").limit(200).get().await() // limit: koleksiyon büyüdükçe tüm belgeleri çekmemek için
+            val lessonsSnap = firestore.collection("kf_lessons").limit(100).get().await() // maksimum ders sayısı 100
 
             val units = unitsSnap.documents.mapNotNull { doc ->
                 val d = doc.data ?: return@mapNotNull null
@@ -987,7 +987,7 @@ class KurdiViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val snap = firestore.collection("kf_lessons")
-                    .limit(200).get().await()
+                    .limit(100).get().await()
                 val lessons = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     KfLesson(
