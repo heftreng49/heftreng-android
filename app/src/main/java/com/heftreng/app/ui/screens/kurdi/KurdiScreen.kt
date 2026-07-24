@@ -114,6 +114,87 @@ fun KurdiScreen(
     // Ödüllü reklam sonrası uygulanan senaryo
     var pendingRewardType by remember { mutableStateOf<AdsViewModel.RewardType?>(null) }
     var pendingUnlockId   by remember { mutableStateOf("") }
+    // Dialog state — kilitli derse tıklanınca reklam izle/iptal seçeneği gösterilir
+    var unlockDialogLessonId    by remember { mutableStateOf("") }
+    var unlockDialogLessonTitle by remember { mutableStateOf("") }
+
+    // -- Kilit Açma Dialog — reklam izleyerek dersi aç -------------------------
+    if (unlockDialogLessonId.isNotBlank()) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { unlockDialogLessonId = ""; unlockDialogLessonTitle = "" },
+            containerColor   = com.heftreng.app.ui.theme.HeftSurface,
+            icon = {
+                androidx.compose.foundation.layout.Box(
+                    modifier = androidx.compose.ui.Modifier
+                        .size(48.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(MaterialTheme.colorScheme.secondaryContainer),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = androidx.compose.ui.Modifier.size(28.dp),
+                    )
+                }
+            },
+            title = {
+                androidx.compose.material3.Text(
+                    text = if (language == "ku") "Ders Kilîtkirî" else "Ders Kilitli",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                )
+            },
+            text = {
+                androidx.compose.material3.Text(
+                    text = if (language == "ku")
+                        ""${unlockDialogLessonTitle}" dersê kilît e. Ji bo vekirin reklamekê temaşe bike."
+                    else
+                        ""${unlockDialogLessonTitle}" dersi kilitli. Kilidi açmak için bir reklam izle.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            confirmButton = {
+                val lockedIdSnapshot = unlockDialogLessonId
+                androidx.compose.material3.Button(
+                    onClick = {
+                        unlockDialogLessonId = ""
+                        unlockDialogLessonTitle = ""
+                        activity?.let {
+                            adsVm.showRewarded(
+                                activity     = it,
+                                rewardType   = AdsViewModel.RewardType.UNLOCK_LESSON,
+                                onRewarded   = { _, _ ->
+                                    vm.tempUnlockLesson(lockedIdSnapshot)
+                                    vm.openLesson(lockedIdSnapshot)
+                                },
+                                onAdNotReady = { vm.showAdNotReadyToast(language) },
+                            )
+                        }
+                    }
+                ) {
+                    Icon(Icons.Filled.PlayCircle, contentDescription = null,
+                        modifier = androidx.compose.ui.Modifier.size(16.dp))
+                    androidx.compose.foundation.layout.Spacer(
+                        androidx.compose.ui.Modifier.width(6.dp))
+                    androidx.compose.material3.Text(
+                        if (language == "ku") "Reklamê Temaşe Bike" else "Reklamı İzle"
+                    )
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { unlockDialogLessonId = ""; unlockDialogLessonTitle = "" }
+                ) {
+                    androidx.compose.material3.Text(
+                        if (language == "ku") "Bişkojk" else "İptal"
+                    )
+                }
+            },
+        )
+    }
 
     // -- Senaryo 3 — Streak Kurtarma Dialog -----------------------------------
     if (streakBroke && canSaveStreak) {
@@ -203,22 +284,17 @@ fun KurdiScreen(
             }
         }
     }
-    // Deep-link kilitli ders → normal onLockedClick akışıyla aynı: reklam göster
+    // Deep-link kilitli ders → dialog göster (direkt reklam açma!)
     LaunchedEffect(deepLinkLockedId) {
         if (deepLinkLockedId.isNotBlank()) {
             val lockedId = deepLinkLockedId
             deepLinkLockedId = ""
-            activity?.let {
-                adsVm.showRewarded(
-                    activity     = it,
-                    rewardType   = AdsViewModel.RewardType.UNLOCK_LESSON,
-                    onRewarded   = { _, _ ->
-                        vm.tempUnlockLesson(lockedId)
-                        vm.openLesson(lockedId)
-                    },
-                    onAdNotReady = { vm.showAdNotReadyToast(language) },
-                )
-            }
+            val lesson = lessons.find { it.id == lockedId }
+            unlockDialogLessonTitle = if (language == "ku")
+                (lesson?.nameKu?.ifBlank { lesson.nameTr } ?: "")
+            else
+                (lesson?.nameTr ?: "")
+            unlockDialogLessonId = lockedId
         }
     }
 
@@ -476,17 +552,12 @@ fun KurdiScreen(
                     )
                 },
                 onLockedClick = { lessonId ->
-                    activity?.let {
-                        adsVm.showRewarded(
-                            activity     = it,
-                            rewardType   = AdsViewModel.RewardType.UNLOCK_LESSON,
-                            onRewarded   = { _, _ ->
-                                vm.tempUnlockLesson(lessonId)
-                                vm.openLesson(lessonId)
-                            },
-                            onAdNotReady = { vm.showAdNotReadyToast(language) },
-                        )
-                    }
+                    val lesson = lessons.find { it.id == lessonId }
+                    unlockDialogLessonTitle = if (language == "ku")
+                        (lesson?.nameKu?.ifBlank { lesson.nameTr } ?: "")
+                    else
+                        (lesson?.nameTr ?: "")
+                    unlockDialogLessonId = lessonId
                 },
             )
             // 1 -> DictionaryTab — Ferheng geçici olarak gizlendi
