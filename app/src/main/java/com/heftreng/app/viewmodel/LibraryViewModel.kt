@@ -303,10 +303,15 @@ class LibraryViewModel @Inject constructor(
             }
             // 2. Arka planda Supabase'den taze veri çek
             try {
-                val freshAuthor = library.getAuthor(authorId) ?: return@launch
-                _isFollowingAuthor.value = library.isFollowingAuthor(authorId)
+                val freshAuthor = library.getAuthor(authorId) ?: run {
+                    _loading.value = false
+                    return@launch
+                }
+                // isFollowingAuthor ayrı try-catch içinde — bu çağrı offline'da crash yaratıyordu
+                val following = try { library.isFollowingAuthor(authorId) } catch (_: Exception) { false }
+                _isFollowingAuthor.value = following
                 _selectedAuthor.value = freshAuthor.toDomain()
-                    .copy(isFollowedByMe = _isFollowingAuthor.value)
+                    .copy(isFollowedByMe = following)
 
                 val booksDeferred   = async { library.getBooksByAuthor(authorId) }
                 val quotesDeferred  = async { library.getQuotesByAuthor(authorId) }
@@ -323,6 +328,7 @@ class LibraryViewModel @Inject constructor(
                 authorDao.insert(freshAuthor.toCached())
                 bookDao.insertAll(freshBooks.map { it.toCached() })
             } catch (e: Exception) {
+                // Offline veya ağ hatası — cache varsa sessiz geç, crash yok
                 if (cachedAuthor == null) _error.value = e.message
                 _isOffline.value = cachedAuthor != null
             } finally {
