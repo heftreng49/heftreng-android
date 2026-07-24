@@ -636,13 +636,21 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val current = _bookReviews.value.find { it.id == reviewId } ?: return@launch
-                val delta   = if (current.isLikedByMe) -1 else 1
-                library.incrementReviewLikes(reviewId, delta)
+                if (current.feedPostId.isBlank()) return@launch
+                // Optimistic UI
+                val nowLiked = !current.isLikedByMe
+                val delta    = if (nowLiked) 1 else -1
                 _bookReviews.value = _bookReviews.value.map {
                     if (it.id == reviewId) it.copy(
-                        isLikedByMe = !it.isLikedByMe,
+                        isLikedByMe = nowLiked,
                         likesCount  = (it.likesCount + delta).coerceAtLeast(0),
                     ) else it
+                }
+                // feed_likes üzerinden atomik beğeni — race condition yok
+                val (realCount, liked) = library.toggleReviewFeedLike(current.feedPostId, myName, myPhoto)
+                // Gerçek sayıyı yansıt
+                _bookReviews.value = _bookReviews.value.map {
+                    if (it.id == reviewId) it.copy(isLikedByMe = liked, likesCount = realCount) else it
                 }
             } catch (e: Exception) { _error.value = e.message }
         }

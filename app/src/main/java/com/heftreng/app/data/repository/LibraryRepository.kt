@@ -588,6 +588,8 @@ class LibraryRepository @Inject constructor(
         db["book_reviews"].delete { filter { eq("id", id) } }
     }
 
+    /** ESKİ: read-then-write, race condition var — toggleReviewFeedLike kullan */
+    @Deprecated("feed_likes tabanlı toggleReviewFeedLike kullan")
     suspend fun incrementReviewLikes(id: String, delta: Int) {
         val row = db["book_reviews"].select {
             filter { eq("id", id) }
@@ -596,6 +598,40 @@ class LibraryRepository @Inject constructor(
         db["book_reviews"].update(
             mapOf("likes_count" to (row.likesCount + delta).coerceAtLeast(0))
         ) { filter { eq("id", id) } }
+    }
+
+    /** Bir incelemenin feed gönderisini feed_likes tablosu üzerinden beğenir/geri alır.
+     *  toggleQuoteFeedLike ile aynı mantık — tek kaynak feed_likes, race condition yok.
+     *  Dönüş: yeni (sayı, beğenildi mi). */
+    suspend fun toggleReviewFeedLike(feedPostId: String, myName: String, myPhoto: String): Pair<Int, Boolean> {
+        val myUid = auth.currentUser?.uid.orEmpty()
+        if (myUid.isEmpty() || feedPostId.isBlank()) return 0 to false
+        val existing = try {
+            db["feed_likes"].select {
+                filter { eq("post_id", feedPostId); eq("uid", myUid) }
+                limit(1)
+            }.decodeList<com.heftreng.app.data.model.FeedLikeRow>()
+        } catch (e: Exception) { emptyList() }
+
+        if (existing.isEmpty()) {
+            db["feed_likes"].insert(
+                mapOf(
+                    "id"        to "${feedPostId}_$myUid",
+                    "post_id"   to feedPostId,
+                    "uid"       to myUid,
+                    "name"      to myName,
+                    "photo_url" to myPhoto,
+                )
+            )
+        } else {
+            db["feed_likes"].delete { filter { eq("post_id", feedPostId); eq("uid", myUid) } }
+        }
+
+        val count = try {
+            db["feed_likes"].select { filter { eq("post_id", feedPostId) } }
+                .decodeList<com.heftreng.app.data.model.FeedLikeRow>().size
+        } catch (e: Exception) { 0 }
+        return count to existing.isEmpty()
     }
 
     // ── Author Follows ────────────────────────────────────────────────────────
