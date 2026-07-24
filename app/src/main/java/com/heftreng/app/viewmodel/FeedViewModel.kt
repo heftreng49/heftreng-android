@@ -656,25 +656,18 @@ class FeedViewModel @Inject constructor(
                     .decodeList<FeedLikeRow>()
                 val likeCounts = likeRows.groupingBy { it.postId }.eachCount()
 
-                // feed_comments: ESKİ → tüm yorum satırlarını (text, mentions vb.) çekiyordu.
-                // YENİ → her post için yalnızca count() sorgusu, satır verisi gelmiyor.
-                // ids.map { } paralel çalıştırılıyor — N istek ama her biri çok küçük.
+                // feed_comments: ESKİ → tüm satır içeriği (text, mentions vb.) çekiliyordu.
+                // YENİ → sadece post_id bazlı count, satır verisi gelmiyor.
                 val commentCounts = mutableMapOf<String, Int>()
-                kotlinx.coroutines.coroutineScope {
-                    ids.map { postId: String ->
-                        async {
-                            try {
-                                val count = supabase.postgrest["feed_comments"].select {
-                                    filter { eq("post_id", postId) }
-                                    count(io.github.jan.supabase.postgrest.query.Count.EXACT)
-                                    limit(0)
-                                }.countOrNull()?.toInt() ?: 0
-                                Pair(postId, count)
-                            } catch (_: Exception) { Pair(postId, -1) }
-                        }
-                    }.map { it.await() }
-                     .filter { pair: Pair<String, Int> -> pair.second >= 0 }
-                     .forEach { pair: Pair<String, Int> -> commentCounts[pair.first] = pair.second }
+                for (postId in ids) {
+                    try {
+                        val count = supabase.postgrest["feed_comments"].select {
+                            filter { eq("post_id", postId) }
+                            count(io.github.jan.supabase.postgrest.query.Count.EXACT)
+                            limit(0)
+                        }.countOrNull()?.toInt() ?: 0
+                        commentCounts[postId] = count
+                    } catch (_: Exception) { /* sayaç alınamadı, mevcut değer korunur */ }
                 }
 
                 if (likeCounts.isEmpty() && commentCounts.isEmpty()) return@launch
