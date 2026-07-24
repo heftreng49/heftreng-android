@@ -795,8 +795,14 @@ class LibraryRepository @Inject constructor(
         feedPostId     : String,
     ) {
         if (libraryBookId.isBlank()) return
+
+        // getBook() tek seferle çağrılıyor — hem coverImg hem sayaç için kullanılır
+        // (eskiden iki ayrı getBook() çağrısı vardı: biri coverImg, biri sayaç için)
+        val book     = getBook(libraryBookId) ?: return
+        val coverUrl = book.coverImg
         val newId    = UUID.randomUUID().toString()
-        val coverUrl = try { getBook(libraryBookId)?.coverImg ?: "" } catch (_: Exception) { "" }
+
+        // 1. Alıntıyı ekle
         insertQuote(BookQuoteRow(
             id              = newId,
             bookId          = libraryBookId,
@@ -810,11 +816,25 @@ class LibraryRepository @Inject constructor(
             feedPostId      = feedPostId,
             coverImg        = coverUrl,
         ))
-        val book = getBook(libraryBookId)
-        if (book != null) updateBookCounters(libraryBookId, quoteCount = book.quoteCount + 1)
+
+        // 2. Kitap sayacını güncelle — insert başarılıysa buraya gelinir
+        //    Hata olursa alıntı eklenmemiş demektir, sayaç bozulmaz
+        try {
+            updateBookCounters(libraryBookId, quoteCount = book.quoteCount + 1)
+        } catch (e: Exception) {
+            // Sayaç güncellenemedi — alıntı eklendi ama sayaç geride kalabilir.
+            // Kritik değil: sayaç periyodik senkronizasyonla düzeltilebilir.
+            android.util.Log.w("LibraryRepo", "addQuoteToLibrary: kitap sayacı güncellenemedi: ${e.message}")
+        }
+
+        // 3. Yazar sayacını güncelle (opsiyonel — yazar yoksa atla)
         if (libraryAuthorId.isNotBlank()) {
-            val author = getAuthor(libraryAuthorId)
-            if (author != null) updateAuthorCounters(libraryAuthorId, quoteCount = author.quoteCount + 1)
+            try {
+                val author = getAuthor(libraryAuthorId)
+                if (author != null) updateAuthorCounters(libraryAuthorId, quoteCount = author.quoteCount + 1)
+            } catch (e: Exception) {
+                android.util.Log.w("LibraryRepo", "addQuoteToLibrary: yazar sayacı güncellenemedi: ${e.message}")
+            }
         }
     }
 
