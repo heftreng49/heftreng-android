@@ -61,6 +61,8 @@ fun AdminScreen(
     val perms       by vm.perms.collectAsState()  // null = yükleniyor
     val staffList   by vm.staffList.collectAsState()
     val users           by vm.users.collectAsState()
+    val usersLoading    by vm.usersLoading.collectAsState()
+    val hasMoreUsers    by vm.hasMoreUsers.collectAsState()
     val unverifiedUsers by vm.unverifiedUsers.collectAsState()
     val unverifiedLoading by vm.unverifiedLoading.collectAsState()
     val feedSyncProgress  by vm.feedSyncProgress.collectAsState()
@@ -962,6 +964,15 @@ fun AdminScreen(
                                 it.email.contains(userSearch, ignoreCase = true)
                             }
                             LazyColumn(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
+                                // Yükleniyorsa (refresh) spinner göster
+                                if (usersLoading && users.isEmpty()) {
+                                    item {
+                                        Box(Modifier.fillMaxWidth().padding(24.dp),
+                                            contentAlignment = Alignment.Center) {
+                                            CircularProgressIndicator(color = Amber, modifier = Modifier.size(28.dp))
+                                        }
+                                    }
+                                }
                                 items(filtered, key = { it.uid }) { user ->
                                     AdminUserRow(
                                         user        = user,
@@ -983,6 +994,35 @@ fun AdminScreen(
                                         onCancelEdit      = { editUser = null },
                                     )
                                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
+                                }
+                                // Sayfalama — daha fazla kullanıcı varsa göster
+                                if (userSearch.isBlank()) {
+                                    item {
+                                        if (usersLoading && users.isNotEmpty()) {
+                                            Box(Modifier.fillMaxWidth().padding(12.dp),
+                                                contentAlignment = Alignment.Center) {
+                                                CircularProgressIndicator(color = Amber,
+                                                    modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                                            }
+                                        } else if (hasMoreUsers) {
+                                            OutlinedButton(
+                                                onClick  = { vm.loadMoreUsers() },
+                                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                                shape    = RoundedCornerShape(10.dp),
+                                                border   = androidx.compose.foundation.BorderStroke(1.dp, Amber.copy(alpha = 0.5f)),
+                                                colors   = ButtonDefaults.outlinedButtonColors(contentColor = Amber),
+                                            ) {
+                                                Text("Daha fazla yükle (${users.size} yüklendi)", fontSize = 13.sp)
+                                            }
+                                        } else if (users.isNotEmpty()) {
+                                            Text(
+                                                "Toplam ${users.size} kullanıcı yüklendi",
+                                                color = Muted, fontSize = 12.sp,
+                                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         } else {

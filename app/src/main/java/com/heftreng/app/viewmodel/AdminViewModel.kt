@@ -113,6 +113,13 @@ class AdminViewModel @Inject constructor(
     private val _users        = MutableStateFlow<List<User>>(emptyList())
     val users = _users.asStateFlow()
 
+    private val _hasMoreUsers   = MutableStateFlow(false)
+    val hasMoreUsers = _hasMoreUsers.asStateFlow()
+    private val _usersLoading   = MutableStateFlow(false)
+    val usersLoading = _usersLoading.asStateFlow()
+    private var usersLastDoc: com.google.firebase.firestore.DocumentSnapshot? = null
+    private val USERS_PAGE_SIZE = 30L
+
     private val _pendingPosts = MutableStateFlow<List<Map<String, Any>>>(emptyList())
     val pendingPosts = _pendingPosts.asStateFlow()
 
@@ -590,19 +597,26 @@ class AdminViewModel @Inject constructor(
     }
 
     // ── Kullanıcıları listele ─────────────────────────────────────────────────
-    fun loadUsers() {
+    fun loadUsers(refresh: Boolean = true) {
         if (_perms.value?.can("users") != true) return
+        if (_usersLoading.value) return
         viewModelScope.launch {
-            _loading.value = true
+            _usersLoading.value = true
+            if (refresh) {
+                usersLastDoc = null
+                _users.value = emptyList()
+            }
             try {
-                // ÖNCEKİ HATA: orderBy("displayName") kullanılıyordu — admin panelindeki
-                // kullanıcı listesi alfabetik sıralanıyordu, en son kayıt olanlar listenin
-                // ortasına/sonuna düşüyordu (hatta limit(100) yüzünden hiç görünmeyebiliyordu).
-                // Artık createdAt'e göre AZALAN sırada çekiliyor — en son kayıt olan en üstte.
-                val snap = firestore.collection("users")
+                var query = firestore.collection("users")
                     .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(100).get().await()
-                _users.value = snap.documents.mapNotNull { doc ->
+                    .limit(USERS_PAGE_SIZE)
+                if (!refresh && usersLastDoc != null) query = query.startAfter(usersLastDoc!!)
+
+                val snap = query.get().await()
+                if (snap.documents.isNotEmpty()) usersLastDoc = snap.documents.last()
+                _hasMoreUsers.value = snap.documents.size >= USERS_PAGE_SIZE.toInt()
+
+                val newUsers = snap.documents.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     User(
                         uid           = doc.id,
@@ -614,11 +628,13 @@ class AdminViewModel @Inject constructor(
                         createdAt     = (d["createdAt"] as? com.google.firebase.Timestamp)?.toDate()?.time ?: 0L,
                     )
                 }
+                _users.value = if (refresh) newUsers else _users.value + newUsers
             } catch (e: Exception) {
-                // orderBy index yoksa (veya createdAt alanı eski kayıtlarda yoksa) sıralamasız
-                // çekip client-side'da createdAt'e göre sırala — yine de en yeni en üstte olsun.
-                try {
-                    val snap = firestore.collection("users").limit(100).get().await()
+                // orderBy index yoksa sıralamasız çek (sadece ilk sayfa)
+                if (refresh) try {
+                    val snap = firestore.collection("users").limit(USERS_PAGE_SIZE).get().await()
+                    _hasMoreUsers.value = snap.documents.size >= USERS_PAGE_SIZE.toInt()
+                    if (snap.documents.isNotEmpty()) usersLastDoc = snap.documents.last()
                     _users.value = snap.documents.mapNotNull { doc ->
                         val d = doc.data ?: return@mapNotNull null
                         User(
@@ -632,9 +648,11 @@ class AdminViewModel @Inject constructor(
                         )
                     }.sortedByDescending { it.createdAt }
                 } catch (e2: Exception) { e2.printStackTrace() }
-            } finally { _loading.value = false }
+            } finally { _usersLoading.value = false }
         }
     }
+
+    fun loadMoreUsers() = loadUsers(refresh = false)
 
     // ── Admin kullanıcı araması — Firestore prefix query ──────────────────────
     private val _userSearchResults = MutableStateFlow<List<User>>(emptyList())
