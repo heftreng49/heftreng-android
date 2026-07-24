@@ -13,12 +13,15 @@ import kotlinx.serialization.Serializable
 // Kayıt sırasında createUserDoc() tarafından yazılır, profil güncellemelerinde senkronize edilir.
 @Serializable
 data class UserRow(
-    val uid          : String  = "",
-    @SerialName("display_name") val displayName: String  = "",
-    @SerialName("photo_url")    val photoUrl   : String  = "",
-    val bio          : String  = "",
-    val banned       : Boolean = false,
-    @SerialName("created_at")   val createdAt  : String  = "",
+    val uid                       : String  = "",
+    @SerialName("display_name")   val displayName  : String  = "",
+    @SerialName("photo_url")      val photoUrl     : String  = "",
+    val bio                       : String  = "",
+    val banned                    : Boolean = false,
+    @SerialName("created_at")     val createdAt    : String  = "",
+    // username — supabase_add_username.sql ile eklendi
+    val username                  : String  = "",
+    @SerialName("username_lower") val usernameLower: String  = "",
 )
 
 @Serializable

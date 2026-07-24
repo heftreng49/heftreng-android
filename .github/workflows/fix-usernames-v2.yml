@@ -1,0 +1,56 @@
+name: Heftreng Migration v2
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Calistirma modu'
+        required: true
+        default: 'dry-run'
+        type: choice
+        options:
+          - dry-run
+          - write
+          - write-with-feed-sync
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install firebase-admin @supabase/supabase-js
+
+      - name: Run dry-run
+        if: ${{ github.event.inputs.mode == 'dry-run' }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node fix-usernames-v2.js
+
+      - name: Run write
+        if: ${{ github.event.inputs.mode == 'write' }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node fix-usernames-v2.js --write
+
+      - name: Run write with feed sync
+        if: ${{ github.event.inputs.mode == 'write-with-feed-sync' }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node fix-usernames-v2.js --write --sync-feed
+
+      - name: Cleanup
+        if: always()
+        run: rm -f serviceAccount.json

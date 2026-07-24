@@ -160,30 +160,9 @@ class SearchViewModel @Inject constructor(
     private suspend fun searchFirebase(q: String, qLower: String, qCap: String): List<SearchResult> {
         val results = mutableListOf<SearchResult>()
 
-        // Kullanıcı araması — ESKİ: displayName(×3) + username(×1) + name(×3) = 7 sorgu
-        // YENİ: displayName(qLower + qCap) + username(qLower) = 3 sorgu
-        // Türkçe/Kürtçe büyük harf farkı qCap ile yakalanıyor; q ≈ qLower veya qCap olduğundan
-        // distinct() listesi zaten 1-2 elemana düşüyor — ek bir varyant gerekmez.
-        // "name" alanı displayName ile büyük ölçüde örtüşüyor; displayName sorgusu yeterli.
-        try {
-            val seenIds = mutableSetOf<String>()
-            for (prefix in listOf(qLower, qCap).distinct()) {
-                val snap = firestore.collection("users")
-                    .orderBy("displayName")
-                    .startAt(prefix).endAt(prefix + "\uF8FF")
-                    .limit(15).get().await()
-                for (doc in snap.documents) {
-                    if (seenIds.add(doc.id)) mapUser(doc)?.let { results += it }
-                }
-            }
-            val uSnap = firestore.collection("users")
-                .orderBy("username")
-                .startAt(qLower).endAt(qLower + "\uF8FF")
-                .limit(15).get().await()
-            for (doc in uSnap.documents) {
-                if (seenIds.add(doc.id)) mapUser(doc)?.let { results += it }
-            }
-        } catch (e: Exception) { e.printStackTrace() }
+        // Kullanıcı araması — Supabase users tablosunda yapılıyor (searchSupabase içinde)
+        // display_name ilike + username_lower ilike → ortadan arama destekli, Türkçe güvenli
+        // Firestore'daki prefix-only orderBy sorgusu kaldırıldı.
 
         // Feed gönderi — son 50 postu çek, client-side filtrele.
         // 60s içinde tekrar arama yapılırsa (kullanıcı yazmaya devam ederken)
@@ -302,6 +281,46 @@ class SearchViewModel @Inject constructor(
     // Şimdi:  2 Supabase sorgusu — ilike '%q%' server-side, case-insensitive
     private suspend fun searchSupabase(qLower: String): List<SearchResult> {
         val results = mutableListOf<SearchResult>()
+
+        // ── Kullanıcı araması — display_name veya username eşleşmesi ─────────
+        // Firestore'daki prefix-only sorgusunun yerini aldı.
+        // ilike "%q%" → ortadan arama destekli; username_lower normalize edilmiş ASCII.
+        try {
+            @kotlinx.serialization.Serializable
+            data class UserSearchRow(
+                val uid           : String = "",
+                @kotlinx.serialization.SerialName("display_name")  val displayName : String = "",
+                @kotlinx.serialization.SerialName("photo_url")      val photoUrl    : String = "",
+                val username      : String = "",
+                val bio           : String = "",
+                val banned        : Boolean = false,
+            )
+            val users = supabase.postgrest["users"]
+                .select {
+                    filter {
+                        eq("banned", false)
+                        or {
+                            ilike("display_name",  "%$qLower%")
+                            ilike("username_lower", "%$qLower%")
+                        }
+                    }
+                    limit(20)
+                }
+                .decodeList<UserSearchRow>()
+
+            val seenUserIds = mutableSetOf<String>()
+            results += users.mapNotNull { u ->
+                if (u.uid.isBlank() || !seenUserIds.add(u.uid)) return@mapNotNull null
+                SearchResult(
+                    id       = u.uid,
+                    type     = "user",
+                    title    = u.displayName.ifBlank { u.username },
+                    subtitle = if (u.username.isNotBlank()) "@${u.username}" else "",
+                    imageUrl = u.photoUrl,
+                    uid      = u.uid,
+                )
+            }
+        } catch (e: Exception) { e.printStackTrace() }
 
         // Kütüphane yazarları
         try {

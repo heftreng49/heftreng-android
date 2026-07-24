@@ -1054,41 +1054,87 @@ class ProfileViewModel @Inject constructor(
     }
 
     // ── Username güncelle ─────────────────────────────────────────────────────
+    /**
+     * Türkçe karakterleri ASCII karşılıklarına dönüştürür (Locale.ROOT safe).
+     * ğ→g  ş→s  ı→i  İ→i  ö→o  ü→u  ç→c
+     */
+    private fun normalizeTurkish(s: String): String = s
+        .replace('ğ', 'g').replace('Ğ', 'g')
+        .replace('ş', 's').replace('Ş', 's')
+        .replace('ı', 'i').replace('İ', 'i')
+        .replace('ö', 'o').replace('Ö', 'o')
+        .replace('ü', 'u').replace('Ü', 'u')
+        .replace('ç', 'c').replace('Ç', 'c')
+
     fun updateUsername(newUsername: String, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
         if (myUid.isEmpty() || newUsername.isBlank()) return
-        val handle = newUsername.lowercase().trim()
-            .filter { it.isLetterOrDigit() || it == '_' }
+
+        // 1. Türkçe normalize → ASCII lowercase → sadece [a-z0-9_] → max 20 karakter
+        val handle = normalizeTurkish(newUsername.trim())
+            .lowercase(java.util.Locale.ROOT)
+            .filter { it in 'a'..'z' || it in '0'..'9' || it == '_' }
             .take(20)
-        if (handle.isBlank()) { onError("Geçersiz kullanıcı adı"); return }
+
+        if (handle.isBlank())  { onError("Geçersiz kullanıcı adı"); return }
+        if (handle.length < 3) { onError("Kullanıcı adı en az 3 karakter olmalı"); return }
+        if (handle.first() == '_' || handle.last() == '_') {
+            onError("Kullanıcı adı alt çizgi ile başlayıp bitemez"); return
+        }
+
         viewModelScope.launch {
             try {
-                // Alınmış mı kontrolü
-                val takenDoc = firestore.collection("usernames").document(handle).get().await()
-                if (takenDoc.exists()) {
-                    val ownerUid = takenDoc.getString("uid") ?: ""
-                    if (ownerUid != myUid) { onError("Bu kullanıcı adı alınmış"); return@launch }
-                }
-                val oldHandle = _user.value?.username?.lowercase()?.trim() ?: ""
-                // Eski handle sil
-                if (oldHandle.isNotBlank() && oldHandle != handle) {
-                    try { firestore.collection("usernames").document(oldHandle).delete().await() }
-                    catch (_: Exception) {}
-                }
-                // Yeni handle kaydet
-                firestore.collection("usernames").document(handle).set(
-                    mapOf("uid" to myUid, "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp())
-                ).await()
-                // users dokümanını güncelle
-                firestore.collection("users").document(myUid).update(mapOf(
-                    "username"      to handle,
-                    "usernameLower" to handle.lowercase(),
-                )).await()
-                _user.value = _user.value?.copy(username = handle)
+                val oldHandle = _user.value?.username
+                    ?.let { normalizeTurkish(it.trim()).lowercase(java.util.Locale.ROOT) } ?: ""
 
-                // Feed gönderilerindeki username'i de güncelle (denormalization sync)
+                // Aynı handle ise işlem yapma
+                if (oldHandle == handle) { onSuccess(); return@launch }
+
+                val usernamesRef = firestore.collection("usernames")
+                val usersRef     = firestore.collection("users")
+
+                // ── Atomik transaction: check→reserve aynı operasyonda ──────────
+                // İki kullanıcının aynı anda aynı handle'ı alması engellenir.
+                firestore.runTransaction { tx ->
+                    val takenSnap = tx.get(usernamesRef.document(handle))
+                    if (takenSnap.exists()) {
+                        val ownerUid = takenSnap.getString("uid") ?: ""
+                        if (ownerUid != myUid) throw Exception("Bu kullanıcı adı alınmış")
+                    }
+                    // Eski handle'ı serbest bırak
+                    if (oldHandle.isNotBlank()) tx.delete(usernamesRef.document(oldHandle))
+                    // Yeni handle'ı rezerve et
+                    tx.set(
+                        usernamesRef.document(handle),
+                        mapOf(
+                            "uid"       to myUid,
+                            "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                        )
+                    )
+                    // users dokümanını güncelle
+                    tx.update(
+                        usersRef.document(myUid),
+                        mapOf("username" to handle, "usernameLower" to handle)
+                    )
+                }.await()
+
+                _user.value = _user.value?.copy(username = handle)
                 syncUserFieldsInFeed(displayName = null, username = handle)
 
+                // Supabase users tablosunu da güncelle — kullanıcı araması buradan besleniyor
+                try {
+                    supabase.postgrest["users"].upsert(
+                        mapOf(
+                            "uid"            to myUid,
+                            "username"       to handle,
+                            "username_lower" to handle,
+                        )
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.w("ProfileVM", "Supabase username sync failed: ${e.message}")
+                }
+
                 onSuccess()
+
             } catch (e: Exception) { onError(e.message ?: "Hata") }
         }
     }
