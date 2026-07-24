@@ -184,11 +184,41 @@ fun KurdiScreen(
     }
 
     // ── Deep-link: feed'den gelen "dersi aç" isteği — dersler yüklenince tetiklenir ──
+    // HATA DÜZELTMESİ: Önceden kilit kontrolü yapılmıyordu, kilitli dersler de açılıyordu.
+    // Şimdi: doneIds ve tempUnlockedIds kontrol ediliyor; kilitliyse unlock dialog gösteriliyor.
     var deepLinkLessonHandled by remember { mutableStateOf(false) }
-    LaunchedEffect(deepLinkLessonId, lessons) {
+    var deepLinkLockedId      by remember { mutableStateOf("") }
+    LaunchedEffect(deepLinkLessonId, lessons, doneIds) {
         if (deepLinkLessonId != null && !deepLinkLessonHandled && lessons.any { it.id == deepLinkLessonId }) {
             deepLinkLessonHandled = true
-            vm.openLesson(deepLinkLessonId)
+            val idx         = lessons.indexOfFirst { it.id == deepLinkLessonId }
+            val firstNotDone = lessons.indexOfFirst { it.id !in doneIds }.takeIf { it >= 0 } ?: 0
+            val isTempUnlocked = deepLinkLessonId in tempUnlockedIds
+            val isLocked    = idx > firstNotDone && deepLinkLessonId !in doneIds && !isTempUnlocked
+            if (!isLocked) {
+                vm.openLesson(deepLinkLessonId)
+            } else {
+                // Kilitli — ödüllü reklam dialog'unu tetikle (normal ders listesiyle aynı akış)
+                deepLinkLockedId = deepLinkLessonId
+            }
+        }
+    }
+    // Deep-link kilitli ders → normal onLockedClick akışıyla aynı: reklam göster
+    LaunchedEffect(deepLinkLockedId) {
+        if (deepLinkLockedId.isNotBlank()) {
+            val lockedId = deepLinkLockedId
+            deepLinkLockedId = ""
+            activity?.let {
+                adsVm.showRewarded(
+                    activity     = it,
+                    rewardType   = AdsViewModel.RewardType.UNLOCK_LESSON,
+                    onRewarded   = { _, _ ->
+                        vm.tempUnlockLesson(lockedId)
+                        vm.openLesson(lockedId)
+                    },
+                    onAdNotReady = { vm.showAdNotReadyToast(language) },
+                )
+            }
         }
     }
 
