@@ -415,8 +415,11 @@ class FeedViewModel @Inject constructor(
                     
                     _posts.value = mapInteractions(filtered)
                     _loading.value = false // Önbellekten veri geldiği an yükleme çemberi biter!
-                    // NOT: enrichPostsInBackground ve refreshInteractionsForPage burada çağrılmıyor.
-                    // Cache verisi yerel — network sorgusu gerekmez. Server aşaması zaten çalışacak.
+                    // Cache'den gelen postların beğeni/yorum sayıları Firestore'da güncel olmayabilir.
+                    // Supabase'den sayaçları hemen çek — tek sorgu, hafif, server aşaması gelinceye
+                    // kadar kullanıcı 0 sayı görmez.
+                    syncPostCounts(filtered.map { it.id })
+                    refreshInteractionsForPage(filtered)
                 }
             } catch (e: Exception) {
                 // Önbellek boşsa veya ilk yüklemeyse burası sessizce pas geçilir
@@ -681,7 +684,8 @@ class FeedViewModel @Inject constructor(
                         .eachCount()
                 } catch (_: Exception) { emptyMap() }
 
-                if (likeCounts.isEmpty() && commentCounts.isEmpty()) return@launch
+                // NOT: erken return yok — hiç beğeni/yorum olmayan postların sayacı
+                // da 0 olarak güncellenmeli. Aksi halde eski (stale) sayı kalır.
 
                 _posts.value = _posts.value.map { post ->
                     if (post.id !in ids) return@map post
