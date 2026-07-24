@@ -508,10 +508,11 @@ class FeedViewModel @Inject constructor(
                 enrichPostsInBackground(filtered)
                 // Yeni sayfanın beğeni/kayıt durumlarını kontrol et
                 refreshInteractionsForPage(filtered)
-            } catch (e: Exception) { 
-                e.printStackTrace() 
-            } finally { 
-                _loadingMore.value = false 
+            } catch (e: Exception) {
+                android.util.Log.w("FeedVM", "loadMore: ${e.message}")
+                _errorEvent.value = e.message
+            } finally {
+                _loadingMore.value = false
             }
         }
     }

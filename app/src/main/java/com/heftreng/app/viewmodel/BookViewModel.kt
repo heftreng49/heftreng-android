@@ -86,7 +86,7 @@ class BookViewModel @Inject constructor(
                     chaptersJob.await()
                 }
                 isLikesLoaded = true
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
         }
     }
 
@@ -123,7 +123,7 @@ class BookViewModel @Inject constructor(
                 _books.value = (bookList + serialList)
                     .sortedByDescending { it.updatedAt?.seconds ?: it.ts?.seconds ?: 0L }
                 lastBooksFetchMs = System.currentTimeMillis()
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
             finally { _loading.value = false }
         }
     }
@@ -149,7 +149,7 @@ class BookViewModel @Inject constructor(
                     .sortedByDescending { it.updatedAt?.seconds ?: it.ts?.seconds ?: 0L }
                 lastMyBooksFetchUid = targetUid
                 lastMyBooksFetchMs  = System.currentTimeMillis()
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
         }
     }
 
@@ -179,7 +179,7 @@ class BookViewModel @Inject constructor(
                         likedChapterIds = likedChapterIds // Beğeni kontrolü eklendi
                     )
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
             finally { _loading.value = false }
         }
     }
@@ -195,7 +195,7 @@ class BookViewModel @Inject constructor(
                     serialId = if (type == "serial") parentId else "",
                     likedChapterIds = likedChapterIds
                 )
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
         }
     }
 
@@ -229,7 +229,7 @@ class BookViewModel @Inject constructor(
                     "updatedAt"    to now,
                 )).await()
                 loadMyBooks()
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
         }
     }
 
@@ -298,7 +298,7 @@ class BookViewModel @Inject constructor(
                 )).await()
                 
                 loadBook(parentId, type)
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
         }
     }
 
@@ -325,7 +325,7 @@ class BookViewModel @Inject constructor(
                 _selectedChapter.value = _selectedChapter.value?.let {
                     if (it.id == chapterId) it.copy(title = newTitle.trim(), body = newBody.trim(), wordCount = wc) else it
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
         }
     }
 
@@ -342,7 +342,7 @@ class BookViewModel @Inject constructor(
                 _chapters.value = _chapters.value.filter { it.id != chapterId }
                 firestore.collection(col).document(parentId)
                     .update("chapterCount", _chapters.value.size).await()
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
         }
     }
 
@@ -401,7 +401,7 @@ class BookViewModel @Inject constructor(
                         }
                     }
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
         }
     }
 
@@ -445,7 +445,7 @@ class BookViewModel @Inject constructor(
                     ref.delete().await()
                     chRef.update("likes", FieldValue.increment(-1)).await()
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
         }
         return nowLiked
     }
@@ -479,7 +479,7 @@ class BookViewModel @Inject constructor(
                 firestore.collection(col).document(parentId)
                     .collection("chapters").document(chapterId)
                     .update("cmtCount", FieldValue.increment(1)).await()
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
         }
     }
 
@@ -493,7 +493,7 @@ class BookViewModel @Inject constructor(
                     .collection("comments").document(commentId).get().await()
                 if (cmtDoc.getString("uid") != uid) return@launch
                 cmtDoc.reference.update(mapOf("text" to newText, "edited" to true)).await()
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
         }
     }
 
@@ -513,7 +513,7 @@ class BookViewModel @Inject constructor(
                 firestore.collection(col).document(parentId)
                     .collection("chapters").document(chapterId)
                     .update("cmtCount", FieldValue.increment(-1)).await()
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
         }
     }
 
@@ -531,7 +531,7 @@ class BookViewModel @Inject constructor(
                 firestore.collection(col).document(bookId).delete().await()
                 _books.value   = _books.value.filter { it.id != bookId }
                 _myBooks.value = _myBooks.value.filter { it.id != bookId }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
         }
     }
 
@@ -557,7 +557,7 @@ class BookViewModel @Inject constructor(
                         pct       = pct,
                     )
                 )
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
         }
     }
 
@@ -612,7 +612,7 @@ class BookViewModel @Inject constructor(
                         eq("chapter_id", chapterId)
                     }
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
         }
     }
 
@@ -626,14 +626,14 @@ class BookViewModel @Inject constructor(
                 .get().await().documents.mapNotNull {
                     it.getString("feedId") ?: it.id.substringBefore("_$uid").takeIf { id -> id.isNotBlank() }
                 }.toSet()
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
     }
 
     private suspend fun loadLikedSerials() {
         try {
             likedSerialIds = firestore.collection("serialLikes").whereEqualTo("uid", uid)
                 .get().await().documents.mapNotNull { it.getString("serialId") }.toSet()
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
     }
 
     // Bölüm beğenileri için döküman ID'lerini önbelleğe alan yeni helper metot
@@ -641,7 +641,7 @@ class BookViewModel @Inject constructor(
         try {
             likedChapterIds = firestore.collection("chapterLikes").whereEqualTo("uid", uid)
                 .get().await().documents.mapNotNull { it.getString("chapterId") }.toSet()
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) { android.util.Log.w("BookVM", e.message ?: "") }
     }
 
     private fun com.google.firebase.firestore.DocumentSnapshot.toBook(

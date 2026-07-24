@@ -60,6 +60,10 @@ class ProfileViewModel @Inject constructor(
     // Post yükleme ayrı state — header göründükten sonra postlar yüklenirken spinner
     private val _postsLoading = MutableStateFlow(false)
     val postsLoading = _postsLoading.asStateFlow()
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error = _error.asStateFlow()
+    fun clearError() { _error.value = null }
     // Profil cache: 3 dk TTL (aynı profili tekrar açınca beklemeden göster)
     private val profileCache = mutableMapOf<String, CacheEntry<Unit>>()
 
@@ -81,7 +85,7 @@ class ProfileViewModel @Inject constructor(
             _userQuotesLoading.value = true
             try {
                 _userQuotes.value = library.getQuotesByUser(targetUid)
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
             finally { _userQuotesLoading.value = false }
         }
     }
@@ -348,7 +352,8 @@ class ProfileViewModel @Inject constructor(
                 }.set(Unit)
 
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.w("ProfileVM", "loadProfile: ${e.message}")
+                _error.value = e.message
             } finally {
                 _loading.value = false
                 _postsLoading.value = false
@@ -362,6 +367,7 @@ class ProfileViewModel @Inject constructor(
     ) {
         if (posts.isEmpty()) return
         viewModelScope.launch {
+            try {
             // ── Avatar/isim: sadece eksik olanlar için Firestore'a git ─────────
             val uidsNeedingEnrich = posts
                 .filter { it.displayName.isBlank() || it.photoURL.isBlank() }
@@ -420,6 +426,10 @@ class ProfileViewModel @Inject constructor(
                     }
                 }
             }
+            } catch (e: Exception) {
+                // Arka plan zenginleştirme hatası — kullanıcı arayüzünü etkilemez, sessiz geç
+                android.util.Log.w("ProfileVM", "enrichPostsInBackground: ${e.message}")
+            }
         }
     }
 
@@ -448,7 +458,7 @@ class ProfileViewModel @Inject constructor(
                     .update("followersCount", FieldValue.increment(-1))
                 firestore.collection("users").document(myUid)
                     .update("followingCount", FieldValue.increment(-1))
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
         }
     }
 
@@ -499,7 +509,7 @@ class ProfileViewModel @Inject constructor(
                     "read"      to false,
                     "ts"        to Timestamp.now(),
                 )).await()
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
         }
     }
 
@@ -510,7 +520,7 @@ class ProfileViewModel @Inject constructor(
                 firestore.collection("followRequests").document(targetUid)
                     .collection("pending").document(myUid).delete().await()
                 _followRequestStatus.value = "none"
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
         }
     }
 
@@ -564,7 +574,7 @@ class ProfileViewModel @Inject constructor(
                     "read"      to false,
                     "ts"        to Timestamp.now(),
                 )).await()
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
         }
     }
 
@@ -652,7 +662,7 @@ class ProfileViewModel @Inject constructor(
                 }
                 _posts.value = _posts.value + newPosts
                 syncProfilePostCounts(newPosts.map { it.id })
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
             finally { _loadingMore.value = false }
         }
     }
@@ -683,7 +693,7 @@ class ProfileViewModel @Inject constructor(
 
                 // Feed gönderilerindeki displayName'i de güncelle (denormalization sync)
                 syncUserFieldsInFeed(displayName = displayName, username = null)
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
         }
     }
 
@@ -725,7 +735,7 @@ class ProfileViewModel @Inject constructor(
                     quotesShared = quotesCount,
                 )
                 _badgeIds.value = badgeIds
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
         }
     }
     /** Beğeni / yorum sayılarını Supabase'den çek.
@@ -766,7 +776,7 @@ class ProfileViewModel @Inject constructor(
                         commentsCount = commentCounts[post.id] ?: post.commentsCount,
                     )
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
         }
     }
 
@@ -837,7 +847,7 @@ class ProfileViewModel @Inject constructor(
                         if (it.id == post.id) it.copy(likesCount = realCount) else it
                     }
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
         }
     }
 
@@ -865,7 +875,7 @@ class ProfileViewModel @Inject constructor(
                 if (postDoc.getString("uid") != myUid) return@launch
                 firestore.collection("feed").document(postId).delete().await()
             }
-            catch (e: Exception) { e.printStackTrace() }
+            catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
         }
     }
 
@@ -880,7 +890,7 @@ class ProfileViewModel @Inject constructor(
                     .update(mapOf("text" to newText, "title" to newTitle.trim())).await()
                 _posts.value = _posts.value.map { if (it.id == postId) it.copy(text = newText, title = newTitle.trim()) else it }
             }
-            catch (e: Exception) { e.printStackTrace() }
+            catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
         }
     }
 
