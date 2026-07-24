@@ -660,20 +660,22 @@ class FeedViewModel @Inject constructor(
                 // YENİ → her post için yalnızca count() sorgusu, satır verisi gelmiyor.
                 // ids.map { } paralel çalıştırılıyor — N istek ama her biri çok küçük.
                 val commentCounts = mutableMapOf<String, Int>()
-                ids.map { postId ->
-                    kotlinx.coroutines.async {
-                        try {
-                            val count = supabase.postgrest["feed_comments"].select {
-                                filter { eq("post_id", postId) }
-                                count(io.github.jan.supabase.postgrest.query.Count.EXACT)
-                                limit(0)
-                            }.countOrNull()?.toInt() ?: 0
-                            postId to count
-                        } catch (_: Exception) { postId to -1 }
-                    }
-                }.map { it.await() }
-                 .filter { it.second >= 0 }
-                 .forEach { (postId, count) -> commentCounts[postId] = count }
+                kotlinx.coroutines.coroutineScope {
+                    ids.map { postId: String ->
+                        async {
+                            try {
+                                val count = supabase.postgrest["feed_comments"].select {
+                                    filter { eq("post_id", postId) }
+                                    count(io.github.jan.supabase.postgrest.query.Count.EXACT)
+                                    limit(0)
+                                }.countOrNull()?.toInt() ?: 0
+                                Pair(postId, count)
+                            } catch (_: Exception) { Pair(postId, -1) }
+                        }
+                    }.map { it.await() }
+                     .filter { pair: Pair<String, Int> -> pair.second >= 0 }
+                     .forEach { pair: Pair<String, Int> -> commentCounts[pair.first] = pair.second }
+                }
 
                 if (likeCounts.isEmpty() && commentCounts.isEmpty()) return@launch
 
