@@ -257,7 +257,7 @@ async function main() {
     console.log('\n[B] Feed gonderileri (username) guncelleniyor...');
     let total = 0;
     for (const { uid, newHandle } of usernameFixes) {
-      const snap = await db.collection('feed').whereEqualTo('uid', uid).get();
+      const snap = await db.collection('feed').where('uid', '==', uid).get();
       if (snap.empty) continue;
       for (const ch of chunk(snap.docs, 400)) {
         const batch = db.batch();
