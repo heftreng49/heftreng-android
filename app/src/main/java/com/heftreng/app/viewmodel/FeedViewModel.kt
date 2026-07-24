@@ -649,15 +649,31 @@ class FeedViewModel @Inject constructor(
         if (ids.isEmpty()) return
         viewModelScope.launch {
             try {
+                // feed_likes: tüm satırları çek, post_id'ye göre grupla
+                // (satır başına sadece post_id + uid geliyor — ağırlık düşük)
                 val likeRows = supabase.postgrest["feed_likes"]
                     .select { filter { isIn("post_id", ids) } }
                     .decodeList<FeedLikeRow>()
-                val commentRows = supabase.postgrest["feed_comments"]
-                    .select { filter { isIn("post_id", ids) } }
-                    .decodeList<FeedCommentRow>()
+                val likeCounts = likeRows.groupingBy { it.postId }.eachCount()
 
-                val likeCounts    = likeRows.groupingBy { it.postId }.eachCount()
-                val commentCounts = commentRows.groupingBy { it.postId }.eachCount()
+                // feed_comments: ESKİ → tüm yorum satırlarını (text, mentions vb.) çekiyordu.
+                // YENİ → her post için yalnızca count() sorgusu, satır verisi gelmiyor.
+                // ids.map { } paralel çalıştırılıyor — N istek ama her biri çok küçük.
+                val commentCounts = mutableMapOf<String, Int>()
+                ids.map { postId ->
+                    kotlinx.coroutines.async {
+                        try {
+                            val count = supabase.postgrest["feed_comments"].select {
+                                filter { eq("post_id", postId) }
+                                count(io.github.jan.supabase.postgrest.query.Count.EXACT)
+                                limit(0)
+                            }.countOrNull()?.toInt() ?: 0
+                            postId to count
+                        } catch (_: Exception) { postId to -1 }
+                    }
+                }.map { it.await() }
+                 .filter { it.second >= 0 }
+                 .forEach { (postId, count) -> commentCounts[postId] = count }
 
                 if (likeCounts.isEmpty() && commentCounts.isEmpty()) return@launch
 
