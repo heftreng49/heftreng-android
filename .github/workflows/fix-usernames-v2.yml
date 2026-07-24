@@ -27,6 +27,13 @@ jobs:
       - name: Install dependencies
         run: npm install firebase-admin @supabase/supabase-js
 
+      - name: Debug secret
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          echo "Length: ${#FIREBASE_SERVICE_ACCOUNT}"
+          echo "First 20 chars: ${FIREBASE_SERVICE_ACCOUNT:0:20}"
+
       - name: Run dry-run
         if: ${{ github.event.inputs.mode == 'dry-run' }}
         env:
@@ -54,10 +61,3 @@ jobs:
       - name: Cleanup
         if: always()
         run: rm -f serviceAccount.json
-
-      - name: Debug secret
-        env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: |
-          echo "Length: ${#FIREBASE_SERVICE_ACCOUNT}"
-          echo "First 20 chars: ${FIREBASE_SERVICE_ACCOUNT:0:20}"
