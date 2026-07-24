@@ -149,9 +149,9 @@ fun KurdiScreen(
             text = {
                 androidx.compose.material3.Text(
                     text = if (language == "ku")
-                        ""${unlockDialogLessonTitle}" dersê kilît e. Ji bo vekirin reklamekê temaşe bike."
+                        "\u201C${unlockDialogLessonTitle}\u201D dersê kilît e. Ji bo vekirin reklamekê temaşe bike."
                     else
-                        ""${unlockDialogLessonTitle}" dersi kilitli. Kilidi açmak için bir reklam izle.",
+                        "\u201C${unlockDialogLessonTitle}\u201D dersi kilitli. Kilidi açmak için bir reklam izle.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
