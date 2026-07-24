@@ -188,13 +188,31 @@ class LibraryViewModel @Inject constructor(
     // ── Authors ───────────────────────────────────────────────────────────────
 
     fun loadAuthors(forceRefresh: Boolean = false) {
-        if (_authors.value.isNotEmpty() && !forceRefresh) return
         viewModelScope.launch {
-            _loading.value = true
+            // ── Stale-while-revalidate ────────────────────────────────────────
+            // 1. Room'da veri varsa anında göster (kullanıcı boş ekran görmez)
+            val cached = try { authorDao.getCachedAuthors(50) } catch (_: Exception) { emptyList() }
+            if (cached.isNotEmpty()) {
+                _authors.value = cached.map { it.toDomain() }
+                _isOffline.value = false
+                if (!forceRefresh) _loading.value = false
+            } else {
+                _loading.value = true
+            }
+            // 2. Arka planda Supabase'den taze veriyi çek
             try {
-                _authors.value = library.getAuthors(50).map { it.toDomain() }
+                val fresh = library.getAuthors(50)
+                _authors.value   = fresh.map { it.toDomain() }
+                _isOffline.value = false
+                // 3. Room'u güncelle — bir sonraki açılışta taze veri hazır
+                authorDao.replaceAll(fresh.map { it.toCached() })
             } catch (e: Exception) {
-                _error.value = e.message
+                if (cached.isEmpty()) {
+                    // Cache de yok, gerçek hata göster
+                    _error.value = e.message
+                }
+                // Cache varsa sessiz geç — kullanıcı zaten eski veriyi görüyor
+                _isOffline.value = cached.isNotEmpty()
             } finally {
                 _loading.value = false
             }
@@ -203,22 +221,45 @@ class LibraryViewModel @Inject constructor(
 
     fun loadAuthor(authorId: String) {
         viewModelScope.launch {
-            _loading.value = true
+            // ── Stale-while-revalidate ────────────────────────────────────────
+            // 1. Room cache'ten yazar ve kitaplarını anında göster
+            val cachedAuthor = try { authorDao.getCachedAuthor(authorId) } catch (_: Exception) { null }
+            val cachedBooks  = try {
+                bookDao.getCachedBooks().filter { it.authorId == authorId }
+            } catch (_: Exception) { emptyList() }
+
+            if (cachedAuthor != null) {
+                _selectedAuthor.value = cachedAuthor.toDomain()
+                _authorBooks.value    = cachedBooks.map { it.toDomain() }
+                _isOffline.value      = false
+                _loading.value        = false
+            } else {
+                _loading.value = true
+            }
+            // 2. Arka planda Supabase'den taze veri çek
             try {
-                val author = library.getAuthor(authorId)?.toDomain() ?: return@launch
+                val freshAuthor = library.getAuthor(authorId) ?: return@launch
                 _isFollowingAuthor.value = library.isFollowingAuthor(authorId)
-                _selectedAuthor.value = author.copy(isFollowedByMe = _isFollowingAuthor.value)
+                _selectedAuthor.value = freshAuthor.toDomain()
+                    .copy(isFollowedByMe = _isFollowingAuthor.value)
 
-                val booksDeferred  = async { library.getBooksByAuthor(authorId) }
-                val quotesDeferred = async { library.getQuotesByAuthor(authorId) }
-                val reviewsDeferred= async { library.getReviewsByAuthor(authorId) }
+                val booksDeferred   = async { library.getBooksByAuthor(authorId) }
+                val quotesDeferred  = async { library.getQuotesByAuthor(authorId) }
+                val reviewsDeferred = async { library.getReviewsByAuthor(authorId) }
 
-                _authorBooks.value   = booksDeferred.await().map  { it.toDomain() }
+                val freshBooks = booksDeferred.await()
+                _authorBooks.value   = freshBooks.map { it.toDomain() }
                 _authorQuotes.value  = quotesDeferred.await().map { it.toDomain() }
-                _authorReviews.value = reviewsDeferred.await().map{ it.toDomain() }
+                _authorReviews.value = reviewsDeferred.await().map { it.toDomain() }
+                _isOffline.value     = false
                 syncQuoteLikeStates(_authorQuotes.value, _authorQuotes)
+
+                // 3. Room'u güncelle
+                authorDao.insert(freshAuthor.toCached())
+                bookDao.insertAll(freshBooks.map { it.toCached() })
             } catch (e: Exception) {
-                _error.value = e.message
+                if (cachedAuthor == null) _error.value = e.message
+                _isOffline.value = cachedAuthor != null
             } finally {
                 _loading.value = false
             }
@@ -303,14 +344,27 @@ class LibraryViewModel @Inject constructor(
 
     fun loadLibraryBook(bookId: String) {
         viewModelScope.launch {
-            _loading.value = true
+            // ── Stale-while-revalidate ────────────────────────────────────────
+            // 1. Room cache'ten kitabı anında göster
+            val cachedBook = try { bookDao.getCachedBook(bookId) } catch (_: Exception) { null }
+            if (cachedBook != null) {
+                _selectedBook.value = cachedBook.toDomain()
+                _isOffline.value    = false
+                _loading.value      = false
+                // Alıntı/inceleme cache yok — spinner göstermeden aşağıda çekilecek
+            } else {
+                _loading.value = true
+            }
+            // 2. Arka planda Supabase'den taze veri çek
             try {
-                val book = library.getBook(bookId)?.toDomain() ?: return@launch
+                val freshBook = library.getBook(bookId) ?: return@launch
+                val book      = freshBook.toDomain()
                 _selectedBook.value = book
+                _isOffline.value    = false
+
                 val qDeferred = async { library.getQuotesByBook(bookId) }
                 val rDeferred = async { library.getReviewsByBook(bookId) }
-                val quotes = qDeferred.await()
-                // Eski kayıtlarda cover_img boşsa kitabın kapağını kullan
+                val quotes    = qDeferred.await()
                 val bookCover = book.coverImg
                 _bookQuotes.value  = quotes.map { row ->
                     val q = row.toDomain()
@@ -318,8 +372,12 @@ class LibraryViewModel @Inject constructor(
                 }
                 _bookReviews.value = rDeferred.await().map { it.toDomain() }
                 syncQuoteLikeStates(_bookQuotes.value, _bookQuotes)
+
+                // 3. Room'u güncelle
+                bookDao.insert(freshBook.toCached())
             } catch (e: Exception) {
-                _error.value = e.message
+                if (cachedBook == null) _error.value = e.message
+                _isOffline.value = cachedBook != null
             } finally {
                 _loading.value = false
             }
