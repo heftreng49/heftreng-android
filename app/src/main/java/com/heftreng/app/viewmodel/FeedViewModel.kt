@@ -1784,7 +1784,14 @@ class FeedViewModel @Inject constructor(
                 val myPhoto = d["photoURL"] as? String
                     ?: auth.currentUser?.photoUrl?.toString() ?: ""
                 val preview = chapterBody.replace(Regex("<[^>]+>"), "").trim().take(200)
-                firestore.collection("feed").add(mapOf(
+                // Deterministik ID: aynı kullanıcı + aynı bölüm → asla çift kayıt oluşmaz
+                val repostDocId = "repost_${uid}_${chapterId}"
+                val ref = firestore.collection("feed").document(repostDocId)
+                val existing = try { ref.get().await() } catch (_: Exception) {
+                    kotlinx.coroutines.delay(700); ref.get().await()
+                }
+                if (existing.exists()) return@launch  // zaten paylaşılmış
+                ref.set(mapOf(
                     "uid"          to uid,
                     "name"         to myName,
                     "displayName"  to myName,
@@ -1834,7 +1841,13 @@ class FeedViewModel @Inject constructor(
                     ?: auth.currentUser?.displayName ?: ""
                 val myPhoto = d["photoURL"] as? String
                     ?: auth.currentUser?.photoUrl?.toString() ?: ""
-                firestore.collection("feed").add(mapOf(
+                val repostDocId = "repost_${uid}_${lessonId}"
+                val ref = firestore.collection("feed").document(repostDocId)
+                val existing = try { ref.get().await() } catch (_: Exception) {
+                    kotlinx.coroutines.delay(700); ref.get().await()
+                }
+                if (existing.exists()) { onResult(true); return@launch }
+                ref.set(mapOf(
                     "uid"          to uid,
                     "name"         to myName,
                     "displayName"  to myName,
@@ -1872,7 +1885,13 @@ class FeedViewModel @Inject constructor(
                 val myPhoto = d["photoURL"] as? String
                     ?: auth.currentUser?.photoUrl?.toString() ?: ""
                 val preview = rulePreview.replace(Regex("<[^>]+>"), "").trim().take(200)
-                firestore.collection("feed").add(mapOf(
+                val repostDocId = "repost_${uid}_${ruleId}"
+                val ref = firestore.collection("feed").document(repostDocId)
+                val existing = try { ref.get().await() } catch (_: Exception) {
+                    kotlinx.coroutines.delay(700); ref.get().await()
+                }
+                if (existing.exists()) { onResult(true); return@launch }
+                ref.set(mapOf(
                     "uid"          to uid,
                     "name"         to myName,
                     "displayName"  to myName,
@@ -1909,7 +1928,14 @@ class FeedViewModel @Inject constructor(
                     ?: auth.currentUser?.displayName ?: ""
                 val myPhoto = d["photoURL"] as? String
                     ?: auth.currentUser?.photoUrl?.toString() ?: ""
-                firestore.collection("feed").add(mapOf(
+                // Achievement: aynı level+xp kombinasyonu için çift paylaşım engelle
+                val repostDocId = "repost_${uid}_kf_achievement_${level}_${xp}"
+                val ref = firestore.collection("feed").document(repostDocId)
+                val existing = try { ref.get().await() } catch (_: Exception) {
+                    kotlinx.coroutines.delay(700); ref.get().await()
+                }
+                if (existing.exists()) { onResult(true); return@launch }
+                ref.set(mapOf(
                     "uid"          to uid,
                     "name"         to myName,
                     "displayName"  to myName,
