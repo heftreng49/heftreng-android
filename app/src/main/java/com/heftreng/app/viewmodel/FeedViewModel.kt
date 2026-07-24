@@ -138,6 +138,10 @@ class FeedViewModel @Inject constructor(
     private val _loadingMore   = MutableStateFlow(false)
     val loadingMore = _loadingMore.asStateFlow()
 
+    // Tek seferlik hata olayları (toast / snackbar için)
+    private val _errorEvent = MutableStateFlow<String?>(null)
+    val errorEvent = _errorEvent.asStateFlow()
+
     private val _postNotFound  = MutableStateFlow<String?>(null)
     val postNotFound = _postNotFound.asStateFlow()
 
