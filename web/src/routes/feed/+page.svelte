@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { collection, query, orderBy, limit, getDocs, deleteDoc, doc } from "firebase/firestore";
+  import { collection, query, orderBy, limit, getDocs, deleteDoc, doc, startAfter } from "firebase/firestore";
   import { db } from "$lib/firebase/config";
   import { supabase } from "$lib/supabase/config";
   import { currentUser } from "$lib/store/auth";
@@ -11,6 +11,10 @@
   let menuOpenId = $state<string | null>(null);
   let activeTab = $state(0);
   let expandedIds = $state<Set<string>>(new Set());
+  let lastDoc = $state<any>(null);
+  let hasMore = $state(false);
+  let loadingMore = $state(false);
+  const PAGE_SIZE = 20;
 
   // ── Zaman formatı ─────────────────────────────────────────────────────────
   function ago(ts: any): string {
@@ -43,13 +47,34 @@
   async function loadPosts() {
     loading = true;
     try {
-      const q = query(collection(db, "feed"), orderBy("ts", "desc"), limit(30));
+      const q = query(collection(db, "feed"), orderBy("ts", "desc"), limit(PAGE_SIZE));
       const snap = await getDocs(q);
-      posts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const newPosts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      posts = newPosts;
+      lastDoc = snap.docs[snap.docs.length - 1] ?? null;
+      hasMore = snap.docs.length === PAGE_SIZE;
       if ($currentUser) await loadInteractions(posts.map(p => p.id));
       await loadLikeCounts(posts.map(p => p.id));
     } catch(e) { console.error(e); }
     finally { loading = false; }
+  }
+
+  async function loadMore() {
+    if (!lastDoc || loadingMore) return;
+    loadingMore = true;
+    try {
+      const q = query(collection(db, "feed"), orderBy("ts", "desc"), startAfter(lastDoc), limit(PAGE_SIZE));
+      const snap = await getDocs(q);
+      const newPosts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      lastDoc = snap.docs[snap.docs.length - 1] ?? lastDoc;
+      hasMore = snap.docs.length === PAGE_SIZE;
+      const ids = newPosts.map(p => p.id);
+      if ($currentUser) await loadInteractions(ids);
+      await loadLikeCounts(ids);
+      // Yeni gelen postlara interaction state'i uygula
+      posts = [...posts, ...newPosts];
+    } catch(e) { console.error(e); }
+    finally { loadingMore = false; }
   }
 
   async function loadLikeCounts(ids: string[]) {
@@ -409,7 +434,7 @@
 </main>
 
 <style>
-.page { max-width: 600px; margin: 0 auto; padding-bottom: 80px; position: relative; }
+.page { max-width: 600px; margin: 0 auto; padding-bottom: 72px; position: relative; }
 
 /* Sekmeler */
 .tabs { display: flex; position: relative; background: var(--surface); border-bottom: 1px solid var(--divider); overflow: hidden; }
@@ -551,6 +576,35 @@
 .sk-av { width: 44px; height: 44px; border-radius: 50%; background: var(--shimmer); flex-shrink: 0; animation: shimmer 1.4s ease-in-out infinite; }
 .sk-body { flex: 1; display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
 .sk-line { height: 13px; background: var(--shimmer); border-radius: 6px; animation: shimmer 1.4s ease-in-out infinite; }
+
+/* Daha fazla yükle */
+.load-more-wrap { padding: 8px 12px 4px; display: flex; justify-content: center; }
+.load-more-btn {
+  padding: 12px 28px;
+  border: 1.5px solid var(--divider);
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.load-more-btn:hover:not(:disabled) { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 6%, var(--surface)); }
+.load-more-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--divider);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 @keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 </style>
