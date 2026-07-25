@@ -24,7 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.heftreng.app.ui.component.RichTextEditor
+import com.heftreng.app.ui.component.WysiwygEditor
 import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.viewmodel.PendingPost
@@ -325,11 +325,11 @@ private fun WriteTab(vm: YazarViewModel, loading: Boolean, language: String) {
         item {
             Text(Strings.contentLabel(language) + " *", color = Muted, fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))
-            RichTextEditor(
+            WysiwygEditor(
                 value    = content,
                 onChange = { content = it },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = "Yazını buraya yaz...",
+                minHeightDp = 220,
             )
             Text(
                 "${content.length} karakter",
@@ -685,10 +685,17 @@ private fun EditPostDialog(
                 item {
                     Text("İçerik *", color = Muted, fontSize = 12.sp)
                     Spacer(Modifier.height(4.dp))
-                    RichTextEditor(
+                    WysiwygEditor(
                         value    = content,
                         onChange = { content = it },
                         modifier = Modifier.fillMaxWidth(),
+                        minHeightDp = 180,
+                    )
+                    Text(
+                        "${content.length} karakter",
+                        color    = if (content.length < 100) Color(0xFFEF4444) else Muted,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 2.dp),
                     )
                 }
                 item {
