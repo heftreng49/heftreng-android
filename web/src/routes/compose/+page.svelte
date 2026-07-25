@@ -6,7 +6,6 @@
   import { db, storage } from "$lib/firebase/config";
   import { currentUser } from "$lib/store/auth";
   import { authLoading } from "$lib/store/auth";
-  import Navbar from "$lib/components/Navbar.svelte";
 
   let text = $state("");
   let title = $state("");
@@ -93,7 +92,6 @@
   let canSubmit = $derived((text.trim().length > 0 || imageFile !== null || quoteText.trim().length > 0) && !submitting);
 </script>
 
-<Navbar />
 <main class="wrap">
   <div class="composer">
 

@@ -4,7 +4,6 @@
   import { db } from "$lib/firebase/config";
   import { supabase } from "$lib/supabase/config";
   import { currentUser } from "$lib/store/auth";
-  import Navbar from "$lib/components/Navbar.svelte";
 
   let posts = $state<any[]>([]);
   let loading = $state(true);
@@ -71,7 +70,6 @@
       const ids = newPosts.map(p => p.id);
       if ($currentUser) await loadInteractions(ids);
       await loadLikeCounts(ids);
-      // Yeni gelen postlara interaction state'i uygula
       posts = [...posts, ...newPosts];
     } catch(e) { console.error(e); }
     finally { loadingMore = false; }
@@ -174,8 +172,6 @@
 <svelte:head>
   <title>Heftreng — Akış</title>
 </svelte:head>
-
-<Navbar />
 
 <main class="page">
   <!-- Sekmeler -->
@@ -421,6 +417,20 @@
           </div>
         </article>
       {/each}
+
+      <!-- ── Daha fazla yükle ─────────────────────────────────────── -->
+      {#if hasMore}
+        <div class="load-more-wrap">
+          <button class="load-more-btn" onclick={loadMore} disabled={loadingMore}>
+            {#if loadingMore}
+              <div class="spinner"></div>
+              Yükleniyor...
+            {:else}
+              Daha fazla göster
+            {/if}
+          </button>
+        </div>
+      {/if}
     {/if}
   </div>
 
@@ -562,7 +572,7 @@
 .act-spacer { flex: 1; }
 
 /* FAB */
-.fab { position: fixed; bottom: 24px; right: 20px; width: 56px; height: 56px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,0,0,0.22); transition: transform 0.15s, box-shadow 0.15s; z-index: 50; }
+.fab { position: fixed; bottom: 76px; right: 20px; width: 56px; height: 56px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,0,0,0.22); transition: transform 0.15s, box-shadow 0.15s; z-index: 50; }
 .fab:hover { transform: scale(1.06); box-shadow: 0 6px 20px rgba(0,0,0,0.28); }
 .fab:active { transform: scale(0.94); }
 
