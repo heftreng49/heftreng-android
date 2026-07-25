@@ -320,7 +320,8 @@ class AdsViewModel @Inject constructor(
     val remainingRewardedAds = _remainingRewardedAds.asStateFlow()
 
     fun canShowScenario(rewardType: RewardType): Boolean {
-        val cfg = configRepo.get(RemoteConfigManager.KEY_REWARDED) ?: return _remainingRewardedAds.value > 0
+        val cfg = configRepo.get(RemoteConfigManager.KEY_REWARDED) ?: return false
+        if (!cfg.enabled || cfg.unitId.isBlank()) return false
         val scenarioEnabled = when (rewardType) {
             RewardType.DOUBLE_XP     -> cfg.scenarioDoubleXp
             RewardType.UNLOCK_LESSON -> cfg.scenarioUnlockLesson
