@@ -324,15 +324,11 @@ private fun WriteTab(vm: YazarViewModel, loading: Boolean, language: String) {
         item {
             Text(Strings.contentLabel(language) + " *", color = Muted, fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))
-            OutlinedTextField(
-                value         = content,
-                onValueChange = { content = it },
-                modifier      = Modifier.fillMaxWidth().heightIn(min = 200.dp),
-                placeholder   = { Text("Yazını buraya yaz... HTML desteklenir.", color = Muted, fontSize = 13.sp) },
-                shape         = RoundedCornerShape(12.dp),
-                minLines      = 8,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
-                colors        = yazarFieldColors(),
+            RichTextEditor(
+                value    = content,
+                onChange = { content = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = "Yazını buraya yaz...",
             )
             Text(
                 "${content.length} karakter",
@@ -686,20 +682,12 @@ private fun EditPostDialog(
                     )
                 }
                 item {
-                    OutlinedTextField(
-                        value         = content,
-                        onValueChange = { content = it },
-                        label         = { Text("İçerik *") },
-                        modifier      = Modifier.fillMaxWidth().heightIn(min = 150.dp),
-                        shape         = RoundedCornerShape(10.dp),
-                        colors        = yazarFieldColors(),
-                        minLines      = 6,
-                    )
-                    Text(
-                        "${content.length} karakter",
-                        color    = if (content.length < 100) Color(0xFFEF4444) else Muted,
-                        fontSize = 11.sp,
-                        modifier = Modifier.padding(top = 2.dp),
+                    Text("İçerik *", color = Muted, fontSize = 12.sp)
+                    Spacer(Modifier.height(4.dp))
+                    RichTextEditor(
+                        value    = content,
+                        onChange = { content = it },
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 item {

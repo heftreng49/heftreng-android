@@ -2,7 +2,6 @@ package com.heftreng.app.ui.component
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -26,7 +25,7 @@ import androidx.compose.ui.unit.sp
 import com.heftreng.app.ui.theme.*
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Compat shims — eski kod bu fonksiyonları kullanıyor, MD ile saklıyoruz
+// Compat shims
 // ─────────────────────────────────────────────────────────────────────────────
 
 fun spansToHtml(text: String, @Suppress("UNUSED_PARAMETER") spans: Any?): String = text
@@ -40,27 +39,25 @@ fun htmlStrip(html: String): String = html
 data class HtmlParseResult(val text: String, val spans: List<Any>)
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Markdown araç çubuğu kısayolları
+// HTML toolbar aksiyonları
 // ─────────────────────────────────────────────────────────────────────────────
 
-private data class MdAction(val icon: ImageVector, val label: String, val syntax: String, val wrap: Boolean = true)
+private sealed class HtmlAction {
+    data class Wrap(val icon: ImageVector, val label: String, val open: String, val close: String) : HtmlAction()
+    data class Block(val icon: ImageVector, val label: String, val tag: String) : HtmlAction()
+    data class Align(val alignment: String) : HtmlAction()
+}
 
-private val MD_ACTIONS = listOf(
-    MdAction(Icons.Filled.Title,            "Başlık H2",     "## ",        wrap = false),
-    MdAction(Icons.Filled.TextFields,       "Başlık H3",     "### ",       wrap = false),
-    MdAction(Icons.Filled.FormatBold,       "Kalın",         "**"),
-    MdAction(Icons.Filled.FormatItalic,     "İtalik",        "_"),
-    MdAction(Icons.Filled.FormatStrikethrough, "Üstü Çizili","~~"),
-    MdAction(Icons.Filled.Code,             "Kod",           "`"),
-    MdAction(Icons.Filled.FormatListBulleted, "Liste",       "- ",         wrap = false),
-    MdAction(Icons.Filled.FormatQuote,      "Alıntı",        "> ",         wrap = false),
-    MdAction(Icons.Filled.TableChart,       "Tablo",         TABLE_SNIPPET, wrap = false),
+private val TOOLBAR_ACTIONS = listOf(
+    HtmlAction.Wrap(Icons.Filled.FormatBold,          "Kalın",    "<b>",  "</b>"),
+    HtmlAction.Wrap(Icons.Filled.FormatItalic,        "İtalik",   "<i>",  "</i>"),
+    HtmlAction.Wrap(Icons.Filled.FormatUnderlined,    "Altı Çizili", "<u>", "</u>"),
+    HtmlAction.Block(Icons.Filled.Title,              "H2",        "h2"),
+    HtmlAction.Block(Icons.Filled.TextFields,         "H3",        "h3"),
 )
 
-private const val TABLE_SNIPPET = "| Başlık 1 | Başlık 2 |\n|----------|----------|\n| Hücre 1  | Hücre 2  |\n"
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Ana RichTextEditor — artık Markdown editörü
+// Ana RichTextEditor — HTML tabanlı
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -68,11 +65,12 @@ fun RichTextEditor(
     value      : String,
     onChange   : (String) -> Unit,
     modifier   : Modifier = Modifier,
-    placeholder: String   = "Markdown ile yazın...",
+    placeholder: String   = "Yazını buraya yaz...",
 ) {
     var tfv       by remember(value) { mutableStateOf(TextFieldValue(value)) }
     var isFocused by remember { mutableStateOf(false) }
-    var preview   by remember { mutableStateOf(false) }
+    var alignment by remember { mutableStateOf("left") }
+    var showAlignMenu by remember { mutableStateOf(false) }
 
     val surface    = HeftSurface
     val surfaceVar = SurfaceVar
@@ -80,137 +78,151 @@ fun RichTextEditor(
     val muted      = Muted
     val divider    = Divider
 
-    fun insert(action: MdAction) {
+    fun applyWrap(open: String, close: String) {
         val sel  = tfv.selection
         val text = tfv.text
         val selected = if (!sel.collapsed) text.substring(sel.min, sel.max) else ""
-
-        val newText: String
-        val newCursor: Int
-
-        if (!action.wrap) {
-            // Satır başına prefix ekle
-            val lineStart = text.lastIndexOf('\n', sel.start - 1).let { if (it < 0) 0 else it + 1 }
-            val prefix = action.syntax
-            if (action.syntax == TABLE_SNIPPET) {
-                val ins = "\n$TABLE_SNIPPET"
-                newText   = text.substring(0, sel.start) + ins + text.substring(sel.start)
-                newCursor = sel.start + ins.length
-            } else {
-                newText   = text.substring(0, lineStart) + prefix + text.substring(lineStart)
-                newCursor = sel.start + prefix.length
-            }
-        } else {
-            // Seçimi sar
-            val s = action.syntax
-            newText   = text.substring(0, sel.min) + s + selected + s + text.substring(sel.max)
-            newCursor = if (selected.isNotEmpty()) sel.max + s.length * 2 else sel.min + s.length
-        }
-
+        val newText = text.substring(0, sel.min) + open + selected + close + text.substring(sel.max)
+        val newCursor = if (selected.isNotEmpty()) sel.max + open.length + close.length
+                        else sel.min + open.length
         tfv = TextFieldValue(newText, TextRange(newCursor))
         onChange(newText)
     }
 
+    fun applyBlock(tag: String) {
+        val sel  = tfv.selection
+        val text = tfv.text
+        val selected = if (!sel.collapsed) text.substring(sel.min, sel.max) else ""
+        val ins = "<$tag>$selected</$tag>"
+        val newText = text.substring(0, sel.min) + ins + text.substring(sel.max)
+        val newCursor = sel.min + ins.length
+        tfv = TextFieldValue(newText, TextRange(newCursor))
+        onChange(newText)
+    }
+
+    fun applyAlign(align: String) {
+        alignment = align
+        val sel  = tfv.selection
+        val text = tfv.text
+        val selected = if (!sel.collapsed) text.substring(sel.min, sel.max) else ""
+        val ins = "<p style=\"text-align:$align\">$selected</p>"
+        val newText = text.substring(0, sel.min) + ins + text.substring(sel.max)
+        val newCursor = sel.min + ins.length
+        tfv = TextFieldValue(newText, TextRange(newCursor))
+        onChange(newText)
+        showAlignMenu = false
+    }
+
     Column(modifier = modifier) {
-        // ── Tab: Düzenle / Önizle ─────────────────────────────────────────
+        // ── Toolbar ───────────────────────────────────────────────────────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(surface, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                .border(1.dp, divider, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment     = Alignment.CenterVertically,
         ) {
-            listOf("Düzenle" to false, "Önizle" to true).forEach { (label, isPreview) ->
-                val active = preview == isPreview
-                Text(
-                    text     = label,
-                    color    = if (active) Amber else muted,
-                    fontSize = 12.sp,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (active) Amber.copy(.1f) else Color.Transparent)
-                        .clickable { preview = isPreview }
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                )
-            }
-        }
-
-        if (!preview) {
-            // ── Araç çubuğu ───────────────────────────────────────────────
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(surface)
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment     = Alignment.CenterVertically,
-            ) {
-                MD_ACTIONS.forEach { action ->
-                    IconButton(
-                        onClick  = { insert(action) },
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(RoundedCornerShape(6.dp)),
-                    ) {
-                        Icon(action.icon, action.label, tint = onBg, modifier = Modifier.size(17.dp))
+            TOOLBAR_ACTIONS.forEach { action ->
+                when (action) {
+                    is HtmlAction.Wrap -> {
+                        IconButton(
+                            onClick  = { applyWrap(action.open, action.close) },
+                            modifier = Modifier.size(36.dp).clip(RoundedCornerShape(6.dp)),
+                        ) {
+                            Icon(action.icon, action.label, tint = onBg, modifier = Modifier.size(18.dp))
+                        }
                     }
+                    is HtmlAction.Block -> {
+                        TextButton(
+                            onClick  = { applyBlock(action.tag) },
+                            modifier = Modifier.height(36.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp),
+                        ) {
+                            Text(action.label, color = onBg, fontSize = 12.sp)
+                        }
+                    }
+                    else -> {}
                 }
             }
 
-            // ── Yazı alanı ────────────────────────────────────────────────
-            BasicTextField(
-                value         = tfv,
-                onValueChange = { tfv = it; onChange(it.text) },
-                cursorBrush   = SolidColor(Amber),
-                textStyle     = LocalTextStyle.current.copy(
-                    color      = onBg,
-                    fontSize   = 14.sp,
-                    lineHeight = 22.sp,
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 180.dp)
-                    .background(surfaceVar, RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
-                    .border(1.dp, if (isFocused) Amber else divider, RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
-                    .padding(12.dp)
-                    .onFocusChanged { isFocused = it.isFocused },
-                decorationBox = { inner ->
-                    Box {
-                        if (tfv.text.isEmpty()) Text(placeholder, color = muted, fontSize = 14.sp)
-                        inner()
-                    }
-                },
-            )
+            // Ayırıcı
+            Spacer(Modifier.width(4.dp))
+            Divider(modifier = Modifier.height(20.dp).width(1.dp), color = divider)
+            Spacer(Modifier.width(4.dp))
 
-            // Kelime sayısı
-            val wordCount = tfv.text.trim().split(Regex("\\s+")).count { it.isNotBlank() }
-            Text("$wordCount kelime", color = muted, fontSize = 11.sp,
-                modifier = Modifier.padding(top = 4.dp, start = 2.dp))
-        } else {
-            // ── Önizleme ──────────────────────────────────────────────────
-            val md = tfv.text
-            androidx.compose.foundation.layout.Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 180.dp)
-                    .background(surfaceVar, RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
-                    .border(1.dp, divider, RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
-                    .padding(12.dp),
-            ) {
-                if (md.isBlank()) {
-                    Text("Önizlenecek içerik yok.", color = muted, fontSize = 13.sp)
-                } else {
-                    MarkdownView(md)
+            // Hizalama dropdown
+            Box {
+                IconButton(
+                    onClick  = { showAlignMenu = true },
+                    modifier = Modifier.size(36.dp).clip(RoundedCornerShape(6.dp)),
+                ) {
+                    val alignIcon = when (alignment) {
+                        "center" -> Icons.Filled.FormatAlignCenter
+                        "right"  -> Icons.Filled.FormatAlignRight
+                        else     -> Icons.Filled.FormatAlignLeft
+                    }
+                    Icon(alignIcon, "Hizalama", tint = onBg, modifier = Modifier.size(18.dp))
+                }
+                DropdownMenu(
+                    expanded         = showAlignMenu,
+                    onDismissRequest = { showAlignMenu = false },
+                    modifier         = Modifier.background(HeftSurface),
+                ) {
+                    listOf(
+                        "left"   to Icons.Filled.FormatAlignLeft,
+                        "center" to Icons.Filled.FormatAlignCenter,
+                        "right"  to Icons.Filled.FormatAlignRight,
+                    ).forEach { (align, icon) ->
+                        DropdownMenuItem(
+                            leadingIcon = { Icon(icon, align, tint = if (alignment == align) Amber else onBg, modifier = Modifier.size(16.dp)) },
+                            text        = { Text(when(align) { "left" -> "Sola"; "center" -> "Ortala"; else -> "Sağa" }, color = if (alignment == align) Amber else onBg, fontSize = 13.sp) },
+                            onClick     = { applyAlign(align) },
+                        )
+                    }
                 }
             }
         }
+
+        // ── Yazı alanı ────────────────────────────────────────────────────
+        BasicTextField(
+            value         = tfv,
+            onValueChange = { tfv = it; onChange(it.text) },
+            cursorBrush   = SolidColor(Amber),
+            textStyle     = LocalTextStyle.current.copy(
+                color      = onBg,
+                fontSize   = 14.sp,
+                lineHeight = 22.sp,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 200.dp)
+                .background(surfaceVar, RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+                .border(1.dp, if (isFocused) Amber else divider, RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+                .padding(12.dp)
+                .onFocusChanged { isFocused = it.isFocused },
+            decorationBox = { inner ->
+                Box {
+                    if (tfv.text.isEmpty()) Text(placeholder, color = muted, fontSize = 14.sp)
+                    inner()
+                }
+            },
+        )
+
+        val charCount = tfv.text.length
+        Text(
+            "$charCount karakter",
+            color    = if (charCount < 100) Color(0xFFEF4444) else muted,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(top = 4.dp, start = 2.dp),
+        )
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Basit Markdown önizleme (Markwon AndroidView)
+// Markdown compat (artık kullanılmıyor ama import hataları için)
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
