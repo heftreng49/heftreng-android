@@ -203,6 +203,9 @@ class KurdiViewModel @Inject constructor(
     private val _loading      = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
+    private val _loadError    = MutableStateFlow(false)
+    val loadError = _loadError.asStateFlow()
+
     // TTL cache — 5 dk içinde load() tekrar Firestore'a gitmesin
     private val KURDI_CACHE_TTL_MS = 5L * 60_000L
     private var lastKurdiFetchMs   = 0L
@@ -280,6 +283,7 @@ class KurdiViewModel @Inject constructor(
             && _units.value.isNotEmpty()) return
         viewModelScope.launch {
             _loading.value = true
+            _loadError.value = false
             try {
                 // ── 1. Kullanıcı belgesinden kf_done + xp + streak oku ────────
                 // Site mantığı: users/{uid} belgesindeki kf_done array'i
@@ -334,9 +338,8 @@ class KurdiViewModel @Inject constructor(
 
             } catch (e: Exception) {
                 e.printStackTrace()
-                // Mock verisi göster
-                _units.value   = MOCK_UNITS
-                _lessons.value = MOCK_LESSONS.map { it.copy(completed = it.id in _doneIds.value) }
+                android.util.Log.e("KurdiVM", "load() HATA: ${e.message}", e)
+                _loadError.value = true
             } finally {
                 _loading.value = false
             }
@@ -389,15 +392,15 @@ class KurdiViewModel @Inject constructor(
                     _units.value   = listOf(KfUnit(id = "u_default", ttl = "Dersler", nameKu = "", desc = "", icon = "📚", color = "#8B5CF6", order = 0))
                     _lessons.value = allLessons.map { it.copy(unitId = "u_default") }
                 } else {
-                    // Her ikisi de boşsa mock veri
-                    _units.value   = MOCK_UNITS
-                    _lessons.value = MOCK_LESSONS.map { it.copy(completed = it.id in doneIds) }
+                    // Her ikisi de boşsa hata göster
+                    _loadError.value = true
                 }
             }
 
-        } catch (_: Exception) {
-            _units.value   = MOCK_UNITS
-            _lessons.value = MOCK_LESSONS.map { it.copy(completed = it.id in _doneIds.value) }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            android.util.Log.e("KurdiVM", "loadUnitsAndLessons HATA: ${e.message}", e)
+            _loadError.value = true
         }
     }
 
@@ -487,11 +490,11 @@ class KurdiViewModel @Inject constructor(
                 // Mükerrer kelimeler ve egzersizler temizle
                 val finalVocab: List<KfVocab> = vocabList
                     .distinctBy { it.ku.trim().lowercase() }
-                    .ifEmpty { MOCK_VOCAB[lessonId] ?: emptyList() }
+                    .ifEmpty { emptyList() }
 
                 val finalExercises: List<KfExercise> = exerciseList
                     .distinctBy { "${it.type}|${it.question.trim().lowercase()}" }
-                    .ifEmpty { MOCK_EXERCISES[lessonId] ?: emptyList() }
+                    .ifEmpty { emptyList() }
 
                 _activeLesson.value = ActiveLesson(
                     lesson    = lesson,
@@ -1302,111 +1305,3 @@ class KurdiViewModel @Inject constructor(
     fun startLesson(lesson: com.heftreng.app.data.model.KurdiLesson) = openLesson(lesson.id)
 
 }
-
-// ── Mock verisi (site ile aynı ID'ler) ────────────────────────────────────────
-// Site _kpRenderMockUnits() ile tamamen eşleşiyor — kf_done senkronize çalışır
-private val MOCK_UNITS = listOf(
-    KfUnit(id="u1", ttl="Destpêk",  nameKu="Destpêk",  desc="Temel Kelimeler", icon="🌱", color="#58cc02", order=1),
-    KfUnit(id="u2", ttl="Jimare",   nameKu="Jimare",   desc="Sayılar",         icon="🔢", color="#1cb0f6", order=2),
-    KfUnit(id="u3", ttl="Reng",     nameKu="Reng",     desc="Renkler",         icon="🎨", color="#ce82ff", order=3),
-    KfUnit(id="u4", ttl="Malbat",   nameKu="Malbat",   desc="Aile",            icon="👨‍👩‍👧", color="#ff9600", order=4),
-    KfUnit(id="u5", ttl="Xwarin",   nameKu="Xwarin",   desc="Yemek",           icon="🍎", color="#ff4b4b", order=5),
-)
-
-private val MOCK_LESSONS = listOf(
-    KfLesson("l1", "u1", "Merhaba!",         "Silav!",             "👋", 10, 1),
-    KfLesson("l2", "u1", "Nasılsın?",        "Çawa yî?",           "😊", 15, 2),
-    KfLesson("l3", "u2", "1-10 Arası",       "Yek-Deh",            "🔢", 20, 1),
-    KfLesson("l4", "u3", "Temel Renkler",    "Rengên Bingehîn",    "🎨", 15, 1),
-    KfLesson("l5", "u4", "Anne-Baba",        "Dê-Bav",             "👨‍👩‍👧", 20, 1),
-    KfLesson("l6", "u5", "Meyve",            "Fêkî",               "🍎", 15, 1),
-)
-
-private val MOCK_VOCAB = mapOf(
-    "l1" to listOf(
-        KfVocab("v1","Silav",    "si-lav",   "Merhaba",     "👋"),
-        KfVocab("v2","Spas",     "spas",     "Teşekkürler", "🙏"),
-        KfVocab("v3","Baş e",    "baş-e",    "İyiyim",      "😊"),
-        KfVocab("v4","Xweş bî",  "xweş-bî",  "Hoşça kal",   "👋"),
-        KfVocab("v5","Belê",     "be-lê",    "Evet",        "✅"),
-        KfVocab("v6","Na",       "na",       "Hayır",       "❌"),
-    ),
-    "l2" to listOf(
-        KfVocab("v7","Çawa",     "ça-wa",    "Nasıl",       "🤔"),
-        KfVocab("v8","Baş",      "baş",      "İyi",         "👍"),
-        KfVocab("v9","Nexweş",   "ne-xweş",  "Hasta",       "🤒"),
-        KfVocab("v10","Pirr baş","pirr-baş", "Çok iyi",     "🌟"),
-        KfVocab("v11","Spas dikim","spas-di-kim","Teşekkür ederim","🙏"),
-    ),
-    "l3" to listOf(
-        KfVocab("vn1","Yek",     "yek",      "Bir",         "1️⃣"),
-        KfVocab("vn2","Du",      "du",       "İki",         "2️⃣"),
-        KfVocab("vn3","Sê",      "sê",       "Üç",          "3️⃣"),
-        KfVocab("vn4","Çar",     "çar",      "Dört",        "4️⃣"),
-        KfVocab("vn5","Pênc",    "pênc",     "Beş",         "5️⃣"),
-        KfVocab("vn6","Şeş",     "şeş",      "Altı",        "6️⃣"),
-        KfVocab("vn7","Heft",    "heft",     "Yedi",        "7️⃣"),
-        KfVocab("vn8","Heşt",    "heşt",     "Sekiz",       "8️⃣"),
-        KfVocab("vn9","Neh",     "neh",      "Dokuz",       "9️⃣"),
-        KfVocab("vn10","Deh",    "deh",      "On",          "🔟"),
-    ),
-    "l4" to listOf(
-        KfVocab("vc1","Sor",     "sor",      "Kırmızı",     "🔴"),
-        KfVocab("vc2","Şîn",     "şîn",      "Mavi",        "🔵"),
-        KfVocab("vc3","Kesk",    "kesk",     "Yeşil",       "🟢"),
-        KfVocab("vc4","Zer",     "zer",      "Sarı",        "🟡"),
-        KfVocab("vc5","Spî",     "spî",      "Beyaz",       "⚪"),
-        KfVocab("vc6","Reş",     "reş",      "Siyah",       "⚫"),
-    ),
-    "l5" to listOf(
-        KfVocab("vm1","Dê",      "dê",       "Anne",        "👩"),
-        KfVocab("vm2","Bav",     "bav",      "Baba",        "👨"),
-        KfVocab("vm3","Bira",    "bi-ra",    "Erkek kardeş","👦"),
-        KfVocab("vm4","Xwişk",   "xwişk",    "Kız kardeş",  "👧"),
-        KfVocab("vm5","Kur",     "kur",      "Oğul",        "🧒"),
-        KfVocab("vm6","Keç",     "keç",      "Kız",         "🧒"),
-    ),
-    "l6" to listOf(
-        KfVocab("vf1","Sêv",     "sêv",      "Elma",        "🍎"),
-        KfVocab("vf2","Moz",     "moz",      "Muz",         "🍌"),
-        KfVocab("vf3","Tirî",    "ti-rî",    "Üzüm",        "🍇"),
-        KfVocab("vf4","Gûz",     "gûz",      "Ceviz",       "🥜"),
-        KfVocab("vf5","Tûjik",   "tû-jik",   "Çilek",       "🍓"),
-    ),
-)
-
-private val MOCK_EXERCISES = mapOf(
-    "l1" to listOf(
-        KfExercise("e1","mcq","«Silav» ne demek?","Merhaba","Teşekkür","Günaydın","Selam","Merhaba"),
-        KfExercise("e2","mcq","«Spas» ne demek?","Teşekkürler","Merhaba","İyi","Hoşça kal","Teşekkürler"),
-        KfExercise("e3","mcq","«Baş e» ne demek?","İyiyim","Hasta","Teşekkür","Günaydın","İyiyim"),
-        KfExercise("e4","mcq","«Belê» ne demek?","Evet","Hayır","Belki","Tamam","Evet"),
-    ),
-    "l2" to listOf(
-        KfExercise("e5","mcq","«Baş» ne demek?","İyi","Hasta","Nasıl","Teşekkür","İyi"),
-        KfExercise("e6","mcq","«Nexweş» ne demek?","Hasta","İyi","Nasıl","Teşekkür","Hasta"),
-        KfExercise("e7","mcq","«Çawa yî?» ne demek?","Nasılsın?","İyiyim","Teşekkürler","Hoşça kal","Nasılsın?"),
-    ),
-    "l3" to listOf(
-        KfExercise("en1","mcq","«Sê» kaç demek?","3","1","2","4","3"),
-        KfExercise("en2","mcq","«Pênc» kaç demek?","5","6","4","7","5"),
-        KfExercise("en3","mcq","«Deh» kaç demek?","10","8","9","7","10"),
-        KfExercise("en4","mcq","«Heft» kaç demek?","7","6","8","9","7"),
-    ),
-    "l4" to listOf(
-        KfExercise("ec1","mcq","«Sor» ne demek?","Kırmızı","Mavi","Yeşil","Sarı","Kırmızı"),
-        KfExercise("ec2","mcq","«Kesk» ne demek?","Yeşil","Siyah","Beyaz","Mavi","Yeşil"),
-        KfExercise("ec3","mcq","«Şîn» ne demek?","Mavi","Kırmızı","Sarı","Beyaz","Mavi"),
-        KfExercise("ec4","mcq","«Reş» ne demek?","Siyah","Beyaz","Sarı","Yeşil","Siyah"),
-    ),
-    "l5" to listOf(
-        KfExercise("em1","mcq","«Dê» ne demek?","Anne","Baba","Kardeş","Kız","Anne"),
-        KfExercise("em2","mcq","«Bav» ne demek?","Baba","Anne","Oğul","Kız","Baba"),
-        KfExercise("em3","mcq","«Xwişk» ne demek?","Kız kardeş","Erkek kardeş","Anne","Baba","Kız kardeş"),
-    ),
-    "l6" to listOf(
-        KfExercise("ef1","mcq","«Sêv» ne demek?","Elma","Muz","Üzüm","Çilek","Elma"),
-        KfExercise("ef2","mcq","«Moz» ne demek?","Muz","Elma","Üzüm","Ceviz","Muz"),
-        KfExercise("ef3","mcq","«Tûjik» ne demek?","Çilek","Muz","Elma","Üzüm","Çilek"),
-    ),
-)

@@ -90,6 +90,7 @@ fun KurdiScreen(
     val streak      by vm.streak.collectAsState()
     val level       by vm.level.collectAsState()
     val loading     by vm.loading.collectAsState()
+    val loadError   by vm.loadError.collectAsState()
     val activeLesson by vm.activeLesson.collectAsState()
     val toast       by vm.toast.collectAsState()
     val isAdmin     by adminVm.isAdmin.collectAsState()
@@ -534,6 +535,8 @@ fun KurdiScreen(
                 lessons         = lessons,
                 doneIds         = doneIds,
                 loading         = loading,
+                loadError       = loadError,
+                onRetry         = { vm.load(forceRefresh = true) },
                 language        = language,
                 tempUnlockedIds = tempUnlockedIds,
                 canWatchAd      = canUnlockLesson,
@@ -1097,6 +1100,8 @@ private fun UnitsTab(
     lessons         : List<KfLesson>,
     doneIds         : Set<String>,
     loading         : Boolean,
+    loadError       : Boolean = false,
+    onRetry         : () -> Unit = {},
     language        : String,
     tempUnlockedIds : Set<String> = emptySet(),
     canWatchAd      : Boolean = false,
@@ -1110,11 +1115,32 @@ private fun UnitsTab(
         loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = Primary)
         }
+        loadError -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("⚠️", fontSize = 40.sp)
+                Text(
+                    if (language == "ku") "Dersên nekarin bên barkirin" else "Dersler yüklenemedi",
+                    color = Muted,
+                    fontSize = 14.sp,
+                )
+                Button(
+                    onClick = onRetry,
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                ) {
+                    Text(if (language == "ku") "Dîsa biceribîne" else "Yenile")
+                }
+            }
+        }
         units.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("📚", fontSize = 40.sp)
-                Spacer(Modifier.height(8.dp))
                 Text(Strings.lessonNotFound(language), color = Muted, fontSize = 14.sp)
+                Button(
+                    onClick = onRetry,
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                ) {
+                    Text(if (language == "ku") "Dîsa biceribîne" else "Yenile")
+                }
             }
         }
         else -> {
