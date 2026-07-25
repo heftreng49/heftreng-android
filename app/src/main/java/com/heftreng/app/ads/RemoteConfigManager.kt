@@ -86,6 +86,7 @@ class RemoteConfigManager @Inject constructor(
         const val KEY_BANNER_YAZAR          = "banner_yazar"
         const val KEY_NATIVE_SERIALS        = "native_serials"
         const val KEY_NATIVE_SAVEDPOSTS     = "native_savedposts"
+        const val KEY_NATIVE_NOTIFICATIONS  = "native_notifications"
         const val KEY_BANNER_PEOPLEHUB      = "banner_peoplehub"
         const val KEY_BANNER_CMSPAGE        = "banner_cmspage"
 
@@ -104,7 +105,7 @@ class RemoteConfigManager @Inject constructor(
             // Adım 2'de eklenen yeni ekranlar
             KEY_BANNER_AUTHOR_DETAIL, KEY_BANNER_BOOK_DETAIL, KEY_BANNER_QUOTE_DETAIL,
             KEY_NATIVE_BOOKSCREENS, KEY_NATIVE_READINGLIST, KEY_BANNER_YAZAR,
-            KEY_NATIVE_SERIALS, KEY_NATIVE_SAVEDPOSTS, KEY_BANNER_PEOPLEHUB,
+            KEY_NATIVE_SERIALS, KEY_NATIVE_SAVEDPOSTS, KEY_NATIVE_NOTIFICATIONS, KEY_BANNER_PEOPLEHUB,
             KEY_BANNER_CMSPAGE,
         )
 
@@ -147,6 +148,7 @@ class RemoteConfigManager @Inject constructor(
             // Serials: orta uzunluk, seri listesi genelde 5-15 öğe
             KEY_NATIVE_SERIALS       to """{"enabled":false,"unitId":"","position":3,"frequency":6}""",
             KEY_NATIVE_SAVEDPOSTS    to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
+            KEY_NATIVE_NOTIFICATIONS to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
             // Kullanıcı listeleri (kısa listeler, düşük öncelik) → banner
             KEY_BANNER_PEOPLEHUB     to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":8,"frequency":8}""",
         )

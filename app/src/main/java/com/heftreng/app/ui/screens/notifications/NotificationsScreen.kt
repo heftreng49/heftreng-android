@@ -154,18 +154,14 @@ fun NotificationsScreen(
     val loading       by vm.loading.collectAsState()
     val unreadCount   = notifications.count { !it.read }
 
-    // ── Reklam alt yapısı — bilinçli olarak KAPALI başlıyor ────────────────
-    // Bu ekran metin ağırlıklı, düz bir liste olduğu için native yerine
-    // banner tercih edildi (Adım 5 kriteri: metin ağırlıklı listeler → banner).
-    // Remote Config'te enabled:false olduğu sürece hiçbir şey görünmez —
-    // gerçek unitId Firebase Console'dan girilene kadar bu ekranda reklam
-    // yüklenmeyecek (bkz. REKLAM-DENETIM-PLANI.md Adım 6).
+    // ── Reklam alt yapısı — native reklamlar ────────────────────────────────
+    // Banner yerine native kullanılıyor (metin listesinde daha doğal görünüm).
     val adConfigs by adsVm.allConfigs.collectAsState()
     val adPlan = remember(notifications.size, adConfigs) {
         adsVm.planFor(
             screenKey = "notifications",
             itemCount = notifications.size,
-            bannerKey = RemoteConfigManager.KEY_BANNER_NOTIFICATIONS,
+            nativeKey = RemoteConfigManager.KEY_NATIVE_NOTIFICATIONS,
         )
     }
     val notifListState = rememberLazyListState()
@@ -180,7 +176,7 @@ fun NotificationsScreen(
     }
 
     DisposableEffect(Unit) {
-        onDispose { adsVm.releaseBanners("notifications_banner_") }
+        onDispose { }
     }
 
     val refreshing by vm.refreshing.collectAsState()
