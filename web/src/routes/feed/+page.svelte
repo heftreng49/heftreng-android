@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { collection, query, orderBy, limit, getDocs } from "firebase/firestore";
+  import { collection, query, orderBy, limit, getDocs, deleteDoc, doc } from "firebase/firestore";
   import { db } from "$lib/firebase/config";
   import { supabase } from "$lib/supabase/config";
   import { currentUser } from "$lib/store/auth";
@@ -9,232 +9,657 @@
   let posts = $state<any[]>([]);
   let loading = $state(true);
   let menuOpenId = $state<string | null>(null);
+  let activeTab = $state(0); // 0=Herkes, 1=Takip Edilenler
 
-  function toggleMenu(e: Event, id: string) {
-    e.stopPropagation();
-    menuOpenId = menuOpenId === id ? null : id;
+  // ── Zaman formatı (Android timeAgo ile aynı) ─────────────────────────────
+  function ago(ts: any): string {
+    const ms = ts?.seconds ? ts.seconds * 1000 : Number(ts);
+    const diff = Date.now() - ms;
+    const m = Math.floor(diff / 60000);
+    const h = Math.floor(diff / 3600000);
+    const d = Math.floor(diff / 86400000);
+    if (m < 1)  return "şimdi";
+    if (m < 60) return `${m}dk`;
+    if (h < 24) return `${h}sa`;
+    if (d < 7)  return `${d}g`;
+    if (d < 30) return `${Math.floor(d/7)}hf`;
+    if (d < 365) return `${Math.floor(d/30)}ay`;
+    return `${Math.floor(d/365)}y`;
   }
-  function closeMenu() { menuOpenId = null; }
 
+  // ── Veri yükleme ─────────────────────────────────────────────────────────
+  onMount(async () => {
+    await loadPosts();
+    // Dışarı tıklayınca menüyü kapat
+    document.addEventListener("click", () => { menuOpenId = null; });
+  });
+
+  async function loadPosts() {
+    loading = true;
+    try {
+      const q = query(collection(db, "feed"), orderBy("ts", "desc"), limit(30));
+      const snap = await getDocs(q);
+      posts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if ($currentUser) await loadInteractions(posts.map(p => p.id));
+      await loadLikeCounts(posts.map(p => p.id));
+    } catch(e) { console.error(e); }
+    finally { loading = false; }
+  }
+
+  async function loadLikeCounts(ids: string[]) {
+    if (!ids.length) return;
+    const { data } = await supabase.from("feed_likes").select("post_id").in("post_id", ids);
+    if (!data) return;
+    const counts: Record<string, number> = {};
+    for (const r of data) counts[r.post_id] = (counts[r.post_id] ?? 0) + 1;
+    posts = posts.map(p => ({ ...p, likesCount: counts[p.id] ?? p.likesCount ?? 0 }));
+  }
+
+  async function loadInteractions(ids: string[]) {
+    if (!$currentUser || !ids.length) return;
+    const [lR, sR] = await Promise.all([
+      supabase.from("feed_likes").select("post_id").eq("user_uid", $currentUser.uid).in("post_id", ids),
+      supabase.from("feed_saves").select("post_id").eq("user_uid", $currentUser.uid).in("post_id", ids),
+    ]);
+    const liked = new Set((lR.data ?? []).map((r: any) => r.post_id));
+    const saved = new Set((sR.data ?? []).map((r: any) => r.post_id));
+    posts = posts.map(p => ({ ...p, isLikedByMe: liked.has(p.id), isSavedByMe: saved.has(p.id) }));
+  }
+
+  // ── Beğeni ───────────────────────────────────────────────────────────────
+  async function toggleLike(p: any) {
+    if (!$currentUser) { window.location.href = "/login"; return; }
+    const wasLiked = p.isLikedByMe;
+    posts = posts.map(x => x.id === p.id ? {
+      ...x,
+      isLikedByMe: !wasLiked,
+      likesCount: wasLiked ? Math.max((x.likesCount ?? 1) - 1, 0) : (x.likesCount ?? 0) + 1,
+    } : x);
+    try {
+      const id = $currentUser.uid + "_" + p.id;
+      if (wasLiked) await supabase.from("feed_likes").delete().eq("id", id);
+      else await supabase.from("feed_likes").upsert({ id, user_uid: $currentUser.uid, post_id: p.id });
+    } catch(e) { console.error(e); }
+  }
+
+  // ── Kaydet ───────────────────────────────────────────────────────────────
+  async function toggleSave(p: any) {
+    if (!$currentUser) { window.location.href = "/login"; return; }
+    const wasSaved = p.isSavedByMe;
+    posts = posts.map(x => x.id === p.id ? { ...x, isSavedByMe: !wasSaved } : x);
+    try {
+      const id = $currentUser.uid + "_" + p.id;
+      if (wasSaved) await supabase.from("feed_saves").delete().eq("id", id);
+      else await supabase.from("feed_saves").upsert({ id, user_uid: $currentUser.uid, post_id: p.id });
+    } catch(e) { console.error(e); }
+  }
+
+  // ── Sil ──────────────────────────────────────────────────────────────────
   async function deletePost(p: any) {
     if (!$currentUser || $currentUser.uid !== p.uid) return;
-    closeMenu();
-    if (!confirm("Gonderiyi silmek istediginize emin misiniz?")) return;
+    menuOpenId = null;
+    if (!confirm("Gönderiyi silmek istediğinize emin misiniz?")) return;
     try {
-      const { deleteDoc, doc } = await import("firebase/firestore");
       await deleteDoc(doc(db, "feed", p.id));
       posts = posts.filter(x => x.id !== p.id);
     } catch(e) { console.error(e); }
   }
 
+  // ── Paylaş ───────────────────────────────────────────────────────────────
   function sharePost(p: any) {
-    closeMenu();
+    menuOpenId = null;
     const url = window.location.origin + "/post/" + p.id;
-    if (navigator.share) {
-      navigator.share({ title: p.displayName, text: p.text?.slice(0,100), url });
-    } else {
-      navigator.clipboard.writeText(url);
-      alert("Baglanti kopyalandi!");
-    }
+    if (navigator.share) navigator.share({ title: p.displayName, text: p.text?.slice(0, 100), url });
+    else { navigator.clipboard.writeText(url); alert("Bağlantı kopyalandı!"); }
   }
 
-  onMount(async () => {
-    try {
-      const q = query(collection(db, "feed"), orderBy("ts", "desc"), limit(30));
-      const snap = await getDocs(q);
-      posts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      await loadInteractions(posts.map(p => p.id));
-      await loadLikeCounts(posts.map(p => p.id));
-    } catch(e) { console.error(e); }
-    finally { loading = false; }
-  });
-
-  function ago(ts: any) {
-    const ms = ts?.seconds ? ts.seconds * 1000 : Number(ts);
-    const m = Math.floor((Date.now() - ms) / 60000);
-    if (m < 1) return "az once";
-    if (m < 60) return m + " dk";
-    if (m < 1440) return Math.floor(m/60) + " sa";
-    return Math.floor(m/1440) + " g";
+  function toggleMenu(e: Event, id: string) {
+    e.stopPropagation();
+    menuOpenId = menuOpenId === id ? null : id;
   }
 
-  async function like(p: any) {
-    if (!$currentUser) return;
-    // Optimistic update
-    posts = posts.map(x => x.id === p.id ? {...x, likesCount: (x.likesCount??0)+1, liked: true} : x);
-    try {
-      await supabase.from('feed_likes').upsert({
-        id:       $currentUser.uid + '_' + p.id,
-        user_uid: $currentUser.uid,
-        post_id:  p.id,
-      });
-    } catch(e) { console.error(e); }
-  }
-
-  async function unlike(p: any) {
-    if (!$currentUser) return;
-    posts = posts.map(x => x.id === p.id ? {...x, likesCount: Math.max((x.likesCount??1)-1,0), liked: false} : x);
-    try {
-      await supabase.from('feed_likes').delete().eq('id', $currentUser.uid + '_' + p.id);
-    } catch(e) { console.error(e); }
-  }
-
-  async function save(p: any) {
-    if (!$currentUser) return;
-    posts = posts.map(x => x.id === p.id ? {...x, saved: true} : x);
-    try {
-      await supabase.from('feed_saves').upsert({
-        id:       $currentUser.uid + '_' + p.id,
-        user_uid: $currentUser.uid,
-        post_id:  p.id,
-      });
-    } catch(e) { console.error(e); }
-  }
-
-  async function loadLikeCounts(postIds: string[]) {
-    if (postIds.length === 0) return;
-    try {
-      const { data } = await supabase
-        .from('feed_likes')
-        .select('post_id')
-        .in('post_id', postIds);
-      if (!data) return;
-      const counts: Record<string, number> = {};
-      for (const r of data) {
-        counts[r.post_id] = (counts[r.post_id] ?? 0) + 1;
-      }
-      posts = posts.map(p => ({ ...p, likesCount: counts[p.id] ?? p.likesCount ?? 0 }));
-    } catch(e) { console.error(e); }
-  }
-
-  // Kullanicinin begendigi ve kaydettigi postlari yukle
-  async function loadInteractions(postIds: string[]) {
-    if (!$currentUser || postIds.length === 0) return;
-    try {
-      const [likesRes, savesRes] = await Promise.all([
-        supabase.from('feed_likes').select('post_id').eq('user_uid', $currentUser.uid).in('post_id', postIds),
-        supabase.from('feed_saves').select('post_id').eq('user_uid', $currentUser.uid).in('post_id', postIds),
-      ]);
-      const likedIds = new Set((likesRes.data ?? []).map((r: any) => r.post_id));
-      const savedIds = new Set((savesRes.data ?? []).map((r: any) => r.post_id));
-      posts = posts.map(p => ({ ...p, liked: likedIds.has(p.id), saved: savedIds.has(p.id) }));
-    } catch(e) { console.error(e); }
-  }
+  let filteredPosts = $derived(
+    activeTab === 0
+      ? posts
+      : posts.filter(p => p.uid === $currentUser?.uid) // Basit filtre, gerçek takip sistemi eklenince güncellenecek
+  );
 </script>
 
+<svelte:head>
+  <title>Heftreng — Akış</title>
+</svelte:head>
+
 <Navbar />
-<main class="feed">
-  {#if loading}
-    {#each Array(5) as _}
-      <div class="skeleton"><div class="sk-av"></div><div class="sk-lines"><div class="sk-l"></div><div class="sk-l w80"></div></div></div>
-    {/each}
-  {:else if posts.length === 0}
-    <p class="empty">Henuz gonderi yok.</p>
-  {:else}
-    {#each posts as p (p.id)}
-      <article class="card">
-        <div class="head">
-          <a href="/profile/{p.uid}" class="av-wrap" onclick={(e) => e.stopPropagation()}>
-            {#if p.photoURL}<img src={p.photoURL} alt="" class="av"/>{:else}<div class="av-ph">{(p.displayName??"?")[0].toUpperCase()}</div>{/if}
-          </a>
-          <div class="meta">
-            <a href="/profile/{p.uid}" class="name" onclick={(e) => e.stopPropagation()}>{p.displayName ?? p.name ?? "Anonim"}</a>
-            <div class="time">{ago(p.ts)}</div>
+
+<main class="page">
+  <!-- ── Sekme çubuğu ─────────────────────────────────────────── -->
+  <div class="tabs">
+    <button class="tab" class:active={activeTab === 0} onclick={() => activeTab = 0}>Herkes</button>
+    <button class="tab" class:active={activeTab === 1} onclick={() => activeTab = 1}>Takip Edilenler</button>
+    <div class="tab-indicator" style="transform: translateX({activeTab * 100}%)"></div>
+  </div>
+
+  <div class="feed">
+    <!-- ── Yükleniyor ──────────────────────────────────────────── -->
+    {#if loading}
+      {#each Array(5) as _}
+        <div class="skeleton">
+          <div class="sk-av"></div>
+          <div class="sk-body">
+            <div class="sk-line" style="width:60%"></div>
+            <div class="sk-line" style="width:40%"></div>
+            <div class="sk-line" style="width:90%;margin-top:12px"></div>
+            <div class="sk-line" style="width:75%"></div>
           </div>
-          <div class="menu-wrap">
-            <button class="menu-btn" onclick={(e) => toggleMenu(e, p.id)}>
-              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-                <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
-              </svg>
-            </button>
-            {#if menuOpenId === p.id}
-              <div class="menu-dropdown" onclick={(e) => e.stopPropagation()}>
-                <button class="menu-item" onclick={() => sharePost(p)}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-                  Paylasim Baglantisi
-                </button>
-                {#if $currentUser?.uid === p.uid}
-                  <button class="menu-item" onclick={() => window.location.href = '/compose?edit=' + p.id}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    Duzenle
-                  </button>
-                  <button class="menu-item danger" onclick={() => deletePost(p)}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-                    Sil
-                  </button>
-                {:else}
-                  <button class="menu-item danger" onclick={closeMenu}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                    Sikayet Et
-                  </button>
+        </div>
+      {/each}
+
+    <!-- ── Boş durum ───────────────────────────────────────────── -->
+    {:else if filteredPosts.length === 0}
+      <div class="empty">
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        <p>Henüz gönderi yok.</p>
+        {#if $currentUser}
+          <a href="/compose" class="compose-link">İlk gönderiyi sen yaz →</a>
+        {/if}
+      </div>
+
+    <!-- ── Gönderi listesi ─────────────────────────────────────── -->
+    {:else}
+      {#each filteredPosts as p (p.id)}
+        <article class="card" onclick={() => window.location.href = '/post/' + p.id} role="button" tabindex="0">
+
+          <!-- Kart başlığı: Avatar + İsim + Zaman + 3-nokta menü -->
+          <div class="card-head">
+            <a href="/profile/{p.uid}" class="avatar-link" onclick={(e) => e.stopPropagation()}>
+              {#if p.photoURL}
+                <div class="avatar-ring">
+                  <img src={p.photoURL} alt={p.displayName} class="avatar-img" />
+                </div>
+              {:else}
+                <div class="avatar-ring">
+                  <div class="avatar-fallback">
+                    {(p.displayName ?? p.name ?? "?")[0].toUpperCase()}
+                  </div>
+                </div>
+              {/if}
+            </a>
+
+            <div class="meta">
+              <a href="/profile/{p.uid}" class="display-name" onclick={(e) => e.stopPropagation()}>
+                {p.displayName ?? p.name ?? "Anonim"}
+              </a>
+              <div class="meta-row">
+                {#if p.username}
+                  <span class="username">@{p.username}</span>
+                  <span class="dot">·</span>
                 {/if}
+                <span class="time">{ago(p.ts)}</span>
               </div>
+            </div>
+
+            <!-- 3-nokta menü -->
+            <div class="menu-wrap" onclick={(e) => e.stopPropagation()}>
+              <button class="menu-btn" onclick={(e) => toggleMenu(e, p.id)} aria-label="Seçenekler">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                  <circle cx="12" cy="5" r="1.8"/>
+                  <circle cx="12" cy="12" r="1.8"/>
+                  <circle cx="12" cy="19" r="1.8"/>
+                </svg>
+              </button>
+
+              {#if menuOpenId === p.id}
+                <div class="dropdown">
+                  {#if $currentUser?.uid === p.uid}
+                    <!-- Kendi gönderisi -->
+                    <a href="/compose?edit={p.id}" class="dropdown-item" onclick={() => menuOpenId = null}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      Düzenle
+                    </a>
+                    <button class="dropdown-item danger" onclick={() => deletePost(p)}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                      Sil
+                    </button>
+                  {:else}
+                    <!-- Başkasının gönderisi -->
+                    <button class="dropdown-item" onclick={() => sharePost(p)}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                      Paylaşım Bağlantısı
+                    </button>
+                    <button class="dropdown-item danger" onclick={() => menuOpenId = null}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                      Şikayet Et
+                    </button>
+                  {/if}
+                  <div class="dropdown-divider"></div>
+                  <button class="dropdown-item" onclick={() => sharePost(p)}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                    Bağlantıyı Kopyala
+                  </button>
+                </div>
+              {/if}
+            </div>
+          </div>
+
+          <!-- Kategori etiketi -->
+          {#if p.category}
+            <div class="category-chip">{p.category}</div>
+          {/if}
+
+          <!-- İçerik -->
+          <div class="card-body">
+            {#if p.title}
+              <h2 class="post-title">{p.title}</h2>
+            {/if}
+            {#if p.text}
+              <p class="post-text">{p.text}</p>
             {/if}
           </div>
-        </div>
-        {#if p.text}<p class="body">{p.text}</p>{/if}
-        {#if p.imgUrl || p.imageURL}<img src={p.imgUrl || p.imageURL} alt="" class="post-img"/>{/if}
-        <div class="acts">
-          <!-- Begeni -->
-          <button class="act-btn" class:liked={p.liked} onclick={(e) => { e.stopPropagation(); p.liked ? unlike(p) : like(p); }}>
-            <svg viewBox="0 0 24 24" fill={p.liked ? "currentColor" : "none"} stroke="currentColor" stroke-width="2">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-            </svg>
-            {#if (p.likesCount ?? 0) > 0}<span>{p.likesCount}</span>{/if}
-          </button>
-          <!-- Yorum -->
-          <button class="act-btn" onclick={(e) => { e.stopPropagation(); window.location.href = '/post/' + p.id; }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
-            {#if (p.commentsCount ?? 0) > 0}<span>{p.commentsCount}</span>{/if}
-          </button>
-          <!-- Repost -->
-          <button class="act-btn" class:reposted={p.repostedByMe} onclick={(e) => e.stopPropagation()}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
-              <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-            </svg>
-            {#if (p.repostsCount ?? 0) > 0}<span>{p.repostsCount}</span>{/if}
-          </button>
-          <!-- Kaydet -->
-          <button class="act-btn save" class:saved={p.saved} onclick={(e) => { e.stopPropagation(); save(p); }} style="margin-left:auto">
-            <svg viewBox="0 0 24 24" fill={p.saved ? "currentColor" : "none"} stroke="currentColor" stroke-width="2">
-              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-            </svg>
-          </button>
-        </div>
-      </article>
-    {/each}
+
+          <!-- Görsel -->
+          {#if p.imgUrl || p.imageURL}
+            <img
+              src={p.imgUrl || p.imageURL}
+              alt=""
+              class="post-img"
+              onclick={(e) => e.stopPropagation()}
+            />
+          {/if}
+
+          <!-- Aksiyon çubuğu -->
+          <div class="actions" onclick={(e) => e.stopPropagation()}>
+
+            <!-- Beğeni -->
+            <button
+              class="act-btn"
+              class:liked={p.isLikedByMe}
+              onclick={() => toggleLike(p)}
+              aria-label="Beğen"
+            >
+              {#if p.isLikedByMe}
+                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+              {:else}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+              {/if}
+              {#if (p.likesCount ?? 0) > 0}
+                <span>{p.likesCount}</span>
+              {/if}
+            </button>
+
+            <!-- Yorum -->
+            <button
+              class="act-btn"
+              onclick={() => window.location.href = '/post/' + p.id}
+              aria-label="Yorum yap"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+              {#if (p.cmtCount ?? p.commentsCount ?? 0) > 0}
+                <span>{p.cmtCount ?? p.commentsCount}</span>
+              {/if}
+            </button>
+
+            <!-- Repost -->
+            <button
+              class="act-btn"
+              class:reposted={p.isRepostedByMe}
+              aria-label="Yeniden paylaş"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                <polyline points="17 1 21 5 17 9"/>
+                <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                <polyline points="7 23 3 19 7 15"/>
+                <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+              </svg>
+              {#if (p.repostsCount ?? p.reposts ?? 0) > 0}
+                <span>{p.repostsCount ?? p.reposts}</span>
+              {/if}
+            </button>
+
+            <!-- Paylaş (dış) -->
+            <button class="act-btn" onclick={() => sharePost(p)} aria-label="Paylaş">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              </svg>
+            </button>
+
+            <div class="act-spacer"></div>
+
+            <!-- Kaydet -->
+            <button
+              class="act-btn save-btn"
+              class:saved={p.isSavedByMe}
+              onclick={() => toggleSave(p)}
+              aria-label="Kaydet"
+            >
+              {#if p.isSavedByMe}
+                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                </svg>
+              {:else}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                </svg>
+              {/if}
+            </button>
+          </div>
+
+        </article>
+      {/each}
+    {/if}
+  </div>
+
+  <!-- FAB — Gönderi yaz -->
+  {#if $currentUser}
+    <a href="/compose" class="fab" aria-label="Gönderi yaz">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="24" height="24">
+        <path d="M12 20h9"/>
+        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+      </svg>
+    </a>
   {/if}
 </main>
 
 <style>
-.feed { max-width:600px; margin:0 auto; padding:12px 12px 40px; display:flex; flex-direction:column; gap:10px; }
-.empty { text-align:center; padding:40px; color:var(--muted); }
-.card { background:var(--card); border-radius:16px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,.08); }
-.head { display:flex; gap:10px; margin-bottom:10px; align-items:flex-start; }
-.meta { flex:1; min-width:0; }
-.av-wrap { flex-shrink:0; }
-.av,.av-ph { width:42px; height:42px; border-radius:50%; object-fit:cover; display:block; }
-.av-ph { background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:16px; }
-.meta { display:flex; flex-direction:column; gap:2px; }
-.name { font-weight:600; font-size:15px; color:var(--on-bg); text-decoration:none; }
-.name:hover { text-decoration:underline; }
-.time { font-size:12px; color:var(--muted); }
-.body { font-size:15px; color:var(--on-bg); line-height:1.65; white-space:pre-wrap; margin-bottom:12px; }
-.post-img { width:100%; border-radius:12px; margin-bottom:12px; max-height:400px; object-fit:cover; }
-.acts { display:flex; align-items:center; gap:2px; margin-top:8px; }
-.act-btn { display:flex; align-items:center; gap:4px; padding:6px 10px; border-radius:20px; color:var(--muted); font-size:13px; font-weight:500; cursor:pointer; border:none; background:transparent; transition:color .15s, background .15s; }
-.act-btn:hover { background:var(--surface-var); color:var(--on-bg); }
-.act-btn.liked { color:#FF3A5C; }
-.act-btn.reposted { color:#F59E0B; }
-.act-btn.saved { color:#F59E0B; }
-.act-btn.save:hover { background:var(--surface-var); color:#F59E0B; }
-.act-btn svg { width:18px; height:18px; }
-.skeleton { display:flex; gap:10px; padding:14px 16px; border-radius:16px; background:var(--card); }
-.sk-av { width:42px; height:42px; border-radius:50%; background:var(--shimmer); flex-shrink:0; }
-.sk-lines { flex:1; display:flex; flex-direction:column; gap:8px; padding-top:4px; }
-.sk-l { height:14px; background:var(--shimmer); border-radius:6px; }
-.w80 { width:80%; }
+/* ── Sayfa ──────────────────────────────────────────────────────────────── */
+.page { max-width: 600px; margin: 0 auto; padding-bottom: 80px; position: relative; }
+
+/* ── Sekmeler ───────────────────────────────────────────────────────────── */
+.tabs {
+  display: flex;
+  position: relative;
+  background: var(--surface);
+  border-bottom: 1px solid var(--divider);
+  overflow: hidden;
+}
+.tab {
+  flex: 1;
+  padding: 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  transition: color 0.2s;
+}
+.tab.active { color: var(--primary); font-weight: 600; }
+.tab-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 50%;
+  height: 2px;
+  background: var(--primary);
+  border-radius: 2px 2px 0 0;
+  transition: transform 0.25s cubic-bezier(.4,0,.2,1);
+}
+
+/* ── Feed listesi ───────────────────────────────────────────────────────── */
+.feed { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; }
+
+/* ── Kart ───────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border-radius: 18px;
+  border: 0.7px solid var(--divider);
+  padding: 14px 15px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  display: block;
+  text-align: left;
+  width: 100%;
+}
+.card:hover { border-color: color-mix(in srgb, var(--primary) 30%, var(--divider)); }
+
+/* ── Kart başlığı ───────────────────────────────────────────────────────── */
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.avatar-link { flex-shrink: 0; text-decoration: none; }
+.avatar-ring {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 60%, purple));
+  padding: 1.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  background: var(--surface-var);
+}
+.avatar-fallback {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--surface-var);
+  color: var(--on-bg);
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.meta { flex: 1; min-width: 0; }
+.display-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--on-bg);
+  text-decoration: none;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.display-name:hover { text-decoration: underline; }
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 1px;
+}
+.username, .time { font-size: 12px; color: var(--muted); }
+.dot { font-size: 12px; color: var(--muted); }
+
+/* ── 3-nokta menü ───────────────────────────────────────────────────────── */
+.menu-wrap { position: relative; }
+.menu-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.menu-btn:hover { background: var(--surface-var); }
+.dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  border-radius: 14px;
+  min-width: 190px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+  overflow: hidden;
+  z-index: 200;
+}
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  font-size: 13px;
+  color: var(--on-surface);
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  text-decoration: none;
+  font-family: inherit;
+  transition: background 0.1s;
+}
+.dropdown-item:hover { background: var(--surface-var); }
+.dropdown-item.danger { color: var(--error); }
+.dropdown-divider { height: 1px; background: var(--divider); }
+
+/* ── Kategori chip ──────────────────────────────────────────────────────── */
+.category-chip {
+  display: inline-block;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 99px;
+  margin-bottom: 6px;
+}
+
+/* ── Gönderi içeriği ────────────────────────────────────────────────────── */
+.card-body { margin-bottom: 2px; }
+.post-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--on-bg);
+  line-height: 1.35;
+  margin-bottom: 5px;
+}
+.post-text {
+  font-size: 15px;
+  color: var(--on-bg);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  margin-bottom: 10px;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.post-img {
+  width: 100%;
+  border-radius: 12px;
+  max-height: 320px;
+  object-fit: cover;
+  margin-bottom: 10px;
+  display: block;
+}
+
+/* ── Aksiyon çubuğu ─────────────────────────────────────────────────────── */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-top: 4px;
+}
+.act-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 10px;
+  border-radius: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  transition: color 0.15s, background 0.15s, transform 0.1s;
+  font-family: inherit;
+}
+.act-btn:hover { background: var(--surface-var); }
+.act-btn:active { transform: scale(0.92); }
+.act-btn.liked { color: #FF3A5C; }
+.act-btn.liked:hover { background: rgba(255,58,92,0.1); }
+.act-btn.reposted { color: #F59E0B; }
+.act-btn.save-btn.saved { color: #F59E0B; }
+.act-spacer { flex: 1; }
+
+/* ── FAB ────────────────────────────────────────────────────────────────── */
+.fab {
+  position: fixed;
+  bottom: 24px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.22);
+  transition: transform 0.15s, box-shadow 0.15s;
+  z-index: 50;
+}
+.fab:hover { transform: scale(1.06); box-shadow: 0 6px 20px rgba(0,0,0,0.28); }
+.fab:active { transform: scale(0.94); }
+
+/* ── Boş durum ──────────────────────────────────────────────────────────── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60px 20px;
+  color: var(--muted);
+  gap: 12px;
+}
+.empty p { font-size: 15px; }
+.compose-link { color: var(--primary); font-weight: 600; font-size: 14px; }
+
+/* ── Skeleton ───────────────────────────────────────────────────────────── */
+.skeleton {
+  display: flex;
+  gap: 12px;
+  padding: 14px 15px;
+  background: var(--card);
+  border-radius: 18px;
+  border: 0.7px solid var(--divider);
+}
+.sk-av {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--shimmer);
+  flex-shrink: 0;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+.sk-body { flex: 1; display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.sk-line {
+  height: 13px;
+  background: var(--shimmer);
+  border-radius: 6px;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
 </style>
