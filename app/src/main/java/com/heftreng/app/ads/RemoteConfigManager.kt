@@ -148,7 +148,7 @@ class RemoteConfigManager @Inject constructor(
             // Serials: orta uzunluk, seri listesi genelde 5-15 öğe
             KEY_NATIVE_SERIALS       to """{"enabled":false,"unitId":"","position":3,"frequency":6}""",
             KEY_NATIVE_SAVEDPOSTS    to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
-            KEY_NATIVE_NOTIFICATIONS to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
+            KEY_NATIVE_NOTIFICATIONS to """{"enabled":false,"unitId":"","position":5,"frequency":5,"maxAds":3}""",
             // Kullanıcı listeleri (kısa listeler, düşük öncelik) → banner
             KEY_BANNER_PEOPLEHUB     to """{"enabled":false,"unitId":"","bannerSize":"adaptive","position":8,"frequency":8}""",
         )
@@ -239,6 +239,7 @@ class RemoteConfigManager @Inject constructor(
             bannerSize    = json.optString("bannerSize", "adaptive").trim().lowercase(),
             placement     = json.optString("placement", "in_list"),
             screens       = json.optString("screens", "feed").trim().lowercase(),
+            maxAds        = json.optInt("maxAds", 0),
             label         = json.optString("label", ""),
             bgColor       = json.optString("bgColor", ""),
             cornerRadius  = json.optInt("cornerRadius", 0),

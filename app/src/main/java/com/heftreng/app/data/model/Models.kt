@@ -431,6 +431,7 @@ data class CmsAdConfig(
     val bannerSize  : String = "adaptive",
     val placement   : String = "in_list",
     val screens     : String = "feed",
+    val maxAds      : Int    = 0,  // 0 = sınırsız; >0 = bu ekranda gösterilecek max reklam sayısı
 
     val label       : String  = "",
     val bgColor     : String  = "",

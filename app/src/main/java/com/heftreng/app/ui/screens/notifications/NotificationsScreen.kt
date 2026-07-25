@@ -158,11 +158,14 @@ fun NotificationsScreen(
     // Banner yerine native kullanılıyor (metin listesinde daha doğal görünüm).
     val adConfigs by adsVm.allConfigs.collectAsState()
     val adPlan = remember(notifications.size, adConfigs) {
-        adsVm.planFor(
+        val plan = adsVm.planFor(
             screenKey = "notifications",
             itemCount = notifications.size,
             nativeKey = RemoteConfigManager.KEY_NATIVE_NOTIFICATIONS,
-        ).entries.sortedBy { it.key }.take(3).associate { it.key to it.value }
+        )
+        val maxAds = adConfigs[RemoteConfigManager.KEY_NATIVE_NOTIFICATIONS]?.maxAds ?: 3
+        if (maxAds > 0) plan.entries.sortedBy { it.key }.take(maxAds).associate { it.key to it.value }
+        else plan
     }
     val notifListState = rememberLazyListState()
 
