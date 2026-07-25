@@ -329,7 +329,7 @@ private fun WriteTab(vm: YazarViewModel, loading: Boolean, language: String) {
                 value    = content,
                 onChange = { content = it },
                 modifier = Modifier.fillMaxWidth(),
-                minHeightDp = 220,
+                minHeightDp = 300,
             )
             Text(
                 "${content.length} karakter",
@@ -689,7 +689,7 @@ private fun EditPostDialog(
                         value    = content,
                         onChange = { content = it },
                         modifier = Modifier.fillMaxWidth(),
-                        minHeightDp = 180,
+                        minHeightDp = 250,
                     )
                     Text(
                         "${content.length} karakter",
