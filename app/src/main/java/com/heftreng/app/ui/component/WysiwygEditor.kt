@@ -24,15 +24,15 @@ fun WysiwygEditor(
     modifier   : Modifier = Modifier,
     minHeightDp: Int = 300,
 ) {
-    val bgHex      = colorToHex(SurfaceVar)
-    val toolbarBg  = colorToHex(HeftSurface)
-    val textHex    = colorToHex(OnBackground)
-    val phHex      = colorToHex(Muted)
-    val iconHex    = colorToHex(OnBackground)
-    val accentHex  = colorToHex(Amber)
-    val divHex     = colorToHex(Divider)
+    val bgHex     = colorToHex(SurfaceVar)
+    val toolbarBg = colorToHex(HeftSurface)
+    val textHex   = colorToHex(OnBackground)
+    val phHex     = colorToHex(Muted)
+    val iconHex   = colorToHex(OnBackground)
+    val accentHex = colorToHex(Amber)
+    val divHex    = colorToHex(Divider)
 
-    var webRef by remember { mutableStateOf<WebView?>(null) }
+    var webRef      by remember { mutableStateOf<WebView?>(null) }
     var initialized by remember { mutableStateOf(false) }
 
     val html = remember(bgHex, toolbarBg, textHex, phHex, iconHex, accentHex, divHex, minHeightDp) {
@@ -51,9 +51,8 @@ fun WysiwygEditor(
             modifier = Modifier.fillMaxWidth().heightIn(min = minHeightDp.dp),
             factory  = { ctx ->
                 WebView(ctx).apply {
-                    settings.javaScriptEnabled  = true
-                    settings.domStorageEnabled   = true
-                    settings.allowFileAccess     = true
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled  = true
                     webChromeClient = WebChromeClient()
                     webViewClient   = object : WebViewClient() {
                         override fun onPageFinished(view: WebView, url: String) {
@@ -96,13 +95,22 @@ private fun buildQuillHtml(
 <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-html,body{background:$bg;height:100%;font-family:sans-serif;}
+html,body{background:$bg;height:100%;font-family:sans-serif;display:flex;flex-direction:column;}
+.ql-container.ql-snow{
+  border:none;background:$bg;flex:1;
+  display:flex;flex-direction:column;
+}
+.ql-editor{
+  flex:1;min-height:$minH;color:$text;
+  font-size:15px;line-height:1.7;padding:14px;
+}
+.ql-editor.ql-blank::before{color:$ph;font-style:normal;left:14px;}
 .ql-toolbar.ql-snow{
   background:$toolbarBg;
   border:none;
-  border-bottom:1px solid $div;
-  padding:6px 4px;
-  position:sticky;top:0;z-index:10;
+  border-top:1px solid $div;
+  padding:8px 4px;
+  position:sticky;bottom:0;z-index:10;
 }
 .ql-toolbar .ql-stroke{stroke:$icon!important;}
 .ql-toolbar .ql-fill{fill:$icon!important;}
@@ -111,10 +119,7 @@ html,body{background:$bg;height:100%;font-family:sans-serif;}
 .ql-toolbar .ql-picker-item{color:$icon!important;}
 .ql-toolbar button:hover .ql-stroke,.ql-toolbar button.ql-active .ql-stroke{stroke:$accent!important;}
 .ql-toolbar button:hover .ql-fill,.ql-toolbar button.ql-active .ql-fill{fill:$accent!important;}
-.ql-toolbar .ql-picker-label:hover,.ql-toolbar .ql-picker-item:hover{color:$accent!important;}
-.ql-container.ql-snow{border:none;background:$bg;}
-.ql-editor{min-height:$minH;color:$text;font-size:15px;line-height:1.7;padding:14px;}
-.ql-editor.ql-blank::before{color:$ph;font-style:normal;left:14px;}
+.ql-toolbar .ql-picker-label:hover,.ql-toolbar .ql-picker-item:hover,.ql-toolbar .ql-picker-item.ql-selected{color:$accent!important;}
 </style>
 </head><body>
 <div id="editor"></div>
@@ -126,8 +131,7 @@ var quill = new Quill('#editor', {
   modules:{toolbar:[
     ['bold','italic','underline'],
     [{header:[1,2,3,false]}],
-    [{align:[]}],
-    ['clean']
+    [{align:[]}]
   ]}
 });
 var timer=null;

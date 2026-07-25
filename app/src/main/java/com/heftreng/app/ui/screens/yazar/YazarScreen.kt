@@ -331,9 +331,10 @@ private fun WriteTab(vm: YazarViewModel, loading: Boolean, language: String) {
                 modifier = Modifier.fillMaxWidth(),
                 minHeightDp = 300,
             )
+            val plainLen = content.replace(Regex("<[^>]+>"), "").trim().length
             Text(
-                "${content.length} karakter",
-                color    = if (content.length < 100) Color(0xFFEF4444) else Muted,
+                "$plainLen karakter",
+                color    = if (plainLen < 100) Color(0xFFEF4444) else Muted,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(top = 3.dp),
             )
@@ -424,7 +425,7 @@ private fun WriteTab(vm: YazarViewModel, loading: Boolean, language: String) {
                 onClick  = {
                     vm.submitPost(title, content, summary, cover, category, lang, tags)
                 },
-                enabled  = !loading && title.isNotBlank() && content.length >= 100 && category.isNotBlank(),
+                enabled  = !loading && title.isNotBlank() && content.replace(Regex("<[^>]+>"), "").trim().length >= 100 && category.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
                 shape    = RoundedCornerShape(12.dp),
                 colors   = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
@@ -691,9 +692,10 @@ private fun EditPostDialog(
                         modifier = Modifier.fillMaxWidth(),
                         minHeightDp = 250,
                     )
+                    val plainLen = content.replace(Regex("<[^>]+>"), "").trim().length
                     Text(
-                        "${content.length} karakter",
-                        color    = if (content.length < 100) Color(0xFFEF4444) else Muted,
+                        "$plainLen karakter",
+                        color    = if (plainLen < 100) Color(0xFFEF4444) else Muted,
                         fontSize = 11.sp,
                         modifier = Modifier.padding(top = 2.dp),
                     )
@@ -816,7 +818,7 @@ private fun EditPostDialog(
                 onClick  = {
                     vm.updateMyPost(post.id, title, content, summary, cover, category, lang, tags)
                 },
-                enabled  = !loading && title.isNotBlank() && content.length >= 100 && category.isNotBlank(),
+                enabled  = !loading && title.isNotBlank() && content.replace(Regex("<[^>]+>"), "").trim().length >= 100 && category.isNotBlank(),
                 colors   = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
                 shape    = RoundedCornerShape(8.dp),
             ) {
