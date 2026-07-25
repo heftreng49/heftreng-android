@@ -162,7 +162,7 @@ fun NotificationsScreen(
             screenKey = "notifications",
             itemCount = notifications.size,
             nativeKey = RemoteConfigManager.KEY_NATIVE_NOTIFICATIONS,
-        )
+        ).entries.sortedBy { it.key }.take(3).associate { it.key to it.value }
     }
     val notifListState = rememberLazyListState()
 
