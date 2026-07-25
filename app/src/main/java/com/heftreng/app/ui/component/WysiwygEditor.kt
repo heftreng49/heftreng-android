@@ -95,22 +95,19 @@ private fun buildQuillHtml(
 <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-html,body{background:$bg;height:100%;font-family:sans-serif;display:flex;flex-direction:column;}
-.ql-container.ql-snow{
-  border:none;background:$bg;flex:1;
-  display:flex;flex-direction:column;
-}
+html,body{background:$bg;min-height:100%;font-family:sans-serif;display:flex;flex-direction:column;margin:0;}
+#editor-wrap{flex:1;}
+.ql-container.ql-snow{border:none;background:$bg;}
 .ql-editor{
-  flex:1;min-height:$minH;color:$text;
+  min-height:$minH;color:$text;
   font-size:15px;line-height:1.7;padding:14px;
 }
 .ql-editor.ql-blank::before{color:$ph;font-style:normal;left:14px;}
-.ql-toolbar.ql-snow{
+#toolbar-wrap .ql-toolbar.ql-snow{
   background:$toolbarBg;
   border:none;
   border-top:1px solid $div;
   padding:8px 4px;
-  position:sticky;bottom:0;z-index:10;
 }
 .ql-toolbar .ql-stroke{stroke:$icon!important;}
 .ql-toolbar .ql-fill{fill:$icon!important;}
@@ -122,19 +119,26 @@ html,body{background:$bg;height:100%;font-family:sans-serif;display:flex;flex-di
 .ql-toolbar .ql-picker-label:hover,.ql-toolbar .ql-picker-item:hover,.ql-toolbar .ql-picker-item.ql-selected{color:$accent!important;}
 </style>
 </head><body>
-<div id="editor"></div>
+<div id="editor-wrap">
+  <div id="editor"></div>
+</div>
+<div id="toolbar-wrap"></div>
 <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 <script>
 var quill = new Quill('#editor', {
   theme:'snow',
   placeholder:'Yazını buraya yaz...',
-  modules:{toolbar:[
-    ['bold','italic','underline'],
-    [{header:[1,2,3,false]}],
-    [{align:[]}]
-  ]}
+  modules:{toolbar:{
+    container:[
+      ['bold','italic','underline'],
+      [{header:[1,2,3,false]}],
+      [{align:[]}]
+    ]
+  }}
 });
-document.body.appendChild(document.querySelector('.ql-toolbar'));
+// Toolbar'ı alta taşı
+var tb = document.querySelector('.ql-toolbar');
+document.getElementById('toolbar-wrap').appendChild(tb);
 var timer=null;
 quill.on('text-change',function(){
   clearTimeout(timer);
