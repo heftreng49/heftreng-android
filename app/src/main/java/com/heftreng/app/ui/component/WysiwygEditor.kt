@@ -134,6 +134,7 @@ var quill = new Quill('#editor', {
     [{align:[]}]
   ]}
 });
+document.body.appendChild(document.querySelector('.ql-toolbar'));
 var timer=null;
 quill.on('text-change',function(){
   clearTimeout(timer);
