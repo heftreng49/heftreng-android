@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/stores";
-  import { doc, getDoc, collection, query, where, orderBy, limit, getDocs, startAfter, updateDoc, increment } from "firebase/firestore";
+  import { doc, getDoc, collection, query, where, orderBy, limit, getDocs, startAfter, updateDoc, increment, setDoc, deleteDoc, addDoc, serverTimestamp } from "firebase/firestore";
   import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
   import { db, storage } from "$lib/firebase/config";
   import { supabase } from "$lib/supabase/config";
@@ -32,6 +32,19 @@
   let postsCount     = $state(0);
   let isFollowing    = $state(false);
   let followLoading  = $state(false);
+
+  // Gizli hesap
+  let isPrivate          = $state(false);
+  let canSeeContent      = $state(true);
+  // "none" | "pending" | "accepted"
+  let followRequestStatus = $state("none");
+  let privateBlockedMsg  = $state(false);
+
+  $effect(() => {
+    if (privateBlockedMsg) {
+      setTimeout(() => { privateBlockedMsg = false; }, 2500);
+    }
+  });
 
   let selectedTab   = $state(0);
   const tabs = ["Gönderiler", "Okuma Listesi", "Kitaplar & Seriler"];
@@ -72,8 +85,10 @@
     posts = [];
     user = null;
     notFound = false;
+    isPrivate = false;
+    canSeeContent = true;
+    followRequestStatus = "none";
     loadUser().then(() => {
-      loadPosts();
       loadSocialCounts();
       if ($currentUser && !isMe) checkFollowing();
       loadReadingList();
@@ -83,13 +98,52 @@
   async function loadUser() {
     loading = true;
     try {
-      // Önce Firestore users koleksiyonundan dene
       const snap = await getDoc(doc(db, "users", uid));
       if (!snap.exists()) { notFound = true; return; }
       user = { uid: snap.id, ...snap.data() };
+
+      // Gizli hesap kontrolü
+      isPrivate = user.isPrivate ?? user.private ?? false;
     } catch(e) { console.error(e); notFound = true; }
     finally { loading = false; }
   }
+
+  async function checkFollowing() {
+    if (!$currentUser) return;
+    const { data } = await supabase.from("follows")
+      .select("id")
+      .eq("from_uid", $currentUser.uid)
+      .eq("target_uid", uid)
+      .maybeSingle();
+    isFollowing = !!data;
+
+    // Gizli hesap: takip isteği kontrolü
+    if (isPrivate && !isFollowing) {
+      try {
+        const reqSnap = await getDoc(doc(db, "followRequests", uid, "pending", $currentUser.uid));
+        followRequestStatus = reqSnap.exists() ? "pending" : "none";
+      } catch(e) { console.error(e); }
+    }
+
+    canSeeContent = isMe || !isPrivate || isFollowing;
+    if (canSeeContent) {
+      loadPosts();
+    } else {
+      postsLoading = false;
+    }
+  }
+
+  // İlk yükleme: gizli değilse direkt loadPosts
+  $effect(() => {
+    if (!loading && user && !isPrivate && !isMe && posts.length === 0 && postsLoading) {
+      canSeeContent = true;
+      loadPosts();
+    }
+    if (!loading && user && isMe && posts.length === 0 && postsLoading) {
+      canSeeContent = true;
+      loadPosts();
+    }
+  });
 
   async function loadPosts() {
     postsLoading = true;
@@ -156,7 +210,6 @@
   }
 
   async function loadSocialCounts() {
-    // Firestore users dokümanından — Android ile aynı
     try {
       const snap = await getDoc(doc(db, "users", uid));
       if (snap.exists()) {
@@ -166,7 +219,6 @@
         postsCount     = d.postsCount ?? postsCount;
       }
     } catch(e) {
-      // Firestore yoksa Supabase'den say
       try {
         const [fR, gR] = await Promise.all([
           supabase.from("follows").select("id", { count: "exact", head: true }).eq("target_uid", uid),
@@ -178,18 +230,21 @@
     }
   }
 
-  async function checkFollowing() {
-    if (!$currentUser) return;
-    const { data } = await supabase.from("follows")
-      .select("id")
-      .eq("from_uid", $currentUser.uid)
-      .eq("target_uid", uid)
-      .maybeSingle();
-    isFollowing = !!data;
-  }
-
+  // ── Takip / Gizli hesap akışı ─────────────────────────────────
   async function toggleFollow() {
     if (!$currentUser) { window.location.href = "/login"; return; }
+
+    // Gizli hesap & takip etmiyorsa → istek gönder/iptal
+    if (isPrivate && !isFollowing) {
+      if (followRequestStatus === "pending") {
+        await cancelFollowRequest();
+      } else {
+        await sendFollowRequest();
+      }
+      return;
+    }
+
+    // Normal takip
     followLoading = true;
     const was = isFollowing;
     isFollowing = !was;
@@ -197,17 +252,14 @@
     try {
       const id = `${$currentUser.uid}_${uid}`;
       if (was) {
-        // Sil: from_uid=ben, target_uid=karşı
         await supabase.from("follows").delete()
           .eq("from_uid", $currentUser.uid)
           .eq("target_uid", uid);
-        // Firestore sayaçları azalt
         await Promise.all([
           updateDoc(doc(db, "users", uid),             { followersCount: increment(-1) }),
           updateDoc(doc(db, "users", $currentUser.uid), { followingCount: increment(-1) }),
         ]);
       } else {
-        // Ekle: from_uid=ben, target_uid=karşı
         await supabase.from("follows").upsert({
           id,
           from_uid:     $currentUser.uid,
@@ -217,18 +269,87 @@
           target_name:  user?.displayName ?? "",
           target_photo: user?.photoURL    ?? "",
         });
-        // Firestore sayaçları artır
         await Promise.all([
           updateDoc(doc(db, "users", uid),             { followersCount: increment(1) }),
           updateDoc(doc(db, "users", $currentUser.uid), { followingCount: increment(1) }),
         ]);
       }
+      canSeeContent = isMe || !isPrivate || isFollowing;
+      if (canSeeContent && posts.length === 0) loadPosts();
     } catch(e) {
       console.error(e);
       isFollowing = was;
       followersCount = Math.max(0, followersCount + (was ? 1 : -1));
     }
     followLoading = false;
+  }
+
+  async function sendFollowRequest() {
+    if (!$currentUser) return;
+    followLoading = true;
+    try {
+      const myUid  = $currentUser.uid;
+      const myName  = $currentUser.displayName ?? "";
+      const myPhoto = $currentUser.photoURL ?? "";
+
+      // followRequests/{targetUid}/pending/{fromUid}
+      await setDoc(doc(db, "followRequests", uid, "pending", myUid), {
+        fromUid:   myUid,
+        fromName:  myName,
+        fromPhoto: myPhoto,
+        targetUid: uid,
+        ts:        serverTimestamp(),
+      });
+
+      followRequestStatus = "pending";
+
+      // Bildirim
+      await addDoc(collection(db, "userNotifs", uid, "msgs"), {
+        fromUid:   myUid,
+        fromName:  myName,
+        fromPhoto: myPhoto,
+        type:      "follow_request",
+        feedId:    "",
+        postId:    "",
+        title:     `${myName} seni takip etmek istiyor`,
+        sub:       "",
+        ico:       "person_add",
+        message:   `${myName} seni takip etmek istiyor`,
+        url:       "",
+        read:      false,
+        ts:        serverTimestamp(),
+      });
+    } catch(e) { console.error(e); }
+    finally { followLoading = false; }
+  }
+
+  async function cancelFollowRequest() {
+    if (!$currentUser) return;
+    followLoading = true;
+    try {
+      await deleteDoc(doc(db, "followRequests", uid, "pending", $currentUser.uid));
+      followRequestStatus = "none";
+    } catch(e) { console.error(e); }
+    finally { followLoading = false; }
+  }
+
+  function onFollowBtnClick() {
+    if (!canSeeContent && isPrivate && followRequestStatus === "none") {
+      // Daha önce hiç takip edilmemişse tıklama toast göster + isteği yönlendir
+    }
+    toggleFollow();
+  }
+
+  function followBtnLabel() {
+    if (isFollowing) return "Takip Ediliyor";
+    if (isPrivate && followRequestStatus === "pending") return "İstek Gönderildi";
+    return "Takip Et";
+  }
+
+  function followBtnClass() {
+    if (isFollowing) return "btn-follow following";
+    if (isPrivate && followRequestStatus === "pending") return "btn-follow pending";
+    return "btn-follow";
   }
 
   async function loadFollowers() {
@@ -283,7 +404,6 @@
     editSaving = true;
     editError  = "";
     try {
-      // Username benzersizlik kontrolü
       if (editUsername !== user?.username) {
         const { data } = await supabase.from("users").select("uid")
           .eq("username", editUsername.trim()).neq("uid", uid).maybeSingle();
@@ -295,7 +415,6 @@
         bio:         editBio.trim(),
         website:     editWebsite.trim(),
       });
-      // Supabase users tablosunu da güncelle
       await supabase.from("users").upsert({
         uid, username: editUsername.trim().toLowerCase(),
         display_name: editName.trim(), bio: editBio.trim(), website: editWebsite.trim(),
@@ -350,12 +469,11 @@
   async function deletePost(p: any) {
     if (!$currentUser || $currentUser.uid !== p.uid) return;
     if (!confirm("Gönderiyi silmek istiyor musunuz?")) return;
-    const { deleteDoc, doc: fdoc } = await import("firebase/firestore");
-    await deleteDoc(fdoc(db, "feed", p.id));
+    const { deleteDoc: fdel, doc: fdoc } = await import("firebase/firestore");
+    await fdel(fdoc(db, "feed", p.id));
     posts = posts.filter(x => x.id !== p.id);
   }
 
-  // ── Beğeni toggle ─────────────────────────────────────────────
   async function toggleLike(p: any) {
     if (!$currentUser) { window.location.href = "/login"; return; }
     const was = p.isLikedByMe;
@@ -368,7 +486,6 @@
     else await supabase.from("feed_likes").upsert({ id, post_id: p.id, uid: $currentUser.uid, name: $currentUser.displayName ?? "", photo_url: $currentUser.photoURL ?? "" });
   }
 
-  // ── Uzun metin aç/kapat ──────────────────────────────────────
   let expandedIds = $state(new Set<string>());
   function toggleExpand(id: string) {
     const s = new Set(expandedIds);
@@ -406,10 +523,17 @@
   <title>{user?.displayName ?? "Profil"} — Heftreng</title>
 </svelte:head>
 
+<!-- Gizli hesap toast -->
+{#if privateBlockedMsg}
+  <div class="private-toast">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    Bu hesap gizli
+  </div>
+{/if}
+
 <main class="wrap">
 
   {#if loading}
-    <!-- Skeleton -->
     <div class="cover-sk"></div>
     <div class="header-sk">
       <div class="av-sk"></div>
@@ -497,12 +621,11 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             </a>
             <button
-              class="btn-follow"
-              class:following={isFollowing}
-              onclick={toggleFollow}
+              class={followBtnClass()}
+              onclick={onFollowBtnClick}
               disabled={followLoading}
             >
-              {isFollowing ? "Takip Ediliyor" : "Takip Et"}
+              {followBtnLabel()}
             </button>
           {/if}
         </div>
@@ -538,7 +661,15 @@
       {:else}
         <!-- Profil bilgileri -->
         <div class="profile-info">
-          <h1 class="display-name">{user?.displayName ?? ""}</h1>
+          <div class="name-row">
+            <h1 class="display-name">{user?.displayName ?? ""}</h1>
+            {#if isPrivate}
+              <span class="private-badge" title="Gizli hesap">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Gizli
+              </span>
+            {/if}
+          </div>
           {#if user?.username}<p class="username">@{user.username}</p>{/if}
           {#if user?.bio}<p class="bio">{user.bio}</p>{/if}
           {#if user?.website}
@@ -549,17 +680,23 @@
           {/if}
         </div>
 
-        <!-- İstatistikler -->
+        <!-- İstatistikler — gizli hesapta sayılar gizlenir (takip etmiyorsa) -->
         <div class="stats-row">
           <button class="stat-item" onclick={() => null}>
-            <span class="stat-num">{postsCount}</span>
+            <span class="stat-num">{canSeeContent ? postsCount : "—"}</span>
             <span class="stat-lbl">Gönderi</span>
           </button>
-          <button class="stat-item" onclick={async () => { showFollowers = true; await loadFollowers(); }}>
+          <button class="stat-item" onclick={async () => {
+            if (!canSeeContent) { privateBlockedMsg = true; return; }
+            showFollowers = true; await loadFollowers();
+          }}>
             <span class="stat-num">{followersCount}</span>
             <span class="stat-lbl">Takipçi</span>
           </button>
-          <button class="stat-item" onclick={async () => { showFollowing = true; await loadFollowing(); }}>
+          <button class="stat-item" onclick={async () => {
+            if (!canSeeContent) { privateBlockedMsg = true; return; }
+            showFollowing = true; await loadFollowing();
+          }}>
             <span class="stat-num">{followingCount}</span>
             <span class="stat-lbl">Takip</span>
           </button>
@@ -572,7 +709,7 @@
         </div>
 
         <!-- Okuma özeti hero -->
-        {#if (user?.booksRead ?? 0) > 0 || (user?.streak ?? 0) > 0}
+        {#if canSeeContent && ((user?.booksRead ?? 0) > 0 || (user?.streak ?? 0) > 0)}
           <div class="reading-hero">
             <div class="rh-stat">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
@@ -606,10 +743,26 @@
       <div class="tab-indicator" style="transform: translateX({selectedTab * 100}%)"></div>
     </div>
 
+    <!-- ── Gizli hesap — takipçi değil ───────────────────────── -->
+    {#if !canSeeContent}
+      <div class="locked-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="52" height="52" style="color:var(--muted)"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <h3>Bu hesap gizli</h3>
+        <p>Gönderileri görmek için takip et.</p>
+        <button
+          class={followBtnClass()}
+          onclick={onFollowBtnClick}
+          disabled={followLoading}
+          style="margin-top:4px"
+        >
+          {followBtnLabel()}
+        </button>
+      </div>
+
     <!-- ── Tab içerikleri ──────────────────────────────────────── -->
 
     <!-- Gönderiler -->
-    {#if selectedTab === 0}
+    {:else if selectedTab === 0}
       {#if postsLoading && posts.length === 0}
         {#each Array(3) as _}
           <div class="post-sk">
@@ -940,11 +1093,16 @@
 .btn-icon:hover { background: var(--divider); }
 .btn-follow { padding: 8px 18px; border: none; border-radius: 10px; background: #F59E0B; color: #000; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; transition: background 0.15s, color 0.15s; }
 .btn-follow.following { background: var(--surface-var); color: var(--on-bg); border: 1.5px solid var(--divider); }
+.btn-follow.pending { background: var(--surface-var); color: var(--on-bg); border: 1.5px solid var(--divider); }
 .btn-follow:disabled { opacity: 0.6; }
+
+/* Ad + gizli badge */
+.name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
+.profile-info .display-name { font-size: 20px; font-weight: 800; color: var(--on-bg); margin: 0; }
+.private-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; color: var(--muted); background: var(--surface-var); border: 1px solid var(--divider); border-radius: 99px; padding: 2px 8px; }
 
 /* Profil bilgileri */
 .profile-info { margin-bottom: 12px; }
-.display-name { font-size: 20px; font-weight: 800; color: var(--on-bg); margin: 0 0 2px; }
 .username { font-size: 13px; color: var(--muted); margin: 0 0 6px; }
 .bio { font-size: 14px; color: var(--on-bg); line-height: 1.6; margin: 0 0 6px; white-space: pre-wrap; }
 .website { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #F59E0B; text-decoration: none; }
@@ -983,24 +1141,16 @@
 .tab.active { color: var(--on-bg); font-weight: 700; }
 .tab-indicator { position: absolute; bottom: 0; left: 0; width: 33.33%; height: 2.5px; background: linear-gradient(90deg, var(--primary), color-mix(in srgb,var(--primary) 60%,purple)); border-radius: 2px 2px 0 0; transition: transform 0.25s cubic-bezier(.4,0,.2,1); pointer-events: none; }
 
+/* Gizli hesap — locked state */
+.locked-state { display: flex; flex-direction: column; align-items: center; padding: 56px 24px; gap: 12px; text-align: center; }
+.locked-state h3 { font-size: 17px; font-weight: 700; color: var(--on-bg); margin: 0; }
+.locked-state p { font-size: 13px; color: var(--muted); margin: 0; }
+
+/* Private toast */
+.private-toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--divider); border-radius: 99px; padding: 10px 18px; font-size: 13px; font-weight: 600; color: var(--on-bg); display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.16); z-index: 500; white-space: nowrap; animation: fadeup 0.2s ease; }
+@keyframes fadeup { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
 /* Post kartları */
-.post-card:hover { background: color-mix(in srgb, var(--surface-var) 50%, var(--card)); }
-.pc-act:hover { background: var(--surface-var); }
-.pc-act.liked { color: #FF3A5C; }
-
-/* Okuma listesi */
-.rl-section { padding: 12px 16px; }
-.rl-header { font-size: 13px; font-weight: 700; color: var(--muted); margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
-.rl-header span { background: var(--surface-var); border-radius: 99px; padding: 1px 7px; font-size: 11px; }
-.rl-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 0.5px solid var(--divider); }
-.rl-cover { width: 36px; height: 50px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
-.rl-cover-ph { background: var(--surface-var); display: flex; align-items: center; justify-content: center; font-size: 18px; }
-.rl-info { display: flex; flex-direction: column; gap: 3px; }
-.rl-book { font-size: 14px; font-weight: 600; color: var(--on-bg); }
-.rl-author { font-size: 12px; color: var(--muted); }
-
-
-/* ── Feed liste + Kart (feed/+page.svelte ile birebir) ── */
 .feed-list { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; }
 .card { background: var(--card); border-radius: 18px; border: 0.7px solid var(--divider); padding: 14px 15px 10px; cursor: pointer; transition: border-color 0.15s; display: block; text-align: left; width: 100%; }
 .card:hover { border-color: color-mix(in srgb, var(--primary) 30%, var(--divider)); }
@@ -1074,6 +1224,17 @@
 .load-more-wrap { padding: 8px 12px 4px; display: flex; justify-content: center; }
 .load-more-btn { padding: 12px 28px; border: 1.5px solid var(--divider); border-radius: 99px; background: var(--surface); color: var(--primary); font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 8px; transition: border-color 0.15s, background 0.15s; }
 .load-more-btn:hover { border-color: var(--primary); background: color-mix(in srgb,var(--primary) 6%,var(--surface)); }
+
+/* Okuma listesi */
+.rl-section { padding: 12px 16px; }
+.rl-header { font-size: 13px; font-weight: 700; color: var(--muted); margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
+.rl-header span { background: var(--surface-var); border-radius: 99px; padding: 1px 7px; font-size: 11px; }
+.rl-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 0.5px solid var(--divider); }
+.rl-cover { width: 36px; height: 50px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
+.rl-cover-ph { background: var(--surface-var); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.rl-info { display: flex; flex-direction: column; gap: 3px; }
+.rl-book { font-size: 14px; font-weight: 600; color: var(--on-bg); }
+.rl-author { font-size: 12px; color: var(--muted); }
 
 /* Boş state */
 .empty-tab { display: flex; flex-direction: column; align-items: center; padding: 48px 20px; gap: 10px; color: var(--muted); }
