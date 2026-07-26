@@ -23,6 +23,10 @@
   let commentSending  = $state(false);
   let replyTo         = $state<any | null>(null);
 
+  // ── Header sayaçları ─────────────────────────────────────────
+  let unreadNotifs   = $state(0);
+  let unreadMessages = $state(0);
+
   // ── Beğenen listesi ──────────────────────────────────────────
   let likersPostId   = $state<string | null>(null);
   let likers         = $state<any[]>([]);
@@ -51,10 +55,26 @@
     expandedIds = next;
   }
 
+  // ── Okunmamış sayaçları ──────────────────────────────────────
+  async function loadUnreadCounts() {
+    if (!$currentUser) return;
+    try {
+      const [nR, mR] = await Promise.all([
+        supabase.from("notifications").select("id", { count: "exact", head: true })
+          .eq("to_uid", $currentUser.uid).eq("is_read", false),
+        supabase.from("messages").select("id", { count: "exact", head: true })
+          .eq("to_uid", $currentUser.uid).eq("is_read", false),
+      ]);
+      unreadNotifs   = nR.count ?? 0;
+      unreadMessages = mR.count ?? 0;
+    } catch(e) { /* sessizce geç */ }
+  }
+
   // ── Veri yükleme ─────────────────────────────────────────────
   onMount(async () => {
     await loadPosts();
     document.addEventListener("click", () => { menuOpenId = null; });
+    if ($currentUser) await loadUnreadCounts();
   });
 
   async function loadPosts() {
@@ -367,7 +387,47 @@
 </svelte:head>
 
 <main class="page">
-  <!-- Sekmeler -->
+  <!-- ── Header ─────────────────────────────────────────────────── -->
+<header class="feed-header">
+  <!-- Logo -->
+  <a href="/feed" class="logo-link">
+    <svg viewBox="0 0 120 32" fill="none" width="100" height="27">
+      <text x="0" y="24" font-family="system-ui,sans-serif" font-weight="800" font-size="24" fill="var(--primary)">heftreng</text>
+    </svg>
+  </a>
+
+  <div class="header-actions">
+    <!-- Arama -->
+    <a href="/search" class="hdr-btn" aria-label="Ara">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+    </a>
+
+    <!-- Bildirimler -->
+    <a href="/notifications" class="hdr-btn badge-wrap" aria-label="Bildirimler">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+      </svg>
+      {#if unreadNotifs > 0}
+        <span class="badge">{unreadNotifs > 99 ? "99+" : unreadNotifs}</span>
+      {/if}
+    </a>
+
+    <!-- Mesajlar -->
+    <a href="/messages" class="hdr-btn badge-wrap" aria-label="Mesajlar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      {#if unreadMessages > 0}
+        <span class="badge">{unreadMessages > 99 ? "99+" : unreadMessages}</span>
+      {/if}
+    </a>
+  </div>
+</header>
+
+<!-- Sekmeler -->
   <div class="tabs">
     <button class="tab" class:active={activeTab === 0} onclick={() => activeTab = 0}>Herkes</button>
     <button class="tab" class:active={activeTab === 1} onclick={() => activeTab = 1}>Takip Edilenler</button>
@@ -735,6 +795,61 @@
 
 <style>
 .page { max-width: 600px; margin: 0 auto; padding-bottom: 72px; position: relative; }
+/* ── Feed Header ───────────────────────────────────────────── */
+.feed-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px 6px;
+  position: sticky;
+  top: 0;
+  background: var(--bg, var(--surface));
+  z-index: 50;
+  border-bottom: 1px solid var(--divider);
+}
+.logo-link {
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.hdr-btn {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--on-bg);
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.hdr-btn:hover { background: var(--surface-var); }
+.badge-wrap { position: relative; }
+.badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 99px;
+  background: #FF3A5C;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  border: 1.5px solid var(--bg, var(--surface));
+  pointer-events: none;
+}
+
 
 /* Sekmeler */
 .tabs { display: flex; position: relative; background: var(--surface); border-bottom: 1px solid var(--divider); overflow: hidden; }
