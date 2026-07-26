@@ -748,8 +748,8 @@
                       <span class="achievement-level">Seviye {p.repostLevel}</span>
                     </div>
                     <div class="achievement-stats">
-                      <div><span class="stat-num">{p.repostXp}</span><span class="stat-lbl">XP</span></div>
-                      <div><span class="stat-num">{p.repostStreak}</span><span class="stat-lbl">Gün serisi</span></div>
+                      <div><span class="ach-num">{p.repostXp}</span><span class="ach-lbl">XP</span></div>
+                      <div><span class="ach-num">{p.repostStreak}</span><span class="ach-lbl">Gün serisi</span></div>
                     </div>
                     <p class="achievement-caption">Kurdî öğrenme yolculuğunda harika ilerleme!</p>
                   </div>
@@ -1056,8 +1056,8 @@
 .achievement-trophy { font-size: 28px; }
 .achievement-level { font-size: 18px; font-weight: 900; color: white; }
 .achievement-stats { display: flex; gap: 20px; }
-.stat-num { display: block; font-size: 20px; font-weight: 700; color: white; }
-.stat-lbl { font-size: 11px; color: rgba(255,255,255,0.85); }
+.achievement-stats .ach-num { display: block; font-size: 20px; font-weight: 700; color: white; }
+.achievement-stats .ach-lbl { font-size: 11px; color: rgba(255,255,255,0.85); }
 .achievement-caption { font-size: 11.5px; font-weight: 500; color: rgba(255,255,255,0.9); }
 .actions { display: flex; align-items: center; margin-top: 4px; }
 .act-btn { display: flex; align-items: center; gap: 5px; padding: 7px 10px; border-radius: 20px; color: var(--muted); font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: transparent; transition: color 0.15s, background 0.15s, transform 0.1s; font-family: inherit; }
