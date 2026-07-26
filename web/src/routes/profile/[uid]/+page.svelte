@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/stores";
-  import { doc, getDoc, collection, query, where, orderBy, limit, getDocs, startAfter, updateDoc } from "firebase/firestore";
+  import { doc, getDoc, collection, query, where, orderBy, limit, getDocs, startAfter, updateDoc, increment } from "firebase/firestore";
   import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
   import { db, storage } from "$lib/firebase/config";
   import { supabase } from "$lib/supabase/config";
@@ -131,20 +131,35 @@
   }
 
   async function loadSocialCounts() {
+    // Firestore users dokümanından — Android ile aynı
     try {
-      const [fersR, fingR] = await Promise.all([
-        supabase.from("follows").select("id", { count: "exact", head: true }).eq("following_uid", uid),
-        supabase.from("follows").select("id", { count: "exact", head: true }).eq("follower_uid", uid),
-      ]);
-      followersCount = fersR.count ?? 0;
-      followingCount = fingR.count ?? 0;
-    } catch(e) { console.error(e); }
+      const snap = await getDoc(doc(db, "users", uid));
+      if (snap.exists()) {
+        const d = snap.data();
+        followersCount = d.followersCount ?? 0;
+        followingCount = d.followingCount ?? 0;
+        postsCount     = d.postsCount ?? postsCount;
+      }
+    } catch(e) {
+      // Firestore yoksa Supabase'den say
+      try {
+        const [fR, gR] = await Promise.all([
+          supabase.from("follows").select("id", { count: "exact", head: true }).eq("target_uid", uid),
+          supabase.from("follows").select("id", { count: "exact", head: true }).eq("from_uid", uid),
+        ]);
+        followersCount = fR.count ?? 0;
+        followingCount = gR.count ?? 0;
+      } catch(e2) { console.error(e2); }
+    }
   }
 
   async function checkFollowing() {
     if (!$currentUser) return;
     const { data } = await supabase.from("follows")
-      .select("id").eq("follower_uid", $currentUser.uid).eq("following_uid", uid).maybeSingle();
+      .select("id")
+      .eq("from_uid", $currentUser.uid)
+      .eq("target_uid", uid)
+      .maybeSingle();
     isFollowing = !!data;
   }
 
@@ -157,17 +172,34 @@
     try {
       const id = `${$currentUser.uid}_${uid}`;
       if (was) {
-        await supabase.from("follows").delete().eq("id", id);
+        // Sil: from_uid=ben, target_uid=karşı
+        await supabase.from("follows").delete()
+          .eq("from_uid", $currentUser.uid)
+          .eq("target_uid", uid);
+        // Firestore sayaçları azalt
+        await Promise.all([
+          updateDoc(doc(db, "users", uid),             { followersCount: increment(-1) }),
+          updateDoc(doc(db, "users", $currentUser.uid), { followingCount: increment(-1) }),
+        ]);
       } else {
+        // Ekle: from_uid=ben, target_uid=karşı
         await supabase.from("follows").upsert({
           id,
-          follower_uid: $currentUser.uid,
-          following_uid: uid,
-          follower_name: $currentUser.displayName ?? "",
-          follower_photo: $currentUser.photoURL ?? "",
+          from_uid:     $currentUser.uid,
+          from_name:    $currentUser.displayName ?? "",
+          from_photo:   $currentUser.photoURL    ?? "",
+          target_uid:   uid,
+          target_name:  user?.displayName ?? "",
+          target_photo: user?.photoURL    ?? "",
         });
+        // Firestore sayaçları artır
+        await Promise.all([
+          updateDoc(doc(db, "users", uid),             { followersCount: increment(1) }),
+          updateDoc(doc(db, "users", $currentUser.uid), { followingCount: increment(1) }),
+        ]);
       }
     } catch(e) {
+      console.error(e);
       isFollowing = was;
       followersCount = Math.max(0, followersCount + (was ? 1 : -1));
     }
@@ -176,17 +208,27 @@
 
   async function loadFollowers() {
     listLoading = true;
-    const { data } = await supabase.from("follows").select("follower_uid, follower_name, follower_photo")
-      .eq("following_uid", uid).order("created_at", { ascending: false }).limit(100);
-    followersList = data ?? [];
+    try {
+      const { data } = await supabase.from("follows")
+        .select("from_uid, from_name, from_photo")
+        .eq("target_uid", uid)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      followersList = data ?? [];
+    } catch(e) { console.error(e); }
     listLoading = false;
   }
 
   async function loadFollowing() {
     listLoading = true;
-    const { data } = await supabase.from("follows").select("following_uid, following_name, following_photo")
-      .eq("follower_uid", uid).order("created_at", { ascending: false }).limit(100);
-    followingList = data ?? [];
+    try {
+      const { data } = await supabase.from("follows")
+        .select("target_uid, target_name, target_photo")
+        .eq("from_uid", uid)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      followingList = data ?? [];
+    } catch(e) { console.error(e); }
     listLoading = false;
   }
 
@@ -623,11 +665,11 @@
         <p class="sheet-empty">Henüz takipçi yok.</p>
       {:else}
         {#each followersList as f}
-          <a href="/profile/{f.follower_uid}" class="user-row" onclick={() => showFollowers = false}>
+          <a href="/profile/{f.from_uid}" class="user-row" onclick={() => showFollowers = false}>
             <div class="user-av">
-              {#if f.follower_photo}<img src={f.follower_photo} alt={f.follower_name} />{:else}<span>{(f.follower_name ?? "?")[0].toUpperCase()}</span>{/if}
+              {#if f.from_photo}<img src={f.from_photo} alt={f.from_name} />{:else}<span>{(f.from_name ?? "?")[0].toUpperCase()}</span>{/if}
             </div>
-            <span class="user-name">{f.follower_name ?? "Anonim"}</span>
+            <span class="user-name">{f.from_name ?? "Anonim"}</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="color:var(--muted)"><polyline points="9 18 15 12 9 6"/></svg>
           </a>
         {/each}
@@ -652,11 +694,11 @@
         <p class="sheet-empty">Henüz takip edilen yok.</p>
       {:else}
         {#each followingList as f}
-          <a href="/profile/{f.following_uid}" class="user-row" onclick={() => showFollowing = false}>
+          <a href="/profile/{f.target_uid}" class="user-row" onclick={() => showFollowing = false}>
             <div class="user-av">
-              {#if f.following_photo}<img src={f.following_photo} alt={f.following_name} />{:else}<span>{(f.following_name ?? "?")[0].toUpperCase()}</span>{/if}
+              {#if f.target_photo}<img src={f.target_photo} alt={f.target_name} />{:else}<span>{(f.target_name ?? "?")[0].toUpperCase()}</span>{/if}
             </div>
-            <span class="user-name">{f.following_name ?? "Anonim"}</span>
+            <span class="user-name">{f.target_name ?? "Anonim"}</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="color:var(--muted)"><polyline points="9 18 15 12 9 6"/></svg>
           </a>
         {/each}
