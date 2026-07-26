@@ -23,6 +23,9 @@
   let commentSending  = $state(false);
   let replyTo         = $state<any | null>(null);
 
+  // ── FAB menü ─────────────────────────────────────────────────
+  let showFabMenu = $state(false);
+
   // ── Header sayaçları ─────────────────────────────────────────
   let unreadNotifs   = $state(0);
   let unreadMessages = $state(0);
@@ -656,14 +659,54 @@
   </div>
 
   {#if $currentUser}
-    <a href="/compose" class="fab" aria-label="Gönderi yaz">
+    <button class="fab" onclick={() => showFabMenu = true} aria-label="Gönderi yaz">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="24" height="24">
         <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
       </svg>
-    </a>
+    </button>
   {/if}
 </main>
 
+
+
+<!-- ── FAB Menü bottom sheet ─────────────────────────────────── -->
+{#if showFabMenu}
+  <div class="sheet-backdrop" onclick={() => showFabMenu = false}></div>
+  <div class="sheet fab-sheet">
+    <div class="sheet-handle"></div>
+    <p class="fab-sheet-label">Ne paylaşmak istersin?</p>
+
+    <!-- Gönderi Yaz -->
+    <a href="/compose" class="fab-menu-item" onclick={() => showFabMenu = false}>
+      <div class="fab-menu-icon" style="background:color-mix(in srgb,var(--primary) 12%,transparent)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" width="20" height="20">
+          <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+        </svg>
+      </div>
+      <div class="fab-menu-text">
+        <span class="fab-menu-title">Gönderi Yaz</span>
+        <span class="fab-menu-sub">Düşüncelerini paylaş</span>
+      </div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="color:var(--muted)"><polyline points="9 18 15 12 9 6"/></svg>
+    </a>
+
+    <!-- Alıntı Paylaş -->
+    <a href="/compose?type=quote" class="fab-menu-item" onclick={() => showFabMenu = false}>
+      <div class="fab-menu-icon" style="background:color-mix(in srgb,#F59E0B 12%,transparent)">
+        <svg viewBox="0 0 24 24" fill="#F59E0B" width="22" height="22">
+          <path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/>
+        </svg>
+      </div>
+      <div class="fab-menu-text">
+        <span class="fab-menu-title">Alıntı Paylaş</span>
+        <span class="fab-menu-sub">Kitaptan bir alıntı ekle</span>
+      </div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="color:var(--muted)"><polyline points="9 18 15 12 9 6"/></svg>
+    </a>
+
+    <div style="height:16px"></div>
+  </div>
+{/if}
 
 <!-- ── Beğenen listesi bottom sheet ──────────────────────────────── -->
 {#if likersPostId}
@@ -1009,6 +1052,16 @@
 .cmt-send:disabled { opacity: 0.4; cursor: not-allowed; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+/* FAB menü sheet */
+.fab-sheet { padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+.fab-sheet-label { font-size: 12px; font-weight: 600; color: var(--muted); padding: 4px 20px 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+.fab-menu-item { display: flex; align-items: center; gap: 14px; padding: 14px 20px; text-decoration: none; border-radius: 14px; margin: 0 8px; transition: background 0.15s; }
+.fab-menu-item:hover { background: var(--surface-var); }
+.fab-menu-icon { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.fab-menu-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.fab-menu-title { font-size: 15px; font-weight: 700; color: var(--on-bg); }
+.fab-menu-sub { font-size: 12px; color: var(--muted); }
+
 .likes-pill {
   display: inline-flex;
   align-items: center;
