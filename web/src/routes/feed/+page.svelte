@@ -556,12 +556,14 @@
               {:else}
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
               {/if}
-              {#if (p.likesCount ?? 0) > 0}
-                <span class="likes-count" onclick={(e) => openLikers(p, e)} role="button" tabindex="0">{p.likesCount}</span>
-              {/if}
             </button>
+            {#if (p.likesCount ?? 0) > 0}
+              <button class="likes-pill" onclick={(e) => openLikers(p, e)} aria-label="Beğenenleri gör">
+                {p.likesCount} beğeni
+              </button>
+            {/if}
 
-            <button class="act-btn" onclick={() => openComments(p)} aria-label="Yorum yap">
+            <button class="act-btn" onclick={(e) => { e.stopPropagation(); window.location.href = "/post/" + p.id; }} aria-label="Yorum yap">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
               {#if (p.commentsCount ?? 0) > 0}<span>{p.commentsCount}</span>{/if}
             </button>
@@ -892,9 +894,22 @@
 .cmt-send:disabled { opacity: 0.4; cursor: not-allowed; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
-/* Beğeni sayısı tıklanabilir */
-.likes-count { cursor: pointer; }
-.likes-count:hover { text-decoration: underline; }
+.likes-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  margin-left: 2px;
+  transition: background 0.15s;
+}
+.likes-pill:hover { background: color-mix(in srgb, var(--primary) 18%, transparent); }
 
 /* Sıralama chips */
 .sort-chips { display: flex; gap: 8px; padding: 0 16px 10px; }
