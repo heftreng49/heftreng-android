@@ -68,6 +68,20 @@
       </svg>
     </button>
     <span class="hdr-logo">heftreng</span>
+
+    <div class="hdr-actions">
+      <a href="/search" class="hdr-icon" aria-label="Ara">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="21" height="21"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </a>
+      {#if $currentUser}
+        <a href="/notifications" class="hdr-icon badge-wrap" aria-label="Bildirimler">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="21" height="21"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </a>
+        <a href="/messages" class="hdr-icon badge-wrap" aria-label="Mesajlar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="21" height="21"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </a>
+      {/if}
+    </div>
   </header>
 {/if}
 
@@ -257,6 +271,15 @@
   font-size: 20px; font-weight: 900; color: var(--primary);
   font-family: system-ui, sans-serif; flex: 1;
 }
+.hdr-actions { display: flex; align-items: center; gap: 0; }
+.hdr-icon {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--on-bg); text-decoration: none;
+  transition: background 0.15s; position: relative;
+}
+.hdr-icon:hover { background: var(--surface-var); }
+.badge-wrap { position: relative; }
 
 /* ── Drawer backdrop ──────────────────────────────────────────── */
 .drawer-backdrop {
