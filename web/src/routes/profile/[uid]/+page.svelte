@@ -368,6 +368,26 @@
     else await supabase.from("feed_likes").upsert({ id, post_id: p.id, uid: $currentUser.uid, name: $currentUser.displayName ?? "", photo_url: $currentUser.photoURL ?? "" });
   }
 
+  // ── Uzun metin aç/kapat ──────────────────────────────────────
+  let expandedIds = $state(new Set<string>());
+  function toggleExpand(id: string) {
+    const s = new Set(expandedIds);
+    s.has(id) ? s.delete(id) : s.add(id);
+    expandedIds = s;
+  }
+
+  function repostLabel(type: string) {
+    if (type === "serial")      return "📖 Kitap";
+    if (type === "blog")        return "📝 Blog";
+    if (type === "kf_lesson")   return "🇹🇷 Kurdî";
+    return "📄 Bölüm";
+  }
+
+  function copyId(p: any) {
+    menuOpenId = null;
+    navigator.clipboard.writeText('#' + p.id);
+  }
+
   function ago(ts: any): string {
     const ms = ts?.seconds ? ts.seconds * 1000 : Number(ts);
     const diff = Date.now() - ms;
@@ -609,8 +629,9 @@
       {:else}
         <div class="feed-list">
       {#each posts as p (p.id)}
-          {@const menuId = "menu_" + p.id}
-          {@const isOwn = p.uid === $currentUser?.uid}
+          {@const isOwn      = p.uid === $currentUser?.uid}
+          {@const isExpanded = expandedIds.has(p.id)}
+          {@const isLongText = (p.text?.length ?? 0) > 280}
 
           <article class="card" onclick={() => window.location.href = '/post/' + p.id} role="button" tabindex="0">
 
@@ -626,37 +647,37 @@
                 </div>
               </a>
               <div class="meta">
-                <a href="/profile/{p.uid}" class="meta-name" onclick={(e) => e.stopPropagation()}>{p.displayName ?? "Anonim"}</a>
+                <a href="/profile/{p.uid}" class="display-name" onclick={(e) => e.stopPropagation()}>{p.displayName ?? "Anonim"}</a>
                 <div class="meta-row">
-                  {#if p.username}<span class="meta-sub">@{p.username}</span><span class="meta-dot">·</span>{/if}
-                  <span class="meta-sub">{ago(p.ts)}</span>
+                  {#if p.username}<span class="username">@{p.username}</span><span class="dot">·</span>{/if}
+                  <span class="time">{ago(p.ts)}</span>
                 </div>
               </div>
               <!-- 3 nokta menü -->
               <div class="menu-wrap" onclick={(e) => e.stopPropagation()}>
-                <button class="menu-btn" onclick={(e) => { e.stopPropagation(); menuOpenId = menuOpenId === p.id ? null : p.id; }}>
+                <button class="menu-btn" onclick={(e) => { e.stopPropagation(); menuOpenId = menuOpenId === p.id ? null : p.id; }} aria-label="Seçenekler">
                   <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
                 </button>
                 {#if menuOpenId === p.id}
                   <div class="dropdown">
                     {#if isOwn}
-                      <a href="/compose?edit={p.id}" class="drop-item" onclick={() => menuOpenId = null}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      <a href="/compose?edit={p.id}" class="dropdown-item" onclick={() => menuOpenId = null}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                         Düzenle
                       </a>
-                      <button class="drop-item danger" onclick={() => { menuOpenId = null; deletePost(p); }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                      <button class="dropdown-item danger" onclick={() => { menuOpenId = null; deletePost(p); }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
                         Sil
                       </button>
-                      <div class="drop-divider"></div>
+                      <div class="dropdown-divider"></div>
                     {/if}
-                    <button class="drop-item" onclick={() => { menuOpenId = null; sharePost(p); }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-                      Paylaş
+                    <button class="dropdown-item" onclick={() => { menuOpenId = null; sharePost(p); }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                      Bağlantıyı Kopyala
                     </button>
-                    <button class="drop-item" onclick={() => { menuOpenId = null; navigator.clipboard.writeText('#' + p.id); }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                      ID Kopyala
+                    <button class="dropdown-item" onclick={() => copyId(p)}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                      Gönderi ID'sini Kopyala
                     </button>
                   </div>
                 {/if}
@@ -688,16 +709,32 @@
               {/if}
 
               {#if p.category}<div class="category-chip">{p.category}</div>{/if}
-              {#if p.title}<h3 class="post-title">{p.title}</h3>{/if}
-              {#if p.text}<p class="post-text">{p.text}</p>{/if}
+              {#if p.title}<h2 class="post-title">{p.title}</h2>{/if}
+              {#if p.text}
+                <p class="post-text" class:clamped={isLongText && !isExpanded}>{p.text}</p>
+                {#if isLongText}
+                  <button class="read-more" onclick={(e) => { e.stopPropagation(); toggleExpand(p.id); }}>
+                    {isExpanded ? "Daha az göster" : "Devamını oku"}
+                  </button>
+                {/if}
+              {/if}
 
               {#if p.repostType && p.repostType !== "kf_achievement"}
                 <div class="repost-embed" onclick={(e) => { e.stopPropagation(); window.location.href = '/post/' + p.repostId; }}>
                   <div class="repost-label">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-                    {p.repostType === "serial" ? "📖 Kitap" : p.repostType === "blog" ? "📝 Blog" : p.repostType === "kf_lesson" ? "🇹🇷 Kurdî" : "📄 Bölüm"}
+                    {repostLabel(p.repostType)}
                   </div>
+                  {#if p.repostAuthor}
+                    <div class="repost-author">
+                      <div class="repost-av">
+                        {#if p.repostAuthorPhoto}<img src={p.repostAuthorPhoto} alt={p.repostAuthor} />{:else}{p.repostAuthor[0].toUpperCase()}{/if}
+                      </div>
+                      <span>{p.repostAuthor}</span>
+                    </div>
+                  {/if}
                   {#if p.repostTitle || p.serialTitle}<p class="repost-title">{p.repostTitle || p.serialTitle}</p>{/if}
+                  {#if p.chapterTitle}<p class="repost-chapter">{p.chapterTitle}</p>{/if}
                   {#if p.repostText}<p class="repost-text">{p.repostText}</p>{/if}
                   {#if p.repostImg || p.serialCover}<img src={p.repostImg || p.serialCover} alt="" class="repost-img" />{/if}
                 </div>
@@ -706,14 +743,15 @@
               {#if p.repostType === "kf_achievement"}
                 <div class="achievement-card">
                   <div class="achievement-inner">
-                    <div style="display:flex;align-items:center;gap:8px">
-                      <span style="font-size:26px">🏆</span>
-                      <span style="font-size:17px;font-weight:900;color:#fff">Seviye {p.repostLevel}</span>
+                    <div class="achievement-top">
+                      <span class="achievement-trophy">🏆</span>
+                      <span class="achievement-level">Seviye {p.repostLevel}</span>
                     </div>
-                    <div style="display:flex;gap:20px;margin-top:6px">
-                      <div><div style="font-size:18px;font-weight:700;color:#fff">{p.repostXp}</div><div style="font-size:10px;color:rgba(255,255,255,0.85)">XP</div></div>
-                      <div><div style="font-size:18px;font-weight:700;color:#fff">{p.repostStreak}</div><div style="font-size:10px;color:rgba(255,255,255,0.85)">Gün serisi</div></div>
+                    <div class="achievement-stats">
+                      <div><span class="stat-num">{p.repostXp}</span><span class="stat-lbl">XP</span></div>
+                      <div><span class="stat-num">{p.repostStreak}</span><span class="stat-lbl">Gün serisi</span></div>
                     </div>
+                    <p class="achievement-caption">Kurdî öğrenme yolculuğunda harika ilerleme!</p>
                   </div>
                 </div>
               {/if}
@@ -725,23 +763,31 @@
 
             <!-- ── Aksiyonlar ── -->
             <div class="actions" onclick={(e) => e.stopPropagation()}>
-              <button class="act-btn" class:liked={p.isLikedByMe} onclick={() => toggleLike(p)}>
+              <button class="act-btn" class:liked={p.isLikedByMe} onclick={() => toggleLike(p)} aria-label="Beğen">
                 {#if p.isLikedByMe}
                   <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                 {:else}
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                 {/if}
-                {#if (p.likesCount ?? 0) > 0}<span>{p.likesCount}</span>{/if}
               </button>
-              <button class="act-btn" onclick={() => window.location.href = '/post/' + p.id}>
+              {#if (p.likesCount ?? 0) > 0}
+                <button class="likes-pill" onclick={(e) => { e.stopPropagation(); window.location.href = '/post/' + p.id; }} aria-label="Beğenenleri gör">
+                  {p.likesCount} beğeni
+                </button>
+              {/if}
+
+              <button class="act-btn" onclick={(e) => { e.stopPropagation(); window.location.href = '/post/' + p.id; }} aria-label="Yorum yap">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 {#if (p.commentsCount ?? 0) > 0}<span>{p.commentsCount}</span>{/if}
               </button>
-              <button class="act-btn" onclick={() => sharePost(p)}>
+
+              <button class="act-btn" onclick={() => sharePost(p)} aria-label="Paylaş">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
               </button>
-              <div style="flex:1"></div>
-              <button class="act-btn save-btn" class:saved={p.isSavedByMe} onclick={() => toggleSave(p)}>
+
+              <div class="act-spacer"></div>
+
+              <button class="act-btn save-btn" class:saved={p.isSavedByMe} onclick={() => toggleSave(p)} aria-label="Kaydet">
                 {#if p.isSavedByMe}
                   <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
                 {:else}
@@ -753,8 +799,8 @@
         {/each}
 
         {#if hasMorePosts}
-          <div class="load-more">
-            <button class="load-more-btn" onclick={loadMorePosts}>Daha fazla yükle</button>
+          <div class="load-more-wrap">
+            <button class="load-more-btn" onclick={loadMorePosts}>Daha fazla göster</button>
           </div>
         {/if}
       </div>
@@ -954,34 +1000,36 @@
 .rl-author { font-size: 12px; color: var(--muted); }
 
 
-/* Feed kartı CSS (profil sayfası) */
+/* ── Feed liste + Kart (feed/+page.svelte ile birebir) ── */
 .feed-list { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; }
-.card { background: var(--card); border-radius: 18px; border: 0.7px solid var(--divider); padding: 14px 15px 10px; cursor: pointer; transition: border-color 0.15s; display: block; text-align: left; width: 100%; margin: 0; }
+.card { background: var(--card); border-radius: 18px; border: 0.7px solid var(--divider); padding: 14px 15px 10px; cursor: pointer; transition: border-color 0.15s; display: block; text-align: left; width: 100%; }
 .card:hover { border-color: color-mix(in srgb, var(--primary) 30%, var(--divider)); }
 .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .avatar-link { flex-shrink: 0; text-decoration: none; }
 .avatar-ring { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 60%, purple)); padding: 1.5px; display: flex; align-items: center; justify-content: center; }
 .avatar-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
-.avatar-fallback { width: 100%; height: 100%; border-radius: 50%; background: var(--surface-var); color: var(--on-bg); font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.avatar-fallback { width: 100%; height: 100%; border-radius: 50%; background: var(--surface-var); color: var(--on-bg); font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .meta { flex: 1; min-width: 0; }
-.meta-name { font-size: 14px; font-weight: 700; color: var(--on-bg); text-decoration: none; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.meta-name:hover { text-decoration: underline; }
+.display-name { font-size: 14px; font-weight: 700; color: var(--on-bg); text-decoration: none; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.display-name:hover { text-decoration: underline; }
 .meta-row { display: flex; align-items: center; gap: 4px; margin-top: 1px; }
-.meta-sub { font-size: 12px; color: var(--muted); }
-.meta-dot { font-size: 12px; color: var(--muted); }
+.username, .time { font-size: 12px; color: var(--muted); }
+.dot { font-size: 12px; color: var(--muted); }
 .menu-wrap { position: relative; }
-.menu-btn { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--muted); background: none; border: none; cursor: pointer; }
+.menu-btn { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--muted); background: none; border: none; cursor: pointer; transition: background 0.15s; }
 .menu-btn:hover { background: var(--surface-var); }
-.dropdown { position: absolute; right: 0; top: calc(100% + 4px); background: var(--surface); border: 1px solid var(--divider); border-radius: 14px; min-width: 200px; box-shadow: 0 8px 24px rgba(0,0,0,0.14); overflow: hidden; z-index: 200; }
-.drop-item { display: flex; align-items: center; gap: 10px; padding: 11px 14px; font-size: 13px; color: var(--on-surface); background: none; border: none; cursor: pointer; width: 100%; text-align: left; text-decoration: none; font-family: inherit; transition: background 0.1s; }
-.drop-item:hover { background: var(--surface-var); }
-.drop-item.danger { color: #ef4444; }
-.drop-divider { height: 1px; background: var(--divider); }
+.dropdown { position: absolute; right: 0; top: calc(100% + 4px); background: var(--surface); border: 1px solid var(--divider); border-radius: 14px; min-width: 210px; box-shadow: 0 8px 24px rgba(0,0,0,0.14); overflow: hidden; z-index: 200; }
+.dropdown-item { display: flex; align-items: center; gap: 10px; padding: 11px 14px; font-size: 13px; color: var(--on-surface); background: none; border: none; cursor: pointer; width: 100%; text-align: left; text-decoration: none; font-family: inherit; transition: background 0.1s; }
+.dropdown-item:hover { background: var(--surface-var); }
+.dropdown-item.danger { color: var(--error, #ef4444); }
+.dropdown-divider { height: 1px; background: var(--divider); }
 .card-body { margin-bottom: 2px; }
 .category-chip { display: inline-block; background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 99px; margin-bottom: 6px; }
 .post-title { font-size: 16px; font-weight: 700; color: var(--on-bg); line-height: 1.35; margin-bottom: 5px; }
-.post-text { font-size: 15px; color: var(--on-bg); line-height: 1.65; white-space: pre-wrap; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
-.post-img { width: 100%; border-radius: 12px; max-height: 300px; object-fit: cover; margin-bottom: 10px; display: block; }
+.post-text { font-size: 15px; color: var(--on-bg); line-height: 1.65; white-space: pre-wrap; margin-bottom: 4px; }
+.post-text.clamped { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.read-more { background: none; border: none; color: var(--primary); font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; margin-bottom: 8px; font-family: inherit; }
+.post-img { width: 100%; border-radius: 12px; max-height: 320px; object-fit: cover; margin-bottom: 10px; display: block; }
 .quote-card { position: relative; background: linear-gradient(135deg,color-mix(in srgb,#F59E0B 8%,transparent),color-mix(in srgb,#9B72F5 6%,transparent)); border: 1px solid color-mix(in srgb,#F59E0B 35%,transparent); border-radius: 14px; padding: 14px 14px 12px; margin-bottom: 10px; overflow: hidden; }
 .quote-mark { position: absolute; top: -6px; left: 6px; font-size: 52px; color: color-mix(in srgb,#F59E0B 15%,transparent); font-weight: 900; line-height: 1; pointer-events: none; font-family: Georgia,serif; }
 .quote-inner { padding-left: 8px; position: relative; }
@@ -992,22 +1040,40 @@
 .quote-cover svg { color: #F59E0B; }
 .quote-book { display: block; font-size: 11px; font-weight: 600; color: #F59E0B; }
 .quote-author { display: block; font-size: 10px; color: var(--muted); margin-top: 1px; }
-.repost-embed { background: var(--surface-var); border: 0.5px solid var(--divider); border-radius: 13px; padding: 12px; margin-bottom: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 5px; }
+.repost-embed { background: var(--surface-var); border: 0.5px solid var(--divider); border-radius: 13px; padding: 12px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s; display: flex; flex-direction: column; gap: 5px; }
+.repost-embed:hover { border-color: var(--primary); }
 .repost-label { display: flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 700; color: var(--primary); letter-spacing: 0.8px; text-transform: uppercase; }
+.repost-author { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--on-surface); }
+.repost-av { width: 16px; height: 16px; border-radius: 50%; background: var(--surface); overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; color: var(--on-bg); }
+.repost-av img { width: 100%; height: 100%; object-fit: cover; }
 .repost-title { font-size: 13px; font-weight: 600; color: var(--on-bg); }
+.repost-chapter { font-size: 12px; color: var(--muted); }
 .repost-text { font-size: 13px; color: var(--on-surface); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .repost-img { width: 100%; height: 120px; object-fit: cover; border-radius: 8px; }
 .achievement-card { border-radius: 16px; overflow: hidden; margin-bottom: 8px; }
-.achievement-inner { background: linear-gradient(135deg,#F5A623,#E8871E,#D9691B); padding: 18px; }
+.achievement-inner { background: linear-gradient(135deg,#F5A623,#E8871E,#D9691B); padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.achievement-top { display: flex; align-items: center; gap: 8px; }
+.achievement-trophy { font-size: 28px; }
+.achievement-level { font-size: 18px; font-weight: 900; color: white; }
+.achievement-stats { display: flex; gap: 20px; }
+.stat-num { display: block; font-size: 20px; font-weight: 700; color: white; }
+.stat-lbl { font-size: 11px; color: rgba(255,255,255,0.85); }
+.achievement-caption { font-size: 11.5px; font-weight: 500; color: rgba(255,255,255,0.9); }
 .actions { display: flex; align-items: center; margin-top: 4px; }
-.act-btn { display: flex; align-items: center; gap: 5px; padding: 7px 10px; border-radius: 20px; color: var(--muted); font-size: 13px; cursor: pointer; border: none; background: transparent; transition: color 0.15s, background 0.15s; font-family: inherit; }
+.act-btn { display: flex; align-items: center; gap: 5px; padding: 7px 10px; border-radius: 20px; color: var(--muted); font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: transparent; transition: color 0.15s, background 0.15s, transform 0.1s; font-family: inherit; }
 .act-btn:hover { background: var(--surface-var); }
+.act-btn:active { transform: scale(0.92); }
 .act-btn.liked { color: #FF3A5C; }
+.act-btn.liked:hover { background: rgba(255,58,92,0.1); }
 .act-btn.save-btn.saved { color: #F59E0B; }
+.act-spacer { flex: 1; }
+.likes-pill { background: none; border: none; color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer; padding: 4px 6px; border-radius: 12px; font-family: inherit; transition: background 0.1s; }
+.likes-pill:hover { background: var(--surface-var); }
 
 /* Daha fazla yükle */
-.load-more { padding: 12px 16px; display: flex; justify-content: center; }
-.load-more-btn { padding: 10px 24px; border: 1.5px solid var(--divider); border-radius: 99px; background: none; color: var(--primary); font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.load-more-wrap { padding: 8px 12px 4px; display: flex; justify-content: center; }
+.load-more-btn { padding: 12px 28px; border: 1.5px solid var(--divider); border-radius: 99px; background: var(--surface); color: var(--primary); font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 8px; transition: border-color 0.15s, background 0.15s; }
+.load-more-btn:hover { border-color: var(--primary); background: color-mix(in srgb,var(--primary) 6%,var(--surface)); }
 
 /* Boş state */
 .empty-tab { display: flex; flex-direction: column; align-items: center; padding: 48px 20px; gap: 10px; color: var(--muted); }
