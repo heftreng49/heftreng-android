@@ -54,9 +54,22 @@
     { icon: 'message',       label: 'Mesajlar',      href: '/messages' },
     { icon: 'saved',         label: 'Kaydedilenler', href: '/saved' },
     { icon: 'settings',      label: 'Ayarlar',       href: '/settings' },
-    { icon: 'people',        label: 'Kişiler',       href: '/people' },
   ];
 </script>
+
+<!-- Global header (drawer açma + logo) -->
+{#if showBottomNav}
+  <header class="global-header">
+    <button class="hdr-hamburger" onclick={() => drawerOpen = !drawerOpen} aria-label="Menü">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    <span class="hdr-logo">heftreng</span>
+  </header>
+{/if}
 
 <!-- Drawer backdrop -->
 {#if drawerOpen}
@@ -66,11 +79,6 @@
 <!-- Sol Drawer -->
 <aside class="drawer" class:open={drawerOpen}>
   <div class="drawer-inner">
-
-    <!-- Logo -->
-    <div class="dr-logo">
-      <span class="dr-logo-text">heftreng</span>
-    </div>
 
     <!-- Profil özeti -->
     {#if $currentUser}
@@ -122,10 +130,7 @@
           <!-- Ayarlar -->
           {:else if item.icon === 'settings'}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          <!-- Kişiler -->
-          {:else if item.icon === 'people'}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          {/if}
+{/if}
           <span>{item.label}</span>
         </a>
       {/each}
@@ -167,17 +172,6 @@
 
   </div>
 </aside>
-
-<!-- Hamburger butonu (her sayfada görünür, login/register hariç) -->
-{#if showBottomNav}
-  <button class="hamburger" onclick={() => drawerOpen = !drawerOpen} aria-label="Menü">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
-      <line x1="3" y1="6" x2="21" y2="6"/>
-      <line x1="3" y1="12" x2="21" y2="12"/>
-      <line x1="3" y1="18" x2="21" y2="18"/>
-    </svg>
-  </button>
-{/if}
 
 {@render children()}
 
@@ -240,17 +234,29 @@
 .nav-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; border: 1.5px solid var(--divider); }
 .nav-avatar.active-av { border-color: var(--primary); }
 
-/* ── Hamburger ────────────────────────────────────────────────── */
-.hamburger {
-  position: fixed; top: 10px; left: 14px;
-  width: 38px; height: 38px; border-radius: 50%;
-  background: var(--surface); border: 1px solid var(--divider);
+/* ── Global Header ────────────────────────────────────────────── */
+.global-header {
+  position: sticky; top: 0; left: 0; right: 0;
+  height: 52px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--divider);
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 14px;
+  z-index: 100;
+  max-width: 100%;
+}
+.hdr-hamburger {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: none; border: none;
   display: flex; align-items: center; justify-content: center;
-  color: var(--on-bg); cursor: pointer; z-index: 200;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  color: var(--on-bg); cursor: pointer; flex-shrink: 0;
   transition: background 0.15s;
 }
-.hamburger:hover { background: var(--surface-var); }
+.hdr-hamburger:hover { background: var(--surface-var); }
+.hdr-logo {
+  font-size: 20px; font-weight: 900; color: var(--primary);
+  font-family: system-ui, sans-serif; flex: 1;
+}
 
 /* ── Drawer backdrop ──────────────────────────────────────────── */
 .drawer-backdrop {
