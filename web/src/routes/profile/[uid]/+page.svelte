@@ -7,13 +7,19 @@
   import { supabase } from "$lib/supabase/config";
   import { currentUser } from "$lib/store/auth";
 
-  const uid = $derived($page.params.uid === "me" ? ($currentUser?.uid ?? "") : $page.params.uid);
+  // uid: "me" ise currentUser.uid, değilse params.uid
+  let uid = $state("");
+  $effect(() => {
+    const p = $page.params.uid;
+    uid = p === "me" ? ($currentUser?.uid ?? "") : p;
+  });
 
   // ── State ─────────────────────────────────────────────────────
   let user          = $state<any>(null);
   let loading       = $state(true);
   let notFound      = $state(false);
-  let isMe          = $derived(uid === $currentUser?.uid);
+  let isMe          = $state(false);
+  $effect(() => { isMe = !!uid && uid === $currentUser?.uid; });
 
   let posts         = $state<any[]>([]);
   let postsLoading  = $state(true);
@@ -51,13 +57,22 @@
   // Okuma listesi
   let readingList   = $state<Record<string, any[]>>({});
 
-  // ── Yükle ─────────────────────────────────────────────────────
-  onMount(async () => {
-    await loadUser();
-    await loadPosts();
-    await loadSocialCounts();
-    if ($currentUser && !isMe) await checkFollowing();
-    loadReadingList();
+  // ── Yükle — uid hazır olunca ──────────────────────────────────
+  let _loaded = $state("");
+  $effect(() => {
+    if (!uid || uid === _loaded) return;
+    _loaded = uid;
+    loading = true;
+    postsLoading = true;
+    posts = [];
+    user = null;
+    notFound = false;
+    loadUser().then(() => {
+      loadPosts();
+      loadSocialCounts();
+      if ($currentUser && !isMe) checkFollowing();
+      loadReadingList();
+    });
   });
 
   async function loadUser() {
@@ -708,16 +723,16 @@
 {/if}
 
 <style>
-.wrap { max-width: 600px; margin: 0 auto; padding-bottom: 80px; }
+.wrap { max-width: 600px; margin: 0 auto; padding-bottom: 80px; overflow-x: clip; }
 
 /* Kapak */
-.cover-wrap { position: relative; width: 100%; height: 120px; background: var(--surface-var); overflow: hidden; }
+.cover-wrap { position: relative; width: 100%; height: 140px; background: var(--surface-var); overflow: hidden; margin-left: calc(-50vw + 50%); margin-right: calc(-50vw + 50%); }
 .cover-img { width: 100%; height: 100%; object-fit: cover; }
 .cover-placeholder { width: 100%; height: 100%; background: linear-gradient(135deg, color-mix(in srgb,var(--primary) 20%,transparent), color-mix(in srgb,var(--primary) 8%,transparent)); }
 .cover-edit-btn { position: absolute; bottom: 8px; right: 10px; display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(0,0,0,0.55); color: #fff; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; }
 
 /* Profil başlığı */
-.profile-header { padding: 0 16px 12px; background: var(--card); border-bottom: 1px solid var(--divider); }
+.profile-header { padding: 0 16px 12px; background: var(--card); border-bottom: 1px solid var(--divider); position: relative; z-index: 1; }
 
 /* Avatar satırı */
 .av-row { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 12px; }
@@ -778,7 +793,7 @@
 .input-prefix input { flex: 1; border: none; background: none; padding: 10px 12px 10px 4px; font-size: 14px; color: var(--on-bg); font-family: inherit; outline: none; }
 
 /* Sekmeler */
-.tabs-bar { display: flex; position: sticky; top: 52px; background: var(--bg); border-bottom: 1px solid var(--divider); z-index: 10; overflow: hidden; }
+.tabs-bar { display: flex; position: sticky; top: 52px; background: var(--surface); border-bottom: 1px solid var(--divider); z-index: 9; overflow: hidden; }
 .tab { flex: 1; padding: 13px 4px; font-size: 13px; font-weight: 500; color: var(--muted); background: none; border: none; cursor: pointer; position: relative; z-index: 1; transition: color 0.2s; font-family: inherit; }
 .tab.active { color: var(--on-bg); font-weight: 700; }
 .tab-indicator { position: absolute; bottom: 0; left: 0; width: 33.33%; height: 2.5px; background: linear-gradient(90deg, var(--primary), color-mix(in srgb,var(--primary) 60%,purple)); border-radius: 2px 2px 0 0; transition: transform 0.25s cubic-bezier(.4,0,.2,1); pointer-events: none; }
