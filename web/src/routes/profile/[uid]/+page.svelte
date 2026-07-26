@@ -45,6 +45,7 @@
 
   // Düzenle modu
   let editMode      = $state(false);
+  let menuOpenId    = $state<string | null>(null);
   let editName      = $state("");
   let editUsername  = $state("");
   let editBio       = $state("");
@@ -59,6 +60,10 @@
 
   // ── Yükle — uid hazır olunca ──────────────────────────────────
   let _loaded = $state("");
+
+  onMount(() => {
+    document.addEventListener("click", () => { menuOpenId = null; });
+  });
   $effect(() => {
     if (!uid || uid === _loaded) return;
     _loaded = uid;
@@ -133,15 +138,20 @@
     for (const r of lR.data ?? []) counts[r.post_id] = (counts[r.post_id] ?? 0) + 1;
 
     let liked = new Set<string>();
+    let saved = new Set<string>();
     if ($currentUser) {
-      const { data } = await supabase.from("feed_likes").select("post_id")
-        .eq("uid", $currentUser.uid).in("post_id", ids);
-      liked = new Set((data ?? []).map((r: any) => r.post_id));
+      const [lR, sR] = await Promise.all([
+        supabase.from("feed_likes").select("post_id").eq("uid", $currentUser.uid).in("post_id", ids),
+        supabase.from("feed_saves").select("post_id").eq("uid", $currentUser.uid).in("post_id", ids),
+      ]);
+      liked = new Set((lR.data ?? []).map((r: any) => r.post_id));
+      saved = new Set((sR.data ?? []).map((r: any) => r.post_id));
     }
     posts = posts.map(p => ids.includes(p.id) ? {
       ...p,
       likesCount: counts[p.id] ?? p.likesCount ?? 0,
       isLikedByMe: liked.has(p.id),
+      isSavedByMe: saved.has(p.id),
     } : p);
   }
 
@@ -317,6 +327,32 @@
       if (type === "avatar") photoUploading = false;
       else coverUploading = false;
     }
+  }
+
+  async function toggleSave(p: any) {
+    if (!$currentUser) { window.location.href = "/login"; return; }
+    const was = p.isSavedByMe;
+    posts = posts.map(x => x.id === p.id ? { ...x, isSavedByMe: !was } : x);
+    const id = `${p.id}_${$currentUser.uid}`;
+    try {
+      if (was) await supabase.from("feed_saves").delete().eq("id", id);
+      else await supabase.from("feed_saves").upsert({ id, post_id: p.id, uid: $currentUser.uid });
+    } catch(e) { posts = posts.map(x => x.id === p.id ? { ...x, isSavedByMe: was } : x); }
+  }
+
+  function sharePost(p: any) {
+    menuOpenId = null;
+    const url = window.location.origin + "/post/" + p.id;
+    if (navigator.share) navigator.share({ title: p.displayName, url });
+    else { navigator.clipboard.writeText(url); }
+  }
+
+  async function deletePost(p: any) {
+    if (!$currentUser || $currentUser.uid !== p.uid) return;
+    if (!confirm("Gönderiyi silmek istiyor musunuz?")) return;
+    const { deleteDoc, doc: fdoc } = await import("firebase/firestore");
+    await deleteDoc(fdoc(db, "feed", p.id));
+    posts = posts.filter(x => x.id !== p.id);
   }
 
   // ── Beğeni toggle ─────────────────────────────────────────────
@@ -571,47 +607,149 @@
           {#if isMe}<a href="/compose" class="empty-link">İlk gönderiyi yaz →</a>{/if}
         </div>
       {:else}
-        {#each posts as p (p.id)}
-          <article class="post-card" onclick={() => window.location.href = '/post/' + p.id} role="button" tabindex="0">
-            <div class="pc-head">
-              <div class="pc-meta">
-                <span class="pc-name">{p.displayName ?? user?.displayName ?? ""}</span>
-                <span class="pc-time">{ago(p.ts)}</span>
+        <div class="feed-list">
+      {#each posts as p (p.id)}
+          {@const menuId = "menu_" + p.id}
+          {@const isOwn = p.uid === $currentUser?.uid}
+
+          <article class="card" onclick={() => window.location.href = '/post/' + p.id} role="button" tabindex="0">
+
+            <!-- ── Kart başlığı ── -->
+            <div class="card-head">
+              <a href="/profile/{p.uid}" class="avatar-link" onclick={(e) => e.stopPropagation()}>
+                <div class="avatar-ring">
+                  {#if p.photoURL}
+                    <img src={p.photoURL} alt={p.displayName} class="avatar-img" />
+                  {:else}
+                    <div class="avatar-fallback">{(p.displayName ?? "?")[0].toUpperCase()}</div>
+                  {/if}
+                </div>
+              </a>
+              <div class="meta">
+                <a href="/profile/{p.uid}" class="meta-name" onclick={(e) => e.stopPropagation()}>{p.displayName ?? "Anonim"}</a>
+                <div class="meta-row">
+                  {#if p.username}<span class="meta-sub">@{p.username}</span><span class="meta-dot">·</span>{/if}
+                  <span class="meta-sub">{ago(p.ts)}</span>
+                </div>
+              </div>
+              <!-- 3 nokta menü -->
+              <div class="menu-wrap" onclick={(e) => e.stopPropagation()}>
+                <button class="menu-btn" onclick={(e) => { e.stopPropagation(); menuOpenId = menuOpenId === p.id ? null : p.id; }}>
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+                </button>
+                {#if menuOpenId === p.id}
+                  <div class="dropdown">
+                    {#if isOwn}
+                      <a href="/compose?edit={p.id}" class="drop-item" onclick={() => menuOpenId = null}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        Düzenle
+                      </a>
+                      <button class="drop-item danger" onclick={() => { menuOpenId = null; deletePost(p); }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                        Sil
+                      </button>
+                      <div class="drop-divider"></div>
+                    {/if}
+                    <button class="drop-item" onclick={() => { menuOpenId = null; sharePost(p); }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                      Paylaş
+                    </button>
+                    <button class="drop-item" onclick={() => { menuOpenId = null; navigator.clipboard.writeText('#' + p.id); }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                      ID Kopyala
+                    </button>
+                  </div>
+                {/if}
               </div>
             </div>
-            {#if p.title}<h3 class="pc-title">{p.title}</h3>{/if}
-            {#if p.text}<p class="pc-text">{p.text}</p>{/if}
+
+            <!-- ── İçerik ── -->
+            <div class="card-body">
+              {#if p.quoteText}
+                <div class="quote-card" onclick={(e) => e.stopPropagation()}>
+                  <span class="quote-mark">❝</span>
+                  <div class="quote-inner">
+                    <p class="quote-text">{p.quoteText}</p>
+                    {#if p.bookName || p.authorName}
+                      <div class="quote-source">
+                        <div class="quote-cover">
+                          {#if p.coverImg}<img src={p.coverImg} alt={p.bookName} />{:else}
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                          {/if}
+                        </div>
+                        <div>
+                          {#if p.bookName}<span class="quote-book">{p.bookName}</span>{/if}
+                          {#if p.authorName}<span class="quote-author">{p.authorName}</span>{/if}
+                        </div>
+                      </div>
+                    {/if}
+                  </div>
+                </div>
+              {/if}
+
+              {#if p.category}<div class="category-chip">{p.category}</div>{/if}
+              {#if p.title}<h3 class="post-title">{p.title}</h3>{/if}
+              {#if p.text}<p class="post-text">{p.text}</p>{/if}
+
+              {#if p.repostType && p.repostType !== "kf_achievement"}
+                <div class="repost-embed" onclick={(e) => { e.stopPropagation(); window.location.href = '/post/' + p.repostId; }}>
+                  <div class="repost-label">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                    {p.repostType === "serial" ? "📖 Kitap" : p.repostType === "blog" ? "📝 Blog" : p.repostType === "kf_lesson" ? "🇹🇷 Kurdî" : "📄 Bölüm"}
+                  </div>
+                  {#if p.repostTitle || p.serialTitle}<p class="repost-title">{p.repostTitle || p.serialTitle}</p>{/if}
+                  {#if p.repostText}<p class="repost-text">{p.repostText}</p>{/if}
+                  {#if p.repostImg || p.serialCover}<img src={p.repostImg || p.serialCover} alt="" class="repost-img" />{/if}
+                </div>
+              {/if}
+
+              {#if p.repostType === "kf_achievement"}
+                <div class="achievement-card">
+                  <div class="achievement-inner">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span style="font-size:26px">🏆</span>
+                      <span style="font-size:17px;font-weight:900;color:#fff">Seviye {p.repostLevel}</span>
+                    </div>
+                    <div style="display:flex;gap:20px;margin-top:6px">
+                      <div><div style="font-size:18px;font-weight:700;color:#fff">{p.repostXp}</div><div style="font-size:10px;color:rgba(255,255,255,0.85)">XP</div></div>
+                      <div><div style="font-size:18px;font-weight:700;color:#fff">{p.repostStreak}</div><div style="font-size:10px;color:rgba(255,255,255,0.85)">Gün serisi</div></div>
+                    </div>
+                  </div>
+                </div>
+              {/if}
+            </div>
+
             {#if p.imgUrl || p.imageURL}
-              <img src={p.imgUrl || p.imageURL} alt="" class="pc-img" onclick={(e) => e.stopPropagation()} />
+              <img src={p.imgUrl || p.imageURL} alt="" class="post-img" onclick={(e) => e.stopPropagation()} />
             {/if}
-            <!-- QuoteCard mini -->
-            {#if p.quoteText}
-              <div class="pc-quote">
-                <p class="pc-quote-text">❝ {p.quoteText}</p>
-                {#if p.bookName}<span class="pc-quote-book">{p.bookName}</span>{/if}
-              </div>
-            {/if}
-            <div class="pc-actions" onclick={(e) => e.stopPropagation()}>
-              <button class="pc-act" class:liked={p.isLikedByMe} onclick={() => toggleLike(p)}>
+
+            <!-- ── Aksiyonlar ── -->
+            <div class="actions" onclick={(e) => e.stopPropagation()}>
+              <button class="act-btn" class:liked={p.isLikedByMe} onclick={() => toggleLike(p)}>
                 {#if p.isLikedByMe}
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                 {:else}
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                 {/if}
                 {#if (p.likesCount ?? 0) > 0}<span>{p.likesCount}</span>{/if}
               </button>
-              <button class="pc-act" onclick={() => window.location.href = '/post/' + p.id}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              <button class="act-btn" onclick={() => window.location.href = '/post/' + p.id}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 {#if (p.commentsCount ?? 0) > 0}<span>{p.commentsCount}</span>{/if}
               </button>
-              {#if isMe}
-                <a href="/compose?edit={p.id}" class="pc-act" onclick={(e) => e.stopPropagation()}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                </a>
-              {/if}
+              <button class="act-btn" onclick={() => sharePost(p)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+              </button>
+              <div style="flex:1"></div>
+              <button class="act-btn save-btn" class:saved={p.isSavedByMe} onclick={() => toggleSave(p)}>
+                {#if p.isSavedByMe}
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                {:else}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                {/if}
+              </button>
             </div>
           </article>
-          <div class="post-divider"></div>
         {/each}
 
         {#if hasMorePosts}
@@ -619,6 +757,7 @@
             <button class="load-more-btn" onclick={loadMorePosts}>Daha fazla yükle</button>
           </div>
         {/if}
+      </div>
       {/if}
 
     <!-- Okuma listesi -->
@@ -799,21 +938,7 @@
 .tab-indicator { position: absolute; bottom: 0; left: 0; width: 33.33%; height: 2.5px; background: linear-gradient(90deg, var(--primary), color-mix(in srgb,var(--primary) 60%,purple)); border-radius: 2px 2px 0 0; transition: transform 0.25s cubic-bezier(.4,0,.2,1); pointer-events: none; }
 
 /* Post kartları */
-.post-card { padding: 14px 16px 10px; cursor: pointer; background: var(--card); }
 .post-card:hover { background: color-mix(in srgb, var(--surface-var) 50%, var(--card)); }
-.post-divider { height: 0.5px; background: var(--divider); }
-.pc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.pc-meta { display: flex; align-items: center; gap: 6px; }
-.pc-name { font-size: 13px; font-weight: 700; color: var(--on-bg); }
-.pc-time { font-size: 11px; color: var(--muted); }
-.pc-title { font-size: 16px; font-weight: 700; color: var(--on-bg); margin: 0 0 5px; }
-.pc-text { font-size: 15px; color: var(--on-bg); line-height: 1.65; white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; margin: 0 0 6px; }
-.pc-img { width: 100%; border-radius: 10px; max-height: 280px; object-fit: cover; margin-bottom: 8px; display: block; }
-.pc-quote { background: color-mix(in srgb,#F59E0B 8%,transparent); border: 1px solid color-mix(in srgb,#F59E0B 25%,transparent); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
-.pc-quote-text { font-size: 13px; font-style: italic; color: var(--on-surface); margin: 0 0 4px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.pc-quote-book { font-size: 11px; color: #F59E0B; font-weight: 600; }
-.pc-actions { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
-.pc-act { display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 20px; color: var(--muted); font-size: 13px; cursor: pointer; border: none; background: transparent; transition: color 0.15s, background 0.15s; text-decoration: none; font-family: inherit; }
 .pc-act:hover { background: var(--surface-var); }
 .pc-act.liked { color: #FF3A5C; }
 
@@ -827,6 +952,58 @@
 .rl-info { display: flex; flex-direction: column; gap: 3px; }
 .rl-book { font-size: 14px; font-weight: 600; color: var(--on-bg); }
 .rl-author { font-size: 12px; color: var(--muted); }
+
+
+/* Feed kartı CSS (profil sayfası) */
+.feed-list { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; }
+.card { background: var(--card); border-radius: 18px; border: 0.7px solid var(--divider); padding: 14px 15px 10px; cursor: pointer; transition: border-color 0.15s; display: block; text-align: left; width: 100%; margin: 0; }
+.card:hover { border-color: color-mix(in srgb, var(--primary) 30%, var(--divider)); }
+.card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.avatar-link { flex-shrink: 0; text-decoration: none; }
+.avatar-ring { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 60%, purple)); padding: 1.5px; display: flex; align-items: center; justify-content: center; }
+.avatar-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.avatar-fallback { width: 100%; height: 100%; border-radius: 50%; background: var(--surface-var); color: var(--on-bg); font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.meta { flex: 1; min-width: 0; }
+.meta-name { font-size: 14px; font-weight: 700; color: var(--on-bg); text-decoration: none; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta-name:hover { text-decoration: underline; }
+.meta-row { display: flex; align-items: center; gap: 4px; margin-top: 1px; }
+.meta-sub { font-size: 12px; color: var(--muted); }
+.meta-dot { font-size: 12px; color: var(--muted); }
+.menu-wrap { position: relative; }
+.menu-btn { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--muted); background: none; border: none; cursor: pointer; }
+.menu-btn:hover { background: var(--surface-var); }
+.dropdown { position: absolute; right: 0; top: calc(100% + 4px); background: var(--surface); border: 1px solid var(--divider); border-radius: 14px; min-width: 200px; box-shadow: 0 8px 24px rgba(0,0,0,0.14); overflow: hidden; z-index: 200; }
+.drop-item { display: flex; align-items: center; gap: 10px; padding: 11px 14px; font-size: 13px; color: var(--on-surface); background: none; border: none; cursor: pointer; width: 100%; text-align: left; text-decoration: none; font-family: inherit; transition: background 0.1s; }
+.drop-item:hover { background: var(--surface-var); }
+.drop-item.danger { color: #ef4444; }
+.drop-divider { height: 1px; background: var(--divider); }
+.card-body { margin-bottom: 2px; }
+.category-chip { display: inline-block; background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 99px; margin-bottom: 6px; }
+.post-title { font-size: 16px; font-weight: 700; color: var(--on-bg); line-height: 1.35; margin-bottom: 5px; }
+.post-text { font-size: 15px; color: var(--on-bg); line-height: 1.65; white-space: pre-wrap; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.post-img { width: 100%; border-radius: 12px; max-height: 300px; object-fit: cover; margin-bottom: 10px; display: block; }
+.quote-card { position: relative; background: linear-gradient(135deg,color-mix(in srgb,#F59E0B 8%,transparent),color-mix(in srgb,#9B72F5 6%,transparent)); border: 1px solid color-mix(in srgb,#F59E0B 35%,transparent); border-radius: 14px; padding: 14px 14px 12px; margin-bottom: 10px; overflow: hidden; }
+.quote-mark { position: absolute; top: -6px; left: 6px; font-size: 52px; color: color-mix(in srgb,#F59E0B 15%,transparent); font-weight: 900; line-height: 1; pointer-events: none; font-family: Georgia,serif; }
+.quote-inner { padding-left: 8px; position: relative; }
+.quote-text { font-size: 14px; font-style: italic; color: var(--on-surface); line-height: 1.6; font-weight: 500; margin-bottom: 10px; }
+.quote-source { display: flex; align-items: center; gap: 8px; }
+.quote-cover { width: 28px; height: 42px; border-radius: 3px; background: color-mix(in srgb,#F59E0B 10%,transparent); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; }
+.quote-cover img { width: 100%; height: 100%; object-fit: cover; }
+.quote-cover svg { color: #F59E0B; }
+.quote-book { display: block; font-size: 11px; font-weight: 600; color: #F59E0B; }
+.quote-author { display: block; font-size: 10px; color: var(--muted); margin-top: 1px; }
+.repost-embed { background: var(--surface-var); border: 0.5px solid var(--divider); border-radius: 13px; padding: 12px; margin-bottom: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 5px; }
+.repost-label { display: flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 700; color: var(--primary); letter-spacing: 0.8px; text-transform: uppercase; }
+.repost-title { font-size: 13px; font-weight: 600; color: var(--on-bg); }
+.repost-text { font-size: 13px; color: var(--on-surface); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.repost-img { width: 100%; height: 120px; object-fit: cover; border-radius: 8px; }
+.achievement-card { border-radius: 16px; overflow: hidden; margin-bottom: 8px; }
+.achievement-inner { background: linear-gradient(135deg,#F5A623,#E8871E,#D9691B); padding: 18px; }
+.actions { display: flex; align-items: center; margin-top: 4px; }
+.act-btn { display: flex; align-items: center; gap: 5px; padding: 7px 10px; border-radius: 20px; color: var(--muted); font-size: 13px; cursor: pointer; border: none; background: transparent; transition: color 0.15s, background 0.15s; font-family: inherit; }
+.act-btn:hover { background: var(--surface-var); }
+.act-btn.liked { color: #FF3A5C; }
+.act-btn.save-btn.saved { color: #F59E0B; }
 
 /* Daha fazla yükle */
 .load-more { padding: 12px 16px; display: flex; justify-content: center; }
