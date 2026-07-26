@@ -1,1 +1,0 @@
-import{tt as e}from"../chunks/DNNsuY7_.js";import{r as t}from"../chunks/BuFlayix.js";import"../chunks/xihTtKlq.js";import"../chunks/C-25CUl6.js";function n(e,n){throw new t(e,n.toString())}var r=e({load:()=>i});function i(){throw n(302,`/feed`)}function a(e){}export{a as component,r as universal};
