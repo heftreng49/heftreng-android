@@ -23,6 +23,12 @@
   let commentSending  = $state(false);
   let replyTo         = $state<any | null>(null);
 
+  // ── Beğenen listesi ──────────────────────────────────────────
+  let likersPostId   = $state<string | null>(null);
+  let likers         = $state<any[]>([]);
+  let likersLoading  = $state(false);
+  let likersSort     = $state<'new'|'old'|'mixed'>('new');
+
   // ── Zaman formatı ────────────────────────────────────────────
   function ago(ts: any): string {
     const ms   = ts?.seconds ? ts.seconds * 1000 : Number(ts);
@@ -169,6 +175,49 @@
       posts = posts.map(x => x.id === p.id ? { ...x, isSavedByMe: wasSaved } : x);
     }
   }
+
+  // ── Beğenenler ───────────────────────────────────────────────
+  async function openLikers(p: any, e: Event) {
+    e.stopPropagation();
+    if (!(p.likesCount > 0)) return;
+    likersPostId  = p.id;
+    likersSort    = 'new';
+    await loadLikers(p.id);
+  }
+
+  function closeLikers() { likersPostId = null; likers = []; }
+
+  async function loadLikers(postId: string) {
+    likersLoading = true;
+    try {
+      const { data } = await supabase
+        .from("feed_likes")
+        .select("uid, name, photo_url, created_at")
+        .eq("post_id", postId)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      // uid'e göre tekilleştir (Android'deki distinctBy mantığı)
+      const seen = new Set<string>();
+      likers = (data ?? []).filter((r: any) => {
+        if (seen.has(r.uid)) return false;
+        seen.add(r.uid);
+        return true;
+      });
+    } catch(e) { console.error(e); }
+    finally { likersLoading = false; }
+  }
+
+  let sortedLikers = $derived((() => {
+    if (likersSort === 'new') return [...likers].sort((a,b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
+    if (likersSort === 'old') return [...likers].sort((a,b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''));
+    // mixed — shuffle
+    const arr = [...likers];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  })());
 
   // ── Yorumlar ─────────────────────────────────────────────────
   async function openComments(p: any) {
@@ -501,13 +550,15 @@
 
           <!-- Aksiyon çubuğu -->
           <div class="actions" onclick={(e) => e.stopPropagation()}>
-            <button class="act-btn" class:liked={p.isLikedByMe} onclick={() => toggleLike(p)} aria-label="Beğen">
+            <button class="act-btn" class:liked={p.isLikedByMe} onclick={() => toggleLike(p)} oncontextmenu={(e) => openLikers(p, e)} aria-label="Beğen">
               {#if p.isLikedByMe}
                 <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
               {:else}
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
               {/if}
-              {#if (p.likesCount ?? 0) > 0}<span>{p.likesCount}</span>{/if}
+              {#if (p.likesCount ?? 0) > 0}
+                <span class="likes-count" onclick={(e) => openLikers(p, e)} role="button" tabindex="0">{p.likesCount}</span>
+              {/if}
             </button>
 
             <button class="act-btn" onclick={() => openComments(p)} aria-label="Yorum yap">
@@ -550,6 +601,56 @@
     </a>
   {/if}
 </main>
+
+
+<!-- ── Beğenen listesi bottom sheet ──────────────────────────────── -->
+{#if likersPostId}
+  <div class="sheet-backdrop" onclick={closeLikers}></div>
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <div>
+        <span class="sheet-title">Beğenenler</span>
+        {#if likers.length > 0}<span class="sheet-count">{likers.length} kişi</span>{/if}
+      </div>
+      <button class="sheet-close" onclick={closeLikers}>✕</button>
+    </div>
+
+    {#if likers.length > 1}
+      <div class="sort-chips">
+        {#each [['new','Yeni'],['old','Eski'],['mixed','Karışık']] as [val, label]}
+          <button
+            class="sort-chip"
+            class:active={likersSort === val}
+            onclick={() => likersSort = val as any}
+          >{label}</button>
+        {/each}
+      </div>
+    {/if}
+
+    <div class="comments-list">
+      {#if likersLoading}
+        <div class="cmt-loading"><div class="spinner"></div></div>
+      {:else if likers.length === 0}
+        <p class="cmt-empty">Henüz beğeni yok.</p>
+      {:else}
+        {#each sortedLikers as lk (lk.uid)}
+          <a href="/profile/{lk.uid}" class="liker-row" onclick={closeLikers}>
+            <div class="cmt-av">
+              {#if lk.photo_url}
+                <img src={lk.photo_url} alt={lk.name} />
+              {:else}
+                <span>{(lk.name ?? "?")[0].toUpperCase()}</span>
+              {/if}
+            </div>
+            <span class="liker-name">{lk.name ?? "Anonim"}</span>
+            <svg class="liker-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="9 18 15 12 9 6"/></svg>
+          </a>
+        {/each}
+      {/if}
+    </div>
+  </div>
+{/if}
 
 <!-- ── Yorum bottom sheet ──────────────────────────────────────── -->
 {#if commentPostId}
@@ -791,5 +892,21 @@
 .cmt-send:disabled { opacity: 0.4; cursor: not-allowed; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+/* Beğeni sayısı tıklanabilir */
+.likes-count { cursor: pointer; }
+.likes-count:hover { text-decoration: underline; }
+
+/* Sıralama chips */
+.sort-chips { display: flex; gap: 8px; padding: 0 16px 10px; }
+.sort-chip { padding: 5px 14px; border-radius: 99px; font-size: 12px; font-weight: 500; border: none; cursor: pointer; background: var(--surface-var); color: var(--muted); font-family: inherit; transition: background 0.15s, color 0.15s; }
+.sort-chip.active { background: var(--primary); color: #fff; font-weight: 600; }
+
+/* Liker satırı */
+.liker-row { display: flex; align-items: center; gap: 10px; padding: 8px 16px; text-decoration: none; transition: background 0.1s; border-radius: 12px; }
+.liker-row:hover { background: var(--surface-var); }
+.liker-name { flex: 1; font-size: 14px; font-weight: 600; color: var(--on-bg); }
+.liker-arrow { color: var(--muted); }
+.sheet-count { font-size: 12px; color: var(--muted); margin-left: 6px; }
+
 @keyframes shimmer { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
 </style>
