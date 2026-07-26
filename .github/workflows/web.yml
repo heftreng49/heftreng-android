@@ -1,4 +1,4 @@
-name: Web Deploy
+Name: Web Deploy
 
 on:
   push:
@@ -36,14 +36,6 @@ jobs:
           VITE_FIREBASE_APP_ID:              ${{ secrets.FIREBASE_APP_ID }}
           VITE_SUPABASE_URL:                 ${{ secrets.SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY:            ${{ secrets.SUPABASE_ANON_KEY }}
-
-      - name: Commit build to repo
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add web/build -f
-          git diff --staged --quiet || git commit -m "chore: update web build [skip ci]"
-          git push
 
       - name: Deploy to Render
         run: |
