@@ -1,25 +1,29 @@
 <script lang="ts">
-  import { auth } from '$lib/firebase/config';
-  import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
   import { goto } from '$app/navigation';
+  import { register } from '$lib/services/auth.service';
 
-  let email = $state('');
-  let password = $state('');
+  let email       = $state('');
+  let password    = $state('');
   let displayName = $state('');
-  let error = $state('');
-  let loading = $state(false);
+  let error       = $state('');
+  let loading     = $state(false);
 
-  async function register() {
+  async function submit() {
     if (!email || !password || !displayName) { error = 'Tüm alanları doldurun.'; return; }
     loading = true; error = '';
     try {
-      const c = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(c.user, { displayName });
+      await register(email, password, displayName);
       goto('/feed');
     } catch(e: any) {
-      error = e.code === 'auth/email-already-in-use' ? 'Bu e-posta zaten kullanımda.' : 'Kayıt başarısız.';
+      error =
+        e.code === 'auth/email-already-in-use'
+          ? 'Bu e-posta zaten kullanımda.'
+          : e.code === 'auth/weak-password'
+          ? 'Şifre en az 6 karakter olmalı.'
+          : 'Kayıt başarısız.';
     } finally { loading = false; }
   }
+</script>
 </script>
 
 <div class="wrap">

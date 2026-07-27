@@ -2,9 +2,7 @@
   import '../app.css';
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import { auth } from '$lib/firebase/config';
-  import { signOut } from 'firebase/auth';
-  import { onAuthStateChanged } from 'firebase/auth';
+  import { initAuthListener, signOut } from '$lib/services/auth.service';
   import { currentUser, authLoading } from '$lib/stores/auth';
   import { theme, applyTheme } from '$lib/store/theme';
 
@@ -26,7 +24,7 @@
 
   async function handleSignOut() {
     closeDrawer();
-    await signOut(auth);
+    await signOut();
     window.location.href = '/login';
   }
 
@@ -37,11 +35,7 @@
 
   onMount(() => {
     applyTheme($theme.variant, $theme.mode);
-    const unsub = onAuthStateChanged(auth, (user) => {
-      currentUser.set(user);
-      authLoading.set(false);
-    });
-    return unsub;
+    return initAuthListener();
   });
 
   // Drawer menü öğeleri

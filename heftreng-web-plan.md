@@ -1,69 +1,105 @@
 # Heftreng Web — Mimari Plan ve Yol Haritası
 
-> **Durum:** Faz 2 tamamlandı. Faz 3 devam ediyor.
+> **Durum:** Faz 3 tamamlandı ✅. Sırada Faz 4.
 
 ---
 
-## 1. Mevcut Durum Analizi
+## Sürüm Geçmişi
 
-| Dosya | Durum |
+| Sürüm | Açıklama |
 |---|---|
-| `routes/feed/+page.svelte` | ✅ Refactor edildi |
-| `routes/compose/+page.svelte` | ✅ compose.service.ts ile entegre |
-| `routes/post/[id]/+page.svelte` | ✅ post.service.ts ile entegre |
-| `routes/profile/[uid]/+page.svelte` | ✅ profile.service.ts ile entegre |
-| `lib/stores/auth.ts` | ✅ userProfile + isLoggedIn |
-| `lib/components/Navbar.svelte` | Faz 3 hedefi |
+| v25 | Faz 1: compose.service, auth.service, QuoteCard — yanlış zip yapısı |
+| v26 | v25 zip yol düzeltmesi |
+| v26b | MD dosyası zipten çıkarıldı |
+| v27 | Faz 2: post.service, profile.service, UserChip/Modal/LikersModal/InfiniteScroll |
+| v28 | Bugfix: çift `</script>` kapanış etiketi düzeltildi |
+| v29 | Faz 3: layout + login + register → auth.service.ts entegrasyonu, eski store shim |
 
 ---
 
-## 2. Hedef Mimari
+## 1. Mevcut Durum (v29 itibarıyla)
+
+| Dosya | Durum | Not |
+|---|---|---|
+| `routes/+layout.svelte` | ✅ | `initAuthListener()` kullanıyor, `userProfile` doluyor |
+| `routes/feed/+page.svelte` | ✅ | |
+| `routes/compose/+page.svelte` | ✅ | |
+| `routes/post/[id]/+page.svelte` | ✅ | |
+| `routes/profile/[uid]/+page.svelte` | ✅ | |
+| `routes/login/+page.svelte` | ✅ | `auth.service.ts#signIn()` |
+| `routes/register/+page.svelte` | ✅ | `auth.service.ts#register()` + Firestore profil |
+| `lib/store/auth.ts` | ✅ | Re-export shim → `$lib/stores/auth`'a yönlendirir |
+| `lib/stores/auth.ts` | ✅ | Tek gerçek kaynak |
+| `lib/components/Navbar.svelte` | — | Layout içinde inline, ayrı bileşen gerekmedi |
+
+### Store Durumu
+
+| Klasör | Durum |
+|---|---|
+| `lib/store/auth.ts` | Shim — sadece `$lib/stores/auth`'a re-export eder, silinebilir |
+| `lib/store/theme.ts` | Aktif — `+layout.svelte` hâlâ bu dosyayı kullanıyor |
+| `lib/stores/auth.ts` | ✅ Tek gerçek auth store |
+| `lib/stores/feed.store.ts` | ✅ |
+| `lib/stores/profile.store.ts` | ✅ |
+| `lib/stores/ui.store.ts` | ✅ |
+
+---
+
+## 2. Mimari Harita
 
 ```
 web/src/lib/
 ├── models/              ✅ Tüm interface'ler tamam
 │
 ├── services/
-│   ├── feed.service.ts          ✅
-│   ├── social.service.ts        ✅
-│   ├── comment.service.ts       ✅
-│   ├── profile.service.ts       ✅ Faz 2'de genişletildi
-│   ├── post.service.ts          ✅ YENİ (Faz 2)
-│   ├── compose.service.ts       ✅
-│   ├── auth.service.ts          ✅
-│   ├── notification.service.ts  Faz 3
-│   ├── message.service.ts       Faz 3
-│   └── library.service.ts       Faz 4
+│   ├── auth.service.ts          ✅ Faz 1 — initAuthListener/signIn/register/signOut
+│   ├── compose.service.ts       ✅ Faz 1
+│   ├── feed.service.ts          ✅ Faz 1
+│   ├── social.service.ts        ✅ Faz 1
+│   ├── comment.service.ts       ✅ Faz 1
+│   ├── profile.service.ts       ✅ Faz 1+2
+│   ├── post.service.ts          ✅ Faz 2
+│   ├── notification.service.ts  ⏳ Faz 4
+│   ├── message.service.ts       ⏳ Faz 4
+│   └── library.service.ts       ⏳ Faz 4
 │
 ├── stores/
-│   ├── auth.ts          ✅
+│   ├── auth.ts          ✅ currentUser + userProfile + isLoggedIn
 │   ├── feed.store.ts    ✅
 │   ├── profile.store.ts ✅
 │   └── ui.store.ts      ✅
 │
+├── store/ (eski — kısmen korunuyor)
+│   ├── auth.ts   → shim, $lib/stores/auth'a re-export
+│   └── theme.ts  → aktif, layout kullanıyor
+│
 ├── components/
-│   ├── PostCard.svelte      ✅
-│   ├── QuoteCard.svelte     ✅
-│   ├── Avatar.svelte        ✅
-│   ├── CommentPanel.svelte  ✅
-│   ├── LikeButton.svelte    ✅
-│   ├── Skeleton.svelte      ✅
-│   ├── UserChip.svelte      ✅ YENİ (Faz 2)
-│   ├── InfiniteScroll.svelte ✅ YENİ (Faz 2) — Intersection Observer
-│   ├── Modal.svelte         ✅ YENİ (Faz 2) — genel amaçlı dialog
-│   ├── LikersModal.svelte   ✅ YENİ (Faz 2) — beğenenler listesi
-│   └── Navbar.svelte        Faz 3
+│   ├── Avatar.svelte        ✅ Faz 1
+│   ├── Skeleton.svelte      ✅ Faz 1
+│   ├── LikeButton.svelte    ✅ Faz 1
+│   ├── PostCard.svelte      ✅ Faz 1
+│   ├── CommentPanel.svelte  ✅ Faz 1
+│   ├── QuoteCard.svelte     ✅ Faz 1
+│   ├── UserChip.svelte      ✅ Faz 2
+│   ├── InfiniteScroll.svelte ✅ Faz 2
+│   ├── Modal.svelte         ✅ Faz 2
+│   └── LikersModal.svelte   ✅ Faz 2
 │
 ├── firebase/ ✅
 └── supabase/ ✅
 
 web/src/routes/
+├── +layout.svelte               ✅ Faz 3 — initAuthListener() entegre
 ├── feed/+page.svelte            ✅
 ├── compose/+page.svelte         ✅
-├── post/[id]/+page.svelte       ✅ Faz 2'de refactor
-├── profile/[uid]/+page.svelte   ✅ Faz 2'de refactor
-├── login/                       Faz 3
-└── register/                    Faz 3
+├── post/[id]/+page.svelte       ✅
+├── profile/[uid]/+page.svelte   ✅
+├── login/+page.svelte           ✅ Faz 3 — auth.service.ts#signIn()
+├── register/+page.svelte        ✅ Faz 3 — auth.service.ts#register()
+├── notifications/               ⏳ Faz 4
+├── messages/                    ⏳ Faz 4
+├── library/                     ⏳ Faz 4
+└── kurdi/                       ⏳ Faz 4
 ```
 
 ---
@@ -78,93 +114,51 @@ web/src/routes/
 | **components/** | Tekrar kullanılan bileşen | Sayfa-özel mantık |
 | **routes/\*/+page.svelte** | Store bağlama + component dizimi | Doğrudan DB sorgusu |
 
-**Altın kural:** `+page.svelte` içinde `supabase.from(...)` veya `getDocs(...)` görüyorsan → `services/` katmanına taşı.
-
 ---
 
 ## 4. Yol Haritası
 
-### Faz 1 — Temel ✅ Tamamlandı
-- [x] `lib/models/` — tüm interface'ler
-- [x] `lib/services/feed.service.ts`
-- [x] `lib/services/social.service.ts`
-- [x] `lib/services/comment.service.ts`
-- [x] `lib/services/profile.service.ts`
-- [x] `lib/services/auth.service.ts`
-- [x] `lib/services/compose.service.ts`
-- [x] `lib/stores/` — auth, feed, profile, ui
-- [x] `lib/components/` — PostCard, Avatar, Skeleton, LikeButton, CommentPanel, QuoteCard
-- [x] `routes/feed/+page.svelte` refactor
-- [x] `routes/compose/+page.svelte` refactor
+### Faz 1 ✅ (v26)
+- [x] `lib/models/` + tüm `lib/services/` temeli + `lib/stores/` + core bileşenler
+- [x] `routes/feed` + `routes/compose` refactor
 
-### Faz 2 — Profil & Post Detayı ✅ Tamamlandı
-- [x] `lib/components/UserChip.svelte` ← YENİ
-- [x] `lib/components/InfiniteScroll.svelte` ← YENİ (Intersection Observer)
-- [x] `lib/components/Modal.svelte` ← YENİ (genel dialog)
-- [x] `lib/components/LikersModal.svelte` ← YENİ (Android LikersBottomSheet karşılığı)
-- [x] `lib/services/post.service.ts` ← YENİ (fetchPost, toggleLike, toggleSave, yorum CRUD, likers)
-- [x] `lib/services/profile.service.ts` genişletildi (toggleFollow, follow request, posts, enrich, upload)
-- [x] `routes/post/[id]/+page.svelte` refactor (post.service.ts kullanıyor)
-- [x] `routes/profile/[uid]/+page.svelte` refactor (profile.service.ts kullanıyor)
+### Faz 2 ✅ (v27 → v28 bugfix)
+- [x] UserChip, InfiniteScroll, Modal, LikersModal bileşenleri
+- [x] `lib/services/post.service.ts`
+- [x] `routes/post/[id]` + `routes/profile/[uid]` refactor
 
-### Faz 3 — Kimlik & Navigasyon
-- [ ] `lib/components/Navbar.svelte`
-- [ ] `routes/login/+page.svelte` refactor (auth.service.ts kullanacak)
-- [ ] `routes/register/+page.svelte` refactor
-- [ ] `routes/+layout.svelte` → `auth.service.ts#initAuthListener()` ile güncelle
+### Faz 3 ✅ (v29)
+- [x] `routes/+layout.svelte` → `initAuthListener()` entegrasyonu
+- [x] `routes/login/+page.svelte` → `auth.service.ts#signIn()`
+- [x] `routes/register/+page.svelte` → `auth.service.ts#register()`
+- [x] `lib/store/auth.ts` → re-export shim (geriye dönük uyumluluk)
+
+### Faz 4 — Mesajlar, Bildirimler & Kütüphane ← Sıradaki
 - [ ] `lib/services/notification.service.ts`
 - [ ] `lib/services/message.service.ts`
-
-### Faz 4 — Kütüphane & Kurdî
 - [ ] `lib/services/library.service.ts`
-- [ ] `lib/models/library.ts`
-- [ ] `routes/library/`
-- [ ] `routes/kurdi/`
+- [ ] `routes/notifications/+page.svelte`
+- [ ] `routes/messages/+page.svelte`
+- [ ] `routes/library/+page.svelte`
 
-### Faz 5 — Admin & CMS
-- [ ] `routes/admin/`
+### Faz 5 — Kurdî & Admin
+- [ ] `routes/kurdi/+page.svelte`
+- [ ] `routes/admin/+page.svelte`
 - [ ] `lib/models/cms.ts`
 
 ---
 
 ## 5. Servis API Özeti
 
-### post.service.ts (Faz 2 — YENİ)
+### auth.service.ts
 ```typescript
-fetchPost(postId, uid?)           → post + likesCount + isLikedByMe + isSavedByMe
-deletePost(postId)                → void
-fetchComments(postId, uid?)       → Comment[] (isLikedByMe ile zenginleştirilmiş)
-togglePostLike(postId, uid, ...)  → void
-togglePostSave(postId, uid, ...)  → void
-addComment(postId, uid, ...)      → Comment
-editComment(commentId, text)      → Comment
-deleteComment(commentId)          → void
-toggleCommentLike(cmtId, uid, ...) → void
-fetchPostLikers(postId)           → {uid, name, photo_url, created_at}[]
-fetchCommentLikers(commentId)     → {uid, name, photo_url, created_at}[]
+initAuthListener()        → unsubscribe fn  // layout'ta kullan
+signIn(email, pw)         → UserCredential
+register(email, pw, name) → UserCredential + Firestore user doc
+signOut()                 → void
 ```
 
-### profile.service.ts (Faz 1+2)
-```typescript
-fetchProfile(uid)                → User | null
-fetchSocialCounts(uid)           → {followers, following, posts}
-checkFollowStatus(from, target, isPrivate) → {isFollowing, followRequestStatus}
-toggleFollow(from, target, ...)  → void
-sendFollowRequest(from, target)  → void
-cancelFollowRequest(from, target) → void
-fetchFollowers(uid)              → {uid, name, photo}[]
-fetchFollowing(uid)              → {uid, name, photo}[]
-fetchUserPosts(uid, lastDoc?)    → {posts, lastDoc, hasMore}
-enrichPostsWithInteractions(ids, uid?) → {likeCounts, likedIds, savedIds}
-fetchReadingList(uid)            → Record<status, item[]>
-updateProfile(uid, data)         → void
-checkUsernameAvailable(username, excludeUid) → boolean
-syncUsernameToSupabase(uid, ...) → void
-uploadAvatar(uid, file)          → string (URL)
-uploadCoverPhoto(uid, file)      → string (URL)
-```
-
-### compose.service.ts (Faz 1)
+### compose.service.ts
 ```typescript
 loadPost(id)            → Partial<Post> | null
 uploadImage(file, uid)  → string (URL)
@@ -173,58 +167,36 @@ createQuote(payload)    → string (id)
 updatePost(id, fields)  → void
 ```
 
-### auth.service.ts (Faz 1)
+### post.service.ts
 ```typescript
-initAuthListener()       → unsubscribe fn
-signIn(email, pw)        → UserCredential
-register(email, pw, name) → UserCredential
-signOut()                → void
+fetchPost(postId, uid?)            → {post, likesCount, isLikedByMe, isSavedByMe}
+deletePost(postId)                 → void
+fetchComments(postId, uid?)        → Comment[]
+togglePostLike / togglePostSave    → void
+addComment / editComment / deleteComment → Comment / void
+toggleCommentLike                  → void
+fetchPostLikers / fetchCommentLikers → Liker[]
+```
+
+### profile.service.ts
+```typescript
+fetchProfile / fetchSocialCounts / checkFollowStatus
+toggleFollow / sendFollowRequest / cancelFollowRequest
+fetchFollowers / fetchFollowing
+fetchUserPosts / enrichPostsWithInteractions
+fetchReadingList
+updateProfile / checkUsernameAvailable / syncUsernameToSupabase
+uploadAvatar / uploadCoverPhoto
 ```
 
 ---
 
 ## 6. Component API
 
-### `InfiniteScroll.svelte` (Faz 2)
 ```svelte
-<InfiniteScroll
-  hasMore={hasMorePosts}
-  loading={postsLoading}
-  onLoadMore={loadMorePosts}
-  threshold={200}
-/>
-```
-
-### `Modal.svelte` (Faz 2)
-```svelte
-<Modal bind:open title="Başlık" maxWidth="480px" onclose={handleClose}>
-  <!-- içerik buraya -->
-</Modal>
-```
-
-### `LikersModal.svelte` (Faz 2)
-```svelte
-<LikersModal
-  bind:open={showLikers}
-  likers={likers}
-  loading={likersLoading}
-  title="Beğenenler"
-  onclose={() => showLikers = false}
-/>
-```
-
-### `UserChip.svelte` (Faz 2)
-```svelte
-<UserChip uid={u.uid} name={u.name} photoURL={u.photo} subtitle="Takipçi" />
-```
-
-### `QuoteCard.svelte` (Faz 1)
-```svelte
-<QuoteCard
-  quoteText={post.quoteText}
-  bookName={post.bookName}
-  authorName={post.authorName}
-  coverImg={post.coverImg}
-  expanded={false}
-/>
+<InfiniteScroll hasMore={bool} loading={bool} onLoadMore={fn} />
+<Modal bind:open title="..." maxWidth="480px" onclose={fn}> ... </Modal>
+<LikersModal bind:open={bool} {likers} {loading} onclose={fn} />
+<UserChip uid="..." name="..." photoURL="..." subtitle="..." />
+<QuoteCard quoteText="..." bookName="..." authorName="..." coverImg="..." expanded={false} />
 ```

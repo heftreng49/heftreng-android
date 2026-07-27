@@ -1,20 +1,30 @@
 <script lang="ts">
-  import { auth } from '$lib/firebase/config';
-  import { signInWithEmailAndPassword } from 'firebase/auth';
   import { goto } from '$app/navigation';
+  import { signIn } from '$lib/services/auth.service';
 
-  let email = $state('');
+  let email    = $state('');
   let password = $state('');
-  let error = $state('');
-  let loading = $state(false);
+  let error    = $state('');
+  let loading  = $state(false);
 
   async function login() {
     if (!email || !password) return;
     loading = true; error = '';
-    try { await signInWithEmailAndPassword(auth, email, password); goto('/feed'); }
-    catch(e: any) { error = e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password' ? 'E-posta veya sifre hatali.' : e.code === 'auth/user-not-found' ? 'Bu e-posta kayitli degil.' : e.code === 'auth/too-many-requests' ? 'Cok fazla deneme. Lutfen bekleyin.' : (e.message ?? 'Giris basarisiz.'); }
-    finally { loading = false; }
+    try {
+      await signIn(email, password);
+      goto('/feed');
+    } catch(e: any) {
+      error =
+        e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password'
+          ? 'E-posta veya şifre hatalı.'
+          : e.code === 'auth/user-not-found'
+          ? 'Bu e-posta kayıtlı değil.'
+          : e.code === 'auth/too-many-requests'
+          ? 'Çok fazla deneme. Lütfen bekleyin.'
+          : (e.message ?? 'Giriş başarısız.');
+    } finally { loading = false; }
   }
+</script>
 </script>
 
 <div class="wrap">
