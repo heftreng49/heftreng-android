@@ -2,11 +2,17 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import { collection, addDoc, Timestamp, doc, getDoc, updateDoc } from "firebase/firestore";
-  import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-  import { db, storage } from "$lib/firebase/config";
   import { supabase } from "$lib/supabase/config";
-  import { currentUser, authLoading } from "$lib/store/auth";
+  // ── Yeni store (lib/stores/auth) ──────────────────────────────────────────
+  import { currentUser, authLoading } from "$lib/stores/auth";
+  // ── Servis katmanı (doğrudan DB çağrısı yok) ─────────────────────────────
+  import {
+    loadPost,
+    uploadImage,
+    createPost,
+    createQuote,
+    updatePost,
+  } from "$lib/services/compose.service";
 
   // ── Mod ──────────────────────────────────────────────────────
   let mode        = $state<"post" | "quote">("post");
@@ -69,9 +75,8 @@
   async function loadExistingPost(id: string) {
     loadingPost = true;
     try {
-      const snap = await getDoc(doc(db, "feed", id));
-      if (!snap.exists()) { error = "Gönderi bulunamadı."; return; }
-      const d = snap.data();
+      const d = await loadPost(id);
+      if (!d) { error = "Gönderi bulunamadı."; return; }
       if ($currentUser && d.uid !== $currentUser.uid) { error = "Yetki yok."; return; }
       if (d.quoteText) {
         mode        = "quote";
@@ -139,14 +144,12 @@
     authorTimer = setTimeout(async () => {
       authorLoading = true;
       try {
-        // "authors" tablosu, "name" kolonu — Android ile aynı
         const { data, error: err } = await supabase
           .from("authors")
           .select("id, name")
           .ilike("name", `%${val.trim()}%`)
           .limit(8);
         if (err) {
-          // Tablo erişim hatası varsa feed'deki author_name kolonundan çek
           const { data: feedData } = await supabase
             .from("library_books")
             .select("author_name")
@@ -188,40 +191,40 @@
     try {
       if (isEditMode && editPostId) {
         if (mode === "quote") {
-          await updateDoc(doc(db, "feed", editPostId), {
-            quoteText: quoteText.trim(), bookName: quoteBook.trim(), authorName: quoteAuthor.trim(),
+          await updatePost(editPostId, {
+            quoteText: quoteText.trim(),
+            bookName:  quoteBook.trim(),
+            authorName: quoteAuthor.trim(),
           });
         } else {
-          await updateDoc(doc(db, "feed", editPostId), { text: text.trim(), title: title.trim() });
+          await updatePost(editPostId, { text: text.trim(), title: title.trim() });
         }
       } else {
-        let imageURL = "";
-        if (imageFile) {
-          const r = ref(storage, `posts/${$currentUser.uid}/${Date.now()}.jpg`);
-          await uploadBytes(r, imageFile);
-          imageURL = await getDownloadURL(r);
+        if (mode === "quote") {
+          await createQuote({
+            uid:         $currentUser.uid,
+            displayName: $currentUser.displayName ?? "",
+            photoURL:    $currentUser.photoURL    ?? "",
+            title:       quoteTitle.trim(),
+            quoteText:   quoteText.trim(),
+            bookName:    quoteBook.trim(),
+            authorName:  quoteAuthor.trim(),
+            coverImg:    quoteCover,
+            bookId:      quoteBookId,
+          });
+        } else {
+          let imageUrl = "";
+          if (imageFile) imageUrl = await uploadImage(imageFile, $currentUser.uid);
+          await createPost({
+            uid:         $currentUser.uid,
+            displayName: $currentUser.displayName ?? "",
+            photoURL:    $currentUser.photoURL    ?? "",
+            title:       title.trim(),
+            text:        text.trim(),
+            category,
+            imageUrl,
+          });
         }
-        await addDoc(collection(db, "feed"), {
-          uid:           $currentUser.uid,
-          displayName:   $currentUser.displayName ?? "",
-          name:          $currentUser.displayName ?? "",
-          username:      "",
-          photoURL:      $currentUser.photoURL    ?? "",
-          authorEmail:   $currentUser.email       ?? "",
-          text:          mode === "quote" ? "" : text.trim(),
-          title:         mode === "quote" ? quoteTitle.trim() : title.trim(),
-          category:      mode === "quote" ? "" : category,
-          imgUrl:        imageURL, imageURL,
-          quoteText:     mode === "quote" ? quoteText.trim() : "",
-          bookName:      mode === "quote" ? quoteBook.trim() : "",
-          authorName:    mode === "quote" ? quoteAuthor.trim() : "",
-          coverImg:      mode === "quote" ? quoteCover : "",
-          libraryBookId: mode === "quote" ? quoteBookId : "",
-          type:          mode === "quote" ? "library_quote" : "",
-          visibility:    "public",
-          mentions: [], likes: 0, saves: 0, cmtCount: 0, reposts: 0,
-          ts: Timestamp.now(),
-        });
       }
       goto("/feed");
     } catch(e: any) { error = "Hata oluştu, tekrar dene."; console.error(e); }
@@ -234,6 +237,8 @@
 
   let bookNotFound   = $derived(bookQuery.length > 1 && !bookLoading && !bookLinked && bookResults.length === 0 && !showBookDrop);
   let authorNotFound = $derived(authorQuery.length > 1 && !authorLoading && authorResults.length === 0 && !showAuthorDrop);
+</script>
+
 </script>
 
 <!-- ── Normal Gönderi ──────────────────────────────────────── -->
