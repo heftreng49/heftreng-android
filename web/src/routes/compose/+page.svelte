@@ -239,8 +239,6 @@
   let authorNotFound = $derived(authorQuery.length > 1 && !authorLoading && authorResults.length === 0 && !showAuthorDrop);
 </script>
 
-</script>
-
 <!-- ── Normal Gönderi ──────────────────────────────────────── -->
 {#if mode === "post"}
 <main class="wrap post-wrap">

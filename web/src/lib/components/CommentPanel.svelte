@@ -54,7 +54,7 @@
 </script>
 
 <!-- Panel arka planı -->
-<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="overlay" onclick={() => dispatch('close')} role="button" tabindex="-1" aria-label="Kapat"></div>
 
 <div class="panel">

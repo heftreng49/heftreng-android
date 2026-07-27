@@ -37,7 +37,7 @@
   }
 </script>
 
-<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
 <article
   class="card"
   onclick={() => window.location.href = '/post/' + post.id}
@@ -64,7 +64,7 @@
     </div>
 
     <!-- ⋮ Menü -->
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div class="menu-wrap" onclick={(e) => e.stopPropagation()}>
       <button
         class="menu-btn"
@@ -110,7 +110,7 @@
 
     <!-- Alıntı kutusu (Android QuoteDialog görünümü) -->
     {#if post.quoteText}
-      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div class="quote-card" onclick={(e) => e.stopPropagation()}>
         <span class="quote-mark">❝</span>
         <div class="quote-inner">
@@ -151,7 +151,7 @@
 
     <!-- Repost embed -->
     {#if post.repostType && post.repostType !== 'kf_achievement'}
-      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div
         class="repost-embed"
         onclick={(e) => { e.stopPropagation(); window.location.href = '/post/' + post.repostId; }}
@@ -176,7 +176,7 @@
   </div>
 
   <!-- AKSİYON ÇUBUĞU -->
-  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="card-actions" onclick={(e) => e.stopPropagation()}>
     <LikeButton
       liked={post.isLikedByMe ?? false}
