@@ -18,6 +18,7 @@
   let loadingMore    = $state(false);
   let unreadNotifs   = $state(0);
   let unreadMessages = $state(0);
+  let fabSheetOpen   = $state(false);
 
   onMount(async () => {
     await load();
@@ -223,34 +224,34 @@
 
 <style>
   .tabs {
-    display: flex; border-bottom: 2px solid #f0ebf9;
-    position: sticky; top: 0; background: #fff; z-index: 10;
+    display: flex; border-bottom: 2px solid var(--divider);
+    position: sticky; top: 0; background: var(--surface); z-index: 10;
   }
   .tab {
     flex: 1; padding: 12px; background: none; border: none;
-    font-size: 14px; font-weight: 600; color: #999; cursor: pointer;
+    font-size: 14px; font-weight: 600; color: var(--muted); cursor: pointer;
     border-bottom: 2px solid transparent; margin-bottom: -2px;
     transition: color .15s, border-color .15s;
   }
-  .tab.active { color: #7c4dff; border-bottom-color: #7c4dff; }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 
   .feed-page { padding: 12px; max-width: 680px; margin: 0 auto; }
 
   .skeleton-list { padding: 12px; }
   .skeleton-card { display: flex; gap: 10px; padding: 14px; margin-bottom: 10px;
-    background: #fff; border-radius: 14px; }
+    background: var(--card); border-radius: 14px; }
 
   .empty-state { text-align: center; padding: 48px 16px; color: #999; }
   .compose-cta {
     display: inline-block; margin-top: 12px; padding: 10px 20px;
-    background: #7c4dff; color: #fff; border-radius: 20px; text-decoration: none;
+    background: var(--primary); color: #fff; border-radius: 20px; text-decoration: none;
     font-weight: 700; font-size: 14px;
   }
 
   .load-more {
     display: block; width: 100%; padding: 14px;
-    background: #f5f0fc; border: none; border-radius: 12px;
-    font-size: 14px; font-weight: 600; color: #7c4dff;
+    background: var(--surface-var); border: none; border-radius: 12px;
+    font-size: 14px; font-weight: 600; color: var(--primary);
     cursor: pointer; margin-top: 4px;
   }
   .load-more:disabled { opacity: .5; cursor: default; }
