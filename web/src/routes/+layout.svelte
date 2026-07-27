@@ -5,7 +5,7 @@
   import { auth } from '$lib/firebase/config';
   import { signOut } from 'firebase/auth';
   import { onAuthStateChanged } from 'firebase/auth';
-  import { currentUser, authLoading } from '$lib/store/auth';
+  import { currentUser, authLoading } from '$lib/stores/auth';
   import { theme, applyTheme } from '$lib/store/theme';
 
   let { children } = $props();
@@ -87,7 +87,7 @@
 
 <!-- Drawer backdrop -->
 {#if drawerOpen}
-  <div class="drawer-backdrop" onclick={closeDrawer}></div>
+  <div class="drawer-backdrop" onclick={closeDrawer} onkeydown={(e) => e.key === "Escape" && closeDrawer()} role="button" tabindex="-1" aria-label="Kapat"></div>
 {/if}
 
 <!-- Sol Drawer -->
@@ -308,9 +308,6 @@
   display: flex; flex-direction: column; gap: 0;
 }
 
-/* Logo */
-.dr-logo { padding: 0 4px 16px; }
-.dr-logo-text { font-size: 22px; font-weight: 900; color: var(--primary); font-family: system-ui, sans-serif; }
 
 /* Profil */
 .dr-profile {
