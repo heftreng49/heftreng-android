@@ -490,7 +490,6 @@
   }
 </script>
 
-</script>
 
 <svelte:head>
   <title>{user?.displayName ?? "Profil"} — Heftreng</title>

@@ -229,7 +229,6 @@
   }
 </script>
 
-</script>
 
 <svelte:head>
   <title>{post?.displayName ?? "Gönderi"} — Heftreng</title>
