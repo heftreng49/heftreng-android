@@ -1,5 +1,6 @@
 # Heftreng Web — Mimari Plan ve Yol Haritası
 
+> **Konum:** `web/heftreng-web-plan.md` (web build tetikler, Android tetiklemez)
 > **Durum:** Faz 3 tamamlandı ✅. Sırada Faz 4.
 
 ---
