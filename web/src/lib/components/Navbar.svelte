@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { currentUser } from '$lib/store/auth';
+  import { currentUser } from '$lib/stores/auth';
 </script>
 
 <nav>

@@ -394,6 +394,9 @@
     finally { editQuoteSaving = false; }
   }
 
+  function closeEditModal() { editModalPost = null; editModalSaving = false; }
+  function closeEditQuoteModal() { editQuoteModal = null; editQuoteSaving = false; }
+
   // ── Kütüphane ─────────────────────────────────────────────────
   async function loadLibraryBooks(authorUid: string) {
     libraryLoading = true;
@@ -584,9 +587,6 @@
               </button>
             {:else}
               <button class="btn-edit" onclick={openEdit}>Profili Düzenle</button>
-              <button class="btn-quote-share" onclick={openShareQuote} title="Alıntı Paylaş">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
-              </button>
               <a href="/settings" class="btn-icon" aria-label="Ayarlar">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
               </a>
@@ -1498,15 +1498,6 @@
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes shimmer { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
 
-/* ── Alıntı paylaş butonu ──────────────────────────────────── */
-.btn-quote-share {
-  display: flex; align-items: center; justify-content: center;
-  width: 36px; height: 36px; border-radius: 10px;
-  background: color-mix(in srgb, #F59E0B 12%, transparent);
-  color: #F59E0B; border: 1px solid color-mix(in srgb, #F59E0B 30%, transparent);
-  cursor: pointer; transition: background 0.15s, transform 0.1s;
-}
-.btn-quote-share:hover { background: color-mix(in srgb, #F59E0B 20%, transparent); transform: scale(1.05); }
 
 /* ── Kitaplar sekmesi ──────────────────────────────────────── */
 .books-header {

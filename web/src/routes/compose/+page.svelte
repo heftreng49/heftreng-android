@@ -552,16 +552,16 @@
 .char-count.warn { color: #ef4444; }
 
 /* ── Alıntı Ekranı ──────────────────────────────────────────── */
-.quote-wrap { display: flex; flex-direction: column; }
+.quote-wrap { display: flex; flex-direction: column; background: var(--bg); min-height: 100dvh; }
 
 .quote-topbar {
   display: flex; align-items: center; padding: 10px 14px;
   border-bottom: 1px solid var(--divider);
-  position: sticky; top: 0; background: var(--surface); z-index: 10; gap: 10px;
+  position: sticky; top: 0; background: var(--bg); z-index: 10; gap: 10px;
 }
 .back-btn {
   width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
-  background: none; border: none; cursor: pointer; color: var(--on-bg); border-radius: 50%; flex-shrink: 0;
+  background: none; border: none; cursor: pointer; color: var(--primary); border-radius: 50%; flex-shrink: 0;
 }
 .back-btn:hover { background: var(--surface-var); }
 .quote-topbar-title {
@@ -576,42 +576,42 @@
 .share-text-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* Alıntı form body */
-.quote-body { display: flex; flex-direction: column; gap: 0; padding: 12px 0; }
+.quote-body { display: flex; flex-direction: column; gap: 0; padding: 16px 0; }
 
 .q-title {
   width: 100%; border: none; background: transparent; color: var(--on-bg);
-  font-size: 15px; font-weight: 600; padding: 4px 16px 12px; outline: none;
-  font-family: inherit; box-sizing: border-box; border-bottom: 1px solid var(--divider);
+  font-size: 15px; font-weight: 500; padding: 4px 16px 16px; outline: none;
+  font-family: inherit; box-sizing: border-box;
 }
-.q-title::placeholder { color: var(--muted); font-weight: 400; font-size: 14px; }
+.q-title::placeholder { color: var(--primary); font-weight: 400; font-size: 15px; opacity: 0.7; }
 
-.q-field { padding: 12px 16px; }
+.q-field { padding: 8px 16px; }
 
-/* OutlinedTextField (Android Material 3 stili) */
+/* OutlinedTextField — Android Material 3 karanlık stil */
 .q-outlined {
-  width: 100%; background: var(--surface-var); border: 1px solid var(--divider);
-  border-radius: 10px; padding: 14px 14px; font-size: 14px; color: var(--on-bg);
-  outline: none; font-family: inherit; resize: none; line-height: 1.65; box-sizing: border-box;
-  font-style: italic; transition: border-color 0.15s;
+  width: 100%; background: var(--surface-var); border: 1.5px solid var(--divider);
+  border-radius: 12px; padding: 16px; font-size: 15px; color: var(--on-bg);
+  outline: none; font-family: inherit; resize: none; line-height: 1.7; box-sizing: border-box;
+  transition: border-color 0.15s;
 }
 .q-outlined:focus { border-color: var(--primary); }
-.q-outlined::placeholder { color: var(--muted); font-size: 12px; letter-spacing: 0.05em; font-style: normal; font-weight: 600; }
+.q-outlined::placeholder { color: var(--muted); font-size: 13px; letter-spacing: 0.04em; font-weight: 600; }
 
 .q-outlined-wrap {
   position: relative; display: flex; align-items: center;
-  background: var(--surface-var); border: 1px solid var(--divider);
-  border-radius: 10px; transition: border-color 0.15s;
+  background: var(--surface-var); border: 1.5px solid var(--divider);
+  border-radius: 12px; transition: border-color 0.15s; min-height: 56px;
 }
 .q-outlined-wrap:focus-within { border-color: var(--primary); }
 .q-leading {
   display: flex; align-items: center; justify-content: center;
-  width: 44px; height: 52px; color: var(--muted); flex-shrink: 0;
+  width: 48px; height: 56px; color: var(--muted); flex-shrink: 0;
 }
 .q-outlined-input {
   flex: 1; border: none; background: transparent; color: var(--on-bg);
-  font-size: 14px; outline: none; font-family: inherit; padding: 0 8px 0 0; height: 52px;
+  font-size: 14px; outline: none; font-family: inherit; padding: 0 8px 0 0; height: 56px;
 }
-.q-outlined-input::placeholder { color: var(--muted); font-size: 11px; letter-spacing: 0.06em; font-weight: 600; }
+.q-outlined-input::placeholder { color: var(--muted); font-size: 12px; letter-spacing: 0.06em; font-weight: 600; }
 .q-trailing { display: flex; align-items: center; padding-right: 10px; }
 .q-trailing-btn {
   display: flex; align-items: center; justify-content: center; background: none; border: none;

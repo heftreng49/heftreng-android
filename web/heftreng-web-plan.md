@@ -15,34 +15,26 @@
 | v27 | Faz 2: post.service, profile.service, UserChip/Modal/LikersModal/InfiniteScroll |
 | v28 | Bugfix: çift `</script>` kapanış etiketi düzeltildi |
 | v29 | Faz 3: layout + login + register → auth.service.ts entegrasyonu, eski store shim |
+| v30 | Bugfix: login/register çift script, feed/Modal eski a11y formatı, QuoteCard isRtl |
+| v31 | Profil düzelt: closeEditModal eksikti → gönderi düzenleme çalışmıyor; btn-quote-share kaldırıldı (Android'de yok); compose alıntı ekranı Android stili; lib/store/auth.ts shim silindi; Navbar → stores/auth |
 
 ---
 
-## 1. Mevcut Durum (v29 itibarıyla)
+## 1. Mevcut Durum (v31 itibarıyla)
 
 | Dosya | Durum | Not |
 |---|---|---|
-| `routes/+layout.svelte` | ✅ | `initAuthListener()` kullanıyor, `userProfile` doluyor |
+| `routes/+layout.svelte` | ✅ | `initAuthListener()` kullanıyor |
 | `routes/feed/+page.svelte` | ✅ | |
-| `routes/compose/+page.svelte` | ✅ | |
+| `routes/compose/+page.svelte` | ✅ | Alıntı ekranı Android stili |
 | `routes/post/[id]/+page.svelte` | ✅ | |
-| `routes/profile/[uid]/+page.svelte` | ✅ | |
-| `routes/login/+page.svelte` | ✅ | `auth.service.ts#signIn()` |
-| `routes/register/+page.svelte` | ✅ | `auth.service.ts#register()` + Firestore profil |
-| `lib/store/auth.ts` | ✅ | Re-export shim → `$lib/stores/auth`'a yönlendirir |
-| `lib/stores/auth.ts` | ✅ | Tek gerçek kaynak |
-| `lib/components/Navbar.svelte` | — | Layout içinde inline, ayrı bileşen gerekmedi |
-
-### Store Durumu
-
-| Klasör | Durum |
-|---|---|
-| `lib/store/auth.ts` | Shim — sadece `$lib/stores/auth`'a re-export eder, silinebilir |
-| `lib/store/theme.ts` | Aktif — `+layout.svelte` hâlâ bu dosyayı kullanıyor |
-| `lib/stores/auth.ts` | ✅ Tek gerçek auth store |
-| `lib/stores/feed.store.ts` | ✅ |
-| `lib/stores/profile.store.ts` | ✅ |
-| `lib/stores/ui.store.ts` | ✅ |
+| `routes/profile/[uid]/+page.svelte` | ✅ | closeEditModal eklendi, btn-quote-share kaldırıldı |
+| `routes/login/+page.svelte` | ✅ | |
+| `routes/register/+page.svelte` | ✅ | |
+| `lib/store/auth.ts` | 🗑️ **SİLİNDİ** | Shim gereksizdi, tüm importlar stores/auth'a taşındı |
+| `lib/store/theme.ts` | ✅ | Aktif — layout kullanıyor |
+| `lib/stores/auth.ts` | ✅ | Tek gerçek auth store |
+| `lib/components/Navbar.svelte` | ✅ | stores/auth kullanıyor |
 
 ---
 
@@ -53,7 +45,7 @@ web/src/lib/
 ├── models/              ✅ Tüm interface'ler tamam
 │
 ├── services/
-│   ├── auth.service.ts          ✅ Faz 1 — initAuthListener/signIn/register/signOut
+│   ├── auth.service.ts          ✅ Faz 1
 │   ├── compose.service.ts       ✅ Faz 1
 │   ├── feed.service.ts          ✅ Faz 1
 │   ├── social.service.ts        ✅ Faz 1
@@ -70,33 +62,33 @@ web/src/lib/
 │   ├── profile.store.ts ✅
 │   └── ui.store.ts      ✅
 │
-├── store/ (eski — kısmen korunuyor)
-│   ├── auth.ts   → shim, $lib/stores/auth'a re-export
+├── store/ (kısmen — shim silindi)
 │   └── theme.ts  → aktif, layout kullanıyor
 │
 ├── components/
-│   ├── Avatar.svelte        ✅ Faz 1
-│   ├── Skeleton.svelte      ✅ Faz 1
-│   ├── LikeButton.svelte    ✅ Faz 1
-│   ├── PostCard.svelte      ✅ Faz 1
-│   ├── CommentPanel.svelte  ✅ Faz 1
-│   ├── QuoteCard.svelte     ✅ Faz 1
-│   ├── UserChip.svelte      ✅ Faz 2
-│   ├── InfiniteScroll.svelte ✅ Faz 2
-│   ├── Modal.svelte         ✅ Faz 2
-│   └── LikersModal.svelte   ✅ Faz 2
+│   ├── Avatar.svelte        ✅
+│   ├── Skeleton.svelte      ✅
+│   ├── LikeButton.svelte    ✅
+│   ├── PostCard.svelte      ✅
+│   ├── CommentPanel.svelte  ✅
+│   ├── QuoteCard.svelte     ✅ isRtl $derived düzeltildi
+│   ├── UserChip.svelte      ✅
+│   ├── InfiniteScroll.svelte ✅
+│   ├── Modal.svelte         ✅ a11y ignore formatı düzeltildi
+│   ├── LikersModal.svelte   ✅
+│   └── Navbar.svelte        ✅ stores/auth'a taşındı
 │
 ├── firebase/ ✅
 └── supabase/ ✅
 
 web/src/routes/
-├── +layout.svelte               ✅ Faz 3 — initAuthListener() entegre
+├── +layout.svelte               ✅ Faz 3
 ├── feed/+page.svelte            ✅
-├── compose/+page.svelte         ✅
+├── compose/+page.svelte         ✅ Android stili alıntı ekranı
 ├── post/[id]/+page.svelte       ✅
-├── profile/[uid]/+page.svelte   ✅
-├── login/+page.svelte           ✅ Faz 3 — auth.service.ts#signIn()
-├── register/+page.svelte        ✅ Faz 3 — auth.service.ts#register()
+├── profile/[uid]/+page.svelte   ✅ Gönderi düzenleme düzeltildi
+├── login/+page.svelte           ✅
+├── register/+page.svelte        ✅
 ├── notifications/               ⏳ Faz 4
 ├── messages/                    ⏳ Faz 4
 ├── library/                     ⏳ Faz 4
@@ -128,18 +120,21 @@ web/src/routes/
 - [x] `lib/services/post.service.ts`
 - [x] `routes/post/[id]` + `routes/profile/[uid]` refactor
 
-### Faz 3 ✅ (v29)
+### Faz 3 ✅ (v29 → v30 → v31 bugfix)
 - [x] `routes/+layout.svelte` → `initAuthListener()` entegrasyonu
-- [x] `routes/login/+page.svelte` → `auth.service.ts#signIn()`
-- [x] `routes/register/+page.svelte` → `auth.service.ts#register()`
-- [x] `lib/store/auth.ts` → re-export shim (geriye dönük uyumluluk)
+- [x] `routes/login` + `routes/register` → `auth.service.ts`
+- [x] `lib/store/auth.ts` shim silindi
+- [x] Navbar + tüm importlar `stores/auth`'a taşındı
+- [x] Çeşitli build hataları giderildi (çift script, a11y format, isRtl)
+- [x] Profil: closeEditModal eksikliği düzeltildi, btn-quote-share kaldırıldı
+- [x] Compose: alıntı ekranı Android stili (karanlık zemin, büyük outlined inputlar)
 
 ### Faz 4 — Mesajlar, Bildirimler & Kütüphane ← Sıradaki
 - [ ] `lib/services/notification.service.ts`
-- [ ] `lib/services/message.service.ts`
-- [ ] `lib/services/library.service.ts`
 - [ ] `routes/notifications/+page.svelte`
-- [ ] `routes/messages/+page.svelte`
+- [ ] `lib/services/message.service.ts`
+- [ ] `routes/messages/+page.svelte` (konuşma listesi + mesaj ekranı)
+- [ ] `lib/services/library.service.ts`
 - [ ] `routes/library/+page.svelte`
 
 ### Faz 5 — Kurdî & Admin
@@ -153,7 +148,7 @@ web/src/routes/
 
 ### auth.service.ts
 ```typescript
-initAuthListener()        → unsubscribe fn  // layout'ta kullan
+initAuthListener()        → unsubscribe fn
 signIn(email, pw)         → UserCredential
 register(email, pw, name) → UserCredential + Firestore user doc
 signOut()                 → void
@@ -170,7 +165,7 @@ updatePost(id, fields)  → void
 
 ### post.service.ts
 ```typescript
-fetchPost(postId, uid?)            → {post, likesCount, isLikedByMe, isSavedByMe}
+fetchPostDetail(postId, uid?)      → PostDetail
 deletePost(postId)                 → void
 fetchComments(postId, uid?)        → Comment[]
 togglePostLike / togglePostSave    → void
@@ -181,13 +176,13 @@ fetchPostLikers / fetchCommentLikers → Liker[]
 
 ### profile.service.ts
 ```typescript
-fetchProfile / fetchSocialCounts / checkFollowStatus
-toggleFollow / sendFollowRequest / cancelFollowRequest
+fetchUser / fetchSocialCounts / checkFollowStatus
+followUser / unfollowUser / sendFollowRequest / cancelFollowRequest
 fetchFollowers / fetchFollowing
-fetchUserPosts / enrichPostsWithInteractions
-fetchReadingList
-updateProfile / checkUsernameAvailable / syncUsernameToSupabase
-uploadAvatar / uploadCoverPhoto
+fetchUserPosts / fetchMoreUserPosts
+fetchReadingList / fetchLibraryBooks / addLibraryBook
+saveProfileEdit / checkUsernameAvailable / uploadProfilePhoto
+shareQuoteFromProfile
 ```
 
 ---
@@ -201,3 +196,9 @@ uploadAvatar / uploadCoverPhoto
 <UserChip uid="..." name="..." photoURL="..." subtitle="..." />
 <QuoteCard quoteText="..." bookName="..." authorName="..." coverImg="..." expanded={false} />
 ```
+
+---
+
+## 7. Bilinen Silinecek / Temizlenecek
+- `lib/store/auth.ts` → **SİLİNDİ** v31'de
+- `lib/store/theme.ts` → Faz 5'te layout refactor edilince silinecek
