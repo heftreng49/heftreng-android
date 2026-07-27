@@ -24,7 +24,7 @@
     onTapAuthor,
   }: Props = $props();
 
-  const isRtl = language === 'ku' || language === 'ar';
+  const isRtl = $derived(language === 'ku' || language === 'ar');
 </script>
 
 {#if quoteText}

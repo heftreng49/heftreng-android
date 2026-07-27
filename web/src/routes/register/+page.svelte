@@ -24,7 +24,6 @@
     } finally { loading = false; }
   }
 </script>
-</script>
 
 <div class="wrap">
   <div class="card">
