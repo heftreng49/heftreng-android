@@ -71,6 +71,40 @@
   // Okuma listesi
   let readingList   = $state<Record<string, any[]>>({});
 
+  // ── Kitap Ekleme (Android AdminAddBookDialog mantığı) ─────────
+  let showAddBookModal  = $state(false);
+  let addBookTitle      = $state("");
+  let addBookSynopsis   = $state("");
+  let addBookGenre      = $state("");
+  let addBookYear       = $state("");
+  let addBookPages      = $state("");
+  let addBookCover      = $state("");
+  let addBookSaving     = $state(false);
+  let addBookError      = $state("");
+  let libraryBooks      = $state<any[]>([]);   // Bu profilin kütüphane kitapları
+  let libraryLoading    = $state(false);
+
+  // ── Alıntı Paylaşma (Android AuthorQuoteDialog mantığı) ───────
+  let showShareQuoteModal = $state(false);
+  let shareQuoteText      = $state("");
+  let shareQuoteBook      = $state("");
+  let shareQuoteAuthor    = $state("");
+  let shareQuoteBookId    = $state("");
+  let shareQuoteDropOpen  = $state(false);
+  let shareQuoteSelectedBook = $state<any | null>(null);
+  let shareQuoteSaving    = $state(false);
+
+  // ── Gönderi Düzenleme (inline modal — feed ile aynı mantık) ───
+  let editModalPost   = $state<any | null>(null);
+  let editModalTitle  = $state("");
+  let editModalText   = $state("");
+  let editModalSaving = $state(false);
+  let editQuoteModal     = $state<any | null>(null);
+  let editQuoteText      = $state("");
+  let editQuoteBook      = $state("");
+  let editQuoteAuthor    = $state("");
+  let editQuoteSaving    = $state(false);
+
   // ── Yükle — uid hazır olunca ──────────────────────────────────
   let _loaded = $state("");
 
@@ -142,6 +176,13 @@
     if (!loading && user && isMe && posts.length === 0 && postsLoading) {
       canSeeContent = true;
       loadPosts();
+    }
+  });
+
+  // Kitaplar sekmesine geçince yükle
+  $effect(() => {
+    if (selectedTab === 2 && uid && libraryBooks.length === 0 && !libraryLoading) {
+      loadLibraryBooks(uid);
     }
   });
 
@@ -474,6 +515,143 @@
     posts = posts.filter(x => x.id !== p.id);
   }
 
+  // ── Kütüphane kitaplarını yükle ──────────────────────────────
+  async function loadLibraryBooks(authorUid: string) {
+    libraryLoading = true;
+    try {
+      // Supabase: bu kullanıcının yazdığı kitapları al
+      const { data } = await supabase
+        .from("library_books")
+        .select("id, title, author_name, cover_img, publish_year, synopsis, genre, page_count")
+        .eq("author_uid", authorUid)
+        .order("created_at", { ascending: false });
+      libraryBooks = data ?? [];
+    } catch (e) { console.error(e); libraryBooks = []; }
+    finally { libraryLoading = false; }
+  }
+
+  // ── Kitap Ekleme ─────────────────────────────────────────────
+  function openAddBook() {
+    addBookTitle = ""; addBookSynopsis = ""; addBookGenre = "";
+    addBookYear = ""; addBookPages = ""; addBookCover = ""; addBookError = "";
+    showAddBookModal = true;
+  }
+  function closeAddBook() { showAddBookModal = false; addBookError = ""; }
+
+  async function submitAddBook() {
+    if (!addBookTitle.trim() || !$currentUser) return;
+    addBookSaving = true; addBookError = "";
+    try {
+      const row: any = {
+        title:       addBookTitle.trim(),
+        synopsis:    addBookSynopsis.trim(),
+        genre:       addBookGenre.trim(),
+        cover_img:   addBookCover.trim(),
+        author_uid:  uid,
+        author_name: user?.displayName ?? user?.name ?? "",
+      };
+      if (addBookYear.trim())  row.publish_year = parseInt(addBookYear) || 0;
+      if (addBookPages.trim()) row.page_count   = parseInt(addBookPages) || 0;
+
+      const { data, error: err } = await supabase.from("library_books").insert(row).select().single();
+      if (err) throw err;
+      libraryBooks = [data, ...libraryBooks];
+      closeAddBook();
+    } catch (e: any) {
+      addBookError = e?.message ?? "Kitap eklenirken hata oluştu.";
+    } finally { addBookSaving = false; }
+  }
+
+  // ── Alıntı Paylaşma ──────────────────────────────────────────
+  function openShareQuote() {
+    shareQuoteText = ""; shareQuoteBook = ""; shareQuoteAuthor = user?.displayName ?? "";
+    shareQuoteBookId = ""; shareQuoteSelectedBook = null; shareQuoteDropOpen = false;
+    showShareQuoteModal = true;
+    // Bu kullanıcının kütüphane kitaplarını yükle (dropdown için)
+    if (libraryBooks.length === 0) loadLibraryBooks(uid);
+  }
+  function closeShareQuote() { showShareQuoteModal = false; }
+
+  async function submitShareQuote() {
+    if (!shareQuoteText.trim() || !$currentUser) return;
+    shareQuoteSaving = true;
+    try {
+      const finalBook   = shareQuoteSelectedBook?.title  ?? shareQuoteBook.trim();
+      const finalAuthor = shareQuoteSelectedBook?.author_name ?? shareQuoteAuthor.trim();
+      const finalCover  = shareQuoteSelectedBook?.cover_img   ?? "";
+      const finalBookId = shareQuoteSelectedBook?.id ?? shareQuoteBookId;
+
+      await addDoc(collection(db, "feed"), {
+        uid:            $currentUser.uid,
+        displayName:    $currentUser.displayName ?? "",
+        name:           $currentUser.displayName ?? "",
+        username:       "",
+        photoURL:       $currentUser.photoURL    ?? "",
+        authorEmail:    $currentUser.email       ?? "",
+        text:           "",
+        title:          "",
+        category:       "",
+        imgUrl:         "",
+        imageURL:       "",
+        quoteText:      shareQuoteText.trim(),
+        bookName:       finalBook,
+        authorName:     finalAuthor,
+        coverImg:       finalCover,
+        libraryBookId:  finalBookId,
+        type:           "library_quote",
+        visibility:     "public",
+        mentions:       [],
+        likes: 0, saves: 0, cmtCount: 0, reposts: 0,
+        ts: serverTimestamp(),
+      });
+      closeShareQuote();
+      window.location.href = "/feed";
+    } catch (e) { console.error(e); }
+    finally { shareQuoteSaving = false; }
+  }
+
+  // ── Gönderi düzenleme ────────────────────────────────────────
+  function openEditModal(p: any) {
+    menuOpenId = null;
+    if (p.quoteText) {
+      editQuoteModal  = p;
+      editQuoteText   = p.quoteText  ?? "";
+      editQuoteBook   = p.bookName   ?? "";
+      editQuoteAuthor = p.authorName ?? "";
+    } else {
+      editModalPost  = p;
+      editModalTitle = p.title ?? "";
+      editModalText  = p.text  ?? "";
+    }
+  }
+  function closeEditModal()      { editModalPost  = null; editModalSaving = false; }
+  function closeEditQuoteModal() { editQuoteModal = null; editQuoteSaving = false; }
+
+  async function saveEditPost() {
+    if (!editModalPost || !editModalText.trim()) return;
+    editModalSaving = true;
+    try {
+      await updateDoc(doc(db, "feed", editModalPost.id), { text: editModalText.trim(), title: editModalTitle.trim() });
+      posts = posts.map(p => p.id === editModalPost!.id ? { ...p, text: editModalText.trim(), title: editModalTitle.trim() } : p);
+      closeEditModal();
+    } catch(e) { console.error(e); }
+    finally { editModalSaving = false; }
+  }
+
+  async function saveEditQuote() {
+    if (!editQuoteModal || !editQuoteText.trim()) return;
+    editQuoteSaving = true;
+    try {
+      const updates: any = { quoteText: editQuoteText.trim() };
+      if (editQuoteBook.trim())   updates.bookName   = editQuoteBook.trim();
+      if (editQuoteAuthor.trim()) updates.authorName = editQuoteAuthor.trim();
+      await updateDoc(doc(db, "feed", editQuoteModal.id), updates);
+      posts = posts.map(p => p.id === editQuoteModal!.id ? { ...p, ...updates } : p);
+      closeEditQuoteModal();
+    } catch(e) { console.error(e); }
+    finally { editQuoteSaving = false; }
+  }
+
   async function toggleLike(p: any) {
     if (!$currentUser) { window.location.href = "/login"; return; }
     const was = p.isLikedByMe;
@@ -612,6 +790,9 @@
               </button>
             {:else}
               <button class="btn-edit" onclick={openEdit}>Profili Düzenle</button>
+              <button class="btn-quote-share" onclick={openShareQuote} title="Alıntı Paylaş">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
+              </button>
               <a href="/settings" class="btn-icon" aria-label="Ayarlar">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
               </a>
@@ -814,10 +995,10 @@
                 {#if menuOpenId === p.id}
                   <div class="dropdown">
                     {#if isOwn}
-                      <a href="/compose?edit={p.id}" class="dropdown-item" onclick={() => menuOpenId = null}>
+                      <button class="dropdown-item" onclick={() => openEditModal(p)}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                         Düzenle
-                      </a>
+                      </button>
                       <button class="dropdown-item danger" onclick={() => { menuOpenId = null; deletePost(p); }}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
                         Sil
@@ -991,16 +1172,260 @@
 
     <!-- Kitaplar & Seriler -->
     {:else}
-      <div class="empty-tab">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="44" height="44"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-        <p>Henüz kitap veya seri yok.</p>
-        {#if isMe}<a href="/library" class="empty-link">Kütüphaneye git →</a>{/if}
+      <!-- Kitaplar sekmesi: $effect ile otomatik yüklenir -->
+
+      <!-- Üst bar: başlık + kitap ekle butonu -->
+      <div class="books-header">
+        <span class="books-title">Kütüphane Kitapları</span>
+        {#if isMe}
+          <button class="add-book-btn" onclick={openAddBook}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="15" height="15"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Kitap Ekle
+          </button>
+        {/if}
       </div>
+
+      {#if libraryLoading}
+        <div class="empty-tab">
+          <div class="spinner"></div>
+          <p>Yükleniyor...</p>
+        </div>
+      {:else if libraryBooks.length === 0}
+        <div class="empty-tab">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="44" height="44"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <p>Henüz kitap eklenmemiş.</p>
+          {#if isMe}
+            <button class="empty-link-btn" onclick={openAddBook}>İlk kitabı ekle →</button>
+          {/if}
+        </div>
+      {:else}
+        <div class="books-grid">
+          {#each libraryBooks as book (book.id)}
+            <div class="book-card">
+              <div class="book-cover-wrap">
+                {#if book.cover_img}
+                  <img src={book.cover_img} alt={book.title} class="book-cover"/>
+                {:else}
+                  <div class="book-cover-ph">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="28" height="28"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                  </div>
+                {/if}
+              </div>
+              <div class="book-info">
+                <span class="book-title">{book.title}</span>
+                {#if book.author_name}<span class="book-author">{book.author_name}</span>{/if}
+                <div class="book-meta-row">
+                  {#if book.publish_year > 0}<span class="book-meta-chip">{book.publish_year}</span>{/if}
+                  {#if book.genre}<span class="book-meta-chip">{book.genre}</span>{/if}
+                  {#if book.page_count > 0}<span class="book-meta-chip">{book.page_count} s.</span>{/if}
+                </div>
+                {#if book.synopsis}
+                  <p class="book-synopsis">{book.synopsis}</p>
+                {/if}
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
     {/if}
 
     <div style="height:80px"></div>
   {/if}
 </main>
+
+<!-- ── Gönderi Düzenleme Modal ───────────────────────────────── -->
+{#if editModalPost}
+  <div class="modal-backdrop" onclick={closeEditModal}></div>
+  <div class="modal-card">
+    <div class="modal-header">
+      <span class="modal-title">Gönderiyi Düzenle</span>
+      <button class="sheet-close" onclick={closeEditModal}>✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="modal-label">Başlık</label>
+      <input class="modal-input" placeholder="Başlık (opsiyonel)" bind:value={editModalTitle} maxlength={120}/>
+      <label class="modal-label" style="margin-top:8px">Metin *</label>
+      <textarea class="modal-textarea" rows={5} placeholder="Gönderi metni..." bind:value={editModalText}></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick={closeEditModal}>İptal</button>
+      <button class="modal-save" onclick={saveEditPost} disabled={!editModalText.trim() || editModalSaving}>
+        {editModalSaving ? "Kaydediliyor..." : "Kaydet"}
+      </button>
+    </div>
+  </div>
+{/if}
+
+<!-- ── Alıntı Düzenleme Modal ─────────────────────────────────── -->
+{#if editQuoteModal}
+  <div class="modal-backdrop" onclick={closeEditQuoteModal}></div>
+  <div class="modal-card">
+    <div class="modal-header">
+      <span class="modal-title">Alıntıyı Düzenle</span>
+      <button class="sheet-close" onclick={closeEditQuoteModal}>✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="modal-label">Alıntı metni *</label>
+      <textarea class="modal-textarea quote-ta" rows={4} placeholder="Alıntı metni..." bind:value={editQuoteText}></textarea>
+      <label class="modal-label" style="margin-top:8px">Kitap adı</label>
+      <input class="modal-input" placeholder="Kitap adı..." bind:value={editQuoteBook}/>
+      <label class="modal-label" style="margin-top:8px">Yazar adı</label>
+      <input class="modal-input" placeholder="Yazar adı..." bind:value={editQuoteAuthor}/>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick={closeEditQuoteModal}>İptal</button>
+      <button class="modal-save" onclick={saveEditQuote} disabled={!editQuoteText.trim() || editQuoteSaving}>
+        {editQuoteSaving ? "Kaydediliyor..." : "Kaydet"}
+      </button>
+    </div>
+  </div>
+{/if}
+
+<!-- ── Kitap Ekleme Modal (Android AdminAddBookDialog) ────────── -->
+{#if showAddBookModal}
+  <div class="modal-backdrop" onclick={closeAddBook}></div>
+  <div class="modal-card">
+    <div class="modal-header">
+      <span class="modal-title">Kitap Ekle</span>
+      <button class="sheet-close" onclick={closeAddBook}>✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="modal-label">Kitap Adı *</label>
+      <input class="modal-input" placeholder="Kitap adı..." bind:value={addBookTitle}/>
+
+      <label class="modal-label" style="margin-top:8px">Özet (opsiyonel)</label>
+      <textarea class="modal-textarea" rows={3} placeholder="Kısa açıklama..." bind:value={addBookSynopsis}></textarea>
+
+      <div class="modal-row">
+        <div class="modal-col">
+          <label class="modal-label">Tür</label>
+          <input class="modal-input" placeholder="Roman, Şiir..." bind:value={addBookGenre}/>
+        </div>
+        <div class="modal-col">
+          <label class="modal-label">Yayın Yılı</label>
+          <input class="modal-input" type="number" placeholder="2024" bind:value={addBookYear}/>
+        </div>
+      </div>
+
+      <div class="modal-row">
+        <div class="modal-col">
+          <label class="modal-label">Sayfa Sayısı</label>
+          <input class="modal-input" type="number" placeholder="320" bind:value={addBookPages}/>
+        </div>
+        <div class="modal-col">
+          <label class="modal-label">Kapak URL</label>
+          <input class="modal-input" placeholder="https://..." bind:value={addBookCover}/>
+        </div>
+      </div>
+
+      {#if addBookCover}
+        <div class="cover-preview-wrap">
+          <img src={addBookCover} alt="Kapak önizleme" class="cover-preview"
+               onerror={(e: any) => { e.target.style.display='none'; }}/>
+        </div>
+      {/if}
+
+      {#if addBookError}
+        <p class="modal-error">{addBookError}</p>
+      {/if}
+    </div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick={closeAddBook}>İptal</button>
+      <button
+        class="modal-save"
+        onclick={submitAddBook}
+        disabled={!addBookTitle.trim() || addBookSaving}
+      >
+        {addBookSaving ? "Ekleniyor..." : "Kitabı Ekle"}
+      </button>
+    </div>
+  </div>
+{/if}
+
+<!-- ── Alıntı Paylaşma Modal (Android AuthorQuoteDialog) ──────── -->
+{#if showShareQuoteModal}
+  <div class="modal-backdrop" onclick={closeShareQuote}></div>
+  <div class="modal-card">
+    <div class="modal-header">
+      <span class="modal-title">Alıntı Paylaş</span>
+      <button class="sheet-close" onclick={closeShareQuote}>✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Alıntı metni -->
+      <label class="modal-label">Alıntı *</label>
+      <textarea
+        class="modal-textarea quote-ta"
+        rows={4}
+        placeholder="Alıntı metni..."
+        bind:value={shareQuoteText}
+      ></textarea>
+
+      <!-- Yazar adı -->
+      <label class="modal-label" style="margin-top:8px">Yazar adı</label>
+      <input class="modal-input" placeholder="Yazar..." bind:value={shareQuoteAuthor}/>
+
+      <!-- Kitap seç — kütüphane dropdown (Android AuthorQuoteDialog mantığı) -->
+      <label class="modal-label" style="margin-top:8px">Kitap seç</label>
+
+      {#if shareQuoteSelectedBook}
+        <div class="selected-book-row">
+          {#if shareQuoteSelectedBook.cover_img}
+            <img src={shareQuoteSelectedBook.cover_img} alt={shareQuoteSelectedBook.title} class="selected-book-cover"/>
+          {:else}
+            <div class="selected-book-cover no-cover">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            </div>
+          {/if}
+          <div class="selected-book-info">
+            <span class="selected-book-title">{shareQuoteSelectedBook.title}</span>
+            {#if shareQuoteSelectedBook.author_name}
+              <span class="selected-book-author">{shareQuoteSelectedBook.author_name}</span>
+            {/if}
+            <span class="library-badge">✓ Kütüphane bağlandı</span>
+          </div>
+          <button class="clear-book-btn" onclick={() => { shareQuoteSelectedBook = null; shareQuoteBook = ""; }}>✕</button>
+        </div>
+      {:else if libraryBooks.length > 0}
+        <!-- Kütüphaneden seç dropdown -->
+        <div class="lib-book-list">
+          {#each libraryBooks as book (book.id)}
+            <button class="lib-book-item" onclick={() => { shareQuoteSelectedBook = book; shareQuoteBook = book.title; if (!shareQuoteAuthor) shareQuoteAuthor = book.author_name ?? ""; }}>
+              {#if book.cover_img}
+                <img src={book.cover_img} alt={book.title} class="lib-book-cover"/>
+              {:else}
+                <div class="lib-book-cover no-cover">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                </div>
+              {/if}
+              <div class="lib-book-text">
+                <span class="lib-book-title">{book.title}</span>
+                {#if book.publish_year > 0}<span class="lib-book-meta">{book.publish_year}</span>{/if}
+              </div>
+            </button>
+          {/each}
+        </div>
+        <p class="or-divider">— veya kitap adını yaz —</p>
+        <input class="modal-input" placeholder="Kitap adı..." bind:value={shareQuoteBook}/>
+      {:else}
+        <!-- Kütüphanede kitap yok, manuel giriş -->
+        <input class="modal-input" placeholder="Kitap adı (opsiyonel)..." bind:value={shareQuoteBook}/>
+        {#if isMe}
+          <p class="hint-text">Kütüphane'ye kitap ekleyerek otomatik bağlayabilirsin.</p>
+        {/if}
+      {/if}
+    </div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick={closeShareQuote}>İptal</button>
+      <button
+        class="modal-save"
+        onclick={submitShareQuote}
+        disabled={!shareQuoteText.trim() || shareQuoteSaving}
+      >
+        {shareQuoteSaving ? "Paylaşılıyor..." : "Paylaş"}
+      </button>
+    </div>
+  </div>
+{/if}
 
 <!-- ── Takipçiler sheet ────────────────────────────────────────── -->
 {#if showFollowers}
@@ -1278,4 +1703,167 @@
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes shimmer { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* ── Alıntı paylaş butonu ──────────────────────────────────── */
+.btn-quote-share {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 10px;
+  background: color-mix(in srgb, #F59E0B 12%, transparent);
+  color: #F59E0B; border: 1px solid color-mix(in srgb, #F59E0B 30%, transparent);
+  cursor: pointer; transition: background 0.15s, transform 0.1s;
+}
+.btn-quote-share:hover { background: color-mix(in srgb, #F59E0B 20%, transparent); transform: scale(1.05); }
+
+/* ── Kitaplar sekmesi ──────────────────────────────────────── */
+.books-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px 8px;
+}
+.books-title { font-size: 14px; font-weight: 600; color: var(--on-bg); }
+.add-book-btn {
+  display: flex; align-items: center; gap: 5px; padding: 6px 12px;
+  background: var(--primary); color: #fff; border: none; border-radius: 20px;
+  font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+  transition: opacity 0.15s;
+}
+.add-book-btn:hover { opacity: 0.85; }
+.empty-link-btn {
+  background: none; border: none; color: var(--primary); font-size: 14px;
+  cursor: pointer; font-family: inherit; padding: 0;
+}
+
+.books-grid { display: flex; flex-direction: column; gap: 0; }
+.book-card {
+  display: flex; gap: 12px; padding: 12px 16px;
+  border-bottom: 1px solid var(--divider); transition: background 0.1s;
+}
+.book-card:last-child { border-bottom: none; }
+.book-card:hover { background: var(--surface-var); }
+
+.book-cover-wrap { flex-shrink: 0; }
+.book-cover {
+  width: 52px; height: 78px; border-radius: 5px; object-fit: cover;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+.book-cover-ph {
+  width: 52px; height: 78px; border-radius: 5px;
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface-var));
+  display: flex; align-items: center; justify-content: center;
+  color: var(--primary); opacity: 0.7;
+}
+.book-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-top: 2px; }
+.book-title { font-size: 14px; font-weight: 600; color: var(--on-bg); line-height: 1.3; }
+.book-author { font-size: 12px; color: var(--primary); }
+.book-meta-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.book-meta-chip {
+  font-size: 11px; color: var(--muted); background: var(--surface-var);
+  border-radius: 6px; padding: 2px 7px;
+}
+.book-synopsis { font-size: 12px; color: var(--muted); line-height: 1.5; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ── Modal (genel) ─────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.52);
+  z-index: 400; backdrop-filter: blur(2px);
+}
+.modal-card {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(94vw, 500px); max-height: 88vh; overflow-y: auto;
+  background: var(--surface); border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25); z-index: 401;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px; border-bottom: 1px solid var(--divider);
+  position: sticky; top: 0; background: var(--surface); z-index: 1;
+}
+.modal-title { font-size: 16px; font-weight: 700; color: var(--on-bg); }
+.modal-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.modal-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
+.modal-input {
+  width: 100%; background: var(--surface-var); border: 1px solid var(--divider);
+  border-radius: 10px; padding: 10px 12px; font-size: 14px; color: var(--on-bg);
+  outline: none; font-family: inherit; box-sizing: border-box; transition: border-color 0.15s;
+}
+.modal-input:focus { border-color: var(--primary); }
+.modal-input::placeholder { color: var(--muted); }
+.modal-textarea {
+  width: 100%; background: var(--surface-var); border: 1px solid var(--divider);
+  border-radius: 10px; padding: 10px 12px; font-size: 14px; color: var(--on-bg);
+  outline: none; font-family: inherit; resize: vertical; line-height: 1.6;
+  box-sizing: border-box; transition: border-color 0.15s;
+}
+.modal-textarea:focus { border-color: var(--primary); }
+.modal-textarea.quote-ta { font-style: italic; }
+.modal-textarea::placeholder { color: var(--muted); }
+.modal-row { display: flex; gap: 10px; }
+.modal-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.modal-actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 12px 18px; border-top: 1px solid var(--divider);
+  position: sticky; bottom: 0; background: var(--surface);
+}
+.modal-cancel {
+  padding: 9px 18px; border-radius: 10px; background: none; border: none;
+  font-size: 14px; color: var(--muted); cursor: pointer; font-family: inherit;
+}
+.modal-cancel:hover { color: var(--on-bg); }
+.modal-save {
+  padding: 9px 22px; border-radius: 10px; background: var(--primary); color: #fff;
+  border: none; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+  transition: opacity 0.15s;
+}
+.modal-save:disabled { opacity: 0.4; cursor: not-allowed; }
+.modal-error { font-size: 13px; color: var(--error, #ef4444); margin-top: 4px; }
+
+/* Kapak önizleme */
+.cover-preview-wrap { display: flex; justify-content: center; margin-top: 4px; }
+.cover-preview { width: 64px; height: 96px; object-fit: cover; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+
+/* ── Alıntı modal — kütüphane kitap listesi ────────────────── */
+.lib-book-list {
+  border: 1px solid var(--divider); border-radius: 12px;
+  overflow: hidden; max-height: 200px; overflow-y: auto;
+}
+.lib-book-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: none; border: none; border-bottom: 1px solid var(--divider);
+  padding: 9px 12px; cursor: pointer; text-align: left; font-family: inherit;
+  transition: background 0.1s;
+}
+.lib-book-item:last-child { border-bottom: none; }
+.lib-book-item:hover { background: var(--surface-var); }
+.lib-book-cover {
+  width: 28px; height: 42px; border-radius: 3px; object-fit: cover; flex-shrink: 0;
+}
+.lib-book-cover.no-cover {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  display: flex; align-items: center; justify-content: center; color: var(--primary);
+}
+.lib-book-text { display: flex; flex-direction: column; min-width: 0; }
+.lib-book-title { font-size: 13px; font-weight: 600; color: var(--on-bg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-book-meta { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+.or-divider { text-align: center; font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
+.hint-text { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+/* Seçili kitap göstergesi */
+.selected-book-row {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
+  border-radius: 10px;
+}
+.selected-book-cover {
+  width: 32px; height: 48px; border-radius: 4px; object-fit: cover; flex-shrink: 0;
+  background: color-mix(in srgb, #F59E0B 10%, transparent);
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.selected-book-cover.no-cover { color: #F59E0B; }
+.selected-book-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.selected-book-title { font-size: 13px; font-weight: 600; color: var(--on-bg); }
+.selected-book-author { font-size: 11px; color: var(--muted); }
+.library-badge { font-size: 11px; color: var(--primary); font-weight: 600; }
+.clear-book-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 4px; }
+.clear-book-btn:hover { color: var(--on-bg); }
 </style>

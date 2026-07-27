@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { collection, query, orderBy, limit, getDocs, deleteDoc, doc, startAfter } from "firebase/firestore";
+  import { collection, query, orderBy, limit, getDocs, deleteDoc, doc, startAfter, updateDoc } from "firebase/firestore";
   import { db } from "$lib/firebase/config";
   import { supabase } from "$lib/supabase/config";
   import { currentUser } from "$lib/store/auth";
@@ -25,6 +25,18 @@
 
   // ── FAB menü ─────────────────────────────────────────────────
   let showFabMenu = $state(false);
+
+  // ── Gönderi düzenleme (inline modal — Android EditPostDialog mantığı) ──
+  let editModalPost   = $state<any | null>(null);
+  let editModalTitle  = $state("");
+  let editModalText   = $state("");
+  let editModalSaving = $state(false);
+  // Alıntı düzenleme
+  let editQuoteModal     = $state<any | null>(null);
+  let editQuoteText      = $state("");
+  let editQuoteBook      = $state("");
+  let editQuoteAuthor    = $state("");
+  let editQuoteSaving    = $state(false);
 
   // ── Header sayaçları ─────────────────────────────────────────
   let unreadNotifs   = $state(0);
@@ -340,6 +352,56 @@
     } catch(e) { console.error(e); }
   }
 
+  // ── Gönderi düzenleme ────────────────────────────────────────
+  function openEditModal(p: any) {
+    menuOpenId = null;
+    if (p.quoteText) {
+      editQuoteModal  = p;
+      editQuoteText   = p.quoteText ?? "";
+      editQuoteBook   = p.bookName  ?? "";
+      editQuoteAuthor = p.authorName ?? "";
+    } else {
+      editModalPost  = p;
+      editModalTitle = p.title ?? "";
+      editModalText  = p.text  ?? "";
+    }
+  }
+
+  function closeEditModal()      { editModalPost   = null; editModalSaving = false; }
+  function closeEditQuoteModal() { editQuoteModal  = null; editQuoteSaving = false; }
+
+  async function saveEditPost() {
+    if (!editModalPost || !editModalText.trim()) return;
+    editModalSaving = true;
+    try {
+      await updateDoc(doc(db, "feed", editModalPost.id), {
+        text:  editModalText.trim(),
+        title: editModalTitle.trim(),
+      });
+      posts = posts.map(p => p.id === editModalPost!.id
+        ? { ...p, text: editModalText.trim(), title: editModalTitle.trim() }
+        : p);
+      closeEditModal();
+    } catch(e) { console.error(e); }
+    finally { editModalSaving = false; }
+  }
+
+  async function saveEditQuote() {
+    if (!editQuoteModal || !editQuoteText.trim()) return;
+    editQuoteSaving = true;
+    try {
+      const updates: any = { quoteText: editQuoteText.trim() };
+      if (editQuoteBook.trim())   updates.bookName   = editQuoteBook.trim();
+      if (editQuoteAuthor.trim()) updates.authorName = editQuoteAuthor.trim();
+      await updateDoc(doc(db, "feed", editQuoteModal.id), updates);
+      posts = posts.map(p => p.id === editQuoteModal!.id
+        ? { ...p, quoteText: editQuoteText.trim(), bookName: editQuoteBook.trim(), authorName: editQuoteAuthor.trim() }
+        : p);
+      closeEditQuoteModal();
+    } catch(e) { console.error(e); }
+    finally { editQuoteSaving = false; }
+  }
+
   // ── Sil ──────────────────────────────────────────────────────
   async function deletePost(p: any) {
     if (!$currentUser || $currentUser.uid !== p.uid) return;
@@ -460,10 +522,10 @@
               {#if menuOpenId === p.id}
                 <div class="dropdown">
                   {#if $currentUser?.uid === p.uid}
-                    <a href="/compose?edit={p.id}" class="dropdown-item" onclick={() => menuOpenId = null}>
+                    <button class="dropdown-item" onclick={() => openEditModal(p)}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       Düzenle
-                    </a>
+                    </button>
                     <button class="dropdown-item danger" onclick={() => deletePost(p)}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
                       Sil
@@ -628,6 +690,75 @@
 </main>
 
 
+
+<!-- ── Gönderi Düzenleme Modal (Android EditPostDialog) ──────── -->
+{#if editModalPost}
+  <div class="modal-backdrop" onclick={closeEditModal}></div>
+  <div class="modal-card">
+    <div class="modal-header">
+      <span class="modal-title">Gönderiyi Düzenle</span>
+      <button class="sheet-close" onclick={closeEditModal}>✕</button>
+    </div>
+    <div class="modal-body">
+      <input
+        class="modal-input"
+        placeholder="Başlık (opsiyonel)"
+        bind:value={editModalTitle}
+        maxlength={120}
+      />
+      <textarea
+        class="modal-textarea"
+        bind:value={editModalText}
+        rows={5}
+        placeholder="Gönderi metni..."
+      ></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick={closeEditModal}>İptal</button>
+      <button
+        class="modal-save"
+        onclick={saveEditPost}
+        disabled={!editModalText.trim() || editModalSaving}
+      >
+        {editModalSaving ? "Kaydediliyor..." : "Kaydet"}
+      </button>
+    </div>
+  </div>
+{/if}
+
+<!-- ── Alıntı Düzenleme Modal (Android EditQuoteDialog) ───────── -->
+{#if editQuoteModal}
+  <div class="modal-backdrop" onclick={closeEditQuoteModal}></div>
+  <div class="modal-card">
+    <div class="modal-header">
+      <span class="modal-title">Alıntıyı Düzenle</span>
+      <button class="sheet-close" onclick={closeEditQuoteModal}>✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="modal-label">Alıntı metni</label>
+      <textarea
+        class="modal-textarea quote-ta"
+        bind:value={editQuoteText}
+        rows={4}
+        placeholder="Alıntı metni..."
+      ></textarea>
+      <label class="modal-label" style="margin-top:8px">Kitap adı</label>
+      <input class="modal-input" placeholder="Kitap adı..." bind:value={editQuoteBook}/>
+      <label class="modal-label" style="margin-top:8px">Yazar adı</label>
+      <input class="modal-input" placeholder="Yazar adı..." bind:value={editQuoteAuthor}/>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick={closeEditQuoteModal}>İptal</button>
+      <button
+        class="modal-save primary"
+        onclick={saveEditQuote}
+        disabled={!editQuoteText.trim() || editQuoteSaving}
+      >
+        {editQuoteSaving ? "Kaydediliyor..." : "Kaydet"}
+      </button>
+    </div>
+  </div>
+{/if}
 
 <!-- ── FAB Menü bottom sheet ─────────────────────────────────── -->
 {#if showFabMenu}
@@ -1052,4 +1183,53 @@
 .sheet-count { font-size: 12px; color: var(--muted); margin-left: 6px; }
 
 @keyframes shimmer { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* ── Edit Modals ───────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  z-index: 400; backdrop-filter: blur(2px);
+}
+.modal-card {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(92vw, 480px); background: var(--surface);
+  border-radius: 20px; box-shadow: 0 16px 48px rgba(0,0,0,0.22);
+  z-index: 401; overflow: hidden;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px; border-bottom: 1px solid var(--divider);
+}
+.modal-title { font-size: 16px; font-weight: 600; color: var(--on-bg); }
+.modal-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.modal-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.modal-input {
+  width: 100%; background: var(--surface-var); border: 1px solid var(--divider);
+  border-radius: 10px; padding: 10px 12px; font-size: 14px; color: var(--on-bg);
+  outline: none; font-family: inherit; box-sizing: border-box; transition: border-color 0.15s;
+}
+.modal-input:focus { border-color: var(--primary); }
+.modal-textarea {
+  width: 100%; background: var(--surface-var); border: 1px solid var(--divider);
+  border-radius: 10px; padding: 10px 12px; font-size: 14px; color: var(--on-bg);
+  outline: none; font-family: inherit; resize: vertical; line-height: 1.6;
+  box-sizing: border-box; transition: border-color 0.15s;
+}
+.modal-textarea:focus { border-color: var(--primary); }
+.modal-textarea.quote-ta { font-style: italic; }
+.modal-actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 12px 18px; border-top: 1px solid var(--divider);
+}
+.modal-cancel {
+  padding: 8px 18px; border-radius: 10px; background: none; border: none;
+  font-size: 14px; color: var(--muted); cursor: pointer; font-family: inherit;
+}
+.modal-cancel:hover { color: var(--on-bg); }
+.modal-save {
+  padding: 8px 20px; border-radius: 10px; background: var(--primary); color: #fff;
+  border: none; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+  transition: opacity 0.15s;
+}
+.modal-save.primary { background: var(--primary); }
+.modal-save:disabled { opacity: 0.4; cursor: not-allowed; }
 </style>
