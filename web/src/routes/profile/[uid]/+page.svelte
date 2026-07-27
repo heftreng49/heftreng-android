@@ -1,13 +1,36 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/stores";
-  import { doc, getDoc, collection, query, where, orderBy, limit, getDocs, startAfter, updateDoc, increment, setDoc, deleteDoc, addDoc, serverTimestamp } from "firebase/firestore";
-  import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-  import { db, storage } from "$lib/firebase/config";
+  import { goto } from "$app/navigation";
+  import { serverTimestamp, addDoc, collection, updateDoc, doc } from "firebase/firestore";
+  import { db } from "$lib/firebase/config";
   import { supabase } from "$lib/supabase/config";
-  import { currentUser } from "$lib/store/auth";
+  import { currentUser } from "$lib/stores/auth";
+  import {
+    fetchProfile,
+    fetchSocialCounts,
+    checkFollowStatus,
+    toggleFollow,
+    sendFollowRequest,
+    cancelFollowRequest,
+    fetchFollowers,
+    fetchFollowing,
+    fetchUserPosts,
+    enrichPostsWithInteractions,
+    fetchReadingList,
+    updateProfile,
+    checkUsernameAvailable,
+    syncUsernameToSupabase,
+    uploadAvatar,
+    uploadCoverPhoto,
+  } from "$lib/services/profile.service";
+  import { togglePostLike, togglePostSave, deletePost as deletePostService } from "$lib/services/post.service";
+  import { updatePost } from "$lib/services/compose.service";
+  import Modal from "$lib/components/Modal.svelte";
+  import QuoteCard from "$lib/components/QuoteCard.svelte";
+  import UserChip from "$lib/components/UserChip.svelte";
+  import InfiniteScroll from "$lib/components/InfiniteScroll.svelte";
 
-  // uid: "me" ise currentUser.uid, değilse params.uid
   let uid = $state("");
   $effect(() => {
     const p = $page.params.uid;
@@ -25,7 +48,6 @@
   let postsLoading  = $state(true);
   let hasMorePosts  = $state(false);
   let lastPostDoc   = $state<any>(null);
-  const PAGE = 15;
 
   let followersCount = $state(0);
   let followingCount = $state(0);
@@ -33,352 +55,203 @@
   let isFollowing    = $state(false);
   let followLoading  = $state(false);
 
-  // Gizli hesap
-  let isPrivate          = $state(false);
-  let canSeeContent      = $state(true);
-  // "none" | "pending" | "accepted"
-  let followRequestStatus = $state("none");
-  let privateBlockedMsg  = $state(false);
+  let isPrivate           = $state(false);
+  let canSeeContent       = $state(true);
+  let followRequestStatus = $state<"none"|"pending"|"accepted">("none");
+  let privateBlockedMsg   = $state(false);
 
   $effect(() => {
-    if (privateBlockedMsg) {
-      setTimeout(() => { privateBlockedMsg = false; }, 2500);
-    }
+    if (privateBlockedMsg) setTimeout(() => { privateBlockedMsg = false; }, 2500);
   });
 
-  let selectedTab   = $state(0);
+  let selectedTab = $state(0);
   const tabs = ["Gönderiler", "Okuma Listesi", "Kitaplar & Seriler"];
 
-  // Takipçi/Takip listesi
   let showFollowers  = $state(false);
   let showFollowing  = $state(false);
   let followersList  = $state<any[]>([]);
   let followingList  = $state<any[]>([]);
   let listLoading    = $state(false);
 
-  // Düzenle modu
-  let editMode      = $state(false);
-  let menuOpenId    = $state<string | null>(null);
-  let editName      = $state("");
-  let editUsername  = $state("");
-  let editBio       = $state("");
-  let editWebsite   = $state("");
-  let editSaving    = $state(false);
-  let editError     = $state("");
+  // Düzenle
+  let editMode       = $state(false);
+  let menuOpenId     = $state<string | null>(null);
+  let editName       = $state("");
+  let editUsername   = $state("");
+  let editBio        = $state("");
+  let editWebsite    = $state("");
+  let editSaving     = $state(false);
+  let editError      = $state("");
   let photoUploading = $state(false);
   let coverUploading = $state(false);
 
   // Okuma listesi
-  let readingList   = $state<Record<string, any[]>>({});
+  let readingList = $state<Record<string, any[]>>({});
 
-  // ── Kitap Ekleme (Android AdminAddBookDialog mantığı) ─────────
-  let showAddBookModal  = $state(false);
-  let addBookTitle      = $state("");
-  let addBookSynopsis   = $state("");
-  let addBookGenre      = $state("");
-  let addBookYear       = $state("");
-  let addBookPages      = $state("");
-  let addBookCover      = $state("");
-  let addBookSaving     = $state(false);
-  let addBookError      = $state("");
-  let libraryBooks      = $state<any[]>([]);   // Bu profilin kütüphane kitapları
-  let libraryLoading    = $state(false);
+  // Kitap ekleme
+  let showAddBookModal = $state(false);
+  let addBookTitle     = $state(""); let addBookSynopsis = $state("");
+  let addBookGenre     = $state(""); let addBookYear     = $state("");
+  let addBookPages     = $state(""); let addBookCover    = $state("");
+  let addBookSaving    = $state(false); let addBookError = $state("");
+  let libraryBooks     = $state<any[]>([]);
+  let libraryLoading   = $state(false);
 
-  // ── Alıntı Paylaşma (Android AuthorQuoteDialog mantığı) ───────
-  let showShareQuoteModal = $state(false);
-  let shareQuoteText      = $state("");
-  let shareQuoteBook      = $state("");
-  let shareQuoteAuthor    = $state("");
-  let shareQuoteBookId    = $state("");
-  let shareQuoteDropOpen  = $state(false);
-  let shareQuoteSelectedBook = $state<any | null>(null);
-  let shareQuoteSaving    = $state(false);
+  // Alıntı paylaşma
+  let showShareQuoteModal     = $state(false);
+  let shareQuoteText          = $state(""); let shareQuoteBook    = $state("");
+  let shareQuoteAuthor        = $state(""); let shareQuoteBookId  = $state("");
+  let shareQuoteDropOpen      = $state(false);
+  let shareQuoteSelectedBook  = $state<any | null>(null);
+  let shareQuoteSaving        = $state(false);
 
-  // ── Gönderi Düzenleme (inline modal — feed ile aynı mantık) ───
+  // Gönderi düzenleme
   let editModalPost   = $state<any | null>(null);
-  let editModalTitle  = $state("");
-  let editModalText   = $state("");
+  let editModalTitle  = $state(""); let editModalText  = $state("");
   let editModalSaving = $state(false);
-  let editQuoteModal     = $state<any | null>(null);
-  let editQuoteText      = $state("");
-  let editQuoteBook      = $state("");
-  let editQuoteAuthor    = $state("");
-  let editQuoteSaving    = $state(false);
+  let editQuoteModal  = $state<any | null>(null);
+  let editQuoteText   = $state(""); let editQuoteBook  = $state(""); let editQuoteAuthor = $state("");
+  let editQuoteSaving = $state(false);
 
-  // ── Yükle — uid hazır olunca ──────────────────────────────────
+  let expandedIds = $state(new Set<string>());
+
   let _loaded = $state("");
 
   onMount(() => {
     document.addEventListener("click", () => { menuOpenId = null; });
   });
+
   $effect(() => {
     if (!uid || uid === _loaded) return;
     _loaded = uid;
-    loading = true;
-    postsLoading = true;
-    posts = [];
-    user = null;
-    notFound = false;
-    isPrivate = false;
-    canSeeContent = true;
-    followRequestStatus = "none";
+    loading = true; postsLoading = true;
+    posts = []; user = null; notFound = false;
+    isPrivate = false; canSeeContent = true; followRequestStatus = "none";
     loadUser().then(() => {
       loadSocialCounts();
-      if ($currentUser && !isMe) checkFollowing();
-      loadReadingList();
+      if ($currentUser && !isMe) checkFollow();
+      loadReadingListData();
     });
   });
 
-  async function loadUser() {
-    loading = true;
-    try {
-      const snap = await getDoc(doc(db, "users", uid));
-      if (!snap.exists()) { notFound = true; return; }
-      user = { uid: snap.id, ...snap.data() };
-
-      // Gizli hesap kontrolü
-      isPrivate = user.isPrivate ?? user.private ?? false;
-    } catch(e) { console.error(e); notFound = true; }
-    finally { loading = false; }
-  }
-
-  async function checkFollowing() {
-    if (!$currentUser) return;
-    const { data } = await supabase.from("follows")
-      .select("id")
-      .eq("from_uid", $currentUser.uid)
-      .eq("target_uid", uid)
-      .maybeSingle();
-    isFollowing = !!data;
-
-    // Gizli hesap: takip isteği kontrolü
-    if (isPrivate && !isFollowing) {
-      try {
-        const reqSnap = await getDoc(doc(db, "followRequests", uid, "pending", $currentUser.uid));
-        followRequestStatus = reqSnap.exists() ? "pending" : "none";
-      } catch(e) { console.error(e); }
-    }
-
-    canSeeContent = isMe || !isPrivate || isFollowing;
-    if (canSeeContent) {
-      loadPosts();
-    } else {
-      postsLoading = false;
-    }
-  }
-
-  // İlk yükleme: gizli değilse direkt loadPosts
-  $effect(() => {
-    if (!loading && user && !isPrivate && !isMe && posts.length === 0 && postsLoading) {
-      canSeeContent = true;
-      loadPosts();
-    }
-    if (!loading && user && isMe && posts.length === 0 && postsLoading) {
-      canSeeContent = true;
-      loadPosts();
-    }
-  });
-
-  // Kitaplar sekmesine geçince yükle
   $effect(() => {
     if (selectedTab === 2 && uid && libraryBooks.length === 0 && !libraryLoading) {
       loadLibraryBooks(uid);
     }
   });
 
+  async function loadUser() {
+    loading = true;
+    try {
+      const u = await fetchProfile(uid);
+      if (!u) { notFound = true; return; }
+      user = u;
+      isPrivate = u.isPrivate ?? false;
+    } catch(e) { notFound = true; }
+    finally { loading = false; }
+  }
+
+  async function loadSocialCounts() {
+    const c = await fetchSocialCounts(uid);
+    followersCount = c.followers; followingCount = c.following;
+    if (c.posts) postsCount = c.posts;
+  }
+
+  async function checkFollow() {
+    if (!$currentUser) return;
+    const res = await checkFollowStatus($currentUser.uid, uid, isPrivate);
+    isFollowing = res.isFollowing;
+    followRequestStatus = res.followRequestStatus;
+    canSeeContent = isMe || !isPrivate || isFollowing;
+    if (canSeeContent) loadPosts();
+    else postsLoading = false;
+  }
+
+  $effect(() => {
+    if (!loading && user && !isPrivate && !isMe && posts.length === 0 && postsLoading) {
+      canSeeContent = true; loadPosts();
+    }
+    if (!loading && user && isMe && posts.length === 0 && postsLoading) {
+      canSeeContent = true; loadPosts();
+    }
+  });
+
   async function loadPosts() {
     postsLoading = true;
     try {
-      const q = query(
-        collection(db, "feed"),
-        where("uid", "==", uid),
-        orderBy("ts", "desc"),
-        limit(PAGE)
+      const res = await fetchUserPosts(uid);
+      const { likeCounts, likedIds, savedIds } = await enrichPostsWithInteractions(
+        res.posts.map(p => p.id), $currentUser?.uid,
       );
-      const snap = await getDocs(q);
-      posts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      lastPostDoc = snap.docs[snap.docs.length - 1] ?? null;
-      hasMorePosts = snap.docs.length === PAGE;
+      posts = res.posts.map(p => ({
+        ...p,
+        likesCount: likeCounts[p.id] ?? (p as any).likesCount ?? 0,
+        isLikedByMe: likedIds.has(p.id),
+        isSavedByMe: savedIds.has(p.id),
+      }));
+      lastPostDoc = res.lastDoc;
+      hasMorePosts = res.hasMore;
       postsCount = posts.length;
-      await enrichPosts(posts.map(p => p.id));
     } catch(e) { console.error(e); }
     finally { postsLoading = false; }
   }
 
   async function loadMorePosts() {
-    if (!lastPostDoc) return;
+    if (!lastPostDoc || !hasMorePosts) return;
     try {
-      const q = query(
-        collection(db, "feed"),
-        where("uid", "==", uid),
-        orderBy("ts", "desc"),
-        startAfter(lastPostDoc),
-        limit(PAGE)
+      const res = await fetchUserPosts(uid, lastPostDoc);
+      const { likeCounts, likedIds, savedIds } = await enrichPostsWithInteractions(
+        res.posts.map(p => p.id), $currentUser?.uid,
       );
-      const snap = await getDocs(q);
-      const newPosts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      lastPostDoc = snap.docs[snap.docs.length - 1] ?? lastPostDoc;
-      hasMorePosts = snap.docs.length === PAGE;
-      await enrichPosts(newPosts.map(p => p.id));
-      posts = [...posts, ...newPosts];
+      const enriched = res.posts.map(p => ({
+        ...p,
+        likesCount: likeCounts[p.id] ?? (p as any).likesCount ?? 0,
+        isLikedByMe: likedIds.has(p.id),
+        isSavedByMe: savedIds.has(p.id),
+      }));
+      posts = [...posts, ...enriched];
+      lastPostDoc = res.lastDoc;
+      hasMorePosts = res.hasMore;
     } catch(e) { console.error(e); }
   }
 
-  async function enrichPosts(ids: string[]) {
-    if (!ids.length) return;
-    const [lR] = await Promise.all([
-      supabase.from("feed_likes").select("post_id").in("post_id", ids),
-    ]);
-    const counts: Record<string, number> = {};
-    for (const r of lR.data ?? []) counts[r.post_id] = (counts[r.post_id] ?? 0) + 1;
-
-    let liked = new Set<string>();
-    let saved = new Set<string>();
-    if ($currentUser) {
-      const [lR, sR] = await Promise.all([
-        supabase.from("feed_likes").select("post_id").eq("uid", $currentUser.uid).in("post_id", ids),
-        supabase.from("feed_saves").select("post_id").eq("uid", $currentUser.uid).in("post_id", ids),
-      ]);
-      liked = new Set((lR.data ?? []).map((r: any) => r.post_id));
-      saved = new Set((sR.data ?? []).map((r: any) => r.post_id));
-    }
-    posts = posts.map(p => ids.includes(p.id) ? {
-      ...p,
-      likesCount: counts[p.id] ?? p.likesCount ?? 0,
-      isLikedByMe: liked.has(p.id),
-      isSavedByMe: saved.has(p.id),
-    } : p);
+  async function loadReadingListData() {
+    readingList = await fetchReadingList(uid);
   }
 
-  async function loadSocialCounts() {
-    try {
-      const snap = await getDoc(doc(db, "users", uid));
-      if (snap.exists()) {
-        const d = snap.data();
-        followersCount = d.followersCount ?? 0;
-        followingCount = d.followingCount ?? 0;
-        postsCount     = d.postsCount ?? postsCount;
-      }
-    } catch(e) {
-      try {
-        const [fR, gR] = await Promise.all([
-          supabase.from("follows").select("id", { count: "exact", head: true }).eq("target_uid", uid),
-          supabase.from("follows").select("id", { count: "exact", head: true }).eq("from_uid", uid),
-        ]);
-        followersCount = fR.count ?? 0;
-        followingCount = gR.count ?? 0;
-      } catch(e2) { console.error(e2); }
-    }
-  }
-
-  // ── Takip / Gizli hesap akışı ─────────────────────────────────
-  async function toggleFollow() {
-    if (!$currentUser) { window.location.href = "/login"; return; }
-
-    // Gizli hesap & takip etmiyorsa → istek gönder/iptal
+  // ── Takip ─────────────────────────────────────────────────────
+  async function onFollowBtnClick() {
+    if (!$currentUser) { goto("/login"); return; }
     if (isPrivate && !isFollowing) {
-      if (followRequestStatus === "pending") {
-        await cancelFollowRequest();
-      } else {
-        await sendFollowRequest();
-      }
+      followLoading = true;
+      try {
+        if (followRequestStatus === "pending") {
+          await cancelFollowRequest($currentUser.uid, uid);
+          followRequestStatus = "none";
+        } else {
+          await sendFollowRequest($currentUser.uid, $currentUser.displayName ?? "", $currentUser.photoURL ?? "", uid);
+          followRequestStatus = "pending";
+        }
+      } catch(e) { console.error(e); }
+      finally { followLoading = false; }
       return;
     }
-
-    // Normal takip
     followLoading = true;
     const was = isFollowing;
     isFollowing = !was;
     followersCount = Math.max(0, followersCount + (was ? -1 : 1));
     try {
-      const id = `${$currentUser.uid}_${uid}`;
-      if (was) {
-        await supabase.from("follows").delete()
-          .eq("from_uid", $currentUser.uid)
-          .eq("target_uid", uid);
-        await Promise.all([
-          updateDoc(doc(db, "users", uid),             { followersCount: increment(-1) }),
-          updateDoc(doc(db, "users", $currentUser.uid), { followingCount: increment(-1) }),
-        ]);
-      } else {
-        await supabase.from("follows").upsert({
-          id,
-          from_uid:     $currentUser.uid,
-          from_name:    $currentUser.displayName ?? "",
-          from_photo:   $currentUser.photoURL    ?? "",
-          target_uid:   uid,
-          target_name:  user?.displayName ?? "",
-          target_photo: user?.photoURL    ?? "",
-        });
-        await Promise.all([
-          updateDoc(doc(db, "users", uid),             { followersCount: increment(1) }),
-          updateDoc(doc(db, "users", $currentUser.uid), { followingCount: increment(1) }),
-        ]);
-      }
+      await toggleFollow(
+        $currentUser.uid, $currentUser.displayName ?? "", $currentUser.photoURL ?? "",
+        uid, user?.displayName ?? "", user?.photoURL ?? "", was,
+      );
       canSeeContent = isMe || !isPrivate || isFollowing;
       if (canSeeContent && posts.length === 0) loadPosts();
     } catch(e) {
-      console.error(e);
       isFollowing = was;
       followersCount = Math.max(0, followersCount + (was ? 1 : -1));
     }
     followLoading = false;
-  }
-
-  async function sendFollowRequest() {
-    if (!$currentUser) return;
-    followLoading = true;
-    try {
-      const myUid  = $currentUser.uid;
-      const myName  = $currentUser.displayName ?? "";
-      const myPhoto = $currentUser.photoURL ?? "";
-
-      // followRequests/{targetUid}/pending/{fromUid}
-      await setDoc(doc(db, "followRequests", uid, "pending", myUid), {
-        fromUid:   myUid,
-        fromName:  myName,
-        fromPhoto: myPhoto,
-        targetUid: uid,
-        ts:        serverTimestamp(),
-      });
-
-      followRequestStatus = "pending";
-
-      // Bildirim
-      await addDoc(collection(db, "userNotifs", uid, "msgs"), {
-        fromUid:   myUid,
-        fromName:  myName,
-        fromPhoto: myPhoto,
-        type:      "follow_request",
-        feedId:    "",
-        postId:    "",
-        title:     `${myName} seni takip etmek istiyor`,
-        sub:       "",
-        ico:       "person_add",
-        message:   `${myName} seni takip etmek istiyor`,
-        url:       "",
-        read:      false,
-        ts:        serverTimestamp(),
-      });
-    } catch(e) { console.error(e); }
-    finally { followLoading = false; }
-  }
-
-  async function cancelFollowRequest() {
-    if (!$currentUser) return;
-    followLoading = true;
-    try {
-      await deleteDoc(doc(db, "followRequests", uid, "pending", $currentUser.uid));
-      followRequestStatus = "none";
-    } catch(e) { console.error(e); }
-    finally { followLoading = false; }
-  }
-
-  function onFollowBtnClick() {
-    if (!canSeeContent && isPrivate && followRequestStatus === "none") {
-      // Daha önce hiç takip edilmemişse tıklama toast göster + isteği yönlendir
-    }
-    toggleFollow();
   }
 
   function followBtnLabel() {
@@ -386,80 +259,45 @@
     if (isPrivate && followRequestStatus === "pending") return "İstek Gönderildi";
     return "Takip Et";
   }
-
   function followBtnClass() {
     if (isFollowing) return "btn-follow following";
     if (isPrivate && followRequestStatus === "pending") return "btn-follow pending";
     return "btn-follow";
   }
 
-  async function loadFollowers() {
+  async function loadFollowersData() {
     listLoading = true;
-    try {
-      const { data } = await supabase.from("follows")
-        .select("from_uid, from_name, from_photo")
-        .eq("target_uid", uid)
-        .order("created_at", { ascending: false })
-        .limit(100);
-      followersList = data ?? [];
-    } catch(e) { console.error(e); }
+    followersList = (await fetchFollowers(uid)).map(r => ({ from_uid: r.uid, from_name: r.name, from_photo: r.photo }));
     listLoading = false;
   }
-
-  async function loadFollowing() {
+  async function loadFollowingData() {
     listLoading = true;
-    try {
-      const { data } = await supabase.from("follows")
-        .select("target_uid, target_name, target_photo")
-        .eq("from_uid", uid)
-        .order("created_at", { ascending: false })
-        .limit(100);
-      followingList = data ?? [];
-    } catch(e) { console.error(e); }
+    followingList = (await fetchFollowing(uid)).map(r => ({ target_uid: r.uid, target_name: r.name, target_photo: r.photo }));
     listLoading = false;
-  }
-
-  async function loadReadingList() {
-    try {
-      const { data } = await supabase.from("reading_list").select("*").eq("uid", uid);
-      const grouped: Record<string, any[]> = {};
-      for (const r of data ?? []) {
-        (grouped[r.status] ??= []).push(r);
-      }
-      readingList = grouped;
-    } catch(e) { console.error(e); }
   }
 
   // ── Profil düzenle ────────────────────────────────────────────
   function openEdit() {
-    editName     = user?.displayName ?? "";
-    editUsername = user?.username ?? "";
-    editBio      = user?.bio ?? "";
-    editWebsite  = user?.website ?? "";
-    editError    = "";
-    editMode     = true;
+    editName = user?.displayName ?? ""; editUsername = user?.username ?? "";
+    editBio = user?.bio ?? ""; editWebsite = user?.website ?? "";
+    editError = ""; editMode = true;
   }
 
   async function saveProfile() {
     if (!$currentUser) return;
-    editSaving = true;
-    editError  = "";
+    editSaving = true; editError = "";
     try {
       if (editUsername !== user?.username) {
-        const { data } = await supabase.from("users").select("uid")
-          .eq("username", editUsername.trim()).neq("uid", uid).maybeSingle();
-        if (data) { editError = "Bu kullanıcı adı zaten alınmış."; editSaving = false; return; }
+        const ok = await checkUsernameAvailable(editUsername, uid);
+        if (!ok) { editError = "Bu kullanıcı adı zaten alınmış."; editSaving = false; return; }
       }
-      await updateDoc(doc(db, "users", uid), {
+      await updateProfile(uid, {
         displayName: editName.trim(),
         username:    editUsername.trim().toLowerCase(),
         bio:         editBio.trim(),
         website:     editWebsite.trim(),
       });
-      await supabase.from("users").upsert({
-        uid, username: editUsername.trim().toLowerCase(),
-        display_name: editName.trim(), bio: editBio.trim(), website: editWebsite.trim(),
-      });
+      await syncUsernameToSupabase(uid, editUsername.trim().toLowerCase(), editName.trim(), user?.photoURL ?? "");
       user = { ...user, displayName: editName.trim(), username: editUsername.trim(), bio: editBio.trim(), website: editWebsite.trim() };
       editMode = false;
     } catch(e: any) { editError = e.message ?? "Bir hata oluştu."; }
@@ -473,14 +311,11 @@
     if (type === "avatar") photoUploading = true;
     else coverUploading = true;
     try {
-      const path = type === "avatar"
-        ? `avatars/${uid}/${Date.now()}.jpg`
-        : `covers/${uid}/${Date.now()}.jpg`;
-      const storageRef = ref(storage, path);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
+      const url = type === "avatar"
+        ? await uploadAvatar(uid, file)
+        : await uploadCoverPhoto(uid, file);
       const field = type === "avatar" ? "photoURL" : "coverPhoto";
-      await updateDoc(doc(db, "users", uid), { [field]: url });
+      await updateProfile(uid, { [field]: url });
       user = { ...user, [field]: url };
     } catch(e) { console.error(e); }
     finally {
@@ -489,151 +324,61 @@
     }
   }
 
+  // ── Post eylemleri ────────────────────────────────────────────
   async function toggleSave(p: any) {
-    if (!$currentUser) { window.location.href = "/login"; return; }
+    if (!$currentUser) { goto("/login"); return; }
     const was = p.isSavedByMe;
     posts = posts.map(x => x.id === p.id ? { ...x, isSavedByMe: !was } : x);
-    const id = `${p.id}_${$currentUser.uid}`;
     try {
-      if (was) await supabase.from("feed_saves").delete().eq("id", id);
-      else await supabase.from("feed_saves").upsert({ id, post_id: p.id, uid: $currentUser.uid });
+      await togglePostSave(p.id, $currentUser.uid, was);
     } catch(e) { posts = posts.map(x => x.id === p.id ? { ...x, isSavedByMe: was } : x); }
+  }
+
+  async function toggleLike(p: any) {
+    if (!$currentUser) { goto("/login"); return; }
+    const was = p.isLikedByMe;
+    posts = posts.map(x => x.id === p.id ? {
+      ...x, isLikedByMe: !was,
+      likesCount: Math.max(0, (x.likesCount ?? 0) + (was ? -1 : 1)),
+    } : x);
+    try {
+      await togglePostLike(p.id, $currentUser.uid, $currentUser.displayName ?? "", $currentUser.photoURL ?? "", was);
+    } catch(e) {
+      posts = posts.map(x => x.id === p.id ? { ...x, isLikedByMe: was, likesCount: Math.max(0, (x.likesCount ?? 0) + (was ? 1 : -1)) } : x);
+    }
+  }
+
+  async function deletePostHandler(p: any) {
+    if (!$currentUser || $currentUser.uid !== p.uid) return;
+    if (!confirm("Gönderiyi silmek istiyor musunuz?")) return;
+    await deletePostService(p.id);
+    posts = posts.filter(x => x.id !== p.id);
   }
 
   function sharePost(p: any) {
     menuOpenId = null;
     const url = window.location.origin + "/post/" + p.id;
     if (navigator.share) navigator.share({ title: p.displayName, url });
-    else { navigator.clipboard.writeText(url); }
+    else navigator.clipboard.writeText(url);
   }
 
-  async function deletePost(p: any) {
-    if (!$currentUser || $currentUser.uid !== p.uid) return;
-    if (!confirm("Gönderiyi silmek istiyor musunuz?")) return;
-    const { deleteDoc: fdel, doc: fdoc } = await import("firebase/firestore");
-    await fdel(fdoc(db, "feed", p.id));
-    posts = posts.filter(x => x.id !== p.id);
-  }
-
-  // ── Kütüphane kitaplarını yükle ──────────────────────────────
-  async function loadLibraryBooks(authorUid: string) {
-    libraryLoading = true;
-    try {
-      // Supabase: bu kullanıcının yazdığı kitapları al
-      const { data } = await supabase
-        .from("library_books")
-        .select("id, title, author_name, cover_img, publish_year, synopsis, genre, page_count")
-        .eq("author_uid", authorUid)
-        .order("created_at", { ascending: false });
-      libraryBooks = data ?? [];
-    } catch (e) { console.error(e); libraryBooks = []; }
-    finally { libraryLoading = false; }
-  }
-
-  // ── Kitap Ekleme ─────────────────────────────────────────────
-  function openAddBook() {
-    addBookTitle = ""; addBookSynopsis = ""; addBookGenre = "";
-    addBookYear = ""; addBookPages = ""; addBookCover = ""; addBookError = "";
-    showAddBookModal = true;
-  }
-  function closeAddBook() { showAddBookModal = false; addBookError = ""; }
-
-  async function submitAddBook() {
-    if (!addBookTitle.trim() || !$currentUser) return;
-    addBookSaving = true; addBookError = "";
-    try {
-      const row: any = {
-        title:       addBookTitle.trim(),
-        synopsis:    addBookSynopsis.trim(),
-        genre:       addBookGenre.trim(),
-        cover_img:   addBookCover.trim(),
-        author_uid:  uid,
-        author_name: user?.displayName ?? user?.name ?? "",
-      };
-      if (addBookYear.trim())  row.publish_year = parseInt(addBookYear) || 0;
-      if (addBookPages.trim()) row.page_count   = parseInt(addBookPages) || 0;
-
-      const { data, error: err } = await supabase.from("library_books").insert(row).select().single();
-      if (err) throw err;
-      libraryBooks = [data, ...libraryBooks];
-      closeAddBook();
-    } catch (e: any) {
-      addBookError = e?.message ?? "Kitap eklenirken hata oluştu.";
-    } finally { addBookSaving = false; }
-  }
-
-  // ── Alıntı Paylaşma ──────────────────────────────────────────
-  function openShareQuote() {
-    shareQuoteText = ""; shareQuoteBook = ""; shareQuoteAuthor = user?.displayName ?? "";
-    shareQuoteBookId = ""; shareQuoteSelectedBook = null; shareQuoteDropOpen = false;
-    showShareQuoteModal = true;
-    // Bu kullanıcının kütüphane kitaplarını yükle (dropdown için)
-    if (libraryBooks.length === 0) loadLibraryBooks(uid);
-  }
-  function closeShareQuote() { showShareQuoteModal = false; }
-
-  async function submitShareQuote() {
-    if (!shareQuoteText.trim() || !$currentUser) return;
-    shareQuoteSaving = true;
-    try {
-      const finalBook   = shareQuoteSelectedBook?.title  ?? shareQuoteBook.trim();
-      const finalAuthor = shareQuoteSelectedBook?.author_name ?? shareQuoteAuthor.trim();
-      const finalCover  = shareQuoteSelectedBook?.cover_img   ?? "";
-      const finalBookId = shareQuoteSelectedBook?.id ?? shareQuoteBookId;
-
-      await addDoc(collection(db, "feed"), {
-        uid:            $currentUser.uid,
-        displayName:    $currentUser.displayName ?? "",
-        name:           $currentUser.displayName ?? "",
-        username:       "",
-        photoURL:       $currentUser.photoURL    ?? "",
-        authorEmail:    $currentUser.email       ?? "",
-        text:           "",
-        title:          "",
-        category:       "",
-        imgUrl:         "",
-        imageURL:       "",
-        quoteText:      shareQuoteText.trim(),
-        bookName:       finalBook,
-        authorName:     finalAuthor,
-        coverImg:       finalCover,
-        libraryBookId:  finalBookId,
-        type:           "library_quote",
-        visibility:     "public",
-        mentions:       [],
-        likes: 0, saves: 0, cmtCount: 0, reposts: 0,
-        ts: serverTimestamp(),
-      });
-      closeShareQuote();
-      window.location.href = "/feed";
-    } catch (e) { console.error(e); }
-    finally { shareQuoteSaving = false; }
-  }
-
-  // ── Gönderi düzenleme ────────────────────────────────────────
   function openEditModal(p: any) {
     menuOpenId = null;
     if (p.quoteText) {
-      editQuoteModal  = p;
-      editQuoteText   = p.quoteText  ?? "";
-      editQuoteBook   = p.bookName   ?? "";
-      editQuoteAuthor = p.authorName ?? "";
+      editQuoteModal = p; editQuoteText = p.quoteText ?? "";
+      editQuoteBook = p.bookName ?? ""; editQuoteAuthor = p.authorName ?? "";
     } else {
-      editModalPost  = p;
-      editModalTitle = p.title ?? "";
-      editModalText  = p.text  ?? "";
+      editModalPost = p; editModalTitle = p.title ?? ""; editModalText = p.text ?? "";
     }
   }
-  function closeEditModal()      { editModalPost  = null; editModalSaving = false; }
-  function closeEditQuoteModal() { editQuoteModal = null; editQuoteSaving = false; }
 
   async function saveEditPost() {
     if (!editModalPost || !editModalText.trim()) return;
     editModalSaving = true;
     try {
-      await updateDoc(doc(db, "feed", editModalPost.id), { text: editModalText.trim(), title: editModalTitle.trim() });
+      await updatePost(editModalPost.id, { text: editModalText.trim(), title: editModalTitle.trim() });
       posts = posts.map(p => p.id === editModalPost!.id ? { ...p, text: editModalText.trim(), title: editModalTitle.trim() } : p);
-      closeEditModal();
+      editModalPost = null;
     } catch(e) { console.error(e); }
     finally { editModalSaving = false; }
   }
@@ -642,47 +387,95 @@
     if (!editQuoteModal || !editQuoteText.trim()) return;
     editQuoteSaving = true;
     try {
-      const updates: any = { quoteText: editQuoteText.trim() };
-      if (editQuoteBook.trim())   updates.bookName   = editQuoteBook.trim();
-      if (editQuoteAuthor.trim()) updates.authorName = editQuoteAuthor.trim();
-      await updateDoc(doc(db, "feed", editQuoteModal.id), updates);
-      posts = posts.map(p => p.id === editQuoteModal!.id ? { ...p, ...updates } : p);
-      closeEditQuoteModal();
+      await updatePost(editQuoteModal.id, { quoteText: editQuoteText.trim(), bookName: editQuoteBook.trim(), authorName: editQuoteAuthor.trim() });
+      posts = posts.map(p => p.id === editQuoteModal!.id ? { ...p, quoteText: editQuoteText.trim(), bookName: editQuoteBook.trim(), authorName: editQuoteAuthor.trim() } : p);
+      editQuoteModal = null;
     } catch(e) { console.error(e); }
     finally { editQuoteSaving = false; }
   }
 
-  async function toggleLike(p: any) {
-    if (!$currentUser) { window.location.href = "/login"; return; }
-    const was = p.isLikedByMe;
-    posts = posts.map(x => x.id === p.id ? {
-      ...x, isLikedByMe: !was,
-      likesCount: Math.max(0, (x.likesCount ?? 0) + (was ? -1 : 1)),
-    } : x);
-    const id = `${p.id}_${$currentUser.uid}`;
-    if (was) await supabase.from("feed_likes").delete().eq("post_id", p.id).eq("uid", $currentUser.uid);
-    else await supabase.from("feed_likes").upsert({ id, post_id: p.id, uid: $currentUser.uid, name: $currentUser.displayName ?? "", photo_url: $currentUser.photoURL ?? "" });
+  // ── Kütüphane ─────────────────────────────────────────────────
+  async function loadLibraryBooks(authorUid: string) {
+    libraryLoading = true;
+    try {
+      const { data } = await supabase.from("library_books")
+        .select("id,title,author_name,cover_img,publish_year,synopsis,genre,page_count")
+        .eq("author_uid", authorUid).order("created_at", { ascending: false });
+      libraryBooks = data ?? [];
+    } catch(e) { libraryBooks = []; }
+    finally { libraryLoading = false; }
   }
 
-  let expandedIds = $state(new Set<string>());
+  function openAddBook() {
+    addBookTitle = ""; addBookSynopsis = ""; addBookGenre = "";
+    addBookYear = ""; addBookPages = ""; addBookCover = ""; addBookError = "";
+    showAddBookModal = true;
+  }
+
+  async function submitAddBook() {
+    if (!addBookTitle.trim() || !$currentUser) return;
+    addBookSaving = true; addBookError = "";
+    try {
+      const row: any = {
+        title: addBookTitle.trim(), synopsis: addBookSynopsis.trim(),
+        genre: addBookGenre.trim(), cover_img: addBookCover.trim(),
+        author_uid: uid, author_name: user?.displayName ?? "",
+      };
+      if (addBookYear.trim())  row.publish_year = parseInt(addBookYear) || 0;
+      if (addBookPages.trim()) row.page_count   = parseInt(addBookPages) || 0;
+      const { data, error: err } = await supabase.from("library_books").insert(row).select().single();
+      if (err) throw err;
+      libraryBooks = [data, ...libraryBooks];
+      showAddBookModal = false;
+    } catch(e: any) { addBookError = e?.message ?? "Kitap eklenirken hata oluştu."; }
+    finally { addBookSaving = false; }
+  }
+
+  // ── Alıntı paylaşma ───────────────────────────────────────────
+  function openShareQuote() {
+    shareQuoteText = ""; shareQuoteBook = "";
+    shareQuoteAuthor = user?.displayName ?? ""; shareQuoteBookId = "";
+    shareQuoteSelectedBook = null; shareQuoteDropOpen = false;
+    showShareQuoteModal = true;
+    if (libraryBooks.length === 0) loadLibraryBooks(uid);
+  }
+
+  async function submitShareQuote() {
+    if (!shareQuoteText.trim() || !$currentUser) return;
+    shareQuoteSaving = true;
+    try {
+      const finalBook   = shareQuoteSelectedBook?.title      ?? shareQuoteBook.trim();
+      const finalAuthor = shareQuoteSelectedBook?.author_name ?? shareQuoteAuthor.trim();
+      const finalCover  = shareQuoteSelectedBook?.cover_img   ?? "";
+      const finalBookId = shareQuoteSelectedBook?.id          ?? shareQuoteBookId;
+      await addDoc(collection(db, "feed"), {
+        uid: $currentUser.uid, displayName: $currentUser.displayName ?? "",
+        name: $currentUser.displayName ?? "", username: "", photoURL: $currentUser.photoURL ?? "",
+        text: "", title: "", category: "", imgUrl: "", imageURL: "",
+        quoteText: shareQuoteText.trim(), bookName: finalBook,
+        authorName: finalAuthor, coverImg: finalCover, libraryBookId: finalBookId,
+        type: "library_quote", visibility: "public", mentions: [],
+        likes: 0, saves: 0, cmtCount: 0, reposts: 0, ts: serverTimestamp(),
+      });
+      showShareQuoteModal = false;
+      goto("/feed");
+    } catch(e) { console.error(e); }
+    finally { shareQuoteSaving = false; }
+  }
+
+  // ── Yardımcılar ───────────────────────────────────────────────
   function toggleExpand(id: string) {
     const s = new Set(expandedIds);
     s.has(id) ? s.delete(id) : s.add(id);
     expandedIds = s;
   }
-
   function repostLabel(type: string) {
-    if (type === "serial")      return "📖 Kitap";
-    if (type === "blog")        return "📝 Blog";
-    if (type === "kf_lesson")   return "🇹🇷 Kurdî";
+    if (type === "serial")    return "📖 Kitap";
+    if (type === "blog")      return "📝 Blog";
+    if (type === "kf_lesson") return "🇹🇷 Kurdî";
     return "📄 Bölüm";
   }
-
-  function copyId(p: any) {
-    menuOpenId = null;
-    navigator.clipboard.writeText('#' + p.id);
-  }
-
+  function copyId(p: any) { menuOpenId = null; navigator.clipboard.writeText('#' + p.id); }
   function ago(ts: any): string {
     const ms = ts?.seconds ? ts.seconds * 1000 : Number(ts);
     const diff = Date.now() - ms;
@@ -695,6 +488,8 @@
     if (d < 7)  return `${d}g`;
     return `${Math.floor(d/30)}ay`;
   }
+</script>
+
 </script>
 
 <svelte:head>

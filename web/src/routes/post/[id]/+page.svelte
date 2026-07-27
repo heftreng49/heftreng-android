@@ -1,10 +1,23 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/stores";
-  import { doc, getDoc, deleteDoc } from "firebase/firestore";
-  import { db } from "$lib/firebase/config";
-  import { supabase } from "$lib/supabase/config";
-  import { currentUser } from "$lib/store/auth";
+  import { goto } from "$app/navigation";
+  import { currentUser } from "$lib/stores/auth";
+  import {
+    fetchPost,
+    deletePost,
+    fetchComments,
+    togglePostLike,
+    togglePostSave,
+    addComment,
+    editComment,
+    deleteComment,
+    toggleCommentLike,
+    fetchPostLikers,
+    fetchCommentLikers,
+  } from "$lib/services/post.service";
+  import LikersModal from "$lib/components/LikersModal.svelte";
+  import QuoteCard from "$lib/components/QuoteCard.svelte";
 
   const postId = $derived($page.params.id);
 
@@ -54,7 +67,7 @@
     return `${Math.floor(d/365)}y`;
   }
 
-  // ── Yorum thread yapısı (Instagram tarzı) ─────────────────────
+  // ── Yorum thread yapısı ────────────────────────────────────────
   let commentThreads = $derived((() => {
     const allIds = new Set(comments.map((c: any) => c.id));
     const topLevel = comments.filter((c: any) => !c.reply_to_cmt_id || !allIds.has(c.reply_to_cmt_id));
@@ -76,25 +89,12 @@
   async function loadPost() {
     loading = true;
     try {
-      const snap = await getDoc(doc(db, "feed", postId));
-      if (!snap.exists()) { loadFailed = true; return; }
-      post = { id: snap.id, ...snap.data() };
-
-      // Beğeni sayısı + durum
-      const [countRes, interRes] = await Promise.all([
-        supabase.from("feed_likes").select("id", { count: "exact", head: true }).eq("post_id", postId),
-        $currentUser
-          ? supabase.from("feed_likes").select("id").eq("post_id", postId).eq("uid", $currentUser.uid).maybeSingle()
-          : Promise.resolve({ data: null }),
-      ]);
-      likesCount  = countRes.count ?? post.likesCount ?? 0;
-      isLikedByMe = !!interRes.data;
-
-      if ($currentUser) {
-        const { data: sv } = await supabase.from("feed_saves")
-          .select("id").eq("post_id", postId).eq("uid", $currentUser.uid).maybeSingle();
-        isSavedByMe = !!sv;
-      }
+      const res = await fetchPost(postId, $currentUser?.uid ?? undefined);
+      if (!res) { loadFailed = true; return; }
+      post        = res.post;
+      likesCount  = res.likesCount;
+      isLikedByMe = res.isLikedByMe;
+      isSavedByMe = res.isSavedByMe;
     } catch(e) { console.error(e); loadFailed = true; }
     finally { loading = false; }
   }
@@ -102,43 +102,19 @@
   async function loadComments() {
     cmtLoading = true;
     try {
-      const { data } = await supabase
-        .from("feed_comments")
-        .select("*")
-        .eq("post_id", postId)
-        .order("created_at", { ascending: true });
-      const rows = data ?? [];
-
-      // Kendi yorum beğenilerim
-      let myLikedIds = new Set<string>();
-      if ($currentUser && rows.length) {
-        const { data: cl } = await supabase
-          .from("comment_likes").select("comment_id")
-          .eq("uid", $currentUser.uid)
-          .in("comment_id", rows.map((r: any) => r.id));
-        myLikedIds = new Set((cl ?? []).map((r: any) => r.comment_id));
-      }
-      comments = rows.map((r: any) => ({ ...r, isLikedByMe: myLikedIds.has(r.id) }));
+      comments = await fetchComments(postId, $currentUser?.uid ?? undefined);
     } catch(e) { console.error(e); }
     finally { cmtLoading = false; }
   }
 
   // ── Beğeni ────────────────────────────────────────────────────
   async function toggleLike() {
-    if (!$currentUser) { window.location.href = "/login"; return; }
+    if (!$currentUser) { goto("/login"); return; }
     const was = isLikedByMe;
     isLikedByMe = !was;
     likesCount  = Math.max(0, likesCount + (was ? -1 : 1));
     try {
-      const id = `${postId}_${$currentUser.uid}`;
-      if (was) {
-        await supabase.from("feed_likes").delete().eq("post_id", postId).eq("uid", $currentUser.uid);
-      } else {
-        await supabase.from("feed_likes").upsert({
-          id, post_id: postId, uid: $currentUser.uid,
-          name: $currentUser.displayName ?? "", photo_url: $currentUser.photoURL ?? "",
-        });
-      }
+      await togglePostLike(postId, $currentUser.uid, $currentUser.displayName ?? "", $currentUser.photoURL ?? "", was);
     } catch(e) {
       isLikedByMe = was;
       likesCount  = Math.max(0, likesCount + (was ? 1 : -1));
@@ -147,22 +123,20 @@
 
   // ── Kaydet ────────────────────────────────────────────────────
   async function toggleSave() {
-    if (!$currentUser) { window.location.href = "/login"; return; }
+    if (!$currentUser) { goto("/login"); return; }
     const was = isSavedByMe;
     isSavedByMe = !was;
     try {
-      const id = `${postId}_${$currentUser.uid}`;
-      if (was) await supabase.from("feed_saves").delete().eq("id", id);
-      else await supabase.from("feed_saves").upsert({ id, post_id: postId, uid: $currentUser.uid });
+      await togglePostSave(postId, $currentUser.uid, was);
     } catch(e) { isSavedByMe = was; }
   }
 
-  // ── Gönderiyi sil ─────────────────────────────────────────────
-  async function deletePost() {
+  // ── Sil ───────────────────────────────────────────────────────
+  async function handleDeletePost() {
     if (!$currentUser || $currentUser.uid !== post?.uid) return;
     if (!confirm("Gönderiyi silmek istediğinize emin misiniz?")) return;
-    await deleteDoc(doc(db, "feed", postId));
-    window.location.href = "/feed";
+    await deletePost(postId);
+    goto("/feed");
   }
 
   // ── Yorum gönder / düzenle ────────────────────────────────────
@@ -171,21 +145,18 @@
     submitting = true;
     try {
       if (editTarget) {
-        const { data } = await supabase.from("feed_comments")
-          .update({ text: commentText.trim() })
-          .eq("id", editTarget.id).select().single();
-        if (data) comments = comments.map((c: any) => c.id === editTarget.id ? { ...c, text: data.text } : c);
+        const updated = await editComment(editTarget.id, commentText.trim());
+        comments = comments.map((c: any) => c.id === editTarget.id ? { ...c, text: updated.text } : c);
         editTarget = null;
       } else {
-        const { data } = await supabase.from("feed_comments").insert({
-          post_id: postId,
-          uid: $currentUser.uid,
-          name: $currentUser.displayName ?? "",
-          photo_url: $currentUser.photoURL ?? "",
-          text: commentText.trim(),
-          reply_to_cmt_id: replyTo?.id ?? null,
-        }).select().single();
-        if (data) comments = [...comments, { ...data, isLikedByMe: false }];
+        const newCmt = await addComment(
+          postId, $currentUser.uid,
+          $currentUser.displayName ?? "",
+          $currentUser.photoURL ?? "",
+          commentText.trim(),
+          replyTo?.id ?? undefined,
+        );
+        comments = [...comments, newCmt];
         replyTo = null;
       }
       commentText = "";
@@ -194,15 +165,15 @@
   }
 
   // ── Yorum sil ─────────────────────────────────────────────────
-  async function deleteComment() {
+  async function handleDeleteComment() {
     if (!deleteTarget) return;
-    await supabase.from("feed_comments").delete().eq("id", deleteTarget.id);
+    await deleteComment(deleteTarget.id);
     comments = comments.filter((c: any) => c.id !== deleteTarget.id);
     deleteTarget = null;
   }
 
   // ── Yorum beğen ───────────────────────────────────────────────
-  async function toggleCommentLike(cmt: any) {
+  async function toggleCommentLikeHandler(cmt: any) {
     if (!$currentUser) return;
     const was = cmt.isLikedByMe;
     comments = comments.map((c: any) => c.id === cmt.id ? {
@@ -210,23 +181,17 @@
       likes_count: Math.max(0, (c.likes_count ?? 0) + (was ? -1 : 1)),
     } : c);
     try {
-      const id = `${cmt.id}_${$currentUser.uid}`;
-      if (was) await supabase.from("comment_likes").delete().eq("comment_id", cmt.id).eq("uid", $currentUser.uid);
-      else await supabase.from("comment_likes").upsert({ id, comment_id: cmt.id, uid: $currentUser.uid, name: $currentUser.displayName ?? "", photo_url: $currentUser.photoURL ?? "" });
+      await toggleCommentLike(cmt.id, $currentUser.uid, $currentUser.displayName ?? "", $currentUser.photoURL ?? "", was);
     } catch(e) { console.error(e); }
   }
 
-  // ── Beğenenler listesi ────────────────────────────────────────
+  // ── Beğenenler ────────────────────────────────────────────────
   async function openLikers() {
     if (likesCount === 0) return;
     showLikers = true;
     likersLoading = true;
-    try {
-      const { data } = await supabase.from("feed_likes").select("uid,name,photo_url,created_at")
-        .eq("post_id", postId).order("created_at", { ascending: false }).limit(100);
-      const seen = new Set<string>();
-      likers = (data ?? []).filter((r: any) => { if (seen.has(r.uid)) return false; seen.add(r.uid); return true; });
-    } catch(e) { console.error(e); }
+    try { likers = await fetchPostLikers(postId); }
+    catch(e) { console.error(e); }
     finally { likersLoading = false; }
   }
 
@@ -234,11 +199,8 @@
     if (!(cmt.likes_count > 0)) return;
     cmtLikersId = cmt.id;
     cmtLikersLoading = true;
-    try {
-      const { data } = await supabase.from("comment_likes").select("uid,name,photo_url,created_at")
-        .eq("comment_id", cmt.id).order("created_at", { ascending: false }).limit(50);
-      cmtLikers = data ?? [];
-    } catch(e) { console.error(e); }
+    try { cmtLikers = await fetchCommentLikers(cmt.id); }
+    catch(e) { console.error(e); }
     finally { cmtLikersLoading = false; }
   }
 
@@ -265,6 +227,8 @@
     };
     return map[type] ?? type;
   }
+</script>
+
 </script>
 
 <svelte:head>
