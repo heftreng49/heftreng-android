@@ -156,7 +156,57 @@
 
 <!-- FAB -->
 {#if $currentUser}
-  <a href="/compose" class="fab" aria-label="Gönderi yaz">+</a>
+  <!-- FAB Sheet backdrop -->
+  {#if fabSheetOpen}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="fab-backdrop" onclick={() => fabSheetOpen = false}></div>
+  {/if}
+
+  <!-- FAB Sheet -->
+  {#if fabSheetOpen}
+    <div class="fab-sheet">
+      <p class="fab-sheet-title">Ne paylaşmak istersin?</p>
+      <a href="/compose?type=post" class="fab-sheet-item" onclick={() => fabSheetOpen = false}>
+        <span class="fab-sheet-icon" style="background:#4A6FFF">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" width="22" height="22">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </span>
+        <div>
+          <strong>Gönderi Yaz</strong>
+          <p>Düşüncelerini paylaş</p>
+        </div>
+      </a>
+      <a href="/compose?type=quote" class="fab-sheet-item" onclick={() => fabSheetOpen = false}>
+        <span class="fab-sheet-icon" style="background:#D97706">
+          <svg viewBox="0 0 24 24" fill="#fff" width="22" height="22">
+            <path d="M4.583 17.321C3.553 16.227 3 15 3 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 0 1-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179zm10 0C13.553 16.227 13 15 13 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 0 1-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179z"/>
+          </svg>
+        </span>
+        <div>
+          <strong>Alıntı Paylaş</strong>
+          <p>Kitaptan bir alıntı ekle</p>
+        </div>
+      </a>
+    </div>
+  {/if}
+
+  <!-- FAB Button -->
+  <button
+    class="fab"
+    class:fab-open={fabSheetOpen}
+    aria-label="Paylaş"
+    onclick={() => fabSheetOpen = !fabSheetOpen}
+  >
+    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" width="26" height="26"
+      style="transition: transform 0.25s; transform: rotate({fabSheetOpen ? 45 : 0}deg)"
+    >
+      <line x1="12" y1="5" x2="12" y2="19"/>
+      <line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  </button>
 {/if}
 
 <!-- Yorum paneli -->
@@ -208,10 +258,51 @@
   .fab {
     position: fixed; bottom: 80px; right: 20px;
     width: 52px; height: 52px; border-radius: 50%;
-    background: #7c4dff; color: #fff;
+    background: var(--primary); color: #fff;
     display: flex; align-items: center; justify-content: center;
-    font-size: 28px; text-decoration: none;
-    box-shadow: 0 4px 16px rgba(124,77,255,.35);
-    z-index: 50;
+    border: none; cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0,0,0,.25);
+    z-index: 60; transition: background 0.2s, transform 0.2s;
+  }
+  .fab:hover { transform: scale(1.07); }
+  .fab.fab-open { background: #555; }
+
+  .fab-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 55; backdrop-filter: blur(2px);
+  }
+
+  .fab-sheet {
+    position: fixed; bottom: 148px; right: 16px;
+    background: var(--surface);
+    border: 1px solid var(--divider);
+    border-radius: 20px;
+    padding: 16px 12px 10px;
+    z-index: 60;
+    width: min(320px, calc(100vw - 32px));
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    animation: sheet-pop 0.2s ease;
+  }
+  @keyframes sheet-pop {
+    from { opacity: 0; transform: translateY(12px) scale(0.96); }
+    to   { opacity: 1; transform: translateY(0)   scale(1); }
+  }
+  .fab-sheet-title {
+    font-size: 0.78rem; font-weight: 600;
+    color: var(--muted); margin: 0 4px 10px;
+  }
+  .fab-sheet-item {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 10px; border-radius: 14px;
+    text-decoration: none; color: var(--on-bg);
+    transition: background 0.15s; margin-bottom: 4px;
+  }
+  .fab-sheet-item:hover { background: var(--surface-var); }
+  .fab-sheet-item strong { display: block; font-size: 0.95rem; font-weight: 700; }
+  .fab-sheet-item p { margin: 2px 0 0; font-size: 0.78rem; color: var(--muted); }
+  .fab-sheet-icon {
+    width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
   }
 </style>
