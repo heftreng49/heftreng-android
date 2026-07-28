@@ -35,9 +35,10 @@
   onMount(async () => {
     await load();
     if ($currentUser) {
+      // Önce followingUids yükle — suggestedUsers exclude listesi buna bağlı
+      await loadFollowingUids();
       const [counts] = await Promise.all([
         fetchUnreadCounts($currentUser.uid),
-        loadFollowingUids(),
         loadSuggestedUsers(),
       ]);
       unreadNotifs   = counts.notifs;
@@ -57,14 +58,24 @@
   async function loadSuggestedUsers() {
     if (!$currentUser) return;
     const myUid = $currentUser.uid;
+
+    // followingUids state'i bu noktada dolu — exclude listesini taze oluştur
     const excludeUids = new Set([myUid, ...followingUids]);
+
     try {
       const { data } = await supabase
         .from('users')
         .select('uid, display_name, photo_url, bio')
         .order('created_at', { ascending: false })
-        .limit(100);
-      const candidates = (data ?? []).filter((r: any) => !excludeUids.has(r.uid) && r.uid && r.display_name);
+        .limit(200);
+
+      // Takip edilenler ve kendi UID'si kesinlikle dışarıda
+      const candidates = (data ?? []).filter((r: any) =>
+        r.uid &&
+        r.display_name &&
+        !excludeUids.has(r.uid as string)
+      );
+
       // Karıştır, 8 al
       const shuffled = candidates.sort(() => Math.random() - 0.5).slice(0, 8);
       suggestedUsers = shuffled.map((r: any) => ({
