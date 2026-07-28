@@ -1,7 +1,7 @@
 # Heftreng Web — Mimari Plan ve Yol Haritası
 
-> **Konum:** `web/heftreng-web-plan.md` (web build tetikler, Android tetiklemez)
-> **Durum:** Faz 4 tamamlandı ✅. Sırada Faz 5.
+> **Konum:** `web/heftreng-web-plan.md`
+> **Durum:** Faz 3 tamamlandı ✅. Faz 4 devam ediyor.
 
 ---
 
@@ -9,15 +9,16 @@
 
 | Sürüm | Açıklama |
 |---|---|
-| v25 | Faz 1: compose.service, auth.service, QuoteCard — yanlış zip yapısı |
-| v26 | v25 zip yol düzeltmesi |
-| v26b | MD dosyası zipten çıkarıldı |
+| v25 | Faz 1: compose.service, auth.service, QuoteCard |
+| v26 | Zip yol düzeltmesi |
+| v26b | MD zipten çıkarıldı |
 | v27 | Faz 2: post.service, profile.service, UserChip/Modal/LikersModal/InfiniteScroll |
-| v28 | Bugfix: çift `</script>` kapanış etiketi düzeltildi |
-| v29 | Faz 3: layout + login + register → auth.service.ts entegrasyonu, eski store shim |
-| v30 | Bugfix: login/register çift script, feed/Modal eski a11y formatı, QuoteCard isRtl |
-| v31 | Profil düzelt: closeEditModal eksikti; compose alıntı ekranı Android stili; lib/store/auth.ts shim silindi |
-| v32 | Faz 4: library.service.ts + routes/library/ + author/[id] + book/[id] + Navbar güncellendi |
+| v28 | Bugfix: çift `</script>` (post + profile) |
+| v29 | Faz 3: layout + login + register → auth.service.ts |
+| v29b | MD → `web/` klasörüne taşındı |
+| v30 | FAB sheet: Gönderi Yaz / Alıntı Paylaş seçenekleri |
+| v31 | Bugfix: login+register çift `</script>`, svelte-ignore syntax, QuoteCard `$derived` |
+| v32 | Profil: Alıntılar sekmesi eklendi, Kitaplar 2'li grid, `feed_post_id` filtresi |
 
 ---
 
@@ -25,18 +26,30 @@
 
 | Dosya | Durum | Not |
 |---|---|---|
-| `routes/+layout.svelte` | ✅ | `initAuthListener()` kullanıyor |
-| `routes/feed/+page.svelte` | ✅ | |
-| `routes/compose/+page.svelte` | ✅ | Alıntı ekranı Android QuoteDialog stili |
-| `routes/post/[id]/+page.svelte` | ✅ | |
-| `routes/profile/[uid]/+page.svelte` | ✅ | |
-| `routes/login/+page.svelte` | ✅ | |
-| `routes/register/+page.svelte` | ✅ | |
-| `routes/library/+page.svelte` | ✅ **YENİ** | 4 sekme: Alıntılar/İncelemeler/Yazarlar/Kitaplar |
-| `routes/library/author/[id]/+page.svelte` | ✅ **YENİ** | 3 sekme, takip butonu |
-| `routes/library/book/[id]/+page.svelte` | ✅ **YENİ** | 2 sekme, inceleme ekleme |
-| `lib/services/library.service.ts` | ✅ **YENİ** | Android LibraryRepository karşılığı |
-| `lib/components/Navbar.svelte` | ✅ | Kütüphane linki + aktif route göstergesi eklendi |
+| `routes/+layout.svelte` | ✅ | `initAuthListener()` |
+| `routes/feed/+page.svelte` | ✅ | FAB sheet |
+| `routes/compose/+page.svelte` | ✅ | `?type=quote` parametresi |
+| `routes/post/[id]/+page.svelte` | ✅ | post.service.ts |
+| `routes/profile/[uid]/+page.svelte` | ✅ | Alıntılar sekmesi, 2'li kitap grid |
+| `routes/login/+page.svelte` | ✅ | auth.service.ts |
+| `routes/register/+page.svelte` | ✅ | auth.service.ts |
+
+### Profil Sekmeler (v32)
+```
+0 → Gönderiler   (feed postları)
+1 → Alıntılar    ← YENİ (book_quotes, feed_post_id boş olanlar filtrelenir)
+2 → Okuma Listesi
+3 → Kitaplar & Seriler  (2'li grid, created_at DESC, tür rozeti)
+```
+
+### Android → Web Mantık Eşleştirmesi
+
+| Android | Web |
+|---|---|
+| `BookQuote.toPost()` → `id = feedPostId ?: id` | `feed_post_id` boş olanlar filter edilir |
+| `return@forEach` ile boş feedPostId atlanır | `.filter(q => q.feed_post_id !== '')` |
+| `LazyVerticalGrid(columns = GridCells.Fixed(2))` | `grid-template-columns: repeat(2, 1fr)` |
+| `BookCard` rozetleri: Seri=Primary, Kitap=Amber | `.book-type-badge.serial/.book` |
 
 ---
 
@@ -44,148 +57,94 @@
 
 ```
 web/src/lib/
-├── models/              ✅ Tüm interface'ler tamam
-│
+├── models/              ✅
 ├── services/
-│   ├── auth.service.ts          ✅ Faz 1
-│   ├── compose.service.ts       ✅ Faz 1
-│   ├── feed.service.ts          ✅ Faz 1
-│   ├── social.service.ts        ✅ Faz 1
-│   ├── comment.service.ts       ✅ Faz 1
-│   ├── profile.service.ts       ✅ Faz 1+2
-│   ├── post.service.ts          ✅ Faz 2
-│   ├── library.service.ts       ✅ Faz 4 YENİ
-│   ├── notification.service.ts  ⏳ Faz 5
-│   └── message.service.ts       ⏳ Faz 5
-│
-├── stores/
-│   ├── auth.ts          ✅
-│   ├── feed.store.ts    ✅
-│   ├── profile.store.ts ✅
-│   └── ui.store.ts      ✅
-│
-├── store/
-│   └── theme.ts  → aktif, layout kullanıyor
-│
-├── components/
-│   ├── Avatar.svelte        ✅
-│   ├── Skeleton.svelte      ✅
-│   ├── LikeButton.svelte    ✅
-│   ├── PostCard.svelte      ✅
-│   ├── CommentPanel.svelte  ✅
-│   ├── QuoteCard.svelte     ✅
-│   ├── UserChip.svelte      ✅
-│   ├── InfiniteScroll.svelte ✅
-│   ├── Modal.svelte         ✅
-│   ├── LikersModal.svelte   ✅
-│   └── Navbar.svelte        ✅ Kütüphane linki eklendi
-│
-├── firebase/ ✅
-└── supabase/ ✅
+│   ├── auth.service.ts          ✅
+│   ├── compose.service.ts       ✅
+│   ├── feed.service.ts          ✅
+│   ├── social.service.ts        ✅
+│   ├── comment.service.ts       ✅
+│   ├── profile.service.ts       ✅
+│   ├── post.service.ts          ✅
+│   ├── notification.service.ts  ⏳ Faz 4
+│   ├── message.service.ts       ⏳ Faz 4
+│   └── library.service.ts       ⏳ Faz 4
+├── stores/              ✅ auth, feed, profile, ui
+├── store/               auth=shim, theme=aktif
+└── components/          ✅ Avatar, Skeleton, LikeButton, PostCard,
+                            CommentPanel, QuoteCard, UserChip,
+                            InfiniteScroll, Modal, LikersModal
 
 web/src/routes/
-├── +layout.svelte                    ✅
-├── feed/+page.svelte                 ✅
-├── compose/+page.svelte              ✅
-├── post/[id]/+page.svelte            ✅
-├── profile/[uid]/+page.svelte        ✅
-├── login/+page.svelte                ✅
-├── register/+page.svelte             ✅
-├── library/+page.svelte              ✅ Faz 4
-├── library/author/[id]/+page.svelte  ✅ Faz 4
-├── library/book/[id]/+page.svelte    ✅ Faz 4
-├── notifications/                    ⏳ Faz 5
-├── messages/                         ⏳ Faz 5
-└── kurdi/                            ⏳ Faz 6
+├── +layout.svelte               ✅
+├── feed/+page.svelte            ✅ FAB sheet
+├── compose/+page.svelte         ✅
+├── post/[id]/+page.svelte       ✅
+├── profile/[uid]/+page.svelte   ✅ Alıntılar sekmesi, 2'li grid
+├── login/+page.svelte           ✅
+├── register/+page.svelte        ✅
+├── notifications/               ⏳ Faz 4
+├── messages/                    ⏳ Faz 4
+├── library/                     ⏳ Faz 4
+└── kurdi/                       ⏳ Faz 4
 ```
 
 ---
 
-## 3. Temel Kural: Nereye Ne Gider?
+## 3. Temel Kural
 
 | Katman | Ne içerir | Ne içermez |
 |---|---|---|
-| **models/** | TypeScript interface'ler | Fonksiyon, iş mantığı |
-| **services/** | Firestore/Supabase sorguları | UI state, Svelte store |
-| **stores/** | Reactive state | Doğrudan DB sorgusu |
+| **models/** | TypeScript interface'ler | Fonksiyon |
+| **services/** | Firestore/Supabase sorguları | UI state |
+| **stores/** | Reactive state | Doğrudan DB |
 | **components/** | Tekrar kullanılan bileşen | Sayfa-özel mantık |
-| **routes/\*/+page.svelte** | Store bağlama + component dizimi | Doğrudan DB sorgusu |
+| **routes/\*/+page.svelte** | Store + component | Doğrudan DB |
 
 ---
 
 ## 4. Yol Haritası
 
-### Faz 1 ✅ (v26)
-- [x] `lib/models/` + `lib/services/` temeli + `lib/stores/` + core bileşenler
-- [x] `routes/feed` + `routes/compose` refactor
+### Faz 1 ✅ (v26) — Temel servisler + bileşenler
+### Faz 2 ✅ (v28) — post/profile refactor
+### Faz 3 ✅ (v29-v31) — auth entegrasyonu, FAB sheet, bugfixler
+### Faz 3.5 ✅ (v32) — Profil alıntılar sekmesi + kitap grid
 
-### Faz 2 ✅ (v27 → v28)
-- [x] UserChip, InfiniteScroll, Modal, LikersModal
-- [x] `lib/services/post.service.ts`
-- [x] `routes/post/[id]` + `routes/profile/[uid]` refactor
-
-### Faz 3 ✅ (v29 → v31)
-- [x] `routes/+layout.svelte` → `initAuthListener()`
-- [x] `routes/login` + `routes/register` → `auth.service.ts`
-- [x] `lib/store/auth.ts` shim silindi
-- [x] Çeşitli build hataları giderildi
-
-### Faz 4 ✅ (v32)
-- [x] `lib/services/library.service.ts` — Android LibraryRepository karşılığı
-  - fetchLibraryQuotes (Firebase, sayfalama)
-  - fetchReviews / fetchAuthors / fetchBooks (Supabase)
-  - fetchAuthorById / fetchAuthorBooks / fetchAuthorReviews / fetchAuthorQuotesFromFeed
-  - fetchBookById / fetchBookQuotes / fetchBookReviews
-  - addBookReview / createAuthor / createLibraryBook
-  - checkAuthorFollow / followAuthor / unfollowAuthor
-  - searchBooks / searchAuthors (compose QuoteDialog için)
-- [x] `routes/library/+page.svelte` — 4 sekme (Android LibraryScreen)
-- [x] `routes/library/author/[id]/+page.svelte` — yazar detay + takip (Android AuthorDetailScreen)
-- [x] `routes/library/book/[id]/+page.svelte` — kitap detay + inceleme (Android LibraryBookDetailScreen)
-- [x] `Navbar.svelte` — Kütüphane linki + aktif route göstergesi
-
-### Faz 5 — Mesajlar & Bildirimler
+### Faz 4 — Mesajlar, Bildirimler & Kütüphane ← Sıradaki
 - [ ] `lib/services/notification.service.ts`
-- [ ] `routes/notifications/+page.svelte`
 - [ ] `lib/services/message.service.ts`
-- [ ] `routes/messages/+page.svelte` + `routes/messages/[uid]/+page.svelte`
+- [ ] `lib/services/library.service.ts`
+- [ ] `routes/notifications/+page.svelte`
+- [ ] `routes/messages/+page.svelte`
+- [ ] `routes/library/+page.svelte`
 
-### Faz 6 — Kurdî & Admin
+### Faz 5 — Kurdî & Admin
 - [ ] `routes/kurdi/+page.svelte`
 - [ ] `routes/admin/+page.svelte`
-- [ ] `lib/models/cms.ts` (varsa genişletme)
+- [ ] `lib/models/cms.ts`
 
 ---
 
-## 5. library.service.ts API Özeti
+## 5. Önemli Notlar
 
+**Svelte 5 ignore syntax:** tire değil alt çizgi kullan
+```svelte
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+```
+
+**$props() ile reactive değer:** `const` değil `$derived` kullan
 ```typescript
-// Alıntılar (Firebase)
-fetchLibraryQuotes(lastDoc?)   → LibraryQuotePage { posts, lastDoc, hasMore }
+// ❌ const isRtl = language === 'ku';
+// ✅
+const isRtl = $derived(language === 'ku' || language === 'ar');
+```
 
-// İncelemeler (Supabase)
-fetchReviews()                 → BookReview[]
-fetchBookReviews(bookId)       → BookReview[]
-addBookReview(params)          → BookReview | null
+**Çift `</script>` hatası:** Script bölümü `</script>` ile bitmeli, template orijinalinde de `</script>` varsa birleştirince çift oluşur. Her zaman template'in ilk satırı kontrol edilmeli.
 
-// Yazarlar (Supabase)
-fetchAuthors()                 → Author[]
-fetchAuthorById(id)            → Author | null
-fetchAuthorBooks(authorId)     → LibraryBook[]
-fetchAuthorReviews(authorId)   → BookReview[]
-fetchAuthorQuotesFromFeed(name)→ any[]  (Firebase feed)
-checkAuthorFollow(uid, authorId) → boolean
-followAuthor(uid, authorId)    → void
-unfollowAuthor(uid, authorId)  → void
-createAuthor(params)           → Author | null
-
-// Kitaplar (Supabase)
-fetchBooks()                   → LibraryBook[]
-fetchBookById(id)              → LibraryBook | null
-fetchBookQuotes(bookId, title?)→ any[]  (Firebase önce, Supabase fallback)
-createLibraryBook(params)      → LibraryBook | null
-
-// Arama (compose QuoteDialog)
-searchBooks(q)                 → { id, title, authorName, coverImg }[]
-searchAuthors(q)               → { id, name }[]
+**book_quotes filtresi:**
+```typescript
+// Android toPost() mantığı — feed_post_id boş olanları atla
+userQuotes = data.filter(q => q.feed_post_id && q.feed_post_id.trim() !== '');
+// Linkleme: /post/{q.feed_post_id}
 ```

@@ -65,7 +65,7 @@
   });
 
   let selectedTab = $state(0);
-  const tabs = ["Gönderiler", "Okuma Listesi", "Kitaplar & Seriler"];
+  const tabs = ["Gönderiler", "Alıntılar", "Okuma Listesi", "Kitaplar & Seriler"];
 
   let showFollowers  = $state(false);
   let showFollowing  = $state(false);
@@ -96,6 +96,9 @@
   let addBookSaving    = $state(false); let addBookError = $state("");
   let libraryBooks     = $state<any[]>([]);
   let libraryLoading   = $state(false);
+  // book_quotes — feed_post_id boş olanlar filtrelenir (Android toPost() mantığı)
+  let userQuotes       = $state<any[]>([]);
+  let quotesLoading    = $state(false);
 
   // Alıntı paylaşma
   let showShareQuoteModal     = $state(false);
@@ -135,7 +138,7 @@
   });
 
   $effect(() => {
-    if (selectedTab === 2 && uid && libraryBooks.length === 0 && !libraryLoading) {
+    if (selectedTab === 3 && uid && libraryBooks.length === 0 && !libraryLoading) {
       loadLibraryBooks(uid);
     }
   });
@@ -217,6 +220,21 @@
 
   async function loadReadingListData() {
     readingList = await fetchReadingList(uid);
+  }
+
+  async function loadUserQuotes() {
+    quotesLoading = true;
+    try {
+      const { data } = await supabase
+        .from('book_quotes')
+        .select('id,text,book_title,author_name,feed_post_id,likes_count,created_at,user_display_name,user_photo_url,book_id')
+        .eq('uid', uid)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      // Android'deki return@forEach mantığı: feed_post_id boş olanları filtrele
+      userQuotes = (data ?? []).filter((q: any) => q.feed_post_id && q.feed_post_id.trim() !== '');
+    } catch(e) { console.error('loadUserQuotes:', e); }
+    finally { quotesLoading = false; }
   }
 
   // ── Takip ─────────────────────────────────────────────────────
@@ -402,7 +420,7 @@
     libraryLoading = true;
     try {
       const { data } = await supabase.from("library_books")
-        .select("id,title,author_name,cover_img,publish_year,synopsis,genre,page_count")
+        .select("id,title,author_name,cover_img,publish_year,synopsis,genre,page_count,type,is_serial")
         .eq("author_uid", authorUid).order("created_at", { ascending: false });
       libraryBooks = data ?? [];
     } catch(e) { libraryBooks = []; }
@@ -936,6 +954,32 @@
 
     <!-- Okuma listesi -->
     {:else if selectedTab === 1}
+      <!-- Alıntılar -->
+      {#if quotesLoading}
+        <div class="empty-tab"><div class="spinner"></div><p>Yükleniyor...</p></div>
+      {:else if userQuotes.length === 0}
+        <div class="empty-tab">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="44" height="44"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
+          <p>Henüz alıntı paylaşılmamış.</p>
+        </div>
+      {:else}
+        <div class="quotes-list">
+          {#each userQuotes as q (q.id)}
+            <a href="/post/{q.feed_post_id}" class="quote-row">
+              <div class="quote-row-icon">"</div>
+              <div class="quote-row-body">
+                <p class="quote-row-text">{q.text}</p>
+                <div class="quote-row-meta">
+                  {#if q.book_title}<span class="quote-row-book">📖 {q.book_title}</span>{/if}
+                  {#if q.author_name}<span class="quote-row-author">{q.author_name}</span>{/if}
+                </div>
+              </div>
+            </a>
+          {/each}
+        </div>
+      {/if}
+
+    {:else if selectedTab === 2}
       {#if Object.keys(readingList).length === 0}
         <div class="empty-tab">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="44" height="44"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
@@ -995,29 +1039,27 @@
       {:else}
         <div class="books-grid">
           {#each libraryBooks as book (book.id)}
-            <div class="book-card">
+            <a href="/library/book/{book.id}" class="book-card">
               <div class="book-cover-wrap">
                 {#if book.cover_img}
                   <img src={book.cover_img} alt={book.title} class="book-cover"/>
                 {:else}
                   <div class="book-cover-ph">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="28" height="28"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                   </div>
                 {/if}
               </div>
               <div class="book-info">
+                {#if book.type === 'serial' || book.is_serial}
+                  <span class="book-type-badge serial">Seri</span>
+                {:else}
+                  <span class="book-type-badge book">Kitap</span>
+                {/if}
                 <span class="book-title">{book.title}</span>
                 {#if book.author_name}<span class="book-author">{book.author_name}</span>{/if}
-                <div class="book-meta-row">
-                  {#if book.publish_year > 0}<span class="book-meta-chip">{book.publish_year}</span>{/if}
-                  {#if book.genre}<span class="book-meta-chip">{book.genre}</span>{/if}
-                  {#if book.page_count > 0}<span class="book-meta-chip">{book.page_count} s.</span>{/if}
-                </div>
-                {#if book.synopsis}
-                  <p class="book-synopsis">{book.synopsis}</p>
-                {/if}
+                {#if book.genre}<span class="book-meta-chip">{book.genre}</span>{/if}
               </div>
-            </div>
+            </a>
           {/each}
         </div>
       {/if}
@@ -1517,7 +1559,30 @@
   cursor: pointer; font-family: inherit; padding: 0;
 }
 
-.books-grid { display: flex; flex-direction: column; gap: 0; }
+.quotes-list { display: flex; flex-direction: column; }
+.quote-row {
+  display: flex; gap: 12px; padding: 14px 16px;
+  border-bottom: 1px solid var(--divider);
+  text-decoration: none; color: inherit;
+  transition: background 0.12s;
+}
+.quote-row:hover { background: var(--surface-var); }
+.quote-row:last-child { border-bottom: none; }
+.quote-row-icon {
+  font-size: 2rem; line-height: 1; color: rgba(217,119,6,0.3);
+  font-family: Georgia, serif; flex-shrink: 0; margin-top: -4px;
+}
+.quote-row-body { flex: 1; min-width: 0; }
+.quote-row-text {
+  font-size: 0.88rem; font-style: italic; line-height: 1.55;
+  color: var(--on-bg); margin: 0 0 6px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.quote-row-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.quote-row-book  { font-size: 0.75rem; color: var(--primary); font-weight: 600; }
+.quote-row-author{ font-size: 0.72rem; color: var(--muted); }
+
+.books-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 12px 16px; }
 .book-card {
   display: flex; gap: 12px; padding: 12px 16px;
   border-bottom: 1px solid var(--divider); transition: background 0.1s;
@@ -1525,19 +1590,24 @@
 .book-card:last-child { border-bottom: none; }
 .book-card:hover { background: var(--surface-var); }
 
-.book-cover-wrap { flex-shrink: 0; }
+.book-cover-wrap { width: 100%; overflow: hidden; }
 .book-cover {
-  width: 52px; height: 78px; border-radius: 5px; object-fit: cover;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  width: 100%; aspect-ratio: 2/3; object-fit: cover;
 }
 .book-cover-ph {
-  width: 52px; height: 78px; border-radius: 5px;
+  width: 100%; aspect-ratio: 2/3;
   background: color-mix(in srgb, var(--primary) 10%, var(--surface-var));
   display: flex; align-items: center; justify-content: center;
   color: var(--primary); opacity: 0.7;
 }
-.book-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-top: 2px; }
-.book-title { font-size: 14px; font-weight: 600; color: var(--on-bg); line-height: 1.3; }
+.book-info { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px 10px; }
+.book-type-badge {
+  display: inline-block; font-size: 9px; font-weight: 700;
+  border-radius: 4px; padding: 2px 6px; margin-bottom: 4px;
+}
+.book-type-badge.serial { background: color-mix(in srgb, var(--primary) 15%, transparent); color: var(--primary); }
+.book-type-badge.book   { background: color-mix(in srgb, #D97706 15%, transparent); color: #D97706; }
+.book-title { font-size: 13px; font-weight: 600; color: var(--on-bg); line-height: 1.3; }
 .book-author { font-size: 12px; color: var(--primary); }
 .book-meta-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
 .book-meta-chip {
