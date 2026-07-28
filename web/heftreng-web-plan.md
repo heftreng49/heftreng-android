@@ -1,7 +1,7 @@
 # Heftreng Web — Mimari Plan ve Yol Haritası
 
 > **Konum:** `web/heftreng-web-plan.md` (web build tetikler, Android tetiklemez)
-> **Durum:** Faz 3 tamamlandı ✅. Sırada Faz 4.
+> **Durum:** Faz 4 tamamlandı ✅. Sırada Faz 5.
 
 ---
 
@@ -16,25 +16,27 @@
 | v28 | Bugfix: çift `</script>` kapanış etiketi düzeltildi |
 | v29 | Faz 3: layout + login + register → auth.service.ts entegrasyonu, eski store shim |
 | v30 | Bugfix: login/register çift script, feed/Modal eski a11y formatı, QuoteCard isRtl |
-| v31 | Profil düzelt: closeEditModal eksikti → gönderi düzenleme çalışmıyor; btn-quote-share kaldırıldı (Android'de yok); compose alıntı ekranı Android stili; lib/store/auth.ts shim silindi; Navbar → stores/auth |
+| v31 | Profil düzelt: closeEditModal eksikti; compose alıntı ekranı Android stili; lib/store/auth.ts shim silindi |
+| v32 | Faz 4: library.service.ts + routes/library/ + author/[id] + book/[id] + Navbar güncellendi |
 
 ---
 
-## 1. Mevcut Durum (v31 itibarıyla)
+## 1. Mevcut Durum (v32 itibarıyla)
 
 | Dosya | Durum | Not |
 |---|---|---|
 | `routes/+layout.svelte` | ✅ | `initAuthListener()` kullanıyor |
 | `routes/feed/+page.svelte` | ✅ | |
-| `routes/compose/+page.svelte` | ✅ | Alıntı ekranı Android stili |
+| `routes/compose/+page.svelte` | ✅ | Alıntı ekranı Android QuoteDialog stili |
 | `routes/post/[id]/+page.svelte` | ✅ | |
-| `routes/profile/[uid]/+page.svelte` | ✅ | closeEditModal eklendi, btn-quote-share kaldırıldı |
+| `routes/profile/[uid]/+page.svelte` | ✅ | |
 | `routes/login/+page.svelte` | ✅ | |
 | `routes/register/+page.svelte` | ✅ | |
-| `lib/store/auth.ts` | 🗑️ **SİLİNDİ** | Shim gereksizdi, tüm importlar stores/auth'a taşındı |
-| `lib/store/theme.ts` | ✅ | Aktif — layout kullanıyor |
-| `lib/stores/auth.ts` | ✅ | Tek gerçek auth store |
-| `lib/components/Navbar.svelte` | ✅ | stores/auth kullanıyor |
+| `routes/library/+page.svelte` | ✅ **YENİ** | 4 sekme: Alıntılar/İncelemeler/Yazarlar/Kitaplar |
+| `routes/library/author/[id]/+page.svelte` | ✅ **YENİ** | 3 sekme, takip butonu |
+| `routes/library/book/[id]/+page.svelte` | ✅ **YENİ** | 2 sekme, inceleme ekleme |
+| `lib/services/library.service.ts` | ✅ **YENİ** | Android LibraryRepository karşılığı |
+| `lib/components/Navbar.svelte` | ✅ | Kütüphane linki + aktif route göstergesi eklendi |
 
 ---
 
@@ -52,17 +54,17 @@ web/src/lib/
 │   ├── comment.service.ts       ✅ Faz 1
 │   ├── profile.service.ts       ✅ Faz 1+2
 │   ├── post.service.ts          ✅ Faz 2
-│   ├── notification.service.ts  ⏳ Faz 4
-│   ├── message.service.ts       ⏳ Faz 4
-│   └── library.service.ts       ⏳ Faz 4
+│   ├── library.service.ts       ✅ Faz 4 YENİ
+│   ├── notification.service.ts  ⏳ Faz 5
+│   └── message.service.ts       ⏳ Faz 5
 │
 ├── stores/
-│   ├── auth.ts          ✅ currentUser + userProfile + isLoggedIn
+│   ├── auth.ts          ✅
 │   ├── feed.store.ts    ✅
 │   ├── profile.store.ts ✅
 │   └── ui.store.ts      ✅
 │
-├── store/ (kısmen — shim silindi)
+├── store/
 │   └── theme.ts  → aktif, layout kullanıyor
 │
 ├── components/
@@ -71,28 +73,30 @@ web/src/lib/
 │   ├── LikeButton.svelte    ✅
 │   ├── PostCard.svelte      ✅
 │   ├── CommentPanel.svelte  ✅
-│   ├── QuoteCard.svelte     ✅ isRtl $derived düzeltildi
+│   ├── QuoteCard.svelte     ✅
 │   ├── UserChip.svelte      ✅
 │   ├── InfiniteScroll.svelte ✅
-│   ├── Modal.svelte         ✅ a11y ignore formatı düzeltildi
+│   ├── Modal.svelte         ✅
 │   ├── LikersModal.svelte   ✅
-│   └── Navbar.svelte        ✅ stores/auth'a taşındı
+│   └── Navbar.svelte        ✅ Kütüphane linki eklendi
 │
 ├── firebase/ ✅
 └── supabase/ ✅
 
 web/src/routes/
-├── +layout.svelte               ✅ Faz 3
-├── feed/+page.svelte            ✅
-├── compose/+page.svelte         ✅ Android stili alıntı ekranı
-├── post/[id]/+page.svelte       ✅
-├── profile/[uid]/+page.svelte   ✅ Gönderi düzenleme düzeltildi
-├── login/+page.svelte           ✅
-├── register/+page.svelte        ✅
-├── notifications/               ⏳ Faz 4
-├── messages/                    ⏳ Faz 4
-├── library/                     ⏳ Faz 4
-└── kurdi/                       ⏳ Faz 4
+├── +layout.svelte                    ✅
+├── feed/+page.svelte                 ✅
+├── compose/+page.svelte              ✅
+├── post/[id]/+page.svelte            ✅
+├── profile/[uid]/+page.svelte        ✅
+├── login/+page.svelte                ✅
+├── register/+page.svelte             ✅
+├── library/+page.svelte              ✅ Faz 4
+├── library/author/[id]/+page.svelte  ✅ Faz 4
+├── library/book/[id]/+page.svelte    ✅ Faz 4
+├── notifications/                    ⏳ Faz 5
+├── messages/                         ⏳ Faz 5
+└── kurdi/                            ⏳ Faz 6
 ```
 
 ---
@@ -112,93 +116,76 @@ web/src/routes/
 ## 4. Yol Haritası
 
 ### Faz 1 ✅ (v26)
-- [x] `lib/models/` + tüm `lib/services/` temeli + `lib/stores/` + core bileşenler
+- [x] `lib/models/` + `lib/services/` temeli + `lib/stores/` + core bileşenler
 - [x] `routes/feed` + `routes/compose` refactor
 
-### Faz 2 ✅ (v27 → v28 bugfix)
-- [x] UserChip, InfiniteScroll, Modal, LikersModal bileşenleri
+### Faz 2 ✅ (v27 → v28)
+- [x] UserChip, InfiniteScroll, Modal, LikersModal
 - [x] `lib/services/post.service.ts`
 - [x] `routes/post/[id]` + `routes/profile/[uid]` refactor
 
-### Faz 3 ✅ (v29 → v30 → v31 bugfix)
-- [x] `routes/+layout.svelte` → `initAuthListener()` entegrasyonu
+### Faz 3 ✅ (v29 → v31)
+- [x] `routes/+layout.svelte` → `initAuthListener()`
 - [x] `routes/login` + `routes/register` → `auth.service.ts`
 - [x] `lib/store/auth.ts` shim silindi
-- [x] Navbar + tüm importlar `stores/auth`'a taşındı
-- [x] Çeşitli build hataları giderildi (çift script, a11y format, isRtl)
-- [x] Profil: closeEditModal eksikliği düzeltildi, btn-quote-share kaldırıldı
-- [x] Compose: alıntı ekranı Android stili (karanlık zemin, büyük outlined inputlar)
+- [x] Çeşitli build hataları giderildi
 
-### Faz 4 — Mesajlar, Bildirimler & Kütüphane ← Sıradaki
+### Faz 4 ✅ (v32)
+- [x] `lib/services/library.service.ts` — Android LibraryRepository karşılığı
+  - fetchLibraryQuotes (Firebase, sayfalama)
+  - fetchReviews / fetchAuthors / fetchBooks (Supabase)
+  - fetchAuthorById / fetchAuthorBooks / fetchAuthorReviews / fetchAuthorQuotesFromFeed
+  - fetchBookById / fetchBookQuotes / fetchBookReviews
+  - addBookReview / createAuthor / createLibraryBook
+  - checkAuthorFollow / followAuthor / unfollowAuthor
+  - searchBooks / searchAuthors (compose QuoteDialog için)
+- [x] `routes/library/+page.svelte` — 4 sekme (Android LibraryScreen)
+- [x] `routes/library/author/[id]/+page.svelte` — yazar detay + takip (Android AuthorDetailScreen)
+- [x] `routes/library/book/[id]/+page.svelte` — kitap detay + inceleme (Android LibraryBookDetailScreen)
+- [x] `Navbar.svelte` — Kütüphane linki + aktif route göstergesi
+
+### Faz 5 — Mesajlar & Bildirimler
 - [ ] `lib/services/notification.service.ts`
 - [ ] `routes/notifications/+page.svelte`
 - [ ] `lib/services/message.service.ts`
-- [ ] `routes/messages/+page.svelte` (konuşma listesi + mesaj ekranı)
-- [ ] `lib/services/library.service.ts`
-- [ ] `routes/library/+page.svelte`
+- [ ] `routes/messages/+page.svelte` + `routes/messages/[uid]/+page.svelte`
 
-### Faz 5 — Kurdî & Admin
+### Faz 6 — Kurdî & Admin
 - [ ] `routes/kurdi/+page.svelte`
 - [ ] `routes/admin/+page.svelte`
-- [ ] `lib/models/cms.ts`
+- [ ] `lib/models/cms.ts` (varsa genişletme)
 
 ---
 
-## 5. Servis API Özeti
+## 5. library.service.ts API Özeti
 
-### auth.service.ts
 ```typescript
-initAuthListener()        → unsubscribe fn
-signIn(email, pw)         → UserCredential
-register(email, pw, name) → UserCredential + Firestore user doc
-signOut()                 → void
+// Alıntılar (Firebase)
+fetchLibraryQuotes(lastDoc?)   → LibraryQuotePage { posts, lastDoc, hasMore }
+
+// İncelemeler (Supabase)
+fetchReviews()                 → BookReview[]
+fetchBookReviews(bookId)       → BookReview[]
+addBookReview(params)          → BookReview | null
+
+// Yazarlar (Supabase)
+fetchAuthors()                 → Author[]
+fetchAuthorById(id)            → Author | null
+fetchAuthorBooks(authorId)     → LibraryBook[]
+fetchAuthorReviews(authorId)   → BookReview[]
+fetchAuthorQuotesFromFeed(name)→ any[]  (Firebase feed)
+checkAuthorFollow(uid, authorId) → boolean
+followAuthor(uid, authorId)    → void
+unfollowAuthor(uid, authorId)  → void
+createAuthor(params)           → Author | null
+
+// Kitaplar (Supabase)
+fetchBooks()                   → LibraryBook[]
+fetchBookById(id)              → LibraryBook | null
+fetchBookQuotes(bookId, title?)→ any[]  (Firebase önce, Supabase fallback)
+createLibraryBook(params)      → LibraryBook | null
+
+// Arama (compose QuoteDialog)
+searchBooks(q)                 → { id, title, authorName, coverImg }[]
+searchAuthors(q)               → { id, name }[]
 ```
-
-### compose.service.ts
-```typescript
-loadPost(id)            → Partial<Post> | null
-uploadImage(file, uid)  → string (URL)
-createPost(payload)     → string (id)
-createQuote(payload)    → string (id)
-updatePost(id, fields)  → void
-```
-
-### post.service.ts
-```typescript
-fetchPostDetail(postId, uid?)      → PostDetail
-deletePost(postId)                 → void
-fetchComments(postId, uid?)        → Comment[]
-togglePostLike / togglePostSave    → void
-addComment / editComment / deleteComment → Comment / void
-toggleCommentLike                  → void
-fetchPostLikers / fetchCommentLikers → Liker[]
-```
-
-### profile.service.ts
-```typescript
-fetchUser / fetchSocialCounts / checkFollowStatus
-followUser / unfollowUser / sendFollowRequest / cancelFollowRequest
-fetchFollowers / fetchFollowing
-fetchUserPosts / fetchMoreUserPosts
-fetchReadingList / fetchLibraryBooks / addLibraryBook
-saveProfileEdit / checkUsernameAvailable / uploadProfilePhoto
-shareQuoteFromProfile
-```
-
----
-
-## 6. Component API
-
-```svelte
-<InfiniteScroll hasMore={bool} loading={bool} onLoadMore={fn} />
-<Modal bind:open title="..." maxWidth="480px" onclose={fn}> ... </Modal>
-<LikersModal bind:open={bool} {likers} {loading} onclose={fn} />
-<UserChip uid="..." name="..." photoURL="..." subtitle="..." />
-<QuoteCard quoteText="..." bookName="..." authorName="..." coverImg="..." expanded={false} />
-```
-
----
-
-## 7. Bilinen Silinecek / Temizlenecek
-- `lib/store/auth.ts` → **SİLİNDİ** v31'de
-- `lib/store/theme.ts` → Faz 5'te layout refactor edilince silinecek
