@@ -85,7 +85,7 @@ function rowToQuote(r: any): BookQuote {
     authorId:        r.author_id         ?? '',
     bookTitle:       r.book_title        ?? '',
     authorName:      r.author_name       ?? '',
-    coverImg:        r.cover_img         ?? '',
+    coverImg:        r.cover_img         ?? '',  // cover_img DB'de opsiyonel — sayfa book.coverImg'i kullanır
     text:            r.text              ?? '',
     uid:             r.uid               ?? '',
     userDisplayName: r.user_display_name ?? '',
@@ -170,7 +170,7 @@ export async function fetchRecentQuotes(offset = 0, limit = PAGE): Promise<Quote
 
   const { data } = await supabase
     .from('book_quotes')
-    .select('id, book_id, author_id, book_title, author_name, cover_img, text, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
+    .select('id, book_id, author_id, book_title, author_name, text, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
     .or('moderation_status.eq.active,moderation_status.is.null')
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
@@ -192,7 +192,7 @@ export async function fetchQuotesByBook(bookId: string, bookTitle?: string): Pro
   // 1. book_id ile Supabase'den çek (birincil kaynak)
   const { data } = await supabase
     .from('book_quotes')
-    .select('id, book_id, author_id, book_title, author_name, cover_img, text, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
+    .select('id, book_id, author_id, book_title, author_name, text, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
     .eq('book_id', bookId)
     .or('moderation_status.eq.active,moderation_status.is.null')
     .order('created_at', { ascending: false })
@@ -204,7 +204,7 @@ export async function fetchQuotesByBook(bookId: string, bookTitle?: string): Pro
   if (bookTitle?.trim()) {
     const { data: d2 } = await supabase
       .from('book_quotes')
-      .select('id, book_id, author_id, book_title, author_name, cover_img, text, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
+      .select('id, book_id, author_id, book_title, author_name, text, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
       .ilike('book_title', bookTitle.trim())
       .or('moderation_status.eq.active,moderation_status.is.null')
       .order('created_at', { ascending: false })
@@ -227,7 +227,7 @@ export async function fetchQuotesByAuthor(authorId: string, authorName?: string)
   if (authorId) {
     const { data } = await supabase
       .from('book_quotes')
-      .select('id, book_id, author_id, book_title, author_name, cover_img, text, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
+      .select('id, book_id, author_id, book_title, author_name, text, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
       .eq('author_id', authorId)
       .or('moderation_status.eq.active,moderation_status.is.null')
       .order('created_at', { ascending: false })
@@ -241,7 +241,7 @@ export async function fetchQuotesByAuthor(authorId: string, authorName?: string)
   if (authorName?.trim()) {
     const { data } = await supabase
       .from('book_quotes')
-      .select('id, book_id, author_id, book_title, author_name, cover_img, text, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
+      .select('id, book_id, author_id, book_title, author_name, text, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
       .ilike('author_name', authorName.trim())
       .or('moderation_status.eq.active,moderation_status.is.null')
       .order('created_at', { ascending: false })

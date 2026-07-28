@@ -27,15 +27,17 @@
 
   onMount(async () => {
     loading = true;
-    book = await fetchBookById(id);
-    const uid = $currentUser?.uid ?? null;
-    const [rawQuotes, rawReviews] = await Promise.all([
-      fetchQuotesByBook(id, book?.title),
-      fetchReviewsByBook(id),
-    ]);
-    quotes  = await hydrateQuoteLikes(rawQuotes, uid);
-    reviews = rawReviews;
-    loading = false;
+    try {
+      book = await fetchBookById(id);
+      const uid = $currentUser?.uid ?? null;
+      const [rawQuotes, rawReviews] = await Promise.all([
+        fetchQuotesByBook(id, book?.title),
+        fetchReviewsByBook(id),
+      ]);
+      quotes  = await hydrateQuoteLikes(rawQuotes, uid);
+      reviews = rawReviews;
+    } catch(e) { console.error('book detail load error:', e); }
+    finally { loading = false; }
   });
 
   async function handleQuoteLike(q: BookQuote) {
@@ -131,7 +133,7 @@
         <div class="quote-list">
           {#each quotes as q (q.id)}
             <div class="quote-item">
-              <QuoteCard quoteText={q.text} bookName={q.bookTitle} authorName={q.authorName} coverImg={q.coverImg} />
+              <QuoteCard quoteText={q.text} bookName={q.bookTitle} authorName={q.authorName} coverImg={q.coverImg || book?.coverImg || ''} />
               <div class="quote-meta">
                 <a href="/profile/{q.uid}" class="quote-user">
                   <img src={q.userPhotoURL || '/placeholder.png'} alt={q.userDisplayName} class="mini-av" />
