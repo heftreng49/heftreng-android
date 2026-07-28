@@ -1,7 +1,7 @@
 # Heftreng Web — Mimari Plan ve Yol Haritası
 
 > **Konum:** `web/heftreng-web-plan.md`
-> **Durum:** Faz 3 tamamlandı ✅. Faz 4 devam ediyor.
+> **Durum:** Faz 3 tamamlandı ✅. Faz 3.5 devam ediyor (profil düzeltmeleri).
 
 ---
 
@@ -19,6 +19,7 @@
 | v30 | FAB sheet: Gönderi Yaz / Alıntı Paylaş seçenekleri |
 | v31 | Bugfix: login+register çift `</script>`, svelte-ignore syntax, QuoteCard `$derived` |
 | v32 | Profil: Alıntılar sekmesi eklendi, Kitaplar 2'li grid, `feed_post_id` filtresi |
+| v33 | Profil: Alıntılar → sekme değil bottom sheet (Android UserQuotesSheet karşılığı), stat'a tıklayınca açılır |
 
 ---
 
@@ -30,17 +31,23 @@
 | `routes/feed/+page.svelte` | ✅ | FAB sheet |
 | `routes/compose/+page.svelte` | ✅ | `?type=quote` parametresi |
 | `routes/post/[id]/+page.svelte` | ✅ | post.service.ts |
-| `routes/profile/[uid]/+page.svelte` | ✅ | Alıntılar sekmesi, 2'li kitap grid |
+| `routes/profile/[uid]/+page.svelte` | ✅ | Alıntılar bottom sheet (stat'a tıkla), 2'li kitap grid |
 | `routes/login/+page.svelte` | ✅ | auth.service.ts |
 | `routes/register/+page.svelte` | ✅ | auth.service.ts |
 
-### Profil Sekmeler (v32)
+### Profil Sekmeler (v33)
 ```
-0 → Gönderiler   (feed postları)
-1 → Alıntılar    ← YENİ (book_quotes, feed_post_id boş olanlar filtrelenir)
-2 → Okuma Listesi
-3 → Kitaplar & Seriler  (2'li grid, created_at DESC, tür rozeti)
+0 → Gönderiler
+1 → Okuma Listesi
+2 → Kitaplar & Seriler  (2'li grid, tür rozeti)
 ```
+
+### Alıntılar — Bottom Sheet (Android UserQuotesSheet karşılığı)
+- Sekme değil, profil başlığındaki **"X alıntı"** stat'ına tıklayınca açılır
+- `book_quotes` tablosundan `uid` ile sorgu, `created_at DESC`
+- `feed_post_id` boş olanlar filtrelenir (Android `toPost()` mantığı)
+- Her alıntı `"metin"` + `yazar · kitap` formatı, amber renk
+- Link: `book_id` varsa `/library/book/{id}`, yoksa `/post/{feed_post_id}`
 
 ### Android → Web Mantık Eşleştirmesi
 

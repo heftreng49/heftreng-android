@@ -65,7 +65,7 @@
   });
 
   let selectedTab = $state(0);
-  const tabs = ["Gönderiler", "Alıntılar", "Okuma Listesi", "Kitaplar & Seriler"];
+  const tabs = ["Gönderiler", "Okuma Listesi", "Kitaplar & Seriler"];
 
   let showFollowers  = $state(false);
   let showFollowing  = $state(false);
@@ -99,6 +99,7 @@
   // book_quotes — feed_post_id boş olanlar filtrelenir (Android toPost() mantığı)
   let userQuotes       = $state<any[]>([]);
   let quotesLoading    = $state(false);
+  let showQuotesSheet  = $state(false);
 
   // Alıntı paylaşma
   let showShareQuoteModal     = $state(false);
@@ -138,7 +139,7 @@
   });
 
   $effect(() => {
-    if (selectedTab === 3 && uid && libraryBooks.length === 0 && !libraryLoading) {
+    if (selectedTab === 2 && uid && libraryBooks.length === 0 && !libraryLoading) {
       loadLibraryBooks(uid);
     }
   });
@@ -710,11 +711,11 @@
               <span>kitap okudum</span>
             </div>
             <div class="rh-div"></div>
-            <div class="rh-stat">
+            <button class="rh-stat rh-stat-btn" onclick={() => { showQuotesSheet = true; if (!userQuotes.length) loadUserQuotes(); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg>
-              <strong>{posts.filter(p => p.quoteText).length}</strong>
+              <strong>{userQuotes.length || (user?.quotesShared ?? 0)}</strong>
               <span>alıntı</span>
-            </div>
+            </button>
             <div class="rh-div"></div>
             <div class="rh-stat" style="color:#F59E0B">
               <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M13.5 0.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z"/></svg>
@@ -954,32 +955,6 @@
 
     <!-- Okuma listesi -->
     {:else if selectedTab === 1}
-      <!-- Alıntılar -->
-      {#if quotesLoading}
-        <div class="empty-tab"><div class="spinner"></div><p>Yükleniyor...</p></div>
-      {:else if userQuotes.length === 0}
-        <div class="empty-tab">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="44" height="44"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
-          <p>Henüz alıntı paylaşılmamış.</p>
-        </div>
-      {:else}
-        <div class="quotes-list">
-          {#each userQuotes as q (q.id)}
-            <a href="/post/{q.feed_post_id}" class="quote-row">
-              <div class="quote-row-icon">"</div>
-              <div class="quote-row-body">
-                <p class="quote-row-text">{q.text}</p>
-                <div class="quote-row-meta">
-                  {#if q.book_title}<span class="quote-row-book">📖 {q.book_title}</span>{/if}
-                  {#if q.author_name}<span class="quote-row-author">{q.author_name}</span>{/if}
-                </div>
-              </div>
-            </a>
-          {/each}
-        </div>
-      {/if}
-
-    {:else if selectedTab === 2}
       {#if Object.keys(readingList).length === 0}
         <div class="empty-tab">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="44" height="44"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
@@ -1068,6 +1043,50 @@
     <div style="height:80px"></div>
   {/if}
 </main>
+
+<!-- ── Alıntılar Sheet (Android UserQuotesSheet karşılığı) ─────── -->
+{#if showQuotesSheet}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="modal-backdrop" onclick={() => showQuotesSheet = false}></div>
+  <div class="quotes-sheet">
+    <div class="quotes-sheet-handle"></div>
+    <div class="quotes-sheet-header">
+      <span class="quotes-sheet-title">Alıntılarım ({userQuotes.length})</span>
+      <button class="sheet-close" onclick={() => showQuotesSheet = false}>✕</button>
+    </div>
+    <div class="quotes-sheet-divider"></div>
+
+    {#if quotesLoading}
+      <div class="quotes-sheet-empty">
+        <div class="spinner"></div>
+      </div>
+    {:else if userQuotes.length === 0}
+      <div class="quotes-sheet-empty">
+        <p>Henüz alıntı yok</p>
+      </div>
+    {:else}
+      <div class="quotes-sheet-list">
+        {#each userQuotes as q (q.id)}
+          <!-- Android: onClick → navigate library_book_detail/{bookId} -->
+          <a
+            href={q.book_id ? `/library/book/${q.book_id}` : `/post/${q.feed_post_id}`}
+            class="quotes-sheet-item"
+            onclick={() => showQuotesSheet = false}
+          >
+            <p class="qsi-text">"{q.text}"</p>
+            <p class="qsi-meta">
+              {[q.author_name, q.book_title].filter(Boolean).join(' · ')}
+            </p>
+          </a>
+          <div class="quotes-sheet-divider"></div>
+        {/each}
+      </div>
+    {/if}
+    <div style="height:16px"></div>
+  </div>
+{/if}
+
 
 <!-- ── Gönderi Düzenleme Modal ───────────────────────────────── -->
 {#if editModalPost}
@@ -1558,6 +1577,55 @@
   background: none; border: none; color: var(--primary); font-size: 14px;
   cursor: pointer; font-family: inherit; padding: 0;
 }
+
+.rh-stat-btn {
+  background: none; border: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  color: inherit; padding: 4px 8px; border-radius: 10px;
+  transition: background 0.15s;
+}
+.rh-stat-btn:hover { background: rgba(255,255,255,0.08); }
+
+.quotes-sheet {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: min(600px, 100vw);
+  background: var(--surface); border-radius: 24px 24px 0 0;
+  box-shadow: 0 -4px 32px rgba(0,0,0,0.2);
+  z-index: 401; max-height: 70vh; display: flex; flex-direction: column;
+  animation: sheet-up 0.25s ease;
+}
+@keyframes sheet-up {
+  from { transform: translateX(-50%) translateY(100%); }
+  to   { transform: translateX(-50%) translateY(0); }
+}
+.quotes-sheet-handle {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: var(--divider); margin: 10px auto 4px;
+  flex-shrink: 0;
+}
+.quotes-sheet-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 16px 10px; flex-shrink: 0;
+}
+.quotes-sheet-title { font-weight: 700; font-size: 1rem; color: var(--on-bg); }
+.quotes-sheet-divider { height: 1px; background: var(--divider); flex-shrink: 0; }
+.quotes-sheet-empty {
+  display: flex; align-items: center; justify-content: center;
+  height: 120px; color: var(--muted); font-size: 0.9rem;
+}
+.quotes-sheet-list { overflow-y: auto; flex: 1; }
+.quotes-sheet-item {
+  display: block; padding: 12px 16px;
+  text-decoration: none; color: inherit;
+  transition: background 0.12s;
+}
+.quotes-sheet-item:hover { background: var(--surface-var); }
+.qsi-text {
+  font-size: 0.88rem; font-style: italic; line-height: 1.55;
+  color: var(--on-bg); margin: 0 0 4px;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+}
+.qsi-meta { font-size: 0.75rem; color: #D97706; font-weight: 500; margin: 0; }
 
 .quotes-list { display: flex; flex-direction: column; }
 .quote-row {
