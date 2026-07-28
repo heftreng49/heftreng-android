@@ -15,9 +15,9 @@
   const TABS = ['Alıntılar', 'İncelemeler', 'Yazarlar', 'Kitaplar'] as const;
   let activeTab = $state(0);
 
-  let quotes:   BookQuote[]  = $state([]);
-  let reviews:  BookReview[] = $state([]);
-  let authors:  Author[]     = $state([]);
+  let quotes:   BookQuote[]   = $state([]);
+  let reviews:  BookReview[]  = $state([]);
+  let authors:  Author[]      = $state([]);
   let books:    LibraryBook[] = $state([]);
   let loading   = $state(true);
 
@@ -25,14 +25,23 @@
   let quotesHasMore     = $state(false);
   let quotesLoadingMore = $state(false);
 
+  // Pull-to-refresh
+  let refreshing  = $state(false);
+  let touchStartY = 0;
+  let pullDist    = $state(0);
+  const PULL_THRESHOLD = 72;
+
   onMount(async () => {
     const t = $page.url.searchParams.get('tab');
     if (t) activeTab = parseInt(t) || 0;
+    await loadAll();
+  });
 
+  async function loadAll() {
     loading = true;
     await Promise.all([loadQuotes(), loadReviews(), loadAuthors(), loadBooks()]);
     loading = false;
-  });
+  }
 
   async function loadQuotes() {
     const p: QuotePage = await fetchRecentQuotes(0);
@@ -54,58 +63,119 @@
     quotesLoadingMore = false;
   }
 
-  async function loadReviews() {
-    reviews = await fetchRecentReviews();
-  }
+  async function loadReviews() { reviews = await fetchRecentReviews(); }
+  async function loadAuthors() { authors = await fetchAuthors(); }
+  async function loadBooks()   { books   = await fetchBooks(); }
 
-  async function loadAuthors() {
-    authors = await fetchAuthors();
-  }
-
-  async function loadBooks() {
-    books = await fetchBooks();
-  }
-
+  // ── Beğeni: alıntı ────────────────────────────────────────────────────────
   async function handleQuoteLike(quote: BookQuote) {
     const u = $currentUser;
     if (!u) { window.location.href = '/login'; return; }
-    const res = await toggleLibraryItemLike(quote.feedPostId, u.uid, u.displayName ?? '', u.photoURL ?? '');
+    const was = quote.isLikedByMe ?? false;
+    // Optimistic
     quotes = quotes.map(q => q.id === quote.id
-      ? { ...q, likesCount: res.count, isLikedByMe: res.liked }
+      ? { ...q, likesCount: Math.max(0, q.likesCount + (was ? -1 : 1)), isLikedByMe: !was }
       : q
     );
+    try {
+      const res = await toggleLibraryItemLike(quote.feedPostId, u.uid, u.displayName ?? '', u.photoURL ?? '');
+      quotes = quotes.map(q => q.id === quote.id
+        ? { ...q, likesCount: res.count, isLikedByMe: res.liked } : q);
+    } catch {
+      quotes = quotes.map(q => q.id === quote.id
+        ? { ...q, likesCount: Math.max(0, q.likesCount + (was ? 1 : -1)), isLikedByMe: was } : q);
+    }
+  }
+
+  // ── Beğeni: inceleme ──────────────────────────────────────────────────────
+  async function handleReviewLike(review: BookReview) {
+    const u = $currentUser;
+    if (!u) { window.location.href = '/login'; return; }
+    const was = review.isLikedByMe ?? false;
+    reviews = reviews.map(r => r.id === review.id
+      ? { ...r, likesCount: Math.max(0, r.likesCount + (was ? -1 : 1)), isLikedByMe: !was }
+      : r
+    );
+    try {
+      const res = await toggleLibraryItemLike(review.id, u.uid, u.displayName ?? '', u.photoURL ?? '');
+      reviews = reviews.map(r => r.id === review.id
+        ? { ...r, likesCount: res.count, isLikedByMe: res.liked } : r);
+    } catch {
+      reviews = reviews.map(r => r.id === review.id
+        ? { ...r, likesCount: Math.max(0, r.likesCount + (was ? 1 : -1)), isLikedByMe: was } : r);
+    }
+  }
+
+  // ── Pull-to-refresh ────────────────────────────────────────────────────────
+  function onTouchStart(e: TouchEvent) { touchStartY = e.touches[0].clientY; }
+  function onTouchMove(e: TouchEvent) {
+    if (refreshing || loading) return;
+    if (document.documentElement.scrollTop > 0) return;
+    const dy = e.touches[0].clientY - touchStartY;
+    if (dy > 0) pullDist = Math.min(dy * 0.5, PULL_THRESHOLD + 20);
+  }
+  async function onTouchEnd() {
+    if (pullDist >= PULL_THRESHOLD) {
+      refreshing = true; pullDist = 0;
+      await loadAll();
+      refreshing = false;
+    } else { pullDist = 0; }
   }
 
   function stars(r: number) {
     return '★'.repeat(Math.round(r)) + '☆'.repeat(5 - Math.round(r));
   }
+
+  function ago(ts: any): string {
+    const ms = ts?.seconds ? ts.seconds * 1000 : ts ? new Date(ts).getTime() : 0;
+    const diff = Date.now() - ms;
+    const m = Math.floor(diff/60000), h = Math.floor(diff/3600000), d = Math.floor(diff/86400000);
+    if (m < 1) return 'şimdi';
+    if (m < 60) return `${m}dk`;
+    if (h < 24) return `${h}sa`;
+    if (d < 7)  return `${d}g`;
+    return `${Math.floor(d/30)}ay`;
+  }
 </script>
 
 <svelte:head><title>Kütüphane — Heftreng</title></svelte:head>
 
-<div class="page">
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div class="page"
+  role="main"
+  ontouchstart={onTouchStart}
+  ontouchmove={onTouchMove}
+  ontouchend={onTouchEnd}
+>
+
+  <!-- Pull-to-refresh göstergesi -->
+  {#if pullDist > 10 || refreshing}
+    <div class="ptr-indicator" style="height:{refreshing ? 48 : pullDist}px; opacity:{refreshing ? 1 : pullDist/PULL_THRESHOLD}">
+      <div class="ptr-spinner" class:spinning={refreshing}></div>
+    </div>
+  {/if}
+
   <header class="lib-header">
     <h1 class="lib-title">Kütüphane</h1>
   </header>
 
-  <!-- Sekmeler — Android TabRow ile aynı stil -->
+  <!-- Sekmeler -->
   <div class="tabs">
     {#each TABS as tab, i}
-      <button class="tab" class:active={activeTab === i} onclick={() => activeTab = i}>
-        {tab}
-      </button>
+      <button class="tab" class:active={activeTab === i} onclick={() => activeTab = i}>{tab}</button>
     {/each}
+    <div class="tab-line" style="transform:translateX({activeTab * 100}%)"></div>
   </div>
 
   {#if loading}
     <div class="skeleton-list">
-      {#each {length: 6} as _}
+      {#each {length: 5} as _}
         <div class="skel-card">
           <Skeleton width="64px" height="90px" radius="8px" />
           <div style="flex:1;display:flex;flex-direction:column;gap:6px">
             <Skeleton width="60%" height="14px" />
             <Skeleton width="40%" height="12px" />
-            <Skeleton width="90%" height="12px" />
+            <Skeleton width="80%" height="12px" />
           </div>
         </div>
       {/each}
@@ -113,148 +183,202 @@
 
   {:else}
 
-    <!-- ── Alıntılar — Android LibraryQuotesTab / ConnectedPostCard ile birebir ── -->
+    <!-- ── Alıntılar ──────────────────────────────────────────────────────── -->
     {#if activeTab === 0}
       {#if quotes.length === 0}
         <div class="empty-state">
-          <span class="empty-icon">❝</span>
-          <p class="empty-text">Henüz alıntı yok.</p>
+          <span class="empty-icon">💬</span>
+          <p>Henüz alıntı yok.</p>
         </div>
       {:else}
         <div class="quote-list">
           {#each quotes as q (q.id)}
-            <!-- Android'deki ConnectedPostCard wrapper kartı -->
-            <div class="quote-post-card">
-              <!-- Üst: kullanıcı satırı (Android PostCard header gibi) -->
-              <div class="quote-post-header">
-                <a href="/profile/{q.uid}" class="quote-post-user">
-                  <img
-                    src={q.userPhotoURL || '/placeholder.png'}
-                    alt={q.userDisplayName}
-                    class="post-avatar"
-                  />
-                  <div class="post-user-info">
-                    <span class="post-username">{q.userDisplayName}</span>
-                    <span class="post-tag">alıntı paylaştı</span>
-                  </div>
+            <div class="quote-item">
+              <!-- Kullanıcı başlığı (Android ConnectedPostCard üst kısmı gibi) -->
+              <div class="quote-user-header">
+                <a href="/profile/{q.uid}" class="q-av">
+                  {#if q.userPhotoURL}
+                    <img src={q.userPhotoURL} alt={q.userDisplayName} />
+                  {:else}
+                    <span>{(q.userDisplayName || '?')[0].toUpperCase()}</span>
+                  {/if}
                 </a>
-              </div>
-
-              <!-- QuoteCard: mevcut bileşen (Android QuoteCompose karşılığı) -->
-              <div class="quote-card-wrap">
-                <QuoteCard
-                  quoteText={q.text}
-                  bookName={q.bookTitle}
-                  authorName={q.authorName}
-                  coverImg={q.coverImg}
-                />
-              </div>
-
-              <!-- Alt: eylemler (Android BookCardActions / like row) -->
-              <div class="quote-post-actions">
+                <div class="q-meta">
+                  <a href="/profile/{q.uid}" class="q-name">{q.userDisplayName}</a>
+                  {#if q.createdAt}
+                    <span class="q-time">{ago(q.createdAt)}</span>
+                  {/if}
+                </div>
                 {#if q.bookId}
-                  <a href="/library/book/{q.bookId}" class="action-book-link">
-                    <span class="action-icon">📖</span>
-                    <span class="action-label">{q.bookTitle}</span>
+                  <a href="/library/book/{q.bookId}" class="q-book-chip">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    {q.bookTitle}
                   </a>
                 {/if}
-                <div class="action-spacer"></div>
-                <!-- Beğeni butonu — Android BookQuoteCard likeButton ile aynı -->
+              </div>
+
+              <!-- Alıntı içeriği -->
+              <QuoteCard
+                quoteText={q.text}
+                bookName={q.bookTitle}
+                authorName={q.authorName}
+                coverImg={q.coverImg}
+              />
+
+              <!-- Aksiyonlar -->
+              <div class="quote-actions">
                 <button
-                  class="like-btn"
-                  class:liked={q.isLikedByMe}
+                  class="act-like" class:liked={q.isLikedByMe}
                   onclick={() => handleQuoteLike(q)}
                   aria-label="Beğen"
                 >
-                  <span class="like-icon">{q.isLikedByMe ? '♥' : '♡'}</span>
-                  {#if q.likesCount > 0}
-                    <span class="like-count">{q.likesCount}</span>
+                  {#if q.isLikedByMe}
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                  {:else}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                   {/if}
+                  {#if q.likesCount > 0}<span>{q.likesCount}</span>{/if}
                 </button>
+                <a href="/post/{q.feedPostId}" class="act-comment" aria-label="Yorumlar">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </a>
               </div>
             </div>
           {/each}
 
-          <!-- Daha Fazla Göster — Android OutlinedButton ile aynı -->
           {#if quotesHasMore}
-            <div class="load-more-wrap">
-              {#if quotesLoadingMore}
-                <div class="spinner"></div>
-              {:else}
-                <button class="load-more-btn" onclick={loadMoreQuotes}>
-                  Daha Fazla Göster
-                </button>
-              {/if}
-            </div>
+            <button class="load-more" onclick={loadMoreQuotes} disabled={quotesLoadingMore}>
+              {quotesLoadingMore ? 'Yükleniyor…' : 'Daha fazla göster'}
+            </button>
           {/if}
         </div>
       {/if}
 
-    <!-- ── İncelemeler ───────────────────────────────────────────────────── -->
+    <!-- ── İncelemeler ────────────────────────────────────────────────────── -->
     {:else if activeTab === 1}
       {#if reviews.length === 0}
         <div class="empty-state">
           <span class="empty-icon">⭐</span>
-          <p class="empty-text">Henüz inceleme yok.</p>
+          <p>Henüz inceleme yok.</p>
         </div>
       {:else}
         <div class="review-list">
           {#each reviews as rv (rv.id)}
-            <a href="/library/book/{rv.bookId}" class="review-card">
-              <div class="review-header">
-                <span class="stars">{stars(rv.rating)}</span>
-                <span class="rating-num">{rv.rating.toFixed(1)}</span>
-                <span class="book-title-sm">{rv.bookTitle}</span>
+            <div class="review-card">
+              <!-- Kitap başlığı + rating -->
+              <a href="/library/book/{rv.bookId}" class="review-book-row">
+                {#if rv.bookCoverImg}
+                  <img src={rv.bookCoverImg} alt={rv.bookTitle} class="review-cover" />
+                {:else}
+                  <div class="review-cover review-cover-ph">📖</div>
+                {/if}
+                <div class="review-book-info">
+                  <span class="review-book-title">{rv.bookTitle}</span>
+                  <div class="review-stars">
+                    {#each {length: 5} as _, i}
+                      <svg viewBox="0 0 24 24" width="14" height="14"
+                        fill={i < Math.round(rv.rating) ? '#F59E0B' : 'none'}
+                        stroke="#F59E0B" stroke-width="1.5">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                      </svg>
+                    {/each}
+                    <span class="review-rating-num">{rv.rating.toFixed(1)}</span>
+                  </div>
+                </div>
+              </a>
+
+              <!-- İnceleme metni -->
+              {#if rv.text}
+                <p class="review-text">{rv.text}</p>
+              {/if}
+
+              <!-- Alt satır: kullanıcı + beğeni -->
+              <div class="review-footer">
+                <a href="/profile/{rv.uid}" class="review-user">
+                  <div class="mini-av">
+                    {#if rv.userPhotoURL}
+                      <img src={rv.userPhotoURL} alt={rv.userDisplayName} />
+                    {:else}
+                      <span>{(rv.userDisplayName || '?')[0].toUpperCase()}</span>
+                    {/if}
+                  </div>
+                  <span>{rv.userDisplayName}</span>
+                </a>
+                <button
+                  class="act-like sm" class:liked={rv.isLikedByMe}
+                  onclick={() => handleReviewLike(rv)}
+                  aria-label="Beğen"
+                >
+                  {#if rv.isLikedByMe}
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                  {:else}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                  {/if}
+                  {#if (rv.likesCount ?? 0) > 0}<span>{rv.likesCount}</span>{/if}
+                </button>
               </div>
-              <p class="review-text">{rv.text}</p>
-              <div class="review-user">
-                <img src={rv.userPhotoURL || '/placeholder.png'} alt={rv.userDisplayName} class="mini-avatar" />
-                <span>{rv.userDisplayName}</span>
-              </div>
-            </a>
+            </div>
           {/each}
         </div>
       {/if}
 
-    <!-- ── Yazarlar ──────────────────────────────────────────────────────── -->
+    <!-- ── Yazarlar ───────────────────────────────────────────────────────── -->
     {:else if activeTab === 2}
       {#if authors.length === 0}
         <div class="empty-state">
-          <span class="empty-icon">👤</span>
-          <p class="empty-text">Henüz yazar yok.</p>
+          <span class="empty-icon">✍️</span>
+          <p>Henüz yazar yok.</p>
         </div>
       {:else}
         <div class="author-list">
           {#each authors as a (a.id)}
-            <!-- Android LibraryAuthorRow → Card + Row birebir karşılığı -->
             <a href="/library/author/{a.id}" class="author-card">
-              <Avatar src={a.photoURL} name={a.name} size={52} />
+              <div class="author-av">
+                {#if a.photoURL}
+                  <img src={a.photoURL} alt={a.name} />
+                {:else}
+                  <span>{a.name[0]?.toUpperCase()}</span>
+                {/if}
+              </div>
               <div class="author-info">
                 <span class="author-name">{a.name}</span>
                 {#if a.nationality}
                   <span class="author-nat">{a.nationality}</span>
                 {/if}
-                <div class="author-stats">
-                  {#if a.bookCount > 0}
-                    <span class="stat-chip">📚 {a.bookCount}</span>
+                <!-- Android'deki StatChip'ler -->
+                <div class="author-chips">
+                  {#if (a.bookCount ?? 0) > 0}
+                    <span class="stat-chip">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                      {a.bookCount} kitap
+                    </span>
                   {/if}
-                  {#if a.quoteCount > 0}
-                    <span class="stat-chip">❝ {a.quoteCount}</span>
+                  {#if (a.quoteCount ?? 0) > 0}
+                    <span class="stat-chip">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
+                      {a.quoteCount} alıntı
+                    </span>
+                  {/if}
+                  {#if (a.followerCount ?? 0) > 0}
+                    <span class="stat-chip">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                      {a.followerCount} takipçi
+                    </span>
                   {/if}
                 </div>
               </div>
-              <span class="chevron">›</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" style="color:var(--muted);flex-shrink:0"><polyline points="9 18 15 12 9 6"/></svg>
             </a>
           {/each}
         </div>
       {/if}
 
-    <!-- ── Kitaplar ──────────────────────────────────────────────────────── -->
+    <!-- ── Kitaplar ───────────────────────────────────────────────────────── -->
     {:else if activeTab === 3}
       {#if books.length === 0}
         <div class="empty-state">
-          <span class="empty-icon">📖</span>
-          <p class="empty-text">Henüz kitap yok.</p>
+          <span class="empty-icon">📚</span>
+          <p>Henüz kitap yok.</p>
         </div>
       {:else}
         <div class="book-grid">
@@ -263,13 +387,18 @@
               {#if b.coverImg}
                 <img src={b.coverImg} alt={b.title} class="book-cover" />
               {:else}
-                <div class="book-cover-placeholder">{b.title[0]}</div>
+                <div class="book-cover book-cover-ph">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                </div>
               {/if}
               <div class="book-info">
                 <span class="book-title">{b.title}</span>
                 <span class="book-author">{b.authorName}</span>
-                {#if b.avgRating > 0}
-                  <span class="book-rating">★ {b.avgRating.toFixed(1)}</span>
+                {#if (b.avgRating ?? 0) > 0}
+                  <span class="book-rating">
+                    <svg viewBox="0 0 24 24" fill="#F59E0B" width="11" height="11"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    {b.avgRating.toFixed(1)}
+                  </span>
                 {/if}
               </div>
             </a>
@@ -282,192 +411,157 @@
 </div>
 
 <style>
-  .page { max-width: 720px; margin: 0 auto; padding-bottom: 80px; }
+.page { max-width: 720px; margin: 0 auto; padding-bottom: 80px; }
 
-  .lib-header { padding: 16px 16px 0; }
-  .lib-title  { font-family: 'Playfair Display', serif; font-size: 26px; font-weight: 700; color: var(--primary); }
+/* Pull-to-refresh */
+.ptr-indicator {
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; transition: height 0.2s, opacity 0.2s;
+}
+.ptr-spinner {
+  width: 22px; height: 22px;
+  border: 2.5px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  border-top-color: var(--primary); border-radius: 50%;
+}
+.ptr-spinner.spinning { animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-  /* Sekmeler — Android TabRow ile aynı */
-  .tabs { display: flex; border-bottom: 2px solid var(--divider); position: sticky; top: 0; background: var(--bg); z-index: 10; }
-  .tab  {
-    flex: 1; padding: 12px 4px; font-size: 13px; font-weight: 600; color: var(--muted);
-    border-bottom: 2px solid transparent; margin-bottom: -2px;
-    transition: color .15s, border-color .15s;
-  }
-  .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+/* Header */
+.lib-header { padding: 16px 16px 4px; }
+.lib-title  { font-size: 22px; font-weight: 800; color: var(--primary); margin: 0; }
 
-  /* Boş durum — Android EmptyState ile aynı */
-  .empty-state {
-    display: flex; flex-direction: column; align-items: center;
-    padding: 48px 16px; gap: 12px;
-  }
-  .empty-icon { font-size: 40px; opacity: .4; }
-  .empty-text { font-size: 14px; color: var(--muted); text-align: center; }
+/* Tabs */
+.tabs {
+  position: sticky; top: 52px; z-index: 9; display: flex;
+  background: var(--surface); border-bottom: 1px solid var(--divider); overflow: hidden;
+}
+.tab {
+  flex: 1; padding: 12px 4px; font-size: 13px; font-weight: 500;
+  color: var(--muted); background: none; border: none; cursor: pointer;
+  position: relative; transition: color 0.2s; font-family: inherit;
+}
+.tab.active { color: var(--on-bg); font-weight: 700; }
+.tab-line {
+  position: absolute; bottom: 0; left: 0; width: 25%; height: 2.5px;
+  background: var(--primary); border-radius: 2px 2px 0 0;
+  transition: transform 0.25s cubic-bezier(.4,0,.2,1); pointer-events: none;
+}
 
-  /* Skeleton */
-  .skeleton-list { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
-  .skel-card { display: flex; gap: 12px; padding: 12px; background: var(--card); border-radius: 12px; }
+/* Skeleton */
+.skeleton-list { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.skel-card { display: flex; gap: 12px; padding: 14px; background: var(--card); border-radius: 14px; }
 
-  /* ── Alıntılar — Android ConnectedPostCard / LibraryQuotesTab ── */
-  .quote-list { padding: 0; display: flex; flex-direction: column; gap: 0; }
+/* Empty */
+.empty-state { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; gap: 10px; color: var(--muted); }
+.empty-icon { font-size: 44px; }
+.empty-state p { font-size: 14px; }
 
-  /* Kart wrapper — Android ConnectedPostCard → Card(containerColor=HeftSurface) */
-  .quote-post-card {
-    background: var(--card);
-    border-bottom: 1px solid var(--divider);
-  }
+/* ── Alıntılar ─────────────────────────────────────────────────────────────── */
+.quote-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+.quote-item { background: var(--card); border-radius: 16px; overflow: hidden; border: 0.7px solid var(--divider); }
+.quote-user-header { display: flex; align-items: center; gap: 9px; padding: 11px 12px 0; }
+.q-av {
+  width: 36px; height: 36px; border-radius: 50%; background: var(--surface-var);
+  overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: var(--on-bg); text-decoration: none;
+}
+.q-av img { width: 100%; height: 100%; object-fit: cover; }
+.q-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.q-name { font-size: 13px; font-weight: 700; color: var(--on-bg); text-decoration: none; }
+.q-name:hover { text-decoration: underline; }
+.q-time { font-size: 11px; color: var(--muted); }
+.q-book-chip {
+  display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  border-radius: 99px; padding: 3px 9px; text-decoration: none; flex-shrink: 0;
+  white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis;
+}
+.quote-actions {
+  display: flex; align-items: center; gap: 4px;
+  padding: 6px 12px 10px; border-top: 1px solid var(--divider); margin-top: 2px;
+}
+.act-like {
+  display: flex; align-items: center; gap: 5px;
+  background: none; border: none; cursor: pointer; color: var(--muted);
+  padding: 6px 10px; border-radius: 20px; font-size: 13px; font-family: inherit;
+  transition: background 0.15s;
+}
+.act-like:hover { background: var(--surface-var); }
+.act-like.liked { color: #FF3A5C; }
+.act-like.sm { padding: 4px 8px; font-size: 12px; }
+.act-comment {
+  display: flex; align-items: center; gap: 5px; color: var(--muted);
+  padding: 6px 10px; border-radius: 20px; text-decoration: none;
+  transition: background 0.15s;
+}
+.act-comment:hover { background: var(--surface-var); }
 
-  /* Üst kullanıcı satırı — Android PostCard header */
-  .quote-post-header {
-    display: flex;
-    align-items: center;
-    padding: 12px 14px 8px;
-  }
-  .quote-post-user {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .post-avatar {
-    width: 36px; height: 36px;
-    border-radius: 50%;
-    object-fit: cover;
-    background: color-mix(in srgb, var(--primary) 15%, transparent);
-  }
-  .post-user-info {
-    display: flex; flex-direction: column; gap: 1px;
-  }
-  .post-username {
-    font-size: 14px; font-weight: 600; color: var(--on-bg);
-  }
-  .post-tag {
-    font-size: 11px; color: var(--muted);
-  }
+/* ── İncelemeler ───────────────────────────────────────────────────────────── */
+.review-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+.review-card { background: var(--card); border-radius: 16px; overflow: hidden; border: 0.7px solid var(--divider); padding: 14px; }
+.review-book-row { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; text-decoration: none; }
+.review-cover { width: 44px; height: 64px; border-radius: 5px; object-fit: cover; flex-shrink: 0; }
+.review-cover-ph { background: var(--surface-var); display: flex; align-items: center; justify-content: center; font-size: 22px; }
+.review-book-info { display: flex; flex-direction: column; gap: 5px; }
+.review-book-title { font-size: 14px; font-weight: 700; color: var(--on-bg); }
+.review-stars { display: flex; align-items: center; gap: 2px; }
+.review-rating-num { font-size: 12px; font-weight: 700; color: #F59E0B; margin-left: 4px; }
+.review-text { font-size: 14px; color: var(--on-surface); line-height: 1.6; margin-bottom: 12px; }
+.review-footer { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--divider); padding-top: 10px; }
+.review-user { display: flex; align-items: center; gap: 7px; text-decoration: none; color: var(--muted); font-size: 13px; font-weight: 500; }
+.mini-av { width: 26px; height: 26px; border-radius: 50%; background: var(--surface-var); overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--on-bg); }
+.mini-av img { width: 100%; height: 100%; object-fit: cover; }
 
-  /* QuoteCard sarıcı — Android içindeki QuoteCard padding */
-  .quote-card-wrap {
-    padding: 0 12px 10px;
-  }
+/* ── Yazarlar ──────────────────────────────────────────────────────────────── */
+.author-list { display: flex; flex-direction: column; padding: 10px 12px; gap: 8px; }
+.author-card {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--card); border-radius: 14px; padding: 12px 14px;
+  text-decoration: none; border: 0.7px solid var(--divider);
+  transition: border-color 0.15s;
+}
+.author-card:hover { border-color: color-mix(in srgb, var(--primary) 30%, var(--divider)); }
+.author-av {
+  width: 52px; height: 52px; border-radius: 50%; background: var(--surface-var);
+  overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700; color: var(--on-bg);
+  border: 2px solid color-mix(in srgb, var(--primary) 20%, transparent);
+}
+.author-av img { width: 100%; height: 100%; object-fit: cover; }
+.author-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.author-name { font-size: 15px; font-weight: 700; color: var(--on-bg); }
+.author-nat  { font-size: 12px; color: var(--muted); }
+.author-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.stat-chip {
+  display: flex; align-items: center; gap: 3px;
+  font-size: 11px; color: var(--muted);
+}
 
-  /* Alt eylem satırı — Android BookCardActions */
-  .quote-post-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px 12px;
-    border-top: 1px solid var(--divider);
-  }
-  .action-book-link {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 12px;
-    color: var(--primary);
-    max-width: 55%;
-    overflow: hidden;
-  }
-  .action-icon { font-size: 13px; flex-shrink: 0; }
-  .action-label {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-  .action-spacer { flex: 1; }
+/* ── Kitaplar ──────────────────────────────────────────────────────────────── */
+.book-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: 12px; padding: 12px;
+}
+.book-card { display: flex; flex-direction: column; gap: 7px; text-decoration: none; }
+.book-cover {
+  width: 100%; aspect-ratio: 2/3; object-fit: cover;
+  border-radius: 10px; display: block;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+}
+.book-cover-ph {
+  background: var(--surface-var); display: flex;
+  align-items: center; justify-content: center; color: var(--muted);
+}
+.book-info { display: flex; flex-direction: column; gap: 2px; padding: 0 2px; }
+.book-title  { font-size: 13px; font-weight: 700; color: var(--on-bg); line-height: 1.3; }
+.book-author { font-size: 12px; color: var(--muted); }
+.book-rating { display: flex; align-items: center; gap: 3px; font-size: 12px; color: #F59E0B; font-weight: 600; }
 
-  /* Beğeni butonu — Android BookQuoteCard likeButton */
-  .like-btn {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 13px;
-    color: var(--muted);
-    padding: 6px 10px;
-    border-radius: 20px;
-    background: var(--surface-var);
-    transition: color .15s, background .15s;
-  }
-  .like-btn.liked { color: var(--error); background: color-mix(in srgb, var(--error) 12%, transparent); }
-  .like-icon { font-size: 15px; line-height: 1; }
-  .like-count { font-size: 12px; font-weight: 600; }
-
-  /* Daha Fazla — Android OutlinedButton */
-  .load-more-wrap {
-    display: flex; justify-content: center;
-    padding: 16px;
-  }
-  .load-more-btn {
-    padding: 10px 28px;
-    border: 1.5px solid var(--primary);
-    border-radius: 20px;
-    font-size: 14px; font-weight: 600;
-    color: var(--primary);
-    background: transparent;
-    transition: background .15s;
-  }
-  .load-more-btn:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
-
-  .spinner {
-    width: 28px; height: 28px;
-    border: 2.5px solid var(--divider);
-    border-top-color: var(--primary);
-    border-radius: 50%;
-    animation: spin .7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ── İncelemeler ── */
-  .review-list { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-  .review-card { display: block; background: var(--card); border-radius: 14px; padding: 14px; }
-  .review-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .stars { color: var(--primary); font-size: 14px; }
-  .rating-num { font-weight: 700; font-size: 14px; color: var(--on-bg); }
-  .book-title-sm { font-size: 13px; color: var(--muted); margin-left: auto; }
-  .review-text { font-size: 14px; line-height: 1.5; color: var(--on-surface); margin-bottom: 10px; }
-  .review-user { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
-  .mini-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
-
-  /* ── Yazarlar — Android LibraryAuthorRow / Card + Row ── */
-  .author-list {
-    display: flex; flex-direction: column;
-    gap: 10px;
-    padding: 12px 16px;
-  }
-  .author-card {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px;
-    background: var(--card);
-    border-radius: 14px;
-    box-shadow: 0 1px 2px rgba(0,0,0,.06);
-    transition: background .12s;
-  }
-  .author-card:hover { background: var(--surface-var); }
-  .author-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-  .author-name { font-weight: 600; font-size: 15px; color: var(--on-bg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .author-nat  { font-size: 12px; color: var(--muted); }
-  .author-stats { display: flex; gap: 10px; margin-top: 2px; }
-  .stat-chip { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 3px; }
-  .chevron { font-size: 22px; color: var(--muted); font-weight: 300; flex-shrink: 0; }
-
-  /* ── Kitaplar — Android LazyVerticalGrid(2 sütun) ── */
-  .book-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 14px;
-    padding: 14px;
-  }
-  .book-card  { display: flex; flex-direction: column; gap: 8px; }
-  .book-cover { width: 100%; aspect-ratio: 2/3; object-fit: cover; border-radius: 8px; }
-  .book-cover-placeholder {
-    width: 100%; aspect-ratio: 2/3; background: var(--surface-var);
-    border-radius: 8px; display: flex; align-items: center;
-    justify-content: center; font-size: 36px; color: var(--muted);
-  }
-  .book-info   { display: flex; flex-direction: column; gap: 2px; }
-  .book-title  { font-weight: 700; font-size: 13px; color: var(--on-bg); line-height: 1.3; }
-  .book-author { font-size: 12px; color: var(--muted); }
-  .book-rating { font-size: 12px; color: var(--primary); }
+.load-more {
+  display: block; width: 100%; padding: 14px; margin: 4px 0;
+  background: var(--surface-var); border: none; border-radius: 12px;
+  font-size: 14px; font-weight: 600; color: var(--primary);
+  cursor: pointer; font-family: inherit;
+}
+.load-more:disabled { opacity: .5; cursor: default; }
 </style>
