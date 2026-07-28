@@ -256,13 +256,13 @@
   .load-more:disabled { opacity: .5; cursor: default; }
 
   .fab {
-    position: fixed; bottom: 80px; right: 20px;
+    position: fixed; bottom: 76px; right: 20px;
     width: 52px; height: 52px; border-radius: 50%;
     background: var(--primary); color: #fff;
     display: flex; align-items: center; justify-content: center;
     border: none; cursor: pointer;
     box-shadow: 0 4px 16px rgba(0,0,0,.25);
-    z-index: 60; transition: background 0.2s, transform 0.2s;
+    z-index: 110; transition: background 0.2s, transform 0.2s;
   }
   .fab:hover { transform: scale(1.07); }
   .fab.fab-open { background: #555; }
@@ -270,7 +270,7 @@
   .fab-backdrop {
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.4);
-    z-index: 55; backdrop-filter: blur(2px);
+    z-index: 105; backdrop-filter: blur(2px);
   }
 
   .fab-sheet {
@@ -279,7 +279,7 @@
     border: 1px solid var(--divider);
     border-radius: 20px;
     padding: 16px 12px 10px;
-    z-index: 60;
+    z-index: 110;
     width: min(320px, calc(100vw - 32px));
     box-shadow: 0 8px 32px rgba(0,0,0,0.18);
     animation: sheet-pop 0.2s ease;
