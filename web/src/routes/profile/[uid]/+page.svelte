@@ -88,6 +88,23 @@
   // Okuma listesi
   let readingList = $state<Record<string, any[]>>({});
 
+  // Rozetler
+  const BADGE_CATALOG: Record<string, { emoji: string; title: string; desc: string }> = {
+    first_book:      { emoji: '📖', title: 'İlk Kitap',              desc: 'İlk kitabını okudum olarak işaretledin' },
+    bookworm:        { emoji: '🐛', title: 'Kitap Kurdu',            desc: '10 kitap okudun' },
+    library_master:  { emoji: '🏛️', title: 'Kütüphane Ustası',      desc: '25 kitap okudun' },
+    quote_collector: { emoji: '💬', title: 'Alıntı Koleksiyoncusu', desc: '5 alıntı paylaştın' },
+    quote_master:    { emoji: '🏆', title: 'Alıntı Ustası',          desc: '25 alıntı paylaştın' },
+    streak_7:        { emoji: '🔥', title: '7 Günlük Seri',          desc: '7 gün üst üste aktif oldun' },
+    streak_30:       { emoji: '⚡', title: '30 Günlük Seri',         desc: '30 gün üst üste aktif oldun' },
+    streak_100:      { emoji: '🌟', title: '100 Günlük Seri',        desc: '100 gün üst üste aktif oldun' },
+  };
+  let badgeIds         = $state<string[]>([]);
+  let activeBadgeInfo  = $state<string | null>(null); // tıklanan badge id
+
+  // ReadBooksSheet
+  let showReadBooksSheet = $state(false);
+
   // Kitap ekleme
   let showAddBookModal = $state(false);
   let addBookTitle     = $state(""); let addBookSynopsis = $state("");
@@ -135,6 +152,7 @@
       loadSocialCounts();
       if ($currentUser && !isMe) checkFollow();
       loadReadingListData();
+      loadBadges(uid);
     });
   });
 
@@ -221,6 +239,16 @@
 
   async function loadReadingListData() {
     readingList = await fetchReadingList(uid);
+  }
+
+  async function loadBadges(targetUid: string) {
+    try {
+      const { data } = await supabase
+        .from('user_badges')
+        .select('badge_id')
+        .eq('uid', targetUid);
+      badgeIds = (data ?? []).map((r: any) => r.badge_id as string);
+    } catch(e) { console.error('badges:', e); }
   }
 
   async function loadUserQuotes() {
@@ -705,11 +733,11 @@
         <!-- Okuma özeti hero -->
         {#if canSeeContent && ((user?.booksRead ?? 0) > 0 || (user?.streak ?? 0) > 0)}
           <div class="reading-hero">
-            <div class="rh-stat">
+            <button class="rh-stat rh-stat-btn" onclick={() => showReadBooksSheet = true}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-              <strong>{user?.booksRead ?? 0}</strong>
+              <strong>{user?.booksRead ?? (readingList['okudum']?.length ?? 0)}</strong>
               <span>kitap okudum</span>
-            </div>
+            </button>
             <div class="rh-div"></div>
             <button class="rh-stat rh-stat-btn" onclick={() => { showQuotesSheet = true; if (!userQuotes.length) loadUserQuotes(); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg>
@@ -723,6 +751,31 @@
               <span>gün streak</span>
             </div>
           </div>
+        {/if}
+
+        <!-- Rozetler (Android BadgesRow) -->
+        {#if badgeIds.length > 0}
+          <div class="badges-row">
+            {#each badgeIds as bid (bid)}
+              {@const b = BADGE_CATALOG[bid]}
+              {#if b}
+                <button class="badge-item" onclick={() => activeBadgeInfo = activeBadgeInfo === bid ? null : bid} title={b.title}>
+                  <span class="badge-emoji">{b.emoji}</span>
+                  <span class="badge-label">{b.title}</span>
+                </button>
+              {/if}
+            {/each}
+          </div>
+          {#if activeBadgeInfo && BADGE_CATALOG[activeBadgeInfo]}
+            <div class="badge-info-bar">
+              <span class="badge-info-emoji">{BADGE_CATALOG[activeBadgeInfo].emoji}</span>
+              <div>
+                <strong>{BADGE_CATALOG[activeBadgeInfo].title}</strong>
+                <p>{BADGE_CATALOG[activeBadgeInfo].desc}</p>
+              </div>
+              <button class="badge-info-close" onclick={() => activeBadgeInfo = null}>✕</button>
+            </div>
+          {/if}
         {/if}
       {/if}
     </div>
@@ -1043,6 +1096,40 @@
     <div style="height:80px"></div>
   {/if}
 </main>
+
+<!-- ── Okunan Kitaplar Sheet (Android ReadBooksSheet) ────────── -->
+{#if showReadBooksSheet}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="sheet-backdrop" onclick={() => showReadBooksSheet = false}></div>
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span class="sheet-title">Okunan Kitaplar <span class="sheet-count">{readingList['okudum']?.length ?? 0}</span></span>
+      <button class="sheet-close" onclick={() => showReadBooksSheet = false}>✕</button>
+    </div>
+    <div class="sheet-list">
+      {#if !readingList['okudum']?.length}
+        <p class="sheet-empty">Henüz okunan kitap yok.</p>
+      {:else}
+        {#each readingList['okudum'] as entry}
+          <div class="rl-sheet-item">
+            {#if entry.cover_url}
+              <img src={entry.cover_url} alt={entry.book_name} class="rl-sheet-cover" />
+            {:else}
+              <div class="rl-sheet-cover rl-sheet-cover-ph">📖</div>
+            {/if}
+            <div class="rl-sheet-info">
+              <span class="rl-sheet-title">{entry.book_name ?? '—'}</span>
+              {#if entry.author_name}<span class="rl-sheet-author">{entry.author_name}</span>{/if}
+            </div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="color:var(--muted);flex-shrink:0"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        {/each}
+      {/if}
+    </div>
+  </div>
+{/if}
 
 <!-- ── Alıntılar Sheet (Android UserQuotesSheet karşılığı) ─────── -->
 {#if showQuotesSheet}
@@ -1789,4 +1876,58 @@
 .library-badge { font-size: 11px; color: var(--primary); font-weight: 600; }
 .clear-book-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 4px; }
 .clear-book-btn:hover { color: var(--on-bg); }
+
+/* ── Rozetler ───────────────────────────────────────────────────────────── */
+.badges-row {
+  display: flex; gap: 8px; overflow-x: auto; padding: 8px 0 4px;
+  scrollbar-width: none;
+}
+.badges-row::-webkit-scrollbar { display: none; }
+.badge-item {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  min-width: 60px; background: none; border: none; cursor: pointer;
+  padding: 6px 4px; border-radius: 12px; transition: background 0.15s;
+  font-family: inherit;
+}
+.badge-item:hover { background: var(--surface-var); }
+.badge-emoji { font-size: 26px; line-height: 1; }
+.badge-label {
+  font-size: 9px; color: var(--muted); text-align: center;
+  line-height: 1.3; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 58px;
+}
+.badge-info-bar {
+  display: flex; align-items: center; gap: 10px;
+  background: color-mix(in srgb, #F59E0B 10%, transparent);
+  border: 1px solid color-mix(in srgb, #F59E0B 30%, transparent);
+  border-radius: 12px; padding: 10px 12px; margin-top: 6px;
+  animation: fadeup 0.15s ease;
+}
+.badge-info-emoji { font-size: 24px; flex-shrink: 0; }
+.badge-info-bar div { flex: 1; }
+.badge-info-bar strong { display: block; font-size: 13px; color: var(--on-bg); font-weight: 700; }
+.badge-info-bar p { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
+.badge-info-close {
+  background: none; border: none; color: var(--muted);
+  cursor: pointer; font-size: 14px; flex-shrink: 0; padding: 4px;
+}
+
+/* ── ReadBooksSheet ─────────────────────────────────────────────────────── */
+.rl-sheet-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; border-bottom: 0.5px solid var(--divider);
+  cursor: pointer; transition: background 0.1s;
+}
+.rl-sheet-item:hover { background: var(--surface-var); }
+.rl-sheet-cover {
+  width: 38px; height: 54px; border-radius: 4px; object-fit: cover; flex-shrink: 0;
+}
+.rl-sheet-cover-ph {
+  background: var(--surface-var); display: flex; align-items: center;
+  justify-content: center; font-size: 20px;
+}
+.rl-sheet-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.rl-sheet-title { font-size: 14px; font-weight: 600; color: var(--on-bg); }
+.rl-sheet-author { font-size: 12px; color: var(--muted); }
+
 </style>
