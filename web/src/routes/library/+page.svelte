@@ -223,6 +223,8 @@
                 bookName={q.bookTitle}
                 authorName={q.authorName}
                 coverImg={q.coverImg}
+                bookId={q.bookId ?? ''}
+                authorId={q.authorId ?? ''}
               />
 
               <!-- Aksiyonlar -->

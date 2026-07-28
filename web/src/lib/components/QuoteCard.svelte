@@ -1,5 +1,5 @@
-<!-- Android QuoteCompose.kt → QuoteCard Svelte karşılığı -->
-<!-- Amber/mor gradient arka plan, alıntı ikonu, kitap kapağı -->
+<!-- Android QuoteCompose.kt → QuoteCard web karşılığı -->
+<!-- Tüm sayfalar (feed, profil, kütüphane, kitap, yazar) bu bileşeni kullanır -->
 <script lang="ts">
   interface Props {
     quoteText:   string;
@@ -9,6 +9,11 @@
     language?:   string;
     /** true → detail ekranı, kırpma yok (Android expandByDefault) */
     expanded?:   boolean;
+    /** Kitap sayfası ID'si — verilirse kitap adı tıklanabilir link olur */
+    bookId?:     string;
+    /** Yazar sayfası ID'si — verilirse yazar adı tıklanabilir link olur */
+    authorId?:   string;
+    /** Callback alternatifi (ID yoksa) */
     onTapBook?:  (name: string) => void;
     onTapAuthor?:(name: string) => void;
   }
@@ -20,121 +25,221 @@
     coverImg   = '',
     language   = 'tr',
     expanded   = false,
+    bookId     = '',
+    authorId   = '',
     onTapBook,
     onTapAuthor,
   }: Props = $props();
 
   const isRtl = $derived(language === 'ku' || language === 'ar');
+
+  // Android: isLong = quoteText.length > 280
+  const isLong    = $derived(quoteText.length > 280);
+  let isExpanded  = $state(expanded);
+
+  const displayText = $derived(
+    (!isLong || isExpanded || expanded) ? quoteText : quoteText.slice(0, 280).trimEnd() + '…'
+  );
+
+  // Kitap linki — önce bookId ile direkt sayfa, yoksa callback
+  function handleBookTap(e: MouseEvent) {
+    if (bookId) return; // <a> etiketi zaten navigate eder
+    e.preventDefault();
+    onTapBook?.(bookName);
+  }
+
+  function handleAuthorTap(e: MouseEvent) {
+    if (authorId) return;
+    e.preventDefault();
+    onTapAuthor?.(authorName);
+  }
 </script>
 
 {#if quoteText}
 <div class="quote-card" class:rtl={isRtl}>
-  <!-- Alıntı ikonu -->
-  <span class="quote-icon" aria-hidden="true">"</span>
+
+  <!-- Büyük tırnak ikonu (Android'deki "\u201c" 56sp konumu) -->
+  <span class="quote-icon" aria-hidden="true">❝</span>
 
   <!-- Alıntı metni -->
-  <p class="quote-text" class:clamped={!expanded}>
-    {quoteText}
-  </p>
+  <div class="quote-inner">
+    <p class="quote-text">{displayText}</p>
 
-  <!-- Kitap bilgisi -->
-  {#if bookName || authorName}
-  <div class="quote-meta">
-    {#if coverImg}
-      <img src={coverImg} alt={bookName} class="cover" />
-    {:else}
-      <div class="cover-placeholder" aria-hidden="true">📖</div>
+    <!-- Devamını oku (Android: isLong && !expandByDefault) -->
+    {#if isLong && !expanded}
+      <button class="expand-btn" onclick={() => isExpanded = !isExpanded}>
+        {isExpanded
+          ? (language === 'ku' ? 'Kêmtir nîşan bide' : 'Daha az göster')
+          : (language === 'ku' ? 'Bêtir bixwîne'     : 'Devamını oku')}
+      </button>
     {/if}
-    <div class="meta-text">
-      {#if bookName}
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <span
-          class="book-name"
-          class:clickable={!!onTapBook}
-          onclick={() => onTapBook?.(bookName)}
-        >{bookName}</span>
-      {/if}
-      {#if authorName}
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <span
-          class="author-name"
-          class:clickable={!!onTapAuthor}
-          onclick={() => onTapAuthor?.(authorName)}
-        >{authorName}</span>
-      {/if}
-    </div>
+
+    <!-- Kitap + yazar bilgisi -->
+    {#if bookName || authorName}
+      <div class="quote-meta">
+
+        <!-- Kapak (Android: 28x42dp Box) -->
+        {#if bookId}
+          <a href="/library/book/{bookId}" class="cover-wrap" onclick={(e) => e.stopPropagation()}>
+            {#if coverImg}
+              <img src={coverImg} alt={bookName} class="cover-img" />
+            {:else}
+              <div class="cover-ph">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="1.5" width="14" height="14">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
+              </div>
+            {/if}
+          </a>
+        {:else if coverImg || !bookName}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="cover-wrap" onclick={(e) => { e.stopPropagation(); handleBookTap(e); }} style={onTapBook ? 'cursor:pointer' : ''}>
+            {#if coverImg}
+              <img src={coverImg} alt={bookName} class="cover-img" />
+            {:else}
+              <div class="cover-ph">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="1.5" width="14" height="14">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <div class="cover-ph">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="1.5" width="14" height="14">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            </svg>
+          </div>
+        {/if}
+
+        <!-- Kitap adı + yazar adı -->
+        <div class="meta-text">
+          {#if bookName}
+            {#if bookId}
+              <a href="/library/book/{bookId}" class="book-name" onclick={(e) => e.stopPropagation()}>{bookName}</a>
+            {:else if onTapBook}
+              <button class="book-name book-btn" onclick={(e) => { e.stopPropagation(); onTapBook?.(bookName); }}>{bookName}</button>
+            {:else}
+              <span class="book-name">{bookName}</span>
+            {/if}
+          {/if}
+
+          {#if authorName}
+            {#if authorId}
+              <a href="/library/author/{authorId}" class="author-name-text" onclick={(e) => e.stopPropagation()}>{authorName}</a>
+            {:else if onTapAuthor}
+              <button class="author-name-text author-btn" onclick={(e) => { e.stopPropagation(); onTapAuthor?.(authorName); }}>{authorName}</button>
+            {:else}
+              <span class="author-name-text">{authorName}</span>
+            {/if}
+          {/if}
+        </div>
+      </div>
+    {/if}
   </div>
-  {/if}
 </div>
 {/if}
 
 <style>
+/* Android QuoteCompose.kt birebir karşılığı */
 .quote-card {
   position: relative;
   border-radius: 14px;
-  padding: 14px 16px 12px;
+  padding: 14px 14px 12px;
   background: linear-gradient(
     135deg,
-    rgba(251, 191, 36, 0.08) 0%,
-    rgba(155, 114, 245, 0.06) 100%
+    color-mix(in srgb, #F59E0B 8%, transparent),
+    color-mix(in srgb, #9B72F5 6%, transparent)
   );
-  border: 1px solid;
-  border-color: rgba(251, 191, 36, 0.35);
+  border: 1px solid color-mix(in srgb, #F59E0B 35%, transparent);
   overflow: hidden;
+  margin: 0;
 }
 .quote-card.rtl { direction: rtl; }
 
+/* Android: Text("\u201c", fontSize=56sp, color=Amber.copy(alpha=0.12)) */
 .quote-icon {
   position: absolute;
-  top: 6px;
-  left: 12px;
-  font-size: 2.4rem;
+  top: -6px;
+  left: 6px;
+  font-size: 52px;
   line-height: 1;
-  color: rgba(251, 191, 36, 0.35);
+  color: color-mix(in srgb, #F59E0B 14%, transparent);
   font-family: Georgia, serif;
+  font-weight: 900;
   pointer-events: none;
+  user-select: none;
 }
 
+.quote-inner {
+  padding-left: 8px;
+  position: relative;
+}
+
+/* Android: fontSize=14sp, fontStyle=Italic, fontWeight=Medium */
 .quote-text {
-  margin: 0 0 10px;
-  font-size: 0.92rem;
-  line-height: 1.6;
-  color: var(--color-text, #1a1a1a);
-  padding-top: 8px;
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--on-surface);
   font-style: italic;
-}
-.quote-text.clamped {
-  display: -webkit-box;
-  -webkit-line-clamp: 5;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  font-weight: 500;
+  white-space: pre-wrap;
 }
 
+/* Android: "Devamını oku" / "Daha az göster" */
+.expand-btn {
+  display: block;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #F59E0B;
+  padding: 0;
+  margin-bottom: 8px;
+  font-family: inherit;
+}
+
+/* Android: Row(verticalAlignment=Center, horizontalArrangement=spacedBy(8dp)) */
 .quote-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 8px;
+  gap: 8px;
+  margin-top: 10px;
 }
 
-.cover {
-  width: 38px;
-  height: 52px;
-  object-fit: cover;
-  border-radius: 5px;
-  flex-shrink: 0;
-}
-.cover-placeholder {
-  width: 38px;
-  height: 52px;
+/* Android: Box(28x42dp, clip=RoundedCornerShape(3dp), background=Amber.copy(0.10)) */
+.cover-wrap {
+  width: 28px;
+  height: 42px;
+  border-radius: 3px;
+  background: color-mix(in srgb, #F59E0B 10%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(155, 114, 245, 0.12);
-  border-radius: 5px;
-  font-size: 1.4rem;
+  overflow: hidden;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+.cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cover-ph {
+  width: 28px;
+  height: 42px;
+  border-radius: 3px;
+  background: color-mix(in srgb, #F59E0B 10%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
@@ -142,19 +247,49 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
+
+/* Android: color=Amber, fontSize=11sp, fontWeight=SemiBold, maxLines=1 */
 .book-name {
-  font-size: 0.8rem;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--color-text, #1a1a1a);
+  color: #F59E0B;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+  display: block;
 }
-.author-name {
-  font-size: 0.75rem;
-  color: #888;
-}
-.clickable {
+a.book-name:hover { text-decoration: underline; }
+
+.book-btn {
+  background: none;
+  border: none;
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  padding: 0;
+  font-family: inherit;
+  text-align: left;
+}
+
+/* Android: color=Muted, fontSize=10sp, maxLines=1 */
+.author-name-text {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  text-decoration: none;
+}
+a.author-name-text:hover { text-decoration: underline; }
+
+.author-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  text-align: left;
 }
 </style>

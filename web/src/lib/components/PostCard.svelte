@@ -4,6 +4,7 @@
   import { createEventDispatcher } from 'svelte';
   import Avatar     from './Avatar.svelte';
   import LikeButton from './LikeButton.svelte';
+  import QuoteCard   from './QuoteCard.svelte';
   import { ago, shortNum } from '$lib/models/util';
   import type { Post } from '$lib/models/post';
 
@@ -108,25 +109,19 @@
   <!-- İÇERİK -->
   <div class="card-body">
 
-    <!-- Alıntı kutusu (Android QuoteDialog görünümü) -->
+    <!-- Alıntı kutusu — merkezi QuoteCard bileşeni (Android QuoteCompose.kt) -->
     {#if post.quoteText}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <div class="quote-card" onclick={(e) => e.stopPropagation()}>
-        <span class="quote-mark">❝</span>
-        <div class="quote-inner">
-          <p class="quote-text">{post.quoteText}</p>
-          {#if post.bookName || post.authorName}
-            <div class="quote-source">
-              {#if post.coverImg}
-                <img src={post.coverImg} alt={post.bookName} class="quote-cover-img" />
-              {/if}
-              <div>
-                {#if post.bookName}<span class="quote-book">{post.bookName}</span>{/if}
-                {#if post.authorName}<span class="quote-author">{post.authorName}</span>{/if}
-              </div>
-            </div>
-          {/if}
-        </div>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div onclick={(e) => e.stopPropagation()} style="margin-bottom:8px">
+        <QuoteCard
+          quoteText={post.quoteText}
+          bookName={post.bookName ?? ''}
+          authorName={post.authorName ?? ''}
+          coverImg={post.coverImg ?? ''}
+          bookId={(post as any).libraryBookId ?? (post as any).bookId ?? ''}
+          authorId={(post as any).authorId ?? ''}
+        />
       </div>
     {/if}
 
@@ -280,21 +275,7 @@
   }
   .post-img { width: 100%; border-radius: 10px; margin-top: 10px; object-fit: cover; max-height: 360px; }
 
-  /* Alıntı kutusu */
-  .quote-card {
-    background: linear-gradient(135deg, #f8f4ff, #f0ebfb);
-    border-left: 3px solid #7c4dff; border-radius: 10px;
-    padding: 12px 14px; margin-bottom: 10px;
-    display: flex; gap: 8px;
-  }
-  .quote-mark { font-size: 24px; color: #7c4dff; line-height: 1; flex-shrink: 0; }
-  .quote-inner { flex: 1; min-width: 0; }
-  .quote-text { font-size: 14px; font-style: italic; margin: 0 0 8px; line-height: 1.6; }
-  .quote-source { display: flex; align-items: center; gap: 8px; }
-  .quote-cover-img { width: 32px; height: 44px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
-  .quote-book { font-size: 12px; font-weight: 700; display: block; color: #333; }
-  .quote-author { font-size: 11px; color: #888; display: block; }
-
+  /* Alıntı kutusu → bileşen QuoteCard.svelte kullanılıyor */
   /* Repost embed */
   .repost-embed {
     border: 1px solid #e8e0f5; border-radius: 10px;
