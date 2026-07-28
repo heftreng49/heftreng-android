@@ -73,7 +73,7 @@ function rowToBook(r: any): LibraryBook {
     quoteCount:  r.quote_count  ?? 0,
     reviewCount: r.review_count ?? 0,
     avgRating:   r.avg_rating   ?? 0,
-    likesCount:  r.likes_count  ?? 0,
+    likesCount:  0,
     ts:          r.created_at   ?? null,
   };
 }
@@ -92,8 +92,8 @@ function rowToQuote(r: any): BookQuote {
     userPhotoURL:    r.user_photo_url    ?? '',
     feedPostId:      r.feed_post_id      ?? '',
     visibility:      r.visibility        ?? 'public',
-    likesCount:      r.likes_count       ?? 0,
-    ts:              r.created_at        ?? null, // ← created_at, ts değil
+    likesCount:      0,  // feed_likes tablosundan hydrateQuoteLikes ile doldurulur
+    ts:              r.created_at        ?? null,
     // client-side state
     isLikedByMe:     false,
   };
@@ -112,7 +112,7 @@ function rowToReview(r: any): BookReview {
     userDisplayName: r.user_display_name ?? '',
     userPhotoURL:    r.user_photo_url    ?? '',
     feedPostId:      r.feed_post_id      ?? '',
-    likesCount:      r.likes_count       ?? 0,
+    likesCount:      0,
     ts:              r.created_at        ?? null,
     isLikedByMe:     false,
   };
@@ -170,8 +170,8 @@ export async function fetchRecentQuotes(offset = 0, limit = PAGE): Promise<Quote
 
   const { data } = await supabase
     .from('book_quotes')
-    .select('id, book_id, author_id, book_title, author_name, cover_img, text, uid, user_display_name, user_photo_url, feed_post_id, likes_count, created_at, moderation_status')
-    .eq('moderation_status', 'active')
+    .select('id, book_id, author_id, book_title, author_name, cover_img, text, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
+    .or('moderation_status.eq.active,moderation_status.is.null')
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -192,9 +192,9 @@ export async function fetchQuotesByBook(bookId: string, bookTitle?: string): Pro
   // 1. book_id ile Supabase'den çek (birincil kaynak)
   const { data } = await supabase
     .from('book_quotes')
-    .select('id, book_id, author_id, book_title, author_name, cover_img, text, uid, user_display_name, user_photo_url, feed_post_id, likes_count, created_at, moderation_status')
+    .select('id, book_id, author_id, book_title, author_name, cover_img, text, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
     .eq('book_id', bookId)
-    .eq('moderation_status', 'active')
+    .or('moderation_status.eq.active,moderation_status.is.null')
     .order('created_at', { ascending: false })
     .limit(50);
 
@@ -204,9 +204,9 @@ export async function fetchQuotesByBook(bookId: string, bookTitle?: string): Pro
   if (bookTitle?.trim()) {
     const { data: d2 } = await supabase
       .from('book_quotes')
-      .select('id, book_id, author_id, book_title, author_name, cover_img, text, uid, user_display_name, user_photo_url, feed_post_id, likes_count, created_at, moderation_status')
+      .select('id, book_id, author_id, book_title, author_name, cover_img, text, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
       .ilike('book_title', bookTitle.trim())
-      .eq('moderation_status', 'active')
+      .or('moderation_status.eq.active,moderation_status.is.null')
       .order('created_at', { ascending: false })
       .limit(50);
     return (d2 ?? []).map(rowToQuote);
@@ -227,9 +227,9 @@ export async function fetchQuotesByAuthor(authorId: string, authorName?: string)
   if (authorId) {
     const { data } = await supabase
       .from('book_quotes')
-      .select('id, book_id, author_id, book_title, author_name, cover_img, text, uid, user_display_name, user_photo_url, feed_post_id, likes_count, created_at, moderation_status')
+      .select('id, book_id, author_id, book_title, author_name, cover_img, text, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
       .eq('author_id', authorId)
-      .eq('moderation_status', 'active')
+      .or('moderation_status.eq.active,moderation_status.is.null')
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -241,9 +241,9 @@ export async function fetchQuotesByAuthor(authorId: string, authorName?: string)
   if (authorName?.trim()) {
     const { data } = await supabase
       .from('book_quotes')
-      .select('id, book_id, author_id, book_title, author_name, cover_img, text, uid, user_display_name, user_photo_url, feed_post_id, likes_count, created_at, moderation_status')
+      .select('id, book_id, author_id, book_title, author_name, cover_img, text, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
       .ilike('author_name', authorName.trim())
-      .eq('moderation_status', 'active')
+      .or('moderation_status.eq.active,moderation_status.is.null')
       .order('created_at', { ascending: false })
       .limit(50);
     return (data ?? []).filter((r: any) => !banned.has(r.uid)).map(rowToQuote);
@@ -266,8 +266,8 @@ export async function fetchRecentReviews(limit = 50): Promise<BookReview[]> {
 
   const { data } = await supabase
     .from('book_reviews')
-    .select('id, book_id, author_id, book_title, author_name, text, rating, uid, user_display_name, user_photo_url, feed_post_id, likes_count, created_at, moderation_status')
-    .eq('moderation_status', 'active')
+    .select('id, book_id, author_id, book_title, author_name, text, rating, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
+    .or('moderation_status.eq.active,moderation_status.is.null')
     .order('created_at', { ascending: false })  // ← created_at, ts değil
     .limit(limit);
 
@@ -277,9 +277,9 @@ export async function fetchRecentReviews(limit = 50): Promise<BookReview[]> {
 export async function fetchReviewsByBook(bookId: string): Promise<BookReview[]> {
   const { data } = await supabase
     .from('book_reviews')
-    .select('id, book_id, author_id, book_title, author_name, text, rating, uid, user_display_name, user_photo_url, feed_post_id, likes_count, created_at, moderation_status')
+    .select('id, book_id, author_id, book_title, author_name, text, rating, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
     .eq('book_id', bookId)
-    .eq('moderation_status', 'active')
+    .or('moderation_status.eq.active,moderation_status.is.null')
     .order('created_at', { ascending: false })
     .limit(50);
   return (data ?? []).map(rowToReview);
@@ -288,9 +288,9 @@ export async function fetchReviewsByBook(bookId: string): Promise<BookReview[]> 
 export async function fetchReviewsByAuthor(authorId: string): Promise<BookReview[]> {
   const { data } = await supabase
     .from('book_reviews')
-    .select('id, book_id, author_id, book_title, author_name, text, rating, uid, user_display_name, user_photo_url, feed_post_id, likes_count, created_at, moderation_status')
+    .select('id, book_id, author_id, book_title, author_name, text, rating, uid, user_display_name, user_photo_url, feed_post_id, created_at, moderation_status')
     .eq('author_id', authorId)
-    .eq('moderation_status', 'active')
+    .or('moderation_status.eq.active,moderation_status.is.null')
     .order('created_at', { ascending: false })
     .limit(50);
   return (data ?? []).map(rowToReview);
@@ -321,7 +321,7 @@ export async function fetchAuthorById(id: string): Promise<Author | null> {
 export async function fetchAuthorBooks(authorId: string): Promise<LibraryBook[]> {
   const { data } = await supabase
     .from('library_books')
-    .select('id, title, author_id, author_name, cover_img, genre, publish_year, synopsis, page_count, quote_count, review_count, avg_rating, likes_count, created_at')
+    .select('id, title, author_id, author_name, cover_img, genre, publish_year, synopsis, page_count, quote_count, review_count, avg_rating, created_at')
     .eq('author_id', authorId)
     .order('created_at', { ascending: false });
   return (data ?? []).map(rowToBook);
@@ -359,7 +359,7 @@ export async function searchAuthors(q: string): Promise<Pick<Author, 'id' | 'nam
 export async function fetchBooks(limit = 200): Promise<LibraryBook[]> {
   const { data } = await supabase
     .from('library_books')
-    .select('id, title, author_id, author_name, cover_img, genre, publish_year, synopsis, page_count, quote_count, review_count, avg_rating, likes_count, created_at')
+    .select('id, title, author_id, author_name, cover_img, genre, publish_year, synopsis, page_count, quote_count, review_count, avg_rating, created_at')
     .order('title', { ascending: true })
     .limit(limit);
   return (data ?? []).map(rowToBook);
@@ -368,7 +368,7 @@ export async function fetchBooks(limit = 200): Promise<LibraryBook[]> {
 export async function fetchBookById(id: string): Promise<LibraryBook | null> {
   const { data } = await supabase
     .from('library_books')
-    .select('id, title, author_id, author_name, cover_img, genre, publish_year, synopsis, page_count, quote_count, review_count, avg_rating, likes_count, created_at')
+    .select('id, title, author_id, author_name, cover_img, genre, publish_year, synopsis, page_count, quote_count, review_count, avg_rating, created_at')
     .eq('id', id)
     .single();
   return data ? rowToBook(data) : null;
