@@ -182,7 +182,7 @@
     {#each TABS as tab, i}
       <button class="tab" class:active={activeTab === i} onclick={() => activeTab = i}>{tab}</button>
     {/each}
-    <div class="tab-line" style="transform:translateX({activeTab * 100}%)"></div>
+
   </div>
 
   {#if loading}
@@ -449,7 +449,7 @@
 </div>
 
 <style>
-.page { max-width: 720px; margin: 0 auto; padding-bottom: 80px; }
+.page { max-width: 720px; margin: 0 auto; padding-bottom: 80px; background: var(--bg); min-height: 100vh; }
 
 /* Pull-to-refresh */
 .ptr-indicator {
@@ -472,20 +472,15 @@
 .tabs {
   position: sticky; top: 52px; z-index: 9; display: flex;
   background: var(--surface); border-bottom: 1px solid var(--divider);
-  overflow: visible;
+  overflow: hidden;
 }
 .tab {
   flex: 1; padding: 12px 4px; font-size: 13px; font-weight: 500;
   color: var(--muted); background: none; border: none; cursor: pointer;
-  position: relative; transition: color 0.2s; font-family: inherit;
+  border-bottom: 2.5px solid transparent;
+  transition: color 0.2s, border-color 0.2s; font-family: inherit;
 }
-.tab.active { color: var(--on-bg); font-weight: 700; }
-.tab-line {
-  position: absolute; bottom: -1px; left: 0; width: 25%; height: 2.5px;
-  background: var(--primary); border-radius: 2px 2px 0 0;
-  transition: transform 0.25s cubic-bezier(.4,0,.2,1); pointer-events: none;
-  z-index: 10;
-}
+.tab.active { color: var(--on-bg); font-weight: 700; border-bottom-color: var(--primary); }
 
 /* Skeleton */
 .skeleton-list { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
