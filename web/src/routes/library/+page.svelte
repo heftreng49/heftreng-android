@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount }     from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { page }        from '$app/stores';
   import { currentUser } from '$lib/stores/auth';
   import QuoteCard       from '$lib/components/QuoteCard.svelte';
@@ -88,12 +88,10 @@
     loadingBooks = false;
   }
 
-  // ── Beğeni: alıntı ────────────────────────────────────────────────────────
   async function handleQuoteLike(quote: BookQuote) {
     const u = $currentUser;
     if (!u) { window.location.href = '/login'; return; }
     const was = quote.isLikedByMe ?? false;
-    // Optimistic
     quotes = quotes.map(q => q.id === quote.id
       ? { ...q, likesCount: Math.max(0, q.likesCount + (was ? -1 : 1)), isLikedByMe: !was }
       : q
@@ -108,7 +106,6 @@
     }
   }
 
-  // ── Beğeni: inceleme ──────────────────────────────────────────────────────
   async function handleReviewLike(review: BookReview) {
     const u = $currentUser;
     if (!u) { window.location.href = '/login'; return; }
@@ -127,7 +124,6 @@
     }
   }
 
-  // ── Pull-to-refresh ────────────────────────────────────────────────────────
   function onTouchStart(e: TouchEvent) { touchStartY = e.touches[0].clientY; }
   function onTouchMove(e: TouchEvent) {
     if (refreshing || loading) return;
@@ -158,7 +154,6 @@
     return `${Math.floor(d/30)}ay`;
   }
 
-  // Alıntı 3-nokta menü
   let quoteMenuId = $state<string | null>(null);
   function toggleQuoteMenu(e: Event, id: string) {
     e.stopPropagation();
@@ -170,24 +165,20 @@
     if (navigator.share) navigator.share({ title: q.userDisplayName, url });
     else { navigator.clipboard.writeText(url); alert('Bağlantı kopyalandı!'); }
   }
-
-  import { onDestroy } from 'svelte';
   function closeMenus() { quoteMenuId = null; }
 </script>
 
 <svelte:head><title>Kütüphane — Heftreng</title></svelte:head>
-
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <svelte:window onclick={closeMenus} />
 
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="page"
   role="main"
   ontouchstart={onTouchStart}
   ontouchmove={onTouchMove}
   ontouchend={onTouchEnd}
 >
-
-  <!-- Pull-to-refresh göstergesi -->
+  <!-- Pull-to-refresh -->
   {#if pullDist > 10 || refreshing}
     <div class="ptr-indicator" style="height:{refreshing ? 48 : pullDist}px; opacity:{refreshing ? 1 : pullDist/PULL_THRESHOLD}">
       <div class="ptr-spinner" class:spinning={refreshing}></div>
@@ -198,15 +189,21 @@
     <h1 class="lib-title">Kütüphane</h1>
   </header>
 
-  <!-- Sekmeler -->
+  <!-- Sekme çubuğu — sticky, global header (52px) altına yapışır -->
   <div class="tabs">
     {#each TABS as tab, i}
       <button class="tab" class:active={activeTab === i} onclick={() => activeTab = i}>{tab}</button>
     {/each}
-
   </div>
 
-  <!-- ── Alıntılar ──────────────────────────────────────────────────────── -->
+  <!--
+    TAB-BODY: tabs'ın hemen altında normal document flow'da başlar.
+    Sticky tabs scroll ederken üstüne çıkar ama bu div sabit yerinde kalır —
+    içerik asla tabs'ın altına gizlenmez, üstüne de binmez.
+  -->
+  <div class="tab-body">
+
+    <!-- ── Alıntılar ──────────────────────────────────────────────────────── -->
     {#if activeTab === 0}
       {#if loadingQuotes}
         <div class="skeleton-list">
@@ -230,7 +227,6 @@
         <div class="quote-list">
           {#each quotes as q (q.id)}
             <div class="quote-item">
-              <!-- Kullanıcı başlığı -->
               <div class="quote-user-header">
                 <a href="/profile/{q.uid}" class="q-av">
                   {#if q.userPhotoURL}
@@ -245,7 +241,6 @@
                     <span class="q-time">{ago(q.createdAt)}</span>
                   {/if}
                 </div>
-                <!-- 3-nokta menü -->
                 <div class="q-menu-wrap" onclick={(e) => e.stopPropagation()}>
                   <button class="q-menu-btn" onclick={(e) => toggleQuoteMenu(e, q.id)} aria-label="Seçenekler">
                     <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
@@ -267,7 +262,6 @@
                 </div>
               </div>
 
-              <!-- Alıntı içeriği -->
               <QuoteCard
                 quoteText={q.text}
                 bookName={q.bookTitle}
@@ -277,13 +271,8 @@
                 authorId={q.authorId ?? ''}
               />
 
-              <!-- Aksiyonlar -->
               <div class="quote-actions">
-                <button
-                  class="act-like" class:liked={q.isLikedByMe}
-                  onclick={() => handleQuoteLike(q)}
-                  aria-label="Beğen"
-                >
+                <button class="act-like" class:liked={q.isLikedByMe} onclick={() => handleQuoteLike(q)} aria-label="Beğen">
                   {#if q.isLikedByMe}
                     <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                   {:else}
@@ -310,7 +299,7 @@
         </div>
       {/if}
 
-    <!-- ── İncelemeler ────────────────────────────────────────────────────── -->
+    <!-- ── İncelemeler ─────────────────────────────────────────────────────── -->
     {:else if activeTab === 1}
       {#if loadingReviews}
         <div class="skeleton-list">
@@ -334,7 +323,6 @@
         <div class="review-list">
           {#each reviews as rv (rv.id)}
             <div class="review-card">
-              <!-- Kitap başlığı + rating -->
               <a href="/library/book/{rv.bookId}" class="review-book-row">
                 {#if rv.bookCoverImg}
                   <img src={rv.bookCoverImg} alt={rv.bookTitle} class="review-cover" />
@@ -355,13 +343,9 @@
                   </div>
                 </div>
               </a>
-
-              <!-- İnceleme metni -->
               {#if rv.text}
                 <p class="review-text">{rv.text}</p>
               {/if}
-
-              <!-- Alt satır: kullanıcı + beğeni -->
               <div class="review-footer">
                 <a href="/profile/{rv.uid}" class="review-user">
                   <div class="mini-av">
@@ -373,11 +357,7 @@
                   </div>
                   <span>{rv.userDisplayName}</span>
                 </a>
-                <button
-                  class="act-like sm" class:liked={rv.isLikedByMe}
-                  onclick={() => handleReviewLike(rv)}
-                  aria-label="Beğen"
-                >
+                <button class="act-like sm" class:liked={rv.isLikedByMe} onclick={() => handleReviewLike(rv)} aria-label="Beğen">
                   {#if rv.isLikedByMe}
                     <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                   {:else}
@@ -391,7 +371,7 @@
         </div>
       {/if}
 
-    <!-- ── Yazarlar ───────────────────────────────────────────────────────── -->
+    <!-- ── Yazarlar ────────────────────────────────────────────────────────── -->
     {:else if activeTab === 2}
       {#if loadingAuthors}
         <div class="skeleton-list">
@@ -427,7 +407,6 @@
                 {#if a.nationality}
                   <span class="author-nat">{a.nationality}</span>
                 {/if}
-                <!-- Android'deki StatChip'ler -->
                 <div class="author-chips">
                   {#if (a.bookCount ?? 0) > 0}
                     <span class="stat-chip">
@@ -455,13 +434,13 @@
         </div>
       {/if}
 
-    <!-- ── Kitaplar ───────────────────────────────────────────────────────── -->
+    <!-- ── Kitaplar ────────────────────────────────────────────────────────── -->
     {:else if activeTab === 3}
       {#if loadingBooks}
         <div class="book-grid">
           {#each {length: 6} as _}
             <div style="display:flex;flex-direction:column;gap:7px">
-              <Skeleton width="100%" height="0" radius="10px" style="aspect-ratio:2/3;height:auto;padding-bottom:150%;" />
+              <Skeleton width="100%" height="180px" radius="10px" />
               <Skeleton width="80%" height="13px" />
               <Skeleton width="50%" height="12px" />
             </div>
@@ -499,10 +478,17 @@
       {/if}
     {/if}
 
-</div>
+  </div><!-- /tab-body -->
+</div><!-- /page -->
 
 <style>
-.page { max-width: 720px; margin: 0 auto; padding-bottom: 80px; background: var(--bg); min-height: 100vh; }
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding-bottom: 80px;
+  background: var(--bg);
+  min-height: 100vh;
+}
 
 /* Pull-to-refresh */
 .ptr-indicator {
@@ -521,19 +507,33 @@
 .lib-header { padding: 16px 16px 4px; }
 .lib-title  { font-size: 22px; font-weight: 800; color: var(--primary); margin: 0; }
 
-/* Tabs */
+/*
+  TABS — sticky, global-header (height: 52px) altına yapışır.
+  top: 52px sabit değer: layout.svelte'deki .global-header { height: 52px } ile eşleşir.
+  z-index: 9 → global header (z:100) altında, içerik üstünde.
+*/
 .tabs {
-  position: sticky; top: 52px; z-index: 9; display: flex;
-  background: var(--surface); border-bottom: 1px solid var(--divider);
-  overflow: visible;
+  position: sticky;
+  top: 52px;
+  z-index: 9;
+  display: flex;
+  background: var(--bg);
+  border-bottom: 1px solid var(--divider);
 }
 .tab {
   flex: 1; padding: 12px 4px; font-size: 13px; font-weight: 500;
   color: var(--muted); background: none; border: none; cursor: pointer;
-  border-bottom: 2.5px solid transparent;
+  border-bottom: 2.5px solid transparent; margin-bottom: -1px;
   transition: color 0.2s, border-color 0.2s; font-family: inherit;
 }
 .tab.active { color: var(--on-bg); font-weight: 700; border-bottom-color: var(--primary); }
+
+/*
+  TAB-BODY — normal document flow'da tabs'ın hemen altında başlar.
+  "position: sticky" olan tabs scroll edildiğinde tab-body'nin üstüne çıkar
+  ama tab-body kendisi yerinde kalır. Hiçbir binme olmaz.
+*/
+.tab-body { display: block; }
 
 /* Skeleton */
 .skeleton-list { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
@@ -544,13 +544,22 @@
 .empty-icon { font-size: 44px; }
 .empty-state p { font-size: 14px; }
 
-/* ── Alıntılar ─────────────────────────────────────────────────────────────── */
+/* ── Alıntılar ──────────────────────────────────────────────────────────── */
 .quote-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
-.quote-item { background: var(--card); border-radius: 16px; overflow: hidden; border: 0.7px solid var(--divider); }
-.quote-user-header { display: flex; align-items: center; gap: 9px; padding: 11px 12px 0; }
+.quote-item {
+  background: var(--card);
+  border-radius: 16px;
+  overflow: hidden;
+  border: 0.7px solid var(--divider);
+}
+.quote-user-header {
+  display: flex; align-items: center; gap: 9px;
+  padding: 11px 12px 8px;
+}
 .q-av {
-  width: 36px; height: 36px; border-radius: 50%; background: var(--surface-var);
-  overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--surface-var); overflow: hidden; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
   font-size: 13px; font-weight: 700; color: var(--on-bg); text-decoration: none;
 }
 .q-av img { width: 100%; height: 100%; object-fit: cover; }
@@ -559,38 +568,11 @@
 .q-name:hover { text-decoration: underline; }
 .q-time { font-size: 11px; color: var(--muted); }
 
-.quote-actions {
-  display: flex; align-items: center; gap: 4px;
-  padding: 6px 12px 10px; border-top: 1px solid var(--divider); margin-top: 2px;
-}
-.act-like {
-  display: flex; align-items: center; gap: 5px;
-  background: none; border: none; cursor: pointer; color: var(--muted);
-  padding: 6px 10px; border-radius: 20px; font-size: 13px; font-family: inherit;
-  transition: background 0.15s;
-}
-.act-like:hover { background: var(--surface-var); }
-.act-like.liked { color: #FF3A5C; }
-.act-like.sm { padding: 4px 8px; font-size: 12px; }
-.act-comment {
-  display: flex; align-items: center; gap: 5px; color: var(--muted);
-  padding: 6px 10px; border-radius: 20px; text-decoration: none;
-  transition: background 0.15s;
-}
-.act-comment:hover { background: var(--surface-var); }
-.act-spacer { flex: 1; }
-.act-share {
-  display: flex; align-items: center; gap: 5px; color: var(--muted);
-  padding: 6px 10px; border-radius: 20px; background: none; border: none;
-  cursor: pointer; transition: background 0.15s;
-}
-.act-share:hover { background: var(--surface-var); }
-
-/* Alıntı 3-nokta menü */
 .q-menu-wrap { position: relative; margin-left: auto; }
 .q-menu-btn {
-  width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center;
-  justify-content: center; color: var(--muted); background: none; border: none; cursor: pointer;
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); background: none; border: none; cursor: pointer;
   transition: background 0.15s;
 }
 .q-menu-btn:hover { background: var(--surface-var); }
@@ -609,9 +591,40 @@
 }
 .q-dropdown-item:hover { background: var(--surface-var); }
 
-/* ── İncelemeler ───────────────────────────────────────────────────────────── */
+.quote-actions {
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 8px 8px;
+  border-top: 1px solid var(--divider);
+}
+.act-like {
+  display: flex; align-items: center; gap: 5px;
+  background: none; border: none; cursor: pointer; color: var(--muted);
+  padding: 6px 10px; border-radius: 20px; font-size: 13px; font-family: inherit;
+  transition: background 0.15s;
+}
+.act-like:hover { background: var(--surface-var); }
+.act-like.liked { color: #FF3A5C; }
+.act-like.sm    { padding: 4px 8px; font-size: 12px; }
+.act-comment {
+  display: flex; align-items: center; gap: 5px; color: var(--muted);
+  padding: 6px 10px; border-radius: 20px; text-decoration: none;
+  transition: background 0.15s;
+}
+.act-comment:hover { background: var(--surface-var); }
+.act-spacer { flex: 1; }
+.act-share {
+  display: flex; align-items: center; gap: 5px; color: var(--muted);
+  padding: 6px 10px; border-radius: 20px; background: none; border: none;
+  cursor: pointer; transition: background 0.15s;
+}
+.act-share:hover { background: var(--surface-var); }
+
+/* ── İncelemeler ────────────────────────────────────────────────────────── */
 .review-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
-.review-card { background: var(--card); border-radius: 16px; overflow: hidden; border: 0.7px solid var(--divider); padding: 14px; }
+.review-card {
+  background: var(--card); border-radius: 16px;
+  border: 0.7px solid var(--divider); padding: 14px;
+}
 .review-book-row { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; text-decoration: none; }
 .review-cover { width: 44px; height: 64px; border-radius: 5px; object-fit: cover; flex-shrink: 0; }
 .review-cover-ph { background: var(--surface-var); display: flex; align-items: center; justify-content: center; font-size: 22px; }
@@ -622,11 +635,15 @@
 .review-text { font-size: 14px; color: var(--on-surface); line-height: 1.6; margin-bottom: 12px; }
 .review-footer { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--divider); padding-top: 10px; }
 .review-user { display: flex; align-items: center; gap: 7px; text-decoration: none; color: var(--muted); font-size: 13px; font-weight: 500; }
-.mini-av { width: 26px; height: 26px; border-radius: 50%; background: var(--surface-var); overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--on-bg); }
+.mini-av {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--surface-var);
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: var(--on-bg);
+}
 .mini-av img { width: 100%; height: 100%; object-fit: cover; }
 
-/* ── Yazarlar ──────────────────────────────────────────────────────────────── */
-.author-list { display: flex; flex-direction: column; padding: 10px 12px; gap: 8px; }
+/* ── Yazarlar ───────────────────────────────────────────────────────────── */
+.author-list { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; }
 .author-card {
   display: flex; align-items: center; gap: 12px;
   background: var(--card); border-radius: 14px; padding: 12px 14px;
@@ -645,12 +662,9 @@
 .author-name { font-size: 15px; font-weight: 700; color: var(--on-bg); }
 .author-nat  { font-size: 12px; color: var(--muted); }
 .author-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
-.stat-chip {
-  display: flex; align-items: center; gap: 3px;
-  font-size: 11px; color: var(--muted);
-}
+.stat-chip { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); }
 
-/* ── Kitaplar ──────────────────────────────────────────────────────────────── */
+/* ── Kitaplar ───────────────────────────────────────────────────────────── */
 .book-grid {
   display: grid; grid-template-columns: repeat(2, 1fr);
   gap: 12px; padding: 12px;
@@ -662,8 +676,8 @@
   box-shadow: 0 3px 10px rgba(0,0,0,0.15);
 }
 .book-cover-ph {
-  background: var(--surface-var); display: flex;
-  align-items: center; justify-content: center; color: var(--muted);
+  background: var(--surface-var);
+  display: flex; align-items: center; justify-content: center; color: var(--muted);
 }
 .book-info { display: flex; flex-direction: column; gap: 2px; padding: 0 2px; }
 .book-title  { font-size: 13px; font-weight: 700; color: var(--on-bg); line-height: 1.3; }
