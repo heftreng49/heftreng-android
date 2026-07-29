@@ -6,7 +6,7 @@ on:
     paths:
       - .github/workflows/web.yml
       - 'web/**'
-
+    workflow_dispatch:
 jobs:
   deploy:
     runs-on: ubuntu-latest
