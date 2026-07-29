@@ -1,0 +1,1 @@
+import"./ClEUTMeC.js";import{r as e}from"./Mv_qwr3-.js";var t=()=>{let t=e;return{page:{subscribe:t.page.subscribe},navigating:{subscribe:t.navigating.subscribe},updated:t.updated}},n={subscribe(e){return t().page.subscribe(e)}};export{n as t};
