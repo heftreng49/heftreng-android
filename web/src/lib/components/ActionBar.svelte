@@ -1,18 +1,3 @@
-<!--
-  ActionBar — Beğeni + yorum + paylaş aksiyon satırı.
-  Feed, library ve post detayında tekrar eden kalıbın tek kaynağı.
-
-  Kullanım:
-    <ActionBar
-      liked={q.isLikedByMe}
-      likeCount={q.likesCount}
-      commentHref="/post/{q.feedPostId}"
-      onLike={() => handleLike(q)}
-      onShare={() => share(q)}
-    />
-    <!-- Kompakt (inceleme kartı altı gibi) -->
-    <ActionBar liked={rv.isLikedByMe} likeCount={rv.likesCount} onLike={...} compact />
--->
 <script lang="ts">
   interface Props {
     liked:         boolean;

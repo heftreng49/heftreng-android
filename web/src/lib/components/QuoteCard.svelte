@@ -35,7 +35,8 @@
 
   // Android: isLong = quoteText.length > 280
   const isLong    = $derived(quoteText.length > 280);
-  let isExpanded  = $state(expanded);
+  let isExpanded  = $state(false);
+  $effect(() => { isExpanded = expanded; });
 
   const displayText = $derived(
     (!isLong || isExpanded || expanded) ? quoteText : quoteText.slice(0, 280).trimEnd() + '…'

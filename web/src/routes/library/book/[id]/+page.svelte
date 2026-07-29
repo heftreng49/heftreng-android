@@ -158,7 +158,7 @@
               <button class="star" class:filled={s <= reviewRating} onclick={() => reviewRating = s}>★</button>
             {/each}
           </div>
-          <textarea bind:value={reviewText} placeholder="İncelemenizi yazın…" rows="3" class="review-input" />
+          <textarea bind:value={reviewText} placeholder="İncelemenizi yazın…" rows="3" class="review-input"></textarea>
           <button class="submit-btn" disabled={submitting || !reviewText.trim()} onclick={submitReview}>
             {submitting ? 'Gönderiliyor…' : 'İnceleme Ekle'}
           </button>

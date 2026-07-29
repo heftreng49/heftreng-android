@@ -1,17 +1,3 @@
-<!--
-  PageTopBar — Detay sayfalarında geri butonu + başlık çubuğu.
-  library/author/[id], library/book/[id], post/[id] sayfalarında tekrar ediyor.
-
-  Kullanım:
-    <PageTopBar title={author?.name ?? ''} />
-
-    <!-- Sağ tarafa ekstra buton için: -->
-    <PageTopBar title={book?.title ?? ''}>
-      {#snippet right()}
-        <button onclick={share}>...</button>
-      {/snippet}
-    </PageTopBar>
--->
 <script lang="ts">
   import { type Snippet } from 'svelte';
 

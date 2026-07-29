@@ -1,22 +1,3 @@
-<!--
-  UserHeader — Kart üstündeki kullanıcı satırı.
-  Avatar + isim + zaman + opsiyonel alt etiket + 3-nokta menü.
-  Feed, library ve yazar sayfasında tekrar eden kalıbın tek kaynağı.
-
-  Kullanım:
-    <UserHeader
-      uid={q.uid}
-      displayName={q.userDisplayName}
-      photoURL={q.userPhotoURL}
-      ts={q.ts}
-      menuItems={[
-        { label: 'Gönderiye git', href: '/post/' + q.feedPostId },
-        { label: 'Paylaş', onclick: () => share(q) },
-      ]}
-    />
-    <!-- alt etiket (opsiyonel) -->
-    <UserHeader ... tag="alıntı paylaştı" />
--->
 <script lang="ts">
   import { ago } from '$lib/utils/time';
 

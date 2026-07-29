@@ -1,12 +1,3 @@
-<!--
-  TabBar — sticky sekme çubuğu + URL sync + animasyonlu underline.
-  4 sayfada kopyalanmış tab kalıbının tek kaynağı.
-
-  Kullanım:
-    <TabBar tabs={['Alıntılar','İncelemeler']} bind:active={activeTab} />
-    <TabBar tabs={['Kitaplar','Alıntılar']} bind:active={tab}
-            counts={[books.length, quotes.length]} urlParam="tab" stickyTop={52} />
--->
 <script lang="ts">
   import { page }         from '$app/stores';
   import { replaceState } from '$app/navigation';

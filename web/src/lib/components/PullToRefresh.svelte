@@ -1,17 +1,3 @@
-<!--
-  PullToRefresh — slot tabanlı pull-to-refresh sarıcı.
-  3 sayfada kopyalanmış dokunma mantığının tek kaynağı.
-
-  Kullanım:
-    <PullToRefresh onRefresh={loadAll}>
-      <!-- sayfa içeriği buraya -->
-    </PullToRefresh>
-
-    <!-- refreshing state'ini dışarıdan takip etmek için: -->
-    <PullToRefresh onRefresh={loadAll} bind:refreshing>
-      ...
-    </PullToRefresh>
--->
 <script lang="ts">
   import { type Snippet } from 'svelte';
 

@@ -1,11 +1,3 @@
-<!--
-  EmptyState — liste boş olduğunda gösterilecek blok.
-  5 sayfada kopyalanmış kalıbın tek kaynağı.
-
-  Kullanım:
-    <EmptyState icon="💬" message="Henüz alıntı yok." />
-    <EmptyState icon="✍️" message="Yazar yok." hint="İlk paylaşan sen ol!" />
--->
 <script lang="ts">
   interface Props {
     icon?:    string;   // emoji
