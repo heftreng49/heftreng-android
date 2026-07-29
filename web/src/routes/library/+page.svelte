@@ -19,7 +19,11 @@
   let reviews:  BookReview[]  = $state([]);
   let authors:  Author[]      = $state([]);
   let books:    LibraryBook[] = $state([]);
-  let loading   = $state(true);
+  let loading        = $state(true);
+  let loadingQuotes  = $state(true);
+  let loadingReviews = $state(true);
+  let loadingAuthors = $state(true);
+  let loadingBooks   = $state(true);
 
   let quoteOffset       = $state(0);
   let quotesHasMore     = $state(false);
@@ -39,16 +43,19 @@
 
   async function loadAll() {
     loading = true;
+    loadingQuotes = true; loadingReviews = true; loadingAuthors = true; loadingBooks = true;
     await Promise.all([loadQuotes(), loadReviews(), loadAuthors(), loadBooks()]);
     loading = false;
   }
 
   async function loadQuotes() {
+    loadingQuotes = true;
     const p: QuotePage = await fetchRecentQuotes(0);
     const uid = $currentUser?.uid ?? null;
     quotes        = await hydrateQuoteLikes(p.quotes, uid);
     quoteOffset   = p.offset;
     quotesHasMore = p.hasMore;
+    loadingQuotes = false;
   }
 
   async function loadMoreQuotes() {
@@ -63,9 +70,23 @@
     quotesLoadingMore = false;
   }
 
-  async function loadReviews() { reviews = await fetchRecentReviews(); }
-  async function loadAuthors() { authors = await fetchAuthors(); }
-  async function loadBooks()   { books   = await fetchBooks(); }
+  async function loadReviews() {
+    loadingReviews = true;
+    reviews = await fetchRecentReviews();
+    loadingReviews = false;
+  }
+
+  async function loadAuthors() {
+    loadingAuthors = true;
+    authors = await fetchAuthors();
+    loadingAuthors = false;
+  }
+
+  async function loadBooks() {
+    loadingBooks = true;
+    books = await fetchBooks();
+    loadingBooks = false;
+  }
 
   // ── Beğeni: alıntı ────────────────────────────────────────────────────────
   async function handleQuoteLike(quote: BookQuote) {
@@ -185,25 +206,22 @@
 
   </div>
 
-  {#if loading}
-    <div class="skeleton-list">
-      {#each {length: 5} as _}
-        <div class="skel-card">
-          <Skeleton width="64px" height="90px" radius="8px" />
-          <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-            <Skeleton width="60%" height="14px" />
-            <Skeleton width="40%" height="12px" />
-            <Skeleton width="80%" height="12px" />
-          </div>
-        </div>
-      {/each}
-    </div>
-
-  {:else}
-
-    <!-- ── Alıntılar ──────────────────────────────────────────────────────── -->
+  <!-- ── Alıntılar ──────────────────────────────────────────────────────── -->
     {#if activeTab === 0}
-      {#if quotes.length === 0}
+      {#if loadingQuotes}
+        <div class="skeleton-list">
+          {#each {length: 5} as _}
+            <div class="skel-card">
+              <Skeleton width="64px" height="90px" radius="8px" />
+              <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                <Skeleton width="60%" height="14px" />
+                <Skeleton width="40%" height="12px" />
+                <Skeleton width="80%" height="12px" />
+              </div>
+            </div>
+          {/each}
+        </div>
+      {:else if quotes.length === 0}
         <div class="empty-state">
           <span class="empty-icon">💬</span>
           <p>Henüz alıntı yok.</p>
@@ -294,7 +312,20 @@
 
     <!-- ── İncelemeler ────────────────────────────────────────────────────── -->
     {:else if activeTab === 1}
-      {#if reviews.length === 0}
+      {#if loadingReviews}
+        <div class="skeleton-list">
+          {#each {length: 4} as _}
+            <div class="skel-card">
+              <Skeleton width="44px" height="64px" radius="5px" />
+              <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                <Skeleton width="70%" height="14px" />
+                <Skeleton width="50%" height="12px" />
+                <Skeleton width="90%" height="12px" />
+              </div>
+            </div>
+          {/each}
+        </div>
+      {:else if reviews.length === 0}
         <div class="empty-state">
           <span class="empty-icon">⭐</span>
           <p>Henüz inceleme yok.</p>
@@ -362,7 +393,20 @@
 
     <!-- ── Yazarlar ───────────────────────────────────────────────────────── -->
     {:else if activeTab === 2}
-      {#if authors.length === 0}
+      {#if loadingAuthors}
+        <div class="skeleton-list">
+          {#each {length: 6} as _}
+            <div class="skel-card">
+              <Skeleton width="52px" height="52px" radius="50%" />
+              <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                <Skeleton width="55%" height="15px" />
+                <Skeleton width="35%" height="12px" />
+                <Skeleton width="70%" height="11px" />
+              </div>
+            </div>
+          {/each}
+        </div>
+      {:else if authors.length === 0}
         <div class="empty-state">
           <span class="empty-icon">✍️</span>
           <p>Henüz yazar yok.</p>
@@ -413,7 +457,17 @@
 
     <!-- ── Kitaplar ───────────────────────────────────────────────────────── -->
     {:else if activeTab === 3}
-      {#if books.length === 0}
+      {#if loadingBooks}
+        <div class="book-grid">
+          {#each {length: 6} as _}
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <Skeleton width="100%" height="0" radius="10px" style="aspect-ratio:2/3;height:auto;padding-bottom:150%;" />
+              <Skeleton width="80%" height="13px" />
+              <Skeleton width="50%" height="12px" />
+            </div>
+          {/each}
+        </div>
+      {:else if books.length === 0}
         <div class="empty-state">
           <span class="empty-icon">📚</span>
           <p>Henüz kitap yok.</p>
@@ -445,7 +499,6 @@
       {/if}
     {/if}
 
-  {/if}
 </div>
 
 <style>
@@ -472,7 +525,7 @@
 .tabs {
   position: sticky; top: 52px; z-index: 9; display: flex;
   background: var(--surface); border-bottom: 1px solid var(--divider);
-  overflow: hidden;
+  overflow: visible;
 }
 .tab {
   flex: 1; padding: 12px 4px; font-size: 13px; font-weight: 500;
