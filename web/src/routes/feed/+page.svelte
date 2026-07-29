@@ -225,9 +225,10 @@
       {#if activeTab === 1}
         <EmptyState icon="👥" message="Takip ettiğin kişilerin gönderileri burada görünür." hint="Kişi keşfet →" hintHref="/library" />
       {:else}
-        <EmptyState icon="📄" message="Henüz gönderi yok.">
-          {#if $currentUser}<a href="/compose" class="compose-cta" slot="action">İlk gönderiyi yaz →</a>{/if}
-        </EmptyState>
+        <EmptyState icon="📄" message="Henüz gönderi yok."
+          actionLabel={$currentUser ? 'İlk gönderiyi yaz →' : ''}
+          actionHref="/compose"
+        />
       {/if}
 
     {:else}

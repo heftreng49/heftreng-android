@@ -1,10 +1,20 @@
 <script lang="ts">
   interface Props {
-    icon?:    string;   // emoji
-    message:  string;
-    hint?:    string;   // ikincil açıklama
+    icon?:       string;
+    message:     string;
+    hint?:       string;
+    actionLabel?: string;  // buton/link metni
+    actionHref?:  string;  // verilirse <a>, verilmezse <button>
+    onAction?:   () => void;
   }
-  let { icon = '', message, hint = '' }: Props = $props();
+  let {
+    icon        = '',
+    message,
+    hint        = '',
+    actionLabel = '',
+    actionHref  = '',
+    onAction,
+  }: Props = $props();
 </script>
 
 <div class="empty-state">
@@ -14,6 +24,13 @@
   <p class="empty-msg">{message}</p>
   {#if hint}
     <p class="empty-hint">{hint}</p>
+  {/if}
+  {#if actionLabel}
+    {#if actionHref}
+      <a href={actionHref} class="empty-action">{actionLabel}</a>
+    {:else}
+      <button class="empty-action" onclick={onAction}>{actionLabel}</button>
+    {/if}
   {/if}
 </div>
 
@@ -42,5 +59,19 @@
   font-size: 13px;
   color: var(--muted);
   margin: 0;
+}
+.empty-action {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 9px 20px;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 20px;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 13px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
 }
 </style>

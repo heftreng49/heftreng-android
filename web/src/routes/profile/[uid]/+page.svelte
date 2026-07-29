@@ -814,9 +814,10 @@
           </div>
         {/each}
       {:else if posts.length === 0}
-        <EmptyState icon="📄" message="Henüz gönderi yok.">
-          {#if isMe}<a href="/compose" class="compose-cta-sm" slot="action">İlk gönderiyi yaz →</a>{/if}
-        </EmptyState>
+        <EmptyState icon="📄" message="Henüz gönderi yok."
+          actionLabel={isMe ? 'İlk gönderiyi yaz →' : ''}
+          actionHref="/compose"
+        />
       {:else}
         <div class="feed-list">
       {#each posts as p (p.id)}
@@ -1042,9 +1043,10 @@
       {#if libraryLoading}
         <EmptyState icon="⏳" message="Yükleniyor..." />
       {:else if libraryBooks.length === 0}
-        <EmptyState icon="📖" message="Henüz kitap eklenmemiş.">
-          {#if isMe}<button class="compose-cta-sm" onclick={openAddBook} slot="action">İlk kitabı ekle →</button>{/if}
-        </EmptyState>
+          <EmptyState icon="📖" message="Henüz kitap eklenmemiş."
+            actionLabel={isMe ? 'İlk kitabı ekle →' : ''}
+            onAction={openAddBook}
+          />
       {:else}
         <div class="books-grid">
           {#each libraryBooks as book (book.id)}
