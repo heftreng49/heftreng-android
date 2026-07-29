@@ -136,11 +136,29 @@
     if (d < 7)  return `${d}g`;
     return `${Math.floor(d/30)}ay`;
   }
+
+  // Alıntı 3-nokta menü
+  let quoteMenuId = $state<string | null>(null);
+  function toggleQuoteMenu(e: Event, id: string) {
+    e.stopPropagation();
+    quoteMenuId = quoteMenuId === id ? null : id;
+  }
+  function shareQuote(q: any) {
+    quoteMenuId = null;
+    const url = window.location.origin + '/post/' + q.feedPostId;
+    if (navigator.share) navigator.share({ title: q.userDisplayName, url });
+    else { navigator.clipboard.writeText(url); alert('Bağlantı kopyalandı!'); }
+  }
+
+  import { onDestroy } from 'svelte';
+  function closeMenus() { quoteMenuId = null; }
 </script>
 
 <svelte:head><title>Kütüphane — Heftreng</title></svelte:head>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<svelte:window onclick={closeMenus} />
+
 <div class="page"
   role="main"
   ontouchstart={onTouchStart}
@@ -194,7 +212,7 @@
         <div class="quote-list">
           {#each quotes as q (q.id)}
             <div class="quote-item">
-              <!-- Kullanıcı başlığı (Android ConnectedPostCard üst kısmı gibi) -->
+              <!-- Kullanıcı başlığı -->
               <div class="quote-user-header">
                 <a href="/profile/{q.uid}" class="q-av">
                   {#if q.userPhotoURL}
@@ -207,6 +225,26 @@
                   <a href="/profile/{q.uid}" class="q-name">{q.userDisplayName}</a>
                   {#if q.createdAt}
                     <span class="q-time">{ago(q.createdAt)}</span>
+                  {/if}
+                </div>
+                <!-- 3-nokta menü -->
+                <div class="q-menu-wrap" onclick={(e) => e.stopPropagation()}>
+                  <button class="q-menu-btn" onclick={(e) => toggleQuoteMenu(e, q.id)} aria-label="Seçenekler">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                      <circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/>
+                    </svg>
+                  </button>
+                  {#if quoteMenuId === q.id}
+                    <div class="q-dropdown">
+                      <a href="/post/{q.feedPostId}" class="q-dropdown-item">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        Gönderiye git
+                      </a>
+                      <button class="q-dropdown-item" onclick={() => shareQuote(q)}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                        Bağlantıyı Kopyala
+                      </button>
+                    </div>
                   {/if}
                 </div>
               </div>
@@ -238,6 +276,10 @@
                 <a href="/post/{q.feedPostId}" class="act-comment" aria-label="Yorumlar">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 </a>
+                <div class="act-spacer"></div>
+                <button class="act-share" onclick={() => shareQuote(q)} aria-label="Paylaş">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                </button>
               </div>
             </div>
           {/each}
@@ -429,7 +471,8 @@
 /* Tabs */
 .tabs {
   position: sticky; top: 52px; z-index: 9; display: flex;
-  background: var(--surface); border-bottom: 1px solid var(--divider); overflow: hidden;
+  background: var(--surface); border-bottom: 1px solid var(--divider);
+  overflow: visible;
 }
 .tab {
   flex: 1; padding: 12px 4px; font-size: 13px; font-weight: 500;
@@ -438,9 +481,10 @@
 }
 .tab.active { color: var(--on-bg); font-weight: 700; }
 .tab-line {
-  position: absolute; bottom: 0; left: 0; width: 25%; height: 2.5px;
+  position: absolute; bottom: -1px; left: 0; width: 25%; height: 2.5px;
   background: var(--primary); border-radius: 2px 2px 0 0;
   transition: transform 0.25s cubic-bezier(.4,0,.2,1); pointer-events: none;
+  z-index: 10;
 }
 
 /* Skeleton */
@@ -486,6 +530,36 @@
   transition: background 0.15s;
 }
 .act-comment:hover { background: var(--surface-var); }
+.act-spacer { flex: 1; }
+.act-share {
+  display: flex; align-items: center; gap: 5px; color: var(--muted);
+  padding: 6px 10px; border-radius: 20px; background: none; border: none;
+  cursor: pointer; transition: background 0.15s;
+}
+.act-share:hover { background: var(--surface-var); }
+
+/* Alıntı 3-nokta menü */
+.q-menu-wrap { position: relative; margin-left: auto; }
+.q-menu-btn {
+  width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; color: var(--muted); background: none; border: none; cursor: pointer;
+  transition: background 0.15s;
+}
+.q-menu-btn:hover { background: var(--surface-var); }
+.q-dropdown {
+  position: absolute; right: 0; top: calc(100% + 4px);
+  background: var(--surface); border: 1px solid var(--divider);
+  border-radius: 12px; min-width: 180px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14); overflow: hidden; z-index: 200;
+}
+.q-dropdown-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px; font-size: 13px; color: var(--on-surface);
+  background: none; border: none; cursor: pointer; width: 100%;
+  text-align: left; text-decoration: none; font-family: inherit;
+  transition: background 0.1s;
+}
+.q-dropdown-item:hover { background: var(--surface-var); }
 
 /* ── İncelemeler ───────────────────────────────────────────────────────────── */
 .review-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
