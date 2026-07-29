@@ -1,9 +1,12 @@
 <script lang="ts">
-  import { onMount }      from 'svelte';
-  import PostCard         from '$lib/components/PostCard.svelte';
-  import Skeleton         from '$lib/components/Skeleton.svelte';
-  import CommentPanel     from '$lib/components/CommentPanel.svelte';
-  import { currentUser }  from '$lib/stores/auth';
+  import { onMount }         from 'svelte';
+  import PostCard            from '$lib/components/PostCard.svelte';
+  import Skeleton            from '$lib/components/Skeleton.svelte';
+  import CommentPanel        from '$lib/components/CommentPanel.svelte';
+  import TabBar              from '$lib/components/TabBar.svelte';
+  import PullToRefresh       from '$lib/components/PullToRefresh.svelte';
+  import EmptyState          from '$lib/components/EmptyState.svelte';
+  import { currentUser }     from '$lib/stores/auth';
   import {
     posts, feedLoading, hasMore, lastDoc,
     commentPostId, resetFeed,
@@ -20,8 +23,7 @@
   let unreadNotifs     = $state(0);
   let unreadMessages   = $state(0);
 
-  // Pull-to-refresh
-  let refreshing       = $state(false);
+  let refreshing = $state(false);
 
   // Takip edilen uid'ler (Takip Edilenler sekmesi için)
   let followingUids    = $state<Set<string>>(new Set());
@@ -143,27 +145,11 @@
     } finally { loadingMore = false; }
   }
 
-  // ── Pull-to-refresh ────────────────────────────────────────────────────────
-  let touchStartY = 0;
-  let pullDist    = $state(0);
-  const PULL_THRESHOLD = 72;
 
-  function onTouchStart(e: TouchEvent) { touchStartY = e.touches[0].clientY; }
-  function onTouchMove(e: TouchEvent) {
-    if (refreshing || $feedLoading) return;
-    const scrollTop = document.documentElement.scrollTop;
-    if (scrollTop > 0) return;
-    const dy = e.touches[0].clientY - touchStartY;
-    if (dy > 0) pullDist = Math.min(dy * 0.5, PULL_THRESHOLD + 20);
-  }
-  async function onTouchEnd() {
-    if (pullDist >= PULL_THRESHOLD) {
-      refreshing = true;
-      pullDist = 0;
-      await load();
-      await loadSuggestedUsers();
-      refreshing = false;
-    } else { pullDist = 0; }
+
+  async function handleRefresh() {
+    await load();
+    await loadSuggestedUsers();
   }
 
   // ── Post aksiyonları ───────────────────────────────────────────────────────
@@ -212,26 +198,13 @@
 
 <svelte:head><title>Heftreng — Akış</title></svelte:head>
 
-<!-- Pull-to-refresh alanı -->
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="ptr-wrap"
-  role="main"
-  ontouchstart={onTouchStart}
-  ontouchmove={onTouchMove}
-  ontouchend={onTouchEnd}
->
-  {#if pullDist > 10 || refreshing}
-    <div class="ptr-indicator" style="height:{refreshing ? 48 : pullDist}px; opacity:{refreshing ? 1 : pullDist/PULL_THRESHOLD}">
-      <div class="ptr-spinner" class:spinning={refreshing}></div>
-    </div>
-  {/if}
+<PullToRefresh onRefresh={handleRefresh} bind:refreshing>
 
-  <!-- Sekmeler -->
-  <div class="tabs">
-    <button class="tab" class:active={activeTab===0} onclick={() => activeTab=0}>Herkes</button>
-    <button class="tab" class:active={activeTab===1} onclick={() => activeTab=1}>Takip Edilenler</button>
-    <div class="tab-line" style="transform:translateX({activeTab * 100}%)"></div>
-  </div>
+  <TabBar
+    tabs={['Herkes', 'Takip Edilenler']}
+    bind:active={activeTab}
+    stickyTop={52}
+  />
 
   <div class="feed-page">
     {#if $feedLoading}
@@ -249,17 +222,13 @@
       </div>
 
     {:else if filteredPosts.length === 0}
-      <div class="empty-state">
-        {#if activeTab === 1}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          <p>Takip ettiğin kişilerin gönderileri burada görünür.</p>
-          <a href="/library" class="compose-cta">Kişi keşfet →</a>
-        {:else}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          <p>Henüz gönderi yok.</p>
-          {#if $currentUser}<a href="/compose" class="compose-cta">İlk gönderiyi yaz →</a>{/if}
-        {/if}
-      </div>
+      {#if activeTab === 1}
+        <EmptyState icon="👥" message="Takip ettiğin kişilerin gönderileri burada görünür." hint="Kişi keşfet →" hintHref="/library" />
+      {:else}
+        <EmptyState icon="📄" message="Henüz gönderi yok.">
+          {#if $currentUser}<a href="/compose" class="compose-cta" slot="action">İlk gönderiyi yaz →</a>{/if}
+        </EmptyState>
+      {/if}
 
     {:else}
       {#each filteredPosts as post, i (post.id)}
@@ -317,7 +286,7 @@
       {/if}
     {/if}
   </div>
-</div>
+</PullToRefresh>
 
 <!-- FAB -->
 {#if $currentUser}
@@ -384,37 +353,6 @@
 {/if}
 
 <style>
-/* ── Tabs ───────────────────────────────────────────────────────────────────── */
-.tabs {
-  position: sticky; top: 52px; z-index: 9;
-  display: flex; background: var(--surface);
-  border-bottom: 1px solid var(--divider); overflow: hidden;
-}
-.tab {
-  flex: 1; padding: 13px 4px; font-size: 13px; font-weight: 500;
-  color: var(--muted); background: none; border: none; cursor: pointer;
-  position: relative; transition: color 0.2s; font-family: inherit;
-}
-.tab.active { color: var(--on-bg); font-weight: 700; }
-.tab-line {
-  position: absolute; bottom: 0; left: 0; width: 50%; height: 2.5px;
-  background: var(--primary); border-radius: 2px 2px 0 0;
-  transition: transform 0.25s cubic-bezier(.4,0,.2,1); pointer-events: none;
-}
-
-/* ── Pull-to-refresh ────────────────────────────────────────────────────────── */
-.ptr-wrap { min-height: 100dvh; }
-.ptr-indicator {
-  display: flex; align-items: center; justify-content: center;
-  overflow: hidden; transition: height 0.2s, opacity 0.2s;
-}
-.ptr-spinner {
-  width: 22px; height: 22px; border: 2.5px solid color-mix(in srgb, var(--primary) 30%, transparent);
-  border-top-color: var(--primary); border-radius: 50%;
-}
-.ptr-spinner.spinning { animation: spin 0.7s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
 /* ── Feed ───────────────────────────────────────────────────────────────────── */
 .feed-page { padding: 8px 12px 80px; max-width: 680px; margin: 0 auto; }
 
@@ -424,12 +362,6 @@
   background: var(--card); border-radius: 14px;
 }
 
-.empty-state {
-  display: flex; flex-direction: column; align-items: center;
-  padding: 64px 20px; gap: 12px; color: var(--muted); text-align: center;
-}
-.empty-state svg { opacity: 0.4; }
-.empty-state p { font-size: 14px; }
 .compose-cta {
   display: inline-block; margin-top: 4px; padding: 10px 20px;
   background: var(--primary); color: #fff; border-radius: 20px;

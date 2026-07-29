@@ -26,10 +26,14 @@
   } from "$lib/services/profile.service";
   import { togglePostLike, togglePostSave, deletePost as deletePostService } from "$lib/services/post.service";
   import { updatePost } from "$lib/services/compose.service";
-  import Modal from "$lib/components/Modal.svelte";
-  import QuoteCard from "$lib/components/QuoteCard.svelte";
-  import UserChip from "$lib/components/UserChip.svelte";
+  import Modal         from "$lib/components/Modal.svelte";
+  import QuoteCard     from "$lib/components/QuoteCard.svelte";
+  import UserChip      from "$lib/components/UserChip.svelte";
   import InfiniteScroll from "$lib/components/InfiniteScroll.svelte";
+  import TabBar        from "$lib/components/TabBar.svelte";
+  import EmptyState    from "$lib/components/EmptyState.svelte";
+  import PageTopBar    from "$lib/components/PageTopBar.svelte";
+  import { ago }       from "$lib/utils/time";
 
   let uid = $state("");
   $effect(() => {
@@ -526,18 +530,7 @@
     return "📄 Bölüm";
   }
   function copyId(p: any) { menuOpenId = null; navigator.clipboard.writeText('#' + p.id); }
-  function ago(ts: any): string {
-    const ms = ts?.seconds ? ts.seconds * 1000 : Number(ts);
-    const diff = Date.now() - ms;
-    const m = Math.floor(diff / 60000);
-    const h = Math.floor(diff / 3600000);
-    const d = Math.floor(diff / 86400000);
-    if (m < 1) return "şimdi";
-    if (m < 60) return `${m}dk`;
-    if (h < 24) return `${h}sa`;
-    if (d < 7)  return `${d}g`;
-    return `${Math.floor(d/30)}ay`;
-  }
+  // ago() → $lib/utils/time
 </script>
 
 
@@ -821,11 +814,9 @@
           </div>
         {/each}
       {:else if posts.length === 0}
-        <div class="empty-tab">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="44" height="44"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          <p>Henüz gönderi yok.</p>
-          {#if isMe}<a href="/compose" class="empty-link">İlk gönderiyi yaz →</a>{/if}
-        </div>
+        <EmptyState icon="📄" message="Henüz gönderi yok.">
+          {#if isMe}<a href="/compose" class="compose-cta-sm" slot="action">İlk gönderiyi yaz →</a>{/if}
+        </EmptyState>
       {:else}
         <div class="feed-list">
       {#each posts as p (p.id)}
@@ -1009,10 +1000,7 @@
     <!-- Okuma listesi -->
     {:else if selectedTab === 1}
       {#if Object.keys(readingList).length === 0}
-        <div class="empty-tab">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="44" height="44"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          <p>Okuma listesi boş.</p>
-        </div>
+        <EmptyState icon="📚" message="Okuma listesi boş." />
       {:else}
         {#each [["okuyor", "📖 Şu an okuyor"], ["okuyacak", "📚 Okuyacak"], ["okudum", "✅ Okudum"]] as [status, label]}
           {#if readingList[status]?.length}
@@ -1052,18 +1040,11 @@
       </div>
 
       {#if libraryLoading}
-        <div class="empty-tab">
-          <div class="spinner"></div>
-          <p>Yükleniyor...</p>
-        </div>
+        <EmptyState icon="⏳" message="Yükleniyor..." />
       {:else if libraryBooks.length === 0}
-        <div class="empty-tab">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="44" height="44"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          <p>Henüz kitap eklenmemiş.</p>
-          {#if isMe}
-            <button class="empty-link-btn" onclick={openAddBook}>İlk kitabı ekle →</button>
-          {/if}
-        </div>
+        <EmptyState icon="📖" message="Henüz kitap eklenmemiş.">
+          {#if isMe}<button class="compose-cta-sm" onclick={openAddBook} slot="action">İlk kitabı ekle →</button>{/if}
+        </EmptyState>
       {:else}
         <div class="books-grid">
           {#each libraryBooks as book (book.id)}
@@ -1604,8 +1585,13 @@
 .rl-author { font-size: 12px; color: var(--muted); }
 
 /* Boş state */
-.empty-tab { display: flex; flex-direction: column; align-items: center; padding: 48px 20px; gap: 10px; color: var(--muted); }
-.empty-tab p { font-size: 14px; }
+/* .empty-tab → EmptyState bileşenine taşındı */
+.compose-cta-sm {
+  display: inline-block; margin-top: 4px; padding: 8px 18px;
+  background: var(--primary); color: #fff; border-radius: 20px;
+  text-decoration: none; font-weight: 700; font-size: 13px;
+  border: none; cursor: pointer; font-family: inherit;
+}
 .empty-link { color: var(--primary); font-weight: 600; font-size: 13px; text-decoration: none; }
 
 /* Not found */
