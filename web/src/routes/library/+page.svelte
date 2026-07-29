@@ -209,12 +209,6 @@
                     <span class="q-time">{ago(q.createdAt)}</span>
                   {/if}
                 </div>
-                {#if q.bookId}
-                  <a href="/library/book/{q.bookId}" class="q-book-chip">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-                    {q.bookTitle}
-                  </a>
-                {/if}
               </div>
 
               <!-- Alıntı içeriği -->
@@ -472,12 +466,7 @@
 .q-name { font-size: 13px; font-weight: 700; color: var(--on-bg); text-decoration: none; }
 .q-name:hover { text-decoration: underline; }
 .q-time { font-size: 11px; color: var(--muted); }
-.q-book-chip {
-  display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
-  border-radius: 99px; padding: 3px 9px; text-decoration: none; flex-shrink: 0;
-  white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis;
-}
+
 .quote-actions {
   display: flex; align-items: center; gap: 4px;
   padding: 6px 12px 10px; border-top: 1px solid var(--divider); margin-top: 2px;
