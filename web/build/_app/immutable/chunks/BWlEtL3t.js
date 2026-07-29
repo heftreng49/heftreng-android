@@ -1,0 +1,1 @@
+function e(e){let t=0;if(!e||(typeof e==`object`&&e&&`seconds`in e?t=e.seconds*1e3:(typeof e==`string`||typeof e==`number`)&&(t=new Date(e).getTime()),!t))return``;let n=Date.now()-t,r=Math.floor(n/6e4),i=Math.floor(n/36e5),a=Math.floor(n/864e5),o=Math.floor(a/7),s=Math.floor(a/30);return r<1?`şimdi`:r<60?`${r}dk`:i<24?`${i}sa`:a<7?`${a}g`:o<4?`${o}hf`:`${s}ay`}export{e as t};
