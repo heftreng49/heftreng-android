@@ -597,3 +597,24 @@ export async function fetchReadingStatus(uid: string): Promise<any[]> {
     .limit(50);
   return data ?? [];
 }
+
+// ── Kitap beğeni toggle (Android: vm.toggleLikeBook) ────────────────────────
+export async function toggleBookLike(
+  bookId:      string,
+  uid:         string,
+  displayName: string,
+  photoURL:    string,
+  isLiked:     boolean,
+): Promise<void> {
+  if (isLiked) {
+    await supabase.from('book_likes').delete().eq('book_id', bookId).eq('uid', uid);
+  } else {
+    await supabase.from('book_likes').upsert({
+      id: bookId + '_' + uid,
+      book_id: bookId,
+      uid,
+      name: displayName,
+      photo_url: photoURL,
+    });
+  }
+}
