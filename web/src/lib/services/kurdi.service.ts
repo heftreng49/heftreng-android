@@ -3,7 +3,7 @@
 // User progress: users/{uid}/kf_progress/{lessonId}
 
 import {
-  collection, query, orderBy, limit, getDocs,
+  collection, query, orderBy, limit, getDocs, where,
   doc, getDoc, setDoc, updateDoc, increment, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '$lib/firebase/config';
@@ -118,32 +118,77 @@ export async function fetchLessonContent(lessonId: string): Promise<{
   vocab:     KfVocab[];
   exercises: KfExercise[];
 }> {
-  const lessonSnap = await getDoc(doc(db, 'kf_lessons', lessonId));
-  if (!lessonSnap.exists()) return { lesson: null, vocab: [], exercises: [] };
-
-  const [vocabSnap, exSnap] = await Promise.all([
-    getDocs(query(collection(db, 'kf_lessons', lessonId, 'vocab'),     orderBy('order'))),
-    getDocs(query(collection(db, 'kf_lessons', lessonId, 'exercises'), orderBy('order'))),
+  // Android KurdiViewModel ile aynı: kf_vocab ve kf_exercises ayrı üst koleksiyonlar
+  // lessonId field'ı ile whereEqualTo filtresi uygulanır
+  const [lessonSnap, vocabSnap, exSnap] = await Promise.all([
+    getDoc(doc(db, 'kf_lessons', lessonId)),
+    getDocs(query(
+      collection(db, 'kf_vocab'),
+      where('lessonId', '==', lessonId),
+      limit(200),
+    )),
+    getDocs(query(
+      collection(db, 'kf_exercises'),
+      where('lessonId', '==', lessonId),
+      limit(200),
+    )),
   ]);
+
+  if (!lessonSnap.exists()) return { lesson: null, vocab: [], exercises: [] };
 
   const x = lessonSnap.data();
   const lesson: KfLesson = {
     id: lessonSnap.id, unitId: x.unitId ?? '', order: x.order ?? 0,
-    nameTr: x.nameTr || x.title || '', nameKu: x.nameKu || '',
+    nameTr: x.nameTr || x.title || x.name || '',
+    nameKu: x.nameKu || x.nameKmr || '',
     emoji: x.emoji ?? '📖', xp: x.xp ?? 10, tip: x.tip ?? '', completed: false,
   };
 
-  const vocab = vocabSnap.docs.map(d => ({ id: d.id, ...d.data() } as KfVocab));
-  const exercises = exSnap.docs.map(d => {
+  // Vocab — distinctBy ku (Android'deki .distinctBy mantığı)
+  const vocabSeen = new Set<string>();
+  const vocab: KfVocab[] = [];
+  for (const d of vocabSnap.docs) {
     const e = d.data();
-    return {
-      id: d.id, type: e.type ?? 'mcq',
-      question: e.question ?? '', questionTr: e.questionTr ?? '',
-      optA: e.optA ?? '', optB: e.optB ?? '', optC: e.optC ?? '', optD: e.optD ?? '',
-      answer: e.answer ?? '', wrong: e.wrong ?? [],
-      pairs: e.pairs ?? [], words: e.words ?? [], tr: e.tr ?? '',
-    } as KfExercise;
-  });
+    const ku = (e.ku || e.kur || '').trim().toLowerCase();
+    if (!ku || vocabSeen.has(ku)) continue;
+    vocabSeen.add(ku);
+    vocab.push({ id: d.id, ku: e.ku || e.kur || '', kp: e.kp ?? '', tr: e.tr ?? '', e: e.e ?? '📖' });
+  }
+
+  // Exercises — pairs hem Map hem List formatını destekle (Android eski/yeni uyumluluk)
+  const exSeen = new Set<string>();
+  const exercises: KfExercise[] = [];
+  for (const d of exSnap.docs) {
+    const e = d.data();
+    const key = `${e.type}|${(e.question || e.ku || '').trim().toLowerCase()}`;
+    if (exSeen.has(key)) continue;
+    exSeen.add(key);
+
+    // pairs: [{ku,tr}] veya [[ku,tr]] her ikisini destekle
+    const pairsRaw: any[] = e.pairs ?? [];
+    const pairs = pairsRaw.map((item: any) => {
+      if (Array.isArray(item)) return { a: item[0] ?? '', b: item[1] ?? '' };
+      return { a: item?.ku ?? item?.a ?? '', b: item?.tr ?? item?.b ?? '' };
+    }).filter(p => p.a && p.b);
+
+    const words: string[] = (e.words ?? []).filter((w: any) => typeof w === 'string');
+
+    exercises.push({
+      id:         d.id,
+      type:       (e.type ?? 'mcq') as KfExercise['type'],
+      question:   e.question   || e.ku || '',
+      questionTr: e.questionTr || e.tr || '',
+      optA:       e.optA  ?? '',
+      optB:       e.optB  ?? '',
+      optC:       e.optC  ?? '',
+      optD:       e.optD  ?? '',
+      answer:     e.answer || e.correct || e.optA || '',
+      wrong:      (e.wrong ?? []).filter((w: any) => typeof w === 'string'),
+      pairs,
+      words,
+      tr:         e.tr ?? '',
+    });
+  }
 
   return { lesson, vocab, exercises };
 }
