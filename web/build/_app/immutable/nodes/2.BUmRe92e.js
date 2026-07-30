@@ -1,0 +1,1 @@
+import{ct as e,it as t}from"../chunks/CDVG-86v.js";import{r as n}from"../chunks/BuFlayix.js";import"../chunks/xihTtKlq.js";function r(e,t){throw new n(e,t.toString())}var i=e({load:()=>a});function a(){throw r(302,`/feed`)}t();function o(e){}export{o as component,i as universal};
