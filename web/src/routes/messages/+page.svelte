@@ -1,0 +1,83 @@
+<script lang="ts">
+  import { onMount, onDestroy } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { currentUser } from '$lib/stores/auth';
+  import { listenConversations, setPresence } from '$lib/services/message.service';
+  import ConversationRow from '$lib/components/ConversationRow.svelte';
+  import EmptyState      from '$lib/components/EmptyState.svelte';
+  import Skeleton        from '$lib/components/Skeleton.svelte';
+
+  let convs    = $state<any[]>([]);
+  let loading  = $state(true);
+  let search   = $state('');
+  let unsub: (() => void) | null = null;
+
+  const filtered = $derived(
+    search.trim()
+      ? convs.filter(c => c.otherName?.toLowerCase().includes(search.toLowerCase()))
+      : convs
+  );
+
+  onMount(() => {
+    const uid = $currentUser?.uid;
+    if (!uid) { goto('/login'); return; }
+    setPresence(uid, true);
+    unsub = listenConversations(uid, data => {
+      convs = data; loading = false;
+    });
+  });
+  onDestroy(() => {
+    unsub?.();
+    if ($currentUser?.uid) setPresence($currentUser.uid, false);
+  });
+</script>
+
+<svelte:head><title>Mesajlar — Heftreng</title></svelte:head>
+
+<div class="msg-page">
+  <div class="msg-topbar">
+    <h2>Mesajlar</h2>
+  </div>
+
+  <!-- Arama -->
+  <div class="msg-search">
+    <input type="search" placeholder="Konuşma ara…" bind:value={search} class="msg-search-input" />
+  </div>
+
+  {#if loading}
+    <div class="conv-list">
+      {#each {length: 5} as _}
+        <div class="conv-skeleton">
+          <Skeleton width="48px" height="48px" radius="50%" />
+          <div style="flex:1">
+            <Skeleton width="40%" height="13px" />
+            <Skeleton width="70%" height="11px" />
+          </div>
+        </div>
+      {/each}
+    </div>
+  {:else if filtered.length === 0}
+    <EmptyState icon="✉️" message="Henüz mesaj yok." hint="Bir kullanıcının profilinden mesaj gönder." />
+  {:else}
+    <div class="conv-list">
+      {#each filtered as conv (conv.id)}
+        <ConversationRow {conv} currentUid={$currentUser?.uid ?? ''} />
+      {/each}
+    </div>
+  {/if}
+</div>
+
+<style>
+.msg-page { min-height: 100dvh; }
+.msg-topbar { padding: 14px 16px 8px; }
+.msg-topbar h2 { margin: 0; font-size: 1.1rem; font-weight: 700; }
+.msg-search { padding: 0 14px 10px; }
+.msg-search-input {
+  width: 100%; border: none; background: var(--surface-var);
+  border-radius: 20px; padding: 9px 14px;
+  font-size: 0.88rem; font-family: inherit; color: var(--on-bg);
+  outline: none; box-sizing: border-box;
+}
+.conv-list { display: flex; flex-direction: column; }
+.conv-skeleton { display: flex; gap: 12px; padding: 12px 16px; align-items: center; }
+</style>
