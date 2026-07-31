@@ -1,7 +1,6 @@
 <script lang="ts">
   // Android ConnectedPostCard / UnifiedCards karşılığı
   // Props: post + currentUid, event dispatcher'lar
-  import { createEventDispatcher } from 'svelte';
   import Avatar     from './Avatar.svelte';
   import LikeButton from './LikeButton.svelte';
   import QuoteCard   from './QuoteCard.svelte';
@@ -11,16 +10,13 @@
   interface Props {
     post:       Post;
     currentUid: string | null;
+    onLike?:    (post: Post) => void;
+    onSave?:    (post: Post) => void;
+    onComment?: (post: Post) => void;
+    onDelete?:  (post: Post) => void;
+    onEdit?:    (post: Post) => void;
   }
-  let { post, currentUid }: Props = $props();
-
-  const dispatch = createEventDispatcher<{
-    like:    Post;
-    save:    Post;
-    comment: Post;
-    delete:  Post;
-    edit:    Post;
-  }>();
+  let { post, currentUid, onLike, onSave, onComment, onDelete, onEdit }: Props = $props();
 
   let menuOpen   = $state(false);
   let expanded   = $state(false);
@@ -81,10 +77,10 @@
       {#if menuOpen}
         <div class="dropdown">
           {#if isOwner}
-            <button class="dropdown-item" onclick={() => { menuOpen=false; dispatch('edit', post); }}>
+            <button class="dropdown-item" onclick={() => { menuOpen=false; onEdit?.(post); }}>
               ✏️ Düzenle
             </button>
-            <button class="dropdown-item danger" onclick={() => { menuOpen=false; dispatch('delete', post); }}>
+            <button class="dropdown-item danger" onclick={() => { menuOpen=false; onDelete?.(post); }}>
               🗑️ Sil
             </button>
           {:else}
@@ -176,10 +172,10 @@
     <LikeButton
       liked={post.isLikedByMe ?? false}
       count={post.likesCount ?? 0}
-      onclick={() => dispatch('like', post)}
+      onclick={() => onLike?.(post)}
     />
 
-    <button class="action-btn" onclick={() => dispatch('comment', post)} aria-label="Yorum yap">
+    <button class="action-btn" onclick={() => onComment?.(post)} aria-label="Yorum yap">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
       </svg>
@@ -189,7 +185,7 @@
     <button
       class="action-btn"
       class:saved={post.isSavedByMe}
-      onclick={() => dispatch('save', post)}
+      onclick={() => onSave?.(post)}
       aria-label={post.isSavedByMe ? 'Kayıttan çıkar' : 'Kaydet'}
     >
       <svg viewBox="0 0 24 24" fill={post.isSavedByMe ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" width="18" height="18">

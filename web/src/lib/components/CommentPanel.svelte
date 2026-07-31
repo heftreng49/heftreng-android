@@ -1,6 +1,6 @@
 <script lang="ts">
   // Android yorum bottom sheet karşılığı
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import Avatar from './Avatar.svelte';
   import { ago } from '$lib/models/util';
   import { fetchComments, sendComment, deleteComment } from '$lib/services/comment.service';
@@ -8,12 +8,12 @@
   import type { User as FirebaseUser } from 'firebase/auth';
 
   interface Props {
-    postId:      string;
-    currentUser: FirebaseUser | null;
+    postId:         string;
+    currentUser:    FirebaseUser | null;
+    onClose?:       () => void;
+    onCountChange?: (count: number) => void;
   }
-  let { postId, currentUser }: Props = $props();
-
-  const dispatch = createEventDispatcher<{ close: void; countchange: number }>();
+  let { postId, currentUser, onClose, onCountChange }: Props = $props();
 
   let comments : Comment[] = $state([]);
   let loading  = $state(true);
@@ -45,7 +45,7 @@
         reply_to_cmt_id:  replyTo?.id ?? null ?? undefined,
       });
       comments = [...comments, c];
-      dispatch('countchange', comments.length);
+      onCountChange?.(comments.length);
       text    = '';
       replyTo = null;
     } catch(e) { console.error(e); }
@@ -55,13 +55,13 @@
 
 <!-- Panel arka planı -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="overlay" onclick={() => dispatch('close')} role="button" tabindex="-1" aria-label="Kapat"></div>
+<div class="overlay" onclick={() => onClose?.()} role="button" tabindex="-1" aria-label="Kapat"></div>
 
 <div class="panel">
   <div class="panel-handle"></div>
   <div class="panel-header">
     <span class="panel-title">Yorumlar ({comments.length})</span>
-    <button class="close-btn" onclick={() => dispatch('close')}>✕</button>
+    <button class="close-btn" onclick={() => onClose?.()}>✕</button>
   </div>
 
   <div class="panel-body">
@@ -88,7 +88,7 @@
                 <button class="cmt-action danger" onclick={async () => {
                   await deleteComment(c.id, c.uid);
                   comments = comments.filter(x => x.id !== c.id);
-                  dispatch('countchange', comments.length);
+                  onCountChange?.(comments.length);
                 }}>Sil</button>
               {/if}
             </div>
