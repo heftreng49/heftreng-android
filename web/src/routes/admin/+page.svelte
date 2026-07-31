@@ -35,13 +35,15 @@
   let stats = $state<any>(null);
   // Users
   let users = $state<any[]>([]); let userSearch = $state(''); let userLoading = $state(false);
-  let banTarget = $state<any|null>(null); let banReason = $state(''); let banSaving = $state(false);
+  let banTarget = $state<any|null>(null); let showBanModal = $state(false);
+  let banReason = $state(''); let banSaving = $state(false);
   // Reports
   let reports = $state<any[]>([]); let reportsLoading = $state(false);
-  let modTarget = $state<any|null>(null); let modStatus = $state('removed'); let modReason = $state('');
+  let modTarget = $state<any|null>(null); let showModModal = $state(false);
+  let modStatus = $state('removed'); let modReason = $state('');
   // Appeals
   let appeals = $state<any[]>([]); let appealsLoading = $state(false);
-  let appealTarget = $state<any|null>(null); let appealNote = $state('');
+  let appealTarget = $state<any|null>(null); let showAppealModal = $state(false); let appealNote = $state('');
   // Push
   let pushTitle = $state(''); let pushBody = $state(''); let pushUrl = $state('');
   let pushResult = $state(''); let pushSending = $state(false);
@@ -85,7 +87,7 @@
     banSaving = true;
     await banUser(banTarget.uid, banReason, $currentUser.uid);
     users = users.map(u => u.uid === banTarget.uid ? {...u, banned:true} : u);
-    banTarget = null; banReason = ''; banSaving = false;
+    banTarget = null; banReason = ''; banSaving = false; showBanModal = false;
   }
 
   async function doUnban(uid: string) {
@@ -187,7 +189,7 @@
                     <span class="banned-badge">Banlı</span>
                     <button class="action-btn green" onclick={() => doUnban(u.uid)}>Kaldır</button>
                   {:else}
-                    <button class="action-btn red" onclick={() => banTarget = u}>Banla</button>
+                    <button class="action-btn red" onclick={() => { banTarget = u; showBanModal = true; }}>Banla</button>
                   {/if}
                 </div>
               </li>
@@ -211,7 +213,7 @@
                   <p class="report-sub">Şikayet eden: {r.reporterUid ?? '-'}</p>
                 </div>
                 <div class="report-actions">
-                  <button class="action-btn red" onclick={() => modTarget = r}>Müdahale</button>
+                  <button class="action-btn red" onclick={() => { modTarget = r; showModModal = true; }}>Müdahale</button>
                   <button class="action-btn" onclick={async () => { await updateReportStatus(r.id,'dismissed'); reports=reports.filter(x=>x.id!==r.id); }}>Yoksay</button>
                 </div>
               </li>
@@ -235,7 +237,7 @@
                   {#if a.message}<p class="report-sub">"{a.message}"</p>{/if}
                 </div>
                 <div class="report-actions">
-                  <button class="action-btn green" onclick={() => { appealTarget=a; appealNote=''; }}>İncele</button>
+                  <button class="action-btn green" onclick={() => { appealTarget=a; showAppealModal=true; appealNote=''; }}>İncele</button>
                 </div>
               </li>
             {/each}
@@ -289,7 +291,7 @@
 </div>
 
 <!-- Ban Modal -->
-<Modal bind:open={!!banTarget} title="Kullanıcıyı Banla" onclose={() => banTarget = null}>
+<Modal bind:open={showBanModal} title="Kullanıcıyı Banla" onclose={() => { banTarget = null; showBanModal = false; }}>
   {#if banTarget}
     <div class="modal-form">
       <p style="margin:0 0 10px;font-size:.88rem"><strong>{banTarget.display_name}</strong> banlanacak.</p>
@@ -302,7 +304,7 @@
 </Modal>
 
 <!-- Moderasyon Modal -->
-<Modal bind:open={!!modTarget} title="Gönderi Müdahalesi" onclose={() => modTarget = null}>
+<Modal bind:open={showModModal} title="Gönderi Müdahalesi" onclose={() => { modTarget = null; showModModal = false; }}>
   {#if modTarget}
     <div class="modal-form">
       <p style="margin:0 0 10px;font-size:.82rem;color:var(--muted)">Gönderi: {modTarget.postId ?? modTarget.id}</p>
@@ -321,7 +323,7 @@
 </Modal>
 
 <!-- İtiraz Modal -->
-<Modal bind:open={!!appealTarget} title="İtiraz İncele" onclose={() => appealTarget = null}>
+<Modal bind:open={showAppealModal} title="İtiraz İncele" onclose={() => { appealTarget = null; showAppealModal = false; }}>
   {#if appealTarget}
     <div class="modal-form">
       <p style="margin:0 0 6px;font-size:.88rem"><strong>{appealTarget.postOwnerName}</strong></p>

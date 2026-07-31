@@ -15,10 +15,10 @@
   let activeTab = $state(0);
 
   // Her sekme bileşenine refresh tetikleyebilmek için referans
-  let quotesRef:  { refresh: () => Promise<void> } | undefined;
-  let reviewsRef: { refresh: () => Promise<void> } | undefined;
-  let authorsRef: { refresh: () => Promise<void> } | undefined;
-  let booksRef:   { refresh: () => Promise<void> } | undefined;
+  let quotesRef  = $state<{ refresh: () => Promise<void> } | undefined>(undefined);
+  let reviewsRef = $state<{ refresh: () => Promise<void> } | undefined>(undefined);
+  let authorsRef = $state<{ refresh: () => Promise<void> } | undefined>(undefined);
+  let booksRef   = $state<{ refresh: () => Promise<void> } | undefined>(undefined);
 
   async function handleRefresh() {
     await Promise.all([

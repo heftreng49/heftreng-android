@@ -363,11 +363,7 @@
   background: var(--card); border-radius: 14px;
 }
 
-.compose-cta {
-  display: inline-block; margin-top: 4px; padding: 10px 20px;
-  background: var(--primary); color: #fff; border-radius: 20px;
-  text-decoration: none; font-weight: 700; font-size: 14px;
-}
+
 
 .load-more {
   display: block; width: 100%; padding: 14px;

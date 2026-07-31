@@ -17,7 +17,7 @@
   let text      = $state('');
   let sending   = $state(false);
   let loading   = $state(true);
-  let msgEnd: HTMLDivElement;
+  let msgEnd = $state<HTMLDivElement | undefined>(undefined);
 
   let unsubMsgs: (() => void) | null = null;
   let unsubConvs: (() => void) | null = null;
