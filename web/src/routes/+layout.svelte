@@ -5,6 +5,10 @@
   import { initAuthListener, signOut } from '$lib/services/auth.service';
   import { currentUser, authLoading } from '$lib/stores/auth';
   import { theme, applyTheme } from '$lib/store/theme';
+  import { listenNotifications } from '$lib/services/notification.service';
+  import { listenConversations } from '$lib/services/message.service';
+  import { getTheme, saveTheme } from '$lib/services/settings.service';
+  import { unreadNotifCount, unreadMsgCount } from '$lib/stores/ui.store';
 
   let { children } = $props();
 
@@ -33,9 +37,31 @@
     applyTheme($theme.variant, mode);
   }
 
+  let unsubNotifs: (() => void) | null = null;
+  let unsubMsgs:   (() => void) | null = null;
+
   onMount(() => {
-    applyTheme($theme.variant, $theme.mode);
-    return initAuthListener();
+    // Tema — localStorage'dan uygula
+    const saved = getTheme();
+    saveTheme(saved.mode, saved.variant);
+
+    const unsubAuth = initAuthListener();
+
+    // currentUser değişince realtime listener'ları yeniden başlat
+    const unsubStore = currentUser.subscribe(user => {
+      unsubNotifs?.(); unsubNotifs = null;
+      unsubMsgs?.();   unsubMsgs   = null;
+      if (!user) { unreadNotifCount.set(0); unreadMsgCount.set(0); return; }
+
+      unsubNotifs = listenNotifications(user.uid, (notifs) => {
+        unreadNotifCount.set(notifs.filter((n: any) => !n.read).length);
+      });
+      unsubMsgs = listenConversations(user.uid, (convs) => {
+        unreadMsgCount.set(convs.reduce((s: number, cv: any) => s + (cv.unreadCount ?? 0), 0));
+      });
+    });
+
+    return () => { unsubAuth(); unsubStore(); unsubNotifs?.(); unsubMsgs?.(); };
   });
 
   // Drawer menü öğeleri
@@ -70,9 +96,11 @@
       {#if $currentUser}
         <a href="/notifications" class="hdr-icon badge-wrap" aria-label="Bildirimler">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="21" height="21"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          {#if $unreadNotifCount > 0}<span class="badge">{$unreadNotifCount > 99 ? '99+' : $unreadNotifCount}</span>{/if}
         </a>
         <a href="/messages" class="hdr-icon badge-wrap" aria-label="Mesajlar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="21" height="21"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          {#if $unreadMsgCount > 0}<span class="badge">{$unreadMsgCount > 99 ? '99+' : $unreadMsgCount}</span>{/if}
         </a>
       {/if}
     </div>
@@ -274,6 +302,15 @@
 }
 .hdr-icon:hover { background: var(--surface-var); }
 .badge-wrap { position: relative; }
+.badge {
+  position: absolute; top: -4px; right: -5px;
+  min-width: 16px; height: 16px; border-radius: 8px;
+  background: #ef4444; color: #fff;
+  font-size: 9px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 3px; border: 1.5px solid var(--surface);
+  pointer-events: none;
+}
 
 /* ── Drawer backdrop ──────────────────────────────────────────── */
 .drawer-backdrop {

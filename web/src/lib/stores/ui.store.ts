@@ -10,3 +10,6 @@ export function showToast(msg: string, ms = 2500) {
   toastMsg.set(msg);
   setTimeout(() => toastMsg.set(null), ms);
 }
+
+export const unreadNotifCount = writable(0);
+export const unreadMsgCount   = writable(0);
