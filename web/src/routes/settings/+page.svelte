@@ -40,6 +40,20 @@
     saveTheme(mode, theme.variant);
   }
 
+  function onThemeVariant(variant: string) {
+    theme = { ...theme, variant };
+    saveTheme(theme.mode, variant);
+  }
+
+  const VARIANTS = [
+    { key: 'charcoal', label: 'Charcoal', primary: '#4A6FFF', bg: '#F5F5F7' },
+    { key: 'book',     label: 'Kitap',    primary: '#8B5E2C', bg: '#FAF3E8' },
+    { key: 'forest',   label: 'Orman',    primary: '#2E7D32', bg: '#F2F9F2' },
+    { key: 'ocean',    label: 'Okyanus',  primary: '#0077B6', bg: '#F0F8FC' },
+    { key: 'sunset',   label: 'Gün Batımı', primary: '#C0305A', bg: '#FDF5F7' },
+    { key: 'mono',     label: 'Mono',     primary: '#222222', bg: '#F8F8F8' },
+  ];
+
   function onLang(lang: string) {
     theme = { ...theme, lang };
     saveLang(lang);
@@ -88,9 +102,27 @@
   <!-- Görünüm -->
   <p class="section-title">Görünüm</p>
   <div class="section">
+    <!-- Mod: Açık / Koyu / Sistem -->
     <div class="theme-row">
       {#each [['system','Sistem'],['light','Açık'],['dark','Koyu']] as [val, label]}
         <button class="theme-btn" class:active={theme.mode === val} onclick={() => onThemeMode(val)}>{label}</button>
+      {/each}
+    </div>
+    <!-- Varyant -->
+    <p class="sub-label">Renk Teması</p>
+    <div class="variant-grid">
+      {#each VARIANTS as v}
+        <button
+          class="variant-btn"
+          class:active={theme.variant === v.key}
+          onclick={() => onThemeVariant(v.key)}
+        >
+          <span class="variant-dot" style="background:{v.primary}"></span>
+          <span class="variant-name">{v.label}</span>
+          {#if theme.variant === v.key}
+            <span class="variant-check">✓</span>
+          {/if}
+        </button>
       {/each}
     </div>
   </div>
@@ -208,6 +240,23 @@
   cursor: pointer; font-family: inherit; transition: all .15s;
 }
 .theme-btn.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--primary); }
+
+.sub-label { font-size: .72rem; color: var(--muted); padding: 8px 16px 4px; margin: 0; font-weight: 600; }
+.variant-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: 8px; padding: 4px 16px 12px;
+}
+.variant-btn {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 12px;
+  border: 1.5px solid var(--divider); background: var(--surface-var);
+  cursor: pointer; font-family: inherit; transition: all .15s;
+  position: relative;
+}
+.variant-btn.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.variant-dot { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; }
+.variant-name { font-size: .82rem; font-weight: 600; color: var(--on-bg); flex: 1; text-align: left; }
+.variant-check { font-size: .75rem; color: var(--primary); font-weight: 700; }
 .perm-label { font-size: .78rem; color: var(--muted); padding: 10px 16px 4px; margin: 0; }
 .perm-row { display: flex; gap: 8px; padding: 0 16px 10px; }
 .perm-btn { flex: 1; padding: 7px 4px; border-radius: 10px; font-size: .78rem; font-weight: 600;

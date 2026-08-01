@@ -16,11 +16,17 @@ export function getTheme(): { mode: string; variant: string; lang: string } {
 export function saveTheme(mode: string, variant: string) {
   localStorage.setItem('hf_theme_mode',    mode);
   localStorage.setItem('hf_theme_variant', variant);
-  // DOM'a uygula
-  document.documentElement.setAttribute('data-theme', mode === 'system'
+  // DOM'a uygula — app.css [data-theme="variant-mode"] formatını bekliyor
+  const resolved = mode === 'system'
     ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-    : mode);
-  document.documentElement.setAttribute('data-variant', variant);
+    : mode;
+  document.documentElement.setAttribute('data-theme', `${variant}-${resolved}`);
+  // System mod değişimini dinle
+  if (mode === 'system') {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+      document.documentElement.setAttribute('data-theme', `${variant}-${e.matches ? 'dark' : 'light'}`);
+    }, { once: true });
+  }
 }
 
 export function saveLang(lang: string) {

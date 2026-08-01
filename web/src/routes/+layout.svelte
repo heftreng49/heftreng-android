@@ -7,7 +7,7 @@
   import { theme, applyTheme } from '$lib/store/theme';
   import { listenNotifications } from '$lib/services/notification.service';
   import { listenConversations } from '$lib/services/message.service';
-  import { getTheme, saveTheme } from '$lib/services/settings.service';
+  import { getTheme } from '$lib/services/settings.service';
   import { unreadNotifCount, unreadMsgCount } from '$lib/stores/ui.store';
 
   let { children } = $props();
@@ -41,9 +41,17 @@
   let unsubMsgs:   (() => void) | null = null;
 
   onMount(() => {
-    // Tema — localStorage'dan uygula
+    // Tema — localStorage'dan tek kaynakla uygula (applyTheme)
     const saved = getTheme();
-    saveTheme(saved.mode, saved.variant);
+    applyTheme(saved.variant, saved.mode);
+
+    // Sistem modu değişimini canlı dinle
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onSystemChange = () => {
+      const t = getTheme();
+      if (t.mode === 'system') applyTheme(t.variant, 'system');
+    };
+    mq.addEventListener('change', onSystemChange);
 
     const unsubAuth = initAuthListener();
 
@@ -61,7 +69,7 @@
       });
     });
 
-    return () => { unsubAuth(); unsubStore(); unsubNotifs?.(); unsubMsgs?.(); };
+    return () => { unsubAuth(); unsubStore(); unsubNotifs?.(); unsubMsgs?.(); mq.removeEventListener('change', onSystemChange); };
   });
 
   // Drawer menü öğeleri
