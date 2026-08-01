@@ -75,8 +75,8 @@
       {#each posts as p (p.id)}
         <PostCard
           post={p}
-          currentUid={$currentUser?.uid}
-          on:save={() => unsave(p)}
+          currentUid={$currentUser?.uid ?? null}
+          onSave={() => unsave(p)}
         />
       {/each}
     </div>

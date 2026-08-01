@@ -357,7 +357,7 @@
 .tabs {
   position: sticky; top: 52px; z-index: 9;
   display: flex; background: var(--surface);
-  border-bottom: 1px solid var(--divider); overflow: hidden;
+  border-bottom: 1px solid var(--divider);
 }
 .tab {
   flex: 1; padding: 13px 4px; font-size: 13px; font-weight: 500;
