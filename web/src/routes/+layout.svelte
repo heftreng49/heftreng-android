@@ -76,8 +76,8 @@
     return () => { unsubAuth(); unsubStore(); unsubNotifs?.(); unsubMsgs?.(); mq.removeEventListener('change', onSystemChange); };
   });
 
-  // Drawer menü öğeleri — reaktif dil
-  $: navGrid = [
+  // Drawer menü öğeleri — reaktif dil (Svelte 5)
+  const navGrid = $derived([
     { icon: 'feed',     label: s.navFeed($lang),      href: '/feed' },
     { icon: 'search',   label: s.navSearch($lang),    href: '/search' },
     { icon: 'library',  label: s.navLibrary($lang),   href: '/library' },
@@ -86,7 +86,7 @@
     { icon: 'message',  label: s.navMessages($lang),  href: '/messages' },
     { icon: 'saved',    label: s.savedPosts($lang),   href: '/saved' },
     { icon: 'settings', label: s.navSettings($lang),  href: '/settings' },
-  ];
+  ]);
 </script>
 
 <!-- Global header (drawer açma + logo) -->
