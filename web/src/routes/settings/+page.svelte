@@ -7,6 +7,7 @@
     togglePrivateAccount, setMessagePermission,
     fetchBlockedUsers, unblockUser, changePassword, deleteAccount,
   } from '$lib/services/settings.service';
+  import { lang, strings as s } from '$lib/i18n/strings';
   import { signOut } from '$lib/services/auth.service';
   import SettingsRow from '$lib/components/SettingsRow.svelte';
   import Modal       from '$lib/components/Modal.svelte';
@@ -54,9 +55,10 @@
     { key: 'mono',     label: 'Mono',     primary: '#222222', bg: '#F8F8F8' },
   ];
 
-  function onLang(lang: string) {
-    theme = { ...theme, lang };
-    saveLang(lang);
+  function onLang(l: string) {
+    theme = { ...theme, lang: l };
+    saveLang(l);
+    lang.set(l); // reaktif güncelleme — tüm ekranlar anında değişir
   }
 
   async function onTogglePrivate(val: boolean) {
@@ -84,7 +86,7 @@
   }
 </script>
 
-<svelte:head><title>Ayarlar — Heftreng</title></svelte:head>
+<svelte:head><title>{s.settings($lang)} — Heftreng</title></svelte:head>
 
 <div class="settings-page">
   <!-- Profil özeti -->
@@ -100,16 +102,21 @@
   {/if}
 
   <!-- Görünüm -->
-  <p class="section-title">Görünüm</p>
+  <p class="section-title">{s.appearance($lang)}</p>
   <div class="section">
-    <!-- Mod: Açık / Koyu / Sistem -->
     <div class="theme-row">
-      {#each [['system','Sistem'],['light','Açık'],['dark','Koyu']] as [val, label]}
-        <button class="theme-btn" class:active={theme.mode === val} onclick={() => onThemeMode(val)}>{label}</button>
+      {#each [[
+        ['system', s.systemMode($lang)],
+        ['light',  s.lightMode($lang)],
+        ['dark',   s.darkMode($lang)],
+      ]] as modes}
+        {#each modes as [val, label]}
+          <button class="theme-btn" class:active={theme.mode === val} onclick={() => onThemeMode(val)}>{label}</button>
+        {/each}
       {/each}
     </div>
     <!-- Varyant -->
-    <p class="sub-label">Renk Teması</p>
+    <p class="sub-label">{s.colorTheme($lang)}</p>
     <div class="variant-grid">
       {#each VARIANTS as v}
         <button
@@ -128,24 +135,27 @@
   </div>
 
   <!-- Dil -->
-  <p class="section-title">Dil</p>
+  <p class="section-title">{s.language($lang)}</p>
   <div class="section">
-    <div class="theme-row">
-      {#each [['tr','Türkçe'],['ku','Kurdî']] as [val, label]}
-        <button class="theme-btn" class:active={theme.lang === val} onclick={() => onLang(val)}>{label}</button>
-      {/each}
+    <div class="theme-row lang-row">
+      <button class="lang-btn" class:active={$lang === 'tr'} onclick={() => onLang('tr')}>
+        <span class="lang-flag">🇹🇷</span> Türkçe
+      </button>
+      <button class="lang-btn" class:active={$lang === 'ku'} onclick={() => onLang('ku')}>
+        <span class="lang-flag">☀️</span> Kurdî
+      </button>
     </div>
   </div>
 
   <!-- Hesap -->
-  <p class="section-title">Hesap</p>
+  <p class="section-title">{s.account($lang)}</p>
   <div class="section">
-    <SettingsRow icon="✏️" label="Profili Düzenle" href="/profile/{$currentUser?.uid}?edit=1" />
-    <SettingsRow icon="🔑" label="Şifre Değiştir" onClick={() => showPwModal = true} />
+    <SettingsRow icon="✏️" label={s.editProfile($lang)} href="/profile/{$currentUser?.uid}?edit=1" />
+    <SettingsRow icon="🔑" label={s.changePassword($lang)} onClick={() => showPwModal = true} />
   </div>
 
   <!-- Bildirimler -->
-  <p class="section-title">Bildirimler</p>
+  <p class="section-title">{s.notifications($lang)}</p>
   <div class="section">
     <SettingsRow icon="🔔" label="Push Bildirimleri" toggle
       bind:checked={pushEnabled}
@@ -233,6 +243,15 @@
 .section-title { font-size: .72rem; font-weight: 700; color: var(--muted);
   text-transform: uppercase; letter-spacing: .05em; padding: 14px 16px 4px; margin: 0; }
 .section { background: var(--surface); border-top: 1px solid var(--divider); border-bottom: 1px solid var(--divider); }
+.lang-row { gap: 10px; }
+.lang-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px 8px; border-radius: 12px; font-size: .88rem; font-weight: 600;
+  border: 1.5px solid var(--divider); background: var(--surface-var); color: var(--on-bg);
+  cursor: pointer; font-family: inherit; transition: all .15s;
+}
+.lang-btn.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--primary); }
+.lang-flag { font-size: 1.1rem; }
 .theme-row { display: flex; padding: 10px 16px; gap: 8px; }
 .theme-btn {
   flex: 1; padding: 8px 4px; border-radius: 10px; font-size: .82rem; font-weight: 600;

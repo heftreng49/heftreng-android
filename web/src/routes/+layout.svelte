@@ -9,6 +9,7 @@
   import { listenConversations } from '$lib/services/message.service';
   import { getTheme } from '$lib/services/settings.service';
   import { unreadNotifCount, unreadMsgCount } from '$lib/stores/ui.store';
+  import { lang, strings as s } from '$lib/i18n/strings';
 
   let { children } = $props();
 
@@ -41,9 +42,12 @@
   let unsubMsgs:   (() => void) | null = null;
 
   onMount(() => {
-    // Tema — localStorage'dan tek kaynakla uygula (applyTheme)
+    // Tema
     const saved = getTheme();
     applyTheme(saved.variant, saved.mode);
+    // Dil — HTML lang attribute'unu ayarla
+    const savedLang = localStorage.getItem('hf_lang') ?? 'tr';
+    lang.set(savedLang);
 
     // Sistem modu değişimini canlı dinle
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -72,16 +76,16 @@
     return () => { unsubAuth(); unsubStore(); unsubNotifs?.(); unsubMsgs?.(); mq.removeEventListener('change', onSystemChange); };
   });
 
-  // Drawer menü öğeleri
-  const navGrid = [
-    { icon: 'feed',          label: 'Gönderi',      href: '/feed' },
-    { icon: 'search',        label: 'Ara',           href: '/search' },
-    { icon: 'library',       label: 'Kütüphane',     href: '/library' },
-    { icon: 'kurdi',         label: 'Kurdî',         href: '/kurdi' },
-    { icon: 'notif',         label: 'Bildirimler',   href: '/notifications' },
-    { icon: 'message',       label: 'Mesajlar',      href: '/messages' },
-    { icon: 'saved',         label: 'Kaydedilenler', href: '/saved' },
-    { icon: 'settings',      label: 'Ayarlar',       href: '/settings' },
+  // Drawer menü öğeleri — reaktif dil
+  $: navGrid = [
+    { icon: 'feed',     label: s.navFeed($lang),      href: '/feed' },
+    { icon: 'search',   label: s.navSearch($lang),    href: '/search' },
+    { icon: 'library',  label: s.navLibrary($lang),   href: '/library' },
+    { icon: 'kurdi',    label: s.navKurdi($lang),     href: '/kurdi' },
+    { icon: 'notif',    label: s.navNotifs($lang),    href: '/notifications' },
+    { icon: 'message',  label: s.navMessages($lang),  href: '/messages' },
+    { icon: 'saved',    label: s.savedPosts($lang),   href: '/saved' },
+    { icon: 'settings', label: s.navSettings($lang),  href: '/settings' },
   ];
 </script>
 
@@ -227,25 +231,25 @@
       {:else}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="24" height="24"><path d="M3 3h18v2H3zm0 4h18v2H3zm0 4h18v2H3zm0 4h12v2H3z"/></svg>
       {/if}
-      <span>Gönderi</span>
+      <span>{s.navFeed($lang)}</span>
     </a>
-    <a href="/library" class="nav-item" class:active={isActive('/library')} aria-label="Kütüphane">
+    <a href="/library" class="nav-item" class:active={isActive('/library')} aria-label={s.navLibrary($lang)}>
       {#if isActive('/library')}
         <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15zm2.5-2.5H18v3H6.5A.5.5 0 0 1 6 19.5v0A.5.5 0 0 1 6.5 19z"/></svg>
       {:else}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="24" height="24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
       {/if}
-      <span>Kütüphane</span>
+      <span>{s.navLibrary($lang)}</span>
     </a>
-    <a href="/kurdi" class="nav-item" class:active={isActive('/kurdi')} aria-label="Kurdî">
+    <a href="/kurdi" class="nav-item" class:active={isActive('/kurdi')} aria-label={s.navKurdi($lang)}>
       {#if isActive('/kurdi')}
         <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/></svg>
       {:else}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="24" height="24"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>
       {/if}
-      <span>Kurdî</span>
+      <span>{s.navKurdi($lang)}</span>
     </a>
-    <a href="/profile/{$currentUser?.uid}" class="nav-item" class:active={isActive('/profile')} aria-label="Profil">
+    <a href="/profile/{$currentUser?.uid}" class="nav-item" class:active={isActive('/profile')} aria-label={s.navProfile($lang)}>
       {#if $currentUser?.photoURL}
         <img src={$currentUser.photoURL} alt="" class="nav-avatar" class:active-av={isActive('/profile')} />
       {:else if isActive('/profile')}
@@ -253,7 +257,7 @@
       {:else}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="24" height="24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       {/if}
-      <span>Profil</span>
+      <span>{s.navProfile($lang)}</span>
     </a>
   </nav>
 {/if}
