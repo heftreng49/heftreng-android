@@ -26,7 +26,11 @@
       <img src={notif.fromPhoto} alt={notif.fromName} class="notif-avatar" />
     {/if}
     <div class="notif-text">
-      <p class="notif-msg">{notif.message || notif.title}</p>
+      {#if notif.fromName}
+        <p class="notif-msg"><strong class="notif-from">{notif.fromName}</strong> {notif.message || notif.title}</p>
+      {:else}
+        <p class="notif-msg">{notif.message || notif.title}</p>
+      {/if}
       <span class="notif-time">{ago(notif.ts)}</span>
     </div>
   </div>
@@ -52,6 +56,7 @@
 .notif-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .notif-text { flex: 1; min-width: 0; }
 .notif-msg { margin: 0 0 3px; font-size: 0.88rem; line-height: 1.4; color: var(--on-bg); }
+.notif-from { font-weight: 700; color: var(--on-bg); }
 .notif-time { font-size: 0.75rem; color: var(--muted); }
 .notif-dot {
   width: 8px; height: 8px; border-radius: 50%;

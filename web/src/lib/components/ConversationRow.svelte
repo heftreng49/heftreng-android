@@ -11,7 +11,7 @@
   const isMine = $derived(conv.lastSenderUid === currentUid);
 </script>
 
-<a href="/messages/{conv.id}" class="conv-row">
+<a href="/messages/{conv.id}" class="conv-row" class:unread={conv.unreadCount > 0}>
   <div class="conv-av-wrap">
     {#if conv.otherPhoto}
       <img src={conv.otherPhoto} alt={conv.otherName} class="conv-av" />
@@ -24,11 +24,11 @@
   </div>
   <div class="conv-info">
     <div class="conv-top">
-      <span class="conv-name">{conv.otherName}</span>
+      <span class="conv-name" class:unread-name={conv.unreadCount > 0}>{conv.otherName}</span>
       <span class="conv-time">{ago(conv.lastMsgTs)}</span>
     </div>
     <div class="conv-bottom">
-      <p class="conv-last">{isMine ? 'Sen: ' : ''}{conv.lastMsg || '…'}</p>
+      <p class="conv-last" class:unread-last={conv.unreadCount > 0}>{isMine ? 'Sen: ' : ''}{conv.lastMsg || '…'}</p>
       {#if conv.unreadCount > 0}
         <span class="unread-badge">{conv.unreadCount}</span>
       {/if}
@@ -41,8 +41,13 @@
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px; border-bottom: 1px solid var(--divider);
   text-decoration: none; color: inherit; transition: background 0.12s;
+  border-left: 3px solid transparent;
 }
 .conv-row:hover { background: var(--surface-var); }
+.conv-row.unread {
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+  border-left-color: var(--primary);
+}
 .conv-av-wrap { position: relative; flex-shrink: 0; }
 .conv-av { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; }
 .conv-av-ph {
@@ -59,12 +64,14 @@
 .conv-info { flex: 1; min-width: 0; }
 .conv-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; margin-bottom: 3px; }
 .conv-name { font-weight: 700; font-size: 0.9rem; color: var(--on-bg); }
+.conv-name.unread-name { font-weight: 800; }
 .conv-time { font-size: 0.72rem; color: var(--muted); flex-shrink: 0; }
 .conv-bottom { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .conv-last {
   font-size: 0.82rem; color: var(--muted); margin: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
 }
+.conv-last.unread-last { color: var(--on-bg); font-weight: 600; }
 .unread-badge {
   min-width: 18px; height: 18px; border-radius: 9px;
   background: var(--primary); color: #fff;

@@ -60,10 +60,15 @@
 
 <div class="notif-page">
   <div class="notif-topbar">
-    <h2>Bildirimler</h2>
+    <div class="notif-title-wrap">
+      <h2>Bildirimler</h2>
+      {#if unread > 0}
+        <span class="notif-unread-sub">{unread} okunmamış</span>
+      {/if}
+    </div>
     {#if unread > 0}
       <button class="mark-all-btn" onclick={() => $currentUser && markAllRead($currentUser.uid)}>
-        Tümünü okundu say
+        Tümünü oku
       </button>
     {/if}
   </div>
@@ -112,7 +117,9 @@
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 16px 10px;
 }
+.notif-title-wrap { display: flex; flex-direction: column; gap: 1px; }
 .notif-topbar h2 { margin: 0; font-size: 1.1rem; font-weight: 700; }
+.notif-unread-sub { font-size: 0.72rem; color: #F59E0B; font-weight: 600; }
 .mark-all-btn {
   background: none; border: none; cursor: pointer;
   color: var(--primary); font-size: 0.8rem; font-weight: 600;

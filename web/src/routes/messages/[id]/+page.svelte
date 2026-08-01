@@ -120,12 +120,12 @@
 </div>
 
 <style>
-.chat-page { display: flex; flex-direction: column; height: 100dvh; }
+.chat-page { display: flex; flex-direction: column; height: calc(100dvh - 52px); }
 .chat-header {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; background: var(--surface);
   border-bottom: 1px solid var(--divider);
-  position: sticky; top: 0; z-index: 10; flex-shrink: 0;
+  position: sticky; top: 52px; z-index: 10; flex-shrink: 0;
 }
 .back-btn { background: none; border: none; cursor: pointer; font-size: 1.3rem; color: var(--on-bg); padding: 4px; }
 .chat-av { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }

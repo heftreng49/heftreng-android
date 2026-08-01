@@ -37,6 +37,12 @@
 <div class="msg-page">
   <div class="msg-topbar">
     <h2>Mesajlar</h2>
+    <a href="/search" class="new-conv-btn" title="Yeni konuşma">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="20" height="20">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+    </a>
   </div>
 
   <!-- Arama -->
@@ -69,8 +75,18 @@
 
 <style>
 .msg-page { min-height: 100dvh; }
-.msg-topbar { padding: 14px 16px 8px; }
+.msg-topbar {
+  padding: 14px 16px 8px;
+  display: flex; align-items: center; justify-content: space-between;
+}
 .msg-topbar h2 { margin: 0; font-size: 1.1rem; font-weight: 700; }
+.new-conv-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary); transition: background 0.15s;
+}
+.new-conv-btn:hover { background: color-mix(in srgb, var(--primary) 20%, transparent); }
 .msg-search { padding: 0 14px 10px; }
 .msg-search-input {
   width: 100%; border: none; background: var(--surface-var);
