@@ -209,7 +209,7 @@
 
 <style>
   .card {
-    background: var(--card-bg, #fff);
+    background: var(--card);
     border-radius: 14px;
     padding: 14px;
     margin-bottom: 10px;
@@ -219,79 +219,75 @@
   }
   .card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.1); }
 
-  /* Başlık */
   .card-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
   .meta { flex: 1; min-width: 0; }
   .display-name {
-    font-weight: 700; font-size: 14px; color: inherit;
+    font-weight: 700; font-size: 14px; color: var(--on-bg);
     text-decoration: none; display: block;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .display-name:hover { text-decoration: underline; }
-  .meta-row { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #888; margin-top: 1px; }
-  .username { color: #999; }
-  .dot { color: #ccc; }
+  .meta-row { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .username { color: var(--muted); }
+  .dot { color: var(--muted); opacity: .5; }
 
-  /* Menü */
   .menu-wrap { position: relative; }
   .menu-btn {
     background: none; border: none; cursor: pointer;
-    padding: 4px; border-radius: 6px; color: #999;
+    padding: 4px; border-radius: 6px; color: var(--muted);
     display: flex; align-items: center;
   }
-  .menu-btn:hover { background: #f0ebf9; }
+  .menu-btn:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); }
   .dropdown {
     position: absolute; right: 0; top: 28px; z-index: 50;
-    background: #fff; border: 1px solid #e8e0f5;
+    background: var(--surface); border: 1px solid var(--divider);
     border-radius: 10px; padding: 6px 0; min-width: 180px;
-    box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    box-shadow: 0 8px 24px rgba(0,0,0,.18);
   }
   .dropdown-item {
     display: flex; align-items: center; gap: 8px;
     width: 100%; text-align: left; background: none; border: none;
-    padding: 9px 14px; font-size: 13px; cursor: pointer; color: #333;
+    padding: 9px 14px; font-size: 13px; cursor: pointer; color: var(--on-bg);
+    font-family: inherit;
   }
-  .dropdown-item:hover { background: #f5f0fc; }
-  .dropdown-item.danger { color: #e03; }
-  .dropdown-sep { border: none; border-top: 1px solid #f0ebf9; margin: 4px 0; }
+  .dropdown-item:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+  .dropdown-item.danger { color: var(--error); }
+  .dropdown-sep { border: none; border-top: 1px solid var(--divider); margin: 4px 0; }
 
-  /* İçerik */
   .card-body { margin-bottom: 10px; }
   .category-chip {
     display: inline-block; font-size: 11px; font-weight: 600;
-    background: #f0ebf9; color: #6b4fa0;
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+    color: var(--primary);
     padding: 2px 8px; border-radius: 20px; margin-bottom: 6px;
   }
-  .post-title { font-size: 16px; font-weight: 700; margin: 0 0 6px; }
-  .post-text { font-size: 14px; line-height: 1.6; margin: 0; white-space: pre-wrap; }
+  .post-title { font-size: 16px; font-weight: 700; margin: 0 0 6px; color: var(--on-bg); }
+  .post-text { font-size: 14px; line-height: 1.6; margin: 0; white-space: pre-wrap; color: var(--on-surface); }
   .post-text.clamped { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
   .read-more {
-    background: none; border: none; color: #6b4fa0; font-size: 13px;
-    cursor: pointer; padding: 0; margin-top: 4px; font-weight: 600;
+    background: none; border: none; color: var(--primary); font-size: 13px;
+    cursor: pointer; padding: 0; margin-top: 4px; font-weight: 600; font-family: inherit;
   }
   .post-img { width: 100%; border-radius: 10px; margin-top: 10px; object-fit: cover; max-height: 360px; }
 
-  /* Alıntı kutusu → bileşen QuoteCard.svelte kullanılıyor */
-  /* Repost embed */
   .repost-embed {
-    border: 1px solid #e8e0f5; border-radius: 10px;
+    border: 1px solid var(--divider); border-radius: 10px;
     padding: 10px 12px; margin-top: 8px; cursor: pointer;
   }
-  .repost-embed:hover { background: #faf8ff; }
-  .repost-label { font-size: 11px; font-weight: 700; color: #7c4dff; margin-bottom: 6px; }
+  .repost-embed:hover { background: color-mix(in srgb, var(--primary) 5%, transparent); }
+  .repost-label { font-size: 11px; font-weight: 700; color: var(--primary); margin-bottom: 6px; }
   .repost-author-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-  .repost-author-name { font-size: 12px; font-weight: 600; }
-  .repost-text { font-size: 13px; color: #555; margin: 0; }
-  .repost-title { font-size: 13px; font-weight: 700; margin: 4px 0 0; }
+  .repost-author-name { font-size: 12px; font-weight: 600; color: var(--on-bg); }
+  .repost-text { font-size: 13px; color: var(--muted); margin: 0; }
+  .repost-title { font-size: 13px; font-weight: 700; margin: 4px 0 0; color: var(--on-bg); }
 
-  /* Aksiyonlar */
   .card-actions { display: flex; align-items: center; gap: 4px; }
   .action-btn {
     display: inline-flex; align-items: center; gap: 4px;
     background: none; border: none; cursor: pointer;
-    color: #888; font-size: 13px; padding: 4px 8px; border-radius: 6px;
-    transition: color .15s;
+    color: var(--muted); font-size: 13px; padding: 4px 8px; border-radius: 6px;
+    transition: color .15s; font-family: inherit;
   }
-  .action-btn:hover { color: #6b4fa0; }
-  .action-btn.saved { color: #6b4fa0; }
+  .action-btn:hover { color: var(--primary); }
+  .action-btn.saved { color: var(--primary); }
 </style>
