@@ -9,8 +9,11 @@
     commentPostId, resetFeed,
   } from '$lib/stores/feed.store';
   import { fetchFeedPage, enrichPosts, updatePost, deletePost as svcDelete } from '$lib/services/feed.service';
-  import { toggleLike, toggleSave, fetchUnreadCounts, isFollowing } from '$lib/services/social.service';
-  import { supabase } from '$lib/supabase/config';
+  import {
+    toggleLike, toggleSave, fetchUnreadCounts, isFollowing,
+    fetchFollowingIds, fetchSuggestedUsers, toggleFollow,
+    type SuggestedUser,
+  } from '$lib/services/social.service';
   import type { Post } from '$lib/models/post';
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -48,39 +51,14 @@
 
   async function loadFollowingUids() {
     if (!$currentUser) return;
-    const { data } = await supabase
-      .from('follows')
-      .select('target_uid')
-      .eq('from_uid', $currentUser.uid);
-    followingUids = new Set((data ?? []).map((r: any) => r.target_uid as string));
+    followingUids = await fetchFollowingIds($currentUser.uid);
   }
 
   async function loadSuggestedUsers() {
     if (!$currentUser) return;
-    const myUid = $currentUser.uid;
-
-    // followingUids state'i bu noktada dolu — exclude listesini taze oluştur
-    const excludeUids = new Set([myUid, ...followingUids]);
-
+    const excludeUids = new Set([$currentUser.uid, ...followingUids]);
     try {
-      const { data } = await supabase
-        .from('users')
-        .select('uid, display_name, photo_url, bio')
-        .order('created_at', { ascending: false })
-        .limit(200);
-
-      // Takip edilenler ve kendi UID'si kesinlikle dışarıda
-      const candidates = (data ?? []).filter((r: any) =>
-        r.uid &&
-        r.display_name &&
-        !excludeUids.has(r.uid as string)
-      );
-
-      // Karıştır, 8 al
-      const shuffled = candidates.sort(() => Math.random() - 0.5).slice(0, 8);
-      suggestedUsers = shuffled.map((r: any) => ({
-        uid: r.uid, name: r.display_name ?? '', photoURL: r.photo_url ?? '', bio: r.bio ?? '', isFollowing: false,
-      }));
+      suggestedUsers = await fetchSuggestedUsers($currentUser.uid, excludeUids);
     } catch(e) { console.error('suggestedUsers:', e); }
   }
 
@@ -95,19 +73,10 @@
     suggestedUsers = suggestedUsers.map(u => u.uid === user.uid ? { ...u, isFollowing: !wasFollowing } : u);
 
     try {
-      if (wasFollowing) {
-        await supabase.from('follows').delete().eq('from_uid', $currentUser.uid).eq('target_uid', user.uid);
-      } else {
-        await supabase.from('follows').upsert({
-          id: `${$currentUser.uid}_${user.uid}`,
-          from_uid: $currentUser.uid,
-          from_name: $currentUser.displayName ?? '',
-          from_photo: $currentUser.photoURL ?? '',
-          target_uid: user.uid,
-          target_name: user.name,
-          target_photo: user.photoURL,
-        });
-      }
+      await toggleFollow(
+        $currentUser.uid, $currentUser.displayName ?? '', $currentUser.photoURL ?? '',
+        user.uid, user.name, user.photoURL, wasFollowing,
+      );
     } catch {
       suggestedUsers = suggestedUsers.map(u => u.uid === user.uid ? { ...u, isFollowing: wasFollowing } : u);
     } finally {

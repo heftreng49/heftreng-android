@@ -113,3 +113,45 @@ export async function fetchUnreadCounts(uid: string): Promise<{
     messages: mR.count ?? 0,
   };
 }
+
+// ── Takip edilenlerin UID listesi ─────────────────────────────────────────────
+export async function fetchFollowingIds(uid: string): Promise<Set<string>> {
+  const { data } = await supabase
+    .from('follows')
+    .select('target_uid')
+    .eq('from_uid', uid);
+  return new Set((data ?? []).map((r: any) => r.target_uid as string));
+}
+
+// ── Önerilen kullanıcılar (takip edilmeyenler) ───────────────────────────────
+export interface SuggestedUser {
+  uid:       string;
+  name:      string;
+  photoURL:  string;
+  bio:       string;
+  isFollowing: boolean;
+}
+
+export async function fetchSuggestedUsers(
+  currentUid: string,
+  excludeUids: Set<string>,
+  count = 8,
+): Promise<SuggestedUser[]> {
+  const { data } = await supabase
+    .from('users')
+    .select('uid, display_name, photo_url, bio')
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  const candidates = (data ?? []).filter((r: any) =>
+    r.uid && r.display_name && !excludeUids.has(r.uid as string)
+  );
+  const shuffled = candidates.sort(() => Math.random() - 0.5).slice(0, count);
+  return shuffled.map((r: any) => ({
+    uid:        r.uid,
+    name:       r.display_name ?? '',
+    photoURL:   r.photo_url ?? '',
+    bio:        r.bio ?? '',
+    isFollowing: false,
+  }));
+}
