@@ -23,18 +23,18 @@
   let unsubMsgs:  (() => void) | null = null;
   let unsubConvs: (() => void) | null = null;
 
+  const otherUid = $derived(conv?.otherUid ?? '');
+
   onMount(async () => {
     await requireAuth();
     const uid = $currentUser?.uid;
     if (!uid) return;
     setPresence(uid, true);
 
-    // Konuşma bilgisini realtime dinle (Android: listenConversations karşılığı)
     unsubConvs = listenConversations(uid, convs => {
       conv = convs.find(c => c.id === convId) ?? null;
     });
 
-    // Mesajları dinle — alan adları Android şemasına göre: senderId, createdAt
     unsubMsgs = listenMessages(convId, data => {
       msgs    = data;
       loading = false;
@@ -55,8 +55,8 @@
     if (!uid || !text.trim() || sending) return;
     sending = true;
     try {
-      // sendMessage artık sadece uid + text alıyor (Android şeması: senderId)
-      await sendMessage(convId, uid, text.trim());
+      // toUid: karşı tarafın uid'i (unread_${toUid} için gerekli)
+      await sendMessage(convId, uid, otherUid, text.trim());
       text = '';
       tick().then(() => msgEnd?.scrollIntoView({ behavior: 'smooth' }));
     } finally {
@@ -69,8 +69,7 @@
   }
 
   async function handleDelete(msg: any) {
-    // Android: senderId (eskisi: uid)
-    if (msg.senderId !== $currentUser?.uid) return;
+    if (msg.senderUid !== $currentUser?.uid) return;  // Firestore: senderUid
     await deleteMessage(convId, msg.id);
   }
 </script>
@@ -78,7 +77,6 @@
 <svelte:head><title>{conv?.otherName ?? 'Mesaj'} — Heftreng</title></svelte:head>
 
 <div class="chat-page">
-  <!-- Header -->
   <div class="chat-header">
     <button class="back-btn" onclick={() => goto('/messages')}>←</button>
     {#if conv?.otherPhoto}
@@ -90,12 +88,11 @@
       <span class="chat-name">{conv?.otherName ?? '…'}</span>
       {#if conv?.otherOnline}<span class="chat-online">● Çevrimiçi</span>{/if}
     </div>
-    {#if conv?.otherUid}
-      <a href="/profile/{conv.otherUid}" class="profile-link">Profil</a>
+    {#if otherUid}
+      <a href="/profile/{otherUid}" class="profile-link">Profil</a>
     {/if}
   </div>
 
-  <!-- Mesajlar -->
   <div class="chat-body">
     {#if loading}
       <div class="chat-loading">Yükleniyor…</div>
@@ -105,7 +102,7 @@
       {#each msgs as msg (msg.id)}
         <MessageBubble
           {msg}
-          isMine={msg.senderId === $currentUser?.uid}
+          isMine={msg.senderUid === $currentUser?.uid}
           onDelete={handleDelete}
         />
       {/each}
@@ -113,7 +110,6 @@
     {/if}
   </div>
 
-  <!-- Giriş alanı -->
   <div class="chat-input-bar">
     <textarea
       bind:value={text}
