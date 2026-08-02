@@ -1,18 +1,17 @@
 <script lang="ts">
-  import { onMount }                           from 'svelte';
-  import { get }                               from 'svelte/store';
-  import { currentUser, authLoading }          from '$lib/stores/auth';
-  import { requireAuth }                       from '$lib/utils/auth.guard';
-  import { fetchConversations, setPresence }   from '$lib/services/message.service';
-  import { lang, strings as s }               from '$lib/i18n/strings';
-  import ConversationRow                       from '$lib/components/ConversationRow.svelte';
-  import Skeleton                              from '$lib/components/Skeleton.svelte';
+  import { onMount, onDestroy }              from 'svelte';
+  import { get }                             from 'svelte/store';
+  import { currentUser }                     from '$lib/stores/auth';
+  import { requireAuth }                     from '$lib/utils/auth.guard';
+  import { listenConversations, setPresence } from '$lib/services/message.service';
+  import { lang, strings as s }             from '$lib/i18n/strings';
+  import ConversationRow                     from '$lib/components/ConversationRow.svelte';
+  import Skeleton                            from '$lib/components/Skeleton.svelte';
 
   let convs      = $state<any[]>([]);
   let loading    = $state(true);
   let error      = $state('');
   let search     = $state('');
-  let refreshing = $state(false);
 
   const filtered = $derived(
     search.trim()
@@ -20,44 +19,37 @@
       : convs
   );
 
-  async function load() {
-    // requireAuth store'u bekliyor — tamamlandıktan sonra get() ile güvenli oku
+  let unsub: (() => void) | null = null;
+
+  onMount(async () => {
     const ok = await requireAuth();
     if (!ok) return;
 
     const uid = get(currentUser)?.uid;
     if (!uid) { loading = false; return; }
 
-    try {
-      convs = await fetchConversations(uid);
-      error = '';
-    } catch (e: any) {
-      console.error('fetchConversations:', e);
-      error = $lang === 'ku' ? 'Peyam neyên barkirin.' : 'Mesajlar yüklenemedi.';
-    } finally {
-      loading    = false;
-      refreshing = false;
-    }
-  }
+    setPresence(uid, true);
 
-  async function refresh() {
-    refreshing = true;
-    const uid = get(currentUser)?.uid;
-    if (!uid) { refreshing = false; return; }
-    try {
-      convs = await fetchConversations(uid);
-      error = '';
-    } catch {
-      error = $lang === 'ku' ? 'Peyam neyên barkirin.' : 'Mesajlar yüklenemedi.';
-    } finally {
-      refreshing = false;
-    }
-  }
+    // fetch yerine listener — Android gibi realtime, hata da yakalanır
+    unsub = listenConversations(
+      uid,
+      (data) => {
+        convs   = data;
+        loading = false;
+        error   = '';
+      },
+      (err) => {
+        console.error('listenConversations hata:', err);
+        error   = $lang === 'ku' ? 'Peyam neyên barkirin.' : 'Mesajlar yüklenemedi.';
+        loading = false;
+      },
+    );
+  });
 
-  onMount(async () => {
-    await load();
+  onDestroy(() => {
+    unsub?.();
     const uid = get(currentUser)?.uid;
-    if (uid) setPresence(uid, true);
+    if (uid) setPresence(uid, false);
   });
 </script>
 
@@ -99,7 +91,7 @@
   {:else if error}
     <div class="msg-error">
       <p>{error}</p>
-      <button onclick={load} class="retry-btn">{s.retry($lang)}</button>
+      <button onclick={() => { loading = true; error = ''; unsub?.(); const uid = get(currentUser)?.uid; if (uid) unsub = listenConversations(uid, d => { convs=d; loading=false; error=''; }, e => { error='Hata'; loading=false; }); }} class="retry-btn">{s.retry($lang)}</button>
     </div>
 
   {:else if filtered.length === 0}
@@ -110,9 +102,6 @@
     </div>
 
   {:else}
-    <button class="refresh-btn" onclick={refresh} disabled={refreshing}>
-      {#if refreshing}<span class="spin">↻</span>{:else}↻{/if}
-    </button>
     <div class="conv-list">
       {#each filtered as conv (conv.id)}
         <ConversationRow {conv} currentUid={get(currentUser)?.uid ?? ''} />
@@ -160,10 +149,4 @@
   background: none; color: var(--primary); font-weight: 600;
   cursor: pointer; font-family: inherit;
 }
-.refresh-btn {
-  display: block; margin: 0 auto 4px; background: none; border: none;
-  color: var(--muted); font-size: 1.1rem; cursor: pointer; padding: 4px 12px;
-}
-.spin { display: inline-block; animation: spin .6s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
 </style>

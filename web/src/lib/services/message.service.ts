@@ -117,6 +117,7 @@ export async function fetchConversations(uid: string): Promise<Conversation[]> {
 export function listenConversations(
   uid: string,
   cb: (convs: Conversation[]) => void,
+  onError?: (err: any) => void,
 ): () => void {
   const q = query(
     collection(db, 'conversations'),
@@ -154,6 +155,9 @@ export function listenConversations(
       });
     }
     cb(convs);
+  }, (err) => {
+    console.error('listenConversations:', err);
+    onError?.(err);
   });
 }
 
