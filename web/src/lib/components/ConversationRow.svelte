@@ -8,10 +8,13 @@
   }
   let { conv, currentUid }: Props = $props();
 
-  const isMine = $derived(conv.lastSenderUid === currentUid);
+  // Firestore: unread_{uid} → servis "unread" olarak map ediyor
+  const unread  = $derived(conv.unread ?? 0);
+  const lastMsg = $derived(conv.lastMsg ?? '');
+  const time    = $derived(conv.updatedAt);   // Firestore: updated_at
 </script>
 
-<a href="/messages/{conv.id}" class="conv-row" class:unread={conv.unreadCount > 0}>
+<a href="/messages/{conv.id}" class="conv-row" class:unread={unread > 0}>
   <div class="conv-av-wrap">
     {#if conv.otherPhoto}
       <img src={conv.otherPhoto} alt={conv.otherName} class="conv-av" />
@@ -24,13 +27,13 @@
   </div>
   <div class="conv-info">
     <div class="conv-top">
-      <span class="conv-name" class:unread-name={conv.unreadCount > 0}>{conv.otherName}</span>
-      <span class="conv-time">{ago(conv.lastMsgTs)}</span>
+      <span class="conv-name" class:unread-name={unread > 0}>{conv.otherName}</span>
+      <span class="conv-time">{ago(time)}</span>
     </div>
     <div class="conv-bottom">
-      <p class="conv-last" class:unread-last={conv.unreadCount > 0}>{isMine ? 'Sen: ' : ''}{conv.lastMsg || '…'}</p>
-      {#if conv.unreadCount > 0}
-        <span class="unread-badge">{conv.unreadCount}</span>
+      <p class="conv-last" class:unread-last={unread > 0}>{lastMsg || '…'}</p>
+      {#if unread > 0}
+        <span class="unread-badge">{unread}</span>
       {/if}
     </div>
   </div>
