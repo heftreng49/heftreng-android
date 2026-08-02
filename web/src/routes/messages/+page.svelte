@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
-  import { currentUser } from '$lib/stores/auth';
+  import { currentUser, authLoading } from '$lib/stores/auth';
+  import { requireAuth } from '$lib/utils/auth.guard';
   import { listenConversations, setPresence } from '$lib/services/message.service';
   import ConversationRow from '$lib/components/ConversationRow.svelte';
   import EmptyState      from '$lib/components/EmptyState.svelte';
@@ -18,9 +19,10 @@
       : convs
   );
 
-  onMount(() => {
+  onMount(async () => {
+    await requireAuth();
     const uid = $currentUser?.uid;
-    if (!uid) { goto('/login'); return; }
+    if (!uid) return;
     setPresence(uid, true);
     unsub = listenConversations(uid, data => {
       convs = data; loading = false;

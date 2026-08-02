@@ -15,6 +15,18 @@
 
   const hideNavRoutes = ['/login', '/register'];
   let showBottomNav = $derived(!hideNavRoutes.includes($page.url.pathname));
+
+  // Giriş gerektiren sayfalar — authLoading true iken içerik gösterme
+  const authRequiredRoutes = [
+    '/feed', '/notifications', '/messages', '/saved',
+    '/settings', '/compose', '/profile', '/people', '/search',
+    '/post', '/admin',
+  ];
+  const isAuthRequired = $derived(
+    authRequiredRoutes.some(r => $page.url.pathname.startsWith(r))
+  );
+  // authLoading biterken kısa süre içerik gösterme
+  const showContent = $derived(!($authLoading && isAuthRequired));
   let currentPath   = $derived($page.url.pathname);
 
   let drawerOpen = $state(false);
@@ -283,7 +295,14 @@
   </div>
 </aside>
 
-{@render children()}
+{#if showContent}
+  {@render children()}
+{:else}
+  <!-- authLoading: Firebase oturum kontrol ediliyor -->
+  <div class="auth-loading-screen">
+    <div class="auth-spinner"></div>
+  </div>
+{/if}
 
 {#if showBottomNav && $currentUser}
   <nav class="bottom-nav">
@@ -335,6 +354,21 @@
 {/if}
 
 <style>
+/* Auth loading */
+.auth-loading-screen {
+  min-height: 100dvh; display: flex;
+  align-items: center; justify-content: center;
+  background: var(--bg);
+}
+.auth-spinner {
+  width: 36px; height: 36px;
+  border: 3px solid color-mix(in srgb, var(--primary) 25%, transparent);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: auth-spin 0.7s linear infinite;
+}
+@keyframes auth-spin { to { transform: rotate(360deg); } }
+
 /* ── Bottom Nav ───────────────────────────────────────────────── */
 .bottom-nav {
   position: fixed; bottom: 0; left: 0; right: 0;

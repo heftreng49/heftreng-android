@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto }    from '$app/navigation';
-  import { currentUser } from '$lib/stores/auth';
+  import { currentUser, authLoading } from '$lib/stores/auth';
+  import { requireAuth } from '$lib/utils/auth.guard';
   import { supabase }    from '$lib/supabase/config';
   import { db }          from '$lib/firebase/config';
   import { doc, getDoc } from 'firebase/firestore';
@@ -17,7 +18,7 @@
   let page     = $state(0);
   const PAGE   = 15;
 
-  onMount(() => { if (!$currentUser) goto('/login'); else load(); });
+  onMount(async () => { const ok = await requireAuth(); if (ok) load(); });
 
   async function load(append = false) {
     if (!$currentUser) return;

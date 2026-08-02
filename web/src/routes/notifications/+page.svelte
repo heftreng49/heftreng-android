@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
-  import { currentUser } from '$lib/stores/auth';
+  import { currentUser, authLoading } from '$lib/stores/auth';
+  import { requireAuth } from '$lib/utils/auth.guard';
   import { listenNotifications, markAsRead, markAllRead } from '$lib/services/notification.service';
   import NotifItem  from '$lib/components/NotifItem.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
@@ -31,9 +32,10 @@
 
   const unread = $derived(notifs.filter(n => !n.read).length);
 
-  onMount(() => {
+  onMount(async () => {
+    await requireAuth();
     const uid = $currentUser?.uid;
-    if (!uid) { goto('/login'); return; }
+    if (!uid) return;
     unsub = listenNotifications(uid, (data) => {
       notifs = data;
       loading = false;

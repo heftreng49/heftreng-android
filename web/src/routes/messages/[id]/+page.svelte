@@ -2,7 +2,8 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { currentUser } from '$lib/stores/auth';
+  import { currentUser, authLoading } from '$lib/stores/auth';
+  import { requireAuth } from '$lib/utils/auth.guard';
   import {
     listenMessages, listenConversations,
     sendMessage, deleteMessage, markConversationRead, setPresence,
@@ -22,9 +23,10 @@
   let unsubMsgs: (() => void) | null = null;
   let unsubConvs: (() => void) | null = null;
 
-  onMount(() => {
+  onMount(async () => {
+    await requireAuth();
     const uid = $currentUser?.uid;
-    if (!uid) { goto('/login'); return; }
+    if (!uid) return;
     setPresence(uid, true);
     // Konuşma bilgisini al
     unsubConvs = listenConversations(uid, convs => {

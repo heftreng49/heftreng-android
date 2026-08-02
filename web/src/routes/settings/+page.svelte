@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount }     from 'svelte';
   import { goto }        from '$app/navigation';
-  import { currentUser, userProfile } from '$lib/stores/auth';
+  import { currentUser, authLoading, userProfile } from '$lib/stores/auth';
+  import { requireAuth } from '$lib/utils/auth.guard';
   import {
     getTheme, saveTheme, saveLang, getPushEnabled, setPushEnabled,
     togglePrivateAccount, setMessagePermission,
@@ -25,7 +26,7 @@
   let delConfirm  = $state(''); let delError = $state('');
 
   onMount(async () => {
-    if (!$currentUser) { goto('/login'); return; }
+    await requireAuth();
     isPrivate = $userProfile?.isPrivate ?? false;
     msgPerm   = ($userProfile?.messagePermission as any) ?? 'everyone';
   });
