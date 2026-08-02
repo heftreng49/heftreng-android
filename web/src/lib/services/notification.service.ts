@@ -46,6 +46,22 @@ export function notifMeta(type: string): { icon: string; color: string } {
   return map[type] ?? { icon: '🔔', color: '#64748B' };
 }
 
+
+/** Bildirimler — tek seferlik fetch */
+export async function fetchNotifications(uid: string): Promise<Notification[]> {
+  try {
+    const q = query(
+      collection(db, 'userNotifs', uid, 'msgs'),
+      orderBy('ts', 'desc'), limit(50),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
+  } catch (e: any) {
+    console.warn('fetchNotifications error:', e.code);
+    return [];
+  }
+}
+
 export function listenNotifications(uid: string, cb: (notifs: Notification[]) => void): () => void {
   const q = query(
     collection(db, 'userNotifs', uid, 'msgs'),

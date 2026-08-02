@@ -1,16 +1,15 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { currentUser, authLoading } from '$lib/stores/auth';
   import { requireAuth } from '$lib/utils/auth.guard';
-  import { listenNotifications, markAsRead, markAllRead } from '$lib/services/notification.service';
+  import { fetchNotifications, markAsRead, markAllRead } from '$lib/services/notification.service';
   import NotifItem  from '$lib/components/NotifItem.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import Skeleton   from '$lib/components/Skeleton.svelte';
 
   let notifs   = $state<any[]>([]);
   let loading  = $state(true);
-  let unsub: (() => void) | null = null;
 
   // Android: TODAY / WEEK / OLDER grupları
   const now = Date.now();
@@ -36,18 +35,17 @@
     await requireAuth();
     const uid = $currentUser?.uid;
     if (!uid) return;
-
-    const timeout = setTimeout(() => { loading = false; }, 5000);
-
-    unsub = listenNotifications(uid, (data) => {
-      clearTimeout(timeout);
-      notifs = data;
+    try {
+      notifs = await fetchNotifications(uid);
+    } catch {
+      notifs = [];
+    } finally {
       loading = false;
-    });
+    }
+    // 2 sn sonra hepsini okundu say
     setTimeout(() => { if (uid) markAllRead(uid); }, 2000);
   });
 
-  onDestroy(() => unsub?.());
 
   async function handleClick(notif: any) {
     if (!notif.read && $currentUser) {

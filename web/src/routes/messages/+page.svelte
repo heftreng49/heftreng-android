@@ -1,17 +1,17 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { currentUser, authLoading } from '$lib/stores/auth';
-  import { requireAuth } from '$lib/utils/auth.guard';
-  import { listenConversations, setPresence } from '$lib/services/message.service';
-  import ConversationRow from '$lib/components/ConversationRow.svelte';
-  import EmptyState      from '$lib/components/EmptyState.svelte';
-  import Skeleton        from '$lib/components/Skeleton.svelte';
+  import { onMount }                    from 'svelte';
+  import { currentUser, authLoading }   from '$lib/stores/auth';
+  import { requireAuth }                from '$lib/utils/auth.guard';
+  import { fetchConversations, setPresence } from '$lib/services/message.service';
+  import { lang, strings as s }         from '$lib/i18n/strings';
+  import ConversationRow                from '$lib/components/ConversationRow.svelte';
+  import Skeleton                       from '$lib/components/Skeleton.svelte';
 
   let convs    = $state<any[]>([]);
   let loading  = $state(true);
+  let error    = $state('');
   let search   = $state('');
-  let unsub: (() => void) | null = null;
+  let refreshing = $state(false);
 
   const filtered = $derived(
     search.trim()
@@ -19,33 +19,40 @@
       : convs
   );
 
+  async function load() {
+    const uid = $currentUser?.uid;
+    if (!uid) return;
+    try {
+      convs = await fetchConversations(uid);
+      error = '';
+    } catch {
+      error = $lang === 'ku' ? 'Peyam neyên barkirin.' : 'Mesajlar yüklenemedi.';
+    } finally {
+      loading = false;
+      refreshing = false;
+    }
+  }
+
+  async function refresh() {
+    refreshing = true;
+    await load();
+  }
+
   onMount(async () => {
     await requireAuth();
     const uid = $currentUser?.uid;
     if (!uid) return;
     setPresence(uid, true);
-
-    // 5 saniye içinde cevap gelmezse loading'i kapat
-    const timeout = setTimeout(() => { loading = false; }, 5000);
-
-    unsub = listenConversations(uid, data => {
-      clearTimeout(timeout);
-      convs = data;
-      loading = false;
-    });
-  });
-  onDestroy(() => {
-    unsub?.();
-    if ($currentUser?.uid) setPresence($currentUser.uid, false);
+    await load();
   });
 </script>
 
-<svelte:head><title>Mesajlar — Heftreng</title></svelte:head>
+<svelte:head><title>{s.messages($lang)} — Heftreng</title></svelte:head>
 
 <div class="msg-page">
   <div class="msg-topbar">
-    <h2>Mesajlar</h2>
-    <a href="/search" class="new-conv-btn" title="Yeni konuşma">
+    <h2>{s.messages($lang)}</h2>
+    <a href="/search" class="new-conv-btn" title={s.newConv($lang)}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="20" height="20">
         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -55,24 +62,51 @@
 
   <!-- Arama -->
   <div class="msg-search">
-    <input type="search" placeholder="Konuşma ara…" bind:value={search} class="msg-search-input" />
+    <input
+      type="search"
+      placeholder={s.msgSearchHint($lang)}
+      bind:value={search}
+      class="msg-search-input"
+    />
   </div>
 
   {#if loading}
+    <!-- Skeleton -->
     <div class="conv-list">
       {#each {length: 5} as _}
         <div class="conv-skeleton">
           <Skeleton width="48px" height="48px" radius="50%" />
-          <div style="flex:1">
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px">
             <Skeleton width="40%" height="13px" />
             <Skeleton width="70%" height="11px" />
           </div>
         </div>
       {/each}
     </div>
+
+  {:else if error}
+    <div class="msg-error">
+      <p>{error}</p>
+      <button onclick={load} class="retry-btn">{s.retry($lang)}</button>
+    </div>
+
   {:else if filtered.length === 0}
-    <EmptyState icon="✉️" message="Henüz mesaj yok." hint="Bir kullanıcının profilinden mesaj gönder." />
+    <div class="msg-empty">
+      <span class="empty-icon">✉️</span>
+      <p>{s.msgEmpty($lang)}</p>
+      <p class="empty-hint">{s.msgEmptyDesc($lang)}</p>
+    </div>
+
   {:else}
+    <!-- Pull-to-refresh butonu -->
+    <button class="refresh-btn" onclick={refresh} disabled={refreshing}>
+      {#if refreshing}
+        <span class="spin">↻</span>
+      {:else}
+        ↻
+      {/if}
+    </button>
+
     <div class="conv-list">
       {#each filtered as conv (conv.id)}
         <ConversationRow {conv} currentUid={$currentUser?.uid ?? ''} />
@@ -82,12 +116,12 @@
 </div>
 
 <style>
-.msg-page { min-height: 100dvh; }
+.msg-page { min-height: 100dvh; background: var(--bg); }
 .msg-topbar {
   padding: 14px 16px 8px;
   display: flex; align-items: center; justify-content: space-between;
 }
-.msg-topbar h2 { margin: 0; font-size: 1.1rem; font-weight: 700; }
+.msg-topbar h2 { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--on-bg); }
 .new-conv-btn {
   width: 36px; height: 36px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -104,4 +138,26 @@
 }
 .conv-list { display: flex; flex-direction: column; }
 .conv-skeleton { display: flex; gap: 12px; padding: 12px 16px; align-items: center; }
+.msg-empty {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 60px 24px; gap: 8px; text-align: center;
+}
+.empty-icon { font-size: 3rem; }
+.msg-empty p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+.empty-hint { font-size: 0.82rem !important; }
+.msg-error {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 12px; padding: 40px 24px; color: var(--muted);
+}
+.retry-btn {
+  padding: 8px 20px; border-radius: 20px; border: 1.5px solid var(--primary);
+  background: none; color: var(--primary); font-weight: 600;
+  cursor: pointer; font-family: inherit;
+}
+.refresh-btn {
+  display: block; margin: 0 auto 4px; background: none; border: none;
+  color: var(--muted); font-size: 1.1rem; cursor: pointer; padding: 4px 12px;
+}
+.spin { display: inline-block; animation: spin .6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>

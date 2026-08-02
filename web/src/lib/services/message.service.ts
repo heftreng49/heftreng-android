@@ -33,32 +33,30 @@ export interface Message {
 }
 
 // ── Konuşma listesi ─────────────────────────────────────────────────────────
-export function listenConversations(
-  uid: string,
-  cb: (convs: Conversation[]) => void,
-): () => void {
-  const q = query(
-    collection(db, 'conversations'),
-    where('participants', 'array-contains', uid),
-    orderBy('lastMsgTs', 'desc'),
-    limit(30),
-  );
-  return onSnapshot(q, async snap => {
-    // Boş koleksiyon — yüklemeyi bitir, boş liste döndür
-    if (snap.empty) { cb([]); return; }
+/** Konuşma listesi — tek seferlik fetch (listener değil) */
+export async function fetchConversations(uid: string): Promise<Conversation[]> {
+  try {
+    const q = query(
+      collection(db, 'conversations'),
+      where('participants', 'array-contains', uid),
+      orderBy('lastMsgTs', 'desc'),
+      limit(30),
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) return [];
 
     const convs: Conversation[] = [];
     for (const d of snap.docs) {
       const data = d.data();
       const otherUid = (data.participants as string[]).find(p => p !== uid) ?? '';
-      let otherName = data[`name_${otherUid}`] ?? '';
+      let otherName  = data[`name_${otherUid}`]  ?? '';
       let otherPhoto = data[`photo_${otherUid}`] ?? '';
       if (!otherName) {
         try {
           const uSnap = await getDoc(doc(db, 'users', otherUid));
           if (uSnap.exists()) {
-            otherName = uSnap.data().displayName ?? '';
-            otherPhoto = uSnap.data().photoURL ?? '';
+            otherName  = uSnap.data().displayName ?? '';
+            otherPhoto = uSnap.data().photoURL    ?? '';
           }
         } catch {}
       }
@@ -70,12 +68,11 @@ export function listenConversations(
         unreadCount, otherUid, otherName, otherPhoto, otherOnline: false,
       });
     }
-    cb(convs);
-  }, (error) => {
-    // Index hatası veya permission hatası — yüklemeyi bitir boş liste ile
-    console.warn('listenConversations error:', error.code, error.message);
-    cb([]);
-  });
+    return convs;
+  } catch (e: any) {
+    console.warn('fetchConversations error:', e.code, e.message);
+    return [];
+  }
 }
 
 // ── Mesajlar ────────────────────────────────────────────────────────────────
