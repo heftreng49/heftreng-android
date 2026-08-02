@@ -36,11 +36,14 @@
     await requireAuth();
     const uid = $currentUser?.uid;
     if (!uid) return;
+
+    const timeout = setTimeout(() => { loading = false; }, 5000);
+
     unsub = listenNotifications(uid, (data) => {
+      clearTimeout(timeout);
       notifs = data;
       loading = false;
     });
-    // 2 sn sonra hepsini okundu say
     setTimeout(() => { if (uid) markAllRead(uid); }, 2000);
   });
 

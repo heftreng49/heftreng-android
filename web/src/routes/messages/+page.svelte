@@ -24,8 +24,14 @@
     const uid = $currentUser?.uid;
     if (!uid) return;
     setPresence(uid, true);
+
+    // 5 saniye içinde cevap gelmezse loading'i kapat
+    const timeout = setTimeout(() => { loading = false; }, 5000);
+
     unsub = listenConversations(uid, data => {
-      convs = data; loading = false;
+      clearTimeout(timeout);
+      convs = data;
+      loading = false;
     });
   });
   onDestroy(() => {

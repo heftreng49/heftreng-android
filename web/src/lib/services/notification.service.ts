@@ -54,6 +54,9 @@ export function listenNotifications(uid: string, cb: (notifs: Notification[]) =>
   return onSnapshot(q, snap => {
     const notifs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
     cb(notifs);
+  }, (error) => {
+    console.warn('listenNotifications error:', error.code);
+    cb([]);
   });
 }
 

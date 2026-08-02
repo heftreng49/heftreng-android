@@ -44,11 +44,13 @@ export function listenConversations(
     limit(30),
   );
   return onSnapshot(q, async snap => {
+    // Boş koleksiyon — yüklemeyi bitir, boş liste döndür
+    if (snap.empty) { cb([]); return; }
+
     const convs: Conversation[] = [];
     for (const d of snap.docs) {
       const data = d.data();
       const otherUid = (data.participants as string[]).find(p => p !== uid) ?? '';
-      // Karşı kullanıcı bilgisi
       let otherName = data[`name_${otherUid}`] ?? '';
       let otherPhoto = data[`photo_${otherUid}`] ?? '';
       if (!otherName) {
@@ -60,7 +62,6 @@ export function listenConversations(
           }
         } catch {}
       }
-      // Okunmamış sayısı
       const unreadCount = (data.unread ?? {})[uid] ?? 0;
       convs.push({
         id: d.id, participants: data.participants,
@@ -70,6 +71,10 @@ export function listenConversations(
       });
     }
     cb(convs);
+  }, (error) => {
+    // Index hatası veya permission hatası — yüklemeyi bitir boş liste ile
+    console.warn('listenConversations error:', error.code, error.message);
+    cb([]);
   });
 }
 
