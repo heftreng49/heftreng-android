@@ -97,14 +97,14 @@
 
   const navGrid = $derived($currentUser ? authNav : guestNav);
 
-  const VARIANTS = [
-    { key: 'charcoal', label: $lang === 'ku' ? 'Mûrekkeba Komirê' : 'Kömür', color: '#4A6FFF' },
-    { key: 'book',     label: $lang === 'ku' ? 'Pirtûk'           : 'Kitap',  color: '#8B5E2C' },
-    { key: 'forest',   label: $lang === 'ku' ? 'Daristan'         : 'Orman',  color: '#2E7D32' },
-    { key: 'ocean',    label: $lang === 'ku' ? 'Okyanûs'          : 'Okyanus',color: '#0077B6' },
-    { key: 'sunset',   label: $lang === 'ku' ? 'Rojavabûn'        : 'Gün Batımı', color: '#C0305A' },
-    { key: 'mono',     label: $lang === 'ku' ? 'Yek Reng'         : 'Mono',   color: '#444444' },
-  ];
+  const VARIANTS = $derived([
+    { key: 'charcoal', label: s.themeCharcoal($lang), color: '#4A6FFF' },
+    { key: 'book',     label: s.themeBook($lang),     color: '#8B5E2C' },
+    { key: 'forest',   label: s.themeForest($lang),   color: '#2E7D32' },
+    { key: 'ocean',    label: s.themeOcean($lang),    color: '#0077B6' },
+    { key: 'sunset',   label: s.themeSunset($lang),   color: '#C0305A' },
+    { key: 'mono',     label: s.themeMonochrome($lang),color: '#444444' },
+  ]);
 </script>
 
 <!-- Global header (drawer açma + logo) -->
