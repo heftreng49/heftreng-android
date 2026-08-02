@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount }                           from 'svelte';
-  import { currentUser }                       from '$lib/stores/auth';
+  import { get }                               from 'svelte/store';
+  import { currentUser, authLoading }          from '$lib/stores/auth';
   import { requireAuth }                       from '$lib/utils/auth.guard';
   import { fetchConversations, setPresence }   from '$lib/services/message.service';
   import { lang, strings as s }               from '$lib/i18n/strings';
@@ -20,12 +21,18 @@
   );
 
   async function load() {
-    const uid = $currentUser?.uid;
-    if (!uid) return;
+    // requireAuth store'u bekliyor — tamamlandıktan sonra get() ile güvenli oku
+    const ok = await requireAuth();
+    if (!ok) return;
+
+    const uid = get(currentUser)?.uid;
+    if (!uid) { loading = false; return; }
+
     try {
       convs = await fetchConversations(uid);
       error = '';
-    } catch {
+    } catch (e: any) {
+      console.error('fetchConversations:', e);
       error = $lang === 'ku' ? 'Peyam neyên barkirin.' : 'Mesajlar yüklenemedi.';
     } finally {
       loading    = false;
@@ -35,15 +42,22 @@
 
   async function refresh() {
     refreshing = true;
-    await load();
+    const uid = get(currentUser)?.uid;
+    if (!uid) { refreshing = false; return; }
+    try {
+      convs = await fetchConversations(uid);
+      error = '';
+    } catch {
+      error = $lang === 'ku' ? 'Peyam neyên barkirin.' : 'Mesajlar yüklenemedi.';
+    } finally {
+      refreshing = false;
+    }
   }
 
   onMount(async () => {
-    await requireAuth();
-    const uid = $currentUser?.uid;
-    if (!uid) return;
-    setPresence(uid, true);
     await load();
+    const uid = get(currentUser)?.uid;
+    if (uid) setPresence(uid, true);
   });
 </script>
 
@@ -60,7 +74,6 @@
     </a>
   </div>
 
-  <!-- Arama -->
   <div class="msg-search">
     <input
       type="search"
@@ -102,7 +115,7 @@
     </button>
     <div class="conv-list">
       {#each filtered as conv (conv.id)}
-        <ConversationRow {conv} currentUid={$currentUser?.uid ?? ''} />
+        <ConversationRow {conv} currentUid={get(currentUser)?.uid ?? ''} />
       {/each}
     </div>
   {/if}
