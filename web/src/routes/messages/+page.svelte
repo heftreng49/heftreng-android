@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { onMount }                    from 'svelte';
-  import { currentUser, authLoading }   from '$lib/stores/auth';
-  import { requireAuth }                from '$lib/utils/auth.guard';
-  import { fetchConversations, setPresence } from '$lib/services/message.service';
-  import { lang, strings as s }         from '$lib/i18n/strings';
-  import ConversationRow                from '$lib/components/ConversationRow.svelte';
-  import Skeleton                       from '$lib/components/Skeleton.svelte';
+  import { onMount }                           from 'svelte';
+  import { currentUser }                       from '$lib/stores/auth';
+  import { requireAuth }                       from '$lib/utils/auth.guard';
+  import { fetchConversations, setPresence }   from '$lib/services/message.service';
+  import { lang, strings as s }               from '$lib/i18n/strings';
+  import ConversationRow                       from '$lib/components/ConversationRow.svelte';
+  import Skeleton                              from '$lib/components/Skeleton.svelte';
 
-  let convs    = $state<any[]>([]);
-  let loading  = $state(true);
-  let error    = $state('');
-  let search   = $state('');
+  let convs      = $state<any[]>([]);
+  let loading    = $state(true);
+  let error      = $state('');
+  let search     = $state('');
   let refreshing = $state(false);
 
   const filtered = $derived(
@@ -28,7 +28,7 @@
     } catch {
       error = $lang === 'ku' ? 'Peyam neyên barkirin.' : 'Mesajlar yüklenemedi.';
     } finally {
-      loading = false;
+      loading    = false;
       refreshing = false;
     }
   }
@@ -71,7 +71,6 @@
   </div>
 
   {#if loading}
-    <!-- Skeleton -->
     <div class="conv-list">
       {#each {length: 5} as _}
         <div class="conv-skeleton">
@@ -98,15 +97,9 @@
     </div>
 
   {:else}
-    <!-- Pull-to-refresh butonu -->
     <button class="refresh-btn" onclick={refresh} disabled={refreshing}>
-      {#if refreshing}
-        <span class="spin">↻</span>
-      {:else}
-        ↻
-      {/if}
+      {#if refreshing}<span class="spin">↻</span>{:else}↻{/if}
     </button>
-
     <div class="conv-list">
       {#each filtered as conv (conv.id)}
         <ConversationRow {conv} currentUid={$currentUser?.uid ?? ''} />

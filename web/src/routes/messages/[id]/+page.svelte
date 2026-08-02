@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
-  import { currentUser, authLoading } from '$lib/stores/auth';
-  import { requireAuth } from '$lib/utils/auth.guard';
+  import { goto }                     from '$app/navigation';
+  import { page }                     from '$app/stores';
+  import { currentUser }              from '$lib/stores/auth';
+  import { requireAuth }              from '$lib/utils/auth.guard';
   import {
     listenMessages, listenConversations,
     sendMessage, deleteMessage, markConversationRead, setPresence,
@@ -11,16 +11,16 @@
   import MessageBubble from '$lib/components/MessageBubble.svelte';
   import EmptyState    from '$lib/components/EmptyState.svelte';
 
-  const convId  = $derived($page.params.id);
+  const convId = $derived($page.params.id);
 
-  let msgs      = $state<any[]>([]);
-  let conv      = $state<any>(null);
-  let text      = $state('');
-  let sending   = $state(false);
-  let loading   = $state(true);
-  let msgEnd = $state<HTMLDivElement | undefined>(undefined);
+  let msgs    = $state<any[]>([]);
+  let conv    = $state<any>(null);
+  let text    = $state('');
+  let sending = $state(false);
+  let loading = $state(true);
+  let msgEnd  = $state<HTMLDivElement | undefined>(undefined);
 
-  let unsubMsgs: (() => void) | null = null;
+  let unsubMsgs:  (() => void) | null = null;
   let unsubConvs: (() => void) | null = null;
 
   onMount(async () => {
@@ -28,20 +28,25 @@
     const uid = $currentUser?.uid;
     if (!uid) return;
     setPresence(uid, true);
-    // Konuşma bilgisini al
+
+    // Konuşma bilgisini realtime dinle (Android: listenConversations karşılığı)
     unsubConvs = listenConversations(uid, convs => {
       conv = convs.find(c => c.id === convId) ?? null;
     });
-    // Mesajları dinle
+
+    // Mesajları dinle — alan adları Android şemasına göre: senderId, createdAt
     unsubMsgs = listenMessages(convId, data => {
-      msgs = data; loading = false;
+      msgs    = data;
+      loading = false;
       tick().then(() => msgEnd?.scrollIntoView({ behavior: 'smooth' }));
     });
+
     markConversationRead(convId, uid);
   });
 
   onDestroy(() => {
-    unsubMsgs?.(); unsubConvs?.();
+    unsubMsgs?.();
+    unsubConvs?.();
     if ($currentUser?.uid) setPresence($currentUser.uid, false);
   });
 
@@ -50,10 +55,13 @@
     if (!uid || !text.trim() || sending) return;
     sending = true;
     try {
-      await sendMessage(convId, uid, $currentUser.displayName ?? '', $currentUser.photoURL ?? '', text.trim());
+      // sendMessage artık sadece uid + text alıyor (Android şeması: senderId)
+      await sendMessage(convId, uid, text.trim());
       text = '';
       tick().then(() => msgEnd?.scrollIntoView({ behavior: 'smooth' }));
-    } finally { sending = false; }
+    } finally {
+      sending = false;
+    }
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -61,7 +69,8 @@
   }
 
   async function handleDelete(msg: any) {
-    if (msg.uid !== $currentUser?.uid) return;
+    // Android: senderId (eskisi: uid)
+    if (msg.senderId !== $currentUser?.uid) return;
     await deleteMessage(convId, msg.id);
   }
 </script>
@@ -96,7 +105,7 @@
       {#each msgs as msg (msg.id)}
         <MessageBubble
           {msg}
-          isMine={msg.uid === $currentUser?.uid}
+          isMine={msg.senderId === $currentUser?.uid}
           onDelete={handleDelete}
         />
       {/each}
