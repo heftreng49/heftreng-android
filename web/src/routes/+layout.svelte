@@ -76,17 +76,35 @@
     return () => { unsubAuth(); unsubStore(); unsubNotifs?.(); unsubMsgs?.(); mq.removeEventListener('change', onSystemChange); };
   });
 
-  // Drawer menü öğeleri — reaktif dil (Svelte 5)
-  const navGrid = $derived([
+  // Auth durumuna göre drawer nav öğeleri
+  const guestNav  = $derived([
+    { icon: 'feed',     label: s.navFeed($lang),    href: '/feed' },
+    { icon: 'library',  label: s.navLibrary($lang), href: '/library' },
+  ]);
+
+  const authNav = $derived([
     { icon: 'feed',     label: s.navFeed($lang),      href: '/feed' },
     { icon: 'search',   label: s.navSearch($lang),    href: '/search' },
     { icon: 'library',  label: s.navLibrary($lang),   href: '/library' },
     { icon: 'kurdi',    label: s.navKurdi($lang),     href: '/kurdi' },
-    { icon: 'notif',    label: s.navNotifs($lang),    href: '/notifications' },
-    { icon: 'message',  label: s.navMessages($lang),  href: '/messages' },
+    { icon: 'notif',    label: s.navNotifs($lang),    href: '/notifications',
+      badge: $unreadNotifCount },
+    { icon: 'message',  label: s.navMessages($lang),  href: '/messages',
+      badge: $unreadMsgCount },
     { icon: 'saved',    label: s.savedPosts($lang),   href: '/saved' },
     { icon: 'settings', label: s.navSettings($lang),  href: '/settings' },
   ]);
+
+  const navGrid = $derived($currentUser ? authNav : guestNav);
+
+  const VARIANTS = [
+    { key: 'charcoal', label: $lang === 'ku' ? 'Mûrekkeba Komirê' : 'Kömür', color: '#4A6FFF' },
+    { key: 'book',     label: $lang === 'ku' ? 'Pirtûk'           : 'Kitap',  color: '#8B5E2C' },
+    { key: 'forest',   label: $lang === 'ku' ? 'Daristan'         : 'Orman',  color: '#2E7D32' },
+    { key: 'ocean',    label: $lang === 'ku' ? 'Okyanûs'          : 'Okyanus',color: '#0077B6' },
+    { key: 'sunset',   label: $lang === 'ku' ? 'Rojavabûn'        : 'Gün Batımı', color: '#C0305A' },
+    { key: 'mono',     label: $lang === 'ku' ? 'Yek Reng'         : 'Mono',   color: '#444444' },
+  ];
 </script>
 
 <!-- Global header (drawer açma + logo) -->
@@ -128,7 +146,10 @@
 <aside class="drawer" class:open={drawerOpen}>
   <div class="drawer-inner">
 
-    <!-- Profil özeti -->
+    <!-- Logo -->
+    <div class="dr-logo">heftreng</div>
+
+    <!-- Profil özeti veya Giriş Yap -->
     {#if $currentUser}
       <a href="/profile/{$currentUser.uid}" class="dr-profile" onclick={closeDrawer}>
         <div class="dr-av">
@@ -145,7 +166,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="color:var(--muted)"><polyline points="9 18 15 12 9 6"/></svg>
       </a>
     {:else}
-      <a href="/login" class="dr-login-btn" onclick={closeDrawer}>Giriş Yap</a>
+      <a href="/login" class="dr-login-btn" onclick={closeDrawer}>
+        {s.login($lang)}
+      </a>
     {/if}
 
     <div class="dr-divider"></div>
@@ -153,32 +176,35 @@
     <!-- 3'lü navigasyon grid -->
     <div class="dr-grid">
       {#each navGrid as item}
-        <a href={item.href} class="dr-grid-item" class:dr-active={isActive(item.href)} onclick={closeDrawer}>
-          <!-- Feed -->
-          {#if item.icon === 'feed'}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path d="M3 3h18v2H3zm0 4h18v2H3zm0 4h18v2H3zm0 4h12v2H3z"/></svg>
-          <!-- Arama -->
-          {:else if item.icon === 'search'}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <!-- Kütüphane -->
-          {:else if item.icon === 'library'}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          <!-- Kurdî -->
-          {:else if item.icon === 'kurdi'}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>
-          <!-- Bildirim -->
-          {:else if item.icon === 'notif'}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-          <!-- Mesaj -->
-          {:else if item.icon === 'message'}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <!-- Kaydedilenler -->
-          {:else if item.icon === 'saved'}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-          <!-- Ayarlar -->
-          {:else if item.icon === 'settings'}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-{/if}
+        <a
+          href={item.href}
+          class="dr-grid-item"
+          class:dr-active={isActive(item.href)}
+          onclick={closeDrawer}
+        >
+          <div class="dr-grid-icon-wrap">
+            <!-- Feed -->
+            {#if item.icon === 'feed'}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path d="M3 3h18v2H3zm0 4h18v2H3zm0 4h18v2H3zm0 4h12v2H3z"/></svg>
+            {:else if item.icon === 'search'}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            {:else if item.icon === 'library'}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            {:else if item.icon === 'kurdi'}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>
+            {:else if item.icon === 'notif'}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            {:else if item.icon === 'message'}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            {:else if item.icon === 'saved'}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+            {:else if item.icon === 'settings'}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            {/if}
+            {#if item.badge && item.badge > 0}
+              <span class="dr-badge">{item.badge > 9 ? '9+' : item.badge}</span>
+            {/if}
+          </div>
           <span>{item.label}</span>
         </a>
       {/each}
@@ -186,16 +212,52 @@
 
     <div class="dr-divider"></div>
 
-    <!-- Tema seçici -->
-    <div class="dr-theme">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-      {#each [['light','Açık'],['dark','Koyu'],['system','Sistem']] as [mode, label]}
+    <!-- Karanlık / Açık / Sistem -->
+    <div class="dr-section-label">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      {s.appearance($lang)}
+    </div>
+    <div class="dr-mode-row">
+      {#each [['light', s.lightMode($lang)], ['dark', s.darkMode($lang)], ['system', s.systemMode($lang)]] as [mode, label]}
         <button
           class="theme-chip"
           class:selected={$theme.mode === mode}
           onclick={() => setTheme(mode)}
         >{label}</button>
       {/each}
+    </div>
+
+    <!-- Renk teması -->
+    <div class="dr-variant-grid">
+      {#each VARIANTS as v}
+        <button
+          class="dr-variant-btn"
+          class:dr-variant-active={$theme.variant === v.key}
+          onclick={() => {
+            theme.set({ ...$theme, variant: v.key });
+            saveTheme($theme.mode, v.key);
+          }}
+        >
+          <span class="dr-variant-dot" style="background:{v.color}"></span>
+          <span class="dr-variant-name">{v.label}</span>
+        </button>
+      {/each}
+    </div>
+
+    <div class="dr-divider"></div>
+
+    <!-- Dil seçimi -->
+    <div class="dr-section-label">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" width="14" height="14"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>
+      {s.language($lang)}
+    </div>
+    <div class="dr-lang-row">
+      <button class="dr-lang-btn" class:dr-lang-active={$lang === 'tr'} onclick={() => lang.set('tr')}>
+        🇹🇷 Türkçe
+      </button>
+      <button class="dr-lang-btn" class:dr-lang-active={$lang === 'ku'} onclick={() => lang.set('ku')}>
+        ☀️ Kurdî
+      </button>
     </div>
 
     <div class="dr-divider"></div>
@@ -207,14 +269,14 @@
       else navigator.clipboard.writeText('https://heftreng.onrender.com');
     }}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-      Uygulamayı Paylaş
+      {$lang === 'ku' ? 'Serîlêdanê parve bike' : 'Uygulamayı Paylaş'}
     </button>
 
     <!-- Çıkış -->
     {#if $currentUser}
       <button class="dr-signout" onclick={handleSignOut}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Çıkış Yap
+        {s.logout($lang)}
       </button>
     {/if}
 
@@ -225,7 +287,7 @@
 
 {#if showBottomNav && $currentUser}
   <nav class="bottom-nav">
-    <a href="/feed" class="nav-item" class:active={isActive('/feed')} aria-label="Gönderi">
+    <a href="/feed" class="nav-item" class:active={isActive('/feed')} aria-label={s.navFeed($lang)}>
       {#if isActive('/feed')}
         <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M3 3h18v2H3zm0 4h18v2H3zm0 4h18v2H3zm0 4h12v2H3z"/></svg>
       {:else}
@@ -233,6 +295,7 @@
       {/if}
       <span>{s.navFeed($lang)}</span>
     </a>
+
     <a href="/library" class="nav-item" class:active={isActive('/library')} aria-label={s.navLibrary($lang)}>
       {#if isActive('/library')}
         <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15zm2.5-2.5H18v3H6.5A.5.5 0 0 1 6 19.5v0A.5.5 0 0 1 6.5 19z"/></svg>
@@ -241,24 +304,33 @@
       {/if}
       <span>{s.navLibrary($lang)}</span>
     </a>
-    <a href="/kurdi" class="nav-item" class:active={isActive('/kurdi')} aria-label={s.navKurdi($lang)}>
-      {#if isActive('/kurdi')}
-        <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/></svg>
-      {:else}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="24" height="24"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>
-      {/if}
-      <span>{s.navKurdi($lang)}</span>
-    </a>
-    <a href="/profile/{$currentUser?.uid}" class="nav-item" class:active={isActive('/profile')} aria-label={s.navProfile($lang)}>
-      {#if $currentUser?.photoURL}
-        <img src={$currentUser.photoURL} alt="" class="nav-avatar" class:active-av={isActive('/profile')} />
-      {:else if isActive('/profile')}
-        <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
-      {:else}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="24" height="24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      {/if}
-      <span>{s.navProfile($lang)}</span>
-    </a>
+
+    {#if $currentUser}
+      <a href="/kurdi" class="nav-item" class:active={isActive('/kurdi')} aria-label={s.navKurdi($lang)}>
+        {#if isActive('/kurdi')}
+          <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/></svg>
+        {:else}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="24" height="24"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>
+        {/if}
+        <span>{s.navKurdi($lang)}</span>
+      </a>
+
+      <a href="/profile/{$currentUser.uid}" class="nav-item" class:active={isActive('/profile')} aria-label={s.navProfile($lang)}>
+        {#if $currentUser.photoURL}
+          <img src={$currentUser.photoURL} alt="" class="nav-avatar" class:active-av={isActive('/profile')} />
+        {:else if isActive('/profile')}
+          <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+        {:else}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="24" height="24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        {/if}
+        <span>{s.navProfile($lang)}</span>
+      </a>
+    {:else}
+      <a href="/login" class="nav-item nav-login" aria-label={s.login($lang)}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="24" height="24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        <span>{s.login($lang)}</span>
+      </a>
+    {/if}
   </nav>
 {/if}
 
@@ -279,6 +351,7 @@
 }
 .nav-item.active { color: var(--primary); }
 .nav-item:hover  { color: var(--on-bg); }
+.nav-item.nav-login { color: var(--primary); }
 .nav-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; border: 1.5px solid var(--divider); }
 .nav-avatar.active-av { border-color: var(--primary); }
 
@@ -404,6 +477,37 @@
   font-family: inherit; transition: background 0.15s, color 0.15s;
 }
 .theme-chip.selected { background: var(--primary); color: #fff; font-weight: 700; }
+
+/* Yeni drawer elemanları */
+.dr-logo { font-size: 1.3rem; font-weight: 900; color: var(--primary); padding: 4px 0 14px; letter-spacing: -.5px; }
+.dr-section-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: .7rem; font-weight: 700; color: #F59E0B;
+  text-transform: uppercase; letter-spacing: .05em;
+  padding: 10px 0 6px;
+}
+.dr-mode-row { display: flex; gap: 6px; padding-bottom: 10px; }
+.dr-variant-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding-bottom: 4px; }
+.dr-variant-btn {
+  display: flex; align-items: center; gap: 6px; padding: 7px 8px; border-radius: 10px;
+  border: 1.5px solid var(--divider); background: var(--surface-var);
+  cursor: pointer; font-family: inherit; transition: all .15s;
+}
+.dr-variant-btn.dr-variant-active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+.dr-variant-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+.dr-variant-name { font-size: .65rem; font-weight: 600; color: var(--on-bg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dr-lang-row { display: flex; gap: 8px; padding-bottom: 4px; }
+.dr-lang-btn {
+  flex: 1; padding: 9px 6px; border-radius: 10px; font-size: .8rem; font-weight: 600;
+  border: 1.5px solid var(--divider); background: var(--surface-var); color: var(--on-bg);
+  cursor: pointer; font-family: inherit; transition: all .15s;
+}
+.dr-lang-btn.dr-lang-active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--primary); }
+.dr-grid-icon-wrap { position: relative; display: flex; align-items: center; justify-content: center; }
+.dr-badge {
+  position: absolute; top: -4px; right: -6px; background: var(--error); color: #fff;
+  font-size: 8px; font-weight: 700; border-radius: 99px; padding: 1px 4px; line-height: 1.4;
+}
 
 /* Paylaş / Çıkış */
 .dr-share, .dr-signout {
