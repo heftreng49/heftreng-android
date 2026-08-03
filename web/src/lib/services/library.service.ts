@@ -13,9 +13,18 @@
 
 import { supabase } from '$lib/supabase/config';
 import type { Author, LibraryBook, BookQuote, BookReview } from '$lib/models/library';
+import { getOrFetch, cacheDelete } from '$lib/utils/cache';
 
 // ── Sayfa boyutu ─────────────────────────────────────────────────────────────
 const PAGE = 20;
+
+// /library ekranı sık ziyaret edilir; yazar/kitap listeleri ve detayları
+// dakikalarca değişmez — Supabase okumalarını belirgin azaltmak için TTL cache.
+const AUTHORS_TTL_MS      = 5 * 60_000;
+const AUTHOR_DETAIL_TTL_MS = 2 * 60_000;
+const BOOKS_TTL_MS        = 5 * 60_000;
+const BOOK_DETAIL_TTL_MS   = 2 * 60_000;
+const AUTHOR_FOLLOW_TTL_MS = 30_000;
 
 // ── getBannedUids TTL cache ───────────────────────────────────────────────────
 // Android'deki 10 dakika TTL ile birebir aynı mantık.
@@ -301,30 +310,36 @@ export async function fetchReviewsByAuthor(authorId: string): Promise<BookReview
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function fetchAuthors(limit = 200): Promise<Author[]> {
-  const { data } = await supabase
-    .from('authors')
-    .select('id, name, bio, photo_url, birth_year, nationality, book_count, quote_count, review_count, follower_count')
-    .order('name', { ascending: true })
-    .limit(limit);
-  return (data ?? []).map(rowToAuthor);
+  return getOrFetch(`lib_authors_${limit}`, AUTHORS_TTL_MS, async () => {
+    const { data } = await supabase
+      .from('authors')
+      .select('id, name, bio, photo_url, birth_year, nationality, book_count, quote_count, review_count, follower_count')
+      .order('name', { ascending: true })
+      .limit(limit);
+    return (data ?? []).map(rowToAuthor);
+  });
 }
 
 export async function fetchAuthorById(id: string): Promise<Author | null> {
-  const { data } = await supabase
-    .from('authors')
-    .select('id, name, bio, photo_url, birth_year, nationality, book_count, quote_count, review_count, follower_count')
-    .eq('id', id)
-    .single();
-  return data ? rowToAuthor(data) : null;
+  return getOrFetch(`lib_author_${id}`, AUTHOR_DETAIL_TTL_MS, async () => {
+    const { data } = await supabase
+      .from('authors')
+      .select('id, name, bio, photo_url, birth_year, nationality, book_count, quote_count, review_count, follower_count')
+      .eq('id', id)
+      .single();
+    return data ? rowToAuthor(data) : null;
+  });
 }
 
 export async function fetchAuthorBooks(authorId: string): Promise<LibraryBook[]> {
-  const { data } = await supabase
-    .from('library_books')
-    .select('id, title, author_id, author_name, cover_img, genre, publish_year, synopsis, page_count, quote_count, review_count, avg_rating, created_at')
-    .eq('author_id', authorId)
-    .order('created_at', { ascending: false });
-  return (data ?? []).map(rowToBook);
+  return getOrFetch(`lib_author_books_${authorId}`, AUTHOR_DETAIL_TTL_MS, async () => {
+    const { data } = await supabase
+      .from('library_books')
+      .select('id, title, author_id, author_name, cover_img, genre, publish_year, synopsis, page_count, quote_count, review_count, avg_rating, created_at')
+      .eq('author_id', authorId)
+      .order('created_at', { ascending: false });
+    return (data ?? []).map(rowToBook);
+  });
 }
 
 /**
@@ -357,21 +372,25 @@ export async function searchAuthors(q: string): Promise<Pick<Author, 'id' | 'nam
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function fetchBooks(limit = 200): Promise<LibraryBook[]> {
-  const { data } = await supabase
-    .from('library_books')
-    .select('id, title, author_id, author_name, cover_img, genre, publish_year, synopsis, page_count, quote_count, review_count, avg_rating, created_at')
-    .order('title', { ascending: true })
-    .limit(limit);
-  return (data ?? []).map(rowToBook);
+  return getOrFetch(`lib_books_${limit}`, BOOKS_TTL_MS, async () => {
+    const { data } = await supabase
+      .from('library_books')
+      .select('id, title, author_id, author_name, cover_img, genre, publish_year, synopsis, page_count, quote_count, review_count, avg_rating, created_at')
+      .order('title', { ascending: true })
+      .limit(limit);
+    return (data ?? []).map(rowToBook);
+  });
 }
 
 export async function fetchBookById(id: string): Promise<LibraryBook | null> {
-  const { data } = await supabase
-    .from('library_books')
-    .select('id, title, author_id, author_name, cover_img, genre, publish_year, synopsis, page_count, quote_count, review_count, avg_rating, created_at')
-    .eq('id', id)
-    .single();
-  return data ? rowToBook(data) : null;
+  return getOrFetch(`lib_book_${id}`, BOOK_DETAIL_TTL_MS, async () => {
+    const { data } = await supabase
+      .from('library_books')
+      .select('id, title, author_id, author_name, cover_img, genre, publish_year, synopsis, page_count, quote_count, review_count, avg_rating, created_at')
+      .eq('id', id)
+      .single();
+    return data ? rowToBook(data) : null;
+  });
 }
 
 /**
@@ -443,13 +462,15 @@ export async function toggleLibraryItemLike(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function checkAuthorFollow(uid: string, authorId: string): Promise<boolean> {
-  const { data } = await supabase
-    .from('author_follows')
-    .select('user_id')
-    .eq('user_id', uid)
-    .eq('author_id', authorId)
-    .maybeSingle();
-  return !!data;
+  return getOrFetch(`author_follow_${uid}_${authorId}`, AUTHOR_FOLLOW_TTL_MS, async () => {
+    const { data } = await supabase
+      .from('author_follows')
+      .select('user_id')
+      .eq('user_id', uid)
+      .eq('author_id', authorId)
+      .maybeSingle();
+    return !!data;
+  });
 }
 
 export async function followAuthor(uid: string, authorId: string): Promise<void> {
@@ -460,6 +481,8 @@ export async function followAuthor(uid: string, authorId: string): Promise<void>
     .select('user_id', { count: 'exact', head: true })
     .eq('author_id', authorId);
   await supabase.from('authors').update({ follower_count: count ?? 0 }).eq('id', authorId);
+  cacheDelete(`author_follow_${uid}_${authorId}`);
+  cacheDelete(`lib_author_${authorId}`);
 }
 
 export async function unfollowAuthor(uid: string, authorId: string): Promise<void> {
@@ -470,6 +493,8 @@ export async function unfollowAuthor(uid: string, authorId: string): Promise<voi
     .select('user_id', { count: 'exact', head: true })
     .eq('author_id', authorId);
   await supabase.from('authors').update({ follower_count: count ?? 0 }).eq('id', authorId);
+  cacheDelete(`author_follow_${uid}_${authorId}`);
+  cacheDelete(`lib_author_${authorId}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -530,6 +555,7 @@ export async function createAuthor(params: {
     .select()
     .single();
   if (error) throw error;
+  cacheDelete('lib_authors_200');
   return rowToAuthor(data);
 }
 
@@ -558,6 +584,7 @@ export async function createLibraryBook(params: {
     .select()
     .single();
   if (error) throw error;
+  cacheDelete('lib_books_200');
   return rowToBook(data);
 }
 

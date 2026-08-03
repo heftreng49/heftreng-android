@@ -5,6 +5,16 @@ import { db } from '$lib/firebase/config';
 import { supabase } from '$lib/supabase/config';
 import type { Post } from '$lib/models/post';
 import type { Comment } from '$lib/models/comment';
+import { getOrFetch, cacheDelete } from '$lib/utils/cache';
+import { invalidatePostInteractions } from './feed.service';
+
+// post/[id] ekranı geri-git-gel ile sık sık yeniden mount olabiliyor;
+// her seferinde Firestore doc + 2-3 Supabase sorgusu tekrarlanmasın diye
+// kısa TTL'li cache kullanılıyor.
+const POST_DETAIL_TTL_MS = 15_000;
+const COMMENTS_TTL_MS    = 15_000;
+const detailKey   = (postId: string, uid?: string) => `post_detail_${postId}_${uid ?? 'anon'}`;
+const commentsKey = (postId: string, uid?: string) => `post_comments_${postId}_${uid ?? 'anon'}`;
 
 // ── Gönderi yükle ────────────────────────────────────────────────────────────
 export async function fetchPost(postId: string, uid?: string): Promise<{
@@ -13,27 +23,29 @@ export async function fetchPost(postId: string, uid?: string): Promise<{
   isLikedByMe: boolean;
   isSavedByMe: boolean;
 } | null> {
-  const snap = await getDoc(doc(db, 'feed', postId));
-  if (!snap.exists()) return null;
-  const post = { id: snap.id, ...snap.data() } as Post;
+  return getOrFetch(detailKey(postId, uid), POST_DETAIL_TTL_MS, async () => {
+    const snap = await getDoc(doc(db, 'feed', postId));
+    if (!snap.exists()) return null;
+    const post = { id: snap.id, ...snap.data() } as Post;
 
-  const [countRes, interRes] = await Promise.all([
-    supabase.from('feed_likes').select('id', { count: 'exact', head: true }).eq('post_id', postId),
-    uid
-      ? supabase.from('feed_likes').select('id').eq('post_id', postId).eq('uid', uid).maybeSingle()
-      : Promise.resolve({ data: null }),
-  ]);
-  const likesCount  = countRes.count ?? (post as any).likesCount ?? 0;
-  const isLikedByMe = !!interRes.data;
+    const [countRes, interRes] = await Promise.all([
+      supabase.from('feed_likes').select('id', { count: 'exact', head: true }).eq('post_id', postId),
+      uid
+        ? supabase.from('feed_likes').select('id').eq('post_id', postId).eq('uid', uid).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    const likesCount  = countRes.count ?? (post as any).likesCount ?? 0;
+    const isLikedByMe = !!interRes.data;
 
-  let isSavedByMe = false;
-  if (uid) {
-    const { data: sv } = await supabase.from('feed_saves')
-      .select('id').eq('post_id', postId).eq('uid', uid).maybeSingle();
-    isSavedByMe = !!sv;
-  }
+    let isSavedByMe = false;
+    if (uid) {
+      const { data: sv } = await supabase.from('feed_saves')
+        .select('id').eq('post_id', postId).eq('uid', uid).maybeSingle();
+      isSavedByMe = !!sv;
+    }
 
-  return { post, likesCount, isLikedByMe, isSavedByMe };
+    return { post, likesCount, isLikedByMe, isSavedByMe };
+  });
 }
 
 // ── Gönderiyi sil ────────────────────────────────────────────────────────────
@@ -43,22 +55,24 @@ export async function deletePost(postId: string): Promise<void> {
 
 // ── Yorumları yükle ──────────────────────────────────────────────────────────
 export async function fetchComments(postId: string, uid?: string): Promise<Comment[]> {
-  const { data } = await supabase
-    .from('feed_comments')
-    .select('*')
-    .eq('post_id', postId)
-    .order('created_at', { ascending: true });
-  const rows = data ?? [];
+  return getOrFetch(commentsKey(postId, uid), COMMENTS_TTL_MS, async () => {
+    const { data } = await supabase
+      .from('feed_comments')
+      .select('*')
+      .eq('post_id', postId)
+      .order('created_at', { ascending: true });
+    const rows = data ?? [];
 
-  let myLikedIds = new Set<string>();
-  if (uid && rows.length) {
-    const { data: cl } = await supabase
-      .from('comment_likes').select('comment_id')
-      .eq('uid', uid)
-      .in('comment_id', rows.map((r: any) => r.id));
-    myLikedIds = new Set((cl ?? []).map((r: any) => r.comment_id));
-  }
-  return rows.map((r: any) => ({ ...r, isLikedByMe: myLikedIds.has(r.id) })) as Comment[];
+    let myLikedIds = new Set<string>();
+    if (uid && rows.length) {
+      const { data: cl } = await supabase
+        .from('comment_likes').select('comment_id')
+        .eq('uid', uid)
+        .in('comment_id', rows.map((r: any) => r.id));
+      myLikedIds = new Set((cl ?? []).map((r: any) => r.comment_id));
+    }
+    return rows.map((r: any) => ({ ...r, isLikedByMe: myLikedIds.has(r.id) })) as Comment[];
+  });
 }
 
 // ── Beğeni toggle ─────────────────────────────────────────────────────────────
@@ -75,6 +89,8 @@ export async function togglePostLike(
   } else {
     await supabase.from('feed_likes').upsert({ id, post_id: postId, uid, name: displayName, photo_url: photoURL });
   }
+  cacheDelete(detailKey(postId, uid));
+  invalidatePostInteractions(postId, uid);
 }
 
 // ── Kaydet toggle ─────────────────────────────────────────────────────────────
@@ -82,6 +98,8 @@ export async function togglePostSave(postId: string, uid: string, isSaved: boole
   const id = `${postId}_${uid}`;
   if (isSaved) await supabase.from('feed_saves').delete().eq('id', id);
   else await supabase.from('feed_saves').upsert({ id, post_id: postId, uid });
+  cacheDelete(detailKey(postId, uid));
+  invalidatePostInteractions(postId, uid);
 }
 
 // ── Yorum ekle / düzenle ──────────────────────────────────────────────────────
@@ -101,19 +119,26 @@ export async function addComment(
     reply_to_cmt_id: replyToId ?? null,
   }).select().single();
   if (error) throw error;
+  cacheDelete(commentsKey(postId, uid));
+  invalidatePostInteractions(postId, uid);
   return { ...data, isLikedByMe: false } as Comment;
 }
 
-export async function editComment(commentId: string, text: string): Promise<Comment> {
+export async function editComment(commentId: string, text: string, postId?: string, uid?: string): Promise<Comment> {
   const { data, error } = await supabase.from('feed_comments')
     .update({ text })
     .eq('id', commentId).select().single();
   if (error) throw error;
+  if (postId) cacheDelete(commentsKey(postId, uid));
   return data as Comment;
 }
 
-export async function deleteComment(commentId: string): Promise<void> {
+export async function deleteComment(commentId: string, postId?: string, uid?: string): Promise<void> {
   await supabase.from('feed_comments').delete().eq('id', commentId);
+  if (postId) {
+    cacheDelete(commentsKey(postId, uid));
+    invalidatePostInteractions(postId, uid);
+  }
 }
 
 // ── Yorum beğeni toggle ───────────────────────────────────────────────────────

@@ -145,7 +145,7 @@
     submitting = true;
     try {
       if (editTarget) {
-        const updated = await editComment(editTarget.id, commentText.trim());
+        const updated = await editComment(editTarget.id, commentText.trim(), postId, $currentUser.uid);
         comments = comments.map((c: any) => c.id === editTarget.id ? { ...c, text: updated.text } : c);
         editTarget = null;
       } else {
@@ -167,7 +167,7 @@
   // ── Yorum sil ─────────────────────────────────────────────────
   async function handleDeleteComment() {
     if (!deleteTarget) return;
-    await deleteComment(deleteTarget.id);
+    await deleteComment(deleteTarget.id, postId, $currentUser?.uid);
     comments = comments.filter((c: any) => c.id !== deleteTarget.id);
     deleteTarget = null;
   }

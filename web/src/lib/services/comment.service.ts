@@ -1,6 +1,13 @@
 // Android yorum katmanı — Supabase feed_comments tablosu
 import { supabase }      from '$lib/supabase/config';
 import type { Comment, FeedCommentRow, FeedCommentInsert } from '$lib/models/comment';
+import { getOrFetch, cacheDelete } from '$lib/utils/cache';
+
+// Kullanıcı aynı gönderinin yorum panelini kısa süre içinde tekrar açarsa
+// (kapat-aç, feed'de geri git-gel) Supabase'e tekrar istek atılmaz.
+const COMMENTS_TTL_MS = 15_000;
+
+function commentsCacheKey(postId: string) { return `comments_${postId}`; }
 
 // Supabase satırını domain modeline çevir
 function rowToComment(r: FeedCommentRow): Comment {
@@ -22,13 +29,15 @@ function rowToComment(r: FeedCommentRow): Comment {
 
 // ── Yorumları yükle ──────────────────────────────────────────────────────────
 export async function fetchComments(postId: string): Promise<Comment[]> {
-  const { data, error } = await supabase
-    .from('feed_comments')
-    .select('*')
-    .eq('post_id', postId)
-    .order('created_at', { ascending: true });
-  if (error) throw error;
-  return (data ?? []).map(rowToComment);
+  return getOrFetch(commentsCacheKey(postId), COMMENTS_TTL_MS, async () => {
+    const { data, error } = await supabase
+      .from('feed_comments')
+      .select('*')
+      .eq('post_id', postId)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map(rowToComment);
+  });
 }
 
 // ── Yorum gönder ─────────────────────────────────────────────────────────────
@@ -39,17 +48,19 @@ export async function sendComment(payload: FeedCommentInsert): Promise<Comment> 
     .select()
     .single();
   if (error) throw error;
+  cacheDelete(commentsCacheKey(payload.post_id));
   return rowToComment(data as FeedCommentRow);
 }
 
 // ── Yorum sil ────────────────────────────────────────────────────────────────
-export async function deleteComment(id: string, uid: string): Promise<void> {
+export async function deleteComment(id: string, uid: string, postId?: string): Promise<void> {
   const { error } = await supabase
     .from('feed_comments')
     .delete()
     .eq('id', id)
     .eq('uid', uid);
   if (error) throw error;
+  if (postId) cacheDelete(commentsCacheKey(postId));
 }
 
 // ── Yorum beğeni toggle ──────────────────────────────────────────────────────

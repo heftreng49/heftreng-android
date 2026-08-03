@@ -10,30 +10,42 @@ import { db, storage } from '$lib/firebase/config';
 import { supabase } from '$lib/supabase/config';
 import type { User } from '$lib/models/user';
 import type { Post } from '$lib/models/post';
+import { getOrFetch, cacheDelete } from '$lib/utils/cache';
+import { invalidateProfileCache as invalidateMsgProfileCache } from './message.service';
 
 const PAGE = 15;
+// Profil ekranı (kendi profilin + başkalarının profili) sık ziyaret edilir;
+// bu alanlar dakikalarca aynı kalır, TTL cache egress'i belirgin azaltır.
+const PROFILE_TTL_MS      = 60_000;
+const SOCIAL_COUNTS_TTL_MS = 30_000;
+const FOLLOW_STATUS_TTL_MS = 30_000;
+const FOLLOW_LIST_TTL_MS   = 30_000;
 
 // ── Profil getir ─────────────────────────────────────────────────────────────
 export async function fetchProfile(uid: string): Promise<User | null> {
-  const snap = await getDoc(doc(db, 'users', uid));
-  if (!snap.exists()) return null;
-  return { uid: snap.id, ...snap.data() } as User;
+  return getOrFetch(`profile_${uid}`, PROFILE_TTL_MS, async () => {
+    const snap = await getDoc(doc(db, 'users', uid));
+    if (!snap.exists()) return null;
+    return { uid: snap.id, ...snap.data() } as User;
+  });
 }
 
 // ── Sosyal sayaçlar ──────────────────────────────────────────────────────────
 export async function fetchSocialCounts(uid: string): Promise<{ followers: number; following: number; posts: number }> {
-  try {
-    const snap = await getDoc(doc(db, 'users', uid));
-    if (snap.exists()) {
-      const d = snap.data();
-      return { followers: d.followersCount ?? 0, following: d.followingCount ?? 0, posts: d.postsCount ?? 0 };
-    }
-  } catch {}
-  const [fR, gR] = await Promise.all([
-    supabase.from('follows').select('id', { count: 'exact', head: true }).eq('target_uid', uid),
-    supabase.from('follows').select('id', { count: 'exact', head: true }).eq('from_uid', uid),
-  ]);
-  return { followers: fR.count ?? 0, following: gR.count ?? 0, posts: 0 };
+  return getOrFetch(`social_counts_${uid}`, SOCIAL_COUNTS_TTL_MS, async () => {
+    try {
+      const snap = await getDoc(doc(db, 'users', uid));
+      if (snap.exists()) {
+        const d = snap.data();
+        return { followers: d.followersCount ?? 0, following: d.followingCount ?? 0, posts: d.postsCount ?? 0 };
+      }
+    } catch {}
+    const [fR, gR] = await Promise.all([
+      supabase.from('follows').select('id', { count: 'exact', head: true }).eq('target_uid', uid),
+      supabase.from('follows').select('id', { count: 'exact', head: true }).eq('from_uid', uid),
+    ]);
+    return { followers: fR.count ?? 0, following: gR.count ?? 0, posts: 0 };
+  });
 }
 
 // ── Takip durumu + gizli hesap isteği ────────────────────────────────────────
@@ -41,18 +53,20 @@ export async function checkFollowStatus(fromUid: string, targetUid: string, isPr
   isFollowing: boolean;
   followRequestStatus: 'none' | 'pending' | 'accepted';
 }> {
-  const { data } = await supabase.from('follows')
-    .select('id').eq('from_uid', fromUid).eq('target_uid', targetUid).maybeSingle();
-  const isFollowing = !!data;
+  return getOrFetch(`follow_status_${fromUid}_${targetUid}`, FOLLOW_STATUS_TTL_MS, async () => {
+    const { data } = await supabase.from('follows')
+      .select('id').eq('from_uid', fromUid).eq('target_uid', targetUid).maybeSingle();
+    const isFollowing = !!data;
 
-  let followRequestStatus: 'none' | 'pending' | 'accepted' = 'none';
-  if (isPrivate && !isFollowing) {
-    try {
-      const reqSnap = await getDoc(doc(db, 'followRequests', targetUid, 'pending', fromUid));
-      followRequestStatus = reqSnap.exists() ? 'pending' : 'none';
-    } catch {}
-  }
-  return { isFollowing, followRequestStatus };
+    let followRequestStatus: 'none' | 'pending' | 'accepted' = 'none';
+    if (isPrivate && !isFollowing) {
+      try {
+        const reqSnap = await getDoc(doc(db, 'followRequests', targetUid, 'pending', fromUid));
+        followRequestStatus = reqSnap.exists() ? 'pending' : 'none';
+      } catch {}
+    }
+    return { isFollowing, followRequestStatus };
+  });
 }
 
 // ── Normal takip / bırak ─────────────────────────────────────────────────────
@@ -75,6 +89,9 @@ export async function toggleFollow(
       updateDoc(doc(db, 'users', fromUid),   { followingCount: increment(1) }),
     ]);
   }
+  cacheDelete(`follow_status_${fromUid}_${targetUid}`);
+  cacheDelete(`social_counts_${targetUid}`);
+  cacheDelete(`social_counts_${fromUid}`);
 }
 
 // ── Gizli hesap: takip isteği gönder / iptal ─────────────────────────────────
@@ -98,17 +115,21 @@ export async function cancelFollowRequest(fromUid: string, targetUid: string): P
 
 // ── Takipçi / Takip listesi ──────────────────────────────────────────────────
 export async function fetchFollowers(uid: string): Promise<{ uid: string; name: string; photo: string }[]> {
-  const { data } = await supabase.from('follows')
-    .select('from_uid,from_name,from_photo').eq('target_uid', uid)
-    .order('created_at', { ascending: false }).limit(100);
-  return (data ?? []).map((r: any) => ({ uid: r.from_uid, name: r.from_name, photo: r.from_photo }));
+  return getOrFetch(`followers_${uid}`, FOLLOW_LIST_TTL_MS, async () => {
+    const { data } = await supabase.from('follows')
+      .select('from_uid,from_name,from_photo').eq('target_uid', uid)
+      .order('created_at', { ascending: false }).limit(100);
+    return (data ?? []).map((r: any) => ({ uid: r.from_uid, name: r.from_name, photo: r.from_photo }));
+  });
 }
 
 export async function fetchFollowing(uid: string): Promise<{ uid: string; name: string; photo: string }[]> {
-  const { data } = await supabase.from('follows')
-    .select('target_uid,target_name,target_photo').eq('from_uid', uid)
-    .order('created_at', { ascending: false }).limit(100);
-  return (data ?? []).map((r: any) => ({ uid: r.target_uid, name: r.target_name, photo: r.target_photo }));
+  return getOrFetch(`following_list_${uid}`, FOLLOW_LIST_TTL_MS, async () => {
+    const { data } = await supabase.from('follows')
+      .select('target_uid,target_name,target_photo').eq('from_uid', uid)
+      .order('created_at', { ascending: false }).limit(100);
+    return (data ?? []).map((r: any) => ({ uid: r.target_uid, name: r.target_name, photo: r.target_photo }));
+  });
 }
 
 // ── Profil gönderileri ───────────────────────────────────────────────────────
@@ -163,6 +184,8 @@ export async function fetchReadingList(uid: string): Promise<Record<string, any[
 // ── Profil güncelle ──────────────────────────────────────────────────────────
 export async function updateProfile(uid: string, data: Partial<User>): Promise<void> {
   await updateDoc(doc(db, 'users', uid), data as Record<string, unknown>);
+  cacheDelete(`profile_${uid}`);
+  invalidateMsgProfileCache(uid); // konuşma listesindeki ad/foto cache'i de bayat kalmasın
 }
 
 export async function checkUsernameAvailable(username: string, excludeUid: string): Promise<boolean> {

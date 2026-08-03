@@ -86,7 +86,7 @@
               <button class="cmt-action" onclick={() => replyTo = c}>Yanıtla</button>
               {#if currentUser?.uid === c.uid}
                 <button class="cmt-action danger" onclick={async () => {
-                  await deleteComment(c.id, c.uid);
+                  await deleteComment(c.id, c.uid, postId);
                   comments = comments.filter(x => x.id !== c.id);
                   onCountChange?.(comments.length);
                 }}>Sil</button>

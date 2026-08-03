@@ -9,6 +9,14 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '$lib/firebase/config';
 import { supabase }    from '$lib/supabase/config';
 import type { Post }   from '$lib/models/post';
+import { cacheGet, cacheSet, cacheDelete } from '$lib/utils/cache';
+
+// enrichPosts her feed sayfası/scroll'unda aynı postId'ler için beğeni/yorum
+// sayısı ve "benim durumum" bilgisini Supabase'ten tekrar tekrar çekiyordu.
+// Her post+kullanıcı çifti için 20sn TTL cache: aynı gönderiler kısa süre
+// içinde tekrar görüntülenirse (geri git-gel, pull-to-refresh) Supabase'e
+// hiç gidilmez. Sadece cache'te olmayan id'ler sorgulanır.
+const INTERACTION_TTL_MS = 20_000;
 
 const PAGE_SIZE = 20;
 const FEED_COL  = 'feed';
@@ -90,40 +98,73 @@ export async function uploadPostImage(uid: string, file: File): Promise<string> 
   return getDownloadURL(snap.ref);
 }
 
-// ── Enrich: beğeni/yorum sayısı + kişisel durum ────────────────────────────
+// ── Enrich: beğeni/yorum sayısı + kişisel durum (cache'li) ─────────────────
 export async function enrichPosts(posts: Post[], uid: string | null): Promise<Post[]> {
   if (!posts.length) return posts;
-  const ids = posts.map(p => p.id);
+  const uidKey = uid ?? 'anon';
 
-  const [likeRows, cmtRows] = await Promise.all([
-    supabase.from('feed_likes').select('post_id').in('post_id', ids),
-    supabase.from('feed_comments').select('post_id').in('post_id', ids),
-  ]);
+  type Interaction = { likesCount: number; commentsCount: number; isLikedByMe: boolean; isSavedByMe: boolean };
+  const resolved = new Map<string, Interaction>();
+  const missingIds: string[] = [];
 
-  const likeCounts: Record<string, number> = {};
-  for (const r of likeRows.data ?? [])
-    likeCounts[r.post_id] = (likeCounts[r.post_id] ?? 0) + 1;
-
-  const cmtCounts: Record<string, number> = {};
-  for (const r of cmtRows.data ?? [])
-    cmtCounts[r.post_id] = (cmtCounts[r.post_id] ?? 0) + 1;
-
-  let likedSet = new Set<string>();
-  let savedSet = new Set<string>();
-  if (uid) {
-    const [lR, sR] = await Promise.all([
-      supabase.from('feed_likes').select('post_id').eq('uid', uid).in('post_id', ids),
-      supabase.from('feed_saves').select('post_id').eq('uid', uid).in('post_id', ids),
-    ]);
-    likedSet = new Set((lR.data ?? []).map((r: { post_id: string }) => r.post_id));
-    savedSet = new Set((sR.data ?? []).map((r: { post_id: string }) => r.post_id));
+  for (const p of posts) {
+    const cached = cacheGet<Interaction>(`post_inter_${uidKey}_${p.id}`, INTERACTION_TTL_MS);
+    if (cached) resolved.set(p.id, cached);
+    else missingIds.push(p.id);
   }
 
-  return posts.map(p => ({
-    ...p,
-    likesCount:    likeCounts[p.id]  ?? p.likesCount    ?? 0,
-    commentsCount: cmtCounts[p.id]   ?? p.commentsCount ?? 0,
-    isLikedByMe:   likedSet.has(p.id),
-    isSavedByMe:   savedSet.has(p.id),
-  }));
+  if (missingIds.length) {
+    const [likeRows, cmtRows] = await Promise.all([
+      supabase.from('feed_likes').select('post_id').in('post_id', missingIds),
+      supabase.from('feed_comments').select('post_id').in('post_id', missingIds),
+    ]);
+
+    const likeCounts: Record<string, number> = {};
+    for (const r of likeRows.data ?? [])
+      likeCounts[r.post_id] = (likeCounts[r.post_id] ?? 0) + 1;
+
+    const cmtCounts: Record<string, number> = {};
+    for (const r of cmtRows.data ?? [])
+      cmtCounts[r.post_id] = (cmtCounts[r.post_id] ?? 0) + 1;
+
+    let likedSet = new Set<string>();
+    let savedSet = new Set<string>();
+    if (uid) {
+      const [lR, sR] = await Promise.all([
+        supabase.from('feed_likes').select('post_id').eq('uid', uid).in('post_id', missingIds),
+        supabase.from('feed_saves').select('post_id').eq('uid', uid).in('post_id', missingIds),
+      ]);
+      likedSet = new Set((lR.data ?? []).map((r: { post_id: string }) => r.post_id));
+      savedSet = new Set((sR.data ?? []).map((r: { post_id: string }) => r.post_id));
+    }
+
+    for (const id of missingIds) {
+      const interaction: Interaction = {
+        likesCount:    likeCounts[id] ?? 0,
+        commentsCount: cmtCounts[id]  ?? 0,
+        isLikedByMe:   likedSet.has(id),
+        isSavedByMe:   savedSet.has(id),
+      };
+      resolved.set(id, interaction);
+      cacheSet(`post_inter_${uidKey}_${id}`, interaction);
+    }
+  }
+
+  return posts.map(p => {
+    const d = resolved.get(p.id);
+    return {
+      ...p,
+      likesCount:    d?.likesCount    ?? p.likesCount    ?? 0,
+      commentsCount: d?.commentsCount ?? p.commentsCount ?? 0,
+      isLikedByMe:   d?.isLikedByMe   ?? false,
+      isSavedByMe:   d?.isSavedByMe   ?? false,
+    };
+  });
+}
+
+/** Bir post için beğeni/kaydetme durumu değiştiğinde (toggleLike/toggleSave)
+ *  bu kullanıcının cache'ini temizler — bir sonraki enrichPosts çağrısı
+ *  TTL'i beklemeden güncel veriyi çeker. */
+export function invalidatePostInteractions(postId: string, uid?: string | null): void {
+  cacheDelete(`post_inter_${uid ?? 'anon'}_${postId}`);
 }

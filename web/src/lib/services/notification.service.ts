@@ -5,6 +5,11 @@ import {
   onSnapshot, updateDoc, doc, writeBatch, getDocs, where,
 } from 'firebase/firestore';
 import { db } from '$lib/firebase/config';
+import { getOrFetch, cacheDelete, shouldWrite } from '$lib/utils/cache';
+
+// Tek seferlik fetch için kısa TTL — sayfa arka plana alınıp hemen
+// dönüldüğünde (ör. sekme değişimi) Firestore'a tekrar istek atılmaz.
+const NOTIF_FETCH_TTL_MS = 15_000;
 
 export interface Notification {
   id:          string;
@@ -47,19 +52,21 @@ export function notifMeta(type: string): { icon: string; color: string } {
 }
 
 
-/** Bildirimler — tek seferlik fetch */
+/** Bildirimler — tek seferlik fetch (TTL cache'li) */
 export async function fetchNotifications(uid: string): Promise<Notification[]> {
-  try {
-    const q = query(
-      collection(db, 'userNotifs', uid, 'msgs'),
-      orderBy('ts', 'desc'), limit(50),
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
-  } catch (e: any) {
-    console.warn('fetchNotifications error:', e.code);
-    return [];
-  }
+  return getOrFetch(`notifs_${uid}`, NOTIF_FETCH_TTL_MS, async () => {
+    try {
+      const q = query(
+        collection(db, 'userNotifs', uid, 'msgs'),
+        orderBy('ts', 'desc'), limit(50),
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
+    } catch (e: any) {
+      console.warn('fetchNotifications error:', e.code);
+      return [];
+    }
+  });
 }
 
 export function listenNotifications(uid: string, cb: (notifs: Notification[]) => void): () => void {
@@ -76,11 +83,17 @@ export function listenNotifications(uid: string, cb: (notifs: Notification[]) =>
   });
 }
 
+// Aynı bildirim art arda tıklansa/çift render olsa bile 5sn içinde tek yazma.
 export async function markAsRead(uid: string, notifId: string): Promise<void> {
+  if (!shouldWrite(`mark_read_${uid}_${notifId}`, 5_000)) return;
   await updateDoc(doc(db, 'userNotifs', uid, 'msgs', notifId), { read: true });
+  cacheDelete(`notifs_${uid}`); // liste cache'i artık bayat — sıradaki fetch'te tazelensin
 }
 
+// notifications/+page.svelte hem mount'ta (2sn sonra) hem "Tümünü oku"
+// butonunda çağırabiliyor; 5sn'lik pencere içinde tek batch commit gider.
 export async function markAllRead(uid: string): Promise<void> {
+  if (!shouldWrite(`mark_all_read_${uid}`, 5_000)) return;
   const snap = await getDocs(query(
     collection(db, 'userNotifs', uid, 'msgs'),
     where('read', '==', false),
@@ -89,4 +102,5 @@ export async function markAllRead(uid: string): Promise<void> {
   const batch = writeBatch(db);
   snap.docs.forEach(d => batch.update(d.ref, { read: true }));
   await batch.commit();
+  cacheDelete(`notifs_${uid}`);
 }

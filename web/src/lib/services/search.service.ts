@@ -3,6 +3,13 @@
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '$lib/firebase/config';
 import { supabase } from '$lib/supabase/config';
+import { getOrFetch } from '$lib/utils/cache';
+
+// Arama kutusu 280ms debounce'lu (bkz. routes/search/+page.svelte); aynı
+// sorgu kısa süre içinde tekrarlanırsa (geri git-gel, yazıp silip tekrar
+// yazma) hem Firestore hem Supabase'e tekrar gidilmesin diye 30sn TTL.
+const SEARCH_TTL_MS      = 30_000;
+const SUGGESTIONS_TTL_MS = 5 * 60_000;
 
 export type SearchResultType = 'post' | 'user' | 'serial' | 'library_book' | 'book_quote' | 'library_author';
 
@@ -18,19 +25,21 @@ export interface SearchResult {
 export async function search(q: string): Promise<SearchResult[]> {
   if (!q || q.trim().length < 2) return [];
   const qLower = q.trim().toLowerCase();
-  const results: SearchResult[] = [];
 
-  await Promise.all([
-    searchFirebase(qLower, results),
-    searchSupabase(qLower, results),
-  ]);
+  return getOrFetch(`search_${qLower}`, SEARCH_TTL_MS, async () => {
+    const results: SearchResult[] = [];
+    await Promise.all([
+      searchFirebase(qLower, results),
+      searchSupabase(qLower, results),
+    ]);
 
-  // Tekrar önle, tip sırası: user → post → serial → book → quote → author
-  const seen = new Set<string>();
-  const order: SearchResultType[] = ['user','post','serial','library_book','book_quote','library_author'];
-  return order.flatMap(type =>
-    results.filter(r => r.type === type && !seen.has(r.id) && seen.add(r.id))
-  );
+    // Tekrar önle, tip sırası: user → post → serial → book → quote → author
+    const seen = new Set<string>();
+    const order: SearchResultType[] = ['user','post','serial','library_book','book_quote','library_author'];
+    return order.flatMap(type =>
+      results.filter(r => r.type === type && !seen.has(r.id) && seen.add(r.id))
+    );
+  });
 }
 
 async function searchFirebase(q: string, out: SearchResult[]) {
@@ -95,11 +104,13 @@ async function searchSupabase(q: string, out: SearchResult[]) {
 
 // Önerilen kullanıcılar (arama kutusu boşken)
 export async function fetchSuggestions(): Promise<SearchResult[]> {
-  const { data } = await supabase.from('users')
-    .select('uid,display_name,username,photo_url')
-    .order('followers_count', { ascending: false }).limit(12);
-  return (data ?? []).map((u: any) => ({
-    id: u.uid, type: 'user' as const, title: u.display_name || u.username,
-    subtitle: `@${u.username}`, imageUrl: u.photo_url, href: `/profile/${u.uid}`,
-  }));
+  return getOrFetch('search_suggestions', SUGGESTIONS_TTL_MS, async () => {
+    const { data } = await supabase.from('users')
+      .select('uid,display_name,username,photo_url')
+      .order('followers_count', { ascending: false }).limit(12);
+    return (data ?? []).map((u: any) => ({
+      id: u.uid, type: 'user' as const, title: u.display_name || u.username,
+      subtitle: `@${u.username}`, imageUrl: u.photo_url, href: `/profile/${u.uid}`,
+    }));
+  });
 }

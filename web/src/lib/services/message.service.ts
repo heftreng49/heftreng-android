@@ -30,6 +30,37 @@ import {
 } from 'firebase/firestore';
 import { db }       from '$lib/firebase/config';
 import { supabase } from '$lib/supabase/config';
+import { getOrFetch, cacheDelete, shouldWrite } from '$lib/utils/cache';
+
+// ── Kullanıcı profili (name/photo) TTL cache ─────────────────────────────────
+// Konuşma listesindeki her satır için "otherUid" kullanıcısının profilini
+// okumak gerekiyor (N+1 sorgu). displayName/photoURL sık değişmediğinden
+// bu bilgiyi 10dk boyunca (sayfa yenilense bile, sessionStorage'a yedekli)
+// cache'liyoruz — hem fetchConversations hem listenConversations/
+// listenConversation aynı cache'i paylaşır, tekrar okuma yapmaz.
+const PROFILE_TTL_MS = 10 * 60 * 1000;
+
+async function getOtherProfileCached(uid: string): Promise<{ name: string; photo: string }> {
+  return getOrFetch(`user_profile_${uid}`, PROFILE_TTL_MS, async () => {
+    try {
+      const uSnap = await getDoc(doc(db, 'users', uid));
+      if (uSnap.exists()) {
+        return {
+          name:  uSnap.data().displayName ?? uSnap.data().name ?? '',
+          photo: uSnap.data().photoURL    ?? '',
+        };
+      }
+    } catch {}
+    return { name: '', photo: '' };
+  }, true);
+}
+
+/** Bir kullanıcının profil bilgisi güncellendiğinde (settings vb.) cache'i
+ *  temizlemek için dışa açılır — aksi halde eski ad/foto PROFILE_TTL_MS
+ *  boyunca eski haliyle gösterilir. */
+export function invalidateProfileCache(uid: string): void {
+  cacheDelete(`user_profile_${uid}`);
+}
 
 export interface Message {
   id:           string;
@@ -82,17 +113,9 @@ export async function fetchConversations(uid: string): Promise<Conversation[]> {
       const parts: string[] = data.participants ?? [];
       const otherUid  = parts.find(p => p !== uid) ?? '';
 
-      let otherName  = '';
-      let otherPhoto = '';
-      if (otherUid) {
-        try {
-          const uSnap = await getDoc(doc(db, 'users', otherUid));
-          if (uSnap.exists()) {
-            otherName  = uSnap.data().displayName ?? uSnap.data().name ?? '';
-            otherPhoto = uSnap.data().photoURL    ?? '';
-          }
-        } catch {}
-      }
+      const { name: otherName, photo: otherPhoto } = otherUid
+        ? await getOtherProfileCached(otherUid)
+        : { name: '', photo: '' };
 
       convs.push({
         id:           d.id,
@@ -131,17 +154,9 @@ export function listenConversations(
       const data      = d.data();
       const parts: string[] = data.participants ?? [];
       const otherUid  = parts.find(p => p !== uid) ?? '';
-      let otherName  = '';
-      let otherPhoto = '';
-      if (otherUid) {
-        try {
-          const uSnap = await getDoc(doc(db, 'users', otherUid));
-          if (uSnap.exists()) {
-            otherName  = uSnap.data().displayName ?? uSnap.data().name ?? '';
-            otherPhoto = uSnap.data().photoURL    ?? '';
-          }
-        } catch {}
-      }
+      const { name: otherName, photo: otherPhoto } = otherUid
+        ? await getOtherProfileCached(otherUid)
+        : { name: '', photo: '' };
       convs.push({
         id:           d.id,
         participants: parts,
@@ -157,6 +172,46 @@ export function listenConversations(
     cb(convs);
   }, (err) => {
     console.error('listenConversations:', err);
+    onError?.(err);
+  });
+}
+
+// ── Tek konuşma — realtime listener ──────────────────────────────────────────
+// Sohbet detay ekranı sadece TEK bir konuşmanın meta verisini (isim/foto/
+// unread) izlemeye ihtiyaç duyar. Önceden bu ekran listenConversations()
+// kullanıyordu — yani kullanıcının 50 konuşmalık TÜM listesini (+ her biri
+// için N+1 profil okuması) dinleyip içinden tek satırı filtreliyordu. Bu,
+// her mesaj/okundu güncellemesinde gereksiz yere onlarca doküman okumaya
+// (egress) yol açıyordu. Bunun yerine tek doküman dinlenir; profil bilgisi
+// de üstteki paylaşımlı cache'ten gelir.
+export function listenConversation(
+  convId: string,
+  uid: string,
+  cb: (conv: Conversation | null) => void,
+  onError?: (err: any) => void,
+): () => void {
+  return onSnapshot(doc(db, 'conversations', convId), async d => {
+    if (!d.exists()) { cb(null); return; }
+    const data = d.data();
+    const parts: string[] = data.participants ?? [];
+    const otherUid = parts.find(p => p !== uid) ?? '';
+    const { name: otherName, photo: otherPhoto } = otherUid
+      ? await getOtherProfileCached(otherUid)
+      : { name: '', photo: '' };
+
+    cb({
+      id:           d.id,
+      participants: parts,
+      lastMsg:      data.last_msg   ?? '',
+      updatedAt:    data.updated_at ?? null,
+      unread:       data[`unread_${uid}`] ?? 0,
+      otherUid,
+      otherName,
+      otherPhoto,
+      otherOnline: false,
+    });
+  }, (err) => {
+    console.error('listenConversation:', err);
     onError?.(err);
   });
 }
@@ -239,7 +294,10 @@ export async function deleteMessage(convId: string, msgId: string): Promise<void
 }
 
 // ── Okundu işaretle ──────────────────────────────────────────────────────────
+// Sohbet ekranı her mount'ta çağırıyor; hızlı geri-git-geri-gel gibi
+// senaryolarda aynı isteğin tekrarını 5sn içinde engeller.
 export async function markConversationRead(convId: string, uid: string): Promise<void> {
+  if (!shouldWrite(`mark_read_${convId}_${uid}`, 5_000)) return;
   await updateDoc(doc(db, 'conversations', convId), { [`unread_${uid}`]: 0 });
 }
 
@@ -265,7 +323,14 @@ export async function findOrCreateConversation(
 }
 
 // ── Presence ─────────────────────────────────────────────────────────────────
+// Aynı durum (online true/false) art arda tetiklense bile (ör. hızlı
+// mount/unmount, sekme odak kaybı) Supabase'e PRESENCE_MIN_INTERVAL_MS
+// içinde sadece bir kez yazılır.
+const PRESENCE_MIN_INTERVAL_MS = 20_000;
+const PRESENCE_READ_TTL_MS     = 15_000;
+
 export async function setPresence(uid: string, online: boolean): Promise<void> {
+  if (!shouldWrite(`presence_write_${uid}_${online}`, PRESENCE_MIN_INTERVAL_MS)) return;
   try {
     await supabase.from('presence').upsert({
       uid, online, last_seen: new Date().toISOString(),
@@ -275,9 +340,12 @@ export async function setPresence(uid: string, online: boolean): Promise<void> {
 
 export async function fetchPresence(uids: string[]): Promise<Record<string, boolean>> {
   if (!uids.length) return {};
-  const { data } = await supabase.from('presence')
-    .select('uid,online').in('uid', uids);
-  const map: Record<string, boolean> = {};
-  (data ?? []).forEach((r: any) => { map[r.uid] = r.online; });
-  return map;
+  const key = `presence_read_${[...uids].sort().join(',')}`;
+  return getOrFetch(key, PRESENCE_READ_TTL_MS, async () => {
+    const { data } = await supabase.from('presence')
+      .select('uid,online').in('uid', uids);
+    const map: Record<string, boolean> = {};
+    (data ?? []).forEach((r: any) => { map[r.uid] = r.online; });
+    return map;
+  });
 }

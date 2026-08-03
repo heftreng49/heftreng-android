@@ -5,7 +5,7 @@
   import { currentUser }              from '$lib/stores/auth';
   import { requireAuth }              from '$lib/utils/auth.guard';
   import {
-    listenMessages, listenConversations,
+    listenMessages, listenConversation,
     sendMessage, deleteMessage, markConversationRead, setPresence,
   } from '$lib/services/message.service';
   import MessageBubble from '$lib/components/MessageBubble.svelte';
@@ -31,8 +31,11 @@
     if (!uid) return;
     setPresence(uid, true);
 
-    unsubConvs = listenConversations(uid, convs => {
-      conv = convs.find(c => c.id === convId) ?? null;
+    // Tüm konuşma listesini dinlemek yerine tek dokümanı dinliyoruz —
+    // her mesaj/okundu güncellemesinde onlarca gereksiz doküman okumasını
+    // (+ N+1 profil sorgusunu) önler.
+    unsubConvs = listenConversation(convId, uid, c => {
+      conv = c;
     });
 
     unsubMsgs = listenMessages(convId, data => {

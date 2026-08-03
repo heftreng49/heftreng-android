@@ -81,7 +81,7 @@
         unreadNotifCount.set(notifs.filter((n: any) => !n.read).length);
       });
       unsubMsgs = listenConversations(user.uid, (convs) => {
-        unreadMsgCount.set(convs.reduce((s: number, cv: any) => s + (cv.unreadCount ?? 0), 0));
+        unreadMsgCount.set(convs.reduce((s: number, cv: any) => s + (cv.unread ?? 0), 0));
       });
     });
 
