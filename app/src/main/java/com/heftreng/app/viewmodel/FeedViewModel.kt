@@ -170,13 +170,15 @@ class FeedViewModel @Inject constructor(
     // user dökümanı bellek cache — aynı uid'yi tekrar Firestore'dan çekmez
     private val _userDocCache = mutableMapOf<String, Map<String, Any>>()
     private suspend fun cachedUserDoc(targetUid: String): Map<String, Any>? {
+        // Önce memory cache — aynı oturumda Firestore'a gitme
         _userDocCache[targetUid]?.let { return it }
         return try {
+            // Önce Firestore disk cache — 0 egress
             val d = try {
-                firestore.collection("users").document(targetUid).get(Source.SERVER).await().data
-            } catch (_: Exception) {
                 firestore.collection("users").document(targetUid).get(Source.CACHE).await().data
-            }
+            } catch (_: Exception) { null }
+            // Cache boşsa server'a git
+            ?: firestore.collection("users").document(targetUid).get(Source.SERVER).await().data
             if (d != null) _userDocCache[targetUid] = d
             d
         } catch (_: Exception) { null }

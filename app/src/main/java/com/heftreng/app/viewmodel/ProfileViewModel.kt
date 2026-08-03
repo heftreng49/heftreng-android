@@ -199,8 +199,18 @@ class ProfileViewModel @Inject constructor(
                 // ✅ AŞAMA 1 TAMAMLANDI — header hemen ekrana gelir
                 _loading.value = false
 
-                // Takipçi sayıları arka planda — header'ı bekletmez
-                viewModelScope.launch {
+                // Takipçi sayıları — önce Firestore user doc'taki cached sayıyı göster
+                // Supabase COUNT sorgusu sadece sayı yoksa veya kendi profilindeyse
+                val cachedFollowers = _user.value?.followersCount ?: -1
+                val cachedFollowing = _user.value?.followingCount ?: -1
+                if (cachedFollowers >= 0 && cachedFollowing >= 0) {
+                    _followersCount.value = cachedFollowers
+                    _followingCount.value = cachedFollowing
+                }
+
+                // Arka planda Supabase COUNT — sadece kendi profili veya sayı hiç yoksa
+                val needsCount = cachedFollowers < 0 || cachedFollowing < 0 || targetUid == myUid
+                if (needsCount) viewModelScope.launch {
                     try {
                         val followersDeferred = async {
                             supabase.postgrest["follows"].select {
@@ -232,8 +242,8 @@ class ProfileViewModel @Inject constructor(
                             }
                         }
                     } catch (e: Exception) {
-                        _followersCount.value = _user.value?.followersCount ?: 0
-                        _followingCount.value = _user.value?.followingCount ?: 0
+                        if (cachedFollowers < 0) _followersCount.value = 0
+                        if (cachedFollowing < 0) _followingCount.value = 0
                     }
                 }
 

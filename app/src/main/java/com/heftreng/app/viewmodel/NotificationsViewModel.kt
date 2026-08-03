@@ -40,13 +40,17 @@ class NotificationsViewModel @Inject constructor(
     val refreshing = _refreshing.asStateFlow()
 
     private var lastServerFetchMs = 0L
-    private val AUTO_REFRESH_MS = 5L * 60L * 1000L // 5 dk
+    // FCM push ile bildirimler zaten anında geliyor.
+    // Polling sadece uygulama açılışında bir kez yapılır (foreground callback).
+    // 5 dk'da bir yoklama gereksiz Firestore okuması — kaldırıldı.
 
     init {
         val foregroundCb: () -> Unit = {
+            // Uygulama foreground'a gelince sadece cache'i göster,
+            // server'a sadece ilk açılışta veya liste boşsa git.
             auth.currentUser?.uid?.let { if (it.isNotEmpty()) load() }
         }
-        val backgroundCb: () -> Unit = { /* listener yok, bir sey kapatmaya gerek yok */ }
+        val backgroundCb: () -> Unit = { /* listener yok */ }
         AppLifecycleObserver.addForegroundCallback(foregroundCb)
         AppLifecycleObserver.addBackgroundCallback(backgroundCb)
         viewModelScope.launch {
@@ -69,7 +73,7 @@ class NotificationsViewModel @Inject constructor(
                 .orderBy("ts", Query.Direction.DESCENDING)
                 .limit(50)
 
-            // 1. Cache'den hemen goster
+            // 1. Cache'den hemen göster — 0 Firestore okuması
             try {
                 val cacheSnap = query.get(Source.CACHE).await()
                 if (!cacheSnap.isEmpty) {
@@ -79,10 +83,12 @@ class NotificationsViewModel @Inject constructor(
                 }
             } catch (_: Exception) {}
 
-            // 2. Server — 5 dk throttle
+            // 2. Server — sadece liste boşsa veya kullanıcı manuel yenileme yaptıysa
+            // FCM push zaten Firestore cache'i günceller; bir sonraki cache okuma
+            // güncel veriyi getirir. Periyodik polling yok.
             val now = System.currentTimeMillis()
             val shouldHitServer = _notifications.value.isEmpty()
-                || (now - lastServerFetchMs) > AUTO_REFRESH_MS
+                || (now - lastServerFetchMs) > 60 * 60 * 1000L // sadece 1 saatte bir fallback
             if (!shouldHitServer) { _loading.value = false; return@launch }
 
             try {

@@ -62,7 +62,7 @@ class BookViewModel @Inject constructor(
     private var isLikesLoaded = false
 
     // TTL cache — 5 dk içinde aynı listeyi tekrar Firestore'dan çekme
-    private val BOOK_CACHE_TTL_MS   = 5L * 60_000L
+    private val BOOK_CACHE_TTL_MS   = 30L * 60_000L
     private var lastBooksFetchMs    = 0L
     private var lastMyBooksFetchUid = ""
     private var lastMyBooksFetchMs  = 0L
