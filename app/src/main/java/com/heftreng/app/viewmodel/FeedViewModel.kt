@@ -622,7 +622,7 @@ class FeedViewModel @Inject constructor(
                     postsToWrite.forEach { coverImgWrittenIds.add(it.id) }
                     // Prefs boyutunu kontrol et — 500'den fazlaysa eskilerini temizle
                     if (coverImgWrittenIds.size > 500) {
-                        val trimmed = coverImgWrittenIds.takeLast(300).toSet()
+                        val trimmed = coverImgWrittenIds.toList().takeLast(300).toMutableSet()
                         coverImgWrittenIds.clear()
                         coverImgWrittenIds.addAll(trimmed)
                     }
