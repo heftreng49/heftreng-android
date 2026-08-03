@@ -1484,6 +1484,7 @@ private fun LessonPath(
     onOpen          : (String) -> Unit,
     onLockedClick   : (String) -> Unit = {},
     onShare         : ((KfLesson) -> Unit)? = null,
+    onCopyLink      : ((KfLesson) -> Unit)? = null,
 ) {
     val firstNotDone = lessons.indexOfFirst { it.id !in doneIds }
         .let { if (it == -1) lessons.size else it }
@@ -1515,6 +1516,7 @@ private fun LessonPath(
                     else onLockedClick(lesson.id)
                 },
                 onShare    = if (isDone && onShare != null) { { onShare(lesson) } } else null,
+                onCopyLink = if (isDone && onCopyLink != null) { { onCopyLink(lesson) } } else null,
             )
         }
     }
@@ -1777,6 +1779,38 @@ private fun LessonPathNode(
                             )
                             Text(
                                 Strings.shareToFeed(language),
+                                color         = color,
+                                fontWeight    = FontWeight.Bold,
+                                fontSize      = 8.5.sp,
+                                letterSpacing = 0.2.sp,
+                            )
+                        }
+                    }
+                }
+
+                // "LİNKİ KOPYALA" pill — tamamlanan dersler için, paylaş pill'inin yanında
+                if (isDone && onCopyLink != null) {
+                    Spacer(Modifier.height(5.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(color.copy(alpha = 0.15f))
+                            .border(1.dp, color.copy(alpha = 0.45f), RoundedCornerShape(20.dp))
+                            .clickable { onCopyLink() }
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.ContentCopy,
+                                contentDescription = null,
+                                tint     = color,
+                                modifier = Modifier.size(9.dp),
+                            )
+                            Text(
+                                Strings.copyLessonLink(language),
                                 color         = color,
                                 fontWeight    = FontWeight.Bold,
                                 fontSize      = 8.5.sp,
