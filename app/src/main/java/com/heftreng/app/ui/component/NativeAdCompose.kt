@@ -13,10 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.android.gms.ads.nativead.MediaView
-import com.google.android.gms.ads.AdLoader
-import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
-import com.google.android.gms.ads.nativead.NativeAdOptions
 import com.google.android.gms.ads.nativead.NativeAdView
 import com.heftreng.app.R
 import com.heftreng.app.ui.theme.HeftCard
@@ -121,11 +118,8 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
             it.endToEnd     = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
         }
 
-        // CENTER_CROP: içerik kartı tamamen kaplar, siyah kenar olmaz.
-        // FIT_CENTER aksine içerik kutuya sığdırılmaz, kesilerek doldurulur.
-        mediaView.setImageScaleType(com.google.android.gms.ads.nativead.MediaView.IMAGE_SCALE_TYPE_CENTER_CROP)
-
-        // Taşan içeriği kart köşesinden kliple — rounded corner ile uyumlu
+        // MediaView kendi aspect ratio'sunu korur.
+        // clipToOutline ile taşan içerik kart köşelerinden kırpılır — rounded corner bozulmaz.
         mediaView.clipToOutline = true
         mediaView.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
 
