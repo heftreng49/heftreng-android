@@ -107,11 +107,20 @@
             Default 0dp → görünmez. NativeAdViewCompose içinde mediaHeightDp parametresi
             bunu belirler. Bu sayede small/medium/large boyutu tek XML ile karşılanır.
         -->
+        <!--
+            MediaView: layout_height="wrap_content" — ConstraintLayout 0dp yüksekliği
+            top/bottom constraint olmadan sıfır hesaplar, kod tarafı set etse bile etkisiz.
+            wrap_content ile MediaView kendi içeriğine göre boyutlanır,
+            kod tarafından minHeight ile minimum yükseklik garantilenir.
+        -->
         <com.google.android.gms.ads.nativead.MediaView
             android:id="@+id/ad_media"
             android:layout_width="0dp"
-            android:layout_height="0dp"
+            android:layout_height="wrap_content"
+            android:minHeight="120dp"
             android:layout_marginTop="8dp"
+            android:scaleType="centerCrop"
+            android:clipToOutline="true"
             app:layout_constraintTop_toBottomOf="@id/ad_body"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"/>

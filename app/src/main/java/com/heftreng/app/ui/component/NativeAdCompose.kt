@@ -108,28 +108,15 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
     adView.mediaView = mediaView
     if (mediaHeightDp > 0 && nativeAd.mediaContent != null) {
         mediaView.mediaContent = nativeAd.mediaContent!!
-
-        // MATCH_PARENT garantili — layoutParams inflate sonrası null olsa bile çalışır
-        mediaView.layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
-            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-            (mediaHeightDp * dp).toInt()
-        ).also {
-            it.startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
-            it.endToEnd     = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
-        }
-
-        // MediaView kendi aspect ratio'sunu korur.
-        // clipToOutline ile taşan içerik kart köşelerinden kırpılır — rounded corner bozulmaz.
+        // XML'de wrap_content + minHeight=120dp → MediaView kendi boyutunu belirler.
+        // Kod tarafında sadece minHeight'ı boyuta göre güncelle; geri kalanı XML halleder.
+        mediaView.minimumHeight = (mediaHeightDp * dp).toInt()
         mediaView.clipToOutline = true
         mediaView.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
-
         mediaView.visibility = View.VISIBLE
     } else {
-        // mediaHeightDp==0 (SMALL) veya medya içerik yok → gizle
+        // SMALL veya medya yok → gizle
         mediaView.visibility = View.GONE
-        mediaView.layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
-            android.view.ViewGroup.LayoutParams.MATCH_PARENT, 0
-        )
     }
 
     adView.headlineView = adView.findViewById<TextView>(R.id.ad_headline).also {
