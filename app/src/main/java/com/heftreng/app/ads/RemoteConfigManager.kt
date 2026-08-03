@@ -46,9 +46,10 @@ class RemoteConfigManager @Inject constructor(
         // throttle'ımız) birbirinden habersiz farklı sürelerle çalışır ve biri
         // diğerini anlamsız kılar (biri kilitliyken diğeri gereksiz yere
         // "süresi doldu" sanıp fetch dener, SDK zaten cache'ten döner).
-        // GEÇİCİ: test aşaması için 1 saat. Testler bitince 12'ye geri dön.
-        // TODO(test-sonrası): FETCH_INTERVAL_HOURS = 12L yap.
-        private const val FETCH_INTERVAL_HOURS = 1L
+        // Remote Config fetch aralığı — Firebase Console'dan veya burada değiştirilebilir.
+        // 6 saat: günde 4 kez güncelleme kontrolü, Firebase ücretsiz kotasında rahat.
+        // Değiştirmek için sadece bu sabiti güncelle; CLIENT_THROTTLE_MS otomatik eşlenir.
+        private const val FETCH_INTERVAL_HOURS = 6L
         private const val FETCH_INTERVAL_PROD  = FETCH_INTERVAL_HOURS * 3_600L
         private const val FETCH_INTERVAL_DEBUG = 0L
 

@@ -72,6 +72,15 @@ class AdEngine(
         private const val STALE_AD_TIMEOUT_MS = 30 * 60_000L // 30 dakika
 
         /**
+         * ARKA PLAN GRACE PERİYODU (native temizlik).
+         * onPause her tetiklendiğinde (bildirim açma, ekran kilidi, başka uygulama)
+         * native reklamlar anında silinmez — 30 saniye beklenir.
+         * Kullanıcı bu süre içinde geri dönerse (cancelBackgroundRelease ile)
+         * temizlik iptal edilir, yeni istek atılmaz.
+         */
+        private const val BACKGROUND_GRACE_MS = 30_000L // 30 saniye
+
+        /**
          * SCROLL-OUT GRACE PERİYODU (native).
          * Kullanıcı bir native reklam pozisyonunu scroll ile geçince Composable
          * dispose olur. Anında imha etmek yerine bu kadar bekleriz — kullanıcı
@@ -397,12 +406,30 @@ class AdEngine(
     }
 
     /**
-     * Uygulama arka plana alındığında henüz gösterilmemiş native reklamları
-     * serbest bırakır — STALE_AD_TIMEOUT_MS'i beklemeden anında politika-uyumlu temizlik.
+     * Uygulama arka plana alındığında native reklamları 30 saniye sonra serbest bırakır.
+     * Kullanıcı bildirim açıp hemen geri dönerse (tipik senaryo) grace süresi
+     * dolmadan arka plana geçiş tetiklenir ve reklamlar korunur — yeni istek atılmaz.
+     * 30 saniye boyunca kullanıcı dönmezse reklamlar temizlenir.
      */
-    fun releaseUnseenNativesOnBackground() = releaseAllNatives()
+    private var backgroundReleaseJob: Job? = null
+
+    fun releaseUnseenNativesOnBackground() {
+        backgroundReleaseJob?.cancel()
+        backgroundReleaseJob = scope.launch {
+            delay(BACKGROUND_GRACE_MS)
+            releaseAllNatives()
+        }
+    }
+
+    /** Uygulama ön plana gelince arka planda başlayan temizlik iptal edilir. */
+    fun cancelBackgroundRelease() {
+        backgroundReleaseJob?.cancel()
+        backgroundReleaseJob = null
+    }
 
     fun destroyAll() {
+        backgroundReleaseJob?.cancel()
+        backgroundReleaseJob = null
         slots.values.forEach { slot ->
             slot.loadJob?.cancel()
             slot.staleJob?.cancel()

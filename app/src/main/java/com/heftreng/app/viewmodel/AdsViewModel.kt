@@ -398,6 +398,7 @@ class AdsViewModel @Inject constructor(
 
     // ── Lifecycle ────────────────────────────────────────────────────────
     fun onAppForeground() {
+        engine.cancelBackgroundRelease() // arka planda başlayan native temizliği iptal et
         viewModelScope.launch {
             if (!ConsentHelper.canRequestAds.value) return@launch
             engine.resumeAllBanners()
@@ -409,9 +410,10 @@ class AdsViewModel @Inject constructor(
 
     fun onAppBackground() {
         engine.pauseAllBanners()
-        engine.releaseUnseenNativesOnBackground()  // DÜZELTME: görünmemiş native'leri temizle
-        // Stale timeout (30dk) hâlâ aktif — ancak arka planda gereksiz bellek tutmamak için
-        // görünmemiş (PENDING) native'leri anında serbest bırakıyoruz.
+        // 30 saniye grace: bildirim/ekran kilidi gibi kısa arka plan geçişlerinde
+        // native'ler korunur. Kullanıcı geri dönerse onAppForeground() grace'i iptal eder.
+        // 30 saniye dolmadan kullanıcı dönmezse native'ler temizlenir.
+        engine.releaseUnseenNativesOnBackground()
     }
 
     override fun onCleared() {
