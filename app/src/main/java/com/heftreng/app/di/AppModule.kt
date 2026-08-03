@@ -95,18 +95,39 @@ object AppModule {
     fun provideFirebaseStorage(): FirebaseStorage = FirebaseStorage.getInstance()
 
     @Provides @Singleton
-    fun provideSupabaseClient(): SupabaseClient = createSupabaseClient(
+    fun provideSupabaseClient(@ApplicationContext context: Context): SupabaseClient = createSupabaseClient(
         supabaseUrl = BuildConfig.SUPABASE_URL,
         supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
     ) {
-        // Varsayılan 10s timeout ağ dalgalanmalarında crash yapıyordu → 30s'ye çıkarıldı
         httpEngine = OkHttp.create {
             config {
                 connectTimeout(30, TimeUnit.SECONDS)
                 readTimeout(30, TimeUnit.SECONDS)
                 writeTimeout(30, TimeUnit.SECONDS)
                 retryOnConnectionFailure(true)
+                // OkHttp disk cache — Supabase GET isteklerini yerel olarak cache'ler.
+                // Sunucu Cache-Control header'ı set etmese bile response'ları saklar.
+                // Bu sayede aynı sorgu 30 dk içinde tekrar çalışınca ağa gitmez.
+                // 20 MB yeterli; Supabase JSON response'ları küçüktür.
+                cache(okhttp3.Cache(
+                    directory = java.io.File(context.cacheDir, "supabase_http"),
+                    maxSize = 20L * 1024 * 1024 // 20 MB
+                ))
             }
+            // Supabase response'larına Cache-Control header'ı inject et.
+            // Postgrest GET sorguları idempotent — 5 dk cache güvenli.
+            addNetworkInterceptor(okhttp3.Interceptor { chain ->
+                val request = chain.request()
+                val response = chain.proceed(request)
+                // Sadece GET isteklerini cache'le (POST/PATCH/DELETE asla)
+                if (request.method == "GET") {
+                    response.newBuilder()
+                        .header("Cache-Control", "public, max-age=300") // 5 dk
+                        .build()
+                } else {
+                    response
+                }
+            })
         }
         install(Postgrest)
         install(Realtime)

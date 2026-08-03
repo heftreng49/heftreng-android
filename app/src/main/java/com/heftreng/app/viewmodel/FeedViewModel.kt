@@ -28,6 +28,9 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
 import com.heftreng.app.util.CacheEntry
 import javax.inject.Inject
+import dagger.hilt.android.qualifiers.ApplicationContext
+import android.content.Context
+import android.content.SharedPreferences
 
 @HiltViewModel
 class FeedViewModel @Inject constructor(
@@ -36,7 +39,13 @@ class FeedViewModel @Inject constructor(
     private val library  : LibraryRepository,
     private val supabase : SupabaseClient,
     private val quoteDao : com.heftreng.app.data.local.QuoteDao,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
+
+    // Streak tarihi prefs'te saklanır — her feed açılışında Firestore okuma yapmaz
+    private val streakPrefs: SharedPreferences by lazy {
+        appContext.getSharedPreferences("heft_streak", Context.MODE_PRIVATE)
+    }
 
     private val _posts    = MutableStateFlow<List<Post>>(emptyList())
     val posts = _posts.asStateFlow()
@@ -165,20 +174,21 @@ class FeedViewModel @Inject constructor(
     private val userCache = mutableMapOf<String, Pair<String, String>>()
 
     // coverImg Firestore'a zaten yazılmış post ID'leri — tekrar yazma döngüsünü önler
-    private val coverImgWrittenIds = mutableSetOf<String>()
+    // coverImg yazılmış post ID'leri — prefs'e persist edilir, uygulama kapanınca sıfırlanmaz
+    private val coverImgWrittenIds: MutableSet<String> by lazy {
+        streakPrefs.getStringSet("cover_img_written", emptySet())!!.toMutableSet()
+    }
 
     // user dökümanı bellek cache — aynı uid'yi tekrar Firestore'dan çekmez
     private val _userDocCache = mutableMapOf<String, Map<String, Any>>()
     private suspend fun cachedUserDoc(targetUid: String): Map<String, Any>? {
-        // Önce memory cache — aynı oturumda Firestore'a gitme
         _userDocCache[targetUid]?.let { return it }
         return try {
-            // Önce Firestore disk cache — 0 egress
             val d = try {
+                firestore.collection("users").document(targetUid).get(Source.SERVER).await().data
+            } catch (_: Exception) {
                 firestore.collection("users").document(targetUid).get(Source.CACHE).await().data
-            } catch (_: Exception) { null }
-            // Cache boşsa server'a git
-            ?: firestore.collection("users").document(targetUid).get(Source.SERVER).await().data
+            }
             if (d != null) _userDocCache[targetUid] = d
             d
         } catch (_: Exception) { null }
@@ -247,14 +257,15 @@ class FeedViewModel @Inject constructor(
         val myUid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             try {
-                // Gunde bir kez yaz — lastStreakDate bugunse atla
+                // Gunde bir kez yaz — lastStreakDate prefs'ten kontrol et (Firestore okuma yok)
                 val today = java.time.LocalDate.now().toString()
-                val userSnap = firestore.collection("users").document(myUid).get().await()
-                val lastDate = userSnap.getString("lastStreakDate") ?: ""
+                val lastDate = streakPrefs.getString("lastStreakDate_$myUid", "") ?: ""
                 if (lastDate == today) return@launch
 
                 library.recordDailyActivity(myUid)
                 val streak = library.computeStreak(myUid)
+                // Prefs'e kaydet — bir sonraki açılışta Firestore okuma yapmaz
+                streakPrefs.edit().putString("lastStreakDate_$myUid", today).apply()
                 firestore.collection("users").document(myUid)
                     .update(mapOf("streak" to streak, "lastStreakDate" to today))
 
@@ -607,8 +618,15 @@ class FeedViewModel @Inject constructor(
                         )
                     }
                     batch.commit().await()
-                    // Başarıyla yazılanları cache'e al — aynı oturumda tekrar yazma
+                    // Yazılanları prefs'e kaydet — uygulama kapanınca da sıfırlanmaz
                     postsToWrite.forEach { coverImgWrittenIds.add(it.id) }
+                    // Prefs boyutunu kontrol et — 500'den fazlaysa eskilerini temizle
+                    if (coverImgWrittenIds.size > 500) {
+                        val trimmed = coverImgWrittenIds.takeLast(300).toSet()
+                        coverImgWrittenIds.clear()
+                        coverImgWrittenIds.addAll(trimmed)
+                    }
+                    streakPrefs.edit().putStringSet("cover_img_written", coverImgWrittenIds.toSet()).apply()
                 } catch (_: Exception) {}
             }
         }
@@ -932,22 +950,15 @@ class FeedViewModel @Inject constructor(
                         filter { eq("comment_id", comment.id); eq("uid", uid) }
                     }
                 }
-                // Gerçek beğeni sayısını comment_likes'tan say ve feed_comments.likes_count'u güncelle
-                val realCount = try {
-                    supabase.postgrest["comment_likes"]
-                        .select { filter { eq("comment_id", comment.id) } }
-                        .decodeList<CommentLikeRow>().size
-                } catch (_: Exception) { -1 }
-                if (realCount >= 0) {
-                    try {
-                        supabase.postgrest["feed_comments"]
-                            .update(mapOf("likes_count" to realCount)) {
-                                filter { eq("id", comment.id) }
-                            }
-                    } catch (_: Exception) {}
-                    _comments.value = _comments.value.map {
-                        if (it.id == comment.id) it.copy(likesCount = realCount) else it
-                    }
+                // Optimistic UI — sunucu sayısını beklemeden anında göster
+                // Supabase DB trigger veya RLS zaten likes_count'u güncelliyor;
+                // ekstra SELECT + UPDATE gereksiz write/read üretiyordu — kaldırıldı.
+                val optimisticCount = if (nowLiked)
+                    (comment.likesCount + 1).coerceAtLeast(0)
+                else
+                    (comment.likesCount - 1).coerceAtLeast(0)
+                _comments.value = _comments.value.map {
+                    if (it.id == comment.id) it.copy(likesCount = optimisticCount) else it
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
