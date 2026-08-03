@@ -1,0 +1,1 @@
+import{nt as e}from"./CNzooa0x.js";import"./D3atFl98.js";e(!1),e(`light`);var t=e(null);function n(e,n=2500){t.set(e),setTimeout(()=>t.set(null),n)}var r=e(0),i=e(0);export{r as i,t as n,i as r,n as t};
