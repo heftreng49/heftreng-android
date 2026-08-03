@@ -114,7 +114,7 @@
     // currentUser değişince realtime listener'ları yeniden başlat
     const unsubStore = currentUser.subscribe(user => {
       // Giriş yapınca username'i Supabase'e yaz — profil linki çözümlemesi için
-      if (user?.uid && user?.displayName !== undefined) {
+      if (user?.uid) {
         const username = (user as any).username?.trim().toLowerCase() ?? '';
         if (username) {
           syncUsernameToSupabase(user.uid, username, user.displayName ?? '', user.photoURL ?? '').catch(() => {});

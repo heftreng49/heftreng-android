@@ -862,7 +862,7 @@
 
             <!-- ── Kart başlığı ── -->
             <div class="card-head">
-              <a href="/profile/{p.uid}" class="avatar-link" onclick={(e) => e.stopPropagation()}>
+              <a href="/profile/{p.username?.trim() || p.uid}" class="avatar-link" onclick={(e) => e.stopPropagation()}>
                 <div class="avatar-ring">
                   {#if p.photoURL}
                     <img src={p.photoURL} alt={p.displayName} class="avatar-img" />
@@ -872,7 +872,7 @@
                 </div>
               </a>
               <div class="meta">
-                <a href="/profile/{p.uid}" class="display-name" onclick={(e) => e.stopPropagation()}>{p.displayName ?? "Anonim"}</a>
+                <a href="/profile/{p.username?.trim() || p.uid}" class="display-name" onclick={(e) => e.stopPropagation()}>{p.displayName ?? "Anonim"}</a>
                 <div class="meta-row">
                   {#if p.username}<span class="username">@{p.username}</span><span class="dot">·</span>{/if}
                   <span class="time">{ago(p.ts)}</span>
@@ -1401,7 +1401,7 @@
         <p class="sheet-empty">Henüz takipçi yok.</p>
       {:else}
         {#each followersList as f}
-          <a href="/profile/{f.from_uid}" class="user-row" onclick={() => showFollowers = false}>
+          <a href="/profile/{f.from_name?.trim() ? '/profile/' + (f.from_username?.trim() || f.from_uid) : '/profile/' + f.from_uid}" class="user-row" onclick={() => showFollowers = false}>
             <div class="user-av">
               {#if f.from_photo}<img src={f.from_photo} alt={f.from_name} />{:else}<span>{(f.from_name ?? "?")[0].toUpperCase()}</span>{/if}
             </div>
@@ -1430,7 +1430,7 @@
         <p class="sheet-empty">Henüz takip edilen yok.</p>
       {:else}
         {#each followingList as f}
-          <a href="/profile/{f.target_uid}" class="user-row" onclick={() => showFollowing = false}>
+          <a href="/profile/{f.target_username?.trim() || f.target_uid}" class="user-row" onclick={() => showFollowing = false}>
             <div class="user-av">
               {#if f.target_photo}<img src={f.target_photo} alt={f.target_name} />{:else}<span>{(f.target_name ?? "?")[0].toUpperCase()}</span>{/if}
             </div>

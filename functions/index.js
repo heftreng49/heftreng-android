@@ -889,15 +889,14 @@ exports.onUserCreated = functions
       const photoUrl = snap?.data()?.photoURL || user.photoURL || "";
       const bio      = snap?.data()?.bio || "";
 
-      // username: Firestore'da hem 'username' hem 'usernameLower' olabilir
-      const username = snap?.data()?.username || snap?.data()?.usernameLower || "";
+      const username = (snap?.data()?.username || snap?.data()?.usernameLower || "").toLowerCase();
 
       const { error } = await getSupabaseAdmin().from("users").upsert({
         uid          : user.uid,
         display_name : displayName,
         photo_url    : photoUrl,
         bio          : bio,
-        username     : username.toLowerCase(),
+        username     : username,
         banned       : false,
         created_at   : new Date().toISOString(),
       }, { onConflict: "uid" });
