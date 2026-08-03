@@ -27,17 +27,15 @@
 
   onMount(async () => {
     loading = true;
-    try {
-      book = await fetchBookById(id);
-      const uid = $currentUser?.uid ?? null;
-      const [rawQuotes, rawReviews] = await Promise.all([
-        fetchQuotesByBook(id, book?.title),
-        fetchReviewsByBook(id),
-      ]);
-      quotes  = await hydrateQuoteLikes(rawQuotes, uid);
-      reviews = rawReviews;
-    } catch(e) { console.error('book detail load error:', e); }
-    finally { loading = false; }
+    book = await fetchBookById(id);
+    const uid = $currentUser?.uid ?? null;
+    const [rawQuotes, rawReviews] = await Promise.all([
+      fetchQuotesByBook(id, book?.title),
+      fetchReviewsByBook(id),
+    ]);
+    quotes  = await hydrateQuoteLikes(rawQuotes, uid);
+    reviews = rawReviews;
+    loading = false;
   });
 
   async function handleQuoteLike(q: BookQuote) {
@@ -133,7 +131,7 @@
         <div class="quote-list">
           {#each quotes as q (q.id)}
             <div class="quote-item">
-              <QuoteCard quoteText={q.text} bookName={q.bookTitle} authorName={q.authorName} coverImg={q.coverImg || book?.coverImg || ''} />
+              <QuoteCard quoteText={q.text} bookName={q.bookTitle} authorName={q.authorName} coverImg={q.coverImg} />
               <div class="quote-meta">
                 <a href="/profile/{q.uid}" class="quote-user">
                   <img src={q.userPhotoURL || '/placeholder.png'} alt={q.userDisplayName} class="mini-av" />
@@ -158,7 +156,7 @@
               <button class="star" class:filled={s <= reviewRating} onclick={() => reviewRating = s}>★</button>
             {/each}
           </div>
-          <textarea bind:value={reviewText} placeholder="İncelemenizi yazın…" rows="3" class="review-input"></textarea>
+          <textarea bind:value={reviewText} placeholder="İncelemenizi yazın…" rows="3" class="review-input" />
           <button class="submit-btn" disabled={submitting || !reviewText.trim()} onclick={submitReview}>
             {submitting ? 'Gönderiliyor…' : 'İnceleme Ekle'}
           </button>
