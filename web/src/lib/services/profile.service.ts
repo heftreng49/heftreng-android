@@ -203,13 +203,55 @@ export async function checkUsernameAvailable(username: string, excludeUid: strin
 // Android'in normalizeTurkish().lowercase() akışı) — o yüzden username_lower
 // kolonuna değil doğrudan username'e bakılıyor; username_lower yalnızca
 // Android'in kendi Firestore akışında dolduruluyor, web'de tutarlı değil.
+//
+// DÜZELTME: syncUsernameToSupabase sadece profil düzenleme sırasında çağrılıyor;
+// hiç düzenleme yapmamış kullanıcıların username'i Supabase'e yazılmamış olabilir.
+// Supabase'de bulunamazsa Firestore'da username/username_lower ile arama yapılır.
+// Bulunursa Supabase'e otomatik yazılır — bir sonraki link açılışında Supabase'den gelir.
 export async function resolveUsernameToUid(username: string): Promise<string | null> {
   const handle = username.trim().toLowerCase();
   if (!handle) return null;
   return getOrFetch(`username_to_uid_${handle}`, PROFILE_TTL_MS, async () => {
+    // 1. Supabase'den dene (hızlı yol)
     const { data } = await supabase.from('users')
       .select('uid').eq('username', handle).maybeSingle();
-    return data?.uid ?? null;
+    if (data?.uid) return data.uid;
+
+    // 2. Supabase'de yoksa Firestore'da ara (username veya username_lower kolonu)
+    try {
+      const firestoreSnap = await getDocs(
+        query(collection(db, 'users'), where('username_lower', '==', handle), limit(1))
+      );
+      if (!firestoreSnap.empty) {
+        const uid = firestoreSnap.docs[0].id;
+        const d   = firestoreSnap.docs[0].data();
+        // Supabase'e yaz — bir sonraki link açılışında artık Supabase'den gelir
+        supabase.from('users').upsert({
+          uid,
+          username     : d.username ?? handle,
+          display_name : d.displayName ?? d.name ?? '',
+          photo_url    : d.photoURL ?? '',
+        }).then(() => {});
+        return uid;
+      }
+      // username_lower yoksa displayName_lower veya username düz alanıyla dene
+      const snap2 = await getDocs(
+        query(collection(db, 'users'), where('username', '==', handle), limit(1))
+      );
+      if (!snap2.empty) {
+        const uid = snap2.docs[0].id;
+        const d   = snap2.docs[0].data();
+        supabase.from('users').upsert({
+          uid,
+          username     : handle,
+          display_name : d.displayName ?? d.name ?? '',
+          photo_url    : d.photoURL ?? '',
+        }).then(() => {});
+        return uid;
+      }
+    } catch (_) {}
+
+    return null;
   });
 }
 

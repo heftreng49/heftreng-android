@@ -4,6 +4,7 @@
   import { page } from '$app/stores';
   import { initAuthListener, signOut } from '$lib/services/auth.service';
   import { currentUser, authLoading } from '$lib/stores/auth';
+  import { syncUsernameToSupabase } from '$lib/services/profile.service';
   import { theme, applyTheme } from '$lib/store/theme';
   import { listenNotifications } from '$lib/services/notification.service';
   import {
@@ -112,6 +113,13 @@
 
     // currentUser değişince realtime listener'ları yeniden başlat
     const unsubStore = currentUser.subscribe(user => {
+      // Giriş yapınca username'i Supabase'e yaz — profil linki çözümlemesi için
+      if (user?.uid && user?.displayName !== undefined) {
+        const username = (user as any).username?.trim().toLowerCase() ?? '';
+        if (username) {
+          syncUsernameToSupabase(user.uid, username, user.displayName ?? '', user.photoURL ?? '').catch(() => {});
+        }
+      }
       unsubNotifs?.(); unsubNotifs = null;
       if (!user) { unreadNotifCount.set(0); stopConversationsListener(); return; }
 
@@ -220,7 +228,7 @@
 
     <!-- Profil özeti veya Giriş Yap -->
     {#if $currentUser}
-      <a href="/profile/{$currentUser.uid}" class="dr-profile" onclick={closeDrawer}>
+      <a href="/profile/{$currentUser.username?.trim() || $currentUser.uid}" class="dr-profile" onclick={closeDrawer}>
         <div class="dr-av">
           {#if $currentUser.photoURL}
             <img src={$currentUser.photoURL} alt="" />
@@ -391,7 +399,7 @@
         <span>{s.navKurdi($lang)}</span>
       </a>
 
-      <a href="/profile/{$currentUser.uid}" class="nav-item" class:active={isActive('/profile')} aria-label={s.navProfile($lang)}>
+      <a href="/profile/{$currentUser.username?.trim() || $currentUser.uid}" class="nav-item" class:active={isActive('/profile')} aria-label={s.navProfile($lang)}>
         {#if $currentUser.photoURL}
           <img src={$currentUser.photoURL} alt="" class="nav-avatar" class:active-av={isActive('/profile')} />
         {:else if isActive('/profile')}
