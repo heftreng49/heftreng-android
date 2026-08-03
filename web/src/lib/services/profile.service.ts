@@ -217,37 +217,25 @@ export async function resolveUsernameToUid(username: string): Promise<string | n
       .select('uid').eq('username', handle).maybeSingle();
     if (data?.uid) return data.uid;
 
-    // 2. Supabase'de yoksa Firestore'da ara (username veya username_lower kolonu)
+    // 2. Supabase'de yoksa Firestore'da ara
+    // NOT: Android 'usernameLower' yazıyor, web bazı yerlerde 'username_lower' — ikisini de dene
     try {
-      const firestoreSnap = await getDocs(
-        query(collection(db, 'users'), where('username_lower', '==', handle), limit(1))
-      );
-      if (!firestoreSnap.empty) {
-        const uid = firestoreSnap.docs[0].id;
-        const d   = firestoreSnap.docs[0].data();
-        // Supabase'e yaz — bir sonraki link açılışında artık Supabase'den gelir
-        supabase.from('users').upsert({
-          uid,
-          username     : d.username ?? handle,
-          display_name : d.displayName ?? d.name ?? '',
-          photo_url    : d.photoURL ?? '',
-        }).then(() => {});
-        return uid;
-      }
-      // username_lower yoksa displayName_lower veya username düz alanıyla dene
-      const snap2 = await getDocs(
-        query(collection(db, 'users'), where('username', '==', handle), limit(1))
-      );
-      if (!snap2.empty) {
-        const uid = snap2.docs[0].id;
-        const d   = snap2.docs[0].data();
-        supabase.from('users').upsert({
-          uid,
-          username     : handle,
-          display_name : d.displayName ?? d.name ?? '',
-          photo_url    : d.photoURL ?? '',
-        }).then(() => {});
-        return uid;
+      for (const field of ['usernameLower', 'username_lower', 'username']) {
+        const firestoreSnap = await getDocs(
+          query(collection(db, 'users'), where(field, '==', handle), limit(1))
+        );
+        if (!firestoreSnap.empty) {
+          const uid = firestoreSnap.docs[0].id;
+          const d   = firestoreSnap.docs[0].data();
+          // Supabase'e yaz — bir sonraki link açılışında artık Supabase'den gelir
+          supabase.from('users').upsert({
+            uid,
+            username     : d.username ?? handle,
+            display_name : d.displayName ?? d.name ?? '',
+            photo_url    : d.photoURL ?? '',
+          }).then(() => {});
+          return uid;
+        }
       }
     } catch (_) {}
 
