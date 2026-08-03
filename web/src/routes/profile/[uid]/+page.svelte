@@ -20,6 +20,7 @@
     fetchReadingList,
     updateProfile,
     checkUsernameAvailable,
+    resolveUsernameToUid,
     syncUsernameToSupabase,
     uploadAvatar,
     uploadCoverPhoto,
@@ -34,6 +35,7 @@
   import EmptyState    from "$lib/components/EmptyState.svelte";
   import PageTopBar    from "$lib/components/PageTopBar.svelte";
   import { ago }       from "$lib/utils/time";
+  import { showToast } from "$lib/stores/ui.store";
 
   let uid = $state("");
   $effect(() => {
@@ -166,11 +168,36 @@
     }
   });
 
+  // Android'in ProfileScreens.kt copyProfileLink'i ile birebir aynı format:
+  // kullanıcı adı varsa onunla, yoksa uid ile — sabit kanonik domain (platformdan
+  // bağımsız, her zaman aynı paylaşılabilir link üretilsin diye location.origin
+  // yerine hardcoded).
+  async function copyProfileLink() {
+    const handle = user?.username?.trim();
+    const link = handle
+      ? `https://heftreng.onrender.com/profile/${handle}`
+      : `https://heftreng.onrender.com/profile/${uid}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      showToast("Link kopyalandı!");
+    } catch {
+      showToast("Kopyalanamadı.");
+    }
+  }
+
   async function loadUser() {
     loading = true;
     try {
       const u = await fetchProfile(uid);
-      if (!u) { notFound = true; return; }
+      if (!u) {
+        // Route parametresi gerçek bir uid değil olabilir — Android paylaşım
+        // linkleri kullanıcı adıyla üretiliyor (/profile/{username}).
+        // Kullanıcı adı olarak çöz; bulunursa uid'i güncelle — bu $effect'i
+        // yeniden tetikler ve loadUser() gerçek uid ile tekrar çalışır.
+        const resolvedUid = await resolveUsernameToUid(uid);
+        if (resolvedUid && resolvedUid !== uid) { uid = resolvedUid; return; }
+        notFound = true; return;
+      }
       user = u;
       isPrivate = u.isPrivate ?? false;
     } catch(e) { notFound = true; }
@@ -627,11 +654,17 @@
               </button>
             {:else}
               <button class="btn-edit" onclick={openEdit}>Profili Düzenle</button>
+              <button class="btn-icon" aria-label="Profil linkini kopyala" onclick={copyProfileLink}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
               <a href="/settings" class="btn-icon" aria-label="Ayarlar">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
               </a>
             {/if}
           {:else}
+            <button class="btn-icon" aria-label="Profil linkini kopyala" onclick={copyProfileLink}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
             <a href="/messages?uid={uid}" class="btn-icon" aria-label="Mesaj">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             </a>

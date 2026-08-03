@@ -194,6 +194,25 @@ export async function checkUsernameAvailable(username: string, excludeUid: strin
   return !data;
 }
 
+// ── Profil linki çözümleme (Android: /profile/{username|uid}) ────────────────
+// Android paylaşım linkleri kullanıcı adı varsa onu, yoksa uid'i kullanır
+// (bkz. ProfileScreens.kt copyProfileLink). Web tarafında route parametresi
+// önce gerçek bir uid olarak denenir (fetchProfile); bulunamazsa buradan
+// kullanıcı adı olarak çözülür. Her iki platform da username'i zaten küçük
+// harfle Supabase'in `username` kolonuna yazıyor (bkz. syncUsernameToSupabase,
+// Android'in normalizeTurkish().lowercase() akışı) — o yüzden username_lower
+// kolonuna değil doğrudan username'e bakılıyor; username_lower yalnızca
+// Android'in kendi Firestore akışında dolduruluyor, web'de tutarlı değil.
+export async function resolveUsernameToUid(username: string): Promise<string | null> {
+  const handle = username.trim().toLowerCase();
+  if (!handle) return null;
+  return getOrFetch(`username_to_uid_${handle}`, PROFILE_TTL_MS, async () => {
+    const { data } = await supabase.from('users')
+      .select('uid').eq('username', handle).maybeSingle();
+    return data?.uid ?? null;
+  });
+}
+
 export async function syncUsernameToSupabase(uid: string, username: string, displayName: string, photoURL: string): Promise<void> {
   await supabase.from('users').upsert({ uid, username, display_name: displayName, photo_url: photoURL });
 }
