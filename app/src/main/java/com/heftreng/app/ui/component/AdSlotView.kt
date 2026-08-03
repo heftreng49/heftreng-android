@@ -99,19 +99,17 @@ private fun NativeSlotContent(
     adsVm    : AdsViewModel,
     modifier : Modifier,
 ) {
-    val adCardHeight = 250.dp
     val isLoaded    by adsVm.nativeLoadedFlow(placement.slotKey).collectAsState()
     val isExhausted by adsVm.nativeExhaustedFlow(placement.slotKey).collectAsState()
     val nativeAd = if (isLoaded) adsVm.cachedNative(placement.slotKey) else null
 
-    // Banner'daki ile aynı mantık: no-fill kesinleştiyse (artık retry de yok,
-    // bkz. AdEngine.loadOneNative) kalıcı shimmer yerine alanı hiç göstermiyoruz.
     if (isExhausted && nativeAd == null) return
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = adCardHeight)
+            // heightIn(min) KALDIRILDI — sabit 250dp MediaView'u boş alana zorluyordu.
+            // Kart artık reklamın kendi aspect ratio'suna göre otomatik boyutlanır.
             .animateContentSize(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)),
     ) {
         if (nativeAd != null) {
@@ -120,12 +118,15 @@ private fun NativeSlotContent(
                 "large"  -> NativeAdSize.LARGE
                 else     -> NativeAdSize.SMALL
             }
-            NativeAdViewCompose(nativeAd = nativeAd, modifier = Modifier.fillMaxWidth(), adSize = adSize)
+            // fillMaxWidth KALDIRILDI — XML'deki layout_marginHorizontal="12dp" artık geçerli.
+            // NativeAdView kendi margin ve corner radius'unu taşıyor.
+            NativeAdViewCompose(nativeAd = nativeAd, modifier = Modifier.wrapContentSize(), adSize = adSize)
         } else {
+            // Shimmer: reklam yüklenirken placeholder — sabit yükseklik burada uygun.
             AdShimmerCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(adCardHeight)
+                    .height(200.dp)
                     .padding(horizontal = 12.dp, vertical = 4.dp),
             )
         }
