@@ -106,11 +106,7 @@ private fun NativeSlotContent(
     if (isExhausted && nativeAd == null) return
 
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            // heightIn(min) KALDIRILDI — sabit 250dp MediaView'u boş alana zorluyordu.
-            // Kart artık reklamın kendi aspect ratio'suna göre otomatik boyutlanır.
-            .animateContentSize(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)),
+        modifier = modifier.fillMaxWidth(),
     ) {
         if (nativeAd != null) {
             val adSize = when (placement.size.lowercase()) {
