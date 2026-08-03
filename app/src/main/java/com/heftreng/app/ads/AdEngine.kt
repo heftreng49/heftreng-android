@@ -143,6 +143,9 @@ class AdEngine(
         .setVideoOptions(VideoOptions.Builder().setStartMuted(true).build())
         .setRequestMultipleImages(false)
         .setAdChoicesPlacement(NativeAdOptions.ADCHOICES_TOP_RIGHT)
+        // CENTER_CROP düzgün çalışsın diye AdMob'a "her oranı kabul et" diyoruz.
+        // Aksi hâlde AdMob sabit oranda medya gönderir, MediaView boşluk bırakır.
+        .setMediaAspectRatio(NativeAdOptions.NATIVE_MEDIA_ASPECT_RATIO_ANY)
         .build()
 
     private fun backoffDelay(retry: Int): Long =

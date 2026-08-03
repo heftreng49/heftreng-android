@@ -13,7 +13,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.android.gms.ads.nativead.MediaView
+import com.google.android.gms.ads.AdLoader
+import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
+import com.google.android.gms.ads.nativead.NativeAdOptions
 import com.google.android.gms.ads.nativead.NativeAdView
 import com.heftreng.app.R
 import com.heftreng.app.ui.theme.HeftCard
@@ -21,6 +24,21 @@ import com.heftreng.app.ui.theme.Divider
 
 /**
  * NativeAdViewCompose — sadeleştirilmiş, tek XML layout kullanan versiyon.
+ *
+ * GÖRSEL DOLGU (CENTER_CROP):
+ *   MediaView içeriği kartı tamamen kaplar, siyah kenar oluşmaz.
+ *   Bunun çalışması için AdLoader tarafında şu NativeAdOptions gerekir:
+ *
+ *     val options = NativeAdOptions.Builder()
+ *         .setMediaAspectRatio(NativeAdOptions.NATIVE_MEDIA_ASPECT_RATIO_ANY)
+ *         .setRequestMultipleImages(false)
+ *         .build()
+ *     AdLoader.Builder(context, unitId)
+ *         .withNativeAdOptions(options)
+ *         ...
+ *
+ *   AdEngine.kt → requestNative() içinde bu options set edilmeli.
+ *   Aksi hâlde AdMob standart boyutta medya gönderir, CENTER_CROP görsel kaliteyi düşürebilir.
  *
  * ESKİ DURUM:
  *   when (adSize) { "medium" -> R.layout.ad_medium_template; "large" -> R.layout.ad_large_template; else -> R.layout.ad_small_template }
@@ -93,8 +111,8 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
     adView.mediaView = mediaView
     if (mediaHeightDp > 0 && nativeAd.mediaContent != null) {
         mediaView.mediaContent = nativeAd.mediaContent!!
-        // layoutParams null gelebilir (inflate sonrası ölçüm henüz olmadıysa).
-        // Her durumda yeni ConstraintLayout.LayoutParams üret — width MATCH_PARENT garantili.
+
+        // MATCH_PARENT garantili — layoutParams inflate sonrası null olsa bile çalışır
         mediaView.layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
             android.view.ViewGroup.LayoutParams.MATCH_PARENT,
             (mediaHeightDp * dp).toInt()
@@ -102,8 +120,15 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
             it.startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
             it.endToEnd     = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
         }
-        // İçeriği alana sığdır — zoom değil, letterbox (siyah kenar önlenir)
-        mediaView.setImageScaleType(com.google.android.gms.ads.nativead.MediaView.IMAGE_SCALE_TYPE_FIT_CENTER)
+
+        // CENTER_CROP: içerik kartı tamamen kaplar, siyah kenar olmaz.
+        // FIT_CENTER aksine içerik kutuya sığdırılmaz, kesilerek doldurulur.
+        mediaView.setImageScaleType(com.google.android.gms.ads.nativead.MediaView.IMAGE_SCALE_TYPE_CENTER_CROP)
+
+        // Taşan içeriği kart köşesinden kliple — rounded corner ile uyumlu
+        mediaView.clipToOutline = true
+        mediaView.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+
         mediaView.visibility = View.VISIBLE
     } else {
         // mediaHeightDp==0 (SMALL) veya medya içerik yok → gizle
