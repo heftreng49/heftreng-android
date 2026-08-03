@@ -6,7 +6,9 @@
   import { currentUser, authLoading } from '$lib/stores/auth';
   import { theme, applyTheme } from '$lib/store/theme';
   import { listenNotifications } from '$lib/services/notification.service';
-  import { listenConversations } from '$lib/services/message.service';
+  import {
+    conversations, startConversationsListener, stopConversationsListener,
+  } from '$lib/stores/conversations.store';
   import { getTheme } from '$lib/services/settings.service';
   import { unreadNotifCount, unreadMsgCount } from '$lib/stores/ui.store';
   import { lang, strings as s } from '$lib/i18n/strings';
@@ -51,7 +53,7 @@
   }
 
   let unsubNotifs: (() => void) | null = null;
-  let unsubMsgs:   (() => void) | null = null;
+  let unsubConvBadge: (() => void) | null = null;
 
   onMount(() => {
     // Tema
@@ -71,21 +73,28 @@
 
     const unsubAuth = initAuthListener();
 
+    // Konuşma listesi tek yerden (conversations.store) geliyor; rozet
+    // sayısını da aynı veriden türetiyoruz — ikinci bir listener açmıyoruz.
+    unsubConvBadge = conversations.subscribe(convs => {
+      unreadMsgCount.set(convs.reduce((s: number, cv: any) => s + (cv.unread ?? 0), 0));
+    });
+
     // currentUser değişince realtime listener'ları yeniden başlat
     const unsubStore = currentUser.subscribe(user => {
       unsubNotifs?.(); unsubNotifs = null;
-      unsubMsgs?.();   unsubMsgs   = null;
-      if (!user) { unreadNotifCount.set(0); unreadMsgCount.set(0); return; }
+      if (!user) { unreadNotifCount.set(0); stopConversationsListener(); return; }
 
       unsubNotifs = listenNotifications(user.uid, (notifs) => {
         unreadNotifCount.set(notifs.filter((n: any) => !n.read).length);
       });
-      unsubMsgs = listenConversations(user.uid, (convs) => {
-        unreadMsgCount.set(convs.reduce((s: number, cv: any) => s + (cv.unread ?? 0), 0));
-      });
+      startConversationsListener(user.uid);
     });
 
-    return () => { unsubAuth(); unsubStore(); unsubNotifs?.(); unsubMsgs?.(); mq.removeEventListener('change', onSystemChange); };
+    return () => {
+      unsubAuth(); unsubStore(); unsubNotifs?.(); unsubConvBadge?.();
+      stopConversationsListener();
+      mq.removeEventListener('change', onSystemChange);
+    };
   });
 
   // Auth durumuna göre drawer nav öğeleri

@@ -3,15 +3,25 @@
   import { get }                             from 'svelte/store';
   import { currentUser }                     from '$lib/stores/auth';
   import { requireAuth }                     from '$lib/utils/auth.guard';
-  import { listenConversations, setPresence } from '$lib/services/message.service';
+  import { setPresence }                     from '$lib/services/message.service';
+  import {
+    conversations, conversationsLoading, conversationsError,
+    startConversationsListener,
+  } from '$lib/stores/conversations.store';
   import { lang, strings as s }             from '$lib/i18n/strings';
   import ConversationRow                     from '$lib/components/ConversationRow.svelte';
   import Skeleton                            from '$lib/components/Skeleton.svelte';
 
-  let convs      = $state<any[]>([]);
-  let loading    = $state(true);
-  let error      = $state('');
-  let search     = $state('');
+  let search = $state('');
+
+  // Liste artık paylaşımlı conversations.store'dan geliyor — bu sayfa
+  // kendi Firestore listener'ını AÇMIYOR; +layout.svelte'de (rozet için)
+  // zaten çalışan tek listener'ı yeniden kullanıyor. startConversationsListener
+  // idempotent olduğundan (aynı kullanıcı için zaten aktifse hiçbir şey
+  // yapmaz), burada güvenlik amaçlı çağırmak ikinci bir bağlantı açmaz.
+  let convs   = $derived($conversations);
+  let loading = $derived($conversationsLoading);
+  let hasErr  = $derived($conversationsError);
 
   const filtered = $derived(
     search.trim()
@@ -19,37 +29,24 @@
       : convs
   );
 
-  let unsub: (() => void) | null = null;
-
   onMount(async () => {
     const ok = await requireAuth();
     if (!ok) return;
 
     const uid = get(currentUser)?.uid;
-    if (!uid) { loading = false; return; }
+    if (!uid) return;
 
     setPresence(uid, true);
-
-    // fetch yerine listener — Android gibi realtime, hata da yakalanır
-    unsub = listenConversations(
-      uid,
-      (data) => {
-        convs   = data;
-        loading = false;
-        error   = '';
-      },
-      (err) => {
-        console.error('listenConversations hata:', err);
-        error   = $lang === 'ku' ? 'Peyam neyên barkirin.' : 'Mesajlar yüklenemedi.';
-        loading = false;
-      },
-    );
+    startConversationsListener(uid);
   });
 
   onDestroy(() => {
-    unsub?.();
     const uid = get(currentUser)?.uid;
     if (uid) setPresence(uid, false);
+    // NOT: listener'ı burada durdurmuyoruz — +layout.svelte rozet sayısı
+    // için aynı listener'a hâlâ ihtiyaç duyuyor, bu sayfadan çıkınca kapatmak
+    // rozeti de öldürür. Listener kullanıcı çıkış yapınca layout tarafından
+    // (stopConversationsListener) sonlandırılıyor.
   });
 </script>
 
@@ -88,10 +85,13 @@
       {/each}
     </div>
 
-  {:else if error}
+  {:else if hasErr}
     <div class="msg-error">
-      <p>{error}</p>
-      <button onclick={() => { loading = true; error = ''; unsub?.(); const uid = get(currentUser)?.uid; if (uid) unsub = listenConversations(uid, d => { convs=d; loading=false; error=''; }, e => { error='Hata'; loading=false; }); }} class="retry-btn">{s.retry($lang)}</button>
+      <p>{$lang === 'ku' ? 'Peyam neyên barkirin.' : 'Mesajlar yüklenemedi.'}</p>
+      <button
+        onclick={() => { const uid = get(currentUser)?.uid; if (uid) startConversationsListener(uid, true); }}
+        class="retry-btn"
+      >{s.retry($lang)}</button>
     </div>
 
   {:else if filtered.length === 0}
