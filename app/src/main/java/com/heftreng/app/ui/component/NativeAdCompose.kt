@@ -108,9 +108,8 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
     adView.mediaView = mediaView
     if (mediaHeightDp > 0 && nativeAd.mediaContent != null) {
         mediaView.mediaContent = nativeAd.mediaContent!!
-        // XML'de wrap_content + minHeight=120dp → MediaView kendi boyutunu belirler.
-        // Kod tarafında sadece minHeight'ı boyuta göre güncelle; geri kalanı XML halleder.
-        mediaView.minimumHeight = (mediaHeightDp * dp).toInt()
+        // XML wrap_content → MediaView kendi aspect ratio'suna göre boyutlanır.
+        // Kod tarafında hiç müdahale yok; siyah boşluk oluşmaz.
         mediaView.clipToOutline = true
         mediaView.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
         mediaView.visibility = View.VISIBLE
