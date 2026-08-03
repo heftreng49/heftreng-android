@@ -32,6 +32,10 @@ class HeftrangMessagingService : FirebaseMessagingService() {
         // MessagesScreen açıkken "true" set eder → mesaj bildirimi bastırılır
         @Volatile var isMessagesScreenActive: Boolean = false
 
+        // NotificationsViewModel'e push sinyali göndermek için weak reference
+        // (Service ViewModel'i doğrudan tutamaz — memory leak riski)
+        var notifViewModelRef: java.lang.ref.WeakReference<com.heftreng.app.viewmodel.NotificationsViewModel>? = null
+
         // Kullanıcı henüz giriş yapmamışsa token'ı burada sakla;
         // AuthViewModel login sonrasında bu değeri okuyup Firestore'a yazar.
         private const val PREFS_NAME  = "hf_prefs"
@@ -226,6 +230,13 @@ class HeftrangMessagingService : FirebaseMessagingService() {
 
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(notifId, notificationBuilder.build())
+
+        // Bildirim ekranı açıksa NotificationsViewModel'i tazele —
+        // FCM data-only payload Firestore disk cache'i güncellemez,
+        // bu yüzden NotificationsViewModel'e manuel refresh sinyali göndeririz.
+        if (type != "message") {
+            notifViewModelRef?.get()?.onPushReceived()
+        }
     }
 
     // ── Bildirim kanallarını oluştur ──────────────────────────────────────────

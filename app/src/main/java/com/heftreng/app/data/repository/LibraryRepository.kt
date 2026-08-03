@@ -147,9 +147,15 @@ data class ReadingStatusRow(
 
 @Singleton
 class LibraryRepository @Inject constructor(
-    private val supabase : SupabaseClient,
-    private val auth     : FirebaseAuth,
+    private val supabase   : SupabaseClient,
+    private val auth       : FirebaseAuth,
+    private val bookDao    : com.heftreng.app.data.local.BookDao,
+    private val authorDao  : com.heftreng.app.data.local.AuthorDao,
+    private val quoteDao   : com.heftreng.app.data.local.QuoteDao,
 ) {
+    // ── Room cache TTL — her liste 30 dakikada bir Supabase'den yenilenir ────
+    private val ROOM_CACHE_TTL_MS = 30 * 60 * 1000L  // 30 dakika
+
     // ── Kısayol ───────────────────────────────────────────────────────────────
     private val db get() = supabase.postgrest
 
@@ -163,17 +169,43 @@ class LibraryRepository @Inject constructor(
 
     // ── Authors ───────────────────────────────────────────────────────────────
 
-    suspend fun getAuthors(limit: Int = 50): List<AuthorRow> =
-        db["authors"].select {
-            order("name", Order.ASCENDING)
-            limit(limit.toLong())
-        }.decodeList()
+    suspend fun getAuthors(limit: Int = 50): List<AuthorRow> {
+        // Room cache'ten dön — 30 dk dolmadıysa Supabase'e gitme
+        val cached = authorDao.getCachedAuthors(limit)
+        val cacheAge = cached.minOfOrNull { it.cachedAt } ?: 0L
+        if (cached.isNotEmpty() && System.currentTimeMillis() - cacheAge < ROOM_CACHE_TTL_MS) {
+            return cached.map { it.toRow() }
+        }
+        // Cache boş veya eski — Supabase'den çek ve Room'a kaydet
+        return try {
+            val rows = db["authors"].select {
+                order("name", Order.ASCENDING)
+                limit(limit.toLong())
+            }.decodeList<AuthorRow>()
+            authorDao.replaceAll(rows.map { it.toCached() })
+            rows
+        } catch (e: Exception) {
+            // Network yoksa Room'daki eski veriyi kullan
+            cached.map { it.toRow() }
+        }
+    }
 
-    suspend fun getAuthor(id: String): AuthorRow? =
-        db["authors"].select {
-            filter { eq("id", id) }
-            limit(1)
-        }.decodeSingleOrNull()
+    suspend fun getAuthor(id: String): AuthorRow? {
+        val cached = authorDao.getCachedAuthor(id)
+        if (cached != null && System.currentTimeMillis() - cached.cachedAt < ROOM_CACHE_TTL_MS) {
+            return cached.toRow()
+        }
+        return try {
+            val row = db["authors"].select {
+                filter { eq("id", id) }
+                limit(1)
+            }.decodeSingleOrNull<AuthorRow>()
+            row?.let { authorDao.insert(it.toCached()) }
+            row
+        } catch (e: Exception) {
+            cached?.toRow()
+        }
+    }
 
     suspend fun searchAuthors(query: String): List<AuthorRow> =
         db["authors"].select {
@@ -248,11 +280,23 @@ class LibraryRepository @Inject constructor(
 
     // ── Library Books ─────────────────────────────────────────────────────────
 
-    suspend fun getBooks(limit: Int = 50): List<LibraryBookRow> =
-        db["library_books"].select {
-            order("created_at", Order.DESCENDING)
-            limit(limit.toLong())
-        }.decodeList()
+    suspend fun getBooks(limit: Int = 50): List<LibraryBookRow> {
+        val cached = bookDao.getCachedBooks(limit)
+        val cacheAge = cached.minOfOrNull { it.cachedAt } ?: 0L
+        if (cached.isNotEmpty() && System.currentTimeMillis() - cacheAge < ROOM_CACHE_TTL_MS) {
+            return cached.map { it.toRow() }
+        }
+        return try {
+            val rows = db["library_books"].select {
+                order("created_at", Order.DESCENDING)
+                limit(limit.toLong())
+            }.decodeList<LibraryBookRow>()
+            bookDao.replaceAll(rows.map { it.toCached() })
+            rows
+        } catch (e: Exception) {
+            cached.map { it.toRow() }
+        }
+    }
 
     suspend fun getBooksByAuthor(authorId: String): List<LibraryBookRow> =
         db["library_books"].select {
@@ -260,11 +304,22 @@ class LibraryRepository @Inject constructor(
             order("created_at", Order.DESCENDING)
         }.decodeList()
 
-    suspend fun getBook(id: String): LibraryBookRow? =
-        db["library_books"].select {
-            filter { eq("id", id) }
-            limit(1)
-        }.decodeSingleOrNull()
+    suspend fun getBook(id: String): LibraryBookRow? {
+        val cached = bookDao.getCachedBook(id)
+        if (cached != null && System.currentTimeMillis() - cached.cachedAt < ROOM_CACHE_TTL_MS) {
+            return cached.toRow()
+        }
+        return try {
+            val row = db["library_books"].select {
+                filter { eq("id", id) }
+                limit(1)
+            }.decodeSingleOrNull<LibraryBookRow>()
+            row?.let { bookDao.insert(it.toCached()) }
+            row
+        } catch (e: Exception) {
+            cached?.toRow()
+        }
+    }
 
     suspend fun upsertBook(row: LibraryBookRow) {
         db["library_books"].upsert(row)
@@ -389,12 +444,28 @@ class LibraryRepository @Inject constructor(
      *  bu ekran zaten "son eklenenler" akışı, kesin toplam sayı garantisi yok. */
     suspend fun getRecentQuotes(limit: Int = 20, offset: Int = 0): List<BookQuoteRow> {
         val banned = getBannedUids()
-        return db["book_quotes"].select {
-            filter { eq("moderation_status", "active") }
-            order("created_at", Order.DESCENDING)
-            limit(limit.toLong())
-            if (offset > 0) range(offset.toLong(), (offset + limit - 1).toLong())
-        }.decodeList<BookQuoteRow>().filter { it.uid !in banned }
+        // Sadece ilk sayfa (offset=0) cache'lenir — sayfalama devamı her zaman Supabase'den
+        if (offset == 0) {
+            val cached = quoteDao.getCachedQuotes(limit)
+            val cacheAge = cached.minOfOrNull { it.cachedAt } ?: 0L
+            if (cached.isNotEmpty() && System.currentTimeMillis() - cacheAge < ROOM_CACHE_TTL_MS) {
+                return cached.filter { it.uid !in banned }.map { it.toRow() }
+            }
+        }
+        return try {
+            val rows = db["book_quotes"].select {
+                filter { eq("moderation_status", "active") }
+                order("created_at", Order.DESCENDING)
+                limit(limit.toLong())
+                if (offset > 0) range(offset.toLong(), (offset + limit - 1).toLong())
+            }.decodeList<BookQuoteRow>().filter { it.uid !in banned }
+            // Sadece ilk sayfayı kaydet
+            if (offset == 0) quoteDao.replaceAll(rows.map { it.toCached() })
+            rows
+        } catch (e: Exception) {
+            if (offset == 0) quoteDao.getCachedQuotes(limit).filter { it.uid !in banned }.map { it.toRow() }
+            else emptyList()
+        }
     }
 
     suspend fun insertQuote(row: BookQuoteRow) {
@@ -986,3 +1057,101 @@ class LibraryRepository @Inject constructor(
         return existing + newOnes
     }
 }
+
+// ── Row ↔ CachedEntity dönüşümleri ───────────────────────────────────────────
+
+private fun AuthorRow.toCached() = com.heftreng.app.data.local.CachedAuthor(
+    id            = id,
+    name          = name,
+    bio           = bio,
+    photoUrl      = photoUrl,
+    birthYear     = birthYear,
+    nationality   = nationality,
+    bookCount     = bookCount,
+    quoteCount    = quoteCount,
+    reviewCount   = reviewCount,
+    followerCount = followerCount,
+    cachedAt      = System.currentTimeMillis(),
+)
+
+private fun com.heftreng.app.data.local.CachedAuthor.toRow() = AuthorRow(
+    id            = id,
+    name          = name,
+    bio           = bio,
+    photoUrl      = photoUrl,
+    birthYear     = birthYear,
+    nationality   = nationality,
+    bookCount     = bookCount,
+    quoteCount    = quoteCount,
+    reviewCount   = reviewCount,
+    followerCount = followerCount,
+)
+
+private fun LibraryBookRow.toCached() = com.heftreng.app.data.local.CachedBook(
+    id          = id,
+    title       = title,
+    authorId    = authorId ?: "",
+    authorName  = authorName,
+    coverImg    = coverImg,
+    genre       = genre,
+    publishYear = publishYear,
+    synopsis    = synopsis,
+    pageCount   = pageCount,
+    quoteCount  = quoteCount,
+    reviewCount = reviewCount,
+    avgRating   = avgRating,
+    cachedAt    = System.currentTimeMillis(),
+)
+
+private fun com.heftreng.app.data.local.CachedBook.toRow() = LibraryBookRow(
+    id          = id,
+    title       = title,
+    authorId    = authorId,
+    authorName  = authorName,
+    coverImg    = coverImg,
+    genre       = genre,
+    publishYear = publishYear,
+    synopsis    = synopsis,
+    pageCount   = pageCount,
+    quoteCount  = quoteCount,
+    reviewCount = reviewCount,
+    avgRating   = avgRating,
+    likesCount  = 0,  // CachedBook'ta likesCount yok — varsayılan 0, gerçek değer Supabase'den gelir
+)
+
+private fun BookQuoteRow.toCached() = com.heftreng.app.data.local.CachedQuote(
+    id              = id,
+    uid             = uid,
+    displayName     = userDisplayName,
+    photoURL        = userPhotoUrl,
+    quoteText       = text,
+    bookName        = bookTitle,
+    authorName      = authorName,
+    likesCount      = likesCount,
+    coverImg        = coverImg,
+    libraryBookId   = bookId,
+    libraryAuthorId = authorId ?: "",
+    feedPostId      = feedPostId,
+    tsMillis        = try {
+        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+            .parse(createdAt)?.time ?: 0L
+    } catch (_: Exception) { 0L },
+    cachedAt        = System.currentTimeMillis(),
+)
+
+private fun com.heftreng.app.data.local.CachedQuote.toRow() = BookQuoteRow(
+    id              = id,
+    bookId          = libraryBookId,
+    authorId        = libraryAuthorId,
+    bookTitle       = bookName,
+    authorName      = authorName,
+    text            = quoteText,
+    uid             = uid,
+    userDisplayName = displayName,
+    userPhotoUrl    = photoURL,
+    feedPostId      = feedPostId,
+    likesCount      = likesCount,
+    coverImg        = coverImg,
+    createdAt       = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+        .format(java.util.Date(tsMillis)),
+)

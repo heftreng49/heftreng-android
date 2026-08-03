@@ -950,16 +950,8 @@ class FeedViewModel @Inject constructor(
                         filter { eq("comment_id", comment.id); eq("uid", uid) }
                     }
                 }
-                // Optimistic UI — sunucu sayısını beklemeden anında göster
-                // Supabase DB trigger veya RLS zaten likes_count'u güncelliyor;
-                // ekstra SELECT + UPDATE gereksiz write/read üretiyordu — kaldırıldı.
-                val optimisticCount = if (nowLiked)
-                    (comment.likesCount + 1).coerceAtLeast(0)
-                else
-                    (comment.likesCount - 1).coerceAtLeast(0)
-                _comments.value = _comments.value.map {
-                    if (it.id == comment.id) it.copy(likesCount = optimisticCount) else it
-                }
+                // Optimistic update zaten yukarıda (satır 921) uygulandı.
+                // Sunucu işlemi başarılı — ekstra UI güncellemesi gerekmez.
             } catch (e: Exception) { e.printStackTrace() }
         }
     }

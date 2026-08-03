@@ -64,6 +64,12 @@ class NotificationsViewModel @Inject constructor(
         }
     }
 
+    /** FCM push gelince çağır — cache'i bypass ederek server'dan taze veri çeker */
+    fun onPushReceived() {
+        lastServerFetchMs = 0L  // TTL sıfırla — bir sonraki load() server'a gider
+        load()
+    }
+
     fun load() {
         val uid = auth.currentUser?.uid ?: return
         if (_notifications.value.isEmpty()) _loading.value = true
