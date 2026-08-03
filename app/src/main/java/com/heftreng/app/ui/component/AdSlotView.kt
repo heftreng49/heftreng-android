@@ -116,7 +116,13 @@ private fun NativeSlotContent(
             }
             // fillMaxWidth KALDIRILDI — XML'deki layout_marginHorizontal="12dp" artık geçerli.
             // NativeAdView kendi margin ve corner radius'unu taşıyor.
-            NativeAdViewCompose(nativeAd = nativeAd, modifier = Modifier.wrapContentSize(), adSize = adSize)
+            NativeAdViewCompose(
+                nativeAd = nativeAd,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                adSize = adSize,
+            )
         } else {
             // Shimmer: reklam yüklenirken placeholder — sabit yükseklik burada uygun.
             AdShimmerCard(

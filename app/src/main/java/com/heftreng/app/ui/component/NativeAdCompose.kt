@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.constraintlayout.widget.ConstraintSet
 import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
@@ -108,11 +110,23 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
     adView.mediaView = mediaView
     if (mediaHeightDp > 0 && nativeAd.mediaContent != null) {
         mediaView.mediaContent = nativeAd.mediaContent!!
-        // XML'de layout_constraintDimensionRatio="16:9" ile boyut sabitlendi.
-        // Kod tarafında hiç layoutParams müdahalesi yok — XML hallediyor.
         mediaView.clipToOutline = true
         mediaView.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
         mediaView.visibility = View.VISIBLE
+
+        // Reklamın gerçek aspect ratio'sunu oku (yatay: ~1.78, dikey: ~0.56 vb.)
+        // ConstraintSet ile MediaView'un ratio'sunu anında güncelle — wrap_content
+        // döngüsü olmadan tek ölçüm geçişinde doğru boyut hesaplanır.
+        val ratio: Float = nativeAd.mediaContent!!.aspectRatio
+        val safeRatio = if (ratio > 0f) ratio else 1.78f // fallback 16:9
+        val parent = mediaView.parent as? ConstraintLayout
+        if (parent != null) {
+            val cs = ConstraintSet()
+            cs.clone(parent)
+            // "W,w:h" → genişlik sabit, yüksekliği ratio'ya göre hesapla
+            cs.setDimensionRatio(mediaView.id, "W,${safeRatio}:1")
+            cs.applyTo(parent)
+        }
     } else {
         mediaView.visibility = View.GONE
     }
