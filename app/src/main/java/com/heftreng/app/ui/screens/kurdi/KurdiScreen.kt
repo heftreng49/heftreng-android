@@ -37,6 +37,8 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import com.heftreng.app.utils.ShareTarget
 import com.heftreng.app.utils.shareBitmap
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
@@ -543,6 +545,15 @@ fun KurdiScreen(
                 adsVm           = adsVm,
                 onNext   = { vm.getNextLesson()?.let { vm.openLesson(it.id) } },
                 onOpen   = { lessonId -> vm.openLesson(lessonId) },
+                onCopyLink = { lesson ->
+                    val link = "https://heftreng.onrender.com/kurdi/lesson/${lesson.id}"
+                    android.content.ClipData.newPlainText("link", link).let { clip ->
+                        (androidx.core.content.ContextCompat.getSystemService(
+                            context, android.content.ClipboardManager::class.java
+                        ))?.setPrimaryClip(clip)
+                    }
+                    vm.showToast(Strings.linkCopied(language))
+                },
                 onShare  = { lesson ->
                     feedVm.repostKfLesson(
                         lessonId    = lesson.id,
@@ -1110,6 +1121,7 @@ private fun UnitsTab(
     onOpen          : (String) -> Unit,
     onLockedClick   : (String) -> Unit = {},
     onShare         : ((KfLesson) -> Unit)? = null,
+    onCopyLink      : ((KfLesson) -> Unit)? = null,
 ) {
     when {
         loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1233,6 +1245,7 @@ private fun UnitsTab(
                             onOpen          = onOpen,
                             onLockedClick   = onLockedClick,
                             onShare         = onShare,
+                onCopyLink      = onCopyLink,
                         )
                     }
                 }
@@ -1520,6 +1533,7 @@ private fun LessonPathNode(
     canWatchAd  : Boolean = false,
     onClick     : () -> Unit,
     onShare     : (() -> Unit)? = null,
+    onCopyLink  : (() -> Unit)? = null,
 ) {
     val ku = language == "ku"
     var showUnlockDialog by remember { mutableStateOf(false) }
@@ -3185,6 +3199,15 @@ private fun GrammarRuleCard(
                                 }
                             },
                             actions = {
+                                // Link kopyala
+                                val clipMgr = LocalClipboardManager.current
+                                IconButton(onClick = {
+                                    val link = "https://heftreng.onrender.com/kurdi/grammar/${rule.id}"
+                                    clipMgr.setText(AnnotatedString(link))
+                                    onShareResult(Strings.linkCopied(language))
+                                }) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = Strings.copyGrammarLink(language), tint = accentColor, modifier = Modifier.size(18.dp))
+                                }
                                 // Feed'de paylaş
                                 IconButton(onClick = {
                                     feedVm.repostGrammarRule(

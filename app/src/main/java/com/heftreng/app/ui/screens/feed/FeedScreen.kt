@@ -1749,14 +1749,15 @@ fun PostCard(
                     )
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     DropdownMenuItem(
-                        text        = { Text(if (ku) "ID'ya Kopî Bike" else "Gönderi ID'sini Kopyala", color = OnBackground) },
+                        text        = { Text(Strings.copyPostLink(language), color = OnBackground) },
                         leadingIcon = { Icon(Icons.Default.ContentCopy, null, tint = Muted) },
                         onClick     = {
                             menuExpanded = false
-                            clipboard.setText(AnnotatedString("#${post.id}"))
+                            val link = "https://heftreng.onrender.com/post/${post.id}"
+                            clipboard.setText(AnnotatedString(link))
                             android.widget.Toast.makeText(
                                 ctxForCopy,
-                                if (ku) "ID hate kopîkirin" else "Gönderi ID'si kopyalandı",
+                                Strings.linkCopied(language),
                                 android.widget.Toast.LENGTH_SHORT,
                             ).show()
                         },

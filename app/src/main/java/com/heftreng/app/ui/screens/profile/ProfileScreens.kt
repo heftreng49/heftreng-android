@@ -36,6 +36,8 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.debounce
 import com.heftreng.app.utils.openUrl
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import java.net.URLEncoder
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
@@ -132,6 +134,8 @@ fun ProfileScreen(
 
     val isMe      = uid == "me" || uid == vm.myUid
     val targetUid = if (uid == "me") vm.myUid else uid
+    val clipboard = LocalClipboardManager.current
+    val ctx       = androidx.compose.ui.platform.LocalContext.current
     val ku = language == "ku"
 
     DisposableEffect(targetUid) {
@@ -248,6 +252,19 @@ fun ProfileScreen(
                 },
                 actions = {
                     if (isMe) {
+                        val clipboardMe = LocalClipboardManager.current
+                        val ctxMe = androidx.compose.ui.platform.LocalContext.current
+                        IconButton(onClick = {
+                            val username = user?.username?.takeIf { it.isNotBlank() }
+                            val link = if (username != null)
+                                "https://heftreng.onrender.com/profile/$username"
+                            else
+                                "https://heftreng.onrender.com/profile/${targetUid}"
+                            clipboardMe.setText(AnnotatedString(link))
+                            android.widget.Toast.makeText(ctxMe, Strings.linkCopied(language), android.widget.Toast.LENGTH_SHORT).show()
+                        }) {
+                            Icon(Icons.Default.ContentCopy, null, tint = Muted)
+                        }
                         IconButton(onClick = { navController.navigate(Screen.Settings.route) }) {
                             Icon(Icons.Default.Settings, null, tint = Muted)
                         }
@@ -263,6 +280,21 @@ fun ProfileScreen(
                                 onDismissRequest = { menuExpanded = false },
                                 modifier         = Modifier.background(HeftSurface),
                             ) {
+                                DropdownMenuItem(
+                                    text    = { Text(Strings.copyProfileLink(language), color = OnBackground) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        val username = user?.username?.takeIf { it.isNotBlank() }
+                                        val link = if (username != null)
+                                            "https://heftreng.onrender.com/profile/$username"
+                                        else
+                                            "https://heftreng.onrender.com/profile/${targetUid}"
+                                        clipboard.setText(AnnotatedString(link))
+                                        android.widget.Toast.makeText(ctx, Strings.linkCopied(language), android.widget.Toast.LENGTH_SHORT).show()
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.ContentCopy, null, tint = Muted, modifier = Modifier.size(18.dp)) },
+                                )
+                                androidx.compose.material3.HorizontalDivider(color = Divider, thickness = 0.5.dp)
                                 DropdownMenuItem(
                                     text    = { Text(Strings.blockUser(language), color = Color(0xFFEF4444)) },
                                     onClick = {
