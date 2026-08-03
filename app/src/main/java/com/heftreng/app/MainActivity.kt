@@ -28,6 +28,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.heftreng.app.util.AppLifecycleObserver
 import com.heftreng.app.util.ConsentHelper
+import com.heftreng.app.util.DeepLinkHandler
 import com.google.android.gms.ads.MobileAds
 import com.heftreng.app.navigation.HeftrangNavHost
 import androidx.compose.ui.graphics.Color
@@ -166,6 +167,12 @@ class MainActivity : ComponentActivity() {
 
         // Bildirimden gelen intent'i al
         pendingNavTarget = intent?.getStringExtra("navigate_to")
+
+        // Web'den / App Link'ten gelen URL'yi route'a çevir
+        // (bildirim extra'sı yoksa URL'ye bak — ikisi aynı anda gelmez)
+        if (pendingNavTarget == null) {
+            pendingNavTarget = DeepLinkHandler.resolve(intent)
+        }
 
         // ÇÖZÜLDÜ (Play Console crash raporu — Redmi Note 8/MIUI'de HER
         // SEFERİNDE tekrarlanan kalıcı çökme): androidx.activity.compose'un
@@ -334,6 +341,13 @@ class MainActivity : ComponentActivity() {
         // Uygulama açıkken gelen bildirim tıklaması
         intent.getStringExtra("navigate_to")?.let { target ->
             pendingNavTarget = target
+            return
+        }
+        // Uygulama açıkken tıklanan App Link / Deep Link
+        DeepLinkHandler.resolve(intent)?.let { route ->
+            pendingNavTarget = route
+            // NavController'a anında ilet (NavHost zaten ayağa kalkmış)
+            // pendingNavTarget compose tarafında LaunchedEffect ile izleniyor
         }
     }
 

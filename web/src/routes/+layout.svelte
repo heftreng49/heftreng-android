@@ -15,6 +15,36 @@
 
   let { children } = $props();
 
+  // ── "Uygulamada Aç" banner ─────────────────────────────────────────────────
+  // Android mobil tarayıcısında uygulama yüklüyse intent:// şemasıyla açar,
+  // yoksa Play Store'a yönlendirir. iOS ve masaüstü tarayıcılarda gösterilmez.
+  let showAppBanner = $state(false);
+  let appBannerDismissed = $state(false);
+
+  onMount(() => {
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const dismissed = sessionStorage.getItem('hf_banner_dismissed') === '1';
+    showAppBanner = isAndroid && !dismissed;
+  });
+
+  function dismissBanner() {
+    appBannerDismissed = true;
+    showAppBanner = false;
+    sessionStorage.setItem('hf_banner_dismissed', '1');
+  }
+
+  function openInApp() {
+    // intent:// şeması — uygulama varsa açar, yoksa Play Store'a yönlendirir
+    const path = window.location.pathname + window.location.search;
+    const intentUrl =
+      `intent://heftreng.onrender.com${path}#Intent;` +
+      `scheme=https;` +
+      `package=com.heftreng.app;` +
+      `S.browser_fallback_url=https://play.google.com/store/apps/details?id=com.heftreng.app;` +
+      `end`;
+    window.location.href = intentUrl;
+  }
+
   const hideNavRoutes = ['/login', '/register'];
   let showBottomNav = $derived(!hideNavRoutes.includes($page.url.pathname));
 
@@ -127,6 +157,23 @@
     { key: 'mono',     label: s.themeMonochrome($lang),color: '#444444' },
   ]);
 </script>
+
+<!-- "Uygulamada Aç" banner — yalnızca Android mobil tarayıcıda görünür -->
+{#if showAppBanner && !appBannerDismissed}
+  <div class="app-banner">
+    <button class="app-banner-close" onclick={dismissBanner} aria-label="Kapat">✕</button>
+    <div class="app-banner-info">
+      <div class="app-banner-icon">H</div>
+      <div>
+        <div class="app-banner-title">Heftreng</div>
+        <div class="app-banner-sub">{$lang === 'ku' ? 'Di sepanê de veke' : 'Uygulamada daha iyi deneyim'}</div>
+      </div>
+    </div>
+    <button class="app-banner-btn" onclick={openInApp}>
+      {$lang === 'ku' ? 'Veke' : 'Aç'}
+    </button>
+  </div>
+{/if}
 
 <!-- Global header (drawer açma + logo) -->
 {#if showBottomNav}
@@ -363,6 +410,40 @@
 {/if}
 
 <style>
+/* ── "Uygulamada Aç" Banner ───────────────────────────────────── */
+.app-banner {
+  position: sticky; top: 0; z-index: 200;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--divider);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.app-banner-close {
+  background: none; border: none; font-size: 14px;
+  color: var(--muted); cursor: pointer; padding: 4px; line-height: 1;
+  flex-shrink: 0;
+}
+.app-banner-info {
+  display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
+}
+.app-banner-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: var(--primary); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 900; flex-shrink: 0;
+}
+.app-banner-title { font-size: 13px; font-weight: 700; color: var(--on-bg); }
+.app-banner-sub   { font-size: 11px; color: var(--muted); }
+.app-banner-btn {
+  padding: 8px 16px; border-radius: 99px;
+  background: var(--primary); color: #fff;
+  border: none; font-size: 13px; font-weight: 700;
+  cursor: pointer; flex-shrink: 0; font-family: inherit;
+  transition: opacity 0.15s;
+}
+.app-banner-btn:hover { opacity: 0.88; }
+
 /* Auth loading */
 .auth-loading-screen {
   min-height: 100dvh; display: flex;

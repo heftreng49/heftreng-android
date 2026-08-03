@@ -7,10 +7,10 @@ import android.net.Uri
  * Web URL'sini veya heftreng:// URI'sini NavHost route string'ine çevirir.
  *
  * Desteklenen URL'ler:
- *   https://heftreng.web.app/post/ID       → "post/ID"
- *   https://heftreng.web.app/profile/UID   → "profile/UID"
- *   https://heftreng.web.app/library/book/ID → "library/book/ID"
- *   heftreng://app/post/ID                 → "post/ID"  (eski custom scheme)
+ *   https://heftreng.onrender.com/post/ID         → "post/ID"
+ *   https://heftreng.onrender.com/profile/UID     → "profile/UID"
+ *   https://heftreng.onrender.com/library/book/ID → "library/book/ID"
+ *   heftreng://app/post/ID                        → "post/ID"  (eski custom scheme)
  *
  * Kullanım (MainActivity.onCreate ve onNewIntent içinde):
  *   val route = DeepLinkHandler.resolve(intent)
@@ -18,7 +18,7 @@ import android.net.Uri
  */
 object DeepLinkHandler {
 
-    private const val WEB_HOST = "heftreng.web.app"
+    private const val WEB_HOST = "heftreng.onrender.com"
 
     /** Intent'ten NavHost route string'i üretir. Tanınmayan link için null. */
     fun resolve(intent: Intent?): String? {
@@ -30,7 +30,7 @@ object DeepLinkHandler {
         }
     }
 
-    // https://heftreng.web.app/post/abc123  →  "post/abc123"
+    // https://heftreng.onrender.com/post/abc123  →  "post/abc123"
     private fun resolveWeb(uri: Uri): String? {
         if (uri.host != WEB_HOST) return null
         val segments = uri.pathSegments  // ["post", "abc123"]

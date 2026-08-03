@@ -2,17 +2,17 @@
  * deeplink.ts — Heftreng web ↔ Android derin bağlantı yardımcısı.
  *
  * Web URL'si aynı zamanda Android App Link olarak çalışır:
- *   https://heftreng.web.app/post/ID  →  uygulama yüklüyse doğrudan açar
- *   https://heftreng.web.app/post/ID  →  uygulama yoksa web'i gösterir
+ *   https://heftreng.onrender.com/post/ID  →  uygulama yüklüyse doğrudan açar
+ *   https://heftreng.onrender.com/post/ID  →  uygulama yoksa web'i gösterir
  *
  * KURULUM NOTU:
- *   Android tarafında AndroidManifest.xml'e https App Link eklenmeli (aşağıda belirtildi).
- *   web/public/.well-known/assetlinks.json dosyası Firebase Hosting'de yayınlanmalı.
- *   firebase.json'a /.well-known/ için header eklenmeli (aşağıda).
+ *   Android tarafında AndroidManifest.xml'e https App Link eklendi (autoVerify=true).
+ *   web/public/.well-known/assetlinks.json dosyası Render.com'da yayınlanmalı.
+ *   SvelteKit static adapter kullanıyorsanız public/ klasörü otomatik serve edilir.
  */
 
-/** Uygulamanın Firebase Hosting adresi */
-export const WEB_BASE = 'https://heftreng.web.app';
+/** Uygulamanın web adresi */
+export const WEB_BASE = 'https://heftreng.onrender.com';
 
 /** Web URL'sinden Android deep link URL'si üret (paylaşım için) */
 export function shareUrl(path: string): string {

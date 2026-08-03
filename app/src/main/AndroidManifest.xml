@@ -88,12 +88,25 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Deep link: heftreng://app/post/ID -->
+            <!-- Deep link: heftreng://app/post/ID (eski custom scheme — geriye uyum) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="heftreng" android:host="app" />
+            </intent-filter>
+
+            <!--
+                Android App Link — https://heftreng.onrender.com/post/ID vb.
+                Uygulama yüklüyse tarayıcı açılmaz, doğrudan uygulama açılır.
+                autoVerify="true" → Android açılışta .well-known/assetlinks.json
+                dosyasını doğrular; doğrulama geçerse tarayıcı seçme diyalogu çıkmaz.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="heftreng.onrender.com" />
             </intent-filter>
         </activity>
 
