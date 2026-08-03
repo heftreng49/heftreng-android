@@ -93,15 +93,24 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
     adView.mediaView = mediaView
     if (mediaHeightDp > 0 && nativeAd.mediaContent != null) {
         mediaView.mediaContent = nativeAd.mediaContent!!
-        mediaView.layoutParams = mediaView.layoutParams?.apply {
-            height = (mediaHeightDp * dp).toInt()
-            width  = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+        // layoutParams null gelebilir (inflate sonrası ölçüm henüz olmadıysa).
+        // Her durumda yeni ConstraintLayout.LayoutParams üret — width MATCH_PARENT garantili.
+        mediaView.layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            (mediaHeightDp * dp).toInt()
+        ).also {
+            it.startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+            it.endToEnd     = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
         }
+        // İçeriği alana sığdır — zoom değil, letterbox (siyah kenar önlenir)
+        mediaView.setImageScaleType(com.google.android.gms.ads.nativead.MediaView.IMAGE_SCALE_TYPE_FIT_CENTER)
         mediaView.visibility = View.VISIBLE
     } else {
-        // mediaHeightDp==0 (SMALL) veya medya içerik yok → gizle ve 0dp yap
+        // mediaHeightDp==0 (SMALL) veya medya içerik yok → gizle
         mediaView.visibility = View.GONE
-        mediaView.layoutParams = mediaView.layoutParams?.apply { height = 0 }
+        mediaView.layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT, 0
+        )
     }
 
     adView.headlineView = adView.findViewById<TextView>(R.id.ad_headline).also {
