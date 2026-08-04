@@ -126,8 +126,19 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
         // wrap_content ile yüksekliği genişliğe oranla hesapla
         // ConstraintSet kaldırıldı — layout_height="wrap_content" + setAspectRatio yeterli.
         // MediaView, video/görsel yüklenince kendi boyutunu doğru raporlar.
-        val screenWidthPx = context.resources.displayMetrics.widthPixels - (24 * dp).toInt()
-        val targetHeightPx = (screenWidthPx / safeRatio).toInt()
+        val screenWidthPx  = context.resources.displayMetrics.widthPixels - (24 * dp).toInt()
+        val screenHeightPx = context.resources.displayMetrics.heightPixels
+        val rawHeightPx    = (screenWidthPx / safeRatio).toInt()
+
+        // Güvenlik sınırları:
+        // • Yatay reklam (ratio ~1.78): yükseklik ~200dp — sorun yok
+        // • Dikey reklam (ratio ~0.56): yükseklik ~600dp+ olabilir — ekranı kaplar
+        // • MAX: ekran yüksekliğinin %55'i — kullanıcı altındaki içeriği görebilir
+        // • MIN: 120dp — çok küçük medya okunaksız olur
+        val maxHeightPx = (screenHeightPx * 0.55f).toInt()
+        val minHeightPx = (120 * dp).toInt()
+        val targetHeightPx = rawHeightPx.coerceIn(minHeightPx, maxHeightPx)
+
         mediaView.layoutParams = mediaView.layoutParams?.also {
             it.height = targetHeightPx
             it.width  = android.view.ViewGroup.LayoutParams.MATCH_PARENT
