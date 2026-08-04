@@ -111,18 +111,21 @@
             wrap_content ile MediaView kendi içeriğine göre boyutlanır,
             kod tarafından minHeight ile minimum yükseklik garantilenir.
         -->
+        <!--
+            MediaView: layout_height="wrap_content" — içerik aspect ratio'sunu
+            kod tarafı (populateAd) belirler. Sabit ratio kaldırıldı çünkü
+            yatay reklamlar (16:9) ve dikey reklamlar (9:16) farklı yükseklik ister.
+            wrap_content + setAspectRatio (kod tarafı) = siyah kenar yok.
+        -->
         <com.google.android.gms.ads.nativead.MediaView
             android:id="@+id/ad_media"
             android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:minWidth="120dp"
-            android:minHeight="120dp"
+            android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:clipToOutline="true"
             app:layout_constraintTop_toBottomOf="@id/ad_body"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintDimensionRatio="H,1:1"/>
+            app:layout_constraintEnd_toEndOf="parent"/>
 
         <!--
             Barrier: MediaView GONE olduğunda buton ad_body'ye yapışır.

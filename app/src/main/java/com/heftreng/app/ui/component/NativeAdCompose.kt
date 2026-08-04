@@ -3,6 +3,7 @@ package com.heftreng.app.ui.component
 import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
@@ -12,8 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.constraintlayout.widget.ConstraintSet
 import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
@@ -105,28 +104,37 @@ private fun applyTheme(view: NativeAdView, bg: Color, border: Color) {
 private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: Int, context: android.content.Context) {
     val dp = context.resources.displayMetrics.density
 
-    // MediaView: yüksekliği dinamik olarak set et
+    // ── MediaView: aspect ratio'ya göre dinamik boyutlandırma ────────────────
+    // Sorun: XML'deki sabit ratio (1:1) yatay ve dikey reklamlarda siyah kenar
+    // oluşturuyordu. Çözüm: wrap_content + setAspectRatio ile MediaView kendi
+    // gerçek boyutuna göre yüksekliğini belirler.
     val mediaView = adView.findViewById<MediaView>(R.id.ad_media)
     adView.mediaView = mediaView
+
     if (mediaHeightDp > 0 && nativeAd.mediaContent != null) {
-        mediaView.mediaContent = nativeAd.mediaContent!!
+        val mediaContent = nativeAd.mediaContent!!
+        mediaView.mediaContent = mediaContent
         mediaView.clipToOutline = true
         mediaView.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+        mediaView.setImageScaleType(ImageView.ScaleType.FIT_CENTER)
         mediaView.visibility = View.VISIBLE
 
-        // Reklamın gerçek aspect ratio'sunu oku (yatay: ~1.78, dikey: ~0.56 vb.)
-        // ConstraintSet ile MediaView'un ratio'sunu anında güncelle — wrap_content
-        // döngüsü olmadan tek ölçüm geçişinde doğru boyut hesaplanır.
-        val ratio: Float = nativeAd.mediaContent!!.aspectRatio
-        val safeRatio = if (ratio > 0f) ratio else 1.78f // fallback 16:9
-        val parent = mediaView.parent as? ConstraintLayout
-        if (parent != null) {
-            val cs = ConstraintSet()
-            cs.clone(parent)
-            // "W,w:h" → genişlik sabit, yüksekliği ratio'ya göre hesapla
-            cs.setDimensionRatio(mediaView.id, "W,${safeRatio}:1")
-            cs.applyTo(parent)
-        }
+        // Reklamın aspect ratio'sunu oku (yatay ~1.78, dikey ~0.56, kare ~1.0)
+        val ratio = mediaContent.aspectRatio
+        val safeRatio = if (ratio > 0f) ratio else 1.78f
+
+        // wrap_content ile yüksekliği genişliğe oranla hesapla
+        // ConstraintSet kaldırıldı — layout_height="wrap_content" + setAspectRatio yeterli.
+        // MediaView, video/görsel yüklenince kendi boyutunu doğru raporlar.
+        val screenWidthPx = context.resources.displayMetrics.widthPixels - (24 * dp).toInt()
+        val targetHeightPx = (screenWidthPx / safeRatio).toInt()
+        mediaView.layoutParams = mediaView.layoutParams?.also {
+            it.height = targetHeightPx
+            it.width  = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+        } ?: android.view.ViewGroup.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            targetHeightPx,
+        )
     } else {
         mediaView.visibility = View.GONE
     }

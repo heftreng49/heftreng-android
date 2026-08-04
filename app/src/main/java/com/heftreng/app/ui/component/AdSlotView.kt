@@ -109,13 +109,17 @@ private fun NativeSlotContent(
         modifier = modifier.fillMaxWidth(),
     ) {
         if (nativeAd != null) {
-            val adSize = when (placement.size.lowercase()) {
-                "medium" -> NativeAdSize.MEDIUM
-                "large"  -> NativeAdSize.LARGE
-                else     -> NativeAdSize.SMALL
+            // Reklamın aspect ratio'sunu kontrol et — yatay mı dikey mi?
+            // Yatay (landscape): ratio > 1.0 → LARGE boyut uygun (geniş medya)
+            // Dikey (portrait) : ratio < 1.0 → MEDIUM boyut (daha kısa yükseklik)
+            // Kare             : ratio ~1.0  → MEDIUM
+            val mediaRatio = nativeAd.mediaContent?.aspectRatio ?: 1.78f
+            val adSize = when {
+                placement.size.lowercase() == "small" -> NativeAdSize.SMALL
+                mediaRatio > 1.2f -> NativeAdSize.LARGE    // yatay reklam
+                mediaRatio < 0.8f -> NativeAdSize.MEDIUM   // dikey reklam
+                else              -> NativeAdSize.MEDIUM   // kare/belirsiz
             }
-            // fillMaxWidth KALDIRILDI — XML'deki layout_marginHorizontal="12dp" artık geçerli.
-            // NativeAdView kendi margin ve corner radius'unu taşıyor.
             NativeAdViewCompose(
                 nativeAd = nativeAd,
                 modifier = Modifier
