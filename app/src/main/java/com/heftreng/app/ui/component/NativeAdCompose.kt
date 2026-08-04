@@ -122,35 +122,40 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
         val ratio = mediaContent.aspectRatio
         val safeRatio = if (ratio > 0f) ratio else 1.78f
 
-        // Yatay: FIT_CENTER — video tüm alanı doldurur, kırpılmaz
-        // Dikey: CENTER_CROP — sol/sağ siyah kenar oluşmaması için hafif kırp
-        val scaleType = if (safeRatio < 1.0f) ImageView.ScaleType.CENTER_CROP
-                        else                   ImageView.ScaleType.FIT_CENTER
-        mediaView.setImageScaleType(scaleType)
-
-        // wrap_content ile yüksekliği genişliğe oranla hesapla
-        // ConstraintSet kaldırıldı — layout_height="wrap_content" + setAspectRatio yeterli.
-        // MediaView, video/görsel yüklenince kendi boyutunu doğru raporlar.
+        // MediaView'da video scale type programatik değiştirilemiyor (Google kısıtlaması).
+        // Çözüm: dikey reklamlarda genişliği de aspect ratio'ya göre hesapla.
+        // Yatay (ratio > 1.0): tam genişlik, yükseklik orandan hesaplanır
+        // Dikey (ratio < 1.0): önce maxHeight belirlenir, genişlik = height * ratio
         val screenWidthPx  = context.resources.displayMetrics.widthPixels - (24 * dp).toInt()
         val screenHeightPx = context.resources.displayMetrics.heightPixels
         val rawHeightPx    = (screenWidthPx / safeRatio).toInt()
+        val maxHeightPx    = (screenHeightPx * 0.55f).toInt()
+        val minHeightPx    = (120 * dp).toInt()
 
-        // Güvenlik sınırları:
-        // • Yatay reklam (ratio ~1.78): yükseklik ~200dp — sorun yok
-        // • Dikey reklam (ratio ~0.56): yükseklik ~600dp+ olabilir — ekranı kaplar
-        // • MAX: ekran yüksekliğinin %55'i — kullanıcı altındaki içeriği görebilir
-        // • MIN: 120dp — çok küçük medya okunaksız olur
-        val maxHeightPx = (screenHeightPx * 0.55f).toInt()
-        val minHeightPx = (120 * dp).toInt()
-        val targetHeightPx = rawHeightPx.coerceIn(minHeightPx, maxHeightPx)
+        val targetWidthPx: Int
+        val targetHeightPx: Int
 
-        mediaView.layoutParams = mediaView.layoutParams?.also {
+        if (safeRatio < 1.0f) {
+            // Dikey reklam: yüksekliği maxHeight'a sabitle, genişliği orandan türet
+            // Böylece video tam oturur, sol/sağ siyah kenar oluşmaz
+            val clampedHeight = rawHeightPx.coerceIn(minHeightPx, maxHeightPx)
+            targetHeightPx = clampedHeight
+            targetWidthPx  = (clampedHeight * safeRatio).toInt()
+        } else {
+            // Yatay reklam: tam genişlik
+            targetWidthPx  = screenWidthPx
+            targetHeightPx = rawHeightPx.coerceIn(minHeightPx, maxHeightPx)
+        }
+
+        mediaView.layoutParams = (mediaView.layoutParams ?: android.widget.FrameLayout.LayoutParams(
+            targetWidthPx, targetHeightPx
+        )).also {
+            it.width  = targetWidthPx
             it.height = targetHeightPx
-            it.width  = android.view.ViewGroup.LayoutParams.MATCH_PARENT
-        } ?: android.view.ViewGroup.LayoutParams(
-            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-            targetHeightPx,
-        )
+            if (it is android.widget.FrameLayout.LayoutParams) {
+                it.gravity = android.view.Gravity.CENTER_HORIZONTAL
+            }
+        }
     } else {
         mediaView.visibility = View.GONE
     }
