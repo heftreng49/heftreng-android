@@ -106,6 +106,31 @@ class ProfileViewModel @Inject constructor(
     val myUid get() = auth.currentUser?.uid ?: ""
 
     fun load(uid: String, preloadedUser: User? = null, forceRefresh: Boolean = false) {
+        // uid parametresi UID veya username olabilir (web deeplink'ten gelince username gelir)
+        // UID: 20-36 karakter alfanümerik (Firebase UID formatı)
+        // Username: genellikle daha kısa, harf/rakam/nokta/alt çizgi içerir
+        val looksLikeUid = uid == "me" || (uid.length in 20..36 && uid.all { it.isLetterOrDigit() })
+        if (!looksLikeUid && uid.isNotBlank()) {
+            // Username gibi görünüyor — Firestore'da username ile ara, UID'e çevir
+            viewModelScope.launch {
+                try {
+                    val snap = firestore.collection("users")
+                        .whereEqualTo("username", uid)
+                        .limit(1)
+                        .get(Source.SERVER).await()
+                    val resolvedUid = snap.documents.firstOrNull()?.getString("uid")
+                    if (resolvedUid != null) {
+                        load(resolvedUid, preloadedUser, forceRefresh)
+                    } else {
+                        _error.value = "@$uid bulunamadı"
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("ProfileVM", "username resolve: ${e.message}")
+                    _error.value = e.message
+                }
+            }
+            return
+        }
         val targetUid = if (uid == "me") myUid else uid
 
         // ── Boş uid koruması: çevrimdışı veya oturumu olmayan kullanıcıda çökmeyi önler ──

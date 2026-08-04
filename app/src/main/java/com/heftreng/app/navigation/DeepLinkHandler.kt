@@ -7,10 +7,14 @@ import android.net.Uri
  * Web URL'sini veya heftreng:// URI'sini NavHost route string'ine çevirir.
  *
  * Desteklenen URL'ler:
- *   https://heftreng.onrender.com/post/ID         → "post/ID"
- *   https://heftreng.onrender.com/profile/UID     → "profile/UID"
- *   https://heftreng.onrender.com/library/book/ID → "library/book/ID"
- *   heftreng://app/post/ID                        → "post/ID"  (eski custom scheme)
+ *   https://heftreng.onrender.com/post/ID            → "post/ID"
+ *   https://heftreng.onrender.com/profile/UID        → "profile/UID"
+ *   https://heftreng.onrender.com/profile/username   → "profile/username"
+ *   https://heftreng.onrender.com/library/book/ID    → "library/book/ID"
+ *   heftreng://app/post/ID                           → "post/ID" (eski custom scheme)
+ *
+ *  NOT: profile/ segmenti UID veya username olabilir.
+ *  ProfileViewModel.load() bu ayrımı Firestore'da çözer.
  *
  * Kullanım (MainActivity.onCreate ve onNewIntent içinde):
  *   val route = DeepLinkHandler.resolve(intent)
