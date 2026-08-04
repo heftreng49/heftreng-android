@@ -132,13 +132,20 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
         val maxHeightPx    = (screenHeightPx * 0.55f).toInt()
         val minHeightPx    = (120 * dp).toInt()
 
-        // Her iki formatta da kural aynı:
-        // → Yüksekliği sınırla (maxHeight), ardından genişliği = yükseklik × ratio hesapla.
-        // → Böylece MediaView her zaman tam video oranında olur, siyah bant kalmaz.
-        val clampedHeight  = rawHeightPx.coerceIn(minHeightPx, maxHeightPx)
-        val targetHeightPx = clampedHeight
-        val targetWidthPx  = (clampedHeight * safeRatio).toInt()
-            .coerceAtMost(screenWidthPx)  // ekran genişliğini aşmasın
+        val targetWidthPx: Int
+        val targetHeightPx: Int
+
+        if (safeRatio >= 1.0f) {
+            // Yatay reklam: genişliği tam tut, yüksekliği orandan hesapla
+            // coerceIn YOK — yükseklik kırpılırsa letterbox oluşur
+            targetWidthPx  = screenWidthPx
+            targetHeightPx = (screenWidthPx / safeRatio).toInt()
+        } else {
+            // Dikey reklam: yüksekliği maxHeight ile sınırla, genişliği orandan türet
+            val clampedHeight = rawHeightPx.coerceIn(minHeightPx, maxHeightPx)
+            targetHeightPx = clampedHeight
+            targetWidthPx  = (clampedHeight * safeRatio).toInt().coerceAtMost(screenWidthPx)
+        }
 
         mediaView.layoutParams = (mediaView.layoutParams ?: android.widget.FrameLayout.LayoutParams(
             targetWidthPx, targetHeightPx
