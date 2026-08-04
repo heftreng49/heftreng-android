@@ -116,7 +116,10 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
         mediaView.mediaContent = mediaContent
         mediaView.clipToOutline = true
         mediaView.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
-        mediaView.setImageScaleType(ImageView.ScaleType.FIT_CENTER)
+        // CENTER_CROP: video/görsel alanı tamamen dolar, siyah kenar oluşmaz.
+        // Dikey reklamlarda FIT_CENTER sağ/sol siyah bant bırakıyordu.
+        // CENTER_CROP hafif kırpma yapar ama CTR için çok daha iyi görünür.
+        mediaView.setImageScaleType(ImageView.ScaleType.CENTER_CROP)
         mediaView.visibility = View.VISIBLE
 
         // Reklamın aspect ratio'sunu oku (yatay ~1.78, dikey ~0.56, kare ~1.0)
