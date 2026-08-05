@@ -8,7 +8,7 @@ import { supabase } from '$lib/supabase/config';
 export function getTheme(): { mode: string; variant: string; lang: string } {
   return {
     mode:    localStorage.getItem('hf_theme_mode')    ?? 'system',
-    variant: localStorage.getItem('hf_theme_variant') ?? 'default',
+    variant: localStorage.getItem('hf_theme_variant') ?? 'forest',
     lang:    localStorage.getItem('hf_lang')          ?? 'tr',
   };
 }
