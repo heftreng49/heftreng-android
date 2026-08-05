@@ -31,9 +31,9 @@ import kotlinx.coroutines.tasks.await
 // Slug → Blogger sayfası URL eşlemesi
 // Firestore'da içerik yoksa bu URL'lere fallback yapılır.
 private val SLUG_FALLBACK_URLS = mapOf(
-    "hakkinda"           to "https://heft-reng.blogspot.com/p/hakkimizda.html",
-    "gizlilik-politikasi" to "https://heft-reng.blogspot.com/p/gizlilik-politikasi.html",
-    "kullanim-kosullari"  to "https://heft-reng.blogspot.com/p/kullanim-kosullari.html",
+    "hakkinda"           to "https://heftreng.onrender.com",
+    "gizlilik-politikasi" to "https://heftreng.onrender.com/privacy",
+    "kullanim-kosullari"  to "https://heftreng.onrender.com/terms",
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

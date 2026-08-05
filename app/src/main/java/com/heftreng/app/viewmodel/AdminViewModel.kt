@@ -253,7 +253,7 @@ class AdminViewModel @Inject constructor(
             }
         }
         val url = if (content.feedPostId.isNotBlank())
-            "https://heft-reng.blogspot.com/p/akis_01024829108.html?postId=${content.feedPostId}"
+            "https://heftreng.onrender.com/post/${content.feedPostId}"
         else
             "heftreng://daily_quote"
         sendPush(
@@ -844,7 +844,7 @@ class AdminViewModel @Inject constructor(
                     // "Herkese gönder" veya "topic" — toplu push
                     val data = hashMapOf<String, Any>(
                         "title" to title, "body" to body,
-                        "url"   to url.ifBlank { "https://heft-reng.blogspot.com/" },
+                        "url"   to url.ifBlank { "https://heftreng.onrender.com" },
                         "type"  to type,
                         "ico"   to ico,
                     )

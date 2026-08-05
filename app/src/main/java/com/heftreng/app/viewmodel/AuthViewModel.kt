@@ -618,8 +618,8 @@ class AuthViewModel @Inject constructor(
             try {
                 val termsVersion   = "1.0"
                 val privacyVersion = "1.0"
-                val termsUrl       = "https://heft-reng.blogspot.com/p/kullanim-kosullari.html"
-                val privacyUrl     = "https://heft-reng.blogspot.com/p/gizlilik-politikasi.html"
+                val termsUrl       = "https://heftreng.onrender.com/terms"
+                val privacyUrl     = "https://heftreng.onrender.com/privacy"
 
                 // 1. users/{uid} — hızlı erişim için özet
                 firestore.collection("users").document(uid).update(
