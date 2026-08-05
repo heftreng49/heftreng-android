@@ -82,6 +82,7 @@ import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -247,13 +248,10 @@ fun FeedScreen(
     val uploading        by vm.uploading.collectAsState()
     val context          = LocalContext.current
 
+    // Photo Picker — izin gerektirmez (Android 13+ politikası)
     val imagePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.PickVisualMedia()
     ) { uri -> inlineImageUri = uri }
-
-    val imagePermLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted -> if (granted) imagePicker.launch("image/*") }
 
     val currentUser = FirebaseAuth.getInstance().currentUser
     val myUid       = currentUser?.uid ?: ""
@@ -609,15 +607,10 @@ fun FeedScreen(
                                 if (appConfig.feedShowImages) {
                                     IconButton(
                                         onClick  = {
-                                            val perm = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU)
-                                                android.Manifest.permission.READ_MEDIA_IMAGES
-                                            else android.Manifest.permission.READ_EXTERNAL_STORAGE
-                                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, perm)
-                                                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                                imagePicker.launch("image/*")
-                                            } else {
-                                                imagePermLauncher.launch(perm)
-                                            }
+                                            // Photo Picker — sistem galerisi açılır, izin gerekmez
+                                            imagePicker.launch(
+                                                ActivityResultContracts.PickVisualMedia.ImageOnly
+                                            )
                                         },
                                         modifier = Modifier.size(36.dp),
                                     ) {
