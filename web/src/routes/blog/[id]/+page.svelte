@@ -15,7 +15,16 @@
 </script>
 
 <svelte:head>
-  <title>{post?.title ?? 'Blog'} — Heftreng</title>
+  <title>{post?.title ? `${post.title} — Heft Reng` : "Blog — Heft Reng"}</title>
+  <meta name="description" content={post?.summary ? post.summary.slice(0, 160) : (post?.title ?? "Heft Reng blog yazısı")} />
+  <meta property="og:title"       content={post?.title ? `${post.title} — Heft Reng` : "Heft Reng"} />
+  <meta property="og:description" content={post?.summary ? post.summary.slice(0, 200) : (post?.title ?? "Heft Reng blog yazısı")} />
+  <meta property="og:url"         content={"https://heftreng.onrender.com/blog/" + $page.params.id} />
+  <meta property="og:type"        content="article" />
+  <meta property="og:image"       content={post?.coverUrl || "https://heftreng.onrender.com/og-default.png"} />
+  <meta name="twitter:title"      content={post?.title ? `${post.title} — Heft Reng` : "Heft Reng"} />
+  <meta name="twitter:description" content={post?.summary ? post.summary.slice(0, 200) : "Heft Reng blog yazısı"} />
+  <meta name="twitter:image"      content={post?.coverUrl || "https://heftreng.onrender.com/og-default.png"} />
 </svelte:head>
 
 <div class="blog-post-page">

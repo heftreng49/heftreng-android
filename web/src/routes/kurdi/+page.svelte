@@ -63,7 +63,16 @@
   import { goto } from '$app/navigation';
 </script>
 
-<svelte:head><title>Kurdî — Heftreng</title></svelte:head>
+<svelte:head>
+  <title>Kurdî Fêrbûn — Heft Reng</title>
+  <meta name="description" content="Kurmancî öğren! Interaktif dersler, gramer kuralları ve günlük pratikle Kürtçeyi adım adım öğren." />
+  <meta property="og:title"       content="Kurdî Fêrbûn — Heft Reng" />
+  <meta property="og:description" content="Kurmancî öğren! Interaktif dersler, gramer kuralları ve günlük pratikle Kürtçeyi adım adım öğren." />
+  <meta property="og:url"         content="https://heftreng.onrender.com/kurdi" />
+  <meta property="og:image"       content="https://heftreng.onrender.com/og-default.png" />
+  <meta name="twitter:title"      content="Kurdî Fêrbûn — Heft Reng" />
+  <meta name="twitter:description" content="Kurmancî öğren! Interaktif dersler, gramer kuralları ve günlük pratikle Kürtçeyi adım adım öğren." />
+</svelte:head>
 
 <PullToRefresh onRefresh={handleRefresh}>
   <div class="kurdi-page">

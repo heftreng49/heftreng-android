@@ -1,3 +1,16 @@
+<svelte:head>
+  <!-- Global fallback meta — sayfa özel meta ile override edilir -->
+  <meta name="theme-color" content="#c9a84c" />
+  <meta property="og:site_name"   content="Heft Reng" />
+  <meta property="og:type"        content="website" />
+  <meta property="og:image"       content="https://heftreng.onrender.com/og-default.png" />
+  <meta property="og:image:width"  content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card"       content="summary_large_image" />
+  <meta name="twitter:site"       content="@heftreng" />
+  <meta name="twitter:image"      content="https://heftreng.onrender.com/og-default.png" />
+</svelte:head>
+
 <script lang="ts">
   import '../app.css';
   import { onMount } from 'svelte';
