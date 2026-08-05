@@ -207,7 +207,7 @@
         <line x1="3" y1="18" x2="21" y2="18"/>
       </svg>
     </button>
-    <span class="hdr-logo">heftreng</span>
+    <a href="/feed" class="hdr-logo" aria-label="Ana Sayfa">heftreng</a>
 
     <div class="hdr-actions">
       <a href="/search" class="hdr-icon" aria-label="Ara">
@@ -525,6 +525,7 @@
 .hdr-logo {
   font-size: 20px; font-weight: 900; color: var(--primary);
   font-family: system-ui, sans-serif; flex: 1;
+  text-decoration: none; display: block;
 }
 .hdr-actions { display: flex; align-items: center; gap: 0; }
 .hdr-icon {

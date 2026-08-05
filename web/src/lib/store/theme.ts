@@ -23,9 +23,9 @@ export function applyTheme(variant: string, mode: string) {
 
 function createTheme() {
   const getInitial = () => {
-    if (typeof localStorage === 'undefined') return { variant: 'charcoal', mode: 'system' };
+    if (typeof localStorage === 'undefined') return { variant: 'forest', mode: 'system' };
     return {
-      variant: localStorage.getItem(KEY_VARIANT) ?? 'charcoal',
+      variant: localStorage.getItem(KEY_VARIANT) ?? 'forest',
       mode:    localStorage.getItem(KEY_MODE)    ?? 'system',
     };
   };
