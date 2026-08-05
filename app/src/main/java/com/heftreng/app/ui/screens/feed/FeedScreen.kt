@@ -609,7 +609,7 @@ fun FeedScreen(
                                         onClick  = {
                                             // Photo Picker — sistem galerisi açılır, izin gerekmez
                                             imagePicker.launch(
-                                                ActivityResultContracts.PickVisualMedia.ImageOnly
+                                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                                             )
                                         },
                                         modifier = Modifier.size(36.dp),
