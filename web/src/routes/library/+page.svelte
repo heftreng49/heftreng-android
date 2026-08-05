@@ -35,11 +35,16 @@
   });
 
   async function loadQuotes() {
-    const p: QuotePage = await fetchRecentQuotes(0);
-    const uid = $currentUser?.uid ?? null;
-    quotes        = await hydrateQuoteLikes(p.quotes, uid);
-    quoteOffset   = p.offset;
-    quotesHasMore = p.hasMore;
+    try {
+      const p: QuotePage = await fetchRecentQuotes(0);
+      const uid = $currentUser?.uid ?? null;
+      quotes        = await hydrateQuoteLikes(p.quotes, uid);
+      quoteOffset   = p.offset;
+      quotesHasMore = p.hasMore;
+      console.log('[Library] quotes yüklendi:', quotes.length);
+    } catch (e) {
+      console.error('[Library] fetchRecentQuotes hatası:', e);
+    }
   }
 
   async function loadMoreQuotes() {
