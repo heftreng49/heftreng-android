@@ -604,8 +604,8 @@ fun AuthScreen(
 
             // ── Kullanım Koşulları & Gizlilik Politikası ─────────────────────────
             val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-            val termsUrl   = "https://heft-reng.blogspot.com/p/kullanim-kosullari.html"
-            val privacyUrl = "https://heft-reng.blogspot.com/p/gizlilik-politikasi.html"
+            val termsUrl   = "https://heftreng.onrender.com/terms"
+            val privacyUrl = "https://heftreng.onrender.com/privacy"
 
             // Kayıt modunda: onay checkbox'ı (zorunlu)
             // Giriş modunda: bilgilendirici metin (pasif)
