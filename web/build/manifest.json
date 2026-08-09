@@ -1,0 +1,71 @@
+{
+  "name": "Heftreng",
+  "short_name": "Heftreng",
+  "description": "Kürt edebiyatı, dil öğrenme ve kültür platformu",
+  "start_url": "/feed",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#c9a84c",
+  "orientation": "portrait",
+  "lang": "tr",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Feed",
+      "url": "/feed",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Kürtçe Öğren",
+      "url": "/kurdi",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Kütüphane",
+      "url": "/library",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "related_applications": [
+    {
+      "platform": "play",
+      "url": "https://play.google.com/store/apps/details?id=com.heftreng.app",
+      "id": "com.heftreng.app"
+    }
+  ],
+  "prefer_related_applications": false
+}

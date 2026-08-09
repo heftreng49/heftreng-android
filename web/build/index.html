@@ -14,32 +14,40 @@
 			} catch(e) {}
 		</script>
 
-		<!-- Site geneli OG önizleme -->
-		<meta name="description"          content="Kürt edebiyatı, dil öğrenme ve kültür platformu" />
-		<meta property="og:site_name"     content="Heftreng" />
-		<meta property="og:title"         content="Heftreng — Kürt Edebiyatı ve Dil Öğrenme" />
-		<meta property="og:description"   content="Kürt edebiyatı, dil öğrenme ve kültür platformu" />
-		<meta property="og:image"         content="https://heftreng.onrender.com/og-default.png" />
-		<meta property="og:url"           content="https://heftreng.onrender.com" />
-		<meta property="og:type"          content="website" />
-		<meta name="twitter:card"         content="summary_large_image" />
-		<meta name="twitter:title"        content="Heftreng — Kürt Edebiyatı ve Dil Öğrenme" />
-		<meta name="twitter:description"  content="Kürt edebiyatı, dil öğrenme ve kültür platformu" />
-		<meta name="twitter:image"        content="https://heftreng.onrender.com/og-default.png" />
+		<!-- PWA -->
+		<link rel="manifest" href="/manifest.json" />
+		<meta name="theme-color" content="#c9a84c" />
+
+		<!-- iOS PWA — Ana Ekrana Ekle desteği -->
+		<meta name="apple-mobile-web-app-capable"          content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+		<meta name="apple-mobile-web-app-title"            content="Heftreng" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+		<!-- OG önizleme -->
+		<meta name="description"         content="Kürt edebiyatı, dil öğrenme ve kültür platformu" />
+		<meta property="og:site_name"    content="Heftreng" />
+		<meta property="og:title"        content="Heftreng — Kürt Edebiyatı ve Dil Öğrenme" />
+		<meta property="og:description"  content="Kürt edebiyatı, dil öğrenme ve kültür platformu" />
+		<meta property="og:image"        content="https://heftreng.onrender.com/og-default.png" />
+		<meta property="og:url"          content="https://heftreng.onrender.com" />
+		<meta property="og:type"         content="website" />
+		<meta name="twitter:card"        content="summary_large_image" />
+		<meta name="twitter:image"       content="https://heftreng.onrender.com/og-default.png" />
 
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
 		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;1,400&display=swap" rel="stylesheet">
-		<link href="/_app/immutable/entry/start.KOy_cF1U.js" rel="modulepreload">
-		<link href="/_app/immutable/chunks/AG-tcL_H.js" rel="modulepreload">
+		<link href="/_app/immutable/entry/start.CNhOD20X.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/DSngaSOV.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/CNzooa0x.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/BuFlayix.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/D3atFl98.js" rel="modulepreload">
-		<link href="/_app/immutable/entry/app.UA3dYGEY.js" rel="modulepreload">
+		<link href="/_app/immutable/entry/app.Yj6QkRn4.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/HclGiUj8.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/xihTtKlq.js" rel="modulepreload">
-		<link href="/_app/immutable/nodes/0.hRuu7M09.js" rel="modulepreload">
-		<link href="/_app/immutable/chunks/BEdu3OgU.js" rel="modulepreload">
+		<link href="/_app/immutable/nodes/0.BFPY6D7T.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/DNHyCqxS.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/BUnGgOm6.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/0MWwtIo2.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/B3HAuzso.js" rel="modulepreload">
@@ -60,20 +68,27 @@
 		<div style="display: contents">
 			<script>
 				{
-					__sveltekit_11k7wfo = {
+					__sveltekit_1mbq8v1 = {
 						base: ""
 					};
 
 					const element = document.currentScript.parentElement;
 
 					Promise.all([
-						import("/_app/immutable/entry/start.KOy_cF1U.js"),
-						import("/_app/immutable/entry/app.UA3dYGEY.js")
+						import("/_app/immutable/entry/start.CNhOD20X.js"),
+						import("/_app/immutable/entry/app.Yj6QkRn4.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element);
 					});
 				}
 			</script>
 		</div>
+		<script>
+			if ('serviceWorker' in navigator) {
+				window.addEventListener('load', () => {
+					navigator.serviceWorker.register('/sw.js').catch(() => {});
+				});
+			}
+		</script>
 	</body>
 </html>
