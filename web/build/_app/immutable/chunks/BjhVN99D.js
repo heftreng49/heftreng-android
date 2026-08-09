@@ -1,1 +1,0 @@
-import{tt as e}from"./CNzooa0x.js";import{t}from"./DV2j58mr.js";import"./D3atFl98.js";import{n,t as r}from"./BUnGgOm6.js";import"./dpr61XCk.js";function i(){return new Promise(i=>{if(!e(r)){e(n)?i(!0):(t(`/login`),i(!1));return}let a=r.subscribe(r=>{r||(a(),e(n)?i(!0):(t(`/login`),i(!1)))})})}export{i as t};
