@@ -27,7 +27,6 @@
   import { unreadNotifCount, unreadMsgCount } from '$lib/stores/ui.store';
   import { lang, strings as s } from '$lib/i18n/strings';
   import Toast from '$lib/components/Toast.svelte';
-  import IosPwaBanner from '$lib/components/IosPwaBanner.svelte';
 
   let { children } = $props();
 
