@@ -11,7 +11,7 @@
   import Skeleton  from '$lib/components/Skeleton.svelte';
   import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 
-  const tabs = ['Üniteler', 'Dilbilgisi'];
+  const tabs = $derived($lang === 'ku' ? ['Yekîne', 'Rêziman'] : ['Üniteler', 'Dilbilgisi']);
   let activeTab  = $state(0);
   let units      = $state<KfUnit[]>([]);
   let lessons    = $state<KfLesson[]>([]);
@@ -61,6 +61,7 @@
   }
 
   import { goto } from '$app/navigation';
+  import { lang } from '$lib/i18n/strings';
 </script>
 
 <svelte:head>
@@ -77,7 +78,7 @@
 <PullToRefresh onRefresh={handleRefresh}>
   <div class="kurdi-page">
     <div class="kurdi-header">
-      <h2>🇹🇷 Kurdî Öğren</h2>
+      <h2>{$lang === 'ku' ? 'Kurdî Fêrbibe' : 'Kurdî Öğren'}</h2>
       {#if $currentUser}
         <span class="xp-chip">⚡ {$currentUser.displayName}</span>
       {/if}
@@ -165,8 +166,8 @@
         <div class="grammar-list">
           {#each grammar as rule (rule.id)}
             <a href="/kurdi/grammar/{rule.id}" class="grammar-card">
-              <p class="grammar-title">{rule.titleTr || rule.title}</p>
-              {#if rule.title && rule.titleTr}
+              <p class="grammar-title">{$lang === 'ku' ? (rule.title || rule.titleTr) : (rule.titleTr || rule.title)}</p>
+              {#if rule.title && rule.titleTr && $lang !== 'ku'}
                 <p class="grammar-title-ku">{rule.title}</p>
               {/if}
               <p class="grammar-preview">{rule.contentTr.slice(0, 100)}…</p>
