@@ -123,9 +123,9 @@ object ConsentHelper {
                 }
             },
             { formError ->
-                // Güncelleme başarısız — önceki izne bak, yoksa yine de başlat
+                // Güncelleme başarısız — önceki onay durumuna bak
                 Log.w(TAG, "Consent info update hatası: ${formError.message}")
-                resolveOnce(true, consentInfo.consentStatus)
+                resolveOnce(consentInfo.canRequestAds(), consentInfo.consentStatus)
             },
         )
     }
@@ -148,7 +148,7 @@ object ConsentHelper {
             }
             val canAds = consentInfo.canRequestAds()
             Log.d(TAG, "Form tamamlandı — canRequestAds=$canAds status=${consentInfo.consentStatus}")
-            resolveOnce(true, consentInfo.consentStatus)
+            resolveOnce(canAds, consentInfo.consentStatus)
         }
     }
 
