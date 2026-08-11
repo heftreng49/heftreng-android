@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.RatingBar
 import android.widget.TextView
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
@@ -184,6 +185,28 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
         val icon = nativeAd.icon
         it.visibility = if (icon?.drawable != null) View.VISIBLE else View.GONE
         if (icon?.drawable != null) it.setImageDrawable(icon.drawable)
+    }
+
+    // Advertiser — reklamcı adı, uygulama reklamlarında eCPM için kritik
+    adView.advertiserView = adView.findViewById<TextView>(R.id.ad_advertiser).also {
+        val advertiser = nativeAd.advertiser
+        if (!advertiser.isNullOrBlank()) {
+            it.text = advertiser
+            it.visibility = View.VISIBLE
+        } else {
+            it.visibility = View.GONE
+        }
+    }
+
+    // StarRating — uygulama reklamlarında yıldız puanı
+    adView.starRatingView = adView.findViewById<RatingBar>(R.id.ad_stars).also {
+        val rating = nativeAd.starRating
+        if (rating != null && rating > 0) {
+            it.rating = rating.toFloat()
+            it.visibility = View.VISIBLE
+        } else {
+            it.visibility = View.GONE
+        }
     }
 
     adView.setNativeAd(nativeAd)
