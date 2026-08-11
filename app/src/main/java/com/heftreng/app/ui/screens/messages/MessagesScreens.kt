@@ -53,6 +53,7 @@ import android.media.MediaRecorder
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import java.io.File
@@ -414,8 +415,9 @@ fun MessageDetailScreen(
         }
     }
 
+    // Photo Picker — izin gerektirmez
     val imagePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.PickVisualMedia()
     ) { uri -> selectedImage = uri }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -437,11 +439,6 @@ fun MessageDetailScreen(
             }
         }
     }
-
-    // Runtime izin launcher — galeri
-    val imagePermLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted -> if (granted) imagePicker.launch("image/*") }
 
     val otherUid = remember(conversations, convId) {
         conversations.firstOrNull { it.id == convId }
@@ -859,15 +856,9 @@ fun MessageDetailScreen(
                     ) {
                         // Resim seçici butonu
                         IconButton(onClick = {
-                            val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-                                android.Manifest.permission.READ_MEDIA_IMAGES
-                            else android.Manifest.permission.READ_EXTERNAL_STORAGE
-                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, perm)
-                                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                imagePicker.launch("image/*")
-                            } else {
-                                imagePermLauncher.launch(perm)
-                            }
+                            imagePicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
                         }, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Default.Image, null, tint = if (selectedImage != null) Primary else Muted, modifier = Modifier.size(22.dp))
                         }

@@ -1380,7 +1380,7 @@ fun EditProfileScreen(
 
     val storage     = com.google.firebase.storage.FirebaseStorage.getInstance()
     val photoPicker = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.GetContent()
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         uri?.let {
             vm.updateProfilePhoto(
@@ -1392,7 +1392,7 @@ fun EditProfileScreen(
         }
     }
     val coverPicker = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.GetContent()
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         uri?.let {
             vm.updateCoverPhoto(
@@ -1472,7 +1472,7 @@ fun EditProfileScreen(
                 modifier              = Modifier.fillMaxWidth(),
             ) {
                 OutlinedButton(
-                    onClick  = { if (!loading) photoPicker.launch("image/*") },
+                    onClick  = { if (!loading) photoPicker.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     modifier = Modifier.weight(1f),
                     shape    = RoundedCornerShape(10.dp),
                 ) {
@@ -1480,7 +1480,7 @@ fun EditProfileScreen(
                     else Text(Strings.profilePhoto(language), fontSize = 12.sp)
                 }
                 OutlinedButton(
-                    onClick  = { if (!loading) coverPicker.launch("image/*") },
+                    onClick  = { if (!loading) coverPicker.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     modifier = Modifier.weight(1f),
                     shape    = RoundedCornerShape(10.dp),
                 ) {

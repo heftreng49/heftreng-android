@@ -17,6 +17,7 @@ import android.widget.TextView
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -1202,23 +1203,17 @@ fun CreateBookDialog(
     var uploading  by remember { mutableStateOf(false) }
     val scope      = rememberCoroutineScope()
 
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
         coverUri = uri
     }
-    val imagePermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) imagePicker.launch("image/*")
-    }
-
     fun pickImage() {
-        val perm = if (android.os.Build.VERSION.SDK_INT >= 33)
-            android.Manifest.permission.READ_MEDIA_IMAGES
-        else android.Manifest.permission.READ_EXTERNAL_STORAGE
-        if (androidx.core.content.ContextCompat.checkSelfPermission(context, perm)
-            == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            imagePicker.launch("image/*")
-        } else {
-            imagePermLauncher.launch(perm)
-        }
+        imagePicker.launch(
+            androidx.activity.result.PickVisualMediaRequest(
+                ActivityResultContracts.PickVisualMedia.ImageOnly
+            )
+        )
     }
 
     AlertDialog(
