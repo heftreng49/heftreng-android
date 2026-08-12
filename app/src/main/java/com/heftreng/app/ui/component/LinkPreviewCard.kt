@@ -29,25 +29,11 @@ import com.heftreng.app.ui.theme.*
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun YouTubeEmbedCard(videoId: String, modifier: Modifier = Modifier) {
-    val html = """
-        <!DOCTYPE html><html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <style>
-            * { margin:0; padding:0; box-sizing:border-box; }
-            body { background:#000; }
-            .video-container { position:relative; width:100%; padding-top:56.25%; }
-            iframe { position:absolute; top:0; left:0; width:100%; height:100%; border:0; }
-          </style>
-        </head>
-        <body>
-          <div class="video-container">
-            <iframe src="https://www.youtube-nocookie.com/embed/$videoId?playsinline=1&rel=0&origin=https://heftreng.onrender.com"
-              allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-              allowfullscreen></iframe>
-          </div>
-        </body></html>
-    """.trimIndent()
+    // YouTube embed URL'ini direkt WebView'a yükle.
+    // loadDataWithBaseURL ile farklı origin belirtmek 152-4 hatasına yol açıyor.
+    // Direkt loadUrl kullanınca WebView kendi origin'i geçerli olur, YouTube izin verir.
+    val embedUrl = "https://www.youtube-nocookie.com/embed/$videoId" +
+        "?playsinline=1&rel=0&autoplay=0"
 
     Box(
         modifier = modifier
@@ -59,13 +45,13 @@ fun YouTubeEmbedCard(videoId: String, modifier: Modifier = Modifier) {
         AndroidView(
             factory = { ctx ->
                 WebView(ctx).apply {
-                    settings.javaScriptEnabled  = true
+                    settings.javaScriptEnabled            = true
                     settings.mediaPlaybackRequiresUserGesture = false
-                    settings.loadWithOverviewMode = true
-                    settings.useWideViewPort     = true
-                    settings.domStorageEnabled   = true
-                    webChromeClient              = WebChromeClient()
-                    loadDataWithBaseURL("https://www.youtube.com", html, "text/html", "utf-8", null)
+                    settings.loadWithOverviewMode         = true
+                    settings.useWideViewPort              = true
+                    settings.domStorageEnabled            = true
+                    webChromeClient                       = WebChromeClient()
+                    loadUrl(embedUrl)
                 }
             },
             modifier = Modifier.fillMaxSize()
@@ -116,14 +102,17 @@ fun LinkPreviewCard(
                 )
             }
             Column(Modifier.padding(12.dp)) {
-                // Instagram için ikon göster
+                // Instagram / Reels için ikon + etiket
                 if (type == "instagram") {
-                    Text(
-                        "📷 Instagram",
-                        fontSize   = 11.sp,
-                        color      = Muted,
-                        fontWeight = FontWeight.Medium,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("📷 ", fontSize = 13.sp)
+                        Text(
+                            "Instagram Reels",
+                            fontSize   = 11.sp,
+                            color      = Muted,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                     Spacer(Modifier.height(4.dp))
                 }
                 if (title.isNotBlank()) {

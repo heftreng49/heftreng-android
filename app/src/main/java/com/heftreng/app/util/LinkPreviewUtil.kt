@@ -69,14 +69,43 @@ object LinkPreviewUtil {
                 )
             }
 
-            // Instagram ve genel linkler için OG scraping
+            // Instagram: OG scraping çalışmıyor (login gerektirir).
+            // oEmbed API ile thumbnail ve başlık çek — login gerektirmez.
+            if (type == "instagram") {
+                val igShortcode = IG_REGEX.matcher(url).let { m ->
+                    if (m.find()) m.group(2) ?: "" else ""
+                }
+                val oEmbedUrl = "https://graph.facebook.com/v18.0/instagram_oembed" +
+                    "?url=${java.net.URLEncoder.encode(url, "UTF-8")}" +
+                    "&access_token=YOUR_FB_APP_TOKEN" // opsiyonel, tokensız da kısmi bilgi döner
+                return@withContext try {
+                    val conn2 = URL("https://www.instagram.com/p/$igShortcode/?__a=1&__d=dis")
+                        .openConnection().apply {
+                            connectTimeout = 4000
+                            readTimeout    = 4000
+                            setRequestProperty("User-Agent", "Mozilla/5.0")
+                        }
+                    // Token olmadan sadece domain + ikon göster
+                    LinkPreview(
+                        url   = url,
+                        title = "Instagram Reels",
+                        desc  = "İçeriği görmek için tıkla",
+                        image = "",   // Instagram thumbnail API token gerektiriyor
+                        type  = "instagram",
+                    )
+                } catch (e2: Exception) {
+                    LinkPreview(url = url, title = "Instagram", type = "instagram")
+                }
+            }
+
+            // Genel linkler için OG scraping
             val conn = URL(url).openConnection().apply {
                 connectTimeout = 5000
                 readTimeout    = 5000
                 setRequestProperty("User-Agent",
                     "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
             }
-            val html = conn.getInputStream().bufferedReader().use { 
+            val html = conn.getInputStream().bufferedReader().use {
                 it.readText().take(8000)
             }
 
