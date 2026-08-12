@@ -22,7 +22,7 @@ object LinkPreviewUtil {
     )
 
     private val YT_REGEX = Pattern.compile(
-        """(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)([\w\-]{11})""",
+        """(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/|youtube\.com/embed/)([A-Za-z0-9_\-]{11})""",
         Pattern.CASE_INSENSITIVE
     )
 

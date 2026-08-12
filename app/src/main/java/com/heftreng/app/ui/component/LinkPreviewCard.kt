@@ -42,7 +42,7 @@ fun YouTubeEmbedCard(videoId: String, modifier: Modifier = Modifier) {
         </head>
         <body>
           <div class="video-container">
-            <iframe src="https://www.youtube.com/embed/$videoId?playsinline=1&rel=0"
+            <iframe src="https://www.youtube-nocookie.com/embed/$videoId?playsinline=1&rel=0&origin=https://heftreng.onrender.com"
               allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
               allowfullscreen></iframe>
           </div>
