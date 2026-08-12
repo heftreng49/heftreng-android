@@ -41,6 +41,8 @@ class MainActivity : ComponentActivity() {
 
     // Bildirimden gelen deep link hedefi
     private var pendingNavTarget: String? = null
+    var pendingSharedText: String? = null
+    var pendingSharedImageUri: android.net.Uri? = null
 
     // SettingsViewModel — darkMode tercihi için
     private val settingsVm: SettingsViewModel by viewModels()
@@ -172,6 +174,7 @@ class MainActivity : ComponentActivity() {
         // (bildirim extra'sı yoksa URL'ye bak — ikisi aynı anda gelmez)
         if (pendingNavTarget == null) {
             pendingNavTarget = DeepLinkHandler.resolve(intent)
+                ?: handleShareIntent(intent)
         }
 
         // ÇÖZÜLDÜ (Play Console crash raporu — Redmi Note 8/MIUI'de HER
@@ -312,6 +315,46 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * ACTION_SEND / ACTION_SEND_MULTIPLE intent'lerini işler.
+     * Metin veya URL paylaşımında CreatePost ekranına yönlendirir,
+     * paylaşılan içeriği "shared_text" extra olarak iletir.
+     */
+    private fun handleShareIntent(intent: android.content.Intent?): String? {
+        intent ?: return null
+        val action = intent.action ?: return null
+
+        return when (action) {
+            android.content.Intent.ACTION_SEND -> {
+                val mimeType = intent.type ?: return null
+                when {
+                    mimeType == "text/plain" -> {
+                        val sharedText = intent.getStringExtra(android.content.Intent.EXTRA_TEXT) ?: return null
+                        // CreatePost ekranına yönlendir, paylaşılan metni extra olarak ilet
+                        pendingSharedText = sharedText
+                        "create_post"
+                    }
+                    mimeType.startsWith("image/") -> {
+                        val uri = intent.getParcelableExtra<android.net.Uri>(android.content.Intent.EXTRA_STREAM)
+                        if (uri != null) {
+                            pendingSharedImageUri = uri
+                            "create_post"
+                        } else null
+                    }
+                    else -> null
+                }
+            }
+            android.content.Intent.ACTION_SEND_MULTIPLE -> {
+                val uris = intent.getParcelableArrayListExtra<android.net.Uri>(android.content.Intent.EXTRA_STREAM)
+                if (!uris.isNullOrEmpty()) {
+                    pendingSharedImageUri = uris.first()
+                    "create_post"
+                } else null
+            }
+            else -> null
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         // Reklam lifecycle — banner resume + native pool yenileme
@@ -341,6 +384,11 @@ class MainActivity : ComponentActivity() {
         // Uygulama açıkken gelen bildirim tıklaması
         intent.getStringExtra("navigate_to")?.let { target ->
             pendingNavTarget = target
+            return
+        }
+        // Paylaşım intent'i (uygulama açıkken)
+        handleShareIntent(intent)?.let { route ->
+            pendingNavTarget = route
             return
         }
         // Uygulama açıkken tıklanan App Link / Deep Link

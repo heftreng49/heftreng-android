@@ -102,12 +102,14 @@ import androidx.compose.ui.graphics.graphicsLayer
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun FeedScreen(
-    navController: NavController,
-    language     : String = "tr",
-    appConfig    : AppConfig = AppConfig(),
-    vm           : FeedViewModel  = hiltViewModel(),
-    socialVm     : SocialViewModel = hiltViewModel(),
-    adsVm        : AdsViewModel    = hiltViewModel(),
+    navController    : NavController,
+    language         : String = "tr",
+    appConfig        : AppConfig = AppConfig(),
+    initialSharedText: String? = null,
+    initialSharedUri : android.net.Uri? = null,
+    vm               : FeedViewModel  = hiltViewModel(),
+    socialVm         : SocialViewModel = hiltViewModel(),
+    adsVm            : AdsViewModel    = hiltViewModel(),
     settingsVm   : SettingsViewModel = hiltViewModel(),
     blogVm       : BlogViewModel    = hiltViewModel(),
     adminVm      : AdminViewModel   = hiltViewModel(),
@@ -263,6 +265,15 @@ fun FeedScreen(
     // FAB menü state'leri
     var showFabMenu      by remember { mutableStateOf(false) }
     var showComposeDialog by remember { mutableStateOf(false) }
+    var sharedText       by remember { mutableStateOf(initialSharedText ?: "") }
+    var sharedImageUri   by remember { mutableStateOf(initialSharedUri) }
+
+    // Paylaşım intent'i ile açıldıysa compose dialog'u otomatik aç
+    LaunchedEffect(initialSharedText, initialSharedUri) {
+        if (!initialSharedText.isNullOrBlank() || initialSharedUri != null) {
+            showComposeDialog = true
+        }
+    }
     val uploading        by vm.uploading.collectAsState()
     val context          = LocalContext.current
 

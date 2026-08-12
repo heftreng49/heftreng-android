@@ -668,7 +668,17 @@ fun HeftrangNavHost(
                     popEnterTransition  = { fadeIn(tween(180)) },
                     popExitTransition   = { fadeOut(tween(140)) },
                 ) {
-                    FeedScreen(navController = navController, adsVm = adsVm, language = language, appConfig = appConfig)
+                    run {
+                        val activity = navController.context as? com.heftreng.app.MainActivity
+                        FeedScreen(
+                            navController     = navController,
+                            adsVm             = adsVm,
+                            language          = language,
+                            appConfig         = appConfig,
+                            initialSharedText = activity?.pendingSharedText?.also { activity.pendingSharedText = null },
+                            initialSharedUri  = activity?.pendingSharedImageUri?.also { activity.pendingSharedImageUri = null },
+                        )
+                    }
                 }
                 composable(
                     Screen.Search.route,
