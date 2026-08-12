@@ -248,7 +248,9 @@ fun FeedScreen(
     var inlineLinkLoading by remember { mutableStateOf(false) }
 
     // Inline metin değişince link tespit et
-    LaunchedEffect(inlineText) {
+    // Link tespiti — mention LaunchedEffect ile çakışmaması için ayrı key kullan
+    LaunchedEffect(inlineText.length) {
+        kotlinx.coroutines.delay(500) // debounce
         val url = com.heftreng.app.util.LinkPreviewUtil.extractUrl(inlineText)
         if (url != null && url != inlineLinkPreview?.url) {
             inlineLinkLoading = true
@@ -554,6 +556,20 @@ fun FeedScreen(
                         if (inlineQuote != null) {
                             item {
                                 QuoteInputSection(quote = inlineQuote, onRemove = { inlineQuote = null }, language = language)
+                            }
+                        }
+                        // ── Link önizleme ────────────────────────────────
+                        if (inlineLinkPreview != null && inlineLinkPreview!!.url.isNotBlank()) {
+                            item {
+                                LinkPreviewCard(
+                                    url       = inlineLinkPreview!!.url,
+                                    title     = inlineLinkPreview!!.title,
+                                    desc      = inlineLinkPreview!!.desc,
+                                    image     = inlineLinkPreview!!.image,
+                                    type      = inlineLinkPreview!!.type,
+                                    youtubeId = inlineLinkPreview!!.youtubeId,
+                                    modifier  = Modifier.padding(horizontal = 4.dp),
+                                )
                             }
                         }
                         // ── Görsel önizleme ─────────────────────────────
