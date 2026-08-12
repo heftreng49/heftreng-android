@@ -76,7 +76,9 @@ object LinkPreviewUtil {
                 setRequestProperty("User-Agent",
                     "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
             }
-            val html = conn.getInputStream().bufferedReader().use { it.read(5000) }
+            val html = conn.getInputStream().bufferedReader().use { 
+                it.readText().take(8000)
+            }
 
             fun ogTag(prop: String): String {
                 val pattern = Pattern.compile(
