@@ -47,6 +47,11 @@ data class Post(
     val text          : String     = "",
     val imgUrl        : String     = "",
     val ytVid         : String     = "",
+    val linkUrl       : String     = "",  // genel link URL'i
+    val linkTitle     : String     = "",  // OG title
+    val linkDesc      : String     = "",  // OG description
+    val linkImage     : String     = "",  // OG image
+    val linkType      : String     = "",  // "youtube" | "instagram" | "link"
     val badges        : List<String> = emptyList(),
     val repostTitle   : String     = "",
     val repostUrl     : String     = "",

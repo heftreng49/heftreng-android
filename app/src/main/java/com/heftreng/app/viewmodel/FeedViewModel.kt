@@ -802,6 +802,11 @@ class FeedViewModel @Inject constructor(
             imageURL      = imageURL,
             imgUrl        = imageURL,
             ytVid         = d["ytVid"]       as? String ?: "",
+            linkUrl       = d["linkUrl"]     as? String ?: "",
+            linkTitle     = d["linkTitle"]   as? String ?: "",
+            linkDesc      = d["linkDesc"]    as? String ?: "",
+            linkImage     = d["linkImage"]   as? String ?: "",
+            linkType      = d["linkType"]    as? String ?: "",
             badges        = badges,
             repostTitle   = d["repostTitle"] as? String ?: "",
             repostUrl     = d["repostUrl"]   as? String ?: "",
@@ -1289,7 +1294,7 @@ class FeedViewModel @Inject constructor(
     private val _createPostLoading = MutableStateFlow(false)
     val createPostLoading = _createPostLoading.asStateFlow()
 
-    fun createPost(text: String, title: String = "", category: String = "", imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "", coverImg: String = "", type: String = "", libraryAuthorId: String = "", libraryBookId: String = "", mentions: List<String> = emptyList()) {
+    fun createPost(text: String, title: String = "", category: String = "", imageURL: String = "", quoteText: String = "", authorName: String = "", bookName: String = "", coverImg: String = "", type: String = "", libraryAuthorId: String = "", libraryBookId: String = "", mentions: List<String> = emptyList(), linkUrl: String = "", linkTitle: String = "", linkDesc: String = "", linkImage: String = "", linkType: String = "") {
         if (uid.isEmpty()) return
         viewModelScope.launch {
             _createPostLoading.value = true
@@ -1346,6 +1351,12 @@ class FeedViewModel @Inject constructor(
                     "type"            to if (quoteText.isNotBlank() && type.isBlank()) "library_quote" else type,
                     "visibility"      to resolvedVisibility,
                     "mentions"        to mentions.distinct(),
+                    "linkUrl"         to linkUrl,
+                    "linkTitle"       to linkTitle,
+                    "linkDesc"        to linkDesc,
+                    "linkImage"       to linkImage,
+                    "linkType"        to linkType,
+                    "ytVid"           to if (linkType == "youtube") linkUrl else "",
                     "likes"           to 0, "saves" to 0, "cmtCount" to 0, "reposts" to 0,
                     "ts"              to Timestamp.now(),
                 )).await()

@@ -30,6 +30,8 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
 import java.net.URLEncoder
+import com.heftreng.app.util.LinkPreviewUtil
+import com.heftreng.app.ui.component.LinkPreviewCard
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusEvent
@@ -242,6 +244,20 @@ fun FeedScreen(
     }
     var showInlineQuote  by remember { mutableStateOf(false) }
     var inlineImageUri   by remember { mutableStateOf<Uri?>(null) }
+    var inlineLinkPreview by remember { mutableStateOf<com.heftreng.app.util.LinkPreview?>(null) }
+    var inlineLinkLoading by remember { mutableStateOf(false) }
+
+    // Inline metin değişince link tespit et
+    LaunchedEffect(inlineText) {
+        val url = com.heftreng.app.util.LinkPreviewUtil.extractUrl(inlineText)
+        if (url != null && url != inlineLinkPreview?.url) {
+            inlineLinkLoading = true
+            inlineLinkPreview = com.heftreng.app.util.LinkPreviewUtil.fetchPreview(url)
+            inlineLinkLoading = false
+        } else if (url == null) {
+            inlineLinkPreview = null
+        }
+    }
     // FAB menü state'leri
     var showFabMenu      by remember { mutableStateOf(false) }
     var showComposeDialog by remember { mutableStateOf(false) }
@@ -428,6 +444,11 @@ fun FeedScreen(
                                                     bookName   = inlineQuote?.bookName ?: "",
                                                     coverImg   = inlineQuote?.coverImg ?: "",
                                                     mentions   = inlineMentionedUids,
+                                                    linkUrl    = inlineLinkPreview?.url ?: "",
+                                                    linkTitle  = inlineLinkPreview?.title ?: "",
+                                                    linkDesc   = inlineLinkPreview?.desc ?: "",
+                                                    linkImage  = inlineLinkPreview?.image ?: "",
+                                                    linkType   = inlineLinkPreview?.type ?: "",
                                                 )
                                             }
                                             inlineText          = ""
@@ -436,6 +457,7 @@ fun FeedScreen(
                                             inlineQuote         = null
                                             inlineImageUri      = null
                                             inlineMentionedUids = emptyList()
+                                            inlineLinkPreview   = null
                                             vm.clearMentionSuggestions()
                                             showComposeDialog = false
                                         }
@@ -1443,13 +1465,27 @@ private fun ComposeBottomSheet(
     language        : String,
     currentUser     : FirebaseUser?,
     onDismiss       : () -> Unit,
-    onPost          : (String, QuotePayload?) -> Unit,
+    onPost          : (String, QuotePayload?, com.heftreng.app.util.LinkPreview?) -> Unit,
     onSearchBooks   : (suspend (String) -> List<QuoteSuggestion>)? = null,
     onSearchAuthors : (suspend (String) -> List<QuoteSuggestion>)? = null,
 ) {
     var text         by remember { mutableStateOf("") }
     var quotePayload by remember { mutableStateOf<QuotePayload?>(null) }
     var showQuote    by remember { mutableStateOf(false) }
+    var linkPreview  by remember { mutableStateOf<com.heftreng.app.util.LinkPreview?>(null) }
+    var linkLoading  by remember { mutableStateOf(false) }
+
+    // Metinde URL tespit edilince önizleme çek
+    LaunchedEffect(text) {
+        val url = LinkPreviewUtil.extractUrl(text)
+        if (url != null && url != linkPreview?.url) {
+            linkLoading = true
+            linkPreview = LinkPreviewUtil.fetchPreview(url)
+            linkLoading = false
+        } else if (url == null) {
+            linkPreview = null
+        }
+    }
 
     if (showQuote) {
         QuoteDialog(
@@ -1491,7 +1527,7 @@ private fun ComposeBottomSheet(
                     fontSize   = 15.sp,
                 )
                 TextButton(
-                    onClick  = { if (text.isNotBlank() || quotePayload != null) onPost(text.trim(), quotePayload) },
+                    onClick  = { if (text.isNotBlank() || quotePayload != null) onPost(text.trim(), quotePayload, linkPreview) },
                     enabled  = text.isNotBlank() || quotePayload != null,
                 ) {
                     Text(
@@ -1537,6 +1573,17 @@ private fun ComposeBottomSheet(
             if (quotePayload != null) {
                 Spacer(Modifier.height(10.dp))
                 QuoteInputSection(quote = quotePayload, onRemove = { quotePayload = null }, language = language)
+            }
+            if (linkPreview != null && linkPreview!!.url.isNotBlank()) {
+                Spacer(Modifier.height(10.dp))
+                LinkPreviewCard(
+                    url       = linkPreview!!.url,
+                    title     = linkPreview!!.title,
+                    desc      = linkPreview!!.desc,
+                    image     = linkPreview!!.image,
+                    type      = linkPreview!!.type,
+                    youtubeId = linkPreview!!.youtubeId,
+                )
             }
             Spacer(Modifier.height(10.dp))
             HorizontalDivider(color = Divider, thickness = 0.5.dp)
@@ -2023,6 +2070,22 @@ fun PostCard(
                 )
                 if (showImg) FullScreenImageViewer(url = displayImg) { showImg = false }
                 Spacer(Modifier.height(8.dp))
+            }
+
+            // Link önizleme — görsel yoksa ve link varsa göster
+            if (displayImg.isBlank() && post.linkUrl.isNotBlank()) {
+                val ytId = if (post.linkType == "youtube")
+                    com.heftreng.app.util.LinkPreviewUtil.extractYoutubeId(post.linkUrl)
+                else ""
+                LinkPreviewCard(
+                    url       = post.linkUrl,
+                    title     = post.linkTitle,
+                    desc      = post.linkDesc,
+                    image     = post.linkImage,
+                    type      = post.linkType,
+                    youtubeId = ytId,
+                    modifier  = Modifier.padding(bottom = 8.dp),
+                )
             }
         }
 
