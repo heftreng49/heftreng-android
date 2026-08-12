@@ -23,18 +23,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 import android.webkit.WebView
 import android.webkit.WebSettings
 import android.webkit.WebChromeClient
+import android.webkit.WebViewClient
+import android.graphics.Color
 import coil.compose.AsyncImage
 import com.heftreng.app.ui.theme.*
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun YouTubeEmbedCard(videoId: String, modifier: Modifier = Modifier) {
-    // YouTube embed URL'ini direkt WebView'a yükle.
-    // loadDataWithBaseURL ile farklı origin belirtmek 152-4 hatasına yol açıyor.
-    // Direkt loadUrl kullanınca WebView kendi origin'i geçerli olur, YouTube izin verir.
-    val embedUrl = "https://www.youtube-nocookie.com/embed/$videoId" +
-        "?playsinline=1&rel=0&autoplay=0"
-
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -45,13 +41,47 @@ fun YouTubeEmbedCard(videoId: String, modifier: Modifier = Modifier) {
         AndroidView(
             factory = { ctx ->
                 WebView(ctx).apply {
-                    settings.javaScriptEnabled            = true
-                    settings.mediaPlaybackRequiresUserGesture = false
-                    settings.loadWithOverviewMode         = true
-                    settings.useWideViewPort              = true
-                    settings.domStorageEnabled            = true
-                    webChromeClient                       = WebChromeClient()
-                    loadUrl(embedUrl)
+                    // Hardware acceleration — siyah ekranı önler
+                    setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+                    setBackgroundColor(Color.TRANSPARENT)
+
+                    settings.apply {
+                        javaScriptEnabled = true
+                        mediaPlaybackRequiresUserGesture = false
+                        loadWithOverviewMode = true
+                        useWideViewPort = true
+                        domStorageEnabled = true
+                        allowFileAccess = false
+                        cacheMode = WebSettings.LOAD_DEFAULT
+                    }
+
+                    webChromeClient = WebChromeClient()
+                    webViewClient  = WebViewClient()
+
+                    // HTML içinde iframe — en güvenilir yöntem
+                    // origin parametresi yok, embed kısıtlamasını tetiklemiyor
+                    val html = """
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                          <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+                          <style>
+                            html,body{margin:0;padding:0;background:#000;width:100%;height:100%;}
+                            iframe{width:100%;height:100%;border:none;display:block;}
+                          </style>
+                        </head>
+                        <body>
+                          <iframe
+                            src="https://www.youtube.com/embed/$videoId?playsinline=1&rel=0&autoplay=0&enablejsapi=1"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowfullscreen>
+                          </iframe>
+                        </body>
+                        </html>
+                    """.trimIndent()
+
+                    // baseUrl null — WebView kendi origin'ini kullanır, kısıtlama yok
+                    loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
                 }
             },
             modifier = Modifier.fillMaxSize()
@@ -71,13 +101,11 @@ fun LinkPreviewCard(
 ) {
     val context = LocalContext.current
 
-    // YouTube — WebView embed
     if (type == "youtube" && youtubeId.isNotBlank()) {
         YouTubeEmbedCard(videoId = youtubeId, modifier = modifier)
         return
     }
 
-    // Instagram + genel link — önizleme kartı
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -102,17 +130,13 @@ fun LinkPreviewCard(
                 )
             }
             Column(Modifier.padding(12.dp)) {
-                // Instagram / Reels için ikon + etiket
                 if (type == "instagram") {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("📷 ", fontSize = 13.sp)
-                        Text(
-                            "Instagram Reels",
-                            fontSize   = 11.sp,
-                            color      = Muted,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
+                    Text(
+                        "📷 Instagram Reels",
+                        fontSize   = 11.sp,
+                        color      = Muted,
+                        fontWeight = FontWeight.Medium,
+                    )
                     Spacer(Modifier.height(4.dp))
                 }
                 if (title.isNotBlank()) {
