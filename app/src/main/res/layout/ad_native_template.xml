@@ -70,6 +70,36 @@
             app:layout_constraintStart_toEndOf="@id/ad_app_icon"
             app:layout_constraintEnd_toEndOf="parent"/>
 
+        <!-- Advertiser: reklamcı adı -->
+        <TextView
+            android:id="@+id/ad_advertiser"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:textSize="11sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:visibility="gone"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="1dp"
+            app:layout_constraintTop_toBottomOf="@id/ad_headline"
+            app:layout_constraintStart_toEndOf="@id/ad_app_icon"
+            app:layout_constraintEnd_toEndOf="parent"/>
+
+        <!-- StarRating: uygulama reklamlarında yıldız -->
+        <RatingBar
+            android:id="@+id/ad_stars"
+            style="?android:attr/ratingBarStyleSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:isIndicator="true"
+            android:numStars="5"
+            android:stepSize="0.5"
+            android:visibility="gone"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="1dp"
+            app:layout_constraintTop_toBottomOf="@id/ad_advertiser"
+            app:layout_constraintStart_toEndOf="@id/ad_app_icon"/>
+
         <!-- "Sponsorlu" badge: başlık altında -->
         <TextView
             android:id="@+id/ad_sponsored_label"
