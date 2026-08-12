@@ -7,85 +7,99 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import android.webkit.WebView
-import android.webkit.WebSettings
-import android.webkit.WebChromeClient
-import android.webkit.WebViewClient
-import android.graphics.Color
 import coil.compose.AsyncImage
+import com.heftreng.app.R
 import com.heftreng.app.ui.theme.*
 
-@SuppressLint("SetJavaScriptEnabled")
+/**
+ * YouTube: thumbnail + play butonu göster, tıklayınca YouTube'a yönlendir.
+ * WebView embed YouTube tarafından engelleniyor (hata 152-4) — bu yüzden
+ * in-app oynatma yerine dışa yönlendirme kullanıyoruz.
+ */
 @Composable
 fun YouTubeEmbedCard(videoId: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val thumbnailUrl = "https://img.youtube.com/vi/$videoId/hqdefault.jpg"
+    val youtubeUrl   = "https://www.youtube.com/watch?v=$videoId"
+
     Box(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(16f / 9f)
             .clip(RoundedCornerShape(12.dp))
-            .background(HeftSurface)
-    ) {
-        AndroidView(
-            factory = { ctx ->
-                WebView(ctx).apply {
-                    // Hardware acceleration — siyah ekranı önler
-                    setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
-                    setBackgroundColor(Color.TRANSPARENT)
-
-                    settings.apply {
-                        javaScriptEnabled = true
-                        mediaPlaybackRequiresUserGesture = false
-                        loadWithOverviewMode = true
-                        useWideViewPort = true
-                        domStorageEnabled = true
-                        allowFileAccess = false
-                        cacheMode = WebSettings.LOAD_DEFAULT
-                    }
-
-                    webChromeClient = WebChromeClient()
-                    webViewClient  = WebViewClient()
-
-                    // HTML içinde iframe — en güvenilir yöntem
-                    // origin parametresi yok, embed kısıtlamasını tetiklemiyor
-                    val html = """
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                          <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-                          <style>
-                            html,body{margin:0;padding:0;background:#000;width:100%;height:100%;}
-                            iframe{width:100%;height:100%;border:none;display:block;}
-                          </style>
-                        </head>
-                        <body>
-                          <iframe
-                            src="https://www.youtube.com/embed/$videoId?playsinline=1&rel=0&autoplay=0&enablejsapi=1"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowfullscreen>
-                          </iframe>
-                        </body>
-                        </html>
-                    """.trimIndent()
-
-                    // baseUrl null — WebView kendi origin'ini kullanır, kısıtlama yok
-                    loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
+            .clickable {
+                // Önce YouTube uygulamasını dene, yoksa tarayıcıya aç
+                val appIntent = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$videoId"))
+                val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(youtubeUrl))
+                try {
+                    context.startActivity(appIntent)
+                } catch (e: Exception) {
+                    context.startActivity(webIntent)
                 }
-            },
-            modifier = Modifier.fillMaxSize()
+            }
+    ) {
+        // Thumbnail
+        AsyncImage(
+            model              = thumbnailUrl,
+            contentDescription = "YouTube video",
+            modifier           = Modifier.fillMaxSize(),
+            contentScale       = ContentScale.Crop,
         )
+
+        // Karartma overlay
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.3f))
+        )
+
+        // Play butonu ortada
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .align(Alignment.Center)
+                .background(Color.Red, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter           = painterResource(R.drawable.ic_play),
+                contentDescription = "Oynat",
+                tint              = Color.White,
+                modifier          = Modifier.size(28.dp).offset(x = 2.dp),
+            )
+        }
+
+        // YouTube logosu sağ alt
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(8.dp)
+                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text(
+                "▶ YouTube'da izle",
+                fontSize  = 10.sp,
+                color     = Color.White,
+                fontWeight = FontWeight.Medium,
+            )
+        }
     }
 }
 
@@ -113,9 +127,7 @@ fun LinkPreviewCard(
             .border(0.5.dp, Divider, RoundedCornerShape(12.dp))
             .background(HeftSurface)
             .clickable {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                )
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
             }
     ) {
         Column {
@@ -123,9 +135,7 @@ fun LinkPreviewCard(
                 AsyncImage(
                     model              = image,
                     contentDescription = null,
-                    modifier           = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp),
+                    modifier           = Modifier.fillMaxWidth().height(180.dp),
                     contentScale       = ContentScale.Crop,
                 )
             }
