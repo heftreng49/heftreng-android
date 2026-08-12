@@ -151,9 +151,8 @@ class AdEngine(
         )
         .setRequestMultipleImages(false)
         .setAdChoicesPlacement(NativeAdOptions.ADCHOICES_TOP_RIGHT)
-        // Landscape (yatay) oran tercih et — video reklamlar genelde 16:9 yatay
-        // ANY yerine LANDSCAPE kullanınca AdMob video tercih ediyor
-        .setMediaAspectRatio(NativeAdOptions.NATIVE_MEDIA_ASPECT_RATIO_LANDSCAPE)
+        // ANY — hem yatay hem dikey video gelsin, hiçbiri engellenmez
+        .setMediaAspectRatio(NativeAdOptions.NATIVE_MEDIA_ASPECT_RATIO_ANY)
         .build()
 
     private fun backoffDelay(retry: Int): Long =
