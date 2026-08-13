@@ -139,7 +139,10 @@ fun FeedScreen(
     // olarak imkansızdır (bkz. AdPlanner.kt). Ekran artık kendi index
     // formülünü yazmaz.
     val adConfigs by adsVm.allConfigs.collectAsState()
-    val adPlan = remember(posts.size, adConfigs) {
+    // adConfigs'teki native_feed ve banner_feed enabled durumunu ayrıca izle
+    val nativeFeedEnabled = adConfigs[RemoteConfigManager.KEY_NATIVE_FEED]?.enabled == true
+    val bannerFeedEnabled = adConfigs[RemoteConfigManager.KEY_BANNER_FEED]?.enabled == true
+    val adPlan = remember(posts.size, nativeFeedEnabled, bannerFeedEnabled, adConfigs) {
         adsVm.planFor(
             screenKey = "feed",
             itemCount = posts.size,
