@@ -435,11 +435,26 @@ class AdsViewModel @Inject constructor(
         // iki coroutine'den tetikleyip lastFetchMs üzerinde yarış durumu
         // yaratıyordu (biri "throttle geçti" derken diğeri de aynı anda deniyor).
         viewModelScope.launch {
+            // Hem canRequestAds hem de sdkReady'yi birlikte bekle.
+            // Sadece canRequestAds beklemek yetmiyordu — sdkReady daha geç
+            // gelebiliyor ve loadAdConfigs içindeki awaitSdk() zaten bekliyordu
+            // ama canRequestAds hiç gelmezse bu blok hiç çalışmıyordu.
+            // Şimdi iki ayrı coroutine: biri canRequestAds, biri 5sn timeout fallback.
             ConsentHelper.canRequestAds.collect { canAds ->
                 if (canAds) {
+                    android.util.Log.d("AdsVM", "canRequestAds=true → loadAdConfigs")
                     loadAdConfigs()
                     return@collect
                 }
+            }
+        }
+        // Fallback: 5 saniye içinde canRequestAds gelmezse yine de yükle
+        // (GDPR dışı bölge veya UMP timeout durumu için)
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(5_000)
+            if (configRepo.configs.value.isEmpty()) {
+                android.util.Log.d("AdsVM", "Fallback: 5sn sonra loadAdConfigs")
+                loadAdConfigs()
             }
         }
     }
