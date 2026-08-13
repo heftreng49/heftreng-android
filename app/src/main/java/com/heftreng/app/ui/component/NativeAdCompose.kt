@@ -3,17 +3,20 @@ package com.heftreng.app.ui.component
 import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.RatingBar
 import android.widget.TextView
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.constraintlayout.widget.ConstraintSet
+import com.google.android.gms.ads.VideoController
 import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
@@ -21,76 +24,39 @@ import com.heftreng.app.R
 import com.heftreng.app.ui.theme.HeftCard
 import com.heftreng.app.ui.theme.Divider
 
-/**
- * NativeAdViewCompose — sadeleştirilmiş, tek XML layout kullanan versiyon.
- *
- * GÖRSEL DOLGU (CENTER_CROP):
- *   MediaView içeriği kartı tamamen kaplar, siyah kenar oluşmaz.
- *   Bunun çalışması için AdLoader tarafında şu NativeAdOptions gerekir:
- *
- *     val options = NativeAdOptions.Builder()
- *         .setMediaAspectRatio(NativeAdOptions.NATIVE_MEDIA_ASPECT_RATIO_ANY)
- *         .setRequestMultipleImages(false)
- *         .build()
- *     AdLoader.Builder(context, unitId)
- *         .withNativeAdOptions(options)
- *         ...
- *
- *   AdEngine.kt → requestNative() içinde bu options set edilmeli.
- *   Aksi hâlde AdMob standart boyutta medya gönderir, CENTER_CROP görsel kaliteyi düşürebilir.
- *
- * ESKİ DURUM:
- *   when (adSize) { "medium" -> R.layout.ad_medium_template; "large" -> R.layout.ad_large_template; else -> R.layout.ad_small_template }
- *   → 3 ayrı XML dosyası inflate ediliyordu, içerik identikti.
- *
- * YENİ DURUM:
- *   • TEK XML: R.layout.ad_native_template
- *   • mediaHeightDp parametresi → MediaView yüksekliği compose katmanında ayarlanır
- *   • adSize → Enum'a çevrildi (String "small"/"medium"/"large" yerine)
- *     Neden? String hataya açık. Enum → compile-time güvenlik, IDE autocomplete
- *
- * BOYUTLAR:
- *   NativeAdSize.SMALL  → mediaHeightDp=0  → MediaView gizlenir (küçük kart)
- *   NativeAdSize.MEDIUM → mediaHeightDp=120 → küçük medya önizleme
- *   NativeAdSize.LARGE  → mediaHeightDp=200 → tam medya görünümü
- */
 enum class NativeAdSize { SMALL, MEDIUM, LARGE }
 
 @Composable
 fun NativeAdViewCompose(
     nativeAd : NativeAd,
     modifier : Modifier = Modifier,
-    adSize   : NativeAdSize = NativeAdSize.SMALL,
+    adSize   : NativeAdSize = NativeAdSize.LARGE,
 ) {
-    // Boyuta göre MediaView yüksekliği (dp cinsinden). 0 = MediaView GONE.
-    val mediaHeightDp = when (adSize) {
-        NativeAdSize.SMALL  -> 0
-        NativeAdSize.MEDIUM -> 120
-        NativeAdSize.LARGE  -> 200
-    }
-
+    val showMedia = adSize != NativeAdSize.SMALL
     val cardBg     = HeftCard
     val cardBorder = Divider
 
+    // inflated flag — update bloğunda populateAd tekrar çağrılmasın
+    val inflated = remember { androidx.compose.runtime.mutableStateOf(false) }
+
     AndroidView(
         factory = { context ->
-            // TEK layout inflate — boyut farkı mediaHeightDp ile çözülüyor
             val view = LayoutInflater.from(context)
                 .inflate(R.layout.ad_native_template, null) as NativeAdView
             applyTheme(view, cardBg, cardBorder)
-            populateAd(nativeAd, view, mediaHeightDp, context)
+            populateAd(nativeAd, view, showMedia, context)
+            inflated.value = true
             view
         },
         update = { view ->
-            // SADECE tema güncelle — populateAd tekrar çağrılmaz.
-            // mediaContent yeniden set edilirse video sıfırlanır.
+            // Sadece tema güncelle — populateAd ÇAĞIRMA.
+            // populateAd tekrar çağrılırsa mediaContent yeniden set edilir,
+            // video controller sıfırlanır, video başlamaz/durur.
             applyTheme(view, cardBg, cardBorder)
         },
         modifier = modifier.fillMaxWidth(),
     )
 }
-
-// ── Private yardımcılar ───────────────────────────────────────────────────────
 
 private fun applyTheme(view: NativeAdView, bg: Color, border: Color) {
     val dp = view.resources.displayMetrics.density
@@ -102,76 +68,55 @@ private fun applyTheme(view: NativeAdView, bg: Color, border: Color) {
     }
 }
 
-private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: Int, context: android.content.Context) {
-    val dp = context.resources.displayMetrics.density
+private fun populateAd(
+    nativeAd  : NativeAd,
+    adView    : NativeAdView,
+    showMedia : Boolean,
+    context   : android.content.Context,
+) {
+    val dm      = context.resources.displayMetrics
+    val dp      = dm.density
+    val screenW = dm.widthPixels - (24 * dp).toInt() // 12dp*2 CardView margin
+    val screenH = dm.heightPixels
 
-    // ── MediaView: aspect ratio'ya göre dinamik boyutlandırma ────────────────
-    // Sorun: XML'deki sabit ratio (1:1) yatay ve dikey reklamlarda siyah kenar
-    // oluşturuyordu. Çözüm: wrap_content + setAspectRatio ile MediaView kendi
-    // gerçek boyutuna göre yüksekliğini belirler.
     val mediaView = adView.findViewById<MediaView>(R.id.ad_media)
     adView.mediaView = mediaView
 
-    if (mediaHeightDp > 0 && nativeAd.mediaContent != null) {
-        val mediaContent = nativeAd.mediaContent!!
-        // mediaContent sadece bir kez set edilmeli — tekrar atanırsa video sıfırlanır
+    // ── MediaView ─────────────────────────────────────────────────────────────
+    if (showMedia && nativeAd.mediaContent != null) {
+        val mc = nativeAd.mediaContent!!
+
+        // mediaContent sadece bir kez set et — tekrar set edilirse video sıfırlanır
         if (mediaView.mediaContent == null) {
-            mediaView.mediaContent = mediaContent
+            mediaView.mediaContent = mc
         }
+
         mediaView.clipToOutline = true
         mediaView.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
         mediaView.visibility = View.VISIBLE
 
-        // Reklamın aspect ratio'sunu oku (yatay ~1.78, dikey ~0.56, kare ~1.0)
-        val ratio = mediaContent.aspectRatio
-        val safeRatio = if (ratio > 0f) ratio else 1.78f
+        // İlk ratio ataması
+        val ratio = mc.aspectRatio
+        applyRatio(mediaView, ratio, screenW, screenH, dp)
 
-        // MediaView'da video scale type programatik değiştirilemiyor (Google kısıtlaması).
-        // Çözüm: dikey reklamlarda genişliği de aspect ratio'ya göre hesapla.
-        // Yatay (ratio > 1.0): tam genişlik, yükseklik orandan hesaplanır
-        // Dikey (ratio < 1.0): önce maxHeight belirlenir, genişlik = height * ratio
-        val screenWidthPx  = context.resources.displayMetrics.widthPixels - (24 * dp).toInt()
-        val screenHeightPx = context.resources.displayMetrics.heightPixels
-        val rawHeightPx    = (screenWidthPx / safeRatio).toInt()
-        val maxHeightPx    = (screenHeightPx * 0.55f).toInt()
-        val minHeightPx    = (120 * dp).toInt()
-
-        val targetWidthPx: Int
-        val targetHeightPx: Int
-
-        if (safeRatio >= 1.0f) {
-            // Yatay reklam: genişliği tam tut, yüksekliği orandan hesapla
-            // coerceIn YOK — yükseklik kırpılırsa letterbox oluşur
-            targetWidthPx  = screenWidthPx
-            targetHeightPx = (screenWidthPx / safeRatio).toInt()
-        } else {
-            // Dikey reklam: yüksekliği maxHeight ile sınırla, genişliği orandan türet
-            val clampedHeight = rawHeightPx.coerceIn(minHeightPx, maxHeightPx)
-            targetHeightPx = clampedHeight
-            targetWidthPx  = (clampedHeight * safeRatio).toInt().coerceAtMost(screenWidthPx)
-        }
-
-        mediaView.layoutParams = (mediaView.layoutParams ?: android.widget.FrameLayout.LayoutParams(
-            targetWidthPx, targetHeightPx
-        )).also {
-            it.width  = targetWidthPx
-            it.height = targetHeightPx
-            if (it is android.widget.FrameLayout.LayoutParams) {
-                it.gravity = android.view.Gravity.CENTER_HORIZONTAL
+        // Video yüklenince gerçek ratio ile güncelle
+        mc.videoController?.videoLifecycleCallbacks =
+            object : VideoController.VideoLifecycleCallbacks() {
+                override fun onVideoStart() {
+                    mediaView.post {
+                        applyRatio(mediaView, mc.aspectRatio, screenW, screenH, dp)
+                    }
+                }
             }
-        }
     } else {
         mediaView.visibility = View.GONE
     }
 
+    // ── Diğer view'lar ────────────────────────────────────────────────────────
     adView.headlineView = adView.findViewById<TextView>(R.id.ad_headline).also {
         it.text = nativeAd.headline ?: ""
     }
 
-    // AdMob politikası: "Reklam" ibaresi net, okunabilir ve HER zaman görünür olmalı.
-    // Önceden bu view'a kod hiç dokunmuyordu — statik XML default'una (visible) güveniliyordu,
-    // yani biri layout'u değiştirip visibility ekleyecek olsa etiket sessizce kaybolabilirdi.
-    // Artık her populateAd() çağrısında (ilk yükleme + tema/update) açıkça VISIBLE garanti ediliyor.
     adView.findViewById<TextView>(R.id.ad_sponsored_label).visibility = View.VISIBLE
 
     adView.bodyView = adView.findViewById<TextView>(R.id.ad_body).also {
@@ -190,18 +135,12 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
         if (icon?.drawable != null) it.setImageDrawable(icon.drawable)
     }
 
-    // Advertiser — reklamcı adı, uygulama reklamlarında eCPM için kritik
     adView.advertiserView = adView.findViewById<TextView>(R.id.ad_advertiser).also {
-        val advertiser = nativeAd.advertiser
-        if (!advertiser.isNullOrBlank()) {
-            it.text = advertiser
-            it.visibility = View.VISIBLE
-        } else {
-            it.visibility = View.GONE
-        }
+        val adv = nativeAd.advertiser
+        it.visibility = if (!adv.isNullOrBlank()) View.VISIBLE else View.GONE
+        it.text = adv ?: ""
     }
 
-    // StarRating — uygulama reklamlarında yıldız puanı
     adView.starRatingView = adView.findViewById<RatingBar>(R.id.ad_stars).also {
         val rating = nativeAd.starRating
         if (rating != null && rating > 0) {
@@ -212,5 +151,47 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
         }
     }
 
+    // setNativeAd her zaman en sonda
     adView.setNativeAd(nativeAd)
+}
+
+/**
+ * MediaView'u ConstraintSet ile yeniden boyutlandırır.
+ * ratio=0 ise (video henüz yüklenmedi) 16:9 fallback kullanılır.
+ * Video yüklenince onVideoStart() ile gerçek ratio ile tekrar çağrılır.
+ */
+private fun applyRatio(
+    mediaView : MediaView,
+    rawRatio  : Float,
+    screenW   : Int,
+    screenH   : Int,
+    dp        : Float,
+) {
+    val ratio  = if (rawRatio > 0f) rawRatio else 16f / 9f
+    val minH   = (120 * dp).toInt()
+    val maxH   = (screenH * 0.55f).toInt()
+
+    val parent = mediaView.parent as? ConstraintLayout ?: return
+    val cs     = ConstraintSet()
+    cs.clone(parent)
+
+    if (ratio >= 1.0f) {
+        // Yatay: tam genişlik, 16:9 oranı
+        cs.constrainWidth(R.id.ad_media, ConstraintSet.MATCH_CONSTRAINT)
+        cs.constrainHeight(R.id.ad_media, ConstraintSet.MATCH_CONSTRAINT)
+        cs.setDimensionRatio(R.id.ad_media, "W,${ratio}:1")
+        cs.connect(R.id.ad_media, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
+        cs.connect(R.id.ad_media, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+        cs.constrainMinHeight(R.id.ad_media, minH)
+    } else {
+        // Dikey: yükseklik sınırlı, ortaya hizalı
+        val targetH = ((screenW / ratio).toInt()).coerceIn(minH, maxH)
+        val targetW = (targetH * ratio).toInt().coerceAtMost(screenW)
+        cs.constrainWidth(R.id.ad_media, targetW)
+        cs.constrainHeight(R.id.ad_media, targetH)
+        cs.setDimensionRatio(R.id.ad_media, "")
+        cs.centerHorizontally(R.id.ad_media, ConstraintSet.PARENT_ID)
+    }
+
+    cs.applyTo(parent)
 }
