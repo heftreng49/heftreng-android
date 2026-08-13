@@ -82,9 +82,9 @@ fun NativeAdViewCompose(
             view
         },
         update = { view ->
-            // Tema değişiminde (dark/light) arka plan güncelle
+            // SADECE tema güncelle — populateAd tekrar çağrılmaz.
+            // mediaContent yeniden set edilirse video sıfırlanır.
             applyTheme(view, cardBg, cardBorder)
-            populateAd(nativeAd, view, mediaHeightDp, view.context)
         },
         modifier = modifier.fillMaxWidth(),
     )
@@ -114,7 +114,10 @@ private fun populateAd(nativeAd: NativeAd, adView: NativeAdView, mediaHeightDp: 
 
     if (mediaHeightDp > 0 && nativeAd.mediaContent != null) {
         val mediaContent = nativeAd.mediaContent!!
-        mediaView.mediaContent = mediaContent
+        // mediaContent sadece bir kez set edilmeli — tekrar atanırsa video sıfırlanır
+        if (mediaView.mediaContent == null) {
+            mediaView.mediaContent = mediaContent
+        }
         mediaView.clipToOutline = true
         mediaView.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
         mediaView.visibility = View.VISIBLE
