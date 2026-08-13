@@ -342,7 +342,7 @@ fun ProfileScreen(
         // çağrılabilir) — LazyListScope içinde (item/itemsIndexed bloklarında) ÇAĞRILAMAZ,
         // çünkü o bağlam @Composable değildir.
         val profileAdConfigs by adsVm.allConfigs.collectAsState()
-        val profileAdPlan = remember(posts.size, profileAdConfigs, targetUid) {
+        val profileAdPlan = remember(posts.size, profileAdConfigs[RemoteConfigManager.KEY_NATIVE_PROFILE]?.enabled, profileAdConfigs, targetUid) {
             adsVm.planFor(
                 screenKey = "profile_$targetUid",
                 itemCount = posts.size,

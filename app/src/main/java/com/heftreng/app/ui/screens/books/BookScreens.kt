@@ -92,7 +92,7 @@ fun BooksScreen(
     // ── Reklam altyapısı (enabled:false — unitId Firebase Console'dan girilene kadar kapalı) ──
     val adConfigs by adsVm.allConfigs.collectAsState()
     val booksListState = rememberLazyListState()
-    val booksAdPlan = remember(books.size, adConfigs) {
+    val booksAdPlan = remember(books.size, adConfigs[RemoteConfigManager.KEY_NATIVE_BOOKSCREENS]?.enabled, adConfigs) {
         adsVm.planFor(
             screenKey = "bookscreens",
             itemCount = books.size,

@@ -436,7 +436,7 @@ private fun LibraryQuotesTab(
         return
     }
     val adConfigs by adsVm.allConfigs.collectAsState()
-    val adPlan = remember(quotes.size, adConfigs) {
+    val adPlan = remember(quotes.size, adConfigs[RemoteConfigManager.KEY_NATIVE_LIBRARY]?.enabled, adConfigs) {
         adsVm.planFor(
             screenKey = "lib_quotes",
             itemCount = quotes.size,
@@ -533,7 +533,7 @@ private fun LibraryReviewsTab(
         return
     }
     val adConfigs by adsVm.allConfigs.collectAsState()
-    val adPlan = remember(reviews.size, adConfigs) {
+    val adPlan = remember(reviews.size, adConfigs[RemoteConfigManager.KEY_NATIVE_LIBRARY]?.enabled, adConfigs) {
         adsVm.planFor(screenKey = "lib_reviews", itemCount = reviews.size, bannerKey = RemoteConfigManager.KEY_BANNER_LIBRARY)
     }
     val reviewsListState = rememberLazyListState()
@@ -568,7 +568,7 @@ private fun LibraryAuthorsTab(
         return
     }
     val adConfigs by adsVm.allConfigs.collectAsState()
-    val adPlan = remember(authors.size, adConfigs) {
+    val adPlan = remember(authors.size, adConfigs[RemoteConfigManager.KEY_NATIVE_LIBRARY]?.enabled, adConfigs) {
         adsVm.planFor(screenKey = "lib_authors", itemCount = authors.size, bannerKey = RemoteConfigManager.KEY_BANNER_LIBRARY)
     }
     val authorsListState = rememberLazyListState()

@@ -1157,7 +1157,7 @@ private fun UnitsTab(
         }
         else -> {
         val adConfigs by adsVm.allConfigs.collectAsState()
-        val kurdiAdPlan = remember(units.size, adConfigs) {
+        val kurdiAdPlan = remember(units.size, adConfigs[RemoteConfigManager.KEY_NATIVE_KURDI]?.enabled, adConfigs) {
             adsVm.planFor(
                 screenKey = "kurdi",
                 itemCount = units.size,

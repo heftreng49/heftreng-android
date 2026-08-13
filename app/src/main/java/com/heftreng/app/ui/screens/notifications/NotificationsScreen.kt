@@ -157,7 +157,7 @@ fun NotificationsScreen(
     // ── Reklam alt yapısı — native reklamlar ────────────────────────────────
     // Banner yerine native kullanılıyor (metin listesinde daha doğal görünüm).
     val adConfigs by adsVm.allConfigs.collectAsState()
-    val adPlan = remember(notifications.size, adConfigs) {
+    val adPlan = remember(notifications.size, adConfigs[RemoteConfigManager.KEY_NATIVE_NOTIFICATIONS]?.enabled, adConfigs) {
         val plan = adsVm.planFor(
             screenKey = "notifications",
             itemCount = notifications.size,
