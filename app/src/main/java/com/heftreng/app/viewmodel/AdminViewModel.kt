@@ -290,16 +290,23 @@ class AdminViewModel @Inject constructor(
     /** Günün Kelimesi'ni kaydet + herkese push gönder ("Tetikle") */
     fun saveDailyWordAndNotify(content: DailyWordContent, date: String = todayKey()) {
         saveDailyWord(content, date)
-        // Title: kelime + TR anlam (kısa)
-        val title = "📝 ${content.word} — ${content.meaningTr}"
-        // Body: KU anlam + örnek cümle tam olarak
+        // Title: sadece kelime — kısa tut, Android ~50 karakter sınırı var
+        val title = "📝 ${content.word}"
+        // Body: TR anlam önce, sonra KU anlam, örnek ayrı satırda
         val body = buildString {
-            if (content.meaningKu.isNotBlank()) append("Kurdî: ${content.meaningKu}")
+            // Türkçe anlam — kullanıcının hemen anlayacağı kısım
+            if (content.meaningTr.isNotBlank()) append(content.meaningTr)
+            // Kürtçe anlam
+            if (content.meaningKu.isNotBlank()) {
+                if (isNotEmpty()) append(" • ")
+                append(content.meaningKu)
+            }
+            // Örnek cümle — yeni satırda
             if (content.exampleKu.isNotBlank()) {
                 if (isNotEmpty()) append("\n")
                 append("\u201C${content.exampleKu}\u201D")
             }
-        }.ifBlank { "${content.word} — ${content.meaningTr}" }
+        }.ifBlank { content.meaningTr.ifBlank { content.word } }
         sendPush(
             title = title,
             body  = body,
