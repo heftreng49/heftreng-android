@@ -170,22 +170,13 @@ class LibraryRepository @Inject constructor(
     // ── Authors ───────────────────────────────────────────────────────────────
 
     suspend fun getAuthors(limit: Int = 20, offset: Int = 0): List<AuthorRow> {
-        // Sadece ilk sayfa cache'lenir
-        if (offset == 0) {
-            val cached = authorDao.getCachedAuthors(limit)
-            val cacheAge = cached.minOfOrNull { it.cachedAt } ?: 0L
-            if (cached.isNotEmpty() && System.currentTimeMillis() - cacheAge < ROOM_CACHE_TTL_MS) {
-                return cached.map { it.toRow() }
-            }
-        }
-        // Cache boş veya eski — Supabase'den çek ve Room'a kaydet
         return try {
             val rows = db["authors"].select {
                 order("name", Order.ASCENDING)
                 limit(limit.toLong())
                 range(offset.toLong(), (offset + limit - 1).toLong())
             }.decodeList<AuthorRow>()
-            if (offset == 0) authorDao.replaceAll(rows.map { it.toCached() })
+            authorDao.insertAll(rows.map { it.toCached() })
             rows
         } catch (e: Exception) {
             if (offset == 0) authorDao.getCachedAuthors(limit).map { it.toRow() }
@@ -284,23 +275,17 @@ class LibraryRepository @Inject constructor(
     // ── Library Books ─────────────────────────────────────────────────────────
 
     suspend fun getBooks(limit: Int = 20, offset: Int = 0): List<LibraryBookRow> {
-        // Sadece ilk sayfa cache'lenir
-        if (offset == 0) {
-            val cached = bookDao.getCachedBooks(limit)
-            val cacheAge = cached.minOfOrNull { it.cachedAt } ?: 0L
-            if (cached.isNotEmpty() && System.currentTimeMillis() - cacheAge < ROOM_CACHE_TTL_MS) {
-                return cached.map { it.toRow() }
-            }
-        }
         return try {
             val rows = db["library_books"].select {
                 order("created_at", Order.DESCENDING)
                 limit(limit.toLong())
                 range(offset.toLong(), (offset + limit - 1).toLong())
             }.decodeList<LibraryBookRow>()
-            if (offset == 0) bookDao.replaceAll(rows.map { it.toCached() })
+            // Her sayfayı Room'a ekle (replaceAll değil insertAll — önceki sayfaları silme)
+            bookDao.insertAll(rows.map { it.toCached() })
             rows
         } catch (e: Exception) {
+            // Ağ hatası: sadece offset=0'da Room'dan dön
             if (offset == 0) bookDao.getCachedBooks(limit).map { it.toRow() }
             else emptyList()
         }
