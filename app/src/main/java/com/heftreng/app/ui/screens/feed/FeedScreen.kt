@@ -139,17 +139,15 @@ fun FeedScreen(
     // olarak imkansızdır (bkz. AdPlanner.kt). Ekran artık kendi index
     // formülünü yazmaz.
     val adConfigs by adsVm.allConfigs.collectAsState()
-    // adConfigs'teki native_feed ve banner_feed enabled durumunu ayrıca izle
-    val nativeFeedEnabled = adConfigs[RemoteConfigManager.KEY_NATIVE_FEED]?.enabled == true
-    val bannerFeedEnabled = adConfigs[RemoteConfigManager.KEY_BANNER_FEED]?.enabled == true
-    // adConfigs[key]?.enabled key olarak eklendi — Remote Config gelince
-    // adPlan otomatik yeniden hesaplanır ve LaunchedEffect yeniden tetiklenir.
+    // Bildirim ekranıyla aynı pattern: enabled + adConfigs key olarak kullanılır.
+    // adConfigs Map referansı değişmeyebilir — enabled ayrı primitive key olarak eklendi.
     val adPlan = remember(
         posts.size,
         adConfigs[RemoteConfigManager.KEY_NATIVE_FEED]?.enabled,
         adConfigs[RemoteConfigManager.KEY_NATIVE_FEED]?.unitId,
         adConfigs[RemoteConfigManager.KEY_BANNER_FEED]?.enabled,
         adConfigs[RemoteConfigManager.KEY_BANNER_FEED]?.unitId,
+        adConfigs,
     ) {
         adsVm.planFor(
             screenKey = "feed",
@@ -874,7 +872,8 @@ fun FeedScreen(
             // 1-3sn yükleme süresini karşılayacak kadar erken tetiklenir.
             // Ekran artık kendi index formülünü YAZMAZ, banner/native ayrı ayrı
             // ısıtılmaz — ikisi de aynı plan'dan, aynı çağrıdan gelir.
-            LaunchedEffect(feedListState, adPlan, adPlan.size) {
+            LaunchedEffect(feedListState, adPlan, adPlan.isEmpty()) {
+                if (adPlan.isEmpty()) return@LaunchedEffect
                 adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = 0, maxInitialAds = 3)
                 snapshotFlow { feedListState.firstVisibleItemIndex }
                     .debounce(300L) // hızlı scroll'da her kart için istek atılmasın
