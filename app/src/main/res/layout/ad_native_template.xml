@@ -1,25 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    ad_native_template.xml — TEK native ad şablonu.
+    ad_native_template.xml — Native reklam şablonu
 
-    ESKİ DURUM:
-      ad_small_template.xml  ─┐
-      ad_medium_template.xml  ├─ İÇERİK BİREBİR AYNI. Tek fark: ad_media height değeri.
-      ad_large_template.xml  ─┘
+    Boyutlandırma:
+    • MediaView: 0dp/0dp + varsayılan W,16:9 ratio
+    • Gerçek ratio kod tarafında (updateMediaSize) ConstraintSet ile güncellenir
+    • Yatay reklamlar: MATCH_CONSTRAINT + ratio → tam genişlik, doğru yükseklik
+    • Dikey reklamlar: sabit px + centerHorizontally → siyah kenar yok
 
-    NEDEN 3 DOSYA SORUNLUYDU?
-    • Kod tabanı şişiyor, senkronizasyon zorlaşıyor (3 yerde aynı değişiklik)
-    • Build süresi artıyor (3 layout inflate edilip ölçülüyor)
-    • NativeAdViewCompose'da 3 farklı layoutId inflate ediliyordu
-
-    YENİ YAKLAŞIM:
-    • TEK dosya — adSize parametresi compose katmanında ViewGroup.LayoutParams ile çözülür
-    • NativeAdViewCompose → mediaHeightDp: Int parametresi alır → bunu AndroidView'da uygular
-    • LinearLayout → ConstraintLayout: iç içe 3 katman → 1 düz katman (measure pass azalır)
-
-    KATMAN FARK:
-    ESKİ: NativeAdView → LinearLayout(V) → LinearLayout(H) → LinearLayout(V) → TextView
-    YENİ: NativeAdView → ConstraintLayout → direkt widget'lar
+    Yapı (flat ConstraintLayout — tek ölçüm geçişi):
+    NativeAdView
+      └─ ConstraintLayout
+           ├─ ImageView      (ikon)
+           ├─ TextView       (başlık)
+           ├─ TextView       (reklamcı)
+           ├─ RatingBar      (yıldız)
+           ├─ TextView       (sponsorlu)
+           ├─ TextView       (açıklama)
+           ├─ MediaView      (video/görsel)
+           ├─ Barrier        (MediaView altı)
+           └─ Button         (CTA)
 -->
 <com.google.android.gms.ads.nativead.NativeAdView
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -29,16 +29,11 @@
     android:background="@drawable/bg_native_ad_card"
     android:padding="12dp">
 
-    <!--
-        ConstraintLayout: tüm widget'lar flat (tek katman) → measure pass azalır.
-        LinearLayout nested structure → ConstraintLayout flat structure:
-        Her view'ın constraints açık — bakımı kolay, performans daha iyi.
-    -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
-        <!-- İkon: sol üst köşe -->
+        <!-- İkon -->
         <ImageView
             android:id="@+id/ad_app_icon"
             android:layout_width="32dp"
@@ -48,13 +43,7 @@
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintStart_toStartOf="parent"/>
 
-        <!--
-            Başlık: ikon sağında, üst hizada.
-            layout_marginEnd="20dp" — AdMob'un otomatik yerleştirdiği AdChoices ikonu
-            (ADCHOICES_TOP_RIGHT, bkz. AdEngine.kt) sağ üst köşeye biner. Bu boşluk
-            olmadan uzun reklam başlıkları ellipsize'a rağmen o alana çok yaklaşıp
-            ikonun üstünü örtebilirdi — politika ihlali sayılabilecek bir durum.
-        -->
+        <!-- Başlık -->
         <TextView
             android:id="@+id/ad_headline"
             android:layout_width="0dp"
@@ -70,7 +59,7 @@
             app:layout_constraintStart_toEndOf="@id/ad_app_icon"
             app:layout_constraintEnd_toEndOf="parent"/>
 
-        <!-- Advertiser: reklamcı adı -->
+        <!-- Reklamcı adı -->
         <TextView
             android:id="@+id/ad_advertiser"
             android:layout_width="0dp"
@@ -85,7 +74,7 @@
             app:layout_constraintStart_toEndOf="@id/ad_app_icon"
             app:layout_constraintEnd_toEndOf="parent"/>
 
-        <!-- StarRating: uygulama reklamlarında yıldız -->
+        <!-- Yıldız değerlendirmesi -->
         <RatingBar
             android:id="@+id/ad_stars"
             style="?android:attr/ratingBarStyleSmall"
@@ -100,7 +89,7 @@
             app:layout_constraintTop_toBottomOf="@id/ad_advertiser"
             app:layout_constraintStart_toEndOf="@id/ad_app_icon"/>
 
-        <!-- "Sponsorlu" badge: başlık altında -->
+        <!-- Sponsorlu etiketi -->
         <TextView
             android:id="@+id/ad_sponsored_label"
             android:layout_width="wrap_content"
@@ -116,7 +105,7 @@
             app:layout_constraintTop_toBottomOf="@id/ad_stars"
             app:layout_constraintStart_toEndOf="@id/ad_app_icon"/>
 
-        <!-- Açıklama: ikon ve badge'in altında -->
+        <!-- Açıklama metni -->
         <TextView
             android:id="@+id/ad_body"
             android:layout_width="0dp"
@@ -131,21 +120,10 @@
             app:layout_constraintEnd_toEndOf="parent"/>
 
         <!--
-            MediaView: yüksekliği compose katmanından ViewGroup.LayoutParams ile set edilir.
-            Default 0dp → görünmez. NativeAdViewCompose içinde mediaHeightDp parametresi
-            bunu belirler. Bu sayede small/medium/large boyutu tek XML ile karşılanır.
-        -->
-        <!--
-            MediaView: layout_height="wrap_content" — ConstraintLayout 0dp yüksekliği
-            top/bottom constraint olmadan sıfır hesaplar, kod tarafı set etse bile etkisiz.
-            wrap_content ile MediaView kendi içeriğine göre boyutlanır,
-            kod tarafından minHeight ile minimum yükseklik garantilenir.
-        -->
-        <!--
-            MediaView: layout_height="wrap_content" — içerik aspect ratio'sunu
-            kod tarafı (populateAd) belirler. Sabit ratio kaldırıldı çünkü
-            yatay reklamlar (16:9) ve dikey reklamlar (9:16) farklı yükseklik ister.
-            wrap_content + setAspectRatio (kod tarafı) = siyah kenar yok.
+            MediaView:
+            • 0dp/0dp: ConstraintSet tam kontrol
+            • Varsayılan W,16:9: kod ratio gelene kadar boşluk bırakmaz
+            • Gerçek ratio: updateMediaSize() ile güncellenir
         -->
         <com.google.android.gms.ads.nativead.MediaView
             android:id="@+id/ad_media"
@@ -159,9 +137,8 @@
             app:layout_constraintDimensionRatio="W,16:9"/>
 
         <!--
-            Barrier: MediaView GONE olduğunda buton ad_body'ye yapışır.
-            MediaView VISIBLE olduğunda buton MediaView'ın altına geçer.
-            Bu sayede kod tarafında constraint değiştirmeye gerek kalmaz.
+            Barrier: MediaView GONE olduğunda buton ad_body'ye yapışır,
+            VISIBLE olduğunda MediaView altına geçer — constraint değişikliği gerekmez.
         -->
         <androidx.constraintlayout.widget.Barrier
             android:id="@+id/ad_media_barrier"
@@ -170,7 +147,7 @@
             app:barrierDirection="bottom"
             app:constraint_referenced_ids="ad_media"/>
 
-        <!-- CTA butonu: en altta -->
+        <!-- CTA butonu -->
         <Button
             android:id="@+id/ad_call_to_action"
             android:layout_width="0dp"
