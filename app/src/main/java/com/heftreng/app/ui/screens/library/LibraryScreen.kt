@@ -114,7 +114,9 @@ fun LibraryScreen(
     val quotesLoadingMore by feedVm.libraryLoadingMore.collectAsState()
     var reviews by remember { mutableStateOf<List<BookReview>>(emptyList()) }
     val authors by libraryVm.authors.collectAsState()
-    var books   by remember { mutableStateOf<List<LibraryBook>>(emptyList()) }
+    val books      by libraryVm.books.collectAsState()
+    val booksHasMore by libraryVm.booksHasMore.collectAsState()
+    val authorsHasMore by libraryVm.authorsHasMore.collectAsState()
     var loading by remember { mutableStateOf(true) }
     val adConfigs by adsVm.allConfigs.collectAsState()
 
@@ -157,11 +159,8 @@ fun LibraryScreen(
             catch (e: Exception) { android.util.Log.e("LibraryScreen", "authors: ${e.message}") }
         }
         val booksJob = launch {
-            try {
-                books = libraryVm.loadBooksForScreen()
-            } catch (e: Exception) {
-                android.util.Log.e("LibraryScreen", "books: ${e.message}")
-            }
+            try { libraryVm.loadBooks() }
+            catch (e: Exception) { android.util.Log.e("LibraryScreen", "books: ${e.message}") }
         }
         val reviewsJob = launch {
             try {
@@ -325,8 +324,22 @@ fun LibraryScreen(
                     when (page) {
                         0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, adsVm = adsVm, isOffline = quotesOffline, hasMore = quotesHasMore, loadingMore = quotesLoadingMore, onLoadMore = { feedVm.loadMoreLibraryQuotes() })
                         1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm, adsVm = adsVm)
-                        2 -> LibraryAuthorsTab(authors = authors, navController = navController, language = language, adsVm = adsVm)
-                        3 -> LibraryBooksTab(books = books, navController = navController, language = language, adsVm = adsVm)
+                        2 -> LibraryAuthorsTab(
+                            authors = authors,
+                            navController = navController,
+                            language = language,
+                            adsVm = adsVm,
+                            hasMore = authorsHasMore,
+                            onLoadMore = { libraryVm.loadMoreAuthors() },
+                        )
+                        3 -> LibraryBooksTab(
+                            books = books,
+                            navController = navController,
+                            language = language,
+                            adsVm = adsVm,
+                            hasMore = booksHasMore,
+                            onLoadMore = { libraryVm.loadMoreBooks() },
+                        )
                         else -> {}
                     }
                 }
@@ -562,6 +575,8 @@ private fun LibraryAuthorsTab(
     language     : String,
     navController: NavController,
     adsVm        : com.heftreng.app.viewmodel.AdsViewModel,
+    hasMore      : Boolean = false,
+    onLoadMore   : () -> Unit = {},
 ) {
     if (authors.isEmpty()) {
         EmptyState(Icons.Outlined.Person, Strings.libraryNoAuthors(language))
@@ -591,6 +606,22 @@ private fun LibraryAuthorsTab(
                 AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(vertical = 4.dp))
             }
         }
+        // Sayfalama — sona gelince yükle
+        if (hasMore) {
+            item {
+                LaunchedEffect(Unit) { onLoadMore() }
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    contentAlignment = androidx.compose.ui.Alignment.Center,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = Primary,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -600,6 +631,8 @@ private fun LibraryBooksTab(
     language     : String,
     navController: NavController,
     adsVm        : com.heftreng.app.viewmodel.AdsViewModel,
+    hasMore      : Boolean = false,
+    onLoadMore   : () -> Unit = {},
 ) {
     if (books.isEmpty()) {
         EmptyState(Icons.Outlined.AutoStories, Strings.libraryNoBooks(language))
@@ -635,6 +668,22 @@ private fun LibraryBooksTab(
                     adsVm     = adsVm,
                     modifier  = Modifier.padding(vertical = 4.dp),
                 )
+            }
+        }
+        // Sayfalama — son öğeye gelince yükle
+        if (hasMore) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                LaunchedEffect(Unit) { onLoadMore() }
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    contentAlignment = androidx.compose.ui.Alignment.Center,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = Primary,
+                    )
+                }
             }
         }
     }

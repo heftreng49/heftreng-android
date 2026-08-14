@@ -169,24 +169,27 @@ class LibraryRepository @Inject constructor(
 
     // ── Authors ───────────────────────────────────────────────────────────────
 
-    suspend fun getAuthors(limit: Int = 50): List<AuthorRow> {
-        // Room cache'ten dön — 30 dk dolmadıysa Supabase'e gitme
-        val cached = authorDao.getCachedAuthors(limit)
-        val cacheAge = cached.minOfOrNull { it.cachedAt } ?: 0L
-        if (cached.isNotEmpty() && System.currentTimeMillis() - cacheAge < ROOM_CACHE_TTL_MS) {
-            return cached.map { it.toRow() }
+    suspend fun getAuthors(limit: Int = 20, offset: Int = 0): List<AuthorRow> {
+        // Sadece ilk sayfa cache'lenir
+        if (offset == 0) {
+            val cached = authorDao.getCachedAuthors(limit)
+            val cacheAge = cached.minOfOrNull { it.cachedAt } ?: 0L
+            if (cached.isNotEmpty() && System.currentTimeMillis() - cacheAge < ROOM_CACHE_TTL_MS) {
+                return cached.map { it.toRow() }
+            }
         }
         // Cache boş veya eski — Supabase'den çek ve Room'a kaydet
         return try {
             val rows = db["authors"].select {
                 order("name", Order.ASCENDING)
                 limit(limit.toLong())
+                range(offset.toLong(), (offset + limit - 1).toLong())
             }.decodeList<AuthorRow>()
-            authorDao.replaceAll(rows.map { it.toCached() })
+            if (offset == 0) authorDao.replaceAll(rows.map { it.toCached() })
             rows
         } catch (e: Exception) {
-            // Network yoksa Room'daki eski veriyi kullan
-            cached.map { it.toRow() }
+            if (offset == 0) authorDao.getCachedAuthors(limit).map { it.toRow() }
+            else emptyList()
         }
     }
 
@@ -280,21 +283,26 @@ class LibraryRepository @Inject constructor(
 
     // ── Library Books ─────────────────────────────────────────────────────────
 
-    suspend fun getBooks(limit: Int = 50): List<LibraryBookRow> {
-        val cached = bookDao.getCachedBooks(limit)
-        val cacheAge = cached.minOfOrNull { it.cachedAt } ?: 0L
-        if (cached.isNotEmpty() && System.currentTimeMillis() - cacheAge < ROOM_CACHE_TTL_MS) {
-            return cached.map { it.toRow() }
+    suspend fun getBooks(limit: Int = 20, offset: Int = 0): List<LibraryBookRow> {
+        // Sadece ilk sayfa cache'lenir
+        if (offset == 0) {
+            val cached = bookDao.getCachedBooks(limit)
+            val cacheAge = cached.minOfOrNull { it.cachedAt } ?: 0L
+            if (cached.isNotEmpty() && System.currentTimeMillis() - cacheAge < ROOM_CACHE_TTL_MS) {
+                return cached.map { it.toRow() }
+            }
         }
         return try {
             val rows = db["library_books"].select {
                 order("created_at", Order.DESCENDING)
                 limit(limit.toLong())
+                range(offset.toLong(), (offset + limit - 1).toLong())
             }.decodeList<LibraryBookRow>()
-            bookDao.replaceAll(rows.map { it.toCached() })
+            if (offset == 0) bookDao.replaceAll(rows.map { it.toCached() })
             rows
         } catch (e: Exception) {
-            cached.map { it.toRow() }
+            if (offset == 0) bookDao.getCachedBooks(limit).map { it.toRow() }
+            else emptyList()
         }
     }
 

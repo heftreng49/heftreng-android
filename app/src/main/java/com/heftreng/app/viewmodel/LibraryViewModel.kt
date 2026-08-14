@@ -252,36 +252,55 @@ class LibraryViewModel @Inject constructor(
 
     // ── Authors ───────────────────────────────────────────────────────────────
 
+    // ── Yazarlar sayfalama state ──────────────────────────────────────────────
+    private val _authorsOffset  = MutableStateFlow(0)
+    private val _authorsHasMore = MutableStateFlow(true)
+    val authorsHasMore          = _authorsHasMore.asStateFlow()
+    private val _authorsLoading = MutableStateFlow(false)
+    val authorsLoading          = _authorsLoading.asStateFlow()
+
     fun loadAuthors(forceRefresh: Boolean = false) {
+        if (_authorsLoading.value) return
         viewModelScope.launch {
-            // ── Stale-while-revalidate ────────────────────────────────────────
-            // 1. Room'da veri varsa anında göster (kullanıcı boş ekran görmez)
-            val cached = try { authorDao.getCachedAuthors(50) } catch (_: Exception) { emptyList() }
-            if (cached.isNotEmpty()) {
-                _authors.value = cached.map { it.toDomain() }
-                _isOffline.value = false
-                if (!forceRefresh) _loading.value = false
-            } else {
-                _loading.value = true
+            _authorsLoading.value = true
+            if (forceRefresh) {
+                _authorsOffset.value = 0
+                _authors.value = emptyList()
+                _authorsHasMore.value = true
             }
-            // 2. Arka planda Supabase'den taze veriyi çek
-            try {
-                val fresh = library.getAuthors(50)
-                _authors.value   = fresh.map { it.toDomain() }
-                _isOffline.value = false
-                // 3. Room'u güncelle — bir sonraki açılışta taze veri hazır
-                authorDao.replaceAll(fresh.map { it.toCached() })
-            } catch (e: Exception) {
-                if (cached.isEmpty()) {
-                    // Cache de yok, gerçek hata göster
-                    _error.value = e.message
+            // İlk sayfada cache'e bak
+            if (_authorsOffset.value == 0) {
+                val cached = try { authorDao.getCachedAuthors(PAGE_SIZE) } catch (_: Exception) { emptyList() }
+                if (cached.isNotEmpty() && !forceRefresh) {
+                    _authors.value = cached.map { it.toDomain() }
+                    _isOffline.value = false
+                    _loading.value = false
                 }
-                // Cache varsa sessiz geç — kullanıcı zaten eski veriyi görüyor
-                _isOffline.value = cached.isNotEmpty()
+            }
+            try {
+                val fresh = library.getAuthors(PAGE_SIZE, _authorsOffset.value)
+                val domain = fresh.map { it.toDomain() }
+                _authors.value = if (_authorsOffset.value == 0) domain
+                                 else _authors.value + domain
+                _authorsHasMore.value = fresh.size == PAGE_SIZE
+                _authorsOffset.value += fresh.size
+                _isOffline.value = false
+                if (_authorsOffset.value == fresh.size) {
+                    authorDao.replaceAll(fresh.map { it.toCached() })
+                }
+            } catch (e: Exception) {
+                if (_authors.value.isEmpty()) _error.value = e.message
+                _isOffline.value = _authors.value.isNotEmpty()
             } finally {
+                _authorsLoading.value = false
                 _loading.value = false
             }
         }
+    }
+
+    fun loadMoreAuthors() {
+        if (!_authorsHasMore.value || _authorsLoading.value) return
+        loadAuthors()
     }
 
     fun loadAuthor(authorId: String) {
@@ -1021,13 +1040,50 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    suspend fun loadBooksForScreen(): List<LibraryBook> =
-        try {
-            library.getBooks(100).map { it.toDomain() }
-        } catch (e: Exception) {
-            android.util.Log.e("LibraryVM", "loadBooksForScreen: ${e.message}")
-            emptyList()
+    // ── Kitaplar sayfalama state ──────────────────────────────────────────────
+    private val PAGE_SIZE = 20
+    private val _books         = MutableStateFlow<List<LibraryBook>>(emptyList())
+    val books                  = _books.asStateFlow()
+    private val _booksOffset   = MutableStateFlow(0)
+    private val _booksHasMore  = MutableStateFlow(true)
+    val booksHasMore           = _booksHasMore.asStateFlow()
+    private val _booksLoading  = MutableStateFlow(false)
+    val booksLoading           = _booksLoading.asStateFlow()
+
+    fun loadBooks(forceRefresh: Boolean = false) {
+        if (_booksLoading.value) return
+        viewModelScope.launch {
+            _booksLoading.value = true
+            if (forceRefresh) {
+                _booksOffset.value = 0
+                _books.value = emptyList()
+                _booksHasMore.value = true
+            }
+            try {
+                val rows = library.getBooks(PAGE_SIZE, _booksOffset.value)
+                    .map { it.toDomain() }
+                _books.value = if (_booksOffset.value == 0) rows
+                               else _books.value + rows
+                _booksHasMore.value = rows.size == PAGE_SIZE
+                _booksOffset.value += rows.size
+            } catch (e: Exception) {
+                android.util.Log.e("LibraryVM", "loadBooks: ${e.message}")
+            }
+            _booksLoading.value = false
         }
+    }
+
+    fun loadMoreBooks() {
+        if (!_booksHasMore.value || _booksLoading.value) return
+        loadBooks()
+    }
+
+    // Geriye uyum için — LibraryScreen'deki eski çağrıyı kaldır
+    @Deprecated("loadBooks() kullan")
+    suspend fun loadBooksForScreen(): List<LibraryBook> {
+        loadBooks()
+        return _books.value
+    }
 
     suspend fun loadReviewsForScreen(): List<BookReview> =
         try {
