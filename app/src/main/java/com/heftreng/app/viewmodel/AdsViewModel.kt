@@ -172,8 +172,17 @@ class AdsViewModel @Inject constructor(
     // ── Remote Config yükleme ──────────────────────────────────────────────
     fun loadAdConfigs(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            // SDK hazır olana kadar bekle (UMP tamamlandıktan sonra sdkReady=true olur).
-            HeftrangApp.sdkReady.first { it }
+            // sdkReady için 8sn timeout — sdkReady hiç gelmezse sonsuz beklemeye girmez.
+            // Normal akışta sdkReady UMP sonrası MobileAds.initialize callback'inden gelir.
+            // GDPR dışı bölgede (Türkiye) bu çok hızlı olur; ama canRequestAds hiç
+            // gelmezse sdkReady da gelmez — timeout ile bu durum aşılır.
+            val sdkOk = kotlinx.coroutines.withTimeoutOrNull(8_000) {
+                HeftrangApp.sdkReady.first { it }
+                true
+            } ?: false
+            if (!sdkOk) {
+                android.util.Log.w("AdsVM", "sdkReady timeout — yine de config yükleniyor")
+            }
             configRepo.refresh(forceRefresh)
             preloadTopLevelAds()
         }
