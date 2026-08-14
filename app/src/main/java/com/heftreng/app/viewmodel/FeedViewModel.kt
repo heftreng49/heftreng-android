@@ -1326,6 +1326,12 @@ class FeedViewModel @Inject constructor(
                         resolvedCoverImg = library.getBook(resolvedBookId)?.coverImg ?: ""
                     } catch (_: Exception) {}
                 }
+                // Fallback: Supabase'den kapak gelmezse direkt geçilen coverImg parametresini kullan.
+                // Eski sistemde coverImg link olarak geliyordu.
+                // Yeni sistemde link önizleme eklenmesiyle coverImg boş gelebiliyor — parametre öncelikli.
+                if (resolvedCoverImg.isBlank() && coverImg.isNotBlank()) {
+                    resolvedCoverImg = coverImg
+                }
 
                 val myIsPrivate = d["isPrivate"] as? Boolean ?: false
                 val resolvedVisibility = if (myIsPrivate) "friends" else "public"
