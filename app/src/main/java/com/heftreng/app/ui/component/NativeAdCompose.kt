@@ -175,22 +175,23 @@ private fun applyRatio(
     val cs     = ConstraintSet()
     cs.clone(parent)
 
+    // Her iki format için MATCH_CONSTRAINT + ratio — ConstraintLayout kendi hesaplar.
+    // XML'de 0dp/0dp + 16:9 default var; burada reklamın gerçek ratio'suna güncellenir.
+    cs.constrainWidth(R.id.ad_media, ConstraintSet.MATCH_CONSTRAINT)
+    cs.constrainHeight(R.id.ad_media, ConstraintSet.MATCH_CONSTRAINT)
+    cs.connect(R.id.ad_media, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START, 0)
+    cs.connect(R.id.ad_media, ConstraintSet.END,   ConstraintSet.PARENT_ID, ConstraintSet.END,   0)
+
     if (ratio >= 1.0f) {
-        // Yatay: tam genişlik, 16:9 oranı
-        cs.constrainWidth(R.id.ad_media, ConstraintSet.MATCH_CONSTRAINT)
-        cs.constrainHeight(R.id.ad_media, ConstraintSet.MATCH_CONSTRAINT)
+        // Yatay: tam genişlik, yükseklik ratio'dan — siyah bant yok
         cs.setDimensionRatio(R.id.ad_media, "W,${ratio}:1")
-        cs.connect(R.id.ad_media, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
-        cs.connect(R.id.ad_media, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
         cs.constrainMinHeight(R.id.ad_media, minH)
+        cs.constrainMaxHeight(R.id.ad_media, Int.MAX_VALUE)
     } else {
-        // Dikey: yükseklik sınırlı, ortaya hizalı
-        val targetH = ((screenW / ratio).toInt()).coerceIn(minH, maxH)
-        val targetW = (targetH * ratio).toInt().coerceAtMost(screenW)
-        cs.constrainWidth(R.id.ad_media, targetW)
-        cs.constrainHeight(R.id.ad_media, targetH)
-        cs.setDimensionRatio(R.id.ad_media, "")
-        cs.centerHorizontally(R.id.ad_media, ConstraintSet.PARENT_ID)
+        // Dikey: yüksekliği maxH ile sınırla, ratio'ya göre genişlet
+        cs.setDimensionRatio(R.id.ad_media, "W,${ratio}:1")
+        cs.constrainMinHeight(R.id.ad_media, minH)
+        cs.constrainMaxHeight(R.id.ad_media, maxH)
     }
 
     cs.applyTo(parent)
