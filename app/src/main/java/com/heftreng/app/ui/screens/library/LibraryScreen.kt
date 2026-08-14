@@ -323,13 +323,14 @@ fun LibraryScreen(
                 ) { page ->
                     when (page) {
                         0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, adsVm = adsVm, isOffline = quotesOffline, hasMore = quotesHasMore, loadingMore = quotesLoadingMore, onLoadMore = { feedVm.loadMoreLibraryQuotes() })
-                        1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm, adsVm = adsVm)
+                        1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm, adsVm = adsVm, isLoading = loading)
                         2 -> LibraryAuthorsTab(
                             authors = authors,
                             navController = navController,
                             language = language,
                             adsVm = adsVm,
                             hasMore = authorsHasMore,
+                            isLoading = loading,
                             onLoadMore = { libraryVm.loadMoreAuthors() },
                         )
                         3 -> LibraryBooksTab(
@@ -338,6 +339,7 @@ fun LibraryScreen(
                             language = language,
                             adsVm = adsVm,
                             hasMore = booksHasMore,
+                            isLoading = loading,
                             onLoadMore = { libraryVm.loadMoreBooks() },
                         )
                         else -> {}
@@ -444,6 +446,14 @@ private fun LibraryQuotesTab(
     loadingMore  : Boolean = false,
     onLoadMore   : () -> Unit = {},
 ) {
+    if (isOffline && quotes.isEmpty()) {
+        EmptyState(Icons.Outlined.WifiOff, Strings.libraryNoQuotes(language))
+        return
+    }
+    if (quotes.isEmpty() && !isOffline) {
+        LibraryShimmerList()
+        return
+    }
     if (quotes.isEmpty()) {
         EmptyState(Icons.Outlined.FormatQuote, Strings.libraryNoQuotes(language))
         return
@@ -541,6 +551,10 @@ private fun LibraryReviewsTab(
     vm           : LibraryViewModel? = null,
     adsVm        : com.heftreng.app.viewmodel.AdsViewModel,
 ) {
+    if (isLoading && reviews.isEmpty()) {
+        LibraryShimmerList()
+        return
+    }
     if (reviews.isEmpty()) {
         EmptyState(Icons.Outlined.RateReview, Strings.libraryNoReviews(language))
         return
@@ -576,8 +590,13 @@ private fun LibraryAuthorsTab(
     navController: NavController,
     adsVm        : com.heftreng.app.viewmodel.AdsViewModel,
     hasMore      : Boolean = false,
+    isLoading    : Boolean = false,
     onLoadMore   : () -> Unit = {},
 ) {
+    if (isLoading && authors.isEmpty()) {
+        LibraryShimmerList()
+        return
+    }
     if (authors.isEmpty()) {
         EmptyState(Icons.Outlined.Person, Strings.libraryNoAuthors(language))
         return
@@ -632,8 +651,13 @@ private fun LibraryBooksTab(
     navController: NavController,
     adsVm        : com.heftreng.app.viewmodel.AdsViewModel,
     hasMore      : Boolean = false,
+    isLoading    : Boolean = false,
     onLoadMore   : () -> Unit = {},
 ) {
+    if (isLoading && books.isEmpty()) {
+        LibraryShimmerGrid()
+        return
+    }
     if (books.isEmpty()) {
         EmptyState(Icons.Outlined.AutoStories, Strings.libraryNoBooks(language))
         return
@@ -877,4 +901,61 @@ private fun LibAdminTextField(label: String, value: String, minLines: Int = 1, o
             focusedLabelColor    = Amber,
         ),
     )
+}
+
+// ── Library Shimmer ───────────────────────────────────────────────────────────
+
+@Composable
+private fun LibraryShimmerList() {
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        items(6) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                ShimmerBox(modifier = Modifier.size(56.dp).clip(androidx.compose.foundation.shape.CircleShape))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                    ShimmerBox(modifier = Modifier.fillMaxWidth(0.5f).height(14.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp)))
+                    ShimmerBox(modifier = Modifier.fillMaxWidth(0.75f).height(11.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp)))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryShimmerGrid() {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        items(6) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ShimmerBox(modifier = Modifier.fillMaxWidth().height(160.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)))
+                ShimmerBox(modifier = Modifier.fillMaxWidth(0.7f).height(13.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp)))
+                ShimmerBox(modifier = Modifier.fillMaxWidth(0.5f).height(11.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp)))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShimmerBox(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue  = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "shimmer_alpha",
+    )
+    Box(modifier = modifier.background(OnBackground.copy(alpha = alpha)))
 }
