@@ -83,6 +83,12 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.debounce
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Ana ekran
@@ -322,7 +328,7 @@ fun LibraryScreen(
                     modifier                = Modifier.fillMaxSize(),
                 ) { page ->
                     when (page) {
-                        0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, adsVm = adsVm, isOffline = quotesOffline, hasMore = quotesHasMore, loadingMore = quotesLoadingMore, onLoadMore = { feedVm.loadMoreLibraryQuotes() })
+                        0 -> LibraryQuotesTab(quotes = quotes, navController = navController, language = language, feedVm = feedVm, adsVm = adsVm, isOffline = quotesOffline, isLoading = loading, hasMore = quotesHasMore, loadingMore = quotesLoadingMore, onLoadMore = { feedVm.loadMoreLibraryQuotes() })
                         1 -> LibraryReviewsTab(reviews = reviews, navController = navController, language = language, vm = libraryVm, adsVm = adsVm, isLoading = loading)
                         2 -> LibraryAuthorsTab(
                             authors = authors,
@@ -442,6 +448,7 @@ private fun LibraryQuotesTab(
     feedVm       : FeedViewModel,
     adsVm        : com.heftreng.app.viewmodel.AdsViewModel,
     isOffline    : Boolean = false,
+    isLoading    : Boolean = false,
     hasMore      : Boolean = false,
     loadingMore  : Boolean = false,
     onLoadMore   : () -> Unit = {},
