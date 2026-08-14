@@ -106,6 +106,24 @@ private fun populateAd(
         mediaView.visibility = View.VISIBLE
         // aspectRatio: yüklenmeden önce 0 gelebilir → updateMediaSize içinde fallback var
         updateMediaSize(mediaView, mc.aspectRatio, dm)
+
+        // Video başlayınca gerçek ratio belli olur — yatay reklamlarda letterbox kaldır
+        mc.videoController?.videoLifecycleCallbacks =
+            object : com.google.android.gms.ads.VideoController.VideoLifecycleCallbacks() {
+                override fun onVideoStart() {
+                    val realRatio = mc.aspectRatio
+                    if (realRatio > 0f) {
+                        mediaView.post { updateMediaSize(mediaView, realRatio, dm) }
+                    }
+                }
+                override fun onVideoPlay() {
+                    // Bazı cihazlarda onVideoStart'ta boyutlar hazır olmayabilir
+                    val realRatio = mc.aspectRatio
+                    if (realRatio > 0f) {
+                        mediaView.postDelayed({ updateMediaSize(mediaView, realRatio, dm) }, 150)
+                    }
+                }
+            }
     } else {
         mediaView.visibility = View.GONE
     }
@@ -194,7 +212,7 @@ private fun updateMediaSize(
         cs.connect(R.id.ad_media, ConstraintSet.END,   ConstraintSet.PARENT_ID, ConstraintSet.END,   0)
         cs.setDimensionRatio(R.id.ad_media, "W,${ratio}:1")
         cs.constrainMinHeight(R.id.ad_media, minH)
-        cs.constrainMaxHeight(R.id.ad_media, ConstraintSet.WRAP_CONTENT)
+        // maxH kısıtı yok — yatay videolar kendi oranında tam yayılsın
     } else {
         // ── Dikey reklam ─────────────────────────────────────────────────────
         // Sabit px boyut + yatay ortalama
