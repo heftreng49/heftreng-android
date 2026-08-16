@@ -151,6 +151,12 @@ dependencies {
 
     // Networking & Images
     implementation(libs.coil.compose)
+
+    // Media3 ExoPlayer — YouTube WebView embed yerine native oynatma
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
+    implementation("androidx.media3:media3-ui:1.4.1")
+    implementation("androidx.media3:media3-datasource-okhttp:1.4.1")
     implementation("com.google.android.play:app-update-ktx:2.1.0")
     implementation("com.google.android.play:review-ktx:2.0.1")
     implementation(libs.ktor.client.android)
@@ -182,7 +188,4 @@ dependencies {
     implementation("io.noties.markwon:ext-strikethrough:4.6.2")
     implementation("io.noties.markwon:ext-tables:4.6.2")
     implementation("io.noties.markwon:linkify:4.6.2")
-
-    // YouTube Player — uygulama içi video oynatma (IFrame Player API, API key gerektirmez)
-    implementation("com.pierfrancescosoffritti.androidyoutubeplayer:core:12.1.0")
 }
