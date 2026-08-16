@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -24,16 +23,15 @@ import coil.compose.AsyncImage
 import com.heftreng.app.ui.theme.*
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.options.IFramePlayerOptions
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
 
-/**
- * YouTube videosunu uygulama içinde oynatır.
- * android-youtube-player (PierfrancescoSoffritti) — IFrame Player API,
- * resmi API key gerektirmez.
- */
 @Composable
 fun YouTubeEmbedCard(videoId: String, modifier: Modifier = Modifier) {
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Player referansını tut — update bloğunda yeni listener eklememek için
+    var ytPlayer by remember { mutableStateOf<YouTubePlayer?>(null) }
 
     Box(
         modifier = modifier
@@ -45,26 +43,26 @@ fun YouTubeEmbedCard(videoId: String, modifier: Modifier = Modifier) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory  = { ctx ->
+                val options = IFramePlayerOptions.Builder()
+                    .controls(1)    // YouTube kontrollerini göster
+                    .rel(0)         // İlgili video önerilerini kapat
+                    .build()
+
                 YouTubePlayerView(ctx).apply {
-                    // Lifecycle'a bağla — ekrandan çıkınca durdurur, sızdırmaz
+                    enableAutomaticInitialization = false
                     lifecycleOwner.lifecycle.addObserver(this)
 
-                    addYouTubePlayerListener(object : AbstractYouTubePlayerListener() {
+                    initialize(object : AbstractYouTubePlayerListener() {
                         override fun onReady(youTubePlayer: YouTubePlayer) {
-                            // cueVideo → otomatik başlatmaz, kullanıcı play'e basar
-                            // loadVideo → otomatik başlatır
+                            ytPlayer = youTubePlayer
                             youTubePlayer.cueVideo(videoId, 0f)
                         }
-                    })
+                    }, options)
                 }
             },
-            update = { view ->
-                // videoId değişirse yeni videoyu yükle
-                view.addYouTubePlayerListener(object : AbstractYouTubePlayerListener() {
-                    override fun onReady(youTubePlayer: YouTubePlayer) {
-                        youTubePlayer.cueVideo(videoId, 0f)
-                    }
-                })
+            update = { _ ->
+                // Player hazırsa yeni videoyu yükle
+                ytPlayer?.cueVideo(videoId, 0f)
             }
         )
     }
