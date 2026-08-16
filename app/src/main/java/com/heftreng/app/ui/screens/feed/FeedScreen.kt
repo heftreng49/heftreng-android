@@ -3182,12 +3182,53 @@ private fun YoutubeInputDialog(
                         cursorColor          = com.heftreng.app.ui.theme.Primary,
                     ),
                 )
-                // Önizleme
+                // Önizleme — dialog içinde player yerine thumbnail göster
+                // (YouTubePlayerView AlertDialog içinde lifecycle çakışması yaşayabilir)
                 if (videoId.length == 11) {
-                    YouTubeEmbedCard(
-                        videoId  = videoId,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(16f / 9f)
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                    ) {
+                        coil.compose.AsyncImage(
+                            model              = "https://img.youtube.com/vi/$videoId/hqdefault.jpg",
+                            contentDescription = null,
+                            modifier           = Modifier.fillMaxSize(),
+                            contentScale       = androidx.compose.ui.layout.ContentScale.Crop,
+                        )
+                        // Play ikonu overlay
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.25f)),
+                            contentAlignment = androidx.compose.ui.Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Default.PlayCircle,
+                                contentDescription = null,
+                                tint     = androidx.compose.ui.graphics.Color.White,
+                                modifier = Modifier.size(48.dp),
+                            )
+                        }
+                        // "Feed'de oynatılacak" notu
+                        Box(
+                            modifier = Modifier
+                                .align(androidx.compose.ui.Alignment.BottomStart)
+                                .padding(8.dp)
+                                .background(
+                                    androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f),
+                                    androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                if (ku) "Paylaştıktan sonra oynatılır" else "Paylaştıktan sonra oynatılır",
+                                fontSize = 10.sp,
+                                color    = androidx.compose.ui.graphics.Color.White,
+                            )
+                        }
+                    }
                 }
                 if (error.isNotBlank()) {
                     Text(error, color = com.heftreng.app.ui.theme.Error, fontSize = 12.sp)
