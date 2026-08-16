@@ -182,4 +182,7 @@ dependencies {
     implementation("io.noties.markwon:ext-strikethrough:4.6.2")
     implementation("io.noties.markwon:ext-tables:4.6.2")
     implementation("io.noties.markwon:linkify:4.6.2")
+
+    // YouTube Player — uygulama içi video oynatma (IFrame Player API, API key gerektirmez)
+    implementation("com.pierfrancescosoffritti.androidyoutubeplayer:core:12.1.0")
 }
