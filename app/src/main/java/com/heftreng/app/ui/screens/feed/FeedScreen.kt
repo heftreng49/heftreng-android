@@ -32,7 +32,6 @@ import androidx.compose.runtime.*
 import java.net.URLEncoder
 import com.heftreng.app.util.LinkPreviewUtil
 import com.heftreng.app.ui.component.LinkPreviewCard
-import com.heftreng.app.ui.component.YouTubeEmbedCard
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusEvent
@@ -258,10 +257,6 @@ fun FeedScreen(
     var inlineImageUri    by remember { mutableStateOf<Uri?>(null) }
     var inlineLinkPreview by remember { mutableStateOf<com.heftreng.app.util.LinkPreview?>(null) }
     var inlineLinkLoading by remember { mutableStateOf(false) }
-    // YouTube video ekleme
-    var showYoutubeDialog  by remember { mutableStateOf(false) }
-    var inlineYoutubeId    by remember { mutableStateOf("") }
-
     // Inline metin değişince link tespit et
     // Link tespiti — mention LaunchedEffect ile çakışmaması için ayrı key kullan
     LaunchedEffect(inlineText.length) {
@@ -443,7 +438,7 @@ fun FeedScreen(
                                 )
                             },
                             actions = {
-                                val canSend = inlineText.isNotBlank() || inlineQuote != null || inlineImageUri != null || inlineYoutubeId.isNotBlank()
+                                val canSend = inlineText.isNotBlank() || inlineQuote != null || inlineImageUri != null
                                 Button(
                                     onClick = {
                                         if (canSend) {
@@ -470,11 +465,11 @@ fun FeedScreen(
                                                     bookName   = inlineQuote?.bookName ?: "",
                                                     coverImg   = inlineQuote?.coverImg ?: "",
                                                     mentions   = inlineMentionedUids,
-                                                    linkUrl    = if (inlineYoutubeId.isNotBlank()) "https://www.youtube.com/watch?v=$inlineYoutubeId" else inlineLinkPreview?.url ?: "",
+                                                    linkUrl    = inlineLinkPreview?.url ?: "",
                                                     linkTitle  = inlineLinkPreview?.title ?: "",
                                                     linkDesc   = inlineLinkPreview?.desc ?: "",
-                                                    linkImage  = if (inlineYoutubeId.isNotBlank()) "https://img.youtube.com/vi/$inlineYoutubeId/hqdefault.jpg" else inlineLinkPreview?.image ?: "",
-                                                    linkType   = if (inlineYoutubeId.isNotBlank()) "youtube" else inlineLinkPreview?.type ?: "",
+                                                    linkImage  = inlineLinkPreview?.image ?: "",
+                                                    linkType   = inlineLinkPreview?.type ?: "",
                                                 )
                                             }
                                             inlineText          = ""
@@ -484,7 +479,6 @@ fun FeedScreen(
                                             inlineImageUri      = null
                                             inlineMentionedUids = emptyList()
                                             inlineLinkPreview   = null
-                                            inlineYoutubeId     = ""
                                             vm.clearMentionSuggestions()
                                             showComposeDialog = false
                                         }
@@ -583,33 +577,7 @@ fun FeedScreen(
                                 QuoteInputSection(quote = inlineQuote, onRemove = { inlineQuote = null }, language = language)
                             }
                         }
-                        // ── YouTube önizleme ─────────────────────────────
-                        if (inlineYoutubeId.isNotBlank()) {
-                            item {
-                                Box(modifier = Modifier.padding(horizontal = 4.dp)) {
-                                    YouTubeEmbedCard(
-                                        videoId  = inlineYoutubeId,
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                    // Kaldır butonu
-                                    IconButton(
-                                        onClick  = { inlineYoutubeId = "" },
-                                        modifier = Modifier
-                                            .align(androidx.compose.ui.Alignment.TopEnd)
-                                            .padding(4.dp)
-                                            .size(28.dp)
-                                            .background(
-                                                androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f),
-                                                androidx.compose.foundation.shape.CircleShape
-                                            ),
-                                    ) {
-                                        Icon(Icons.Default.Close, null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(14.dp))
-                                    }
-                                }
-                            }
-                        }
-                        // ── Link önizleme ────────────────────────────────
-                        if (inlineLinkPreview != null && inlineLinkPreview!!.url.isNotBlank() && inlineYoutubeId.isBlank()) {
+                        if (inlineLinkPreview != null && inlineLinkPreview!!.url.isNotBlank()) {
                             item {
                                 LinkPreviewCard(
                                     url       = inlineLinkPreview!!.url,
@@ -709,17 +677,7 @@ fun FeedScreen(
                                         )
                                     }
                                 }
-                                // YouTube video ekle
-                                IconButton(
-                                    onClick  = { showYoutubeDialog = true },
-                                    modifier = Modifier.size(36.dp),
-                                ) {
-                                    Icon(
-                                        Icons.Default.PlayCircle, null,
-                                        tint     = if (inlineYoutubeId.isNotBlank()) Color(0xFFFF0000) else Muted,
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                }
+
                                 Spacer(Modifier.weight(1f))
                                 Text(
                                     "${inlineText.length}/1000",
@@ -734,19 +692,7 @@ fun FeedScreen(
         }
     }
 
-    // ── YouTube Video Ekle Dialog ─────────────────────────────────────────────
-    if (showYoutubeDialog) {
-        YoutubeInputDialog(
-            language  = language,
-            onDismiss = { showYoutubeDialog = false },
-            onConfirm = { id ->
-                inlineYoutubeId   = id
-                inlineLinkPreview = null  // link preview ile çakışmasın
-                showYoutubeDialog = false
-            },
-        )
-    }
-
+    
     if (showInlineQuote) {
         QuoteDialog(
             initialText   = inlineQuote?.text ?: "",
@@ -3129,129 +3075,3 @@ private fun FeedAnnouncementBanner(
     }
 }
 
-// ── YouTube Video Ekle Dialog ─────────────────────────────────────────────────
-@Composable
-private fun YoutubeInputDialog(
-    language : String,
-    onDismiss: () -> Unit,
-    onConfirm: (videoId: String) -> Unit,
-) {
-    var input    by remember { mutableStateOf("") }
-    var videoId  by remember { mutableStateOf("") }
-    var error    by remember { mutableStateOf("") }
-
-    // Input değiştikçe ID'yi çıkar
-    LaunchedEffect(input) {
-        val id = com.heftreng.app.util.LinkPreviewUtil.extractYoutubeId(input.trim())
-        videoId = if (id.isNotBlank()) id else input.trim().take(11)
-        error   = ""
-    }
-
-    val ku = language == "ku"
-
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor   = com.heftreng.app.ui.theme.HeftSurface,
-        title = {
-            Text(
-                if (ku) "YouTube Vîdyoyê Zêde Bike" else "YouTube Video Ekle",
-                color      = com.heftreng.app.ui.theme.OnBackground,
-                fontWeight = FontWeight.Bold,
-                fontSize   = 16.sp,
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    if (ku) "Lînka YouTube an jî ID-ya vîdyoyê binivîse:"
-                    else    "YouTube linkini veya video ID'sini yapıştır:",
-                    color    = com.heftreng.app.ui.theme.Muted,
-                    fontSize = 13.sp,
-                )
-                androidx.compose.material3.OutlinedTextField(
-                    value         = input,
-                    onValueChange = { input = it },
-                    placeholder   = { Text("https://youtu.be/...", color = com.heftreng.app.ui.theme.Muted, fontSize = 13.sp) },
-                    singleLine    = true,
-                    modifier      = Modifier.fillMaxWidth(),
-                    colors        = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor   = com.heftreng.app.ui.theme.Primary,
-                        unfocusedBorderColor = com.heftreng.app.ui.theme.Divider,
-                        focusedTextColor     = com.heftreng.app.ui.theme.OnBackground,
-                        unfocusedTextColor   = com.heftreng.app.ui.theme.OnBackground,
-                        cursorColor          = com.heftreng.app.ui.theme.Primary,
-                    ),
-                )
-                // Önizleme — dialog içinde player yerine thumbnail göster
-                // (YouTubePlayerView AlertDialog içinde lifecycle çakışması yaşayabilir)
-                if (videoId.length == 11) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(16f / 9f)
-                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                    ) {
-                        coil.compose.AsyncImage(
-                            model              = "https://img.youtube.com/vi/$videoId/hqdefault.jpg",
-                            contentDescription = null,
-                            modifier           = Modifier.fillMaxSize(),
-                            contentScale       = androidx.compose.ui.layout.ContentScale.Crop,
-                        )
-                        // Play ikonu overlay
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.25f)),
-                            contentAlignment = androidx.compose.ui.Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Default.PlayCircle,
-                                contentDescription = null,
-                                tint     = androidx.compose.ui.graphics.Color.White,
-                                modifier = Modifier.size(48.dp),
-                            )
-                        }
-                        // "Feed'de oynatılacak" notu
-                        Box(
-                            modifier = Modifier
-                                .align(androidx.compose.ui.Alignment.BottomStart)
-                                .padding(8.dp)
-                                .background(
-                                    androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f),
-                                    androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
-                                )
-                                .padding(horizontal = 6.dp, vertical = 3.dp)
-                        ) {
-                            Text(
-                                if (ku) "Paylaştıktan sonra oynatılır" else "Paylaştıktan sonra oynatılır",
-                                fontSize = 10.sp,
-                                color    = androidx.compose.ui.graphics.Color.White,
-                            )
-                        }
-                    }
-                }
-                if (error.isNotBlank()) {
-                    Text(error, color = com.heftreng.app.ui.theme.Error, fontSize = 12.sp)
-                }
-            }
-        },
-        confirmButton = {
-            androidx.compose.material3.TextButton(
-                onClick = {
-                    if (videoId.length != 11) {
-                        error = if (ku) "Vîdyo ID nayê dîtin" else "Geçerli bir YouTube linki gir"
-                    } else {
-                        onConfirm(videoId)
-                    }
-                }
-            ) {
-                Text(if (ku) "Zêde Bike" else "Ekle", color = com.heftreng.app.ui.theme.Primary, fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                Text(if (ku) "Betal" else "İptal", color = com.heftreng.app.ui.theme.Muted)
-            }
-        },
-    )
-}

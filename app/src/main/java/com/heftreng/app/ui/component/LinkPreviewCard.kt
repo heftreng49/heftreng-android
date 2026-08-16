@@ -1,6 +1,5 @@
 package com.heftreng.app.ui.component
 
-import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -116,7 +115,7 @@ fun LinkPreviewCard(
     val context = LocalContext.current
 
     if (type == "youtube" && youtubeId.isNotBlank()) {
-        YouTubePlayerCard(videoId = youtubeId, modifier = modifier)
+        YouTubeEmbedCard(videoId = youtubeId, modifier = modifier)
         return
     }
 
