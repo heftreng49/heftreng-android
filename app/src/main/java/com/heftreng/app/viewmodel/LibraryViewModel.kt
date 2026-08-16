@@ -539,11 +539,8 @@ class LibraryViewModel @Inject constructor(
                 )
                 loadLibraryBook(bookId)
 
-                // Sorun 2 düzeltmesi: kapak değiştiyse (boştan doluysa veya
-                // farklı URL'ye geçildiyse) o kitaba bağlı tüm kayıtları
-                // güncelle. Yoksa Firestore'daki eski alıntılar ve okuma
-                // listesi kayıtları boş/eski kapakla kalmaya devam ederdi.
-                if (coverImg.isNotBlank() && coverImg != current.coverImg) {
+                // Kapak değiştiyse ilgili tüm kayıtlara yansıt
+                if (coverImg.isNotBlank()) {
                     propagateCoverUpdate(bookId, coverImg)
                 }
             } catch (e: Exception) {
