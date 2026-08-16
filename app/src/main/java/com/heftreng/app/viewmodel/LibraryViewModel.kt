@@ -268,14 +268,13 @@ class LibraryViewModel @Inject constructor(
                 _authors.value = emptyList()
                 _authorsHasMore.value = true
             }
-            // İlk sayfada: tüm cache'i anında göster (PAGE_SIZE ile sınırlama yok)
-            if (_authorsOffset.value == 0 && !forceRefresh) {
-                val cached = try { authorDao.getCachedAuthors(200) } catch (_: Exception) { emptyList() }
-                if (cached.isNotEmpty()) {
+            // İlk sayfada cache'e bak
+            if (_authorsOffset.value == 0) {
+                val cached = try { authorDao.getCachedAuthors(PAGE_SIZE) } catch (_: Exception) { emptyList() }
+                if (cached.isNotEmpty() && !forceRefresh) {
                     _authors.value = cached.map { it.toDomain() }
                     _isOffline.value = false
                     _loading.value = false
-                    _authorsLoading.value = false
                 }
             }
             try {
@@ -286,6 +285,9 @@ class LibraryViewModel @Inject constructor(
                 _authorsHasMore.value = fresh.size == PAGE_SIZE
                 _authorsOffset.value += fresh.size
                 _isOffline.value = false
+                if (_authorsOffset.value == fresh.size) {
+                    authorDao.replaceAll(fresh.map { it.toCached() })
+                }
             } catch (e: Exception) {
                 if (_authors.value.isEmpty()) _error.value = e.message
                 _isOffline.value = _authors.value.isNotEmpty()
@@ -413,14 +415,16 @@ class LibraryViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             try {
-                val current = library.getAuthor(authorId) ?: return@launch
-                library.upsertAuthor(current.copy(
+                // getAuthor() yerine direkt patch — cache eski veri döndürüp
+                // değişikliği ezebiliyordu
+                library.patchAuthor(
+                    id          = authorId,
                     name        = name,
                     bio         = bio,
                     photoUrl    = photoURL,
                     birthYear   = birthYear,
                     nationality = nationality,
-                ))
+                )
                 loadAuthor(authorId)
             } catch (e: Exception) {
                 _error.value = e.message
@@ -520,17 +524,19 @@ class LibraryViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             try {
-                val current = library.getBook(bookId) ?: return@launch
-                library.upsertBook(current.copy(
+                // getBook() yerine direkt patch — cache eski veri döndürüp
+                // değişikliği ezebiliyordu
+                library.patchBook(
+                    id          = bookId,
                     title       = title,
-                    authorId    = authorId.ifBlank { current.authorId },
-                    authorName  = authorName.ifBlank { current.authorName },
-                    coverImg    = coverImg,
+                    synopsis    = synopsis,
                     genre       = genre,
                     publishYear = publishYear,
-                    synopsis    = synopsis,
                     pageCount   = pageCount,
-                ))
+                    coverImg    = coverImg,
+                    authorId    = authorId,
+                    authorName  = authorName,
+                )
                 loadLibraryBook(bookId)
 
                 // Sorun 2 düzeltmesi: kapak değiştiyse (boştan doluysa veya
@@ -1056,14 +1062,6 @@ class LibraryViewModel @Inject constructor(
                 _booksOffset.value = 0
                 _books.value = emptyList()
                 _booksHasMore.value = true
-            }
-            // İlk sayfada: Room cache'i anında göster, Supabase'den de çek
-            if (_booksOffset.value == 0 && !forceRefresh) {
-                val cached = try { bookDao.getCachedBooks(200) } catch (_: Exception) { emptyList() }
-                if (cached.isNotEmpty()) {
-                    _books.value = cached.map { it.toDomain() }
-                    _booksLoading.value = false
-                }
             }
             try {
                 val rows = library.getBooks(PAGE_SIZE, _booksOffset.value)

@@ -170,13 +170,22 @@ class LibraryRepository @Inject constructor(
     // ── Authors ───────────────────────────────────────────────────────────────
 
     suspend fun getAuthors(limit: Int = 20, offset: Int = 0): List<AuthorRow> {
+        // Sadece ilk sayfa cache'lenir
+        if (offset == 0) {
+            val cached = authorDao.getCachedAuthors(limit)
+            val cacheAge = cached.minOfOrNull { it.cachedAt } ?: 0L
+            if (cached.isNotEmpty() && System.currentTimeMillis() - cacheAge < ROOM_CACHE_TTL_MS) {
+                return cached.map { it.toRow() }
+            }
+        }
+        // Cache boş veya eski — Supabase'den çek ve Room'a kaydet
         return try {
             val rows = db["authors"].select {
                 order("name", Order.ASCENDING)
                 limit(limit.toLong())
                 range(offset.toLong(), (offset + limit - 1).toLong())
             }.decodeList<AuthorRow>()
-            authorDao.insertAll(rows.map { it.toCached() })
+            if (offset == 0) authorDao.replaceAll(rows.map { it.toCached() })
             rows
         } catch (e: Exception) {
             if (offset == 0) authorDao.getCachedAuthors(limit).map { it.toRow() }
@@ -256,6 +265,38 @@ class LibraryRepository @Inject constructor(
         db["authors"].upsert(row)
     }
 
+    /** Sadece belirtilen alanları günceller — cache eski veri dönse bile güvenli */
+    suspend fun patchAuthor(
+        id         : String,
+        name       : String,
+        bio        : String,
+        photoUrl   : String,
+        birthYear  : Int,
+        nationality: String,
+    ) {
+        db["authors"].update(
+            mapOf(
+                "name"        to name,
+                "bio"         to bio,
+                "photo_url"   to photoUrl,
+                "birth_year"  to birthYear,
+                "nationality" to nationality,
+            )
+        ) { filter { eq("id", id) } }
+        // Room cache'i güncelle
+        val cached = authorDao.getCachedAuthor(id)
+        if (cached != null) {
+            authorDao.insert(cached.copy(
+                name        = name,
+                bio         = bio,
+                photoUrl    = photoUrl,
+                birthYear   = birthYear,
+                nationality = nationality,
+                cachedAt    = System.currentTimeMillis(),
+            ))
+        }
+    }
+
     suspend fun updateAuthorCounters(
         id          : String,
         quoteCount  : Int? = null,
@@ -275,17 +316,23 @@ class LibraryRepository @Inject constructor(
     // ── Library Books ─────────────────────────────────────────────────────────
 
     suspend fun getBooks(limit: Int = 20, offset: Int = 0): List<LibraryBookRow> {
+        // Sadece ilk sayfa cache'lenir
+        if (offset == 0) {
+            val cached = bookDao.getCachedBooks(limit)
+            val cacheAge = cached.minOfOrNull { it.cachedAt } ?: 0L
+            if (cached.isNotEmpty() && System.currentTimeMillis() - cacheAge < ROOM_CACHE_TTL_MS) {
+                return cached.map { it.toRow() }
+            }
+        }
         return try {
             val rows = db["library_books"].select {
                 order("created_at", Order.DESCENDING)
                 limit(limit.toLong())
                 range(offset.toLong(), (offset + limit - 1).toLong())
             }.decodeList<LibraryBookRow>()
-            // Her sayfayı Room'a ekle (replaceAll değil insertAll — önceki sayfaları silme)
-            bookDao.insertAll(rows.map { it.toCached() })
+            if (offset == 0) bookDao.replaceAll(rows.map { it.toCached() })
             rows
         } catch (e: Exception) {
-            // Ağ hatası: sadece offset=0'da Room'dan dön
             if (offset == 0) bookDao.getCachedBooks(limit).map { it.toRow() }
             else emptyList()
         }
@@ -316,6 +363,48 @@ class LibraryRepository @Inject constructor(
 
     suspend fun upsertBook(row: LibraryBookRow) {
         db["library_books"].upsert(row)
+    }
+
+    /** Sadece belirtilen alanları günceller — cache eski veri dönse bile güvenli */
+    suspend fun patchBook(
+        id         : String,
+        title      : String,
+        synopsis   : String,
+        genre      : String,
+        publishYear: Int,
+        pageCount  : Int,
+        coverImg   : String,
+        authorId   : String = "",
+        authorName : String = "",
+    ) {
+        val patch = mutableMapOf<String, Any>(
+            "title"        to title,
+            "synopsis"     to synopsis,
+            "genre"        to genre,
+            "publish_year" to publishYear,
+            "page_count"   to pageCount,
+            "cover_img"    to coverImg,
+        )
+        if (authorId.isNotBlank()) patch["author_id"]   = authorId
+        if (authorName.isNotBlank()) patch["author_name"] = authorName
+
+        db["library_books"].update(patch) { filter { eq("id", id) } }
+
+        // Room cache'i güncelle
+        val cached = bookDao.getCachedBook(id)
+        if (cached != null) {
+            bookDao.insert(cached.copy(
+                title       = title,
+                synopsis    = synopsis,
+                genre       = genre,
+                publishYear = publishYear,
+                pageCount   = pageCount,
+                coverImg    = coverImg,
+                authorId    = authorId.ifBlank { cached.authorId },
+                authorName  = authorName.ifBlank { cached.authorName },
+                cachedAt    = System.currentTimeMillis(),
+            ))
+        }
     }
 
     /** Sorun 2: Kapak değişince book_quotes'taki eski kayıtları güncelle */
