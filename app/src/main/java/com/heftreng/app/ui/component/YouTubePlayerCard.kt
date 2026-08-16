@@ -1,7 +1,6 @@
 package com.heftreng.app.ui.component
 
 import android.annotation.SuppressLint
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.webkit.*
@@ -27,49 +26,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import com.heftreng.app.R
 
-/**
- * YouTube WebView Pool — tek WebView örneği yeniden kullanılır.
- * Referer + Origin header ile hata 152 aşılır.
- * Scroll Listener: sadece görünür kart oynar, diğerleri pause edilir.
- */
-object YouTubeWebViewPool {
-    private var pooledWebView: WebView? = null
-
-    @SuppressLint("SetJavaScriptEnabled")
-    fun getOrCreate(context: Context): WebView {
-        return pooledWebView ?: WebView(context.applicationContext).also { wv ->
-            wv.settings.apply {
-                javaScriptEnabled             = true
-                domStorageEnabled             = true
-                mediaPlaybackRequiresUserGesture = false
-                loadWithOverviewMode          = true
-                useWideViewPort               = true
-                mixedContentMode              = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            }
-            wv.webChromeClient = WebChromeClient()
-            pooledWebView = wv
-        }
-    }
-
-    fun release() {
-        pooledWebView?.apply {
-            loadUrl("about:blank")
-            destroy()
-        }
-        pooledWebView = null
-    }
-}
-
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun YouTubePlayerCard(
     videoId  : String,
     modifier : Modifier = Modifier,
-    autoPlay : Boolean  = false,
 ) {
-    val context = LocalContext.current
+    val context  = LocalContext.current
     var isPlaying by remember { mutableStateOf(false) }
-    val thumbnailUrl = "https://img.youtube.com/vi/$videoId/hqdefault.jpg"
 
     Box(
         modifier = modifier
@@ -78,18 +42,15 @@ fun YouTubePlayerCard(
             .clip(RoundedCornerShape(12.dp))
     ) {
         if (!isPlaying) {
-            // ── Thumbnail göster ───────────────────────────────────────────
+            // Thumbnail
             AsyncImage(
-                model              = thumbnailUrl,
+                model              = "https://img.youtube.com/vi/$videoId/hqdefault.jpg",
                 contentDescription = "YouTube video",
                 modifier           = Modifier.fillMaxSize(),
                 contentScale       = ContentScale.Crop,
             )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.25f))
-            )
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(0.25f)))
+
             // Play butonu
             Box(
                 modifier = Modifier
@@ -107,60 +68,51 @@ fun YouTubePlayerCard(
                     modifier           = Modifier.size(30.dp).offset(x = 2.dp),
                 )
             }
-            // YouTube logosu
+
+            // YouTube'da izle butonu
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(8.dp)
-                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                    .background(Color.Black.copy(0.6f), RoundedCornerShape(4.dp))
                     .padding(horizontal = 6.dp, vertical = 2.dp)
                     .clickable {
-                        val appIntent = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$videoId"))
-                        val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$videoId"))
-                        try { context.startActivity(appIntent) }
-                        catch (_: Exception) { context.startActivity(webIntent) }
+                        try {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$videoId")))
+                        } catch (_: Exception) {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://youtu.be/$videoId")))
+                        }
                     }
             ) {
                 Text("▶ YouTube'da izle", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Medium)
             }
         } else {
-            // ── WebView ile IFrame oynat ───────────────────────────────────
-            val html = """
-                <!DOCTYPE html><html>
-                <head>
-                  <meta name="viewport" content="width=device-width,initial-scale=1">
-                  <style>* { margin:0; padding:0; } body { background:#000; }
-                    .wrap { position:relative; width:100%; padding-top:56.25%; }
-                    iframe { position:absolute; top:0; left:0; width:100%; height:100%; border:0; }
-                  </style>
-                </head>
-                <body>
-                  <div class="wrap">
-                    <iframe
-                      src="https://www.youtube-nocookie.com/embed/$videoId?autoplay=1&playsinline=1&rel=0&modestbranding=1"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowfullscreen></iframe>
-                  </div>
-                </body></html>
-            """.trimIndent()
-
+            // YouTube IFrame API — youtube.com üzerinden yükle, hata 152 olmaz
             AndroidView(
                 factory = { ctx ->
                     WebView(ctx).apply {
-                        settings.javaScriptEnabled             = true
-                        settings.domStorageEnabled             = true
-                        settings.mediaPlaybackRequiresUserGesture = false
-                        settings.loadWithOverviewMode          = true
-                        settings.useWideViewPort               = true
-                        webChromeClient                        = WebChromeClient()
-                        // Referer + Origin header — hata 152 çözümü
-                        loadDataWithBaseURL(
-                            "https://www.youtube.com",
-                            html,
-                            "text/html",
-                            "UTF-8",
-                            null
-                        )
+                        settings.apply {
+                            javaScriptEnabled             = true
+                            domStorageEnabled             = true
+                            mediaPlaybackRequiresUserGesture = false
+                            loadWithOverviewMode          = true
+                            useWideViewPort               = true
+                            cacheMode                     = WebSettings.LOAD_NO_CACHE
+                        }
+                        webChromeClient = WebChromeClient()
+                        webViewClient   = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                                // YouTube dışı linkleri tarayıcıya aç
+                                val url = request.url.toString()
+                                return if (!url.contains("youtube") && !url.contains("youtu.be")) {
+                                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                    true
+                                } else false
+                            }
+                        }
+                        // YouTube IFrame API — youtube.com'dan yükleniyor, origin youtube.com
+                        // Bu sayede embed kısıtlaması uygulanmıyor
+                        loadUrl("https://www.youtube.com/embed/$videoId?autoplay=1&playsinline=1&rel=0&modestbranding=1&enablejsapi=1&origin=https://www.youtube.com")
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
