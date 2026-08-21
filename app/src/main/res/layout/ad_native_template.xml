@@ -1,25 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    ad_native_template.xml — Native reklam şablonu
+    ad_native_template.xml — Native reklam şablonu (v2)
 
-    Boyutlandırma:
-    • MediaView: 0dp/0dp + varsayılan W,16:9 ratio
-    • Gerçek ratio kod tarafında (updateMediaSize) ConstraintSet ile güncellenir
-    • Yatay reklamlar: MATCH_CONSTRAINT + ratio → tam genişlik, doğru yükseklik
-    • Dikey reklamlar: sabit px + centerHorizontally → siyah kenar yok
-
-    Yapı (flat ConstraintLayout — tek ölçüm geçişi):
-    NativeAdView
-      └─ ConstraintLayout
-           ├─ ImageView      (ikon)
-           ├─ TextView       (başlık)
-           ├─ TextView       (reklamcı)
-           ├─ RatingBar      (yıldız)
-           ├─ TextView       (sponsorlu)
-           ├─ TextView       (açıklama)
-           ├─ MediaView      (video/görsel)
-           ├─ Barrier        (MediaView altı)
-           └─ Button         (CTA)
+    Değişiklik: MediaView wrap_content yükseklik kullanıyor.
+    Boyutlandırma artık tamamen kod tarafında (applyVideoSize/applyImageSize)
+    yapılıyor — ConstraintSet ile boyutlandırma kaldırıldı, çünkü
+    ConstraintLayout dimensionRatio video letterbox sorununu çözmüyordu.
 -->
 <com.google.android.gms.ads.nativead.NativeAdView
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -74,7 +60,7 @@
             app:layout_constraintStart_toEndOf="@id/ad_app_icon"
             app:layout_constraintEnd_toEndOf="parent"/>
 
-        <!-- Yıldız değerlendirmesi -->
+        <!-- Yıldız -->
         <RatingBar
             android:id="@+id/ad_stars"
             style="?android:attr/ratingBarStyleSmall"
@@ -105,7 +91,7 @@
             app:layout_constraintTop_toBottomOf="@id/ad_stars"
             app:layout_constraintStart_toEndOf="@id/ad_app_icon"/>
 
-        <!-- Açıklama metni -->
+        <!-- Açıklama -->
         <TextView
             android:id="@+id/ad_body"
             android:layout_width="0dp"
@@ -120,26 +106,22 @@
             app:layout_constraintEnd_toEndOf="parent"/>
 
         <!--
-            MediaView:
-            • 0dp/0dp: ConstraintSet tam kontrol
-            • Varsayılan W,16:9: kod ratio gelene kadar boşluk bırakmaz
-            • Gerçek ratio: updateMediaSize() ile güncellenir
+            MediaView — boyutlandırma tamamen kod tarafında yapılıyor.
+            wrap_content: applyVideoSize/applyImageSize layoutParams'ı set eder.
+            Arka plan şeffaf — siyah letterbox gözükmez.
         -->
         <com.google.android.gms.ads.nativead.MediaView
             android:id="@+id/ad_media"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:clipToOutline="true"
+            android:background="@android:color/transparent"
             app:layout_constraintTop_toBottomOf="@id/ad_body"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintDimensionRatio="W,16:9"/>
+            app:layout_constraintEnd_toEndOf="parent"/>
 
-        <!--
-            Barrier: MediaView GONE olduğunda buton ad_body'ye yapışır,
-            VISIBLE olduğunda MediaView altına geçer — constraint değişikliği gerekmez.
-        -->
+        <!-- Barrier -->
         <androidx.constraintlayout.widget.Barrier
             android:id="@+id/ad_media_barrier"
             android:layout_width="wrap_content"
