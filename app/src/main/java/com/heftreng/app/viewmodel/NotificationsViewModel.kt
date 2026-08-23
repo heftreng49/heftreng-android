@@ -39,6 +39,9 @@ class NotificationsViewModel @Inject constructor(
     private val _refreshing = MutableStateFlow(false)
     val refreshing = _refreshing.asStateFlow()
 
+    private val _error = MutableStateFlow<String?>(null)
+    val error = _error.asStateFlow()
+
     private var lastServerFetchMs = 0L
     // FCM push ile bildirimler zaten anında geliyor.
     // Polling sadece uygulama açılışında bir kez yapılır (foreground callback).

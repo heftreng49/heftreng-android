@@ -176,7 +176,7 @@ class FeedViewModel @Inject constructor(
     // coverImg Firestore'a zaten yazılmış post ID'leri — tekrar yazma döngüsünü önler
     // coverImg yazılmış post ID'leri — prefs'e persist edilir, uygulama kapanınca sıfırlanmaz
     private val coverImgWrittenIds: MutableSet<String> by lazy {
-        streakPrefs.getStringSet("cover_img_written", emptySet())!!.toMutableSet()
+        streakPrefs.getStringSet("cover_img_written", emptySet()).orEmpty().toMutableSet()
     }
 
     // user dökümanı bellek cache — aynı uid'yi tekrar Firestore'dan çekmez

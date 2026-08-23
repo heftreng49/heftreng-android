@@ -2219,7 +2219,7 @@ fun PostCard(
     if (shareTarget != null) {
         SharePreviewDialog(
             post      = post,
-            target    = shareTarget!!,
+            target    = shareTarget ?: return@IconButton,
             onDismiss = { shareTarget = null },
             language  = language,
         )

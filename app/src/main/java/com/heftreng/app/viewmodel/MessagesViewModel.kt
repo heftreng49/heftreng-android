@@ -457,7 +457,7 @@ class MessagesViewModel @Inject constructor(
                     val deltaSnap = firestore.collection("convMessages").document(convId)
                         .collection("msgs")
                         .orderBy("createdAt", Query.Direction.ASCENDING)
-                        .whereGreaterThan("createdAt", newestMsgTs!!)
+                        .whereGreaterThan("createdAt", newestMsgTs ?: return@launch)
                         .get().await()
 
                     if (deltaSnap.documents.isNotEmpty()) {

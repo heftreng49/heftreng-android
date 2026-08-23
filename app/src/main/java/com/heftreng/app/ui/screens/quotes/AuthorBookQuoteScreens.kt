@@ -421,7 +421,7 @@ fun AuthorDetailScreen(
             bookTitle = reviewTargetBook!!.title,
             onDismiss = { showAddReviewFab = false; reviewTargetBook = null },
             onSubmit  = { text, rating ->
-                vm.addBookReview(reviewTargetBook!!, text, rating)
+                reviewTargetBook?.let { vm.addBookReview(it, text, rating) }
                 showAddReviewFab = false
                 reviewTargetBook = null
             },
@@ -450,7 +450,7 @@ fun AuthorDetailScreen(
                 vm.createLibraryBook(
                     title       = title,
                     authorId    = authorId,
-                    authorName  = author!!.name,
+                    authorName  = author?.name ?: "",
                     synopsis    = synopsis,
                     genre       = genre,
                     publishYear = publishYear,
@@ -793,7 +793,7 @@ fun LibraryBookDetailScreen(
 
     // ── Okuma Listesi Durum Seçici ─────────────────────────────────────
     if (showRlSheet && book != null) {
-        val b = book!!
+        val b = book ?: return
         RlStatusPickerDialog(
             currentStatus = currentRlStatus,
             onDismiss     = { showRlSheet = false },
