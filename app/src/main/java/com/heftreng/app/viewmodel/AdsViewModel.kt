@@ -211,6 +211,14 @@ class AdsViewModel @Inject constructor(
                 config.unitId.ifBlank { null }?.let { preloadRewardedAd(it) }
             }
         }
+
+        // Rewarded Interstitial — preload
+        configRepo.get(RemoteConfigManager.KEY_REWARDED_INTERSTITIAL)?.let { config ->
+            if (config.enabled && config.unitId.isNotBlank()) {
+                rewardedInterstitialUnitId = config.unitId
+                loadRewardedInterstitialAd(config.unitId)
+            }
+        }
     }
 
     // ── Interstitial (ekran-bağımsız, davranış korunuyor) ──────────────────
