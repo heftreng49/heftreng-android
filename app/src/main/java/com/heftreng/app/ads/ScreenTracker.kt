@@ -44,9 +44,14 @@ class ScreenTracker @Inject constructor() : Application.ActivityLifecycleCallbac
     }
 
     // ── AdsViewModel referansı ───────────────────────────────────────────────
-    fun bind(adsVm: AdsViewModel, activity: Activity) {
-        adsVmRef  = adsVm
+    fun bind(
+        adsVm   : AdsViewModel,
+        activity: Activity,
+        kurdiVm : com.heftreng.app.viewmodel.KurdiViewModel? = null,
+    ) {
+        adsVmRef    = adsVm
         activityRef = activity
+        if (kurdiVm != null) kurdiVmRef = kurdiVm
     }
 
     // ── Interstitial gösterilebilir mi? ─────────────────────────────────────
@@ -58,14 +63,31 @@ class ScreenTracker @Inject constructor() : Application.ActivityLifecycleCallbac
         return true
     }
 
-    // ── Interstitial göster (hazırsa) ────────────────────────────────────────
+    // ── KurdiViewModel referansı — ödül için ─────────────────────────────────
+    private var kurdiVmRef: com.heftreng.app.viewmodel.KurdiViewModel? = null
+
+    fun bindKurdi(kurdiVm: com.heftreng.app.viewmodel.KurdiViewModel) {
+        kurdiVmRef = kurdiVm
+    }
+
+    // ── Rewarded Interstitial göster (hazırsa) ────────────────────────────────
+    // Normal interstitial yerine rewarded interstitial kullanılır.
+    // Kullanıcı reklamı tamamlarsa tüm dersler 1 saat açılır.
     fun tryShowInterstitial(onDismiss: () -> Unit = {}) {
         val activity = activityRef ?: return
         val adsVm    = adsVmRef    ?: return
         if (!canShowInterstitial()) return
 
         lastShownAtCount = screenCount
-        adsVm.showInterstitial(activity) { onDismiss() }
+
+        adsVm.showRewardedInterstitial(
+            activity    = activity,
+            onRewarded  = {
+                // Kullanıcı reklamı tamamladı — tüm dersler 1 saat açılır
+                kurdiVmRef?.unlockAllLessons()
+            },
+            onDismissed = { onDismiss() },
+        )
     }
 
     // ── ActivityLifecycleCallbacks ───────────────────────────────────────────

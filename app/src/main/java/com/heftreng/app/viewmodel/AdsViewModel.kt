@@ -14,6 +14,8 @@ import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import com.google.android.gms.ads.rewarded.RewardItem
+import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAd
+import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAdLoadCallback
 import com.heftreng.app.HeftrangApp
 import com.heftreng.app.ads.AdConfigRepository
 import com.heftreng.app.ads.AdEngine
@@ -240,6 +242,86 @@ class AdsViewModel @Inject constructor(
         )
     }
 
+    // ── Rewarded Interstitial — geçiş reklamı + ödül ────────────────────────
+    // Kullanıcı izlerse onRewarded callback'i tetiklenir (örn. tüm dersler 1 saat açılır).
+    // Kullanıcı kapatırsa hiçbir şey olmaz — normal interstitial gibi.
+    private var rewardedInterstitialAd     : RewardedInterstitialAd? = null
+    private var rewardedInterstitialUnitId : String  = ""
+    private var rewardedInterstitialLoading: Boolean = false
+
+    private fun loadRewardedInterstitialAd(unitId: String) {
+        if (unitId.isBlank()) return
+        if (rewardedInterstitialAd != null || rewardedInterstitialLoading) return
+        rewardedInterstitialLoading = true
+        RewardedInterstitialAd.load(
+            appContext, unitId, engine.adRequest(),
+            object : RewardedInterstitialAdLoadCallback() {
+                override fun onAdFailedToLoad(e: LoadAdError) {
+                    rewardedInterstitialAd      = null
+                    rewardedInterstitialLoading = false
+                    // Yüklenemezse normal interstitial'a düş
+                    loadInterstitialAd(interstitialUnitId)
+                }
+                override fun onAdLoaded(ad: RewardedInterstitialAd) {
+                    rewardedInterstitialAd      = ad
+                    rewardedInterstitialLoading = false
+                }
+            },
+        )
+    }
+
+    fun loadRewardedInterstitial() {
+        val config = configRepo.get(RemoteConfigManager.KEY_REWARDED_INTERSTITIAL) ?: run {
+            // Config gelmemişse normal interstitial yükle (fallback)
+            loadInterstitial()
+            return
+        }
+        if (!config.enabled || config.unitId.isBlank()) { loadInterstitial(); return }
+        rewardedInterstitialUnitId = config.unitId
+        loadRewardedInterstitialAd(config.unitId)
+    }
+
+    /**
+     * Rewarded Interstitial göster.
+     * @param onRewarded  — kullanıcı reklamı tamamladığında çağrılır (ödül ver)
+     * @param onDismissed — reklam kapandığında (izlese de izlemese de) çağrılır
+     */
+    fun showRewardedInterstitial(
+        activity   : Activity,
+        onRewarded : () -> Unit = {},
+        onDismissed: () -> Unit = {},
+    ) {
+        val now = System.currentTimeMillis()
+        if (now - lastInterstitialShownAtMs < MIN_INTERSTITIAL_INTERVAL_MS) {
+            onDismissed(); return
+        }
+        val ad = rewardedInterstitialAd
+        if (ad == null) {
+            // Rewarded interstitial hazır değil — normal interstitial göster
+            showInterstitial(activity, onDismissed)
+            return
+        }
+        lastInterstitialShownAtMs = now
+        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+            override fun onAdDismissedFullScreenContent() {
+                rewardedInterstitialAd = null
+                loadRewardedInterstitialAd(rewardedInterstitialUnitId)
+                onDismissed()
+            }
+            override fun onAdFailedToShowFullScreenContent(e: AdError) {
+                rewardedInterstitialAd = null
+                loadRewardedInterstitialAd(rewardedInterstitialUnitId)
+                onDismissed()
+            }
+        }
+        ad.show(activity) { _ ->
+            // RewardItem — kullanıcı reklamı tamamladı
+            onRewarded()
+        }
+    }
+
+    fun isRewardedInterstitialReady(): Boolean = rewardedInterstitialAd != null
+
     fun loadInterstitial() {
         val config = configRepo.get(RemoteConfigManager.KEY_INTERSTITIAL) ?: return
         if (!config.enabled) return
@@ -413,6 +495,7 @@ class AdsViewModel @Inject constructor(
             engine.resumeAllBanners()
             loadAdConfigs()
             if (interstitialAd == null && !interstitialLoading && interstitialUnitId.isNotBlank()) loadInterstitialAd(interstitialUnitId)
+            if (rewardedInterstitialAd == null && !rewardedInterstitialLoading && rewardedInterstitialUnitId.isNotBlank()) loadRewardedInterstitialAd(rewardedInterstitialUnitId)
             if (rewardedAd == null && rewardedUnitId.isNotBlank() && !rewardedLoading) preloadRewardedAd(rewardedUnitId)
         }
     }
