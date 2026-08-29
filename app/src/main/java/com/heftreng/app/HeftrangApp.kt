@@ -41,6 +41,9 @@ class HeftrangApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // AdFreeManager — rewarded izleme sonrası 2 saat reklamsız
+        com.heftreng.app.ads.AdFreeManager.init(this)
+
         val gmsAvailable = checkGmsAvailability()
         _isGmsAvailable.value = gmsAvailable
 

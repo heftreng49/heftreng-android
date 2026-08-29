@@ -71,12 +71,9 @@ class ScreenTracker @Inject constructor() : Application.ActivityLifecycleCallbac
         adsVm.showRewardedInterstitial(
             activity    = activity,
             onRewarded  = {
-                // Kullanıcı reklamı tamamladı — SharedPreferences'a timestamp yaz
-                // KurdiViewModel bunu okuyarak tüm dersleri 1 saat açar
-                val prefs = activity.getSharedPreferences("kurdi_unlock", android.content.Context.MODE_PRIVATE)
-                prefs.edit()
-                    .putLong("all_unlock_until_ms", System.currentTimeMillis() + 60 * 60 * 1_000L)
-                    .apply()
+                // Kullanıcı reklamı tamamladı → 2 saat native/banner reklamsız deneyim
+                // Not: Kurdî dersleri kendi rewarded sistemiyle çalışır, buradan etkilenmez
+                com.heftreng.app.ads.AdFreeManager.grantAdFree()
             },
             onDismissed = { onDismiss() },
         )

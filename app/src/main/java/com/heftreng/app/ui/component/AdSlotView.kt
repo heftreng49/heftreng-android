@@ -41,6 +41,10 @@ fun AdSlotView(
     adsVm    : AdsViewModel,
     modifier : Modifier = Modifier,
 ) {
+    // 2 saatlik reklamsız süredeyse native ve banner reklamları gösterme
+    // (Rewarded interstitial bu kontrolden muaf — geçiş reklamı ayrı)
+    if (com.heftreng.app.ads.AdFreeManager.isAdFree()) return
+
     // İstek warmVisiblePositions tarafından zaten atıldı.
     // Burada tekrar request* çağırmak her recompose'da çift istek yaratır.
     // Sadece native için dispose (banner lifecycle farklı yönetilir).
