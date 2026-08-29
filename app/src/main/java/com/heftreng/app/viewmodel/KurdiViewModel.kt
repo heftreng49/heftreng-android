@@ -194,7 +194,7 @@ class KurdiViewModel @Inject constructor(
     // ScreenTracker, rewarded interstitial izlenince SharedPreferences'a yazar.
     // KurdiViewModel başlarken okur ve reaktif state'e koyar.
     private val _allUnlockUntilMs = MutableStateFlow(
-        appContext.getSharedPreferences("kurdi_unlock", android.content.Context.MODE_PRIVATE)
+        context.getSharedPreferences("kurdi_unlock", android.content.Context.MODE_PRIVATE)
             .getLong("all_unlock_until_ms", 0L)
     )
     val allUnlockUntilMs = _allUnlockUntilMs.asStateFlow()
@@ -211,7 +211,7 @@ class KurdiViewModel @Inject constructor(
         viewModelScope.launch {
             while (true) {
                 kotlinx.coroutines.delay(5_000L) // 5 saniyede bir kontrol
-                val saved = appContext.getSharedPreferences("kurdi_unlock", android.content.Context.MODE_PRIVATE)
+                val saved = context.getSharedPreferences("kurdi_unlock", android.content.Context.MODE_PRIVATE)
                     .getLong("all_unlock_until_ms", 0L)
                 if (saved != _allUnlockUntilMs.value) {
                     _allUnlockUntilMs.value = saved
