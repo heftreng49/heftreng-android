@@ -496,14 +496,15 @@ class ProfileViewModel @Inject constructor(
 
     // ── Takipten çık ─────────────────────────────────────────────────────────
     private fun unfollowUser(targetUid: String) {
+        // Optimistic update — UI aninda guncellenir
+        _isFollowing.value         = false
+        _followRequestStatus.value = "none"
+        _followersCount.value      = (_followersCount.value - 1).coerceAtLeast(0)
         viewModelScope.launch {
             try {
                 supabase.postgrest["follows"].delete {
                     filter { eq("id", "${myUid}_$targetUid") }
                 }
-                _isFollowing.value = false
-                _followRequestStatus.value = "none"
-                _followersCount.value = (_followersCount.value - 1).coerceAtLeast(0)
                 firestore.collection("users").document(targetUid)
                     .update("followersCount", FieldValue.increment(-1))
                 firestore.collection("users").document(myUid)
@@ -514,6 +515,8 @@ class ProfileViewModel @Inject constructor(
 
     // ── Gizli hesaba takip isteği gönder ─────────────────────────────────────
     private fun sendFollowRequest(targetUid: String) {
+        // Optimistic update — UI aninda guncellenir
+        _followRequestStatus.value = "pending"
         viewModelScope.launch {
             try {
                 // Tek Firestore çekimi — hem name hem photo için
@@ -565,17 +568,22 @@ class ProfileViewModel @Inject constructor(
 
     // ── Bekleyen isteği iptal et ──────────────────────────────────────────────
     private fun cancelFollowRequest(targetUid: String) {
+        // Optimistic update — UI aninda guncellenir
+        _followRequestStatus.value = "none"
         viewModelScope.launch {
             try {
                 firestore.collection("followRequests").document(targetUid)
                     .collection("pending").document(myUid).delete().await()
-                _followRequestStatus.value = "none"
             } catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
         }
     }
 
     // ── Açık hesaba direkt takip ──────────────────────────────────────────────
     private fun followUserDirectly(targetUid: String) {
+        // Optimistic update — UI aninda guncellenir
+        _isFollowing.value         = true
+        _followRequestStatus.value = "accepted"
+        _followersCount.value     += 1
         viewModelScope.launch {
             try {
                 // İki Firestore get() paralel — biri diğerini beklemez
