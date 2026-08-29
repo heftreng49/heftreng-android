@@ -44,14 +44,9 @@ class ScreenTracker @Inject constructor() : Application.ActivityLifecycleCallbac
     }
 
     // ── AdsViewModel referansı ───────────────────────────────────────────────
-    fun bind(
-        adsVm   : AdsViewModel,
-        activity: Activity,
-        kurdiVm : com.heftreng.app.viewmodel.KurdiViewModel? = null,
-    ) {
+    fun bind(adsVm: AdsViewModel, activity: Activity) {
         adsVmRef    = adsVm
         activityRef = activity
-        if (kurdiVm != null) kurdiVmRef = kurdiVm
     }
 
     // ── Interstitial gösterilebilir mi? ─────────────────────────────────────
@@ -61,13 +56,6 @@ class ScreenTracker @Inject constructor() : Application.ActivityLifecycleCallbac
         if (!INTERSTITIAL_ALLOWED_ROUTES.any { route == it || routeBase == it.substringBefore("/") }) return false
         if (screenCount - lastShownAtCount < MIN_SCREENS_BETWEEN) return false
         return true
-    }
-
-    // ── KurdiViewModel referansı — ödül için ─────────────────────────────────
-    private var kurdiVmRef: com.heftreng.app.viewmodel.KurdiViewModel? = null
-
-    fun bindKurdi(kurdiVm: com.heftreng.app.viewmodel.KurdiViewModel) {
-        kurdiVmRef = kurdiVm
     }
 
     // ── Rewarded Interstitial göster (hazırsa) ────────────────────────────────
@@ -83,8 +71,12 @@ class ScreenTracker @Inject constructor() : Application.ActivityLifecycleCallbac
         adsVm.showRewardedInterstitial(
             activity    = activity,
             onRewarded  = {
-                // Kullanıcı reklamı tamamladı — tüm dersler 1 saat açılır
-                kurdiVmRef?.unlockAllLessons()
+                // Kullanıcı reklamı tamamladı — SharedPreferences'a timestamp yaz
+                // KurdiViewModel bunu okuyarak tüm dersleri 1 saat açar
+                val prefs = activity.getSharedPreferences("kurdi_unlock", android.content.Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putLong("all_unlock_until_ms", System.currentTimeMillis() + 60 * 60 * 1_000L)
+                    .apply()
             },
             onDismissed = { onDismiss() },
         )

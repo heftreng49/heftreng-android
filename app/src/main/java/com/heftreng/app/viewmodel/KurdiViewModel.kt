@@ -190,6 +190,36 @@ class KurdiViewModel @Inject constructor(
     private val _tempUnlockedIds = MutableStateFlow<Set<String>>(emptySet())
     val tempUnlockedIds = _tempUnlockedIds.asStateFlow()
 
+    // ── Tüm derslerin geçici açık olduğu bitiş zamanı ────────────────────────
+    // ScreenTracker, rewarded interstitial izlenince SharedPreferences'a yazar.
+    // KurdiViewModel başlarken okur ve reaktif state'e koyar.
+    private val _allUnlockUntilMs = MutableStateFlow(
+        appContext.getSharedPreferences("kurdi_unlock", android.content.Context.MODE_PRIVATE)
+            .getLong("all_unlock_until_ms", 0L)
+    )
+    val allUnlockUntilMs = _allUnlockUntilMs.asStateFlow()
+
+    fun isAllUnlocked(): Boolean = System.currentTimeMillis() < _allUnlockUntilMs.value
+
+    fun remainingUnlockMinutes(): Long {
+        val remaining = _allUnlockUntilMs.value - System.currentTimeMillis()
+        return if (remaining > 0) remaining / 60_000L else 0L
+    }
+
+    // SharedPreferences değişimini dinle — reklam izlenince state güncellenir
+    init {
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(5_000L) // 5 saniyede bir kontrol
+                val saved = appContext.getSharedPreferences("kurdi_unlock", android.content.Context.MODE_PRIVATE)
+                    .getLong("all_unlock_until_ms", 0L)
+                if (saved != _allUnlockUntilMs.value) {
+                    _allUnlockUntilMs.value = saved
+                }
+            }
+        }
+    }
+
     // Streak bozuk mu? (Streak Kurtarma senaryosu)
     private val _streakBroke   = MutableStateFlow(false)
     val streakBroke = _streakBroke.asStateFlow()
