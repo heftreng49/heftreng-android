@@ -343,16 +343,16 @@
       {s.language($lang)}
     </div>
     <div class="dr-lang-row">
-      <button class="dr-lang-btn" class:dr-lang-active={$lang === 'tr'} onclick={() => lang.set('tr')}>
+      <button class="dr-lang-btn" class:dr-lang-active={$lang === 'tr'} onclick={() => { lang.set('tr'); closeDrawer(); }}>
         🇹🇷 Türkçe
       </button>
-      <button class="dr-lang-btn" class:dr-lang-active={$lang === 'ku'} onclick={() => lang.set('ku')}>
+      <button class="dr-lang-btn" class:dr-lang-active={$lang === 'ku'} onclick={() => { lang.set('ku'); closeDrawer(); }}>
         ☀️ Kurmancî
       </button>
-      <button class="dr-lang-btn" class:dr-lang-active={$lang === 'zza'} onclick={() => lang.set('zza')}>
+      <button class="dr-lang-btn" class:dr-lang-active={$lang === 'zza'} onclick={() => { lang.set('zza'); closeDrawer(); }}>
         ☀️ Zazakî
       </button>
-      <button class="dr-lang-btn" class:dr-lang-active={$lang === 'ckb'} onclick={() => lang.set('ckb')}>
+      <button class="dr-lang-btn" class:dr-lang-active={$lang === 'ckb'} onclick={() => { lang.set('ckb'); closeDrawer(); }}>
         ☀️ Soranî
       </button>
     </div>
