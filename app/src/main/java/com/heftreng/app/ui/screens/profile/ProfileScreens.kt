@@ -1101,7 +1101,7 @@ private fun ReadBooksSheet(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                Strings.profileReadBooksTitle(language).replace("${n}", "${entries.size}"),
+                Strings.profileReadBooksTitle(language).replace("\${n}", entries.size.toString()),
                 color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp,
             )
             IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null, tint = Muted) }
@@ -1152,7 +1152,7 @@ private fun UserQuotesSheet(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                Strings.profileMyQuotesTitle(language).replace("${n}", "${quotes.size}"),
+                Strings.profileMyQuotesTitle(language).replace("\${n}", quotes.size.toString()),
                 color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp,
             )
             IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null, tint = Muted) }
@@ -1386,7 +1386,7 @@ fun EditProfileScreen(
                 imageUri = it,
                 storage  = storage,
                 onDone   = { scope.launch { snackbarHostState.showSnackbar(Strings.profilePhotoUpdated(language)) } },
-                onError  = { msg -> scope.launch { snackbarHostState.showSnackbar(Strings.profilePhotoError(language).replace("$msg", msg)) } },
+                onError  = { msg -> scope.launch { snackbarHostState.showSnackbar(Strings.profilePhotoError(language).replace("\$msg", msg)) } },
             )
         }
     }
@@ -1398,7 +1398,7 @@ fun EditProfileScreen(
                 imageUri = it,
                 storage  = storage,
                 onDone   = { scope.launch { snackbarHostState.showSnackbar(Strings.profileCoverUpdated(language)) } },
-                onError  = { msg -> scope.launch { snackbarHostState.showSnackbar(Strings.profilePhotoError(language).replace("$msg", msg)) } },
+                onError  = { msg -> scope.launch { snackbarHostState.showSnackbar(Strings.profilePhotoError(language).replace("\$msg", msg)) } },
             )
         }
     }
