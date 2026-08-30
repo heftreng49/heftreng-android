@@ -178,7 +178,7 @@ object Strings {
     fun darkMode(l: String)        = t(l, "Karanlık Mod", "Moda Tarî", "Modê Tarî", "دۆخی تاریک")
     fun lightMode(l: String)       = t(l, "Aydınlık Mod", "Moda Ronî", "Modê Ronî", "دۆخی ڕووناک")
     fun systemMode(l: String)      = t(l, "Sistemi Takip Et", "Li gorî Pergalê", "Gorî Sîstemî", "بەپێی سیستەم")
-    fun appLanguage(l: String)     = t(l, "Uygulama Dili", "Zimana Bernameyê", "Zıwanê Bernameyî", "زمانی بەرنامە")
+    fun appLanguage(l: String)     = t(l, "Uygulama Dili", "Zimanê Sepanê", "Zıwanê Sepanî", "زمانی بەرنامە")
     fun about(l: String)           = t(l, "Hakkında", "Der barê me", "Heqê ma de", "دەربارەی ئێمە")
     fun version(l: String)         = t(l, "Sürüm", "Guherto", "Guherto", "وەشان")
     fun account(l: String)         = t(l, "Hesap", "Hesab", "Hesab", "هەژمار")
@@ -326,7 +326,7 @@ object Strings {
     fun passwordMismatch(l: String) = t(l, "Şifreler eşleşmiyor", "Şîre li hev nayên", "Şîre li hev nayên", "Şîre li hev nayên")
     fun currentPassword(l: String)  = t(l, "Mevcut Şifre",         "Şîreya Niha", "Şîreya Niha", "Şîreya Niha")
     fun newPassword(l: String)      = t(l, "Yeni Şifre",           "Şîreya Nû", "Şîreya Nû", "Şîreya Nû")
-    fun selectLang(l: String)       = t(l, "Uygulama dilini seç",  "Zimanê serîlêdanê hilbijêre", "Zimanê serîlêdanê hilbijêre", "Zimanê serîlêdanê hilbijêre")
+    fun selectLang(l: String)       = t(l, "Uygulama dilini seç",  "Zimanê sepanê hilbijêre", "Zıwanê sepanî hilbijêre", "زمانی سەپان هەڵبژێرە")
 
     // ── Auth (yeni) ───────────────────────────────────────────────────────────
     fun welcome(l: String)          = t(l, "Hoş geldin",           "Xêr hatî", "Xêr hatî", "Xêr hatî")
@@ -336,7 +336,7 @@ object Strings {
     // ── Ayarlar - açıklama metinleri ──────────────────────────────────────────
     fun settingsOther(l: String)         = t(l, "Diğer",                            "Yên Din", "Yên Din", "Yên Din")
     fun settingsAbout(l: String)         = t(l, "Heftreng Hakkında",               "Derbarê Heftreng", "Derbarê Heftreng", "Derbarê Heftreng")
-    fun settingsAboutSub(l: String)      = t(l, "Uygulama hakkında bilgi",          "Serîlêdanê nas bike", "Serîlêdanê nas bike", "Serîlêdanê nas bike")
+    fun settingsAboutSub(l: String)      = t(l, "Uygulama hakkında bilgi",          "Der barê sepanê de agahî", "Sepanî ser o melumat", "زانیاری دەربارەی سەپان")
     fun rateApp(l: String)               = t(l, "Bizi Değerlendir",                  "Me binirxîne", "Me binirxîne", "Me binirxîne")
     fun rateAppSub(l: String)            = t(l, "Play Store'da puan ver, yorum yaz",  "Li Play Store dengê xwe bide", "Li Play Store dengê xwe bide", "Li Play Store dengê xwe bide")
     fun copyProfileLink(l: String)    = t(l, "Profil Linkini Kopyala",     "Lînka Profîlê Kopî Bike", "Lînka Profîlê Kopî Bike", "Lînka Profîlê Kopî Bike")
