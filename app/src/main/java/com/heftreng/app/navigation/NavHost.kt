@@ -83,6 +83,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
 import kotlinx.coroutines.launch
@@ -225,6 +227,9 @@ fun HeftrangNavHost(
         }
     }
     val language    by settingsVm.language.collectAsState()
+
+    // Soranî RTL — layout yönünü dinamik ayarla
+    val layoutDirection = if (language == "ckb") LayoutDirection.Rtl else LayoutDirection.Ltr
     val totalUnread by msgsVm.totalUnread.collectAsState()
     val appConfig   by appConfigVm.config.collectAsState()
     val configLoaded by appConfigVm.loaded.collectAsState()
@@ -408,7 +413,7 @@ fun HeftrangNavHost(
             )
         }
     ) {
-        Scaffold(
+        CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) { Scaffold(
             containerColor = Background,
             // ime insets iç ekranlar tarafından yönetiliyor — burada sadece sistem barları
             contentWindowInsets = WindowInsets(0,0,0,0),
@@ -1440,5 +1445,5 @@ fun InstagramAccountSwitcherDialog(
                 }
             }
         }
-    }
+    } } // Scaffold + CompositionLocalProvider
 }

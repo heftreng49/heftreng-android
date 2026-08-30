@@ -220,7 +220,7 @@ fun SettingsScreen(
                         }
                         Spacer(Modifier.height(10.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("tr" to "Türkçe", "ku" to "Kurdî").forEach { (code, label) ->
+                            listOf("tr" to "Türkçe", "ku" to "Kurmancî", "zza" to "Zazakî", "ckb" to "Soranî").forEach { (code, label) ->
                                 val selected = language == code
                                 Button(
                                     onClick  = { vm.setLanguage(code) },
