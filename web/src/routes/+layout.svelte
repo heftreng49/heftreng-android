@@ -350,10 +350,10 @@
         ☀️ Kurmancî
       </button>
       <button class="dr-lang-btn" class:dr-lang-active={$lang === 'zza'} onclick={() => lang.set('zza')}>
-        🔥 Zazakî
+        ☀️ Zazakî
       </button>
       <button class="dr-lang-btn" class:dr-lang-active={$lang === 'ckb'} onclick={() => lang.set('ckb')}>
-        🌙 Soranî
+        ☀️ Soranî
       </button>
     </div>
 
