@@ -227,6 +227,7 @@ fun HeftrangNavHost(
         }
     }
     val language    by settingsVm.language.collectAsState()
+    val layoutDirection = if (language == "ckb") androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr
 
     // Soranî RTL — layout yönünü dinamik ayarla
     val layoutDirection = if (language == "ckb") LayoutDirection.Rtl else LayoutDirection.Ltr
