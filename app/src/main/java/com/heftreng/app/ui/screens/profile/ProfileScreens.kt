@@ -120,7 +120,7 @@ fun ProfileScreen(
         if (privateListBlockedMsg) {
             android.widget.Toast.makeText(
                 localContext,
-                if (language == "ku") "Ev hesab veşartî ye" else "Bu hesap gizli",
+                Strings.profileAccountPrivate(language),
                 android.widget.Toast.LENGTH_SHORT,
             ).show()
             privateListBlockedMsg = false
@@ -148,7 +148,7 @@ fun ProfileScreen(
     val tabs = listOf(
         Strings.posts(language),
         Strings.readingList(language),
-        if (ku) "Pirtûk & Rêze" else "Kitaplar & Seriler",
+        Strings.profileBooksAndSeries(language),
     )
     var selectedTab by remember { mutableIntStateOf(0) }
 
@@ -185,7 +185,7 @@ fun ProfileScreen(
             containerColor = Background,
             topBar = {
                 TopAppBar(
-                    title = { Text(if (ku) "Profîl" else "Profil", color = OnBackground) },
+                    title = { Text(Strings.profileTitle(language), color = OnBackground) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = OnBackground)
@@ -210,20 +210,20 @@ fun ProfileScreen(
                     )
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        if (ku) "Ev hesab tune" else "Bu hesap mevcut değil",
+                        Strings.profileNotFound(language),
                         color    = OnBackground,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        if (ku) "Dibe ku hatibe rakirin." else "Silinmiş veya askıya alınmış olabilir.",
+                        Strings.profileMaybeDeleted(language),
                         color    = Muted,
                         fontSize = 13.sp,
                     )
                     Spacer(Modifier.height(24.dp))
                     TextButton(onClick = { navController.popBackStack() }) {
-                        Text(if (ku) "Vegere" else "Geri Dön", color = Primary)
+                        Text(Strings.profileGoBack(language), color = Primary)
                     }
                 }
             }
@@ -238,7 +238,7 @@ fun ProfileScreen(
             TopAppBar(
                 title = {
                     Text(
-                        user?.let { u -> if (u.username.isNotBlank()) "@${u.username}" else u.displayName.ifBlank { if (ku) "Profîl" else "Profil" } }
+                        user?.let { u -> if (u.username.isNotBlank()) "@${u.username}" else u.displayName.ifBlank { Strings.profileTitle(language) } }
                             ?: preloadedName.ifBlank { Strings.loading(language) },
                         color = OnBackground, fontWeight = FontWeight.SemiBold,
                     )
@@ -503,14 +503,13 @@ fun ProfileScreen(
                             modifier           = Modifier.size(52.dp),
                         )
                         Text(
-                            if (ku) "Ev hesab taybet e" else "Bu hesap gizli",
+                            Strings.profilePrivateTitle(language),
                             color      = OnBackground,
                             fontWeight = FontWeight.SemiBold,
                             fontSize   = 16.sp,
                         )
                         Text(
-                            if (ku) "Ji bo dîtina barkirin û nivîsên vê hesabê, pêwîste hûn bişopînin."
-                            else    "Gönderileri görmek için takip et.",
+                            Strings.profilePrivateDesc(language),
                             color    = Muted,
                             fontSize = 13.sp,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -573,7 +572,7 @@ fun ProfileScreen(
                                             onClick = { vm.loadMorePosts(targetUid) },
                                             shape = RoundedCornerShape(20.dp),
                                         ) {
-                                            Text(if (language == "ku") "Zêdetir bar bike" else "Daha Fazla Yükle")
+                                            Text(Strings.profileLoadMore(language))
                                         }
                                     }
                                 }
@@ -599,13 +598,13 @@ fun ProfileScreen(
                                     )
                                     Spacer(Modifier.height(10.dp))
                                     Text(
-                                        if (ku) "Hîn pirtûk/rêze tune" else "Henüz kitap veya seri yok",
+                                        Strings.profileNoBooksSeries(language),
                                         color = Muted,
                                     )
                                     if (isMe) {
                                         Spacer(Modifier.height(8.dp))
                                         TextButton(onClick = { navController.navigate("serials") }) {
-                                            Text(if (ku) "+ Nû Zêde Bike" else "+ Yeni Ekle", color = Amber)
+                                            Text(Strings.profileAddNew(language), color = Amber)
                                         }
                                     }
                                 }
@@ -624,7 +623,7 @@ fun ProfileScreen(
                                 ) {
                                     Icon(Icons.Outlined.AutoStories, null, tint = Primary, modifier = Modifier.size(16.dp))
                                     Text(
-                                        if (ku) "Rêze" else "Seriler",
+                                        Strings.profileSeries(language),
                                         color      = Primary,
                                         fontSize   = 12.sp,
                                         fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
@@ -653,7 +652,7 @@ fun ProfileScreen(
                                 ) {
                                     Icon(Icons.Outlined.MenuBook, null, tint = Amber, modifier = Modifier.size(16.dp))
                                     Text(
-                                        if (ku) "Pirtûk" else "Kitaplar",
+                                        Strings.profileBooks(language),
                                         color      = Amber,
                                         fontSize   = 12.sp,
                                         fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
@@ -690,7 +689,7 @@ fun ProfileScreen(
                                         modifier = Modifier.size(44.dp),
                                     )
                                     Spacer(Modifier.height(10.dp))
-                                    Text(if (ku) "Lîsteya xwendinê vala ye" else "Okuma listesi boş", color = Muted)
+                                    Text(Strings.profileReadingListEmpty(language), color = Muted)
                                 }
                             }
                         }
@@ -797,8 +796,8 @@ fun ProfileScreen(
     if (msgPermDenied) {
         AlertDialog(
             onDismissRequest = { msgPermDenied = false },
-            title = { Text(if (language == "ku") "Peyam nayê şandin" else "Mesaj Gönderilemez", color = OnBackground, fontWeight = FontWeight.Bold) },
-            text  = { Text(if (language == "ku") "Ev bikarhêner tenê ji şopînerên xwe peyam qebûl dike." else "Bu kullanıcı mesajları kısıtlamış.", color = Muted) },
+            title = { Text(Strings.profileMsgBlockedTitle(language), color = OnBackground, fontWeight = FontWeight.Bold) },
+            text  = { Text(Strings.profileMsgBlockedDesc(language), color = Muted) },
             confirmButton = { TextButton(onClick = { msgPermDenied = false }) { Text("Tamam", color = Primary) } },
             containerColor = HeftSurface,
         )
@@ -1102,7 +1101,7 @@ private fun ReadBooksSheet(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                if (ku) "Pirtûkên xwendî (${entries.size})" else "Okunan Kitaplar (${entries.size})",
+                Strings.profileReadBooksTitle(language).replace("${n}", "${entries.size}"),
                 color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp,
             )
             IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null, tint = Muted) }
@@ -1111,7 +1110,7 @@ private fun ReadBooksSheet(
 
         if (entries.isEmpty()) {
             Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
-                Text(if (ku) "Hîn pirtûk tune" else "Henüz okunan kitap yok", color = Muted)
+                Text(Strings.profileNoReadBooks(language), color = Muted)
             }
         } else {
             LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
@@ -1153,7 +1152,7 @@ private fun UserQuotesSheet(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                if (ku) "Jêgirtên min (${quotes.size})" else "Alıntılarım (${quotes.size})",
+                Strings.profileMyQuotesTitle(language).replace("${n}", "${quotes.size}"),
                 color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp,
             )
             IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null, tint = Muted) }
@@ -1166,7 +1165,7 @@ private fun UserQuotesSheet(
             }
         } else if (quotes.isEmpty()) {
             Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
-                Text(if (ku) "Hîn gotin tune" else "Henüz alıntı yok", color = Muted)
+                Text(Strings.profileNoQuotesYet(language), color = Muted)
             }
         } else {
             LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
@@ -1227,21 +1226,21 @@ fun ReadingSummaryHero(
         ReadingHeroStat(
             icon  = Icons.Outlined.AutoStories,
             value = booksRead.toString(),
-            label = if (language == "ku") "pirtûk xwendin" else "kitap okudum",
+            label = Strings.profileStatBooksRead(language),
             onClick = onBooksClick,
         )
         ReadingHeroDivider()
         ReadingHeroStat(
             icon  = Icons.Outlined.FormatQuote,
             value = quotesCount.toString(),
-            label = if (language == "ku") "jêgirt" else "alıntı",
+            label = Strings.profileStatQuotes(language),
             onClick = onQuotesClick,
         )
         ReadingHeroDivider()
         ReadingHeroStat(
             icon  = Icons.Outlined.LocalFireDepartment,
             value = streak.toString(),
-            label = if (language == "ku") "roj streak" else "gün streak",
+            label = Strings.profileStatStreak(language),
             valueColor = Amber,
         )
     }
@@ -1386,8 +1385,8 @@ fun EditProfileScreen(
             vm.updateProfilePhoto(
                 imageUri = it,
                 storage  = storage,
-                onDone   = { scope.launch { snackbarHostState.showSnackbar(if (ku) "Wêneya profîlê hate nûkirin ✓" else "Profil fotoğrafı güncellendi ✓") } },
-                onError  = { msg -> scope.launch { snackbarHostState.showSnackbar(if (ku) "Çewtî: $msg" else "Hata: $msg") } },
+                onDone   = { scope.launch { snackbarHostState.showSnackbar(Strings.profilePhotoUpdated(language)) } },
+                onError  = { msg -> scope.launch { snackbarHostState.showSnackbar(Strings.profilePhotoError(language).replace("$msg", msg)) } },
             )
         }
     }
@@ -1398,8 +1397,8 @@ fun EditProfileScreen(
             vm.updateCoverPhoto(
                 imageUri = it,
                 storage  = storage,
-                onDone   = { scope.launch { snackbarHostState.showSnackbar(if (ku) "Wêneya bergê hate nûkirin ✓" else "Kapak fotoğrafı güncellendi ✓") } },
-                onError  = { msg -> scope.launch { snackbarHostState.showSnackbar(if (ku) "Çewtî: $msg" else "Hata: $msg") } },
+                onDone   = { scope.launch { snackbarHostState.showSnackbar(Strings.profileCoverUpdated(language)) } },
+                onError  = { msg -> scope.launch { snackbarHostState.showSnackbar(Strings.profilePhotoError(language).replace("$msg", msg)) } },
             )
         }
     }
