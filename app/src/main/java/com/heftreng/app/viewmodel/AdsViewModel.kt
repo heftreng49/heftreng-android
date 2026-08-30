@@ -440,6 +440,9 @@ class AdsViewModel @Inject constructor(
             RewardType.DOUBLE_XP     -> cfg.scenarioDoubleXp
             RewardType.UNLOCK_LESSON -> cfg.scenarioUnlockLesson
             RewardType.SAVE_STREAK   -> cfg.scenarioSaveStreak
+            // AD_FREE_HOUR: ayrı bir Remote Config senaryo bayrağı yok —
+            // rewarded reklam genel olarak açıksa (cfg.enabled) bu senaryo da açık sayılır.
+            RewardType.AD_FREE_HOUR  -> true
         }
         return scenarioEnabled && _remainingRewardedAds.value > 0
     }
