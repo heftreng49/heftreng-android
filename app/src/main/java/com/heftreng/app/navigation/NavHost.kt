@@ -1241,28 +1241,51 @@ fun DrawerContent(
             HorizontalDivider(color = Divider)
             Spacer(Modifier.height(8.dp))
 
-            // ── Dil değişimi ───────────────────────────────────────────
+            // ── Dil değişimi — 4 dil ─────────────────────────────────
             Row(
                 modifier          = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Icon(Icons.Outlined.Translate, null, tint = Amber, modifier = Modifier.size(18.dp))
-                Button(
-                    onClick  = { settingsVm.setLanguage(if (language == "tr") "ku" else "tr") },
-                    modifier = Modifier.weight(1f),
-                    shape    = RoundedCornerShape(8.dp),
-                    colors   = ButtonDefaults.buttonColors(
-                        containerColor = Amber,
-                        contentColor   = Color.Black,
-                    ),
-                    contentPadding = PaddingValues(vertical = 6.dp),
-                ) {
-                    Text(
-                        if (language == "ku") "Kurdî" else "Türkçe",
-                        fontSize   = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
+                Icon(
+                    Icons.Outlined.Translate, null,
+                    tint     = Amber,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    Strings.appLanguage(language),
+                    fontSize  = 12.sp,
+                    color     = Muted,
+                    modifier  = Modifier.weight(1f),
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            val langs = listOf(
+                "tr"  to "☀️ Türkçe",
+                "ku"  to "☀️ Kurmancî",
+                "zza" to "☀️ Zazakî",
+                "ckb" to "☀️ Soranî",
+            )
+            FlowRow(
+                modifier              = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement   = Arrangement.spacedBy(6.dp),
+            ) {
+                langs.forEach { (code, label) ->
+                    val selected = language == code
+                    Button(
+                        onClick        = { settingsVm.setLanguage(code) },
+                        shape          = RoundedCornerShape(20.dp),
+                        colors         = ButtonDefaults.buttonColors(
+                            containerColor = if (selected) Amber else HeftSurface,
+                            contentColor   = if (selected) Color.Black else OnBackground,
+                        ),
+                        border         = if (!selected) BorderStroke(1.dp, Divider) else null,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp),
+                        elevation      = ButtonDefaults.buttonElevation(0.dp),
+                    ) {
+                        Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                    }
                 }
             }
 
