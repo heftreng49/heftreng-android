@@ -305,8 +305,11 @@ class AdsViewModel @Inject constructor(
         }
         val ad = rewardedInterstitialAd
         if (ad == null) {
-            // Rewarded interstitial hazır değil — normal interstitial göster
-            showInterstitial(activity, onDismissed)
+            // Rewarded interstitial henüz yüklenmemiş — bu sefer atla
+            // Normal interstitial'a düşmek AdMob politikasına aykırı:
+            // kullanıcı ödüllü reklam beklediği için ödülsüz gösterilemez
+            android.util.Log.d("AdsVM", "Rewarded interstitial hazır değil, bu geçiş atlanıyor")
+            onDismissed()
             return
         }
         lastInterstitialShownAtMs = now
