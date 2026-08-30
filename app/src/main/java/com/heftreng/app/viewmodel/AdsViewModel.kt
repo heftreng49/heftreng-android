@@ -421,7 +421,7 @@ class AdsViewModel @Inject constructor(
         )
     }
 
-    enum class RewardType { DOUBLE_XP, UNLOCK_LESSON, SAVE_STREAK }
+    enum class RewardType { DOUBLE_XP, UNLOCK_LESSON, SAVE_STREAK, AD_FREE_HOUR }
 
     fun loadRewarded() {
         val config = configRepo.get(RemoteConfigManager.KEY_REWARDED) ?: return
@@ -496,6 +496,11 @@ class AdsViewModel @Inject constructor(
             ad.show(activity) { rewardItem ->
                 if (uid.isNotEmpty()) frequencyManager.increment(uid, "rewarded")
                 _remainingRewardedAds.value = (_remainingRewardedAds.value - 1).coerceAtLeast(0)
+                // AD_FREE_HOUR: reklam tamamlanınca 1 saatlik reklamsız süre otomatik başlar.
+                // Diğer RewardType'lar (DOUBLE_XP, UNLOCK_LESSON, SAVE_STREAK) etkilenmez.
+                if (rewardType == RewardType.AD_FREE_HOUR) {
+                    com.heftreng.app.ads.AdFreeManager.grantAdFree()
+                }
                 onRewarded(rewardItem, rewardType)
             }
         } else {

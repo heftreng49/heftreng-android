@@ -615,4 +615,13 @@ object Strings {
     fun profilePhotoUpdated(l: String) = t(l, "Profil fotoğrafı güncellendi ✓", "Wêneya profîlê hate nûkirin ✓", "Resmê profîlî ame newekerdene ✓", "وێنەی پرۆفایل نوێکرایەوە ✓")
     fun profilePhotoError(l: String) = t(l, "Hata: \$msg", "Çewtî: \$msg", "Xeta: \$msg", "هەڵە: \$msg")
     fun profileCoverUpdated(l: String) = t(l, "Kapak fotoğrafı güncellendi ✓", "Wêneya bergê hate nûkirin ✓", "Resmê bergî ame newekerdene ✓", "وێنەی بەرگ نوێکرایەوە ✓")
+    // ── Reklamsız Süre — Ödüllü Reklam ────────────────────────────────────────
+    fun adFreeTitle(l: String) = t(l, "Reklamsız Deneyim", "Ezmûna Bêreklam", "Tecrubeya Bêreklamî", "ئەزموونی بێ ڕیکلام")
+    fun adFreeSubtitle(l: String) = t(l, "Kısa bir reklam izle, 1 saat reklamsız kullan", "Reklamekê kurt temaşe bike, saetekê bêreklam bikar bîne", "Reklamêko kılm bivîne, saetêk bêreklam bıewnî", "ڕیکلامێکی کورت ببینە، کاتژمێرێک بەبێ ڕیکلام بەکاری بهێنە")
+    fun adFreeButtonWatch(l: String) = t(l, "🎬 Reklam İzle ve Kazan", "🎬 Reklamê Temaşe Bike û Bistîne", "🎬 Reklam Bıvinê û Bıgêr", "🎬 ڕیکلامەکە ببینە و بەدەستی بهێنە")
+    fun adFreeActiveLabel(l: String) = t(l, "Reklamsız süre aktif", "Dema bêreklam çalak e", "Wextê bêreklamî aktîf o", "کاتی بێ ڕیکلام چالاکە")
+    fun adFreeRemainingTime(l: String) = t(l, "Kalan süre: \${time}", "Dema mayî: \${time}", "Wextê mendeyo: \${time}", "کاتی ماوە: \${time}")
+    fun adFreeAdNotReady(l: String) = t(l, "Reklam hazır değil, birazcık sonra tekrar dene.", "Reklam ne amade ye, piçekê şûnda dîsa biceribîne.", "Reklam amade nîyo, piyê şuna carê bin bıceribne.", "ڕیکلامەکە ئامادە نییە، دواتر دووبارە هەوڵ بدەرەوە.")
+    fun adFreeThanks(l: String) = t(l, "Teşekkürler! 1 saat reklamsız kullanım aktif.", "Spas! Bikaranîna 1 saetî ya bêreklam çalak e.", "Spas! 1 saetê bêreklam bikaranê aktîf o.", "سوپاس! کاتژمێرێک بەبێ ڕیکلام چالاک بوو.")
+
 }

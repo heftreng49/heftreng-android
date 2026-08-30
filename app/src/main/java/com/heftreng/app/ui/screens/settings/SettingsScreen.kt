@@ -63,6 +63,7 @@ fun SettingsScreen(
     vm            : SettingsViewModel = hiltViewModel(),
     authVm        : AuthViewModel     = hiltViewModel(),
     adminVm       : AdminViewModel    = hiltViewModel(),
+    adsVm         : com.heftreng.app.viewmodel.AdsViewModel = hiltViewModel(),
 ) {
     val themeMode          by vm.themeMode.collectAsState()
     val themeVariant       by vm.themeVariant.collectAsState()
@@ -70,6 +71,16 @@ fun SettingsScreen(
     val adminPerms     by adminVm.perms.collectAsState()
     val isAdmin        = adminPerms?.isStaff() == true
     val language       by vm.language.collectAsState()
+
+    // ── Reklamsız süre — canlı geri sayım (her saniye güncellenir) ────────────
+    var adFreeRemainingSec by remember { mutableStateOf(com.heftreng.app.ads.AdFreeManager.remainingSeconds()) }
+    val adFreeContext = LocalContext.current
+    LaunchedEffect(Unit) {
+        while (true) {
+            adFreeRemainingSec = com.heftreng.app.ads.AdFreeManager.remainingSeconds()
+            kotlinx.coroutines.delay(1000L)
+        }
+    }
     val pushEnabled    by vm.pushEnabled.collectAsState()
     val privateAccount    by vm.privateAccount.collectAsState()
     val messagePermission by vm.messagePermission.collectAsState()
@@ -135,6 +146,68 @@ fun SettingsScreen(
             contentPadding      = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+
+            // ── Reklamsız Deneyim — kullanıcı isteğiyle başlatılan ödüllü reklam ──
+            // Kullanıcı butona basar → RewardedAd (AD_FREE_HOUR) açılır → izlerse
+            // 1 saatlik reklamsız süre başlar (native + banner reklamlar gizlenir).
+            // Rewarded interstitial (ekran geçişlerinde otomatik çıkan) buradan
+            // ETKİLENMEZ — ayrı, dokunulmamış bir sistem.
+            item {
+                val context  = LocalContext.current
+                val activity = context as? android.app.Activity
+                SettingsSection(title = Strings.adFreeTitle(language)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(SurfaceVar)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        if (adFreeRemainingSec > 0) {
+                            // ── Aktif durum: geri sayım göster ──────────────────
+                            val h = adFreeRemainingSec / 3600
+                            val m = (adFreeRemainingSec % 3600) / 60
+                            val s = adFreeRemainingSec % 60
+                            val timeStr = if (h > 0) String.format("%d:%02d:%02d", h, m, s)
+                                          else        String.format("%d:%02d", m, s)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.CheckCircle, null, tint = Amber, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(Strings.adFreeActiveLabel(language), color = OnBackground, fontWeight = FontWeight.Medium)
+                            }
+                            Text(
+                                Strings.adFreeRemainingTime(language).replace("\${time}", timeStr),
+                                color = Amber, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                            )
+                        } else {
+                            // ── Pasif durum: buton göster ───────────────────────
+                            Text(Strings.adFreeSubtitle(language), color = Muted, fontSize = 13.sp)
+                            Button(
+                                onClick = {
+                                    if (activity == null) return@Button
+                                    adsVm.showRewarded(
+                                        activity   = activity,
+                                        rewardType = com.heftreng.app.viewmodel.AdsViewModel.RewardType.AD_FREE_HOUR,
+                                        onRewarded = { _, _ ->
+                                            adFreeRemainingSec = com.heftreng.app.ads.AdFreeManager.remainingSeconds()
+                                            android.widget.Toast.makeText(adFreeContext, Strings.adFreeThanks(language), android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                        onAdNotReady = {
+                                            android.widget.Toast.makeText(adFreeContext, Strings.adFreeAdNotReady(language), android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape    = RoundedCornerShape(10.dp),
+                                colors   = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                            ) {
+                                Text(Strings.adFreeButtonWatch(language), fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
 
             // ── Görünüm ──────────────────────────────────────────────────
             // ÇÖZÜLDÜ: Eskiden tek bir Switch ile sadece açık/koyu arası
