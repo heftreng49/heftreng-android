@@ -1264,7 +1264,7 @@ fun DrawerContent(
             val langs = listOf(
                 "tr"  to "🇹🇷 Türkçe",
                 "ku"  to "☀️ Kurmancî",
-                "zza" to "☀️ Zazakî",
+                "zza" to "☀️ Kırdkî (Zazakî)",
                 "ckb" to "☀️ Soranî",
             )
             FlowRow(

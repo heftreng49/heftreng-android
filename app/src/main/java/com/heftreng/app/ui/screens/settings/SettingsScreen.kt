@@ -220,7 +220,7 @@ fun SettingsScreen(
                         }
                         Spacer(Modifier.height(10.dp))
                         // 4 dil — 2 satır x 2 sütun
-                        val langList = listOf("tr" to "Türkçe", "ku" to "Kurmancî", "zza" to "Zazakî", "ckb" to "Soranî")
+                        val langList = listOf("tr" to "Türkçe", "ku" to "Kurmancî", "zza" to "Kırdkî (Zazakî)", "ckb" to "Soranî")
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             langList.chunked(2).forEach { row ->
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
