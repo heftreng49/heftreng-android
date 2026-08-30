@@ -28,7 +28,7 @@ object Strings {
     fun navBooks(l: String)        = t(l, "Kitaplar", "Pirtûk", "Pirtûkî", "پڕتووکەکان")
     fun navLibrary(l: String)      = t(l, "Kütüphane", "Pirtûkxane", "Pirtûkxane", "پڕتووکخانە")
     fun navDiscover(l: String)     = t(l, "Keşfet", "Vedîtin", "Bıvin", "دۆزینەوە")
-    fun navKurdi(l: String)        = t(l, "Kurdî", "Kurdî", "Kırdkî", "کوردی")
+    fun navKurdi(l: String)        = t(l, "Kurdî", "Kurdî", "Kurdî", "کوردی")
     fun navProfile(l: String)      = t(l, "Profil", "Profîl", "Profîl", "پرۆفایل")
     fun navSearch(l: String)       = t(l, "Keşfet", "Keşif bike", "Cigêrayış", "گەڕان")
     fun navMessages(l: String)     = t(l, "Mesajlar", "Peyam", "Peyamî", "پەیامەکان")
