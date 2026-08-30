@@ -219,18 +219,26 @@ fun SettingsScreen(
                             }
                         }
                         Spacer(Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("tr" to "Türkçe", "ku" to "Kurmancî", "zza" to "Zazakî", "ckb" to "Soranî").forEach { (code, label) ->
-                                val selected = language == code
-                                Button(
-                                    onClick  = { vm.setLanguage(code) },
-                                    modifier = Modifier.weight(1f),
-                                    shape    = RoundedCornerShape(10.dp),
-                                    colors   = ButtonDefaults.buttonColors(
-                                        containerColor = if (selected) Amber else SurfaceVar,
-                                        contentColor   = if (selected) Color.Black else Muted,
-                                    ),
-                                ) { Text(label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) }
+                        // 4 dil — 2 satır x 2 sütun
+                        val langList = listOf("tr" to "Türkçe", "ku" to "Kurmancî", "zza" to "Zazakî", "ckb" to "Soranî")
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            langList.chunked(2).forEach { row ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    row.forEach { (code, label) ->
+                                        val selected = language == code
+                                        Button(
+                                            onClick  = { vm.setLanguage(code) },
+                                            modifier = Modifier.weight(1f),
+                                            shape    = RoundedCornerShape(10.dp),
+                                            colors   = ButtonDefaults.buttonColors(
+                                                containerColor = if (selected) Amber else SurfaceVar,
+                                                contentColor   = if (selected) Color.Black else Muted,
+                                            ),
+                                        ) { Text(label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) }
+                                    }
+                                    // Tek elemanlı satırda boşluk doldur
+                                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                                }
                             }
                         }
                     }
