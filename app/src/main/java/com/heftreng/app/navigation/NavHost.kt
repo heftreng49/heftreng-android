@@ -1261,7 +1261,7 @@ fun DrawerContent(
             }
             Spacer(Modifier.height(6.dp))
             val langs = listOf(
-                "tr"  to "☀️ Türkçe",
+                "tr"  to "🇹🇷 Türkçe",
                 "ku"  to "☀️ Kurmancî",
                 "zza" to "☀️ Zazakî",
                 "ckb" to "☀️ Soranî",
