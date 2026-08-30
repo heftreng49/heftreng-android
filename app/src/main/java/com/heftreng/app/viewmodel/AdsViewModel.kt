@@ -212,6 +212,16 @@ class AdsViewModel @Inject constructor(
             }
         }
 
+        // ── Reklamsız Saat — tamamen bağımsız reklam havuzu ────────────────────
+        // Kendi Remote Config key'i (KEY_AD_FREE_HOUR), kendi unitId'si, kendi
+        // RewardedAd instance'ı. rewarded_xp havuzundan tamamen ayrı — AdMob
+        // konsolunda ayrı ayrı istatistik takibi yapılabilir.
+        configRepo.get(RemoteConfigManager.KEY_AD_FREE_HOUR)?.let { config ->
+            if (config.enabled) {
+                config.unitId.ifBlank { null }?.let { adFreeHourUnitId = it; preloadAdFreeHourAd(it) }
+            }
+        }
+
         // Rewarded Interstitial — preload
         configRepo.get(RemoteConfigManager.KEY_REWARDED_INTERSTITIAL)?.let { config ->
             if (config.enabled && config.unitId.isNotBlank()) {
@@ -421,7 +431,7 @@ class AdsViewModel @Inject constructor(
         )
     }
 
-    enum class RewardType { DOUBLE_XP, UNLOCK_LESSON, SAVE_STREAK, AD_FREE_HOUR }
+    enum class RewardType { DOUBLE_XP, UNLOCK_LESSON, SAVE_STREAK }
 
     fun loadRewarded() {
         val config = configRepo.get(RemoteConfigManager.KEY_REWARDED) ?: return
@@ -440,9 +450,6 @@ class AdsViewModel @Inject constructor(
             RewardType.DOUBLE_XP     -> cfg.scenarioDoubleXp
             RewardType.UNLOCK_LESSON -> cfg.scenarioUnlockLesson
             RewardType.SAVE_STREAK   -> cfg.scenarioSaveStreak
-            // AD_FREE_HOUR: ayrı bir Remote Config senaryo bayrağı yok —
-            // rewarded reklam genel olarak açıksa (cfg.enabled) bu senaryo da açık sayılır.
-            RewardType.AD_FREE_HOUR  -> true
         }
         return scenarioEnabled && _remainingRewardedAds.value > 0
     }
@@ -499,11 +506,6 @@ class AdsViewModel @Inject constructor(
             ad.show(activity) { rewardItem ->
                 if (uid.isNotEmpty()) frequencyManager.increment(uid, "rewarded")
                 _remainingRewardedAds.value = (_remainingRewardedAds.value - 1).coerceAtLeast(0)
-                // AD_FREE_HOUR: reklam tamamlanınca 1 saatlik reklamsız süre otomatik başlar.
-                // Diğer RewardType'lar (DOUBLE_XP, UNLOCK_LESSON, SAVE_STREAK) etkilenmez.
-                if (rewardType == RewardType.AD_FREE_HOUR) {
-                    com.heftreng.app.ads.AdFreeManager.grantAdFree()
-                }
                 onRewarded(rewardItem, rewardType)
             }
         } else {
@@ -515,6 +517,92 @@ class AdsViewModel @Inject constructor(
             // "reklam hazır değil, birazdan tekrar dene" diyebiliyor.
             onAdNotReady()
             if (rewardedUnitId.isNotBlank()) preloadRewardedAd(rewardedUnitId)
+        }
+    }
+
+    // ── Reklamsız Saat — bağımsız RewardedAd sistemi ────────────────────────
+    //
+    // rewarded_xp (DOUBLE_XP/UNLOCK_LESSON/SAVE_STREAK) sisteminden TAMAMEN
+    // AYRI. Kendi unitId'si, kendi preload/show mantığı, kendi günlük limiti.
+    // AdMob konsolunda ayrı reklam birimi olarak istatistik takibi yapılabilir.
+    //
+    // Rewarded Interstitial (ekran geçişlerinde otomatik çıkan, ScreenTracker
+    // üzerinden tetiklenen) ile de İLİŞKİSİ YOK — o sistem dokunulmadan kalır.
+
+    private var adFreeHourAd      : RewardedAd? = null
+    private var adFreeHourUnitId  : String      = ""
+    private var adFreeHourLoading : Boolean     = false
+
+    private fun preloadAdFreeHourAd(unitId: String) {
+        if (unitId.isBlank()) return
+        adFreeHourUnitId = unitId
+        if (adFreeHourAd != null || adFreeHourLoading) return
+        adFreeHourLoading = true
+        RewardedAd.load(
+            appContext, unitId, engine.adRequest(),
+            object : RewardedAdLoadCallback() {
+                override fun onAdLoaded(ad: RewardedAd) {
+                    adFreeHourAd      = ad
+                    adFreeHourLoading = false
+                }
+                override fun onAdFailedToLoad(adError: LoadAdError) {
+                    adFreeHourAd      = null
+                    adFreeHourLoading = false
+                    viewModelScope.launch {
+                        kotlinx.coroutines.delay(30_000L)
+                        if (adFreeHourAd == null && !adFreeHourLoading) {
+                            preloadAdFreeHourAd(unitId)
+                        }
+                    }
+                }
+            },
+        )
+    }
+
+    /** Kullanıcı "1 Saat Reklamsız Kazan" butonuna bastığında çağrılır. */
+    fun showAdFreeHourReward(
+        activity      : Activity,
+        onRewarded    : (RewardItem) -> Unit,
+        onDismiss     : () -> Unit = {},
+        onLimitReached: () -> Unit = {},
+        onAdNotReady  : () -> Unit = {},
+    ) {
+        val uid        = auth.currentUser?.uid ?: ""
+        val dailyLimit = configRepo.get(RemoteConfigManager.KEY_AD_FREE_HOUR)?.dailyLimit ?: 3
+
+        if (uid.isNotEmpty() && frequencyManager.isLimitReached(uid, "ad_free_hour", dailyLimit)) {
+            onLimitReached()
+            return
+        }
+
+        val ad = adFreeHourAd
+        if (ad != null) {
+            if (uid.isNotEmpty()) {
+                ad.setServerSideVerificationOptions(
+                    com.google.android.gms.ads.rewarded.ServerSideVerificationOptions.Builder()
+                        .setUserId(uid)
+                        .setCustomData("ad_free_hour")
+                        .build(),
+                )
+            }
+            ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+                override fun onAdDismissedFullScreenContent() {
+                    adFreeHourAd = null; onDismiss()
+                    preloadAdFreeHourAd(adFreeHourUnitId)
+                }
+                override fun onAdFailedToShowFullScreenContent(e: AdError) {
+                    adFreeHourAd = null; onDismiss()
+                    preloadAdFreeHourAd(adFreeHourUnitId)
+                }
+            }
+            ad.show(activity) { rewardItem ->
+                if (uid.isNotEmpty()) frequencyManager.increment(uid, "ad_free_hour")
+                com.heftreng.app.ads.AdFreeManager.grantAdFree()
+                onRewarded(rewardItem)
+            }
+        } else {
+            onAdNotReady()
+            if (adFreeHourUnitId.isNotBlank()) preloadAdFreeHourAd(adFreeHourUnitId)
         }
     }
 

@@ -186,10 +186,9 @@ fun SettingsScreen(
                             Button(
                                 onClick = {
                                     if (activity == null) return@Button
-                                    adsVm.showRewarded(
-                                        activity   = activity,
-                                        rewardType = com.heftreng.app.viewmodel.AdsViewModel.RewardType.AD_FREE_HOUR,
-                                        onRewarded = { _, _ ->
+                                    adsVm.showAdFreeHourReward(
+                                        activity     = activity,
+                                        onRewarded   = {
                                             adFreeRemainingSec = com.heftreng.app.ads.AdFreeManager.remainingSeconds()
                                             android.widget.Toast.makeText(adFreeContext, Strings.adFreeThanks(language), android.widget.Toast.LENGTH_SHORT).show()
                                         },

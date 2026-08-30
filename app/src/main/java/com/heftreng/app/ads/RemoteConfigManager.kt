@@ -69,6 +69,7 @@ class RemoteConfigManager @Inject constructor(
         const val KEY_INTERSTITIAL           = "interstitial_serial"
         const val KEY_REWARDED_INTERSTITIAL  = "rewarded_interstitial"
         const val KEY_REWARDED          = "rewarded_xp"
+        const val KEY_AD_FREE_HOUR      = "rewarded_ad_free_hour"
         const val KEY_NATIVE_FEED       = "native_feed"
         const val KEY_NATIVE_BLOG       = "native_blog"
         const val KEY_NATIVE_LIBRARY    = "native_library"
@@ -103,7 +104,7 @@ class RemoteConfigManager @Inject constructor(
             KEY_BANNER_NOTIFICATIONS,
             KEY_NATIVE_FEED, KEY_NATIVE_BLOG, KEY_NATIVE_LIBRARY, KEY_NATIVE_KURDI,
             KEY_NATIVE_PROFILE, KEY_NATIVE_SEARCH, KEY_NATIVE_SINGLEPOST,
-            KEY_INTERSTITIAL, KEY_REWARDED, KEY_REWARDED_INTERSTITIAL,
+            KEY_INTERSTITIAL, KEY_REWARDED, KEY_REWARDED_INTERSTITIAL, KEY_AD_FREE_HOUR,
             // Adım 2'de eklenen yeni ekranlar
             KEY_BANNER_AUTHOR_DETAIL, KEY_BANNER_BOOK_DETAIL, KEY_BANNER_QUOTE_DETAIL,
             KEY_NATIVE_BOOKSCREENS, KEY_NATIVE_READINGLIST, KEY_BANNER_YAZAR,
@@ -127,6 +128,7 @@ class RemoteConfigManager @Inject constructor(
             KEY_INTERSTITIAL   to """{"enabled":false,"unitId":"","frequency":4,"screens":"feed,library,kurdi,blog"}""",
             KEY_REWARDED_INTERSTITIAL to """{"enabled":false,"unitId":"","frequency":4,"screens":"feed,library,kurdi,blog"}""",
             KEY_REWARDED       to """{"enabled":false,"unitId":"","dailyLimit":3,"xpReward":50,"scenarioDoubleXp":true,"scenarioUnlockLesson":true,"scenarioSaveStreak":true}""",
+            KEY_AD_FREE_HOUR   to """{"enabled":false,"unitId":"","dailyLimit":3}""",
             KEY_NATIVE_FEED    to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
             KEY_NATIVE_BLOG    to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
             KEY_NATIVE_LIBRARY to """{"enabled":false,"unitId":"","position":5,"frequency":5}""",
