@@ -36,6 +36,7 @@
   import PageTopBar    from "$lib/components/PageTopBar.svelte";
   import { ago }       from "$lib/utils/time";
   import { showToast } from "$lib/stores/ui.store";
+  import { lang, strings as s } from "$lib/i18n/strings";
 
   let uid = $state("");
   $effect(() => {
@@ -179,7 +180,7 @@
       : `https://heftreng.onrender.com/profile/${uid}`;
     try {
       await navigator.clipboard.writeText(link);
-      showToast("Link kopyalandı!");
+      showToast(s.linkCopied($lang));
     } catch {
       showToast("Kopyalanamadı.");
     }
