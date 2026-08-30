@@ -347,7 +347,13 @@
         🇹🇷 Türkçe
       </button>
       <button class="dr-lang-btn" class:dr-lang-active={$lang === 'ku'} onclick={() => lang.set('ku')}>
-        ☀️ Kurdî
+        ☀️ Kurmancî
+      </button>
+      <button class="dr-lang-btn" class:dr-lang-active={$lang === 'zza'} onclick={() => lang.set('zza')}>
+        🔥 Zazakî
+      </button>
+      <button class="dr-lang-btn" class:dr-lang-active={$lang === 'ckb'} onclick={() => lang.set('ckb')}>
+        🌙 Soranî
       </button>
     </div>
 
@@ -647,6 +653,7 @@
 .dr-variant-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
 .dr-variant-name { font-size: .65rem; font-weight: 600; color: var(--on-bg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dr-lang-row { display: flex; gap: 8px; padding-bottom: 4px; }
+.dr-lang-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .dr-lang-btn {
   flex: 1; padding: 9px 6px; border-radius: 10px; font-size: .8rem; font-weight: 600;
   border: 1.5px solid var(--divider); background: var(--surface-var); color: var(--on-bg);

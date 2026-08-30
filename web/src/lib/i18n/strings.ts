@@ -9,22 +9,34 @@ function getLang(): string {
   return localStorage.getItem('hf_lang') ?? 'tr';
 }
 
+// Desteklenen diller: tr=Türkçe, ku=Kurmancî, zza=Zazakî, ckb=Soranî
+export type Lang = 'tr' | 'ku' | 'zza' | 'ckb';
+
 function createLangStore() {
-  const { subscribe, set } = writable(getLang());
+  const { subscribe, set } = writable(getLang() as Lang);
   return {
     subscribe,
     set: (l: string) => {
       if (typeof localStorage !== 'undefined') localStorage.setItem('hf_lang', l);
-      if (typeof document !== 'undefined')
-        document.documentElement.lang = l === 'ku' ? 'ku' : 'tr';
-      set(l);
+      if (typeof document !== 'undefined') {
+        document.documentElement.lang =
+          l === 'ku' ? 'ku' : l === 'zza' ? 'zza' : l === 'ckb' ? 'ckb' : 'tr';
+      }
+      set(l as Lang);
     },
   };
 }
 export const lang = createLangStore();
 
 type L = string;
-const t = (l: L, tr: string, ku: string) => l === 'ku' ? ku : tr;
+// tr=Türkçe, ku=Kurmancî, zza=Zazakî, ckb=Soranî
+// Zazakî ve Soranî için çeviri yoksa Kurmancî'ye düşer
+const t = (l: L, tr: string, ku: string, zza?: string, ckb?: string) => {
+  if (l === 'ckb') return ckb ?? ku;
+  if (l === 'zza') return zza ?? ku;
+  if (l === 'ku')  return ku;
+  return tr;
+};
 
 export const strings = {
   // ── Alt Navigasyon ──────────────────────────────────────────────────────────
