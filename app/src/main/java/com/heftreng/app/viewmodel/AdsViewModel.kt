@@ -335,20 +335,10 @@ class AdsViewModel @Inject constructor(
                 onDismissed()
             }
         }
-        // Reklamı göstermeden önce kullanıcıya ödülü bildir
-        android.widget.Toast.makeText(
-            activity,
-            "🎁 Reklamı izle → 2 saat reklamsız deneyim kazan!",
-            android.widget.Toast.LENGTH_LONG,
-        ).show()
-
         ad.show(activity) { _ ->
             // RewardItem — kullanıcı reklamı tamamladı
-            android.widget.Toast.makeText(
-                activity,
-                "✅ 2 saat reklamsız deneyim kazandın!",
-                android.widget.Toast.LENGTH_SHORT,
-            ).show()
+            // 1 saat reklamsız deneyim ver (kalan süre varsa üstüne ekler)
+            com.heftreng.app.ads.AdFreeManager.grantAdFree()
             onRewarded()
         }
     }

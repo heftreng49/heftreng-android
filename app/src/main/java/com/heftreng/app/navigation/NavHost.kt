@@ -954,6 +954,7 @@ fun DrawerContent(
     onSignOut   : () -> Unit,
 ) {
     val settingsVm: SettingsViewModel = hiltViewModel()
+    val adsVm: com.heftreng.app.viewmodel.AdsViewModel = hiltViewModel()
 
     ModalDrawerSheet(drawerContainerColor = HeftSurface) {
         Column(
@@ -1241,6 +1242,87 @@ fun DrawerContent(
             Spacer(Modifier.height(8.dp))
             HorizontalDivider(color = Divider)
             Spacer(Modifier.height(8.dp))
+
+            // ── Reklamsız Deneyim ─────────────────────────────────────
+            val context  = LocalContext.current
+            val activity = context as? android.app.Activity
+            var adFreeRemainingSec by remember { mutableStateOf(com.heftreng.app.ads.AdFreeManager.remainingSeconds()) }
+
+            LaunchedEffect(Unit) {
+                while (true) {
+                    kotlinx.coroutines.delay(1_000L)
+                    adFreeRemainingSec = com.heftreng.app.ads.AdFreeManager.remainingSeconds()
+                }
+            }
+
+            HorizontalDivider(color = Divider, modifier = Modifier.padding(vertical = 4.dp))
+
+            if (adFreeRemainingSec > 0) {
+                // Aktif — geri sayım göster
+                val h = adFreeRemainingSec / 3600
+                val m = (adFreeRemainingSec % 3600) / 60
+                val s = adFreeRemainingSec % 60
+                val timeStr = if (h > 0) String.format("%d:%02d:%02d", h, m, s)
+                              else        String.format("%d:%02d", m, s)
+                Row(
+                    modifier          = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(Icons.Filled.CheckCircle, null, tint = Amber, modifier = Modifier.size(18.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            Strings.adFreeActiveLabel(language),
+                            fontSize   = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color      = OnBackground,
+                        )
+                        Text(
+                            timeStr,
+                            fontSize   = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color      = Amber,
+                        )
+                    }
+                }
+            } else {
+                // Pasif — reklam izle butonu
+                Row(
+                    modifier          = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Outlined.BlockFlipped, null, tint = Muted, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(Strings.adFreeTitle(language), fontSize = 12.sp, color = Muted, modifier = Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(4.dp))
+                Button(
+                    onClick = {
+                        if (activity == null) return@Button
+                        adsVm.showAdFreeHourReward(
+                            activity     = activity,
+                            onRewarded   = {
+                                adFreeRemainingSec = com.heftreng.app.ads.AdFreeManager.remainingSeconds()
+                                android.widget.Toast.makeText(context, Strings.adFreeThanks(language), android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                            onAdNotReady = {
+                                android.widget.Toast.makeText(context, Strings.adFreeAdNotReady(language), android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                        )
+                    },
+                    modifier       = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    shape          = RoundedCornerShape(20.dp),
+                    colors         = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                    contentPadding = PaddingValues(vertical = 8.dp),
+                    elevation      = ButtonDefaults.buttonElevation(0.dp),
+                ) {
+                    Icon(Icons.Outlined.PlayCircle, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(Strings.adFreeButtonWatch(language), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            HorizontalDivider(color = Divider, modifier = Modifier.padding(vertical = 4.dp))
 
             // ── Dil değişimi — 4 dil ─────────────────────────────────
             Row(

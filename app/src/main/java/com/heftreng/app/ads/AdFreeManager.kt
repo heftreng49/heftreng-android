@@ -34,9 +34,19 @@ object AdFreeManager {
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
-    /** Ödüllü reklam izlenince çağır — 1 saatlik reklamsız süre başlatır. */
+    /**
+     * Ödüllü reklam izlenince çağır — 1 saatlik reklamsız süre ekler.
+     * Süre hala aktifse üstüne eklenir (max 24 saat).
+     * Süre dolmuşsa sıfırdan 1 saat başlar.
+     */
     fun grantAdFree() {
-        val until = SystemClock.elapsedRealtime() + AD_FREE_DURATION_MS
+        val now     = SystemClock.elapsedRealtime()
+        val current = prefs.getLong(KEY_FREE_UNTIL, 0L)
+        // Kalan süre varsa üstüne ekle, yoksa sıfırdan başlat
+        val base    = if (current > now) current else now
+        // Max 24 saat — kötüye kullanım koruması
+        val maxUntil = now + 24 * 60 * 60 * 1_000L
+        val until   = minOf(base + AD_FREE_DURATION_MS, maxUntil)
         prefs.edit().putLong(KEY_FREE_UNTIL, until).apply()
     }
 
