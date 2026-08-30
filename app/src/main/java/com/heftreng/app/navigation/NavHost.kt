@@ -227,8 +227,6 @@ fun HeftrangNavHost(
         }
     }
     val language    by settingsVm.language.collectAsState()
-    val layoutDirection = if (language == "ckb") androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr
-
     // Soranî RTL — layout yönünü dinamik ayarla
     val layoutDirection = if (language == "ckb") LayoutDirection.Rtl else LayoutDirection.Ltr
     val totalUnread by msgsVm.totalUnread.collectAsState()
@@ -414,7 +412,7 @@ fun HeftrangNavHost(
             )
         }
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) { Scaffold(
+        Scaffold(
             containerColor = Background,
             // ime insets iç ekranlar tarafından yönetiliyor — burada sadece sistem barları
             contentWindowInsets = WindowInsets(0,0,0,0),
@@ -1446,5 +1444,5 @@ fun InstagramAccountSwitcherDialog(
                 }
             }
         }
-    } } // Scaffold + CompositionLocalProvider
+    } // Scaffold
 }
