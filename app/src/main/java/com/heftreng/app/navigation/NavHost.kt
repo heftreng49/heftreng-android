@@ -1291,7 +1291,7 @@ fun DrawerContent(
                     modifier          = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Outlined.BlockFlipped, null, tint = Muted, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.Block, null, tint = Muted, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(Strings.adFreeTitle(language), fontSize = 12.sp, color = Muted, modifier = Modifier.weight(1f))
                 }
