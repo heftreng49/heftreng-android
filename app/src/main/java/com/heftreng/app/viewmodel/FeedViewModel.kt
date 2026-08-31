@@ -913,8 +913,13 @@ class FeedViewModel @Inject constructor(
                         filter { eq("post_id", post.id); eq("uid", uid) }
                     }
                 }
-                // Gerçek sayıyı arka planda doğrula (yarış durumlarını düzeltir)
-                syncPostCounts(listOf(post.id))
+                // NOT: Buradan hemen syncPostCounts(post.id) çağırmıyoruz —
+                // optimistic +1/-1 zaten matematiksel olarak doğru, hemen
+                // ardından gerçek sayıyı Supabase'ten tekrar çekmek (insert'in
+                // henüz aynı oturumda görünür olmayabileceği bir "read-after-
+                // write" yarışına girip) beğeniyi anlık olarak geri düşürme
+                // riski taşıyordu. Sayı zaten doğru; sonraki doğal feed
+                // yenilemesinde kendiliğinden senkronize olur.
             } catch (e: Exception) { e.printStackTrace() }
         }
     }

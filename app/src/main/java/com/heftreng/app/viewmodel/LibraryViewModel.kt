@@ -799,10 +799,19 @@ class LibraryViewModel @Inject constructor(
     fun toggleLikeReview(bookId: String, reviewId: String) {
         viewModelScope.launch {
             try {
-                val current = _bookReviews.value.find { it.id == reviewId } ?: return@launch
+                val current = _bookReviews.value.find { it.id == reviewId }
+                    ?: _authorReviews.value.find { it.id == reviewId } ?: return@launch
                 val delta   = if (current.isLikedByMe) -1 else 1
                 library.incrementReviewLikes(reviewId, delta)
                 _bookReviews.value = _bookReviews.value.map {
+                    if (it.id == reviewId) it.copy(
+                        isLikedByMe = !it.isLikedByMe,
+                        likesCount  = (it.likesCount + delta).coerceAtLeast(0),
+                    ) else it
+                }
+                // Yazar sayfasındaki "İncelemeler" sekmesi authorReviews'tan
+                // besleniyor — bu güncellenmezse orada beğeni anlık görünmüyordu.
+                _authorReviews.value = _authorReviews.value.map {
                     if (it.id == reviewId) it.copy(
                         isLikedByMe = !it.isLikedByMe,
                         likesCount  = (it.likesCount + delta).coerceAtLeast(0),

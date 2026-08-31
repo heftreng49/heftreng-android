@@ -608,9 +608,10 @@ class ProfileViewModel @Inject constructor(
                     )
                 )
 
-                _isFollowing.value = true
-                _followRequestStatus.value = "accepted"
-                _followersCount.value += 1
+                // NOT: _isFollowing/_followRequestStatus/_followersCount zaten
+                // yukarıda optimistic olarak set edildi — burada TEKRAR
+                // set etmek (özellikle += 1) çift sayıma yol açıyordu
+                // (takip edilen kullanıcının takipçi sayısı +2 artıyordu).
                 firestore.collection("users").document(targetUid)
                     .update("followersCount", FieldValue.increment(1))
                 firestore.collection("users").document(myUid)

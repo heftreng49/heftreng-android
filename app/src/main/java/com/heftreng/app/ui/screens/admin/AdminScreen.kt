@@ -2465,6 +2465,11 @@ private fun AdminLibraryTab(libraryVm: LibraryViewModel) {
     var showNewAuthor by remember { mutableStateOf(false) }
     var editAuthor    by remember { mutableStateOf<com.heftreng.app.data.model.Author?>(null) }
     var editBook      by remember { mutableStateOf<com.heftreng.app.data.model.LibraryBook?>(null) }
+    // Bir kitap düzenlenince AdminAuthorCard'ların kendi localBooks'u (tek
+    // seferlik yüklenip bir daha yenilenmeyen yerel state) buradan haberdar
+    // olsun diye artırılan sayaç — kart bunu LaunchedEffect ile izleyip
+    // kitap listesini yeniden çeker.
+    var booksRefreshTrigger by remember { mutableStateOf(0) }
 
     var migrateStatus  by remember { mutableStateOf("") }
     var migrateRunning by remember { mutableStateOf(false) }
@@ -2625,6 +2630,7 @@ private fun AdminLibraryTab(libraryVm: LibraryViewModel) {
                 
                 libraryVm    = libraryVm,
                 onEditBook   = { editBook = it },
+                booksRefreshTrigger = booksRefreshTrigger,
             )
         }
 
@@ -2684,6 +2690,7 @@ private fun AdminLibraryTab(libraryVm: LibraryViewModel) {
             onDismiss = { editBook = null },
             onSave    = { title, synopsis, genre, year, pages, cover ->
                 libraryVm.updateLibraryBook(bk.id, title, synopsis, genre, year, pages, cover)
+                booksRefreshTrigger++
                 editBook = null
             },
         )
@@ -2698,14 +2705,20 @@ private fun AdminAuthorCard(
 
     libraryVm   : LibraryViewModel,
     onEditBook  : (com.heftreng.app.data.model.LibraryBook) -> Unit,
+    booksRefreshTrigger: Int = 0,
 ) {
     // Her kart kendi kitap listesini tutar — global authorBooks state'i kullanmıyoruz
     // çünkü o state tüm kartlar arasında paylaşılıyor ve son yüklenen yazarın
     // kitaplarını gösteriyor.
     var localBooks  by remember { mutableStateOf<List<com.heftreng.app.data.model.LibraryBook>>(emptyList()) }
-    var booksLoaded by remember { mutableStateOf(false) }
     var expanded    by remember { mutableStateOf(false) }
-    val scope       = rememberCoroutineScope()
+
+    // expanded açıldığında VEYA herhangi bir kitap düzenlenip booksRefreshTrigger
+    // arttığında listeyi yeniden çeker — önceden tek seferlik bir bayrakla
+    // yükleniyordu, kapak/başlık düzenlense bile bu liste hiç yenilenmiyordu.
+    LaunchedEffect(expanded, booksRefreshTrigger) {
+        if (expanded) localBooks = libraryVm.fetchBooksForAuthor(author.id)
+    }
 
     Surface(shape = RoundedCornerShape(12.dp), color = HeftSurface) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -2750,15 +2763,7 @@ private fun AdminAuthorCard(
                 }
                 // Kitapları aç — her kart kendi kitaplarını yükler
                 IconButton(
-                    onClick = {
-                        expanded = !expanded
-                        if (expanded && !booksLoaded) {
-                            booksLoaded = true
-                            scope.launch {
-                                localBooks = libraryVm.fetchBooksForAuthor(author.id)
-                            }
-                        }
-                    },
+                    onClick = { expanded = !expanded },
                     modifier = Modifier.size(36.dp),
                 ) {
                     Icon(
