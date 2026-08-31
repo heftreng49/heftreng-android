@@ -503,6 +503,10 @@ class LibraryViewModel @Inject constructor(
                 if (authorId.isNotBlank()) {
                     val author = library.getAuthor(authorId)
                     if (author != null) library.updateAuthorCounters(authorId, bookCount = author.bookCount + 1)
+                    // Yazar sayfası o an açıksa kitap listesi (authorBooks) burada
+                    // yenilenmezse yeni eklenen kitap ekranda görünmez — sayfadan
+                    // çıkıp tekrar girene kadar "eklenmiyormuş" gibi kalırdı.
+                    loadAuthor(authorId)
                 }
                 loadAuthors(forceRefresh = true)
             } catch (e: Exception) {
@@ -538,6 +542,14 @@ class LibraryViewModel @Inject constructor(
                     authorName  = authorName,
                 )
                 loadLibraryBook(bookId)
+
+                // Yazar sayfası açıkken kitap düzenlenirse (ör. kapak URL'si
+                // değişirse) authorBooks listesi burada da yenilenmezse liste
+                // eski (kapaksız/eski) haliyle kalır. Çağıran taraf çoğu zaman
+                // authorId geçmiyor — bunun yerine o an yüklü olan yazarı kullan.
+                _selectedAuthor.value?.id?.let { currentAuthorId ->
+                    if (currentAuthorId.isNotBlank()) loadAuthor(currentAuthorId)
+                }
 
                 // Kapak değiştiyse ilgili tüm kayıtlara yansıt
                 if (coverImg.isNotBlank()) {

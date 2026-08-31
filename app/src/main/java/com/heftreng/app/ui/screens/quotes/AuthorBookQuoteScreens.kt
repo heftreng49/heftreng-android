@@ -119,6 +119,7 @@ fun AuthorDetailScreen(
     val reviews     by vm.authorReviews.collectAsState()
     val loading     by vm.loading.collectAsState()
     val isFollowing by vm.isFollowingAuthor.collectAsState()
+    val vmError     by vm.error.collectAsState()
 
     val authorTabs  = listOf("Kitapları", "Alıntılar", "İncelemeler")
     val pagerState  = rememberPagerState { authorTabs.size }
@@ -131,10 +132,21 @@ fun AuthorDetailScreen(
     var showEditAuthor    by remember { mutableStateOf(false) }
     var showAddBook       by remember { mutableStateOf(false) }
     val isAdmin = vm.isAdmin
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val tabs = listOf("Kitapları", "Alıntılar", "İncelemeler")
 
     LaunchedEffect(authorId) { vm.loadAuthor(authorId) }
+
+    // createLibraryBook/updateLibraryBook gibi admin işlemleri hata alırsa
+    // önceden hiçbir yerde gösterilmiyordu — dialog kapanıyor, kitap
+    // eklenmemiş oluyor ve kullanıcı sebebini hiç göremiyordu.
+    LaunchedEffect(vmError) {
+        vmError?.let {
+            snackbarHostState.showSnackbar(it)
+            vm.clearError()
+        }
+    }
 
     // ── Reklam altyapısı (enabled:false — unitId Firebase Console'dan girilene kadar kapalı) ──
     val adConfigs by adsVm.allConfigs.collectAsState()
@@ -171,6 +183,7 @@ fun AuthorDetailScreen(
 
     Scaffold(
         containerColor = Background,
+        snackbarHost   = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(author?.name ?: "Yazar", color = OnBackground, fontWeight = FontWeight.Bold) },
