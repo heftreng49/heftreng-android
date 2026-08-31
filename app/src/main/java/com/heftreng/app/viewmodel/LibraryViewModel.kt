@@ -458,9 +458,11 @@ class LibraryViewModel @Inject constructor(
                 val rDeferred = async { library.getReviewsByBook(bookId) }
                 val quotes    = qDeferred.await()
                 val bookCover = book.coverImg
+                // Supabase'deki propagation henüz tamamlanmamış olabilir (race).
+                // bookCover doluysa tüm alıntılara uygula — boş olup olmadığına bakma.
                 _bookQuotes.value  = quotes.map { row ->
                     val q = row.toDomain()
-                    if (q.coverImg.isBlank() && bookCover.isNotBlank()) q.copy(coverImg = bookCover) else q
+                    if (bookCover.isNotBlank()) q.copy(coverImg = bookCover) else q
                 }
                 _bookReviews.value = rDeferred.await().map { it.toDomain() }
                 syncQuoteLikeStates(_bookQuotes.value, _bookQuotes)
@@ -528,6 +530,24 @@ class LibraryViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             try {
+                // ── 1. Optimistic UI: StateFlow'ları hemen güncelle ──────────
+                // Böylece kullanıcı kaydet'e basınca kapak anında görünür,
+                // ağ round-trip'i beklenmez.
+                _selectedBook.value = _selectedBook.value?.copy(
+                    title       = title,
+                    synopsis    = synopsis,
+                    genre       = genre,
+                    publishYear = publishYear,
+                    pageCount   = pageCount,
+                    coverImg    = coverImg,
+                )
+                if (coverImg.isNotBlank()) {
+                    _bookQuotes.value = _bookQuotes.value.map { q ->
+                        if (q.coverImg != coverImg) q.copy(coverImg = coverImg) else q
+                    }
+                }
+
+                // ── 2. Kalıcı yazma ──────────────────────────────────────────
                 // getBook() yerine direkt patch — cache eski veri döndürüp
                 // değişikliği ezebiliyordu
                 library.patchBook(
@@ -541,6 +561,15 @@ class LibraryViewModel @Inject constructor(
                     authorId    = authorId,
                     authorName  = authorName,
                 )
+
+                // ── 3. Kapak değiştiyse ilgili tüm kayıtlara yansıt ─────────
+                // loadLibraryBook'tan ÖNCE çağrılmalı; yoksa reload sırasında
+                // Supabase'de henüz güncellenmemiş quotes gelir ve kapak kaybolur.
+                if (coverImg.isNotBlank()) {
+                    propagateCoverUpdate(bookId, coverImg)
+                }
+
+                // ── 4. Sunucudan taze veriyle yenile ─────────────────────────
                 loadLibraryBook(bookId)
 
                 // Yazar sayfası açıkken kitap düzenlenirse (ör. kapak URL'si
@@ -549,11 +578,6 @@ class LibraryViewModel @Inject constructor(
                 // authorId geçmiyor — bunun yerine o an yüklü olan yazarı kullan.
                 _selectedAuthor.value?.id?.let { currentAuthorId ->
                     if (currentAuthorId.isNotBlank()) loadAuthor(currentAuthorId)
-                }
-
-                // Kapak değiştiyse ilgili tüm kayıtlara yansıt
-                if (coverImg.isNotBlank()) {
-                    propagateCoverUpdate(bookId, coverImg)
                 }
             } catch (e: Exception) {
                 _error.value = e.message
