@@ -877,12 +877,17 @@ class FeedViewModel @Inject constructor(
         likedIds = if (nowLiked) likedIds + post.id else likedIds - post.id
 
         // Optimistic UI — Supabase tek kaynak, Firestore'a sayaç yazılmaz
-        _posts.value = _posts.value.map {
+        // _posts (ana feed) ve _libraryQuotes (kitap detay alıntıları) her ikisi
+        // de anında güncellenmeli — aksi halde kitap sayfasındaki alıntı beğenisi
+        // ekrandan çıkıp girinceye kadar eski sayıda kalıyordu.
+        val likeUpdate: (Post) -> Post = {
             if (it.id == post.id) it.copy(
                 isLikedByMe = nowLiked,
                 likesCount  = maxOf(0, it.likesCount + if (nowLiked) 1 else -1),
             ) else it
         }
+        _posts.value         = _posts.value.map(likeUpdate)
+        _libraryQuotes.value = _libraryQuotes.value.map(likeUpdate)
         viewModelScope.launch {
             try {
                 if (nowLiked) {
