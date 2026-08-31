@@ -560,6 +560,9 @@ export const strings = {
   textColorTitle: (l:L) => t(l, 'Yazı Rengi', 'Rengê Nivîsê'),
   textColorDefault: (l:L) => t(l, 'Tema Varsayılanı', 'Xwerû ya Temayê'),
 
+  // ── Reklam (Android'e sonradan eklendi, buradan senkron ediliyor) ─────────
+  rewardedInterstitialInfo: (l:L) => t(l, '🎬 Reklamı izleyerek 1 saat reklamsız deneyim kazanacaksın', '🎬 Bi temaşekirina reklamê 1 saet ceribandina bêreklam qezenc dikî', '🎬 Bi reklamê vinênayışê 1 saete bêreklame qezenc kenê', '🎬 بە بینینی ڕیکلامەکە کاتژمێرێک بەبێ ڕیکلام بەدەستدەهێنیت'),
+
   // ── Geriye dönük uyumluluk (eski web anahtar adları) ─────────────────────
   copy: (l:L) => strings.copyText(l),
   followReqAccept: (l:L) => strings.followRequestAccept(l),

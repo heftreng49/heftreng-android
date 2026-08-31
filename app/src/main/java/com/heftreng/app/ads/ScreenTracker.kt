@@ -2,7 +2,10 @@ package com.heftreng.app.ads
 
 import android.app.Activity
 import android.app.Application
+import android.content.Context
 import android.os.Bundle
+import android.widget.Toast
+import com.heftreng.app.ui.i18n.Strings
 import com.heftreng.app.viewmodel.AdsViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -60,7 +63,9 @@ class ScreenTracker @Inject constructor() : Application.ActivityLifecycleCallbac
 
     // ── Rewarded Interstitial göster (hazırsa) ────────────────────────────────
     // Normal interstitial yerine rewarded interstitial kullanılır.
-    // Kullanıcı reklamı tamamlarsa tüm dersler 1 saat açılır.
+    // Bu format opt-in gerektirmez (kullanıcıya sormadan otomatik açılır) —
+    // o yüzden reklam açılmadan hemen önce kısa bir Toast ile ödülü bildiriyoruz;
+    // AdMob'un kendi giriş ekranına güvenmek yerine kullanıcı her durumda bilgilendirilmiş oluyor.
     fun tryShowInterstitial(onDismiss: () -> Unit = {}) {
         val activity = activityRef ?: return
         val adsVm    = adsVmRef    ?: return
@@ -68,10 +73,15 @@ class ScreenTracker @Inject constructor() : Application.ActivityLifecycleCallbac
 
         lastShownAtCount = screenCount
 
+        val lang = activity.getSharedPreferences("hf_settings", Context.MODE_PRIVATE)
+            .getString("hf_lang", "tr") ?: "tr"
+        Toast.makeText(activity, Strings.rewardedInterstitialInfo(lang), Toast.LENGTH_LONG).show()
+
         adsVm.showRewardedInterstitial(
             activity    = activity,
             onRewarded  = {
-                // Kullanıcı reklamı tamamladı → 2 saat native/banner reklamsız deneyim
+                // Kullanıcı reklamı tamamladı → 1 saat native/banner reklamsız deneyim
+                // (AdFreeManager.AD_FREE_DURATION_MS = 1 saat, sabit)
                 // Not: Kurdî dersleri kendi rewarded sistemiyle çalışır, buradan etkilenmez
                 com.heftreng.app.ads.AdFreeManager.grantAdFree()
             },

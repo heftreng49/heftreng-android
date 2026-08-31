@@ -623,5 +623,6 @@ object Strings {
     fun adFreeRemainingTime(l: String) = t(l, "Kalan süre: \${time}", "Dema mayî: \${time}", "Wextê mendeyo: \${time}", "کاتی ماوە: \${time}")
     fun adFreeAdNotReady(l: String) = t(l, "Reklam hazır değil, birazcık sonra tekrar dene.", "Reklam ne amade ye, piçekê şûnda dîsa biceribîne.", "Reklam amade nîyo, piyê şuna carê bin bıceribne.", "ڕیکلامەکە ئامادە نییە، دواتر دووبارە هەوڵ بدەرەوە.")
     fun adFreeThanks(l: String) = t(l, "Teşekkürler! 1 saat reklamsız kullanım aktif.", "Spas! Bikaranîna 1 saetî ya bêreklam çalak e.", "Spas! 1 saetê bêreklam bikaranê aktîf o.", "سوپاس! کاتژمێرێک بەبێ ڕیکلام چالاک بوو.")
+    fun rewardedInterstitialInfo(l: String) = t(l, "🎬 Reklamı izleyerek 1 saat reklamsız deneyim kazanacaksın", "🎬 Bi temaşekirina reklamê 1 saet ceribandina bêreklam qezenc dikî", "🎬 Bi reklamê vinênayışê 1 saete bêreklame qezenc kenê", "🎬 بە بینینی ڕیکلامەکە کاتژمێرێک بەبێ ڕیکلام بەدەستدەهێنیت")
 
 }
