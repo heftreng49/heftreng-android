@@ -51,6 +51,9 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.data.model.BookQuote
 import com.heftreng.app.data.model.BookReview
@@ -866,8 +869,16 @@ private fun LibraryBookHeader(
                 contentAlignment = Alignment.Center,
             ) {
                 if (book.coverImg.isNotBlank()) {
-                    AsyncImage(model = book.coverImg, contentDescription = null,
-                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(book.coverImg)
+                            .addHeader("User-Agent", "Mozilla/5.0")
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 } else {
                     Icon(Icons.Default.AutoStories, null, tint = Muted, modifier = Modifier.size(40.dp))
                 }
@@ -1396,6 +1407,15 @@ private fun AdminEditBookDialog(
     var pageCountTxt   by remember { mutableStateOf(if (book.pageCount > 0) book.pageCount.toString() else "") }
     var coverImg    by remember { mutableStateOf(book.coverImg) }
 
+    // Kullanıcı yazmayı bitirince önizleme yüklensin (debounce ile)
+    var previewUrl  by remember { mutableStateOf(book.coverImg) }
+    LaunchedEffect(coverImg) {
+        kotlinx.coroutines.delay(800)
+        previewUrl = coverImg.trim()
+    }
+
+    val context = LocalContext.current
+
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor   = HeftSurface,
@@ -1416,6 +1436,51 @@ private fun AdminEditBookDialog(
                 AdminTextField("Yayın Yılı / Sala Weşanê", publishYearTxt) { publishYearTxt = it }
                 AdminTextField("Sayfa Sayısı / Hejmara Rûpelên", pageCountTxt) { pageCountTxt = it }
                 AdminTextField("Kapak URL / URL ya Bergê", coverImg) { coverImg = it }
+
+                // ── Kapak URL Önizlemesi ──────────────────────────────────
+                // Yalnızca URL doluysa göster; hata olursa placeholder çıkar
+                if (previewUrl.isNotBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SurfaceVar),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        SubcomposeAsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(normalizeImageUrl(previewUrl))
+                                .addHeader("User-Agent", "Mozilla/5.0")
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "Kapak önizlemesi",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize(),
+                            loading = {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(28.dp),
+                                    color = Amber,
+                                    strokeWidth = 2.dp,
+                                )
+                            },
+                            error = {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Icon(Icons.Default.BrokenImage, null, tint = Muted, modifier = Modifier.size(32.dp))
+                                    Text(
+                                        "URL yüklenemedi — direkt resim linki girin",
+                                        color = Muted,
+                                        fontSize = 11.sp,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    )
+                                }
+                            },
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
@@ -1430,6 +1495,27 @@ private fun AdminEditBookDialog(
             TextButton(onClick = onDismiss) { Text("İptal / Betal", color = Muted) }
         },
     )
+}
+
+/**
+ * Link önizleme URL'lerini gerçek resim URL'sine dönüştürmeye çalışır.
+ *
+ * Bazı siteler (Goodreads, Kitapyurdu vb.) resim URL'sini sarmalar;
+ * bu fonksiyon bilinen pattern'leri normalize eder.
+ * Tanınmayan URL'ler olduğu gibi döner — Coil zaten dener.
+ */
+private fun normalizeImageUrl(url: String): String {
+    if (url.isBlank()) return url
+    // Goodreads: /photo/upload/... → CDN path düzelt
+    if (url.contains("goodreads.com") && !url.contains(".jpg") && !url.contains(".png") && !url.contains(".webp")) {
+        // Goodreads kitap kapağı genellikle zaten direkt resim — olduğu gibi bırak
+        return url
+    }
+    // Google Books thumbnail → zoom=1 yerine zoom=0 daha yüksek çözünürlük
+    if (url.contains("books.google.com") && url.contains("zoom=1")) {
+        return url.replace("zoom=1", "zoom=0")
+    }
+    return url
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

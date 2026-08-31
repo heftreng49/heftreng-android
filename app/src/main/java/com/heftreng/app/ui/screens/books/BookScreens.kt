@@ -48,6 +48,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -881,8 +882,16 @@ fun BookCard(
             contentAlignment = Alignment.Center,
         ) {
             if (book.coverImg.isNotBlank()) {
-                AsyncImage(model = book.coverImg, contentDescription = null,
-                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(book.coverImg)
+                        .addHeader("User-Agent", "Mozilla/5.0")
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
             } else {
                 Icon(
                     if (isSerial) Icons.Default.AutoStories else Icons.Default.MenuBook,
@@ -964,13 +973,27 @@ fun BookDetailHeader(
                 )
         ) {
             if (book.coverImg.isNotBlank()) {
-                AsyncImage(model = book.coverImg, contentDescription = null,
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(book.coverImg)
+                        .addHeader("User-Agent", "Mozilla/5.0")
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 0.5f })
-                AsyncImage(model = book.coverImg, contentDescription = null,
+                    modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 0.5f },
+                )
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(book.coverImg)
+                        .addHeader("User-Agent", "Mozilla/5.0")
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.align(Alignment.Center).size(100.dp, 140.dp)
-                        .clip(RoundedCornerShape(8.dp)))
+                        .clip(RoundedCornerShape(8.dp)),
+                )
             } else {
                 Box(
                     Modifier.align(Alignment.Center).size(100.dp, 140.dp)
