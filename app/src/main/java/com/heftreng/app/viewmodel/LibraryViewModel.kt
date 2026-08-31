@@ -15,9 +15,7 @@ import com.heftreng.app.data.repository.BookReviewRow
 import com.heftreng.app.data.repository.LibraryBookRow
 import com.heftreng.app.data.repository.LibraryRepository
 import com.heftreng.app.data.local.AuthorDao
-import com.heftreng.app.data.local.BookDao
 import com.heftreng.app.data.local.CachedAuthor
-import com.heftreng.app.data.local.CachedBook
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
@@ -107,21 +105,6 @@ private fun AuthorRow.toCached() = CachedAuthor(
     followerCount = followerCount,
 )
 
-private fun LibraryBookRow.toCached() = CachedBook(
-    id          = id,
-    title       = title,
-    authorId    = authorId ?: "",
-    authorName  = authorName,
-    coverImg    = coverImg,
-    genre       = genre,
-    publishYear = publishYear,
-    synopsis    = synopsis,
-    pageCount   = pageCount,
-    quoteCount  = quoteCount,
-    reviewCount = reviewCount,
-    avgRating   = avgRating,
-)
-
 private fun CachedAuthor.toDomain() = Author(
     id            = id,
     name          = name,
@@ -135,27 +118,11 @@ private fun CachedAuthor.toDomain() = Author(
     followerCount = followerCount,
 )
 
-private fun CachedBook.toDomain() = LibraryBook(
-    id          = id,
-    title       = title,
-    authorId    = authorId,
-    authorName  = authorName,
-    coverImg    = coverImg,
-    genre       = genre,
-    publishYear = publishYear,
-    synopsis    = synopsis,
-    pageCount   = pageCount,
-    quoteCount  = quoteCount,
-    reviewCount = reviewCount,
-    avgRating   = avgRating,
-)
-
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val auth      : FirebaseAuth,
     private val firestore : FirebaseFirestore,
     private val library   : LibraryRepository,
-    private val bookDao   : BookDao,
     private val authorDao : AuthorDao,
 ) : ViewModel() {
 
@@ -308,14 +275,8 @@ class LibraryViewModel @Inject constructor(
             // ── Stale-while-revalidate ────────────────────────────────────────
             // 1. Room cache'ten yazar ve kitaplarını anında göster
             val cachedAuthor = try { authorDao.getCachedAuthor(authorId) } catch (_: Exception) { null }
-            val cachedBooks  = try {
-                bookDao.getCachedBooks().filter { it.authorId == authorId }
-            } catch (_: Exception) { emptyList() }
-
             if (cachedAuthor != null) {
                 _selectedAuthor.value = cachedAuthor.toDomain()
-                _authorBooks.value    = cachedBooks.map { it.toDomain() }
-                _isOffline.value      = false
                 _loading.value        = false
             } else {
                 _loading.value = true
@@ -343,9 +304,8 @@ class LibraryViewModel @Inject constructor(
                 _isOffline.value     = false
                 syncQuoteLikeStates(_authorQuotes.value, _authorQuotes)
 
-                // 3. Room'u güncelle
+                // 3. Room'u güncelle (yazar cache'i hâlâ aktif)
                 authorDao.insert(freshAuthor.toCached())
-                bookDao.insertAll(freshBooks.map { it.toCached() })
             } catch (e: Exception) {
                 // Offline veya ağ hatası — cache varsa sessiz geç, crash yok
                 if (cachedAuthor == null) _error.value = e.message
@@ -436,18 +396,7 @@ class LibraryViewModel @Inject constructor(
 
     fun loadLibraryBook(bookId: String) {
         viewModelScope.launch {
-            // ── Stale-while-revalidate ────────────────────────────────────────
-            // 1. Room cache'ten kitabı anında göster
-            val cachedBook = try { bookDao.getCachedBook(bookId) } catch (_: Exception) { null }
-            if (cachedBook != null) {
-                _selectedBook.value = cachedBook.toDomain()
-                _isOffline.value    = false
-                _loading.value      = false
-                // Alıntı/inceleme cache yok — spinner göstermeden aşağıda çekilecek
-            } else {
-                _loading.value = true
-            }
-            // 2. Arka planda Supabase'den taze veri çek
+            _loading.value = true
             try {
                 val freshBook = library.getBook(bookId) ?: return@launch
                 val book      = freshBook.toDomain()
@@ -458,20 +407,14 @@ class LibraryViewModel @Inject constructor(
                 val rDeferred = async { library.getReviewsByBook(bookId) }
                 val quotes    = qDeferred.await()
                 val bookCover = book.coverImg
-                // Supabase'deki propagation henüz tamamlanmamış olabilir (race).
-                // bookCover doluysa tüm alıntılara uygula — boş olup olmadığına bakma.
                 _bookQuotes.value  = quotes.map { row ->
                     val q = row.toDomain()
                     if (bookCover.isNotBlank()) q.copy(coverImg = bookCover) else q
                 }
                 _bookReviews.value = rDeferred.await().map { it.toDomain() }
                 syncQuoteLikeStates(_bookQuotes.value, _bookQuotes)
-
-                // 3. Room'u güncelle
-                bookDao.insert(freshBook.toCached())
             } catch (e: Exception) {
-                if (cachedBook == null) _error.value = e.message
-                _isOffline.value = cachedBook != null
+                _error.value = e.message
             } finally {
                 _loading.value = false
             }
@@ -530,24 +473,6 @@ class LibraryViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             try {
-                // ── 1. Optimistic UI: StateFlow'ları hemen güncelle ──────────
-                // Böylece kullanıcı kaydet'e basınca kapak anında görünür,
-                // ağ round-trip'i beklenmez.
-                _selectedBook.value = _selectedBook.value?.copy(
-                    title       = title,
-                    synopsis    = synopsis,
-                    genre       = genre,
-                    publishYear = publishYear,
-                    pageCount   = pageCount,
-                    coverImg    = coverImg,
-                )
-                if (coverImg.isNotBlank()) {
-                    _bookQuotes.value = _bookQuotes.value.map { q ->
-                        if (q.coverImg != coverImg) q.copy(coverImg = coverImg) else q
-                    }
-                }
-
-                // ── 2. Kalıcı yazma ──────────────────────────────────────────
                 // getBook() yerine direkt patch — cache eski veri döndürüp
                 // değişikliği ezebiliyordu
                 library.patchBook(
@@ -561,15 +486,6 @@ class LibraryViewModel @Inject constructor(
                     authorId    = authorId,
                     authorName  = authorName,
                 )
-
-                // ── 3. Kapak değiştiyse ilgili tüm kayıtlara yansıt ─────────
-                // loadLibraryBook'tan ÖNCE çağrılmalı; yoksa reload sırasında
-                // Supabase'de henüz güncellenmemiş quotes gelir ve kapak kaybolur.
-                if (coverImg.isNotBlank()) {
-                    propagateCoverUpdate(bookId, coverImg)
-                }
-
-                // ── 4. Sunucudan taze veriyle yenile ─────────────────────────
                 loadLibraryBook(bookId)
 
                 // Yazar sayfası açıkken kitap düzenlenirse (ör. kapak URL'si
@@ -578,6 +494,11 @@ class LibraryViewModel @Inject constructor(
                 // authorId geçmiyor — bunun yerine o an yüklü olan yazarı kullan.
                 _selectedAuthor.value?.id?.let { currentAuthorId ->
                     if (currentAuthorId.isNotBlank()) loadAuthor(currentAuthorId)
+                }
+
+                // Kapak değiştiyse ilgili tüm kayıtlara yansıt
+                if (coverImg.isNotBlank()) {
+                    propagateCoverUpdate(bookId, coverImg)
                 }
             } catch (e: Exception) {
                 _error.value = e.message

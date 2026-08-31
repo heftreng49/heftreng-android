@@ -149,7 +149,6 @@ data class ReadingStatusRow(
 class LibraryRepository @Inject constructor(
     private val supabase   : SupabaseClient,
     private val auth       : FirebaseAuth,
-    private val bookDao    : com.heftreng.app.data.local.BookDao,
     private val authorDao  : com.heftreng.app.data.local.AuthorDao,
     private val quoteDao   : com.heftreng.app.data.local.QuoteDao,
 ) {
@@ -316,35 +315,14 @@ class LibraryRepository @Inject constructor(
     // ── Library Books ─────────────────────────────────────────────────────────
 
     suspend fun getBooks(limit: Int = 20, offset: Int = 0): List<LibraryBookRow> {
-        // Sadece ilk sayfa cache'lenir
-        if (offset == 0) {
-            val cached = bookDao.getCachedBooks(limit)
-            val cacheAge = cached.minOfOrNull { it.cachedAt } ?: 0L
-            if (cached.isNotEmpty() && System.currentTimeMillis() - cacheAge < ROOM_CACHE_TTL_MS) {
-                return cached.map { it.toRow() }
-            }
-        }
         return try {
-            val rows = db["library_books"].select {
+            db["library_books"].select {
                 order("created_at", Order.DESCENDING)
                 limit(limit.toLong())
                 range(offset.toLong(), (offset + limit - 1).toLong())
             }.decodeList<LibraryBookRow>()
-            if (offset == 0) {
-                // replaceAll öncesi mevcut Room kaydını al; coverImg doluysa koru
-                // (sunucudan gelen liste henüz cover_img'i yansıtmamış olabilir)
-                val existingCovers = bookDao.getCachedBooks(500).associate { it.id to it.coverImg }
-                bookDao.replaceAll(rows.map { row ->
-                    val cached = row.toCached()
-                    if (cached.coverImg.isBlank() && existingCovers[cached.id]?.isNotBlank() == true)
-                        cached.copy(coverImg = existingCovers[cached.id]!!)
-                    else cached
-                })
-            }
-            rows
         } catch (e: Exception) {
-            if (offset == 0) bookDao.getCachedBooks(limit).map { it.toRow() }
-            else emptyList()
+            emptyList()
         }
     }
 
@@ -355,19 +333,13 @@ class LibraryRepository @Inject constructor(
         }.decodeList()
 
     suspend fun getBook(id: String): LibraryBookRow? {
-        val cached = bookDao.getCachedBook(id)
-        if (cached != null && System.currentTimeMillis() - cached.cachedAt < ROOM_CACHE_TTL_MS) {
-            return cached.toRow()
-        }
         return try {
-            val row = db["library_books"].select {
+            db["library_books"].select {
                 filter { eq("id", id) }
                 limit(1)
             }.decodeSingleOrNull<LibraryBookRow>()
-            row?.let { bookDao.insert(it.toCached()) }
-            row
         } catch (e: Exception) {
-            cached?.toRow()
+            null
         }
     }
 
@@ -399,36 +371,6 @@ class LibraryRepository @Inject constructor(
         if (authorName.isNotBlank()) patch["author_name"] = authorName
 
         db["library_books"].update(patch) { filter { eq("id", id) } }
-
-        // Supabase'den doğrula — update() sessizce başarısız olabiliyor (RLS, ağ vb.)
-        // Gerçekte yazılan değeri okuyup Room'a uygula; böylece "kapak kayboldu" önlenir.
-        val verified = try {
-            db["library_books"].select { filter { eq("id", id) }; limit(1) }
-                .decodeSingleOrNull<LibraryBookRow>()
-        } catch (_: Exception) { null }
-
-        // Room cache'i güncelle — verified varsa onun coverImg'ini kullan,
-        // yoksa kullanıcının girdiği değere geri dön (en azından optimistic doğru olsun)
-        val cached = bookDao.getCachedBook(id)
-        if (cached != null) {
-            val finalCoverImg = if (verified != null) verified.coverImg else coverImg
-            if (verified != null && verified.coverImg != coverImg) {
-                android.util.Log.w("LibraryRepo",
-                    "patchBook: Supabase cover_img beklenen=$coverImg gerçek=${verified.coverImg} — " +
-                    "RLS veya başka bir kısıt write'ı engellemiş olabilir.")
-            }
-            bookDao.insert(cached.copy(
-                title       = title,
-                synopsis    = synopsis,
-                genre       = genre,
-                publishYear = publishYear,
-                pageCount   = pageCount,
-                coverImg    = finalCoverImg,
-                authorId    = (verified?.authorId?.takeIf { it.isNotBlank() } ?: authorId.takeIf { it.isNotBlank() } ?: cached.authorId),
-                authorName  = (verified?.authorName ?: authorName).ifBlank { cached.authorName },
-                cachedAt    = System.currentTimeMillis(),
-            ))
-        }
     }
 
     /** Sorun 2: Kapak değişince book_quotes'taki eski kayıtları güncelle */
@@ -1193,37 +1135,7 @@ private fun com.heftreng.app.data.local.CachedAuthor.toRow() = AuthorRow(
     followerCount = followerCount,
 )
 
-private fun LibraryBookRow.toCached() = com.heftreng.app.data.local.CachedBook(
-    id          = id,
-    title       = title,
-    authorId    = authorId ?: "",
-    authorName  = authorName,
-    coverImg    = coverImg,
-    genre       = genre,
-    publishYear = publishYear,
-    synopsis    = synopsis,
-    pageCount   = pageCount,
-    quoteCount  = quoteCount,
-    reviewCount = reviewCount,
-    avgRating   = avgRating,
-    cachedAt    = System.currentTimeMillis(),
-)
 
-private fun com.heftreng.app.data.local.CachedBook.toRow() = LibraryBookRow(
-    id          = id,
-    title       = title,
-    authorId    = authorId,
-    authorName  = authorName,
-    coverImg    = coverImg,
-    genre       = genre,
-    publishYear = publishYear,
-    synopsis    = synopsis,
-    pageCount   = pageCount,
-    quoteCount  = quoteCount,
-    reviewCount = reviewCount,
-    avgRating   = avgRating,
-    likesCount  = 0,  // CachedBook'ta likesCount yok — varsayılan 0, gerçek değer Supabase'den gelir
-)
 
 private fun BookQuoteRow.toCached() = com.heftreng.app.data.local.CachedQuote(
     id              = id,
@@ -1261,5 +1173,3 @@ private fun com.heftreng.app.data.local.CachedQuote.toRow() = BookQuoteRow(
     createdAt       = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
         .format(java.util.Date(tsMillis)),
 )
-
-private fun String?.ifNullOrBlank(default: String) = if (isNullOrBlank()) default else this!!

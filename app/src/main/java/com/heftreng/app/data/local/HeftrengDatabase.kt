@@ -10,22 +10,19 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 //
 //  version 1 → 2 : cached_quotes eklendi
 //  version 2 → 3 : cached_books + cached_authors eklendi (Sorun 1 fix)
-//
-//  DatabaseModule'de .addMigrations(MIGRATION_2_3) eklemeyi unutma.
+//  version 3 → 4 : cached_books kaldırıldı — Room cache kapak sorununa yol açıyordu
 // ═══════════════════════════════════════════════════════════════════════════
 
 @Database(
     entities = [
         CachedQuote::class,
-        CachedBook::class,
         CachedAuthor::class,
     ],
-    version      = 3,
+    version      = 4,
     exportSchema = false,
 )
 abstract class HeftrengDatabase : RoomDatabase() {
     abstract fun quoteDao(): QuoteDao
-    abstract fun bookDao(): BookDao
     abstract fun authorDao(): AuthorDao
 }
 
@@ -68,5 +65,12 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
             )
             """.trimIndent()
         )
+    }
+}
+
+// ── Migration 3 → 4 ──────────────────────────────────────────────────────────
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP TABLE IF EXISTS cached_books")
     }
 }
