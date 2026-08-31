@@ -330,7 +330,17 @@ class LibraryRepository @Inject constructor(
                 limit(limit.toLong())
                 range(offset.toLong(), (offset + limit - 1).toLong())
             }.decodeList<LibraryBookRow>()
-            if (offset == 0) bookDao.replaceAll(rows.map { it.toCached() })
+            if (offset == 0) {
+                // replaceAll öncesi mevcut Room kaydını al; coverImg doluysa koru
+                // (sunucudan gelen liste henüz cover_img'i yansıtmamış olabilir)
+                val existingCovers = bookDao.getCachedBooks(500).associate { it.id to it.coverImg }
+                bookDao.replaceAll(rows.map { row ->
+                    val cached = row.toCached()
+                    if (cached.coverImg.isBlank() && existingCovers[cached.id]?.isNotBlank() == true)
+                        cached.copy(coverImg = existingCovers[cached.id]!!)
+                    else cached
+                })
+            }
             rows
         } catch (e: Exception) {
             if (offset == 0) bookDao.getCachedBooks(limit).map { it.toRow() }
@@ -390,18 +400,32 @@ class LibraryRepository @Inject constructor(
 
         db["library_books"].update(patch) { filter { eq("id", id) } }
 
-        // Room cache'i güncelle
+        // Supabase'den doğrula — update() sessizce başarısız olabiliyor (RLS, ağ vb.)
+        // Gerçekte yazılan değeri okuyup Room'a uygula; böylece "kapak kayboldu" önlenir.
+        val verified = try {
+            db["library_books"].select { filter { eq("id", id) }; limit(1) }
+                .decodeSingleOrNull<LibraryBookRow>()
+        } catch (_: Exception) { null }
+
+        // Room cache'i güncelle — verified varsa onun coverImg'ini kullan,
+        // yoksa kullanıcının girdiği değere geri dön (en azından optimistic doğru olsun)
         val cached = bookDao.getCachedBook(id)
         if (cached != null) {
+            val finalCoverImg = if (verified != null) verified.coverImg else coverImg
+            if (verified != null && verified.coverImg != coverImg) {
+                android.util.Log.w("LibraryRepo",
+                    "patchBook: Supabase cover_img beklenen=$coverImg gerçek=${verified.coverImg} — " +
+                    "RLS veya başka bir kısıt write'ı engellemiş olabilir.")
+            }
             bookDao.insert(cached.copy(
                 title       = title,
                 synopsis    = synopsis,
                 genre       = genre,
                 publishYear = publishYear,
                 pageCount   = pageCount,
-                coverImg    = coverImg,
-                authorId    = authorId.ifBlank { cached.authorId },
-                authorName  = authorName.ifBlank { cached.authorName },
+                coverImg    = finalCoverImg,
+                authorId    = (verified?.authorId?.takeIf { it.isNotBlank() } ?: authorId.takeIf { it.isNotBlank() } ?: cached.authorId),
+                authorName  = (verified?.authorName ?: authorName).ifBlank { cached.authorName },
                 cachedAt    = System.currentTimeMillis(),
             ))
         }
@@ -1237,3 +1261,5 @@ private fun com.heftreng.app.data.local.CachedQuote.toRow() = BookQuoteRow(
     createdAt       = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
         .format(java.util.Date(tsMillis)),
 )
+
+private fun String?.ifNullOrBlank(default: String) = if (isNullOrBlank()) default else this!!
