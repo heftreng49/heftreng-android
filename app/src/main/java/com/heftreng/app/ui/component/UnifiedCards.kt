@@ -31,7 +31,6 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
-import coil.request.ImageRequest
 import com.google.firebase.Timestamp
 import com.heftreng.app.data.model.BookQuote
 import com.heftreng.app.data.model.BookReview
