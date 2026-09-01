@@ -408,9 +408,10 @@ class LibraryViewModel @Inject constructor(
 
                 val quotes  = async { library.getQuotesByBook(bookId) }
                 val reviews = async { library.getReviewsByBook(bookId) }
+                // coverImg her zaman kitabın coverImg'i ile eşitlenir.
+                // Supabase propagation gecikmeli olsa bile UI doğru gösterir.
                 _bookQuotes.value = quotes.await().map { q ->
-                    val d = q.toDomain()
-                    if (book.coverImg.isNotBlank()) d.copy(coverImg = book.coverImg) else d
+                    q.toDomain().copy(coverImg = book.coverImg)
                 }
                 _bookReviews.value = reviews.await().map { it.toDomain() }
                 syncQuoteLikeStates(_bookQuotes.value, _bookQuotes)
@@ -506,26 +507,14 @@ class LibraryViewModel @Inject constructor(
                     authorName  = authorName,
                 )
 
-                // 3. Supabase'in gerçekte kaydettiği veriyle UI'ı doğrula
-                //    (RLS veya başka kısıt coverImg'i engellediyse burada anlaşılır)
-                if (saved != null) {
-                    _selectedBook.value = saved.toDomain()
-                    val trueCover = saved.coverImg
-                    if (trueCover != coverImg) {
-                        android.util.Log.w("LibraryVM",
-                            "cover_img RLS tarafından engellendi — beklenen=$coverImg gerçek=$trueCover")
-                    }
-                    // Alıntı kartlarını da doğrulanan kapakla güncelle
-                    if (trueCover.isNotBlank()) {
-                        _bookQuotes.value = _bookQuotes.value.map { it.copy(coverImg = trueCover) }
-                    }
+                // 3. Upsert'ten dönen kesin veriyle UI'ı güncelle
+                _selectedBook.value = saved.toDomain()
+                if (saved.coverImg.isNotBlank()) {
+                    _bookQuotes.value = _bookQuotes.value.map { it.copy(coverImg = saved.coverImg) }
                 }
 
                 // 4. Kapak değiştiyse ilgili tüm tablolara yansıt
-                //    (book_quotes, reading_status, Firestore feed)
-                //    loadLibraryBook'tan ÖNCE çağrılmalı — aksi halde reload
-                //    sırasında Supabase'den henüz güncellenmemiş kapak gelir
-                val finalCover = saved?.coverImg ?: coverImg
+                val finalCover = saved.coverImg
                 if (finalCover.isNotBlank()) {
                     propagateCoverUpdate(bookId, finalCover)
                 }

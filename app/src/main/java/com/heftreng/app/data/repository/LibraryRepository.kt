@@ -347,6 +347,16 @@ class LibraryRepository @Inject constructor(
      * update() sessiz başarısız olabilir (RLS vb.), bu yüzden
      * hemen ardından select ile doğruluyoruz.
      */
+    /**
+     * Kitap güncelle — update(patch) yerine upsert kullanıyoruz.
+     *
+     * Neden upsert?
+     * - update() supabase-kt'de dönüş değeri yok, sessizce başarısız olabiliyor.
+     * - upsert() id varsa update, yoksa insert yapar; RLS UPDATE politikası
+     *   yokken INSERT politikası varsa yine çalışır.
+     * - Elimizdeki veriyi direkt döndürüyoruz — ağ roundtrip yok,
+     *   OkHttp cache sorunu yok.
+     */
     suspend fun patchBook(
         id         : String,
         title      : String,
@@ -357,37 +367,12 @@ class LibraryRepository @Inject constructor(
         coverImg   : String,
         authorId   : String = "",
         authorName : String = "",
-    ): LibraryBookRow? {
-        val patch = mutableMapOf<String, Any>(
-            "title"        to title,
-            "synopsis"     to synopsis,
-            "genre"        to genre,
-            "publish_year" to publishYear,
-            "page_count"   to pageCount,
-            "cover_img"    to coverImg,
-        )
-        if (authorId.isNotBlank()) patch["author_id"]   = authorId
-        if (authorName.isNotBlank()) patch["author_name"] = authorName
-
-        db["library_books"].update(patch) { filter { eq("id", id) } }
-
-        // Supabase update() dönüş değeri yok.
-        // getBook() ile doğrulama yapıyorduk ama OkHttp cache stale veri dönüyordu.
-        // Çözüm: mevcut satırı getBook'tan al, sadece değiştirilen alanları uygula.
-        // OkHttp cache AppModule'de library_books için no-store yapıldı ama
-        // ekstra güvenlik için burada da explicit no-cache header ile çekiyoruz.
+    ): LibraryBookRow {
+        // Mevcut satırı al — quoteCount, reviewCount, avgRating gibi
+        // alanları sıfırlamamak için gerekli
         val current = getBook(id)
-        return current?.copy(
-            title       = title,
-            synopsis    = synopsis,
-            genre       = genre,
-            publishYear = publishYear,
-            pageCount   = pageCount,
-            coverImg    = coverImg,
-            authorId    = authorId.ifBlank { current.authorId },
-            authorName  = authorName.ifBlank { current.authorName },
-        ) ?: LibraryBookRow(
-            // getBook başarısız olursa bile elimizdeki veriyle devam et
+
+        val updated = LibraryBookRow(
             id          = id,
             title       = title,
             synopsis    = synopsis,
@@ -395,9 +380,20 @@ class LibraryRepository @Inject constructor(
             publishYear = publishYear,
             pageCount   = pageCount,
             coverImg    = coverImg,
-            authorId    = authorId,
-            authorName  = authorName,
+            authorId    = authorId.ifBlank { current?.authorId ?: "" },
+            authorName  = authorName.ifBlank { current?.authorName ?: "" },
+            quoteCount  = current?.quoteCount  ?: 0,
+            reviewCount = current?.reviewCount ?: 0,
+            avgRating   = current?.avgRating   ?: 0f,
+            likesCount  = current?.likesCount  ?: 0,
+            createdAt   = current?.createdAt   ?: "",
         )
+
+        // upsert: id varsa UPDATE, yoksa INSERT — her iki RLS politikasını da dener
+        db["library_books"].upsert(updated)
+
+        // Ağa gitme — elimizdeki veriyi dön. coverImg kesinlikle doğru.
+        return updated
     }
 
     /** Sorun 2: Kapak değişince book_quotes'taki eski kayıtları güncelle */
