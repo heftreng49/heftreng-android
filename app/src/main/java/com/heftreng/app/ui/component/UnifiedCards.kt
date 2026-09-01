@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
+import coil.request.ImageRequest
 import com.google.firebase.Timestamp
 import com.heftreng.app.data.model.BookQuote
 import com.heftreng.app.data.model.BookReview
@@ -191,7 +193,7 @@ fun BookQuoteCard(
                         ) {
                             if (quote.coverImg.isNotBlank()) {
                                 AsyncImage(
-                                    model              = quote.coverImg,
+                    model = coverImageRequest(quote.coverImg),
                                     contentDescription = quote.bookTitle,
                                     contentScale       = ContentScale.Crop,
                                     modifier           = Modifier.fillMaxSize(),
@@ -632,6 +634,19 @@ fun EmptyState(
     }
 }
 
+
+// ── Kapak resmi için güvenli ImageRequest ────────────────────────────────────
+// Bazı CDN'ler bot UA engelliyor; User-Agent header ile geçiyoruz.
+@Composable
+private fun coverImageRequest(url: String): ImageRequest {
+    val ctx = LocalContext.current
+    return ImageRequest.Builder(ctx)
+        .data(url)
+        .addHeader("User-Agent", "Mozilla/5.0")
+        .crossfade(true)
+        .build()
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  LibraryBookCard — kitap listesi satırı
 // ─────────────────────────────────────────────────────────────────────────────
@@ -661,7 +676,7 @@ fun LibraryBookCard(
             ) {
                 if (book.coverImg.isNotBlank()) {
                     AsyncImage(
-                        model             = book.coverImg,
+                    model = coverImageRequest(book.coverImg),
                         contentDescription = book.title,
                         contentScale      = ContentScale.Crop,
                         modifier          = Modifier.fillMaxSize(),
@@ -769,7 +784,7 @@ fun LibraryBookGridCard(
         ) {
             if (book.coverImg.isNotBlank()) {
                 AsyncImage(
-                    model              = book.coverImg,
+                    model = coverImageRequest(book.coverImg),
                     contentDescription = book.title,
                     contentScale       = ContentScale.Crop,
                     modifier           = Modifier.fillMaxSize(),

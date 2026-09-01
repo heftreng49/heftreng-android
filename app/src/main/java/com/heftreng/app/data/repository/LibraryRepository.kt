@@ -321,9 +321,7 @@ class LibraryRepository @Inject constructor(
                 limit(limit.toLong())
                 range(offset.toLong(), (offset + limit - 1).toLong())
             }.decodeList<LibraryBookRow>()
-        } catch (e: Exception) {
-            emptyList()
-        }
+        } catch (e: Exception) { emptyList() }
     }
 
     suspend fun getBooksByAuthor(authorId: String): List<LibraryBookRow> =
@@ -332,22 +330,23 @@ class LibraryRepository @Inject constructor(
             order("created_at", Order.DESCENDING)
         }.decodeList()
 
-    suspend fun getBook(id: String): LibraryBookRow? {
-        return try {
-            db["library_books"].select {
-                filter { eq("id", id) }
-                limit(1)
-            }.decodeSingleOrNull<LibraryBookRow>()
-        } catch (e: Exception) {
-            null
-        }
-    }
+    suspend fun getBook(id: String): LibraryBookRow? = try {
+        db["library_books"].select {
+            filter { eq("id", id) }
+            limit(1)
+        }.decodeSingleOrNull<LibraryBookRow>()
+    } catch (e: Exception) { null }
 
     suspend fun upsertBook(row: LibraryBookRow) {
         db["library_books"].upsert(row)
     }
 
-    /** Sadece belirtilen alanları günceller — cache eski veri dönse bile güvenli */
+    /**
+     * Kitap alanlarını günceller ve güncel satırı geri döner.
+     * Room cache yok — tek kaynak Supabase.
+     * update() sessiz başarısız olabilir (RLS vb.), bu yüzden
+     * hemen ardından select ile doğruluyoruz.
+     */
     suspend fun patchBook(
         id         : String,
         title      : String,
@@ -358,7 +357,7 @@ class LibraryRepository @Inject constructor(
         coverImg   : String,
         authorId   : String = "",
         authorName : String = "",
-    ) {
+    ): LibraryBookRow? {
         val patch = mutableMapOf<String, Any>(
             "title"        to title,
             "synopsis"     to synopsis,
@@ -371,6 +370,10 @@ class LibraryRepository @Inject constructor(
         if (authorName.isNotBlank()) patch["author_name"] = authorName
 
         db["library_books"].update(patch) { filter { eq("id", id) } }
+
+        // update() dönüş değeri yok — hemen select ile doğrula.
+        // Bu satır hem başarıyı onaylar hem de güncel veriyi ViewModel'e taşır.
+        return getBook(id)
     }
 
     /** Sorun 2: Kapak değişince book_quotes'taki eski kayıtları güncelle */

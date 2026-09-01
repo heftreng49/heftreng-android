@@ -869,16 +869,8 @@ private fun LibraryBookHeader(
                 contentAlignment = Alignment.Center,
             ) {
                 if (book.coverImg.isNotBlank()) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(book.coverImg)
-                            .addHeader("User-Agent", "Mozilla/5.0")
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    AsyncImage(model = book.coverImg, contentDescription = null,
+                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 } else {
                     Icon(Icons.Default.AutoStories, null, tint = Muted, modifier = Modifier.size(40.dp))
                 }
@@ -1400,29 +1392,29 @@ private fun AdminEditBookDialog(
     onDismiss: () -> Unit,
     onSave   : (title: String, synopsis: String, genre: String, publishYear: Int, pageCount: Int, coverImg: String) -> Unit,
 ) {
-    var title       by remember { mutableStateOf(book.title) }
-    var synopsis    by remember { mutableStateOf(book.synopsis) }
-    var genre       by remember { mutableStateOf(book.genre) }
+    val context = LocalContext.current
+    var title          by remember { mutableStateOf(book.title) }
+    var synopsis       by remember { mutableStateOf(book.synopsis) }
+    var genre          by remember { mutableStateOf(book.genre) }
     var publishYearTxt by remember { mutableStateOf(if (book.publishYear > 0) book.publishYear.toString() else "") }
     var pageCountTxt   by remember { mutableStateOf(if (book.pageCount > 0) book.pageCount.toString() else "") }
-    var coverImg    by remember { mutableStateOf(book.coverImg) }
-
-    // Kullanıcı yazmayı bitirince önizleme yüklensin (debounce ile)
-    var previewUrl  by remember { mutableStateOf(book.coverImg) }
+    var coverImg       by remember { mutableStateOf(book.coverImg) }
+    // 800ms debounce ile önizleme URL'si — kullanıcı yazmayı bitirince yükle
+    var previewUrl     by remember { mutableStateOf(book.coverImg) }
     LaunchedEffect(coverImg) {
         kotlinx.coroutines.delay(800)
         previewUrl = coverImg.trim()
     }
 
-    val context = LocalContext.current
-
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor   = HeftSurface,
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Edit, null, tint = Amber, modifier = Modifier.size(18.dp))
-                Text("Kitap Düzenle / Pirtûk Biguherîne", color = OnBackground, fontWeight = FontWeight.Bold)
+                Text("Kitap Düzenle / Pirtûk Biguherîne",
+                    color = OnBackground, fontWeight = FontWeight.Bold)
             }
         },
         text = {
@@ -1435,45 +1427,49 @@ private fun AdminEditBookDialog(
                 AdminTextField("Tür / Celeb", genre) { genre = it }
                 AdminTextField("Yayın Yılı / Sala Weşanê", publishYearTxt) { publishYearTxt = it }
                 AdminTextField("Sayfa Sayısı / Hejmara Rûpelên", pageCountTxt) { pageCountTxt = it }
+
+                // ── Kapak URL alanı ───────────────────────────────────────────
                 AdminTextField("Kapak URL / URL ya Bergê", coverImg) { coverImg = it }
 
-                // ── Kapak URL Önizlemesi ──────────────────────────────────
-                // Yalnızca URL doluysa göster; hata olursa placeholder çıkar
+                // ── Canlı önizleme ────────────────────────────────────────────
+                // Yalnızca URL varsa göster; başarısız olursa net hata mesajı
                 if (previewUrl.isNotBlank()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(160.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .height(180.dp)
+                            .clip(RoundedCornerShape(10.dp))
                             .background(SurfaceVar),
                         contentAlignment = Alignment.Center,
                     ) {
                         SubcomposeAsyncImage(
                             model = ImageRequest.Builder(context)
-                                .data(normalizeImageUrl(previewUrl))
+                                .data(previewUrl)
                                 .addHeader("User-Agent", "Mozilla/5.0")
                                 .crossfade(true)
                                 .build(),
                             contentDescription = "Kapak önizlemesi",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxSize(),
-                            loading = {
+                            contentScale       = ContentScale.Fit,
+                            modifier           = Modifier.fillMaxSize(),
+                            loading  = {
                                 CircularProgressIndicator(
-                                    modifier = Modifier.size(28.dp),
-                                    color = Amber,
+                                    modifier    = Modifier.size(28.dp),
+                                    color       = Amber,
                                     strokeWidth = 2.dp,
                                 )
                             },
                             error = {
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
                                 ) {
-                                    Icon(Icons.Default.BrokenImage, null, tint = Muted, modifier = Modifier.size(32.dp))
+                                    Icon(Icons.Default.BrokenImage, null,
+                                        tint = Muted, modifier = Modifier.size(32.dp))
                                     Text(
-                                        "URL yüklenemedi — direkt resim linki girin",
-                                        color = Muted,
-                                        fontSize = 11.sp,
+                                        "Bu URL yüklenemedi.
+Lütfen direkt resim linki girin (.jpg .png .webp)",
+                                        color     = Muted,
+                                        fontSize  = 11.sp,
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                     )
                                 }
@@ -1486,7 +1482,12 @@ private fun AdminEditBookDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (title.isNotBlank()) onSave(title.trim(), synopsis.trim(), genre.trim(), publishYearTxt.toIntOrNull() ?: 0, pageCountTxt.toIntOrNull() ?: 0, coverImg.trim())
+                    if (title.isNotBlank()) onSave(
+                        title.trim(), synopsis.trim(), genre.trim(),
+                        publishYearTxt.toIntOrNull() ?: 0,
+                        pageCountTxt.toIntOrNull() ?: 0,
+                        coverImg.trim(),
+                    )
                 },
                 enabled = title.isNotBlank(),
             ) { Text("Kaydet / Tomarkirin", color = Amber, fontWeight = FontWeight.Bold) }
@@ -1495,27 +1496,6 @@ private fun AdminEditBookDialog(
             TextButton(onClick = onDismiss) { Text("İptal / Betal", color = Muted) }
         },
     )
-}
-
-/**
- * Link önizleme URL'lerini gerçek resim URL'sine dönüştürmeye çalışır.
- *
- * Bazı siteler (Goodreads, Kitapyurdu vb.) resim URL'sini sarmalar;
- * bu fonksiyon bilinen pattern'leri normalize eder.
- * Tanınmayan URL'ler olduğu gibi döner — Coil zaten dener.
- */
-private fun normalizeImageUrl(url: String): String {
-    if (url.isBlank()) return url
-    // Goodreads: /photo/upload/... → CDN path düzelt
-    if (url.contains("goodreads.com") && !url.contains(".jpg") && !url.contains(".png") && !url.contains(".webp")) {
-        // Goodreads kitap kapağı genellikle zaten direkt resim — olduğu gibi bırak
-        return url
-    }
-    // Google Books thumbnail → zoom=1 yerine zoom=0 daha yüksek çözünürlük
-    if (url.contains("books.google.com") && url.contains("zoom=1")) {
-        return url.replace("zoom=1", "zoom=0")
-    }
-    return url
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

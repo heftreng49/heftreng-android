@@ -105,6 +105,7 @@ private fun AuthorRow.toCached() = CachedAuthor(
     followerCount = followerCount,
 )
 
+
 private fun CachedAuthor.toDomain() = Author(
     id            = id,
     name          = name,
@@ -117,6 +118,7 @@ private fun CachedAuthor.toDomain() = Author(
     reviewCount   = reviewCount,
     followerCount = followerCount,
 )
+
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
@@ -275,8 +277,7 @@ class LibraryViewModel @Inject constructor(
             // ── Stale-while-revalidate ────────────────────────────────────────
             // 1. Room cache'ten yazar ve kitaplarını anında göster
             val cachedAuthor = try { authorDao.getCachedAuthor(authorId) } catch (_: Exception) { null }
-            if (cachedAuthor != null) {
-                _selectedAuthor.value = cachedAuthor.toDomain()
+                            _isOffline.value      = false
                 _loading.value        = false
             } else {
                 _loading.value = true
@@ -304,7 +305,7 @@ class LibraryViewModel @Inject constructor(
                 _isOffline.value     = false
                 syncQuoteLikeStates(_authorQuotes.value, _authorQuotes)
 
-                // 3. Room'u güncelle (yazar cache'i hâlâ aktif)
+                // Room'u güncelle (yazar cache hâlâ aktif, kitap cache kaldırıldı)
                 authorDao.insert(freshAuthor.toCached())
             } catch (e: Exception) {
                 // Offline veya ağ hatası — cache varsa sessiz geç, crash yok
@@ -398,23 +399,22 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
             try {
-                val freshBook = library.getBook(bookId) ?: return@launch
-                val book      = freshBook.toDomain()
+                val row  = library.getBook(bookId) ?: run { _loading.value = false; return@launch }
+                val book = row.toDomain()
                 _selectedBook.value = book
                 _isOffline.value    = false
 
-                val qDeferred = async { library.getQuotesByBook(bookId) }
-                val rDeferred = async { library.getReviewsByBook(bookId) }
-                val quotes    = qDeferred.await()
-                val bookCover = book.coverImg
-                _bookQuotes.value  = quotes.map { row ->
-                    val q = row.toDomain()
-                    if (bookCover.isNotBlank()) q.copy(coverImg = bookCover) else q
+                val quotes  = async { library.getQuotesByBook(bookId) }
+                val reviews = async { library.getReviewsByBook(bookId) }
+                _bookQuotes.value = quotes.await().map { q ->
+                    val d = q.toDomain()
+                    if (book.coverImg.isNotBlank()) d.copy(coverImg = book.coverImg) else d
                 }
-                _bookReviews.value = rDeferred.await().map { it.toDomain() }
+                _bookReviews.value = reviews.await().map { it.toDomain() }
                 syncQuoteLikeStates(_bookQuotes.value, _bookQuotes)
             } catch (e: Exception) {
-                _error.value = e.message
+                _error.value     = e.message
+                _isOffline.value = true
             } finally {
                 _loading.value = false
             }
@@ -473,9 +473,26 @@ class LibraryViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             try {
-                // getBook() yerine direkt patch — cache eski veri döndürüp
-                // değişikliği ezebiliyordu
-                library.patchBook(
+                // 1. Optimistic UI — kullanıcı gecikme hissetmesin
+                val optimistic = _selectedBook.value?.copy(
+                    title       = title,
+                    synopsis    = synopsis,
+                    genre       = genre,
+                    publishYear = publishYear,
+                    pageCount   = pageCount,
+                    coverImg    = coverImg,
+                )
+                if (optimistic != null) {
+                    _selectedBook.value = optimistic
+                    if (coverImg.isNotBlank()) {
+                        _bookQuotes.value = _bookQuotes.value.map {
+                            it.copy(coverImg = coverImg)
+                        }
+                    }
+                }
+
+                // 2. Supabase'e yaz — patchBook artık güncel satırı dönüyor
+                val saved = library.patchBook(
                     id          = bookId,
                     title       = title,
                     synopsis    = synopsis,
@@ -486,15 +503,45 @@ class LibraryViewModel @Inject constructor(
                     authorId    = authorId,
                     authorName  = authorName,
                 )
+
+                // 3. Supabase'in gerçekte kaydettiği veriyle UI'ı doğrula
+                //    (RLS veya başka kısıt coverImg'i engellediyse burada anlaşılır)
+                if (saved != null) {
+                    _selectedBook.value = saved.toDomain()
+                    val trueCover = saved.coverImg
+                    if (trueCover != coverImg) {
+                        android.util.Log.w("LibraryVM",
+                            "cover_img RLS tarafından engellendi — beklenen=$coverImg gerçek=$trueCover")
+                    }
+                    // Alıntı kartlarını da doğrulanan kapakla güncelle
+                    if (trueCover.isNotBlank()) {
+                        _bookQuotes.value = _bookQuotes.value.map { it.copy(coverImg = trueCover) }
+                    }
+                }
+
+                // 4. Kapak değiştiyse ilgili tüm tablolara yansıt
+                //    (book_quotes, reading_status, Firestore feed)
+                //    loadLibraryBook'tan ÖNCE çağrılmalı — aksi halde reload
+                //    sırasında Supabase'den henüz güncellenmemiş kapak gelir
+                val finalCover = saved?.coverImg ?: coverImg
+                if (finalCover.isNotBlank()) {
+                    propagateCoverUpdate(bookId, finalCover)
+                }
+
+                // 5. Sunucudan taze veriyle son doğrulama
                 loadLibraryBook(bookId)
 
-                // Yazar sayfası açıkken kitap düzenlenirse (ör. kapak URL'si
-                // değişirse) authorBooks listesi burada da yenilenmezse liste
-                // eski (kapaksız/eski) haliyle kalır. Çağıran taraf çoğu zaman
-                // authorId geçmiyor — bunun yerine o an yüklü olan yazarı kullan.
-                _selectedAuthor.value?.id?.let { currentAuthorId ->
-                    if (currentAuthorId.isNotBlank()) loadAuthor(currentAuthorId)
+                // Yazar sayfasındaki kitap listesini de güncelle
+                _selectedAuthor.value?.id?.let { aid ->
+                    if (aid.isNotBlank()) loadAuthor(aid)
                 }
+            } catch (e: Exception) {
+                _error.value = e.message
+                // Hata durumunda sunucudan doğru veriyi yükle
+                loadLibraryBook(bookId)
+            }
+        }
+    }
 
                 // Kapak değiştiyse ilgili tüm kayıtlara yansıt
                 if (coverImg.isNotBlank()) {
