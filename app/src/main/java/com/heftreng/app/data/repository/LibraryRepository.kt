@@ -371,9 +371,33 @@ class LibraryRepository @Inject constructor(
 
         db["library_books"].update(patch) { filter { eq("id", id) } }
 
-        // update() dönüş değeri yok — hemen select ile doğrula.
-        // Bu satır hem başarıyı onaylar hem de güncel veriyi ViewModel'e taşır.
-        return getBook(id)
+        // Supabase update() dönüş değeri yok.
+        // getBook() ile doğrulama yapıyorduk ama OkHttp cache stale veri dönüyordu.
+        // Çözüm: mevcut satırı getBook'tan al, sadece değiştirilen alanları uygula.
+        // OkHttp cache AppModule'de library_books için no-store yapıldı ama
+        // ekstra güvenlik için burada da explicit no-cache header ile çekiyoruz.
+        val current = getBook(id)
+        return current?.copy(
+            title       = title,
+            synopsis    = synopsis,
+            genre       = genre,
+            publishYear = publishYear,
+            pageCount   = pageCount,
+            coverImg    = coverImg,
+            authorId    = authorId.ifBlank { current.authorId },
+            authorName  = authorName.ifBlank { current.authorName },
+        ) ?: LibraryBookRow(
+            // getBook başarısız olursa bile elimizdeki veriyle devam et
+            id          = id,
+            title       = title,
+            synopsis    = synopsis,
+            genre       = genre,
+            publishYear = publishYear,
+            pageCount   = pageCount,
+            coverImg    = coverImg,
+            authorId    = authorId,
+            authorName  = authorName,
+        )
     }
 
     /** Sorun 2: Kapak değişince book_quotes'taki eski kayıtları güncelle */

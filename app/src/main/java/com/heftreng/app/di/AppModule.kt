@@ -117,13 +117,21 @@ object AppModule {
             // Supabase response'larına Cache-Control header'ı inject et.
             // Postgrest GET sorguları idempotent — 5 dk cache güvenli.
             addNetworkInterceptor(okhttp3.Interceptor { chain ->
-                val request = chain.request()
+                val request  = chain.request()
                 val response = chain.proceed(request)
-                // Sadece GET isteklerini cache'le (POST/PATCH/DELETE asla)
                 if (request.method == "GET") {
-                    response.newBuilder()
-                        .header("Cache-Control", "public, max-age=300") // 5 dk
-                        .build()
+                    val path = request.url.encodedPath
+                    // library_books: yazma sonrası stale veri döndürmemesi için cache'leme
+                    // Diğer GET'ler (feed, authors, quotes) 5 dk cache alır
+                    if (path.contains("library_books")) {
+                        response.newBuilder()
+                            .header("Cache-Control", "no-store")
+                            .build()
+                    } else {
+                        response.newBuilder()
+                            .header("Cache-Control", "public, max-age=300")
+                            .build()
+                    }
                 } else {
                     response
                 }
