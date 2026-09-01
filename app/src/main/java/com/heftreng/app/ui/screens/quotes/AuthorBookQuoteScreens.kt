@@ -1466,8 +1466,7 @@ private fun AdminEditBookDialog(
                                     Icon(Icons.Default.BrokenImage, null,
                                         tint = Muted, modifier = Modifier.size(32.dp))
                                     Text(
-                                        "Bu URL yüklenemedi.
-Lütfen direkt resim linki girin (.jpg .png .webp)",
+                                        "Bu URL yüklenemedi.\nLütfen direkt resim linki girin (.jpg .png .webp)",
                                         color     = Muted,
                                         fontSize  = 11.sp,
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,

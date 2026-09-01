@@ -277,7 +277,9 @@ class LibraryViewModel @Inject constructor(
             // ── Stale-while-revalidate ────────────────────────────────────────
             // 1. Room cache'ten yazar ve kitaplarını anında göster
             val cachedAuthor = try { authorDao.getCachedAuthor(authorId) } catch (_: Exception) { null }
-                            _isOffline.value      = false
+            if (cachedAuthor != null) {
+                _selectedAuthor.value = cachedAuthor.toDomain()
+                _isOffline.value      = false
                 _loading.value        = false
             } else {
                 _loading.value = true
@@ -539,16 +541,6 @@ class LibraryViewModel @Inject constructor(
                 _error.value = e.message
                 // Hata durumunda sunucudan doğru veriyi yükle
                 loadLibraryBook(bookId)
-            }
-        }
-    }
-
-                // Kapak değiştiyse ilgili tüm kayıtlara yansıt
-                if (coverImg.isNotBlank()) {
-                    propagateCoverUpdate(bookId, coverImg)
-                }
-            } catch (e: Exception) {
-                _error.value = e.message
             }
         }
     }
