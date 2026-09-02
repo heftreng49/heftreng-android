@@ -218,6 +218,16 @@
     expandedThreads = next;
   }
 
+  // Her gönderi için doğru OG görselini seç — sabit görsel yerine
+  // gönderiye özel: önce link önizleme görseli, sonra yüklenen fotoğraf,
+  // sonra kitap/alıntı kapağı, en son varsayılan.
+  $: ogImage =
+    post?.linkImage ||
+    post?.imgUrl ||
+    post?.imageURL ||
+    post?.coverImg ||
+    "https://heftreng.onrender.com/og-default.png";
+
   function repostLabel(type: string): string {
     const map: Record<string, string> = {
       serial: "📖 Kitap", chapter: "📄 Bölüm",
@@ -237,10 +247,10 @@
   <meta property="og:description" content={post?.text ? post.text.slice(0, 200) : "Heft Reng gönderisi"} />
   <meta property="og:url"         content={"https://heftreng.onrender.com/post/" + $page.params.id} />
   <meta property="og:type"        content="article" />
-  <meta property="og:image"       content={post?.imageUrl || "https://heftreng.onrender.com/og-default.png"} />
+  <meta property="og:image"       content={ogImage} />
   <meta name="twitter:title"      content={post ? `${post.displayName} — Heft Reng` : "Heft Reng"} />
   <meta name="twitter:description" content={post?.text ? post.text.slice(0, 200) : "Heft Reng gönderisi"} />
-  <meta name="twitter:image"      content={post?.imageUrl || "https://heftreng.onrender.com/og-default.png"} />
+  <meta name="twitter:image"      content={ogImage} />
 </svelte:head>
 
 <!-- Geri + Başlık -->
