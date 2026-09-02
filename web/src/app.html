@@ -24,16 +24,26 @@
 		<meta name="apple-mobile-web-app-title"            content="Heftreng" />
 		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-		<!-- OG önizleme -->
-		<meta name="description"         content="Kürt edebiyatı, dil öğrenme ve kültür platformu" />
-		<meta property="og:site_name"    content="Heftreng" />
-		<meta property="og:title"        content="Heftreng — Kürt Edebiyatı ve Dil Öğrenme" />
-		<meta property="og:description"  content="Kürt edebiyatı, dil öğrenme ve kültür platformu" />
-		<meta property="og:image"        content="https://heftreng.onrender.com/og-default.png" />
-		<meta property="og:url"          content="https://heftreng.onrender.com" />
-		<meta property="og:type"         content="website" />
-		<meta name="twitter:card"        content="summary_large_image" />
-		<meta name="twitter:image"       content="https://heftreng.onrender.com/og-default.png" />
+		<!--
+			OG önizleme — SADECE değişmeyen alanlar burada kalır.
+			og:title, og:description, og:image, og:url gibi sayfa-özel etiketler
+			KALDIRILDI — her route kendi <svelte:head> içinde bunları set eder
+			(post/[id], blog/[id], profile/[uid], kütüphane sayfaları vb.).
+			Eskiden burada sabit değerler vardı; bazı paylaşım botları (WhatsApp,
+			Facebook) sayfayı tam render etmeden bu statik etiketleri okuyup
+			hangi içerik paylaşılırsa paylaşılsın hep aynı önizlemeyi gösteriyordu.
+		-->
+		<meta name="description"      content="Kürt edebiyatı, dil öğrenme ve kültür platformu" />
+		<meta property="og:site_name" content="Heftreng" />
+		<meta property="og:type"      content="website" />
+		<meta name="twitter:card"     content="summary_large_image" />
+
+		<!-- Ana sayfa varsayılanı — route kendi <svelte:head>'i yoksa buraya düşer -->
+		<meta property="og:title"       content="Heftreng — Kürt Edebiyatı ve Dil Öğrenme" />
+		<meta property="og:description" content="Kürt edebiyatı, dil öğrenme ve kültür platformu" />
+		<meta property="og:image"       content="https://heftreng.onrender.com/og-default.png" />
+		<meta property="og:url"         content="https://heftreng.onrender.com" />
+		<meta name="twitter:image"      content="https://heftreng.onrender.com/og-default.png" />
 
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
