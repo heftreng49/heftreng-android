@@ -242,15 +242,15 @@
 
 
 <svelte:head>
-  <title>{post ? `${post.displayName} — Heft Reng` : "Gönderi — Heft Reng"}</title>
-  <meta name="description" content={post?.text ? post.text.slice(0, 160) : "Heft Reng gönderisi"} />
+  <title>{post ? `${post.displayName} — Heft Reng` : "Nivîs — Heft Reng"}</title>
+  <meta name="description" content={post?.text ? post.text.slice(0, 160) : "Nivîsa Heft Reng"} />
   <meta property="og:title"       content={post ? `${post.displayName} — Heft Reng` : "Heft Reng"} />
-  <meta property="og:description" content={post?.text ? post.text.slice(0, 200) : "Heft Reng gönderisi"} />
+  <meta property="og:description" content={post?.text ? post.text.slice(0, 200) : "Nivîsa Heft Reng"} />
   <meta property="og:url"         content={"https://heftreng.onrender.com/post/" + $page.params.id} />
   <meta property="og:type"        content="article" />
   <meta property="og:image"       content={ogImage} />
   <meta name="twitter:title"      content={post ? `${post.displayName} — Heft Reng` : "Heft Reng"} />
-  <meta name="twitter:description" content={post?.text ? post.text.slice(0, 200) : "Heft Reng gönderisi"} />
+  <meta name="twitter:description" content={post?.text ? post.text.slice(0, 200) : "Nivîsa Heft Reng"} />
   <meta name="twitter:image"      content={ogImage} />
 </svelte:head>
 

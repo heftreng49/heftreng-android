@@ -564,14 +564,14 @@
 
 <svelte:head>
   <title>{user ? `${user.displayName} — Heft Reng` : "Profil — Heft Reng"}</title>
-  <meta name="description" content={user?.bio ? user.bio.slice(0, 160) : (user?.displayName ? `${user.displayName} — Heft Reng profili` : "Heft Reng kullanıcı profili")} />
+  <meta name="description" content={user?.bio ? user.bio.slice(0, 160) : (user?.displayName ? `${user.displayName} — profîla Heft Reng` : "Profîla karberê Heft Reng")} />
   <meta property="og:title"       content={user ? `${user.displayName} — Heft Reng` : "Heft Reng"} />
-  <meta property="og:description" content={user?.bio ? user.bio.slice(0, 200) : (user?.displayName ? `${user.displayName} — Heft Reng profili` : "Heft Reng kullanıcı profili")} />
+  <meta property="og:description" content={user?.bio ? user.bio.slice(0, 200) : (user?.displayName ? `${user.displayName} — profîla Heft Reng` : "Profîla karberê Heft Reng")} />
   <meta property="og:url"         content={"https://heftreng.onrender.com/profile/" + $page.params.uid} />
   <meta property="og:type"        content="profile" />
   <meta property="og:image"       content={user?.photoURL || "https://heftreng.onrender.com/og-default.png"} />
   <meta name="twitter:title"      content={user ? `${user.displayName} — Heft Reng` : "Heft Reng"} />
-  <meta name="twitter:description" content={user?.bio ? user.bio.slice(0, 200) : "Heft Reng kullanıcı profili"} />
+  <meta name="twitter:description" content={user?.bio ? user.bio.slice(0, 200) : "Profîla karberê Heft Reng"} />
   <meta name="twitter:image"      content={user?.photoURL || "https://heftreng.onrender.com/og-default.png"} />
 </svelte:head>
 
