@@ -221,12 +221,13 @@
   // Her gönderi için doğru OG görselini seç — sabit görsel yerine
   // gönderiye özel: önce link önizleme görseli, sonra yüklenen fotoğraf,
   // sonra kitap/alıntı kapağı, en son varsayılan.
-  $: ogImage =
+  let ogImage = $derived(
     post?.linkImage ||
     post?.imgUrl ||
     post?.imageURL ||
     post?.coverImg ||
-    "https://heftreng.onrender.com/og-default.png";
+    "https://heftreng.onrender.com/og-default.png"
+  );
 
   function repostLabel(type: string): string {
     const map: Record<string, string> = {
