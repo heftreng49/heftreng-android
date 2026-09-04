@@ -266,6 +266,13 @@ fun AdminScreen(
                             Icon(Icons.Default.Tune, contentDescription = "CMS", tint = Amber)
                         }
                     }
+                    // Hesap Birleştirme — mail/şifre erişimini kaybeden kullanıcıların
+                    // eski hesap verisini yeni hesaba taşımak için. Sadece "admin" rolü.
+                    if (perms?.can("admin") == true || perms?.can("staff") == true) {
+                        IconButton(onClick = { navController.navigate("account_merge") }) {
+                            Icon(Icons.Default.SyncAlt, contentDescription = "Hesap Birleştirme", tint = Amber)
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
             )

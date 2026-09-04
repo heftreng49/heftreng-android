@@ -129,6 +129,67 @@ class AdminViewModel @Inject constructor(
     private val _pushResult   = MutableStateFlow("")
     val pushResult = _pushResult.asStateFlow()
 
+    // ── Hesap Birleştirme ────────────────────────────────────────────────────
+    private val _mergeLoading = MutableStateFlow(false)
+    val mergeLoading = _mergeLoading.asStateFlow()
+
+    private val _mergePreview = MutableStateFlow<Map<String, Any?>?>(null)
+    val mergePreview = _mergePreview.asStateFlow()
+
+    private val _mergeResult = MutableStateFlow<String?>(null)
+    val mergeResult = _mergeResult.asStateFlow()
+
+    fun clearMergeState() {
+        _mergePreview.value = null
+        _mergeResult.value = null
+    }
+
+    /** dryRun=true: sadece sayım yapar, hiçbir şey yazmaz — önizleme için. */
+    fun previewAccountMerge(oldUid: String, newUid: String) {
+        if (oldUid.isBlank() || newUid.isBlank()) {
+            _mergeResult.value = "UID alanları boş olamaz."
+            return
+        }
+        viewModelScope.launch {
+            _mergeLoading.value = true
+            _mergeResult.value = null
+            try {
+                val data = mapOf("oldUid" to oldUid, "newUid" to newUid, "dryRun" to true)
+                val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west1")
+                    .getHttpsCallable("mergeAccounts").call(data).await()
+                @Suppress("UNCHECKED_CAST")
+                val resMap = result.data as? Map<String, Any?>
+                _mergePreview.value = resMap?.get("counts") as? Map<String, Any?>
+            } catch (e: Exception) {
+                _mergeResult.value = "Önizleme hatası: ${e.message}"
+            } finally {
+                _mergeLoading.value = false
+            }
+        }
+    }
+
+    /** dryRun=false: gerçekten taşır. previewAccountMerge ile önce kontrol edilmeli. */
+    fun confirmAccountMerge(oldUid: String, newUid: String) {
+        viewModelScope.launch {
+            _mergeLoading.value = true
+            _mergeResult.value = null
+            try {
+                val data = mapOf("oldUid" to oldUid, "newUid" to newUid, "dryRun" to false)
+                val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west1")
+                    .getHttpsCallable("mergeAccounts").call(data).await()
+                @Suppress("UNCHECKED_CAST")
+                val resMap = result.data as? Map<String, Any?>
+                val totalWrites = (resMap?.get("totalWrites") as? Number)?.toInt() ?: 0
+                _mergeResult.value = "✓ Birleştirme tamamlandı — $totalWrites kayıt taşındı."
+                _mergePreview.value = null
+            } catch (e: Exception) {
+                _mergeResult.value = "Birleştirme hatası: ${e.message}"
+            } finally {
+                _mergeLoading.value = false
+            }
+        }
+    }
+
     // ══════════════════════════════════════════════════════════════════════
     //  Günlük bildirimler — "Günün Alıntısı" / "Günün Kelimesi"
     //  Firestore: daily_quote/{date}, daily_word/{date}  (date = yyyy-MM-dd)

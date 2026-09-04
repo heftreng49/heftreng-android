@@ -1695,3 +1695,238 @@ function _escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+
+// ─── mergeAccounts — Hesap Birleştirme ──────────────────────────────────────
+//
+// SORUN: Kullanıcı eski e-postasına/şifresine erişemiyor, giriş yapamıyor.
+// Yeni hesapla kayıt oluyor ama Firebase Auth doğası gereği yeni UID üretiliyor
+// — eski UID'nin tüm verisi (postlar, takipçiler, mesajlar, Kurdî ilerlemesi,
+// kütüphane vb.) yeni hesaba otomatik geçmiyor.
+//
+// ÇÖZÜM: Admin bu fonksiyonu eski UID + yeni UID ile çağırır. Fonksiyon:
+// 1. Eski UID'nin verisini haritalanmış tüm koleksiyonlarda bulur
+// 2. Aynı veriyi yeni UID altında yeniden oluşturur (copy, not move — eski
+//    veri silinmez, sadece "merged: true" olarak işaretlenir)
+// 3. dryRun: true ile önce SADECE SAYIM yapılabilir — hiçbir yazma olmaz.
+//    Admin panelinde "bu kadar post, bu kadar mesaj taşınacak" önizlemesi için.
+//
+// KAPSAM (haritalanan koleksiyonlar):
+//   • users/{uid}                        — profil (taşınmaz, sadece referans)
+//   • users/{uid}/kf_progress/{doc}       — Kurdî ders ilerlemesi
+//   • users/{uid}/readProgress/{doc}      — okuma ilerlemesi
+//   • feed/{postId} where uid==            — paylaşılan postlar
+//   • comments/{postId}/msgs/{id} where uid== — yorumlar
+//   • likes/{id} where uid==               — beğeniler
+//   • feedLikes/{id} where uid==           — feed beğenileri
+//   • feedSaves/{id} where uid==           — kaydedilenler
+//   • chapterLikes/{id} where uid==        — bölüm beğenileri
+//   • serialLikes/{id} where uid==         — seri beğenileri
+//   • follows/{id} where fromUid|toUid==   — takip ilişkileri
+//   • followRequests/{targetUid}/pending/{fromUid} — bekleyen istekler
+//   • notifications/{id} where toUid==     — bildirimler
+//   • userNotifs/{uid}/msgs/{id}           — kullanıcı bildirim kutusu
+//   • conversations/{id} where participants — mesajlaşma listesi
+//   • convMessages/{convId}/msgs/{id} where uid== — mesaj içerikleri
+//   • readingLists/{uid}/books/{sid}       — okuma listesi
+//   • library_books/{id}/quotes/{id} where uid== — Supabase DEĞİL, Firestore alıntılar varsa
+//
+// NOT: Kütüphane (alıntı/inceleme) verisi Supabase'de tutuluyorsa bu function
+// onu KAPSAMAZ — ayrı bir Supabase tarafı script gerekir (bkz. yorum en altta).
+//
+// GÜVENLİK: Sadece admin çağırabilir. Kaynak/hedef UID'nin gerçekten var
+// olduğu Firebase Auth'tan doğrulanır.
+
+const { getAuth } = require("firebase-admin/auth");
+
+async function checkIsAdmin(db, adminUid) {
+  try {
+    const adminDoc = await db.collection("admins").doc(adminUid).get();
+    if (!adminDoc.exists) return false;
+    const d = adminDoc.data() || {};
+    const role = d.role || "";
+    const legacyPerms = Array.isArray(d.permissions) ? d.permissions : [];
+    return role === "admin" || legacyPerms.includes("staff");
+  } catch (_) {
+    return false;
+  }
+}
+
+/** Tek bir koleksiyonda uid alanına göre eşleşen dökümanları bulup kopyalar. */
+async function mergeSimpleCollection(db, batchQueue, colName, uidField, oldUid, newUid, dryRun, counts) {
+  const snap = await db.collection(colName).where(uidField, "==", oldUid).get();
+  counts[colName] = snap.size;
+  if (dryRun) return;
+  snap.forEach((doc) => {
+    const data = { ...doc.data(), [uidField]: newUid, _mergedFrom: oldUid };
+    const newRef = db.collection(colName).doc(); // yeni ID — çakışma riski yok
+    batchQueue.push({ ref: newRef, data });
+  });
+}
+
+/** Alt-koleksiyonu (users/{uid}/kf_progress gibi) tamamen kopyalar. */
+async function mergeSubcollection(db, batchQueue, parentCol, oldUid, newUid, subCol, dryRun, counts) {
+  const snap = await db.collection(parentCol).doc(oldUid).collection(subCol).get();
+  counts[`${parentCol}/${oldUid}/${subCol}`] = snap.size;
+  if (dryRun) return;
+  snap.forEach((doc) => {
+    const newRef = db.collection(parentCol).doc(newUid).collection(subCol).doc(doc.id);
+    batchQueue.push({ ref: newRef, data: doc.data() });
+  });
+}
+
+exports.mergeAccounts = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+
+  const db = getFirestore();
+  const adminUid = request.auth.uid;
+  const isAdmin = await checkIsAdmin(db, adminUid);
+  if (!isAdmin) throw new HttpsError("permission-denied", "Admin yetkisi gerekli.");
+
+  const { oldUid, newUid, dryRun = true } = request.data || {};
+  if (!oldUid || !newUid) {
+    throw new HttpsError("invalid-argument", "oldUid ve newUid zorunlu.");
+  }
+  if (oldUid === newUid) {
+    throw new HttpsError("invalid-argument", "oldUid ve newUid aynı olamaz.");
+  }
+
+  // Her iki UID'nin de gerçekten Firebase Auth'ta var olduğunu doğrula
+  const auth = getAuth();
+  try {
+    await auth.getUser(oldUid);
+    await auth.getUser(newUid);
+  } catch (e) {
+    throw new HttpsError("not-found", `UID doğrulanamadı: ${e.message}`);
+  }
+
+  const counts = {};
+  const batchQueue = [];
+
+  // ── 1. Doğrudan uid field'lı koleksiyonlar ──────────────────────────────
+  await mergeSimpleCollection(db, batchQueue, "feed",         "uid",    oldUid, newUid, dryRun, counts);
+  await mergeSimpleCollection(db, batchQueue, "likes",        "uid",    oldUid, newUid, dryRun, counts);
+  await mergeSimpleCollection(db, batchQueue, "feedLikes",    "uid",    oldUid, newUid, dryRun, counts);
+  await mergeSimpleCollection(db, batchQueue, "feedSaves",    "uid",    oldUid, newUid, dryRun, counts);
+  await mergeSimpleCollection(db, batchQueue, "chapterLikes", "uid",    oldUid, newUid, dryRun, counts);
+  await mergeSimpleCollection(db, batchQueue, "serialLikes",  "uid",    oldUid, newUid, dryRun, counts);
+  await mergeSimpleCollection(db, batchQueue, "notifications","toUid",  oldUid, newUid, dryRun, counts);
+  await mergeSimpleCollection(db, batchQueue, "commentLikes", "uid",    oldUid, newUid, dryRun, counts);
+
+  // ── 2. follows — hem takip eden hem edilen tarafı ───────────────────────
+  const followsAsFrom = await db.collection("follows").where("fromUid", "==", oldUid).get();
+  const followsAsTo   = await db.collection("follows").where("toUid",   "==", oldUid).get();
+  counts["follows(from)"] = followsAsFrom.size;
+  counts["follows(to)"]   = followsAsTo.size;
+  if (!dryRun) {
+    followsAsFrom.forEach((doc) => {
+      const data = { ...doc.data(), fromUid: newUid, _mergedFrom: oldUid };
+      batchQueue.push({ ref: db.collection("follows").doc(), data });
+    });
+    followsAsTo.forEach((doc) => {
+      const data = { ...doc.data(), toUid: newUid, _mergedFrom: oldUid };
+      batchQueue.push({ ref: db.collection("follows").doc(), data });
+    });
+  }
+
+  // ── 3. Alt-koleksiyonlar (users/{uid}/...) ──────────────────────────────
+  await mergeSubcollection(db, batchQueue, "users", oldUid, newUid, "kf_progress",  dryRun, counts);
+  await mergeSubcollection(db, batchQueue, "users", oldUid, newUid, "readProgress", dryRun, counts);
+
+  // ── 4. userNotifs/{uid}/msgs — kullanıcının aldığı bildirimler ──────────
+  // NOT: Bu koleksiyonun dokümanlarında "uid" alanı YOKTUR (parent path'in
+  // kendisi zaten uid'dir) — bu yüzden aşağıdaki collectionGroup("msgs")
+  // sorgusuyla ÇAKIŞMAZ, ayrı ayrı ele almak güvenlidir.
+  await mergeSubcollection(db, batchQueue, "userNotifs", oldUid, newUid, "msgs", dryRun, counts);
+
+  // ── 5. readingLists/{uid}/books ─────────────────────────────────────────
+  await mergeSubcollection(db, batchQueue, "readingLists", oldUid, newUid, "books", dryRun, counts);
+
+  // ── 6. presence/{uid} — tek döküman, doğrudan kopyala ───────────────────
+  const presenceDoc = await db.collection("presence").doc(oldUid).get();
+  counts["presence"] = presenceDoc.exists ? 1 : 0;
+  if (!dryRun && presenceDoc.exists) {
+    batchQueue.push({ ref: db.collection("presence").doc(newUid), data: presenceDoc.data() });
+  }
+
+  // ── 7/8. "msgs" adlı TÜM alt-koleksiyonlar (comments/*/msgs VE
+  //         convMessages/*/msgs aynı isme sahip — Firestore collectionGroup
+  //         ikisini birden döner). Path prefix'ine bakarak ayırıyoruz.
+  const allMsgs = await db.collectionGroup("msgs").where("uid", "==", oldUid).get();
+  let commentMsgCount = 0;
+  let convMsgCount    = 0;
+  if (!dryRun) {
+    allMsgs.forEach((doc) => {
+      const path = doc.ref.path; // örn: "comments/abc/msgs/xyz" veya "convMessages/abc/msgs/xyz"
+      const data = { ...doc.data(), uid: newUid, _mergedFrom: oldUid };
+      const newRef = doc.ref.parent.doc();
+      if (path.startsWith("comments/"))      { commentMsgCount++; batchQueue.push({ ref: newRef, data }); }
+      else if (path.startsWith("convMessages/")) { convMsgCount++;    batchQueue.push({ ref: newRef, data }); }
+      // Tanınmayan bir "msgs" alt-koleksiyonu varsa (ör. userNotifs/{uid}/msgs
+      // zaten 4. adımda ayrı işlendi) burada atlanır — çift taşımayı önler.
+    });
+  } else {
+    allMsgs.forEach((doc) => {
+      const path = doc.ref.path;
+      if (path.startsWith("comments/"))          commentMsgCount++;
+      else if (path.startsWith("convMessages/"))  convMsgCount++;
+    });
+  }
+  counts["comments(msgs)"]     = commentMsgCount;
+  counts["convMessages(msgs)"] = convMsgCount;
+
+  // ── 9. conversations — kullanıcının katıldığı sohbet listesi ────────────
+  const convs = await db.collection("conversations")
+    .where("participants", "array-contains", oldUid).get();
+  counts["conversations"] = convs.size;
+  if (!dryRun) {
+    convs.forEach((doc) => {
+      const data = doc.data();
+      const participants = (data.participants || []).map((p) => (p === oldUid ? newUid : p));
+      batchQueue.push({ ref: doc.ref, data: { ...data, participants }, merge: true });
+    });
+  }
+
+  // ── users/{oldUid} işaretle (silinmez, "merged" olarak işaretlenir) ─────
+  counts["users(oldUid marked)"] = 1;
+  if (!dryRun) {
+    batchQueue.push({
+      ref: db.collection("users").doc(oldUid),
+      data: { mergedInto: newUid, mergedAt: new Date().toISOString() },
+      merge: true,
+    });
+  }
+
+  if (dryRun) {
+    return { dryRun: true, counts, message: "Önizleme — hiçbir veri yazılmadı." };
+  }
+
+  // ── Batch'leri 500'lük gruplar halinde commit et (Firestore limiti) ─────
+  const BATCH_LIMIT = 450;
+  for (let i = 0; i < batchQueue.length; i += BATCH_LIMIT) {
+    const chunk = batchQueue.slice(i, i + BATCH_LIMIT);
+    const batch = db.batch();
+    chunk.forEach(({ ref, data, merge }) => {
+      batch.set(ref, data, merge ? { merge: true } : {});
+    });
+    await batch.commit();
+  }
+
+  return {
+    dryRun: false,
+    counts,
+    totalWrites: batchQueue.length,
+    message: `Hesap birleştirme tamamlandı: ${oldUid} → ${newUid}`,
+  };
+});
+
+// ── TODO — Supabase tarafı (Kütüphane: alıntılar, incelemeler, yazarlar) ────
+// Bu function SADECE Firestore'u kapsar. Kütüphane verisi (book_quotes,
+// book_reviews tabloları) Supabase'de olduğu için ayrı bir SQL script/RPC
+// gerekir:
+//
+//   UPDATE book_quotes  SET uid = '<newUid>' WHERE uid = '<oldUid>';
+//   UPDATE book_reviews SET uid = '<newUid>' WHERE uid = '<oldUid>';
+//   UPDATE author_follows SET user_id = '<newUid>' WHERE user_id = '<oldUid>';
+//
+// Bu SQL'i Supabase SQL Editor'den admin olarak manuel çalıştırın —
+// mergeAccounts function'ı bu adımı otomatik yapmaz.

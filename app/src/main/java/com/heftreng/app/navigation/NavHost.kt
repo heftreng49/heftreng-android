@@ -128,6 +128,7 @@ sealed class Screen(val route: String) {
     object CmsPage       : Screen("cms_page/{slug}")       { fun go(slug: String) = "cms_page/$slug" }
     object Yazar         : Screen("yazar")
     object KurdiAdmin    : Screen("kurdi_admin")
+    object AccountMerge  : Screen("account_merge")
     object SavedPosts    : Screen("saved_posts")
     object BookChapter   : Screen("book_chapter/{bid}/{cid}") { fun go(b: String, c: String) = "book_chapter/$b/$c" }
 }
@@ -787,6 +788,9 @@ fun HeftrangNavHost(
                 // seviyesinde de aynı kontrolü tekrarlamak (savunma derinliği)
                 // — önceden sadece Ayarlar ekranındaki linkin gizlenmesine
                 // güveniliyordu, tek başına yeterli bir sınır değildi.
+                composable(Screen.AccountMerge.route) {
+                    com.heftreng.app.ui.screens.admin.AccountMergeScreen(navController = navController)
+                }
                 composable(Screen.Admin.route) {
                     if (perms == null) {
                         // Henüz yükleniyor — AdminScreen kendi loading'ini gösterecek
