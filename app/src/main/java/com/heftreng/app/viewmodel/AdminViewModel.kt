@@ -144,6 +144,40 @@ class AdminViewModel @Inject constructor(
         _mergeResult.value = null
     }
 
+    // ── Admin Email Değiştirme — hesap birleştirmeden çok daha basit çözüm ──
+    // UID değişmez, veri taşınmaz — sadece Auth'taki email güncellenir.
+    private val _emailUpdateLoading = MutableStateFlow(false)
+    val emailUpdateLoading = _emailUpdateLoading.asStateFlow()
+
+    private val _emailUpdateResult = MutableStateFlow<String?>(null)
+    val emailUpdateResult = _emailUpdateResult.asStateFlow()
+
+    fun clearEmailUpdateResult() { _emailUpdateResult.value = null }
+
+    fun adminUpdateUserEmail(uid: String, newEmail: String) {
+        if (uid.isBlank() || newEmail.isBlank()) {
+            _emailUpdateResult.value = "UID ve e-posta alanları boş olamaz."
+            return
+        }
+        viewModelScope.launch {
+            _emailUpdateLoading.value = true
+            _emailUpdateResult.value = null
+            try {
+                val data = mapOf("uid" to uid, "newEmail" to newEmail)
+                val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west1")
+                    .getHttpsCallable("adminUpdateUserEmail").call(data).await()
+                @Suppress("UNCHECKED_CAST")
+                val resMap = result.data as? Map<String, Any?>
+                val msg = resMap?.get("message") as? String
+                _emailUpdateResult.value = "✓ ${msg ?: "E-posta güncellendi."}"
+            } catch (e: Exception) {
+                _emailUpdateResult.value = "Hata: ${e.message}"
+            } finally {
+                _emailUpdateLoading.value = false
+            }
+        }
+    }
+
     /** dryRun=true: sadece sayım yapar, hiçbir şey yazmaz — önizleme için. */
     fun previewAccountMerge(oldUid: String, newUid: String) {
         if (oldUid.isBlank() || newUid.isBlank()) {

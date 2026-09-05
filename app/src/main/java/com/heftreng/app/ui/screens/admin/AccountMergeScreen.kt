@@ -45,6 +45,12 @@ fun AccountMergeScreen(
     val preview by adminVm.mergePreview.collectAsState()
     val result   by adminVm.mergeResult.collectAsState()
 
+    // ── Email değiştirme (basit çözüm) ──────────────────────────────────────
+    var emailUid   by remember { mutableStateOf("") }
+    var newEmail   by remember { mutableStateOf("") }
+    val emailLoading by adminVm.emailUpdateLoading.collectAsState()
+    val emailResult   by adminVm.emailUpdateResult.collectAsState()
+
     Scaffold(
         containerColor = Background,
         topBar = {
@@ -66,6 +72,60 @@ fun AccountMergeScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            // ── BÖLÜM 1: E-posta Değiştir (önerilen, basit yöntem) ─────────────
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(SurfaceVar)
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("E-posta Değiştir (Önerilen)", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(
+                    "UID değişmez, hiçbir veri taşınmaz. Kullanıcı yeni e-postayla " +
+                    "\"şifremi unuttum\" akışından giriş yapabilir.",
+                    color = Muted, fontSize = 12.sp,
+                )
+                OutlinedTextField(
+                    value = emailUid,
+                    onValueChange = { emailUid = it.trim() },
+                    label = { Text("Kullanıcı UID") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = newEmail,
+                    onValueChange = { newEmail = it.trim() },
+                    label = { Text("Yeni E-posta") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                Button(
+                    onClick = { adminVm.adminUpdateUserEmail(emailUid, newEmail) },
+                    enabled = !emailLoading && emailUid.isNotBlank() && newEmail.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                ) {
+                    if (emailLoading) {
+                        CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("E-postayı Güncelle", fontWeight = FontWeight.Bold)
+                    }
+                }
+                emailResult?.let { msg ->
+                    Text(
+                        msg,
+                        color = if (msg.startsWith("✓")) Color(0xFF4CAF50) else Color(0xFFE57373),
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+
+            HorizontalDivider(color = Divider)
+
+            // ── BÖLÜM 2: Hesap Birleştirme (karmaşık senaryolar için) ───────────
+            Text("Hesap Birleştirme (Gelişmiş)", color = OnBackground, fontWeight = FontWeight.Bold, fontSize = 15.sp)
             Text(
                 "Kullanıcı eski hesabına (mail/şifre kaybı) erişemiyorsa, yeni bir " +
                 "hesapla kayıt olur. Bu ekran eski hesabın verisini yeni hesaba taşır. " +

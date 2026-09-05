@@ -1930,3 +1930,83 @@ exports.mergeAccounts = onCall({ region: "europe-west1", cors: true, timeoutSeco
 //
 // Bu SQL'i Supabase SQL Editor'den admin olarak manuel çalıştırın —
 // mergeAccounts function'ı bu adımı otomatik yapmaz.
+
+// ─── adminUpdateUserEmail — Admin Email Değiştirme ──────────────────────────
+//
+// SORUN: Kullanıcı eski e-postasına/şifresine erişemiyor, giriş yapamıyor,
+// "şifremi unuttum" da işe yaramıyor çünkü mail kutusuna erişimi yok.
+//
+// ÇÖZÜM: mergeAccounts'tan çok daha basit ve güvenli. UID DEĞİŞMEZ, hiçbir
+// veri taşınmaz — çünkü taşınacak bir şey yok, hesap zaten aynı hesap.
+// Admin sadece Firebase Auth'taki email alanını doğrulama istemeden değiştirir.
+// Kullanıcı yeni email + (biliyorsa) eski şifre ile, ya da yeni email üzerinden
+// "şifremi unuttum" akışıyla giriş yapabilir.
+//
+// GÜVENLİK: Sadece admin çağırabilir. Hedef UID'nin var olduğu doğrulanır.
+// Yeni email'in başka bir hesapta kullanılmadığı Firebase Auth tarafından
+// zaten otomatik kontrol edilir (email-already-exists hatası fırlatır).
+
+exports.adminUpdateUserEmail = onCall(
+  { region: "europe-west1", cors: true },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+
+    const db = getFirestore();
+    const adminUid = request.auth.uid;
+    const isAdmin = await checkIsAdmin(db, adminUid);
+    if (!isAdmin) throw new HttpsError("permission-denied", "Admin yetkisi gerekli.");
+
+    const { uid, newEmail } = request.data || {};
+    if (!uid || !newEmail) {
+      throw new HttpsError("invalid-argument", "uid ve newEmail zorunlu.");
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(newEmail)) {
+      throw new HttpsError("invalid-argument", "Geçersiz e-posta formatı.");
+    }
+
+    const auth = getAuth();
+
+    // Hedef kullanıcının var olduğunu doğrula
+    let userRecord;
+    try {
+      userRecord = await auth.getUser(uid);
+    } catch (e) {
+      throw new HttpsError("not-found", `Kullanıcı bulunamadı: ${e.message}`);
+    }
+
+    const oldEmail = userRecord.email || "(yok)";
+
+    try {
+      await auth.updateUser(uid, {
+        email: newEmail,
+        emailVerified: false, // yeni email doğrulanmamış sayılır, kullanıcı isterse sonradan doğrular
+      });
+    } catch (e) {
+      if (e.code === "auth/email-already-exists") {
+        throw new HttpsError("already-exists", "Bu e-posta zaten başka bir hesapta kullanılıyor.");
+      }
+      throw new HttpsError("internal", `E-posta güncellenemedi: ${e.message}`);
+    }
+
+    // Firestore users/{uid} dokümanındaki email alanını da senkronize et (varsa)
+    try {
+      await db.collection("users").doc(uid).set(
+        { email: newEmail, emailChangedByAdminAt: new Date().toISOString() },
+        { merge: true },
+      );
+    } catch (_) {
+      // Firestore güncellemesi başarısız olsa bile Auth güncellemesi geçerli —
+      // kritik olan Auth tarafı, Firestore senkronu ikincil.
+    }
+
+    return {
+      success: true,
+      uid,
+      oldEmail,
+      newEmail,
+      message: `E-posta güncellendi: ${oldEmail} → ${newEmail}`,
+    };
+  },
+);
