@@ -1774,7 +1774,7 @@ async function mergeSubcollection(db, batchQueue, parentCol, oldUid, newUid, sub
   });
 }
 
-exports.mergeAccounts = onCall(async (request) => {
+exports.mergeAccounts = onCall({ region: "europe-west1", cors: true, timeoutSeconds: 300 }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
 
   const db = getFirestore();
