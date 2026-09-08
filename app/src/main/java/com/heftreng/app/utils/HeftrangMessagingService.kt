@@ -183,8 +183,15 @@ class HeftrangMessagingService : FirebaseMessagingService() {
             }
             "message" -> {
                 // Aynı konuşma gruplanır, sadece ilk bildirimde ses
+                // DÜZELTME: setBigContentTitle eklendi — gönderen adı uzunsa
+                // (örn. iki kelimeli isim + soyisim) daraltılmış bildirimde
+                // kesilebiliyordu; genişletilince artık tam görünüyor.
                 notificationBuilder
-                    .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                    .setStyle(
+                        NotificationCompat.BigTextStyle()
+                            .bigText(body)
+                            .setBigContentTitle(title)
+                    )
                     .setGroup("conv_$convId")
                     .setOnlyAlertOnce(true)
 
@@ -223,8 +230,14 @@ class HeftrangMessagingService : FirebaseMessagingService() {
                 }
             }
             else -> {
+                // DÜZELTME: Beğeni/takip/yorum bildirimlerinde de gönderen
+                // adı içeren başlık uzunsa daraltılmış halde kesiliyordu.
                 notificationBuilder
-                    .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                    .setStyle(
+                        NotificationCompat.BigTextStyle()
+                            .bigText(body)
+                            .setBigContentTitle(title)
+                    )
             }
         }
 
