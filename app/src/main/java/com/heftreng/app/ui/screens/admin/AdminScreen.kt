@@ -2467,6 +2467,13 @@ private fun AdminLibraryTab(libraryVm: LibraryViewModel) {
     val authors  by libraryVm.authors.collectAsState()
     val loading  by libraryVm.loading.collectAsState()
     val error    by libraryVm.error.collectAsState()
+    // DÜZELTME: Admin panelinde yazarlar sayfalanarak (20'şer) geliyor ama
+    // "daha fazla yükle" hiç bağlanmamıştı — bu yüzden liste hep ilk 20
+    // yazarda kalıyordu. loadAuthors() zaten sayfalama destekliyor,
+    // sadece bu ekrana eksik olan hasMore/loading state'lerini ve
+    // loadMoreAuthors() çağrısını ekliyoruz.
+    val authorsHasMore  by libraryVm.authorsHasMore.collectAsState()
+    val authorsLoading  by libraryVm.authorsLoading.collectAsState()
     val scope    = rememberCoroutineScope()
 
     var showNewAuthor by remember { mutableStateOf(false) }
@@ -2483,7 +2490,7 @@ private fun AdminLibraryTab(libraryVm: LibraryViewModel) {
     var counterStatus  by remember { mutableStateOf("") }
     var counterRunning by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { libraryVm.loadAuthors() }
+    LaunchedEffect(Unit) { libraryVm.loadAuthors(forceRefresh = true) }
 
     LazyColumn(
         modifier       = Modifier.fillMaxSize(),
@@ -2645,6 +2652,25 @@ private fun AdminLibraryTab(libraryVm: LibraryViewModel) {
             item {
                 Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                     Text("Henüz yazar yok", color = Muted, fontSize = 13.sp)
+                }
+            }
+        }
+
+        // ── Daha Fazla Yükle ─────────────────────────────────────────────
+        if (authors.isNotEmpty() && authorsHasMore) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                    if (authorsLoading) {
+                        CircularProgressIndicator(color = Amber, strokeWidth = 2.dp,
+                            modifier = Modifier.size(24.dp))
+                    } else {
+                        OutlinedButton(
+                            onClick = { libraryVm.loadMoreAuthors() },
+                            shape   = RoundedCornerShape(10.dp),
+                            border  = androidx.compose.foundation.BorderStroke(1.dp, Divider),
+                            colors  = ButtonDefaults.outlinedButtonColors(contentColor = OnBackground),
+                        ) { Text("Daha Fazla Yükle", fontSize = 13.sp) }
+                    }
                 }
             }
         }
