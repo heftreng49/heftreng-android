@@ -267,6 +267,11 @@ class AdsViewModel @Inject constructor(
     private var rewardedInterstitialUnitId : String  = ""
     private var rewardedInterstitialLoading: Boolean = false
 
+    /** ScreenTracker gibi çağıranların, ödül vaat eden Toast'ı göstermeden
+     *  önce reklamın gerçekten hazır olup olmadığını kontrol etmesi için. */
+    val isRewardedInterstitialReady: Boolean
+        get() = rewardedInterstitialAd != null
+
     private fun loadRewardedInterstitialAd(unitId: String) {
         if (unitId.isBlank()) return
         if (rewardedInterstitialAd != null || rewardedInterstitialLoading) return
@@ -315,11 +320,14 @@ class AdsViewModel @Inject constructor(
         }
         val ad = rewardedInterstitialAd
         if (ad == null) {
-            // Rewarded interstitial henüz yüklenmemiş — bu sefer atla
-            // Normal interstitial'a düşmek AdMob politikasına aykırı:
-            // kullanıcı ödüllü reklam beklediği için ödülsüz gösterilemez
-            android.util.Log.d("AdsVM", "Rewarded interstitial hazır değil, bu geçiş atlanıyor")
-            onDismissed()
+            // Rewarded interstitial'da doluluk/fill yok (küçük dil pazarlarında
+            // sık yaşanır) — kullanıcıya ödül vaat EDİLMEDİYSE (ScreenTracker
+            // Toast'ı isRewardedInterstitialReady kontrolünden geçtiği için bu
+            // durumda hiç gösterilmez) normal interstitial'a düşüp geçişi/
+            // gösterimi kurtarıyoruz; ödülsüz gösterildiği için AdFreeManager
+            // hiç çağrılmıyor.
+            android.util.Log.d("AdsVM", "Rewarded interstitial hazır değil, normal interstitial'a düşülüyor")
+            showInterstitial(activity, onAdDismissed = onDismissed)
             return
         }
         lastInterstitialShownAtMs = now

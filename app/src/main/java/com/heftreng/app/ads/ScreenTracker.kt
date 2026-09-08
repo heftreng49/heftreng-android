@@ -73,9 +73,14 @@ class ScreenTracker @Inject constructor() : Application.ActivityLifecycleCallbac
 
         lastShownAtCount = screenCount
 
-        val lang = activity.getSharedPreferences("hf_settings", Context.MODE_PRIVATE)
-            .getString("hf_lang", "tr") ?: "tr"
-        Toast.makeText(activity, Strings.rewardedInterstitialInfo(lang), Toast.LENGTH_LONG).show()
+        // Ödül vaadi SADECE reklam gerçekten hazırsa gösterilir — hazır
+        // değilse (doluluk yok) showRewardedInterstitial() ödülsüz normal
+        // interstitial'a düşüyor; o durumda kullanıcıya boş vaat vermeyelim.
+        if (adsVm.isRewardedInterstitialReady) {
+            val lang = activity.getSharedPreferences("hf_settings", Context.MODE_PRIVATE)
+                .getString("hf_lang", "tr") ?: "tr"
+            Toast.makeText(activity, Strings.rewardedInterstitialInfo(lang), Toast.LENGTH_LONG).show()
+        }
 
         adsVm.showRewardedInterstitial(
             activity    = activity,
