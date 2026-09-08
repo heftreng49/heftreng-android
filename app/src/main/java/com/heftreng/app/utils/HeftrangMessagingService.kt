@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.util.Patterns
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
 import com.google.firebase.auth.FirebaseAuth
@@ -160,6 +161,30 @@ class HeftrangMessagingService : FirebaseMessagingService() {
             .setColor(0xFF8B5CF6.toInt())
             .setLights(0xFF8B5CF6.toInt(), 500, 500)
             .setVibrate(longArrayOf(0, 250, 100, 250))
+
+        // ── Link tespiti ──────────────────────────────────────────────────
+        // Bildirim gövdesinde bir URL varsa "Bağlantıyı Aç" aksiyonu eklenir.
+        // Sistem bildirim çubuğu metindeki linkleri kendiliğinden tıklanabilir
+        // yapmaz; bunun için ayrı bir buton/PendingIntent gerekir.
+        val bodyUrl = Patterns.WEB_URL.matcher(body).let { m -> if (m.find()) m.group() else null }
+        if (bodyUrl != null) {
+            val normalizedUrl = if (bodyUrl.startsWith("http://") || bodyUrl.startsWith("https://"))
+                bodyUrl else "https://$bodyUrl"
+            val linkIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(normalizedUrl))
+            val linkPendingIntent = PendingIntent.getActivity(
+                this,
+                normalizedUrl.hashCode(),
+                linkIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            notificationBuilder.addAction(
+                NotificationCompat.Action.Builder(
+                    R.drawable.ic_notif,
+                    "Bağlantıyı Aç",
+                    linkPendingIntent,
+                ).build()
+            )
+        }
 
         when (type) {
             "daily_quote" -> {
