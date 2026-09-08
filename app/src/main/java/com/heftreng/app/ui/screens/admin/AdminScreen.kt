@@ -127,9 +127,11 @@ fun AdminScreen(
     // Düzenle tab state
     val feedPosts   by vm.feedPosts.collectAsState()
     val editResult  by vm.editResult.collectAsState()
-    var editUser    by remember { mutableStateOf<com.heftreng.app.data.model.User?>(null) }
-    var editName    by remember { mutableStateOf("") }
-    var editPhoto   by remember { mutableStateOf("") }
+    var editUser     by remember { mutableStateOf<com.heftreng.app.data.model.User?>(null) }
+    var editName     by remember { mutableStateOf("") }
+    var editPhoto    by remember { mutableStateOf("") }
+    var editUsername by remember { mutableStateOf("") }
+    var editUsernameErr by remember { mutableStateOf<String?>(null) }
     var deleteUserConfirm by remember { mutableStateOf<String?>(null) }
     var deletePostConfirm by remember { mutableStateOf<String?>(null) }
     var postSearch  by remember { mutableStateOf("") }
@@ -987,9 +989,11 @@ fun AdminScreen(
                                         onVerify    = if (!user.emailVerified) {{ vm.verifyUser(user.uid) }} else null,
                                         onClickName = { navController.navigate("profile/${user.uid}") },
                                         onEdit      = {
-                                            editUser  = user
-                                            editName  = user.displayName
-                                            editPhoto = user.photoURL
+                                            editUser     = user
+                                            editName     = user.displayName
+                                            editPhoto    = user.photoURL
+                                            editUsername = user.username
+                                            editUsernameErr = null
                                         },
                                         onDelete          = { deleteUserConfirm = user.uid },
                                         isEditing         = editUser?.uid == user.uid,
@@ -997,8 +1001,32 @@ fun AdminScreen(
                                         editPhoto         = editPhoto,
                                         onEditNameChange  = { editName = it },
                                         onEditPhotoChange = { editPhoto = it },
-                                        onSaveEdit        = { vm.updateUserProfile(user.uid, editName, editPhoto); editUser = null },
-                                        onCancelEdit      = { editUser = null },
+                                        editUsername      = editUsername,
+                                        editUsernameErr   = editUsernameErr,
+                                        onEditUsernameChange = {
+                                            editUsername = it.lowercase().filter { c -> c.isLetterOrDigit() || c == '_' }
+                                            editUsernameErr = null
+                                        },
+                                        onSaveEdit = {
+                                            val trimmedUsername = editUsername.trim()
+                                            val currentUsername = user.username
+                                            val usernameChanged = trimmedUsername != currentUsername && trimmedUsername.isNotBlank()
+                                            if (usernameChanged) {
+                                                vm.updateUserUsername(
+                                                    uid         = user.uid,
+                                                    newUsername = trimmedUsername,
+                                                    onSuccess   = {
+                                                        vm.updateUserProfile(user.uid, editName, editPhoto)
+                                                        editUser = null
+                                                    },
+                                                    onError = { editUsernameErr = it },
+                                                )
+                                            } else {
+                                                vm.updateUserProfile(user.uid, editName, editPhoto)
+                                                editUser = null
+                                            }
+                                        },
+                                        onCancelEdit = { editUser = null; editUsernameErr = null },
                                     )
                                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                                 }
@@ -1683,16 +1711,58 @@ fun AdminScreen(
                                             adminTextField(editName,  { editName  = it }, "Yeni isim")
                                             Spacer(Modifier.height(6.dp))
                                             adminTextField(editPhoto, { editPhoto = it }, "Yeni fotoğraf URL")
+                                            Spacer(Modifier.height(6.dp))
+                                            OutlinedTextField(
+                                                value         = editUsername,
+                                                onValueChange = {
+                                                    editUsername = it.lowercase().filter { c -> c.isLetterOrDigit() || c == '_' }
+                                                    editUsernameErr = null
+                                                },
+                                                label         = { Text("@kullanıcı adı") },
+                                                singleLine    = true,
+                                                isError       = editUsernameErr != null,
+                                                modifier      = Modifier.fillMaxWidth(),
+                                                shape         = RoundedCornerShape(10.dp),
+                                                colors        = OutlinedTextFieldDefaults.colors(
+                                                    focusedBorderColor      = Amber,
+                                                    unfocusedBorderColor    = Divider,
+                                                    focusedTextColor        = OnBackground,
+                                                    unfocusedTextColor      = OnBackground,
+                                                    unfocusedContainerColor = SurfaceVar,
+                                                    focusedContainerColor   = SurfaceVar,
+                                                ),
+                                            )
+                                            if (editUsernameErr != null) {
+                                                Text(editUsernameErr!!, color = Error, fontSize = 11.sp)
+                                            }
                                             Spacer(Modifier.height(8.dp))
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 Button(
-                                                    onClick  = { vm.updateUserProfile(user.uid, editName, editPhoto); editUser = null },
+                                                    onClick = {
+                                                        val trimmedUsername = editUsername.trim()
+                                                        val currentUsername = user.username
+                                                        val usernameChanged = trimmedUsername != currentUsername && trimmedUsername.isNotBlank()
+                                                        if (usernameChanged) {
+                                                            vm.updateUserUsername(
+                                                                uid         = user.uid,
+                                                                newUsername = trimmedUsername,
+                                                                onSuccess   = {
+                                                                    vm.updateUserProfile(user.uid, editName, editPhoto)
+                                                                    editUser = null
+                                                                },
+                                                                onError = { editUsernameErr = it },
+                                                            )
+                                                        } else {
+                                                            vm.updateUserProfile(user.uid, editName, editPhoto)
+                                                            editUser = null
+                                                        }
+                                                    },
                                                     shape    = RoundedCornerShape(8.dp),
                                                     colors   = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
                                                     modifier = Modifier.weight(1f),
                                                 ) { Text("Kaydet", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                                                 OutlinedButton(
-                                                    onClick  = { editUser = null },
+                                                    onClick  = { editUser = null; editUsernameErr = null },
                                                     shape    = RoundedCornerShape(8.dp),
                                                     modifier = Modifier.weight(1f),
                                                 ) { Text("İptal", fontSize = 12.sp, color = Muted) }
@@ -3494,13 +3564,16 @@ private fun AdminUserRow(
     onClickName : (() -> Unit)? = null,
     onEdit      : (() -> Unit)? = null,
     onDelete    : (() -> Unit)? = null,
-    isEditing         : Boolean = false,
-    editName          : String = "",
-    editPhoto         : String = "",
-    onEditNameChange  : (String) -> Unit = {},
-    onEditPhotoChange : (String) -> Unit = {},
-    onSaveEdit        : () -> Unit = {},
-    onCancelEdit      : () -> Unit = {},
+    isEditing            : Boolean = false,
+    editName             : String = "",
+    editPhoto            : String = "",
+    editUsername         : String = "",
+    editUsernameErr      : String? = null,
+    onEditNameChange     : (String) -> Unit = {},
+    onEditPhotoChange    : (String) -> Unit = {},
+    onEditUsernameChange : (String) -> Unit = {},
+    onSaveEdit           : () -> Unit = {},
+    onCancelEdit         : () -> Unit = {},
 ) {
   Column(Modifier.fillMaxWidth()) {
     Row(
@@ -3596,6 +3669,28 @@ private fun AdminUserRow(
             adminTextField(editName,  onEditNameChange,  "Yeni isim")
             Spacer(Modifier.height(6.dp))
             adminTextField(editPhoto, onEditPhotoChange, "Yeni fotoğraf URL")
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(
+                value         = editUsername,
+                onValueChange = onEditUsernameChange,
+                label         = { Text("@kullanıcı adı", color = com.heftreng.app.ui.theme.Muted) },
+                singleLine    = true,
+                isError       = editUsernameErr != null,
+                modifier      = Modifier.fillMaxWidth(),
+                shape         = RoundedCornerShape(10.dp),
+                colors        = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor      = com.heftreng.app.ui.theme.Amber,
+                    unfocusedBorderColor    = com.heftreng.app.ui.theme.Divider,
+                    focusedTextColor        = com.heftreng.app.ui.theme.OnBackground,
+                    unfocusedTextColor      = com.heftreng.app.ui.theme.OnBackground,
+                    unfocusedContainerColor = com.heftreng.app.ui.theme.SurfaceVar,
+                    focusedContainerColor   = com.heftreng.app.ui.theme.SurfaceVar,
+                ),
+            )
+            if (editUsernameErr != null) {
+                Text(editUsernameErr!!, color = com.heftreng.app.ui.theme.Error, fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 2.dp))
+            }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
                 Button(

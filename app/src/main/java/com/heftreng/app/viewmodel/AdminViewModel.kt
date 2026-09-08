@@ -1039,6 +1039,80 @@ class AdminViewModel @Inject constructor(
     private val _editResult = MutableStateFlow("")
     val editResult = _editResult.asStateFlow()
 
+    /**
+     * Admin: Belirtilen kullanıcının kullanıcı adını güvenli şekilde günceller.
+     * usernames koleksiyonu atomik transaction ile güncellenir (aynı handle çakışmasını önler).
+     */
+    fun updateUserUsername(uid: String, newUsername: String, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
+        if (uid.isBlank() || _perms.value?.can("edit") != true) { onError("Yetki yok"); return }
+        if (newUsername.isBlank()) { onError("Kullanıcı adı boş olamaz"); return }
+
+        val handle = newUsername.trim()
+            .lowercase(java.util.Locale.ROOT)
+            .filter { it in 'a'..'z' || it in '0'..'9' || it == '_' }
+            .take(20)
+
+        if (handle.isBlank() || handle.length < 3) { onError("En az 3 geçerli karakter gerekli"); return }
+
+        viewModelScope.launch {
+            try {
+                val usernamesRef = firestore.collection("usernames")
+                val usersRef     = firestore.collection("users")
+
+                // Eski username'i al
+                val oldSnap = usersRef.document(uid).get().await()
+                val oldHandle = (oldSnap.getString("username") ?: "").trim().lowercase(java.util.Locale.ROOT)
+
+                if (oldHandle == handle) { onSuccess(); return@launch }
+
+                // Atomik transaction: kontrol + rezerve + güncelle
+                firestore.runTransaction { tx ->
+                    val takenSnap = tx.get(usernamesRef.document(handle))
+                    if (takenSnap.exists()) {
+                        val ownerUid = takenSnap.getString("uid") ?: ""
+                        if (ownerUid != uid) throw Exception("Bu kullanıcı adı zaten alınmış")
+                    }
+                    if (oldHandle.isNotBlank()) tx.delete(usernamesRef.document(oldHandle))
+                    tx.set(
+                        usernamesRef.document(handle),
+                        mapOf("uid" to uid, "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp())
+                    )
+                    tx.update(
+                        usersRef.document(uid),
+                        mapOf("username" to handle, "usernameLower" to handle)
+                    )
+                }.await()
+
+                // Yerel listeyi güncelle
+                _users.value = _users.value.map {
+                    if (it.uid == uid) it.copy(username = handle) else it
+                }
+                _editResult.value = "✓ Kullanıcı adı güncellendi: @$handle"
+
+                // Feed'deki username alanını da güncelle (son 50 gönderi)
+                try {
+                    firestore.collection("feed").whereEqualTo("uid", uid)
+                        .limit(50).get().await().documents.forEach {
+                            it.reference.update("username", handle)
+                        }
+                } catch (_: Exception) {}
+
+                // Supabase senkronizasyonu
+                try {
+                    supabase.postgrest["users"].upsert(
+                        mapOf("uid" to uid, "username" to handle, "username_lower" to handle)
+                    )
+                } catch (_: Exception) {}
+
+                onSuccess()
+            } catch (e: Exception) {
+                val msg = "✗ ${e.message ?: "Hata"}"
+                _editResult.value = msg
+                onError(e.message ?: "Hata")
+            }
+        }
+    }
+
     fun updateUserProfile(uid: String, displayName: String, photoURL: String) {
         if (uid.isBlank() || _perms.value?.can("edit") != true) return
         viewModelScope.launch {

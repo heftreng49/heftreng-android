@@ -1251,7 +1251,16 @@ class ProfileViewModel @Inject constructor(
 
                 onSuccess()
 
-            } catch (e: Exception) { onError(e.message ?: "Hata") }
+            } catch (e: Exception) {
+                val msg = e.message ?: "Hata"
+                val friendlyMsg = when {
+                    msg.contains("PERMISSION_DENIED", ignoreCase = true) ->
+                        "E-posta adresinizi doğrulamanız gerekiyor. Lütfen gelen kutunuzu kontrol edin."
+                    msg.contains("alınmış", ignoreCase = true) -> msg
+                    else -> msg
+                }
+                onError(friendlyMsg)
+            }
         }
     }
 

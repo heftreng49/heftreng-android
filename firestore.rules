@@ -127,7 +127,10 @@ service cloud.firestore {
       // (doğrulama ekranı) hiç açılmıyordu. Hesap zaten bot/spam katmanından
       // (verifyRegistration Cloud Function) geçiyor, bu yüzden create için sahiplik yeterli.
       allow create: if isOwner(uid);
-      allow update: if (isOwner(uid) && isVerified()) || isModerator();
+      // isVerified() şartı username/bio/website gibi profil güncellemelerini
+      // doğrulanmamış e-posta sahipleri için de açar. Bot riski düşük —
+      // hesap zaten Cloud Function (verifyRegistration) katmanından geçti.
+      allow update: if isOwner(uid) || isModerator();
       allow delete: if isOwner(uid) || isAdmin();
 
       match /kf_progress/{doc} {
@@ -489,11 +492,15 @@ service cloud.firestore {
     // ─── USERNAMES ────────────────────────────────────────────
     match /usernames/{handle} {
       allow read: if true;
-      allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
-      allow update: if isAuth()
+      // Admin/edit izni: kullanıcı adlarını başkaları adına oluşturabilir/silebilir
+      allow create: if (isAuth() && request.resource.data.uid == request.auth.uid)
+          || isAdmin() || hasPermission("edit");
+      allow update: if (isAuth()
           && resource.data.uid == request.auth.uid
-          && request.resource.data.uid == request.auth.uid;
-      allow delete: if isAuth() && resource.data.uid == request.auth.uid;
+          && request.resource.data.uid == request.auth.uid)
+          || isAdmin() || hasPermission("edit");
+      allow delete: if (isAuth() && resource.data.uid == request.auth.uid)
+          || isAdmin() || hasPermission("edit");
     }
 
     // ─── CMS ──────────────────────────────────────────────────
