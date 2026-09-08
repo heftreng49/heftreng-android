@@ -84,12 +84,10 @@ class ScreenTracker @Inject constructor() : Application.ActivityLifecycleCallbac
 
         adsVm.showRewardedInterstitial(
             activity    = activity,
-            onRewarded  = {
-                // Kullanıcı reklamı tamamladı → 1 saat native/banner reklamsız deneyim
-                // (AdFreeManager.AD_FREE_DURATION_MS = 1 saat, sabit)
-                // Not: Kurdî dersleri kendi rewarded sistemiyle çalışır, buradan etkilenmez
-                com.heftreng.app.ads.AdFreeManager.grantAdFree()
-            },
+            // grantAdFree() AdsViewModel.showRewardedInterstitial() içinde çağrılıyor.
+            // Burada tekrar çağırmak çift grant yaratıyordu (2 saat veriyor gibi görünüyor,
+            // ama aslında aynı bitiş zamanını iki kez yazıyordu — yine de karışıklık).
+            onRewarded  = {},
             onDismissed = { onDismiss() },
         )
     }

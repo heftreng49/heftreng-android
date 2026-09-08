@@ -340,12 +340,20 @@ class AdsViewModel @Inject constructor(
         }
         ad.show(activity) { _ ->
             // RewardItem — kullanıcı reklamı tamamladı
-            // 1 saat reklamsız deneyim ver (kalan süre varsa üstüne ekler)
+            // AdFreeManager.grantAdFree() SADECE burada çağrılır.
+            // ScreenTracker.tryShowInterstitial()'daki onRewarded callback'i
+            // de grantAdFree çağırıyordu → çift grant → süre 2x uzuyordu.
+            // Şimdi onRewarded() callback'i boş, grant tek yerden yapılıyor.
             com.heftreng.app.ads.AdFreeManager.grantAdFree()
             onRewarded()
         }
     }
 
+    // NOT: fun isXxx(): Boolean JVM imzası Kotlin'de val isXxx: Boolean property getter ile
+    // çakışır (her ikisi de bytecode'da boolean isXxx() üretir). Hilt proxy sınıfı
+    // oluştururken bu çakışma derleme hatasına neden oluyordu.
+    // Çözüm: @JvmName ile JVM imzasını açıkça farklılaştır.
+    @JvmName("rewardedInterstitialReady")
     fun isRewardedInterstitialReady(): Boolean = rewardedInterstitialAd != null
 
     fun loadInterstitial() {
