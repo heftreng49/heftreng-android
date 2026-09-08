@@ -419,10 +419,11 @@ class AdsViewModel @Inject constructor(
                 override fun onAdFailedToLoad(adError: LoadAdError) {
                     rewardedAd      = null
                     rewardedLoading = false
-                    // No-fill veya ağ hatası — 30 sn sonra bir kez daha dene.
+                    // No-fill veya ağ hatası — 60 sn sonra bir kez daha dene.
                     // Sürekli retry fill rate'i bozar; tek gecikmiş deneme yeterli.
+                    // 30s → 60s: AdMob "low match rate" uyarısında önerilen minimum bekleme.
                     viewModelScope.launch {
-                        kotlinx.coroutines.delay(30_000L)
+                        kotlinx.coroutines.delay(60_000L)
                         if (rewardedAd == null && !rewardedLoading) {
                             preloadRewardedAd(unitId)
                         }
@@ -550,7 +551,7 @@ class AdsViewModel @Inject constructor(
                     adFreeHourAd      = null
                     adFreeHourLoading = false
                     viewModelScope.launch {
-                        kotlinx.coroutines.delay(30_000L)
+                        kotlinx.coroutines.delay(60_000L)
                         if (adFreeHourAd == null && !adFreeHourLoading) {
                             preloadAdFreeHourAd(unitId)
                         }

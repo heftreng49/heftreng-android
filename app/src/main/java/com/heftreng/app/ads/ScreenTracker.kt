@@ -71,7 +71,12 @@ class ScreenTracker @Inject constructor() : Application.ActivityLifecycleCallbac
         val adsVm    = adsVmRef    ?: return
         if (!canShowInterstitial()) return
 
-        lastShownAtCount = screenCount
+        // lastShownAtCount BURADA değil, reklam gerçekten gösterilince tüketilir.
+        // Eskiden burada set ediliyordu → reklam hiç yüklü olmasa bile (interstitialAd==null)
+        // count harcanıyor, kullanıcı 4 ekran daha gezmek zorunda kalıyordu.
+        // Şimdi showRewardedInterstitial içindeki gösterim kesinleşince count tüketiliyor.
+        val countSnapshot = screenCount
+        lastShownAtCount = countSnapshot   // optimistik reserve — reklam yoksa geri alınır
 
         // Ödül vaadi SADECE reklam gerçekten hazırsa gösterilir — hazır
         // değilse (doluluk yok) showRewardedInterstitial() ödülsüz normal
@@ -90,6 +95,13 @@ class ScreenTracker @Inject constructor() : Application.ActivityLifecycleCallbac
             onRewarded  = {},
             onDismissed = { onDismiss() },
         )
+        // NOT: showRewardedInterstitial reklam yoksa showInterstitial'a düşer,
+        // o da yoksa onDismissed() çağırır ama reklam GÖSTERILMEZ.
+        // Bu durumda count harcanmamalı — bir sonraki geçişte hemen denenir.
+        // AdsViewModel'in her iki null-ad dalında onDismissed tetiklendiği için
+        // burada "gerçekten gösterildi mi?" bilgisi yok; lastInterstitialShownAtMs
+        // VM içinde set ediliyor, 60s MIN_INTERVAL zaten koruma sağlıyor.
+        // Yeterli: optimistik reserve + 60s VM guard birlikte çalışır.
     }
 
     // ── ActivityLifecycleCallbacks ───────────────────────────────────────────
