@@ -267,11 +267,6 @@ class AdsViewModel @Inject constructor(
     private var rewardedInterstitialUnitId : String  = ""
     private var rewardedInterstitialLoading: Boolean = false
 
-    /** ScreenTracker gibi çağıranların, ödül vaat eden Toast'ı göstermeden
-     *  önce reklamın gerçekten hazır olup olmadığını kontrol etmesi için. */
-    val isRewardedInterstitialReady: Boolean
-        get() = rewardedInterstitialAd != null
-
     private fun loadRewardedInterstitialAd(unitId: String) {
         if (unitId.isBlank()) return
         if (rewardedInterstitialAd != null || rewardedInterstitialLoading) return
