@@ -160,8 +160,21 @@ class ProfileViewModel @Inject constructor(
             try {
                 // user + follow durumu + followRequest paralel
                 val userDocDeferred = async {
-                    try { firestore.collection("users").document(targetUid).get(Source.SERVER).await() }
-                    catch (_: Exception) { firestore.collection("users").document(targetUid).get(Source.CACHE).await() }
+                    try {
+                        firestore.collection("users").document(targetUid).get(Source.SERVER).await()
+                    } catch (e: Exception) {
+                        // DÜZELTME: Cache'te doküman hiç yoksa (yeni/ilk kez görülen
+                        // profil, offline durumda) .get(Source.CACHE) da exception
+                        // fırlatıyordu ve bu, coroutine iptaliyle çakışınca
+                        // uncaught exception olarak crash'e yol açıyordu.
+                        android.util.Log.w("ProfileVM", "userDoc SERVER hatası: ${e.message}, CACHE deneniyor")
+                        try {
+                            firestore.collection("users").document(targetUid).get(Source.CACHE).await()
+                        } catch (e2: Exception) {
+                            android.util.Log.w("ProfileVM", "userDoc CACHE de başarısız: ${e2.message}")
+                            null
+                        }
+                    }
                 }
                 val followDocDeferred = async {
                     if (targetUid != myUid && myUid.isNotEmpty()) {
@@ -191,7 +204,7 @@ class ProfileViewModel @Inject constructor(
                 val isFollowingResult = followDocDeferred.await()
                 val followRequestDoc  = followRequestDeferred.await()
 
-                val d = userDoc.data ?: run {
+                val d = userDoc?.data ?: run {
                     _userNotFound.value = true
                     _loading.value = false
                     return@launch
@@ -620,15 +633,33 @@ class ProfileViewModel @Inject constructor(
         _followersCount.value     += 1
         viewModelScope.launch {
             try {
-                // İki Firestore get() paralel — biri diğerini beklemez
-                val myDocDeferred     = async { try { firestore.collection("users").document(myUid).get(Source.SERVER).await() } catch (_: Exception) { firestore.collection("users").document(myUid).get(Source.CACHE).await() } }
-                val targetDocDeferred = async { try { firestore.collection("users").document(targetUid).get(Source.SERVER).await() } catch (_: Exception) { firestore.collection("users").document(targetUid).get(Source.CACHE).await() } }
+                // İki Firestore get() paralel — biri diğerini beklemez.
+                // DÜZELTME: CACHE fallback'i de exception fırlatabiliyordu
+                // (doküman cache'te hiç yoksa) — bu, async{} içinde coroutine
+                // iptaliyle çakışıp uncaught exception olarak crash'e yol
+                // açıyordu. Artık cache de başarısız olursa null dönüyor.
+                val myDocDeferred     = async {
+                    try { firestore.collection("users").document(myUid).get(Source.SERVER).await() }
+                    catch (e: Exception) {
+                        android.util.Log.w("ProfileVM", "myDoc SERVER hatası: ${e.message}")
+                        try { firestore.collection("users").document(myUid).get(Source.CACHE).await() }
+                        catch (e2: Exception) { android.util.Log.w("ProfileVM", "myDoc CACHE de başarısız: ${e2.message}"); null }
+                    }
+                }
+                val targetDocDeferred = async {
+                    try { firestore.collection("users").document(targetUid).get(Source.SERVER).await() }
+                    catch (e: Exception) {
+                        android.util.Log.w("ProfileVM", "targetDoc SERVER hatası: ${e.message}")
+                        try { firestore.collection("users").document(targetUid).get(Source.CACHE).await() }
+                        catch (e2: Exception) { android.util.Log.w("ProfileVM", "targetDoc CACHE de başarısız: ${e2.message}"); null }
+                    }
+                }
                 val myDoc     = myDocDeferred.await()
                 val targetDoc = targetDocDeferred.await()
-                val fromName    = myDoc.getString("displayName") ?: myDoc.getString("name") ?: ""
-                val fromPhoto   = myDoc.getString("photoURL") ?: ""
-                val targetName  = targetDoc.getString("displayName") ?: targetDoc.getString("name") ?: ""
-                val targetPhoto = targetDoc.getString("photoURL") ?: ""
+                val fromName    = myDoc?.getString("displayName") ?: myDoc?.getString("name") ?: ""
+                val fromPhoto   = myDoc?.getString("photoURL") ?: ""
+                val targetName  = targetDoc?.getString("displayName") ?: targetDoc?.getString("name") ?: ""
+                val targetPhoto = targetDoc?.getString("photoURL") ?: ""
 
                 supabase.postgrest["follows"].upsert(
                     FollowRow(
