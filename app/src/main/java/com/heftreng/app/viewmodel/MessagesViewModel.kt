@@ -57,6 +57,29 @@ class MessagesViewModel @Inject constructor(
     // karşı tarafa Auth adı gidiyordu. Artık Firestore'daki gerçek profil
     // adı (displayName/name) her zaman önceliklidir; Auth adı sadece
     // Firestore'a erişilemediğinde geçici fallback olarak kullanılır.
+    private var _myNameResolvedFromFirestore = false
+
+    // Mesaj gönderirken (özellikle push bildirimi için) ismin gerçekten
+    // Firestore'dan geldiğinden emin olur. init'teki asenkron çözümleme
+    // henüz tamamlanmadıysa burada bir kez senkron olarak tazeler.
+    private suspend fun ensureFreshMyName(): String {
+        if (_myNameResolvedFromFirestore) return _myFirestoreName
+        val curUid = auth.currentUser?.uid
+        if (curUid.isNullOrBlank()) return _myFirestoreName
+        return try {
+            val doc = firestore.collection("users").document(curUid).get().await()
+            val name = (doc.getString("displayName") ?: doc.getString("name"))
+                ?.takeIf { it.isNotBlank() }
+            if (name != null) {
+                _myFirestoreName = name
+                _myNameResolvedFromFirestore = true
+            }
+            _myFirestoreName
+        } catch (_: Exception) {
+            _myFirestoreName
+        }
+    }
+
     private var _myFirestoreName: String = auth.currentUser?.displayName ?: "Biri"
 
     private var convListener: ListenerRegistration? = null
@@ -292,9 +315,12 @@ class MessagesViewModel @Inject constructor(
                             val doc = firestore.collection("users").document(newUid).get().await()
                             val name = (doc.getString("displayName") ?: doc.getString("name"))
                                 ?.takeIf { it.isNotBlank() }
-                            _myFirestoreName = name
-                                ?: auth.currentUser?.displayName?.takeIf { it.isNotBlank() }
-                                ?: "Biri"
+                            if (name != null) {
+                                _myFirestoreName = name
+                                _myNameResolvedFromFirestore = true
+                            } else {
+                                _myFirestoreName = auth.currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "Biri"
+                            }
                         } catch (_: Exception) {
                             auth.currentUser?.displayName?.takeIf { it.isNotBlank() }?.let {
                                 _myFirestoreName = it
@@ -339,9 +365,12 @@ class MessagesViewModel @Inject constructor(
                     val doc = firestore.collection("users").document(curUid).get().await()
                     val name = (doc.getString("displayName") ?: doc.getString("name"))
                         ?.takeIf { it.isNotBlank() }
-                    _myFirestoreName = name
-                        ?: auth.currentUser?.displayName?.takeIf { it.isNotBlank() }
-                        ?: "Biri"
+                    if (name != null) {
+                        _myFirestoreName = name
+                        _myNameResolvedFromFirestore = true
+                    } else {
+                        _myFirestoreName = auth.currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "Biri"
+                    }
                 } catch (_: Exception) {
                     auth.currentUser?.displayName?.takeIf { it.isNotBlank() }?.let {
                         _myFirestoreName = it
@@ -685,7 +714,13 @@ class MessagesViewModel @Inject constructor(
                     .set(convUpd, SetOptions.merge()).await()
 
                 try {
-                    val myName = _myFirestoreName
+                    // DÜZELTME: _myFirestoreName, ViewModel init edilirken
+                    // asenkron olarak Firestore'dan çekiliyor. Kullanıcı
+                    // uygulamayı açar açmaz hızlıca mesaj gönderirse bu sorgu
+                    // henüz tamamlanmamış olabiliyor ve push bildirimine hâlâ
+                    // başlangıç değeri (Auth'un mail bazlı adı) gidiyordu.
+                    // Push göndermeden hemen önce ismi garantiye alıyoruz.
+                    val myName = ensureFreshMyName()
                     com.google.firebase.functions.FirebaseFunctions
                         .getInstance("europe-west1")
                         .getHttpsCallable("sendPush")
