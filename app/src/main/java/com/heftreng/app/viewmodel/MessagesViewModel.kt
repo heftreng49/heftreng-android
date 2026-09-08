@@ -51,6 +51,12 @@ class MessagesViewModel @Inject constructor(
     private val _uid = MutableStateFlow(auth.currentUser?.uid ?: "")
     val uid get() = _uid.value
 
+    // DÜZELTME: Firebase Auth'un displayName'i genelde e-posta ile kayıt
+    // olurken otomatik dolan (mail bazlı) bir isimdir, uygulama içi profilde
+    // kullanıcının kendi belirlediği ad değildir. Bu yüzden mesajlarda
+    // karşı tarafa Auth adı gidiyordu. Artık Firestore'daki gerçek profil
+    // adı (displayName/name) her zaman önceliklidir; Auth adı sadece
+    // Firestore'a erişilemediğinde geçici fallback olarak kullanılır.
     private var _myFirestoreName: String = auth.currentUser?.displayName ?: "Biri"
 
     private var convListener: ListenerRegistration? = null
@@ -277,17 +283,22 @@ class MessagesViewModel @Inject constructor(
                 _uid.value = newUid
                 if (newUid.isNotEmpty()) {
                     // listenConversations() — foreground callback'ten çağrılır, burada değil
-                    val authName = auth.currentUser?.displayName?.takeIf { it.isNotBlank() }
-                    if (authName != null) {
-                        _myFirestoreName = authName
-                    } else {
-                        viewModelScope.launch {
-                            try {
-                                val doc = firestore.collection("users").document(newUid).get().await()
-                                val name = (doc.getString("displayName") ?: doc.getString("name"))
-                                    ?.takeIf { it.isNotBlank() }
-                                if (name != null) _myFirestoreName = name
-                            } catch (_: Exception) {}
+                    // DÜZELTME: Önce Firestore'daki gerçek profil adına bak — bu
+                    // kullanıcının uygulama içinde belirlediği isim. Auth'un
+                    // displayName'i (genelde mail bazlı) sadece Firestore
+                    // okunamazsa/boşsa fallback olarak kullanılır.
+                    viewModelScope.launch {
+                        try {
+                            val doc = firestore.collection("users").document(newUid).get().await()
+                            val name = (doc.getString("displayName") ?: doc.getString("name"))
+                                ?.takeIf { it.isNotBlank() }
+                            _myFirestoreName = name
+                                ?: auth.currentUser?.displayName?.takeIf { it.isNotBlank() }
+                                ?: "Biri"
+                        } catch (_: Exception) {
+                            auth.currentUser?.displayName?.takeIf { it.isNotBlank() }?.let {
+                                _myFirestoreName = it
+                            }
                         }
                     }
                 } else {
@@ -322,17 +333,19 @@ class MessagesViewModel @Inject constructor(
         }
         val curUid = auth.currentUser?.uid
         if (!curUid.isNullOrBlank()) {
-            val authName = auth.currentUser?.displayName?.takeIf { it.isNotBlank() }
-            if (authName != null) {
-                _myFirestoreName = authName
-            } else {
-                viewModelScope.launch {
-                    try {
-                        val doc = firestore.collection("users").document(curUid).get().await()
-                        val name = (doc.getString("displayName") ?: doc.getString("name"))
-                            ?.takeIf { it.isNotBlank() }
-                        if (name != null) _myFirestoreName = name
-                    } catch (_: Exception) {}
+            // DÜZELTME: Aynı öncelik sırası — Firestore profil adı önce.
+            viewModelScope.launch {
+                try {
+                    val doc = firestore.collection("users").document(curUid).get().await()
+                    val name = (doc.getString("displayName") ?: doc.getString("name"))
+                        ?.takeIf { it.isNotBlank() }
+                    _myFirestoreName = name
+                        ?: auth.currentUser?.displayName?.takeIf { it.isNotBlank() }
+                        ?: "Biri"
+                } catch (_: Exception) {
+                    auth.currentUser?.displayName?.takeIf { it.isNotBlank() }?.let {
+                        _myFirestoreName = it
+                    }
                 }
             }
         }
