@@ -484,8 +484,28 @@ class ProfileViewModel @Inject constructor(
     }
 
     // ── Ana takip butonu — gizli hesap kontrolü yapar ────────────────────────
+    // DÜZELTME: Hızlı ardışık tıklamalarda (veya bir önceki toggle isteği hâlâ
+    // ağdayken) aynı anda iki farklı dala (ör. hem unfollow hem follow) girilip
+    // optimistic state'in birbirini ezmesi, butonun "hiç değişmiyormuş" gibi
+    // görünmesine yol açıyordu. İşlem sürerken yeni tıklamayı yok sayıyoruz.
+    private var followActionInFlight = false
+
     fun toggleFollow(targetUid: String) {
+        if (targetUid.isBlank()) {
+            android.util.Log.w("ProfileVM", "toggleFollow: targetUid boş, işlem atlandı")
+            return
+        }
+        if (followActionInFlight) {
+            android.util.Log.d("ProfileVM", "toggleFollow: önceki işlem devam ediyor, atlandı")
+            return
+        }
+        followActionInFlight = true
         val isPrivate = _user.value?.isPrivate ?: false
+        android.util.Log.d(
+            "ProfileVM",
+            "toggleFollow: targetUid=$targetUid isFollowing=${_isFollowing.value} " +
+                "requestStatus=${_followRequestStatus.value} isPrivate=$isPrivate"
+        )
         when {
             _isFollowing.value                      -> unfollowUser(targetUid)
             _followRequestStatus.value == "pending" -> cancelFollowRequest(targetUid)
@@ -509,7 +529,13 @@ class ProfileViewModel @Inject constructor(
                     .update("followersCount", FieldValue.increment(-1))
                 firestore.collection("users").document(myUid)
                     .update("followingCount", FieldValue.increment(-1))
-            } catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
+            } catch (e: Exception) {
+                android.util.Log.w("ProfileVM", "unfollowUser hata, state geri alınıyor: ${e.message}")
+                // Ağ hatasında optimistic değişikliği geri al — buton yanlış durumda takılı kalmasın
+                _isFollowing.value    = true
+                _followersCount.value = _followersCount.value + 1
+                _error.value = e.message
+            } finally { followActionInFlight = false }
         }
     }
 
@@ -562,7 +588,11 @@ class ProfileViewModel @Inject constructor(
                     "read"      to false,
                     "ts"        to Timestamp.now(),
                 )).await()
-            } catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
+            } catch (e: Exception) {
+                android.util.Log.w("ProfileVM", "sendFollowRequest hata, state geri alınıyor: ${e.message}")
+                _followRequestStatus.value = "none"
+                _error.value = e.message
+            } finally { followActionInFlight = false }
         }
     }
 
@@ -574,7 +604,11 @@ class ProfileViewModel @Inject constructor(
             try {
                 firestore.collection("followRequests").document(targetUid)
                     .collection("pending").document(myUid).delete().await()
-            } catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
+            } catch (e: Exception) {
+                android.util.Log.w("ProfileVM", "cancelFollowRequest hata, state geri alınıyor: ${e.message}")
+                _followRequestStatus.value = "pending"
+                _error.value = e.message
+            } finally { followActionInFlight = false }
         }
     }
 
@@ -633,7 +667,14 @@ class ProfileViewModel @Inject constructor(
                     "read"      to false,
                     "ts"        to Timestamp.now(),
                 )).await()
-            } catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
+            } catch (e: Exception) {
+                android.util.Log.w("ProfileVM", "followUserDirectly hata, state geri alınıyor: ${e.message}")
+                // Ağ hatasında optimistic değişikliği geri al — buton yanlış durumda takılı kalmasın
+                _isFollowing.value         = false
+                _followRequestStatus.value = "none"
+                _followersCount.value      = (_followersCount.value - 1).coerceAtLeast(0)
+                _error.value = e.message
+            } finally { followActionInFlight = false }
         }
     }
 
