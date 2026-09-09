@@ -38,6 +38,13 @@ fun ConnectedPostCard(
     // Ekrana özgü overrides
     isDetailScreen  : Boolean = false,   // true → onTap null (zaten detaydasın)
     onSaveOverride  : (() -> Unit)? = null, // SavedPostsScreen gibi ekstra mantık için
+    // DÜZELTME: Profil/Kütüphane gibi ekranlar kendi post listesini
+    // (feedVm._posts DEĞİL, kendi ViewModel'inin _posts'unu) gösteriyor.
+    // Beğeni feedVm.toggleLike() ile yapılınca Firestore'a doğru yazılıyordu
+    // ama o ekranın kendi listesindeki post kopyası hiç güncellenmiyordu —
+    // bu yüzden buton anında kırmızı olmuyordu (ekran yenilenince düzeliyordu).
+    // Bu override ile o ekranın kendi toggleLike fonksiyonu çağrılabilir.
+    onLikeOverride  : (() -> Unit)? = null,
     onDeleteOverride: (() -> Unit)? = null,
     onEditOverride  : ((title: String, text: String) -> Unit)? = null,
     showReport      : Boolean = false,
@@ -69,7 +76,7 @@ fun ConnectedPostCard(
         isDetailScreen = isDetailScreen,
 
         // ── Sosyal aksiyonlar ──────────────────────────────────────────────
-        onLike   = { feedVm.toggleLike(post) },
+        onLike   = onLikeOverride ?: { feedVm.toggleLike(post) },
         onSave   = onSaveOverride ?: { feedVm.toggleSave(post) },
         onShare  = {
             if (post.isRepostedByMe) showUnrepostConfirm = true

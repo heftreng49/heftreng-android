@@ -548,6 +548,7 @@ fun ProfileScreen(
                                 navController      = navController,
                                 feedVm             = feedVm,
                                 language           = language,
+                                onLikeOverride     = { vm.toggleLikePost(post) },
                                 onDeleteOverride   = if (isMe) ({ vm.deleteOwnPost(post.id) }) else null,
                                 onEditOverride     = if (isMe) ({ newTitle, newText -> vm.editOwnPost(post.id, newTitle, newText) }) else null,
                                 onRepostOverride   = { vm.markPostReposted(post.id, true) },
