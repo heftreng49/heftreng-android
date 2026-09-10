@@ -14,6 +14,7 @@
 <script lang="ts">
   import '../app.css';
   import { onMount } from 'svelte';
+  import { initCapacitorPush } from '$lib/services/capacitor-push-init';
   import { page } from '$app/stores';
   import { initAuthListener, signOut } from '$lib/services/auth.service';
   import { currentUser, authLoading } from '$lib/stores/auth';
@@ -38,6 +39,7 @@
   let appBannerDismissed = $state(false);
 
   onMount(() => {
+    initCapacitorPush();
     const isAndroid = /Android/i.test(navigator.userAgent);
     const dismissed = sessionStorage.getItem('hf_banner_dismissed') === '1';
     showAppBanner = isAndroid && !dismissed;
@@ -102,6 +104,7 @@
   let unsubConvBadge: (() => void) | null = null;
 
   onMount(() => {
+    initCapacitorPush();
     // Tema
     const saved = getTheme();
     applyTheme(saved.variant, saved.mode);

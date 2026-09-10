@@ -1,0 +1,57 @@
+/* ═══════════════════════════════════════════════════════════════════
+   ios-patch.css — app.css'in SONUNA @import ile ekle:
+   @import './ios-patch.css';
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Safe-area değişkenleri — iPhone X notch, Dynamic Island, Home bar */
+:root {
+  --safe-top:    env(safe-area-inset-top,    0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left,   0px);
+  --safe-right:  env(safe-area-inset-right,  0px);
+}
+
+/* iOS scroll davranışı — Capacitor native scroll kullanır */
+html, body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* Global header — notch altına düşmesin.
+   layout.svelte'deki .global-header zaten top:0, sticky.
+   Capacitor'da WebView tam ekran başladığı için padding-top gerekir. */
+.global-header {
+  padding-top: var(--safe-top) !important;
+  height: calc(52px + var(--safe-top)) !important;
+}
+
+/* Alt navigasyon — Home indicator üstünde kalsın.
+   layout.svelte'deki .bottom-nav zaten env() kullanıyor — bu yedek. */
+.bottom-nav {
+  padding-bottom: max(env(safe-area-inset-bottom), 8px) !important;
+  height: calc(60px + env(safe-area-inset-bottom)) !important;
+}
+
+/* Drawer — sol safe-area (iPad landscape) ve top safe-area */
+.drawer-inner {
+  padding-top: max(20px, var(--safe-top)) !important;
+  padding-left: max(16px, var(--safe-left)) !important;
+  padding-bottom: max(20px, var(--safe-bottom)) !important;
+}
+
+/* Input zoom engeli — font-size 16px altında Safari zoom yapar */
+input, textarea, select {
+  font-size: max(16px, 1em) !important;
+}
+
+/* IosPwaBanner — Capacitor içinde gösterme */
+.ios-pwa-banner,
+.ios-banner {
+  display: none !important;
+}
+
+/* Android uygulama banner — Capacitor'da gösterme */
+.app-banner {
+  display: none !important;
+}

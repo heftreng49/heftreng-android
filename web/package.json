@@ -9,7 +9,9 @@
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"cap:sync": "npx cap sync ios",
+		"cap:open": "npx cap open ios"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^7.0.1",
@@ -23,6 +25,15 @@
 	},
 	"dependencies": {
 		"@supabase/supabase-js": "^2.110.7",
-		"firebase": "^12.16.0"
+		"firebase": "^12.16.0",
+		"@capacitor/core": "^7.0.0",
+		"@capacitor/cli": "^7.0.0",
+		"@capacitor/ios": "^7.0.0",
+		"@capacitor/push-notifications": "^7.0.0",
+		"@capacitor/status-bar": "^7.0.0",
+		"@capacitor/splash-screen": "^7.0.0",
+		"@capacitor/keyboard": "^7.0.0",
+		"@capacitor/app": "^7.0.0",
+		"@capacitor/haptics": "^7.0.0"
 	}
 }

@@ -17,3 +17,5 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 [data-theme="sunset-light"] { --bg:#FDF5F7; --surface:#FFFFFF; --surface-var:#F8ECF0; --card:#FFFFFF; --on-bg:#1C080E; --on-surface:#4A2030; --primary:#C0305A; --muted:#A07080; --divider:#EED8E0; --shimmer:#F8ECF0; --error:#F87171; --success:#34D399; }
 [data-theme="mono-dark"] { --bg:#111111; --surface:#1A1A1A; --surface-var:#222222; --card:#1E1E1E; --on-bg:#F0F0F0; --on-surface:#C0C0C0; --primary:#E0E0E0; --muted:#606060; --divider:#282828; --shimmer:#1C1C1C; --error:#F87171; --success:#34D399; }
 [data-theme="mono-light"] { --bg:#F8F8F8; --surface:#FFFFFF; --surface-var:#F0F0F0; --card:#FFFFFF; --on-bg:#111111; --on-surface:#333333; --primary:#222222; --muted:#888888; --divider:#E0E0E0; --shimmer:#F0F0F0; --error:#F87171; --success:#34D399; }
+
+@import './ios-patch.css';

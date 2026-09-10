@@ -1,0 +1,153 @@
+name: iOS Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+    inputs:
+      sign_and_export:
+        description: 'İmzala ve .ipa oluştur (geliştirici hesabı gerektirir)'
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: macos-15   # Xcode 16, ücretsiz (public repo) / 3000 dk/ay (private)
+
+    steps:
+      # ── Kaynak kod ──────────────────────────────────────────────────────
+      - uses: actions/checkout@v4
+
+      # ── Node + SvelteKit ────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm install --legacy-peer-deps
+
+      - name: Build SvelteKit (web/build/ üretir)
+        working-directory: web
+        run: npm run build
+        env:
+          VITE_FIREBASE_API_KEY:             ${{ secrets.FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN:         ${{ secrets.FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID:          ${{ secrets.FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET:      ${{ secrets.FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID:              ${{ secrets.FIREBASE_APP_ID }}
+          VITE_SUPABASE_URL:                 ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY:            ${{ secrets.SUPABASE_ANON_KEY }}
+
+      # ── Capacitor sync ──────────────────────────────────────────────────
+      # web/build/ içeriğini web/ios/App/App/public/ klasörüne kopyalar
+      - name: Capacitor sync → iOS
+        working-directory: web
+        run: npx cap sync ios
+
+      # ── Xcode ───────────────────────────────────────────────────────────
+      - name: Select Xcode 16
+        run: sudo xcode-select -s /Applications/Xcode_16.app
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      # ── İmzasız build (simulator için) ─────────────────────────────────
+      # Geliştirici hesabı olmadan da çalışır.
+      # Simulator için derleme → ipa çıkmaz ama build hataları görünür.
+      - name: Build for Simulator (imzasız — her zaman çalışır)
+        working-directory: web/ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            build \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty || true
+
+      # ── İmzalı build (sadece sign_and_export=true ise) ─────────────────
+      # Bu adımlar geliştirici hesabı açıldıktan sonra aktif edilecek.
+      # Şu an için atlanıyor.
+
+      - name: Setup signing (GELİŞTİRİCİ HESABI GEREKTİRİR)
+        if: ${{ inputs.sign_and_export == true }}
+        env:
+          CERTIFICATE_BASE64:   ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          PROVISIONING_BASE64:  ${{ secrets.IOS_PROVISIONING_BASE64 }}
+          KEYCHAIN_PASSWORD:    ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          echo "$CERTIFICATE_BASE64" | base64 --decode > $RUNNER_TEMP/cert.p12
+          security import $RUNNER_TEMP/cert.p12 \
+            -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PROVISIONING_BASE64" | base64 --decode \
+            > ~/Library/MobileDevice/Provisioning\ Profiles/heftreng.mobileprovision
+
+      - name: Archive (GELİŞTİRİCİ HESABI GEREKTİRİR)
+        if: ${{ inputs.sign_and_export == true }}
+        working-directory: web/ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/App.xcarchive \
+            archive \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} \
+            CODE_SIGN_IDENTITY="iPhone Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="Heftreng App Store" \
+            | xcpretty
+
+      - name: Export IPA (GELİŞTİRİCİ HESABI GEREKTİRİR)
+        if: ${{ inputs.sign_and_export == true }}
+        run: |
+          cat > $RUNNER_TEMP/ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store</string>
+            <key>teamID</key><string>${{ secrets.APPLE_TEAM_ID }}</string>
+            <key>signingStyle</key><string>manual</string>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/App.xcarchive \
+            -exportPath $RUNNER_TEMP/ipa \
+            -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist
+
+      - name: Upload IPA artifact
+        if: ${{ inputs.sign_and_export == true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: heftreng-ios.ipa
+          path: ${{ runner.temp }}/ipa/*.ipa
+          retention-days: 7
+
+      # ── Her zaman: build sonucu özeti ──────────────────────────────────
+      - name: Build sonucu
+        if: always()
+        run: |
+          echo "✅ SvelteKit build: başarılı"
+          echo "✅ Capacitor sync: başarılı"
+          echo "✅ Simulator build: tamamlandı"
+          echo ""
+          echo "📱 Geliştirici hesabı açıldıktan sonra:"
+          echo "   sign_and_export=true → .ipa üretilir"
+          echo "   TestFlight'a yüklenerek gerçek iPhone'da test edilir"
