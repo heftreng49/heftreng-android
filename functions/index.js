@@ -2084,14 +2084,21 @@ exports.translatePostText = onCall(
       const resp = await fetch(url, {
         method: "GET",
         headers: {
-          // Bazı ağ katmanları User-Agent'sız istekleri reddedebiliyor.
-          "User-Agent": "Mozilla/5.0 (compatible; HeftrengApp/1.0)",
+          // Google, "bot" gibi görünen User-Agent'ları 403 ile reddedebiliyor —
+          // gerçek bir tarayıcı User-Agent'ı kullanıyoruz.
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "Accept": "*/*",
         },
       });
 
       if (!resp.ok) {
-        console.error("translatePostText Google endpoint hatası:", resp.status);
-        throw new HttpsError("internal", "Çeviri servisi şu an yanıt vermiyor.");
+        const errBody = await resp.text().catch(() => "");
+        console.error("translatePostText Google endpoint hatası:", resp.status, errBody.slice(0, 300));
+        // DEBUG: Teşhis kolaylığı için status kodu geçici olarak client'a
+        // taşınıyor. Sorun netleşince bu detay kaldırılabilir.
+        throw new HttpsError("internal", `Çeviri servisi hata döndürdü (HTTP ${resp.status}).`);
       }
 
       const json = await resp.json();
@@ -2102,13 +2109,18 @@ exports.translatePostText = onCall(
         .join("")
         .trim();
 
-      if (!translated) throw new HttpsError("internal", "Çeviri alınamadı.");
+      if (!translated) {
+        console.error("translatePostText: boş çeviri, ham yanıt:", JSON.stringify(json).slice(0, 300));
+        throw new HttpsError("internal", "Çeviri alınamadı (boş yanıt).");
+      }
 
       return { success: true, translatedText: translated };
     } catch (e) {
       if (e instanceof HttpsError) throw e;
-      console.error("translatePostText hata:", e.message);
-      throw new HttpsError("internal", "Çeviri sırasında hata oluştu.");
+      console.error("translatePostText hata:", e.message, e.stack);
+      // DEBUG: fetch/network seviyesinde bir hata (DNS, TLS, timeout vb.)
+      // olması ihtimaline karşı asıl mesajı geçici olarak client'a taşıyoruz.
+      throw new HttpsError("internal", `Çeviri sırasında hata oluştu: ${e.message}`);
     }
   },
 );

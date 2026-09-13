@@ -2312,7 +2312,10 @@ class FeedViewModel @Inject constructor(
                 val msg = when {
                     e.message?.contains("resource-exhausted", ignoreCase = true) == true ->
                         "Çok fazla çeviri isteği yapıldı, biraz sonra tekrar dene."
-                    else -> "Çeviri yapılamadı, tekrar dene."
+                    // DEBUG: Sorunu teşhis edene kadar asıl Cloud Function
+                    // hata mesajını gösteriyoruz. Netleşince genel mesaja
+                    // geri dönülebilir.
+                    else -> "Çeviri yapılamadı: ${e.message ?: "bilinmeyen hata"}"
                 }
                 _translateErrors.value = _translateErrors.value + (post.id to msg)
             } finally {
