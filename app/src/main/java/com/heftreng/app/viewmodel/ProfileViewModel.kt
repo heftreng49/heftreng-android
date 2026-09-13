@@ -109,7 +109,12 @@ class ProfileViewModel @Inject constructor(
         // uid parametresi UID veya username olabilir (web deeplink'ten gelince username gelir)
         // UID: 20-36 karakter alfanümerik (Firebase UID formatı)
         // Username: genellikle daha kısa, harf/rakam/nokta/alt çizgi içerir
-        val looksLikeUid = uid == "me" || (uid.length in 20..36 && uid.all { it.isLetterOrDigit() })
+        // Firebase UID: genellikle 28 karakter, alfanümerik (büyük/küçük harf + rakam).
+        // Username: nokta (.), alt çizgi (_), tire (-) içerebilir ve genellikle daha kısa.
+        // Eski kontrol: uid.length in 20..36 — bazı Google UID'lerini username sanıyordu.
+        // Yeni kontrol: nokta/alt çizgi/tire yoksa UID say (Firebase UID'lerde bunlar olmaz).
+        val looksLikeUid = uid == "me" ||
+            (uid.isNotBlank() && uid.all { it.isLetterOrDigit() } && uid.length >= 20)
         if (!looksLikeUid && uid.isNotBlank()) {
             // Username gibi görünüyor — Firestore'da username ile ara, UID'e çevir
             viewModelScope.launch {
@@ -160,21 +165,44 @@ class ProfileViewModel @Inject constructor(
             try {
                 // user + follow durumu + followRequest paralel
                 val userDocDeferred = async {
-                    try {
-                        firestore.collection("users").document(targetUid).get(Source.SERVER).await()
+                    // Strateji: SERVER → CACHE → SERVER (retry)
+                    // Sorun: SERVER ilk denemede zaman aşımına uğrayabilir (zayıf bağlantı),
+                    // CACHE'te de hiç görülmemiş profil yoksa null döner → userNotFound = true.
+                    // Çözüm: CACHE null gelirse 1 kez daha SERVER'a git (bağlantı toparlamış olabilir).
+                    val userRef = firestore.collection("users").document(targetUid)
+                    var doc: com.google.firebase.firestore.DocumentSnapshot? = null
+
+                    // 1. Deneme: SERVER
+                    doc = try {
+                        userRef.get(Source.SERVER).await()
                     } catch (e: Exception) {
-                        // DÜZELTME: Cache'te doküman hiç yoksa (yeni/ilk kez görülen
-                        // profil, offline durumda) .get(Source.CACHE) da exception
-                        // fırlatıyordu ve bu, coroutine iptaliyle çakışınca
-                        // uncaught exception olarak crash'e yol açıyordu.
-                        android.util.Log.w("ProfileVM", "userDoc SERVER hatası: ${e.message}, CACHE deneniyor")
-                        try {
-                            firestore.collection("users").document(targetUid).get(Source.CACHE).await()
-                        } catch (e2: Exception) {
-                            android.util.Log.w("ProfileVM", "userDoc CACHE de başarısız: ${e2.message}")
+                        android.util.Log.w("ProfileVM", "userDoc SERVER #1 hata: ${e.message}")
+                        null
+                    }
+
+                    // 2. Deneme: CACHE (anlık sonuç için)
+                    if (doc == null || !doc.exists()) {
+                        doc = try {
+                            userRef.get(Source.CACHE).await().takeIf { it.exists() }
+                        } catch (e: Exception) {
+                            android.util.Log.w("ProfileVM", "userDoc CACHE hata: ${e.message}")
                             null
                         }
                     }
+
+                    // 3. Deneme: SERVER tekrar (bağlantı toparlamış olabilir)
+                    if (doc == null || !doc.exists()) {
+                        android.util.Log.w("ProfileVM", "userDoc: hem SERVER hem CACHE boş, 3 sn sonra tekrar SERVER")
+                        kotlinx.coroutines.delay(3_000L)
+                        doc = try {
+                            userRef.get(Source.SERVER).await()
+                        } catch (e: Exception) {
+                            android.util.Log.w("ProfileVM", "userDoc SERVER #2 hata: ${e.message}")
+                            null
+                        }
+                    }
+
+                    doc
                 }
                 val followDocDeferred = async {
                     if (targetUid != myUid && myUid.isNotEmpty()) {
@@ -204,10 +232,29 @@ class ProfileViewModel @Inject constructor(
                 val isFollowingResult = followDocDeferred.await()
                 val followRequestDoc  = followRequestDeferred.await()
 
-                val d = userDoc?.data ?: run {
-                    _userNotFound.value = true
-                    _loading.value = false
-                    return@launch
+                // doc null: ya gerçekten silinmiş hesap ya da ağ sorunu.
+                // exists() == false: Firestore'da hiç yok → silinmiş hesap.
+                // exists() == true ama data null: beklenmedik Firestore durumu.
+                val d = when {
+                    userDoc == null -> {
+                        // 3 deneme de başarısız → ağ sorunu
+                        _error.value = "Profil yüklenemedi, bağlantınızı kontrol edin"
+                        _loading.value = false
+                        return@launch
+                    }
+                    !userDoc.exists() -> {
+                        // Firestore'da bu UID hiç yok → gerçekten silinmiş/yok hesap
+                        _userNotFound.value = true
+                        _loading.value = false
+                        return@launch
+                    }
+                    userDoc.data == null -> {
+                        // Doküman var ama boş — beklenmedik durum, ağ sorunu gibi davran
+                        _error.value = "Profil verisi alınamadı, lütfen tekrar deneyin"
+                        _loading.value = false
+                        return@launch
+                    }
+                    else -> userDoc.data!!
                 }
                 _user.value = User(
                     uid         = d["uid"] as? String ?: targetUid,
