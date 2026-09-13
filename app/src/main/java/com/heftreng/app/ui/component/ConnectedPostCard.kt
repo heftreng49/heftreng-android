@@ -56,6 +56,17 @@ fun ConnectedPostCard(
     onUnrepostOverride : (() -> Unit)? = null,
     adminVm            : AdminViewModel = hiltViewModel(),
 ) {
+    // ── Çeviri ────────────────────────────────────────────────────────────
+    // Çeviri state'i her zaman feedVm üzerinden yönetiliyor (hangi ekrandan
+    // açıldığına bakılmaksızın tek merkezi cache) — like/repost gibi
+    // ekrana-özgü override gerekmiyor çünkü çeviri o ekranın kendi post
+    // listesini DEĞİL, sadece o anki UI durumunu etkiliyor.
+    val translatedTexts    by feedVm.translatedTexts.collectAsState()
+    val translatingPostIds by feedVm.translatingPostIds.collectAsState()
+    val translateErrors    by feedVm.translateErrors.collectAsState()
+    val showTranslateButton = remember(post.id, post.text, language) {
+        com.heftreng.app.util.LanguageDetector.isLikelyDifferentLanguage(post.text, language)
+    }
     // FAZ 1 devamı: ConnectedPostCard tüm ekranların (Kütüphane, Profil,
     // Blog, Kaydedilenler) ORTAK kart kaynağı — moderatör hızlı kaldırma
     // menüsü burada bir kez eklenince tüm bu ekranlara otomatik yayılır.
@@ -147,6 +158,14 @@ fun ConnectedPostCard(
         onBlock  = onBlock,
         onTapHashtag = { taggedPostId -> navController.navigate(Screen.PostDetail.go(taggedPostId)) },
         onTapMention = { mentionedUid -> if (mentionedUid.isNotBlank()) navController.navigate("profile/$mentionedUid") },
+
+        // ── Çeviri ────────────────────────────────────────────────────────
+        showTranslateButton = showTranslateButton,
+        translatedText      = translatedTexts[post.id],
+        isTranslating       = post.id in translatingPostIds,
+        translateError      = translateErrors[post.id],
+        onTranslate         = { feedVm.translatePost(post, language) },
+        onShowOriginal      = { feedVm.clearTranslation(post.id) },
     )
 
     if (showUnrepostConfirm) {

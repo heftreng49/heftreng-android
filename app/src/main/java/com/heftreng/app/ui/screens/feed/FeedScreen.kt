@@ -135,6 +135,10 @@ fun FeedScreen(
     val loading     by vm.loading.collectAsState()
     val hasMore     by vm.hasMore.collectAsState()
     val loadingMore by vm.loadingMore.collectAsState()
+    // ── Çeviri ────────────────────────────────────────────────────────────
+    val translatedTexts     by vm.translatedTexts.collectAsState()
+    val translatingPostIds  by vm.translatingPostIds.collectAsState()
+    val translateErrors     by vm.translateErrors.collectAsState()
     // Reklam planı: banner+native aynı çağrıda hesaplanır, çakışma yapısal
     // olarak imkansızdır (bkz. AdPlanner.kt). Ekran artık kendi index
     // formülünü yazmaz.
@@ -1026,6 +1030,14 @@ fun FeedScreen(
                         },
                         language = language,
                         appConfig = appConfig,
+                        showTranslateButton = remember(post.id, post.text, language) {
+                            com.heftreng.app.util.LanguageDetector.isLikelyDifferentLanguage(post.text, language)
+                        },
+                        translatedText = translatedTexts[post.id],
+                        isTranslating  = post.id in translatingPostIds,
+                        translateError = translateErrors[post.id],
+                        onTranslate    = { vm.translatePost(post, language) },
+                        onShowOriginal = { vm.clearTranslation(post.id) },
                     )
                     com.heftreng.app.ui.component.HeartBurstOverlay(
                         visible = heartBurst,
@@ -1687,6 +1699,17 @@ fun PostCard(
     language       : String = "tr",
     isDetailScreen : Boolean = false,
     appConfig      : AppConfig = AppConfig(),
+    // ── Çeviri ────────────────────────────────────────────────────────────
+    // Gönderi metni muhtemelen farklı bir dildeyse "Çevir" butonu gösterilir.
+    // translatedText doluysa çevrilmiş hali gösterilir ("Orijinali göster"
+    // seçeneğiyle birlikte). onTranslate tetiklendiğinde parent (FeedViewModel)
+    // çeviriyi yapıp translatedText'i doldurur.
+    showTranslateButton : Boolean = false,
+    translatedText      : String? = null,
+    isTranslating       : Boolean = false,
+    translateError      : String? = null,
+    onTranslate         : (() -> Unit)? = null,
+    onShowOriginal      : (() -> Unit)? = null,
 ) {
     val ku = language == "ku"
     val myUid            = FirebaseAuth.getInstance().currentUser?.uid ?: ""
@@ -1937,13 +1960,46 @@ fun PostCard(
             }
             if (post.text.isNotBlank()) {
                 LinkifyText(
-                    post.text, fontSize = 15.sp, lineHeight = 22.sp,
+                    translatedText ?: post.text, fontSize = 15.sp, lineHeight = 22.sp,
                     expandable     = !isDetailScreen,
                     language       = language,
                     onHashtagClick = onTapHashtag,
                     mentionUids    = post.mentions,
                     onMentionClick = onTapMention,
                 )
+                // ── Çeviri satırı ────────────────────────────────────────
+                if (showTranslateButton || translatedText != null || isTranslating || translateError != null) {
+                    Spacer(Modifier.height(4.dp))
+                    when {
+                        isTranslating -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(
+                                color = Primary, strokeWidth = 1.5.dp,
+                                modifier = Modifier.size(13.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                if (ku) "Tê wergerandin…" else "Çevriliyor…",
+                                color = Muted, fontSize = 12.sp,
+                            )
+                        }
+                        translateError != null -> Text(
+                            translateError,
+                            color = androidx.compose.ui.graphics.Color(0xFFE05252),
+                            fontSize = 12.sp,
+                            modifier = Modifier.clickable { onTranslate?.invoke() },
+                        )
+                        translatedText != null -> Text(
+                            if (ku) "Orîjînal nîşan bide" else "Orijinalini göster",
+                            color = Primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable { onShowOriginal?.invoke() },
+                        )
+                        else -> Text(
+                            if (ku) "🌐 Wergerîne" else "🌐 Çevir",
+                            color = Primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable { onTranslate?.invoke() },
+                        )
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
             }
                         if (post.repostType.isNotBlank() && post.repostType != "feed" && post.repostType != "kf_achievement") {

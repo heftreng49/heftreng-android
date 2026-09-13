@@ -2010,3 +2010,105 @@ exports.adminUpdateUserEmail = onCall(
     };
   },
 );
+
+// ─── translatePostText — HTTPS Callable (v2) ────────────────────────────────
+// Gönderi metnini kullanıcının uygulama diline çevirir. Google'ın resmi
+// Cloud Translation API'si ücretli ve API anahtarı gerektiriyor; bunun
+// yerine Google Translate web/mobil arayüzünün kullandığı, key gerektirmeyen
+// GAYRİ RESMİ "gtx" endpoint'i kullanılıyor (translate.googleapis.com).
+// NOT: Bu resmi olmayan bir endpoint — Google herhangi bir zaman formatını
+// değiştirebilir veya erişimi kısıtlayabilir. Zazakî (zza) bu serviste HİÇ
+// desteklenmiyor; client tarafında Zazakî seçili kullanıcılar için buton
+// zaten gösterilmemeli/farklı ele alınmalı.
+//
+// Google Translate dil kodları: Kurmancî = "ku", Soranî = "ckb", Türkçe = "tr".
+const GOOGLE_TRANSLATE_LANG_CODES = {
+  tr  : "tr",
+  ku  : "ku",
+  ckb : "ckb",
+  en  : "en",
+  // zza kasıtlı olarak yok — Google Translate desteklemiyor.
+};
+
+// Basit rate-limit: kullanıcı başına dakikada 12 çeviri isteği.
+// Bu resmi olmayan endpoint'i kötüye kullanıp IP/proje genelinde
+// engellenme riskini azaltmak için de ayrıca önemli.
+async function checkTranslateRateLimit(db, uid) {
+  const ref = db.collection("rateLimits").doc(`translate_${uid}`);
+  const now = Date.now();
+  const windowMs = 60 * 1000;
+  const maxRequests = 12;
+
+  return db.runTransaction(async (tx) => {
+    const doc = await tx.get(ref);
+    const data = doc.exists ? doc.data() : { windowStart: now, count: 0 };
+    if (now - data.windowStart > windowMs) {
+      tx.set(ref, { windowStart: now, count: 1 });
+      return true;
+    }
+    if (data.count >= maxRequests) return false;
+    tx.set(ref, { windowStart: data.windowStart, count: data.count + 1 });
+    return true;
+  });
+}
+
+exports.translatePostText = onCall(
+  { region: "europe-west1", cors: true, timeoutSeconds: 20 },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+
+    const { text = "", targetLang = "" } = request.data || {};
+    const cleanText = String(text).trim();
+    if (!cleanText) throw new HttpsError("invalid-argument", "Çevrilecek metin boş.");
+    if (cleanText.length > 4000) throw new HttpsError("invalid-argument", "Metin çok uzun.");
+
+    const googleLangCode = GOOGLE_TRANSLATE_LANG_CODES[targetLang];
+    if (!googleLangCode) {
+      throw new HttpsError(
+        "invalid-argument",
+        targetLang === "zza"
+          ? "Zazakî için çeviri şu an desteklenmiyor."
+          : "Desteklenmeyen hedef dil.",
+      );
+    }
+
+    const db = getFirestore();
+    const allowed = await checkTranslateRateLimit(db, request.auth.uid).catch(() => true);
+    if (!allowed) throw new HttpsError("resource-exhausted", "Çok fazla çeviri isteği. Biraz sonra tekrar dene.");
+
+    try {
+      const url =
+        "https://translate.googleapis.com/translate_a/single" +
+        `?client=gtx&sl=auto&tl=${encodeURIComponent(googleLangCode)}&dt=t&q=${encodeURIComponent(cleanText)}`;
+
+      const resp = await fetch(url, {
+        method: "GET",
+        headers: {
+          // Bazı ağ katmanları User-Agent'sız istekleri reddedebiliyor.
+          "User-Agent": "Mozilla/5.0 (compatible; HeftrengApp/1.0)",
+        },
+      });
+
+      if (!resp.ok) {
+        console.error("translatePostText Google endpoint hatası:", resp.status);
+        throw new HttpsError("internal", "Çeviri servisi şu an yanıt vermiyor.");
+      }
+
+      const json = await resp.json();
+      // Yanıt formatı: [[["çevrilen parça1","orijinal1",null,null,...], ["çevrilen parça2",...], ...], ...]
+      const segments = Array.isArray(json?.[0]) ? json[0] : [];
+      const translated = segments
+        .map((seg) => (Array.isArray(seg) ? seg[0] : ""))
+        .join("")
+        .trim();
+
+      if (!translated) throw new HttpsError("internal", "Çeviri alınamadı.");
+
+      return { success: true, translatedText: translated };
+    } catch (e) {
+      if (e instanceof HttpsError) throw e;
+      console.error("translatePostText hata:", e.message);
+      throw new HttpsError("internal", "Çeviri sırasında hata oluştu.");
+    }
+  },
+);

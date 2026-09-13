@@ -2262,4 +2262,68 @@ class FeedViewModel @Inject constructor(
             }
         }
     }
+
+    // ── Gönderi çevirisi ──────────────────────────────────────────────────
+    // Gönderi metnini, kullanıcının uygulama dilinden farklı bir dilde
+    // yazılmışsa, uygulama diline çevirir. Çeviri, key gerektirmeyen
+    // Google Translate uç noktasını kullanan bir Cloud Function
+    // (translatePostText) üzerinden yapılıyor. Sonuç kalıcı olarak
+    // saklanmıyor, sadece o anki UI state'inde tutulur.
+    private val _translatedTexts = MutableStateFlow<Map<String, String>>(emptyMap())
+    val translatedTexts = _translatedTexts.asStateFlow()
+
+    private val _translatingPostIds = MutableStateFlow<Set<String>>(emptySet())
+    val translatingPostIds = _translatingPostIds.asStateFlow()
+
+    private val _translateErrors = MutableStateFlow<Map<String, String>>(emptyMap())
+    val translateErrors = _translateErrors.asStateFlow()
+
+    fun translatePost(post: Post, targetLang: String) {
+        if (post.id.isBlank() || post.text.isBlank()) return
+        if (targetLang == "zza") return // Google Translate Zazakî'yi desteklemiyor
+        if (_translatedTexts.value.containsKey(post.id)) return // zaten çevrildi
+        if (post.id in _translatingPostIds.value) return         // zaten çevriliyor
+
+        _translatingPostIds.value = _translatingPostIds.value + post.id
+        _translateErrors.value    = _translateErrors.value - post.id
+
+        viewModelScope.launch {
+            try {
+                val result = com.google.firebase.functions.FirebaseFunctions
+                    .getInstance("europe-west1")
+                    .getHttpsCallable("translatePostText")
+                    .call(hashMapOf(
+                        "text"       to post.text,
+                        "targetLang" to targetLang,
+                    ))
+                    .await()
+
+                @Suppress("UNCHECKED_CAST")
+                val data = result.data as? Map<String, Any?>
+                val translated = data?.get("translatedText") as? String
+
+                if (!translated.isNullOrBlank()) {
+                    _translatedTexts.value = _translatedTexts.value + (post.id to translated)
+                } else {
+                    _translateErrors.value = _translateErrors.value + (post.id to "Çeviri alınamadı.")
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("FeedVM", "translatePost hata: ${e.message}")
+                val msg = when {
+                    e.message?.contains("resource-exhausted", ignoreCase = true) == true ->
+                        "Çok fazla çeviri isteği yapıldı, biraz sonra tekrar dene."
+                    else -> "Çeviri yapılamadı, tekrar dene."
+                }
+                _translateErrors.value = _translateErrors.value + (post.id to msg)
+            } finally {
+                _translatingPostIds.value = _translatingPostIds.value - post.id
+            }
+        }
+    }
+
+    // Kullanıcı "Orijinali göster"e basarsa çeviriyi geri alır.
+    fun clearTranslation(postId: String) {
+        _translatedTexts.value = _translatedTexts.value - postId
+        _translateErrors.value = _translateErrors.value - postId
+    }
 }
