@@ -940,7 +940,7 @@ fun FeedScreen(
                         post      = post,
                         onLike    = {
                             com.heftreng.app.ui.component.triggerHaptic(context, com.heftreng.app.ui.component.HapticType.LIGHT)
-                            vm.toggleLike(post)
+                            vm.toggleLikeById(post.id)
                         },
                         onSave    = {
                             com.heftreng.app.ui.component.triggerHaptic(context, com.heftreng.app.ui.component.HapticType.MEDIUM)
@@ -963,7 +963,7 @@ fun FeedScreen(
                         },
                         onTap        = { navController.navigate(Screen.PostDetail.go(post.id)) },
                         onDoubleTap  = {
-                            if (!post.isLikedByMe) vm.toggleLike(post)
+                            if (!post.isLikedByMe) vm.toggleLikeById(post.id)
                             heartBurst = true
                             com.heftreng.app.ui.component.triggerHaptic(context, com.heftreng.app.ui.component.HapticType.DOUBLE)
                         },

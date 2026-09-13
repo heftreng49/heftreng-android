@@ -871,6 +871,18 @@ class FeedViewModel @Inject constructor(
         }
     }
 
+    /**
+     * toggleLikeById — postId ile çağrılır, güncel state'i _posts'tan okur.
+     * Lambda capture'daki stale post nesnesinden kaçınmak için kullan.
+     * FeedScreen, SinglePostScreen gibi her yer bunu kullanmalı.
+     */
+    fun toggleLikeById(postId: String) {
+        val current = _posts.value.find { it.id == postId }
+            ?: _libraryQuotes.value.find { it.id == postId }
+            ?: return
+        toggleLike(current)
+    }
+
     fun toggleLike(post: Post) {
         if (uid.isEmpty()) return
         val nowLiked = !post.isLikedByMe

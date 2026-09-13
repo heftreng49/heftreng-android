@@ -76,7 +76,7 @@ fun ConnectedPostCard(
         isDetailScreen = isDetailScreen,
 
         // ── Sosyal aksiyonlar ──────────────────────────────────────────────
-        onLike   = onLikeOverride ?: { feedVm.toggleLike(post) },
+        onLike   = onLikeOverride ?: { feedVm.toggleLikeById(post.id) },
         onSave   = onSaveOverride ?: { feedVm.toggleSave(post) },
         onShare  = {
             if (post.isRepostedByMe) showUnrepostConfirm = true
