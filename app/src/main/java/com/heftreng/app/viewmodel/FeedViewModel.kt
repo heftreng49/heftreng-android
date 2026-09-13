@@ -1846,6 +1846,7 @@ class FeedViewModel @Inject constructor(
                             }
                         } catch (_: Exception) {}
                     }
+                } // if (uid.isNotEmpty())
             } catch (e: Exception) {
                 e.printStackTrace()
                 _postNotFound.value = postId
