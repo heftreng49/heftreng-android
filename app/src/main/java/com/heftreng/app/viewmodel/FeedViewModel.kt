@@ -1824,7 +1824,28 @@ class FeedViewModel @Inject constructor(
                     val mapped = mapInteractions(listOf(post))
                     _posts.value = _posts.value + mapped
                     enrichPostsInBackground(mapped)
-                }
+                    // ensurePost genellikle SinglePostScreen'in kendi VM'inde çağrılır.
+                    // Bu VM'de likedIds henüz boş olabilir — post listeye eklendi ama
+                    // isLikedByMe = false olarak geldi. Hemen o post için Supabase'den
+                    // like/save durumunu çek ve _posts'u güncelle.
+                    if (uid.isNotEmpty()) {
+                        try {
+                            val liked = supabase.postgrest["feed_likes"]
+                                .select { filter { eq("uid", uid); eq("post_id", postId) }; limit(1) }
+                                .decodeList<FeedLikeRow>().isNotEmpty()
+                            val saved = supabase.postgrest["feed_saves"]
+                                .select { filter { eq("uid", uid); eq("post_id", postId) }; limit(1) }
+                                .decodeList<FeedSaveRow>().isNotEmpty()
+                            if (liked) likedIds = likedIds + postId
+                            if (saved) savedIds = savedIds + postId
+                            if (liked || saved) {
+                                _posts.value = _posts.value.map { p ->
+                                    if (p.id == postId) p.copy(isLikedByMe = liked, isSavedByMe = saved)
+                                    else p
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
             } catch (e: Exception) {
                 e.printStackTrace()
                 _postNotFound.value = postId
