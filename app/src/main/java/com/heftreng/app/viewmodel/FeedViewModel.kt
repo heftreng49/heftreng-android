@@ -2289,14 +2289,21 @@ class FeedViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val result = com.google.firebase.functions.FirebaseFunctions
-                    .getInstance("europe-west1")
-                    .getHttpsCallable("translatePostText")
-                    .call(hashMapOf(
-                        "text"       to post.text,
-                        "targetLang" to targetLang,
-                    ))
-                    .await()
+                // DEBUG: İstek sessizce sonsuza kadar takılı kalıyordu (ne
+                // başarı ne hata dönüyordu). Açık bir timeout ile en azından
+                // belirli bir süre sonra hataya düşmesini garantiliyoruz —
+                // bu, App Check/network seviyesinde bir sorun olup olmadığını
+                // ayırt etmemize yardımcı olacak.
+                val result = kotlinx.coroutines.withTimeout(15_000) {
+                    com.google.firebase.functions.FirebaseFunctions
+                        .getInstance("europe-west1")
+                        .getHttpsCallable("translatePostText")
+                        .call(hashMapOf(
+                            "text"       to post.text,
+                            "targetLang" to targetLang,
+                        ))
+                        .await()
+                }
 
                 @Suppress("UNCHECKED_CAST")
                 val data = result.data as? Map<String, Any?>
@@ -2310,12 +2317,14 @@ class FeedViewModel @Inject constructor(
             } catch (e: Exception) {
                 android.util.Log.w("FeedVM", "translatePost hata: ${e.message}")
                 val msg = when {
+                    e is kotlinx.coroutines.TimeoutCancellationException ->
+                        "Çeviri isteği zaman aşımına uğradı (15sn). Muhtemelen ağ/App Check sorunu."
                     e.message?.contains("resource-exhausted", ignoreCase = true) == true ->
                         "Çok fazla çeviri isteği yapıldı, biraz sonra tekrar dene."
                     // DEBUG: Sorunu teşhis edene kadar asıl Cloud Function
                     // hata mesajını gösteriyoruz. Netleşince genel mesaja
                     // geri dönülebilir.
-                    else -> "Çeviri yapılamadı: ${e.message ?: "bilinmeyen hata"}"
+                    else -> "Çeviri yapılamadı: ${e.message ?: "bilinmeyen hata"} (${e::class.simpleName})"
                 }
                 _translateErrors.value = _translateErrors.value + (post.id to msg)
             } finally {

@@ -2053,7 +2053,11 @@ async function checkTranslateRateLimit(db, uid) {
 }
 
 exports.translatePostText = onCall(
-  { region: "europe-west1", cors: true, timeoutSeconds: 20 },
+  // enforceAppCheck: false (sendPush ile aynı desen) — App Check aktifse ve
+  // bu token client'ta sorunlu üretiliyorsa istek sessizce reddedilmiyor,
+  // en azından App Check kaynaklı bir engelleme ihtimalini burada net
+  // olarak kapatıyoruz.
+  { region: "europe-west1", cors: true, timeoutSeconds: 20, enforceAppCheck: false },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
 
