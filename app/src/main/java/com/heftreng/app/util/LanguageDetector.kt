@@ -96,11 +96,6 @@ object LanguageDetector {
      * gösterilmez (gereksiz buton, hiç buton olmamasından daha rahatsız edici).
      */
     fun isLikelyDifferentLanguage(text: String, appLanguage: String): Boolean {
-        // Çeviri servisi olarak Google Translate'in gayri resmi/ücretsiz
-        // endpoint'i kullanılıyor ve bu servis Zazakî'yi HİÇ desteklemiyor.
-        // Zazakî uygulama dili seçiliyken buton gösterip başarısız olan bir
-        // istek yaptırmak yerine, hiç göstermiyoruz.
-        if (appLanguage == "zza") return false
         val detected = detect(text) ?: return false
         return detected != appLanguage
     }

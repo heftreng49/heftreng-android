@@ -2280,7 +2280,6 @@ class FeedViewModel @Inject constructor(
 
     fun translatePost(post: Post, targetLang: String) {
         if (post.id.isBlank() || post.text.isBlank()) return
-        if (targetLang == "zza") return // Google Translate Zazakî'yi desteklemiyor
         if (_translatedTexts.value.containsKey(post.id)) return // zaten çevrildi
         if (post.id in _translatingPostIds.value) return         // zaten çevriliyor
 
@@ -2318,13 +2317,10 @@ class FeedViewModel @Inject constructor(
                 android.util.Log.w("FeedVM", "translatePost hata: ${e.message}")
                 val msg = when {
                     e is kotlinx.coroutines.TimeoutCancellationException ->
-                        "Çeviri isteği zaman aşımına uğradı (15sn). Muhtemelen ağ/App Check sorunu."
+                        "Çeviri isteği zaman aşımına uğradı, tekrar dene."
                     e.message?.contains("resource-exhausted", ignoreCase = true) == true ->
                         "Çok fazla çeviri isteği yapıldı, biraz sonra tekrar dene."
-                    // DEBUG: Sorunu teşhis edene kadar asıl Cloud Function
-                    // hata mesajını gösteriyoruz. Netleşince genel mesaja
-                    // geri dönülebilir.
-                    else -> "Çeviri yapılamadı: ${e.message ?: "bilinmeyen hata"} (${e::class.simpleName})"
+                    else -> "Çeviri yapılamadı, tekrar dene."
                 }
                 _translateErrors.value = _translateErrors.value + (post.id to msg)
             } finally {

@@ -2012,27 +2012,23 @@ exports.adminUpdateUserEmail = onCall(
 );
 
 // ─── translatePostText — HTTPS Callable (v2) ────────────────────────────────
-// Gönderi metnini kullanıcının uygulama diline çevirir. Google'ın resmi
-// Cloud Translation API'si ücretli ve API anahtarı gerektiriyor; bunun
-// yerine Google Translate web/mobil arayüzünün kullandığı, key gerektirmeyen
-// GAYRİ RESMİ "gtx" endpoint'i kullanılıyor (translate.googleapis.com).
-// NOT: Bu resmi olmayan bir endpoint — Google herhangi bir zaman formatını
-// değiştirebilir veya erişimi kısıtlayabilir. Zazakî (zza) bu serviste HİÇ
-// desteklenmiyor; client tarafında Zazakî seçili kullanıcılar için buton
-// zaten gösterilmemeli/farklı ele alınmalı.
-//
-// Google Translate dil kodları: Kurmancî = "ku", Soranî = "ckb", Türkçe = "tr".
-const GOOGLE_TRANSLATE_LANG_CODES = {
-  tr  : "tr",
-  ku  : "ku",
-  ckb : "ckb",
-  en  : "en",
-  // zza kasıtlı olarak yok — Google Translate desteklemiyor.
+// Gönderi metnini kullanıcının uygulama diline çevirir. Google Cloud
+// Translation API Kurmancî/Soranî/Zazakî desteklemiyor; Google Translate'in
+// gayri resmi ücretsiz endpoint'i ise Cloud Functions sunucu IP'lerinden
+// erişilemedi (muhtemelen Google tarafından engelleniyor). Bunun yerine
+// Gemini (LLM) kullanılıyor — resmi API, ücretsiz katmanı var, dil kısıtı
+// olmadan Kurmancî/Soranî/Zazakî dahil her dile çeviri yapabiliyor.
+// Secret: Firebase Secret Manager → GEMINI_API_KEY
+const TRANSLATE_LANG_NAMES = {
+  tr  : "Turkish (Türkçe)",
+  ku  : "Kurmanji Kurdish (Kurmancî)",
+  ckb : "Sorani Kurdish (Soranî / کوردیی ناوەندی)",
+  zza : "Zazaki (Zazakî / Kirmanckî)",
+  en  : "English",
 };
 
 // Basit rate-limit: kullanıcı başına dakikada 12 çeviri isteği.
-// Bu resmi olmayan endpoint'i kötüye kullanıp IP/proje genelinde
-// engellenme riskini azaltmak için de ayrıca önemli.
+// Kötüye kullanımı (spam / bot maliyeti) önlemek için.
 async function checkTranslateRateLimit(db, uid) {
   const ref = db.collection("rateLimits").doc(`translate_${uid}`);
   const now = Date.now();
@@ -2053,11 +2049,13 @@ async function checkTranslateRateLimit(db, uid) {
 }
 
 exports.translatePostText = onCall(
-  // enforceAppCheck: false (sendPush ile aynı desen) — App Check aktifse ve
-  // bu token client'ta sorunlu üretiliyorsa istek sessizce reddedilmiyor,
-  // en azından App Check kaynaklı bir engelleme ihtimalini burada net
-  // olarak kapatıyoruz.
-  { region: "europe-west1", cors: true, timeoutSeconds: 20, enforceAppCheck: false },
+  {
+    region: "europe-west1",
+    cors: true,
+    timeoutSeconds: 20,
+    enforceAppCheck: false,
+    secrets: ["GEMINI_API_KEY"],
+  },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
 
@@ -2066,53 +2064,44 @@ exports.translatePostText = onCall(
     if (!cleanText) throw new HttpsError("invalid-argument", "Çevrilecek metin boş.");
     if (cleanText.length > 4000) throw new HttpsError("invalid-argument", "Metin çok uzun.");
 
-    const googleLangCode = GOOGLE_TRANSLATE_LANG_CODES[targetLang];
-    if (!googleLangCode) {
-      throw new HttpsError(
-        "invalid-argument",
-        targetLang === "zza"
-          ? "Zazakî için çeviri şu an desteklenmiyor."
-          : "Desteklenmeyen hedef dil.",
-      );
-    }
+    const targetLangName = TRANSLATE_LANG_NAMES[targetLang];
+    if (!targetLangName) throw new HttpsError("invalid-argument", "Desteklenmeyen hedef dil.");
 
     const db = getFirestore();
     const allowed = await checkTranslateRateLimit(db, request.auth.uid).catch(() => true);
     if (!allowed) throw new HttpsError("resource-exhausted", "Çok fazla çeviri isteği. Biraz sonra tekrar dene.");
 
-    try {
-      const url =
-        "https://translate.googleapis.com/translate_a/single" +
-        `?client=gtx&sl=auto&tl=${encodeURIComponent(googleLangCode)}&dt=t&q=${encodeURIComponent(cleanText)}`;
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new HttpsError("internal", "Çeviri servisi yapılandırılmamış (GEMINI_API_KEY eksik).");
 
-      const resp = await fetch(url, {
-        method: "GET",
-        headers: {
-          // Google, "bot" gibi görünen User-Agent'ları 403 ile reddedebiliyor —
-          // gerçek bir tarayıcı User-Agent'ı kullanıyoruz.
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          "Accept": "*/*",
+    const prompt =
+      `Translate the following text into ${targetLangName}. ` +
+      `Output ONLY the translated text, with no explanations, no quotation marks, ` +
+      `and no additional commentary. Preserve line breaks, emojis and formatting. ` +
+      `If the text is already in ${targetLangName}, return it unchanged.\n\n` +
+      `Text:\n${cleanText}`;
+
+    try {
+      const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
+          }),
         },
-      });
+      );
 
       if (!resp.ok) {
         const errBody = await resp.text().catch(() => "");
-        console.error("translatePostText Google endpoint hatası:", resp.status, errBody.slice(0, 300));
-        // DEBUG: Teşhis kolaylığı için status kodu geçici olarak client'a
-        // taşınıyor. Sorun netleşince bu detay kaldırılabilir.
+        console.error("translatePostText Gemini hatası:", resp.status, errBody.slice(0, 300));
         throw new HttpsError("internal", `Çeviri servisi hata döndürdü (HTTP ${resp.status}).`);
       }
 
       const json = await resp.json();
-      // Yanıt formatı: [[["çevrilen parça1","orijinal1",null,null,...], ["çevrilen parça2",...], ...], ...]
-      const segments = Array.isArray(json?.[0]) ? json[0] : [];
-      const translated = segments
-        .map((seg) => (Array.isArray(seg) ? seg[0] : ""))
-        .join("")
-        .trim();
-
+      const translated = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
       if (!translated) {
         console.error("translatePostText: boş çeviri, ham yanıt:", JSON.stringify(json).slice(0, 300));
         throw new HttpsError("internal", "Çeviri alınamadı (boş yanıt).");
@@ -2122,8 +2111,6 @@ exports.translatePostText = onCall(
     } catch (e) {
       if (e instanceof HttpsError) throw e;
       console.error("translatePostText hata:", e.message, e.stack);
-      // DEBUG: fetch/network seviyesinde bir hata (DNS, TLS, timeout vb.)
-      // olması ihtimaline karşı asıl mesajı geçici olarak client'a taşıyoruz.
       throw new HttpsError("internal", `Çeviri sırasında hata oluştu: ${e.message}`);
     }
   },
