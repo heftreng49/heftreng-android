@@ -151,7 +151,7 @@ async function ensureFirestoreDoc(user, stats) {
     username,
     usernameLower:  username.toLowerCase(),
     email,
-    photoURL:       data?.photoURL ?? user.photoURL ?? '',
+    photoURL:       data?.photoURL ?? user.photoUrl ?? '',
     coverPhoto:     data?.coverPhoto ?? '',
     bio:            data?.bio ?? '',
     website:        data?.website ?? '',
@@ -206,7 +206,7 @@ async function ensureSupabaseRow(user, fsData, username, stats) {
   }
 
   const name    = fsData?.displayName?.trim() || user.displayName?.trim() || 'Kullanıcı';
-  const photo   = fsData?.photoURL ?? user.photoURL ?? '';
+  const photo   = fsData?.photoURL ?? user.photoUrl ?? '';
   const bio     = fsData?.bio ?? '';
 
   if (!existing) {
@@ -298,8 +298,28 @@ async function main() {
     return false;
   });
 
+  // Auth'ta photoUrl var ama Firestore'da photoURL bos olanlar
+  const photoMissing = allUsers.filter(u => {
+    if (broken.find(b => b.uid === u.uid)) return false; // zaten broken'da
+    const fs = fsMap.get(u.uid);
+    if (!fs) return false;
+    return (u.photoUrl) && !(fs.photoURL?.trim());
+  });
+
   console.log(`\nEksik/yarim profil sayisi: ${broken.length}`);
-  if (!broken.length) { console.log('Duzeltme gerekmiyor.'); return; }
+  console.log(`Fotograf eksik (Auth'ta var, Firestore'da yok): ${photoMissing.length}`);
+
+  if (photoMissing.length) {
+    console.log('\n── Fotograf guncelleniyor ──────────────────────────────────');
+    for (const user of photoMissing) {
+      console.log(`  [photoURL FIX] ${user.uid.slice(0,10)}... → ${user.photoUrl}`);
+      if (!DRY_RUN) {
+        await db.collection('users').doc(user.uid).update({ photoURL: user.photoUrl });
+      }
+    }
+  }
+
+  if (!broken.length) { console.log('Profil duzeltme gerekmiyor.'); return; }
 
   console.log('\n' + '─'.repeat(60));
 
