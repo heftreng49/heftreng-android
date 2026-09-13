@@ -1,0 +1,61 @@
+name: Fix Incomplete Profiles
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Calistirma modu'
+        required: true
+        default: 'dry-run'
+        type: choice
+        options:
+          - dry-run
+          - write
+      uid:
+        description: 'Tek kullanici (bos = hepsi)'
+        required: false
+        default: ''
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install firebase-admin@12 @supabase/supabase-js
+
+      - name: Dry-run
+        if: ${{ github.event.inputs.mode == 'dry-run' }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          UID_ARG=""
+          if [ -n "${{ github.event.inputs.uid }}" ]; then
+            UID_ARG="--uid=${{ github.event.inputs.uid }}"
+          fi
+          node fix-incomplete-profiles.js $UID_ARG
+
+      - name: Write
+        if: ${{ github.event.inputs.mode == 'write' }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          UID_ARG=""
+          if [ -n "${{ github.event.inputs.uid }}" ]; then
+            UID_ARG="--uid=${{ github.event.inputs.uid }}"
+          fi
+          node fix-incomplete-profiles.js --write $UID_ARG
+
+      - name: Cleanup
+        if: always()
+        run: rm -f serviceAccount.json
