@@ -95,7 +95,17 @@ object LanguageDetector {
      * Tespit belirsizse (null) false döner — yani şüpheli durumda buton
      * gösterilmez (gereksiz buton, hiç buton olmamasından daha rahatsız edici).
      */
+    // ── ÖZELLİK GEÇİCİ OLARAK KAPALI ────────────────────────────────────────
+    // Çeviri servisi (Google Translate gayri resmi endpoint çalışmadı,
+    // Gemini ücretsiz katmanı 15 RPM ile çok kullanıcılı senaryoda yetersiz
+    // kaldı) için sağlam/yeterli kapasiteli bir alternatif bulunana kadar
+    // "Çevir" butonu tüm ekranlarda gizli. Geri açmak için bu satırı silmek
+    // yeterli — geri kalan tüm altyapı (ViewModel, Cloud Function, UI) yerinde
+    // duruyor, sadece buton görünürlüğü kapatıldı.
+    private const val TRANSLATE_FEATURE_ENABLED = false
+
     fun isLikelyDifferentLanguage(text: String, appLanguage: String): Boolean {
+        if (!TRANSLATE_FEATURE_ENABLED) return false
         val detected = detect(text) ?: return false
         return detected != appLanguage
     }
