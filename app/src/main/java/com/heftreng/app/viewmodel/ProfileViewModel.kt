@@ -448,8 +448,14 @@ class ProfileViewModel @Inject constructor(
                         libraryAuthorId = fd["libraryAuthorId"] as? String ?: "",
                         type            = fd["type"]            as? String ?: "",
                         mentions        = (fd["mentions"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                        pinned          = fd["pinned"] as? Boolean ?: false,
+                        pinnedAt        = fd["pinnedAt"] as? Timestamp,
                     )
-                }.sortedByDescending { it.ts?.seconds ?: 0L }
+                }.sortedWith(
+                    // Sabitlenmiş gönderi(ler) her zaman en üstte, geri kalanı tarihe göre.
+                    compareByDescending<Post> { it.pinned }
+                        .thenByDescending { it.ts?.seconds ?: 0L }
+                )
 
                 // ✅ AŞAMA 2 TAMAMLANDI — postlar ekrana gelir
                 _posts.value = rawPosts
@@ -1040,6 +1046,68 @@ class ProfileViewModel @Inject constructor(
                 isRepostedByMe = reposted,
                 repostsCount   = maxOf(0, it.repostsCount + if (reposted) 1 else -1),
             ) else it
+        }
+    }
+
+    // ── Profilde sabitleme ────────────────────────────────────────────────
+    // Kullanıcı isteği: profilde bir gönderiyi en üste sabitleyebilme.
+    // Aynı anda sadece bir gönderi sabit kalabilir — yeni bir gönderi
+    // sabitlenince öncekinin sabitlemesi otomatik kaldırılır.
+    fun pinPost(postId: String) {
+        if (myUid.isEmpty()) return
+        val previousPinnedId = _posts.value.firstOrNull { it.pinned }?.id
+        val now = com.google.firebase.Timestamp.now()
+
+        // Optimistic update — UI anında güncellenir.
+        _posts.value = _posts.value
+            .map { p ->
+                when (p.id) {
+                    postId            -> p.copy(pinned = true, pinnedAt = now)
+                    previousPinnedId  -> p.copy(pinned = false, pinnedAt = null)
+                    else              -> p
+                }
+            }
+            .sortedWith(compareByDescending<Post> { it.pinned }.thenByDescending { it.ts?.seconds ?: 0L })
+
+        viewModelScope.launch {
+            try {
+                val postRef = firestore.collection("feed").document(postId)
+                if (postRef.get().await().getString("uid") != myUid) return@launch // güvenlik
+
+                val batch = firestore.batch()
+                batch.update(postRef, mapOf("pinned" to true, "pinnedAt" to now))
+                if (previousPinnedId != null && previousPinnedId != postId) {
+                    batch.update(
+                        firestore.collection("feed").document(previousPinnedId),
+                        mapOf("pinned" to false, "pinnedAt" to null),
+                    )
+                }
+                batch.commit().await()
+            } catch (e: Exception) {
+                android.util.Log.w("ProfileVM", "pinPost hata: ${e.message}")
+                _error.value = e.message
+                // Hata olursa optimistic değişikliği geri al.
+                load(uid = myUid, forceRefresh = true)
+            }
+        }
+    }
+
+    fun unpinPost(postId: String) {
+        if (myUid.isEmpty()) return
+        _posts.value = _posts.value
+            .map { p -> if (p.id == postId) p.copy(pinned = false, pinnedAt = null) else p }
+            .sortedWith(compareByDescending<Post> { it.pinned }.thenByDescending { it.ts?.seconds ?: 0L })
+
+        viewModelScope.launch {
+            try {
+                val postRef = firestore.collection("feed").document(postId)
+                if (postRef.get().await().getString("uid") != myUid) return@launch
+                postRef.update(mapOf("pinned" to false, "pinnedAt" to null)).await()
+            } catch (e: Exception) {
+                android.util.Log.w("ProfileVM", "unpinPost hata: ${e.message}")
+                _error.value = e.message
+                load(uid = myUid, forceRefresh = true)
+            }
         }
     }
 

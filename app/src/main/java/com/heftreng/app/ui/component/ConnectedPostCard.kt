@@ -46,6 +46,8 @@ fun ConnectedPostCard(
     // Bu override ile o ekranın kendi toggleLike fonksiyonu çağrılabilir.
     onLikeOverride  : (() -> Unit)? = null,
     onDeleteOverride: (() -> Unit)? = null,
+    onPinOverride   : (() -> Unit)? = null,
+    onUnpinOverride : (() -> Unit)? = null,
     onEditOverride  : ((title: String, text: String) -> Unit)? = null,
     showReport      : Boolean = false,
     onReport        : (() -> Unit)? = null,
@@ -97,6 +99,8 @@ fun ConnectedPostCard(
             }
         },
         onDelete = onDeleteOverride,
+        onPin    = onPinOverride,
+        onUnpin  = onUnpinOverride,
         onEdit   = onEditOverride,
         canModerate = canModeratePosts,
         isRemoved   = post.moderationStatus == "removed",

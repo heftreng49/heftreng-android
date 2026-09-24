@@ -179,6 +179,7 @@ service cloud.firestore {
       allow update:
           if isAdmin()
           || (isAuth() && notBanned() && resource.data.uid == request.auth.uid && onlyChanging(['text']))
+          || (isAuth() && notBanned() && resource.data.uid == request.auth.uid && onlyChanging(['pinned','pinnedAt']))
           || (isAuth() && onlyChanging(['likesCount']))
           || (isAuth() && onlyChanging(['saves']))
           || (isAuth() && onlyChanging(['commentsCount']))

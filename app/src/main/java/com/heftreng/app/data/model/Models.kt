@@ -99,6 +99,12 @@ data class Post(
     val moderationReason : String     = "",
     val visibility       : String     = "public",
     val mentions         : List<String> = emptyList(), // mention edilen uid listesi (Comment.mentions ile aynı desen)
+    // ── Profilde sabitleme ──────────────────────────────────────────────
+    // Kullanıcı kendi profilinde bir gönderiyi en üste sabitleyebilir.
+    // Sadece bir gönderi aynı anda sabit kalabilir (yeni sabitleme
+    // öncekini otomatik kaldırır — bkz. ProfileViewModel.pinPost).
+    val pinned           : Boolean    = false,
+    val pinnedAt         : Timestamp? = null,
     // ÇÖZÜLDÜ: Client-state alanları — Firestore'a YAZILMAZ, sadece ViewModel'de doldurulur
     @get:Exclude @set:Exclude
     var isLikedByMe    : Boolean    = false,

@@ -550,6 +550,8 @@ fun ProfileScreen(
                                 language           = language,
                                 onLikeOverride     = { vm.toggleLikePost(post) },
                                 onDeleteOverride   = if (isMe) ({ vm.deleteOwnPost(post.id) }) else null,
+                                onPinOverride      = if (isMe) ({ vm.pinPost(post.id) }) else null,
+                                onUnpinOverride    = if (isMe) ({ vm.unpinPost(post.id) }) else null,
                                 onEditOverride     = if (isMe) ({ newTitle, newText -> vm.editOwnPost(post.id, newTitle, newText) }) else null,
                                 onRepostOverride   = { vm.markPostReposted(post.id, true) },
                                 onUnrepostOverride = { vm.markPostReposted(post.id, false) },

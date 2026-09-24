@@ -235,10 +235,34 @@ fun FeedScreen(
     val likers           by socialVm.likers.collectAsState()
     val socialLoading    by socialVm.loading.collectAsState()
 
+    val context          = LocalContext.current
     var inlineText       by remember { mutableStateOf("") }
     var inlineTitle      by remember { mutableStateOf("") }
     var inlineTopic      by remember { mutableStateOf("") }
     var inlineQuote      by remember { mutableStateOf<QuotePayload?>(null) }
+    // ── Taslak kaydetme ──────────────────────────────────────────────────
+    // Kullanıcı gönderi yazarken uygulama arka planda öldürülürse (bildirim,
+    // düşük bellek vb.) inlineText/inlineTitle (Compose remember state'i)
+    // kayboluyordu. Artık debounce'lu şekilde SharedPreferences'a yazılıyor
+    // ve compose ekranı her açıldığında geri yükleniyor.
+    var draftRestoredChecked by remember { mutableStateOf(false) }
+    LaunchedEffect(showComposeDialog) {
+        if (showComposeDialog && !draftRestoredChecked) {
+            draftRestoredChecked = true
+            if (inlineText.isBlank() && inlineTitle.isBlank()) {
+                com.heftreng.app.util.DraftManager.load(context)?.let { (text, title) ->
+                    inlineText  = text
+                    inlineTitle = title
+                }
+            }
+        }
+    }
+    LaunchedEffect(inlineText, inlineTitle) {
+        kotlinx.coroutines.delay(600) // debounce — her tuş vuruşunda diske yazmayalım
+        if (inlineText.isNotBlank() || inlineTitle.isNotBlank()) {
+            com.heftreng.app.util.DraftManager.save(context, inlineText, inlineTitle)
+        }
+    }
     val mentionSuggestions by vm.mentionSuggestions.collectAsState()
     var inlineMentionedUids by remember { mutableStateOf(listOf<String>()) }
     LaunchedEffect(inlineText) {
@@ -287,7 +311,6 @@ fun FeedScreen(
         }
     }
     val uploading        by vm.uploading.collectAsState()
-    val context          = LocalContext.current
 
     // Photo Picker — izin gerektirmez (Android 13+ politikası)
     val imagePicker = rememberLauncherForActivityResult(
@@ -484,6 +507,7 @@ fun FeedScreen(
                                             inlineMentionedUids = emptyList()
                                             inlineLinkPreview   = null
                                             vm.clearMentionSuggestions()
+                                            com.heftreng.app.util.DraftManager.clear(context)
                                             showComposeDialog = false
                                         }
                                     },
@@ -1693,6 +1717,9 @@ fun PostCard(
     onComment : () -> Unit,
     onShare      : () -> Unit,
     onDelete     : (() -> Unit)? = null,
+    // Profilde sabitleme — sadece kendi gönderisi için (isOwn true iken) gösterilir.
+    onPin        : (() -> Unit)? = null,
+    onUnpin      : (() -> Unit)? = null,
     onEdit       : ((title: String, text: String) -> Unit)? = null,
     onEditQuote  : ((quoteText: String, bookName: String, authorName: String) -> Unit)? = null,
     onTap        : (() -> Unit)? = null,
@@ -1827,6 +1854,21 @@ fun PostCard(
                                 else showEditDialog = true
                             },
                         )
+                        if (onPin != null || onUnpin != null) {
+                            if (post.pinned) {
+                                DropdownMenuItem(
+                                    text        = { Text(if (ku) "Sabitlemeyi Rake" else "Sabitlemeyi Kaldır", color = OnBackground) },
+                                    leadingIcon = { Icon(Icons.Default.PushPin, null, tint = Muted) },
+                                    onClick     = { menuExpanded = false; onUnpin?.invoke() },
+                                )
+                            } else {
+                                DropdownMenuItem(
+                                    text        = { Text(if (ku) "Li Profîlê Sabît Bike" else "Profilde Sabitle", color = OnBackground) },
+                                    leadingIcon = { Icon(Icons.Default.PushPin, null, tint = Muted) },
+                                    onClick     = { menuExpanded = false; onPin?.invoke() },
+                                )
+                            }
+                        }
                         DropdownMenuItem(
                             text        = { Text(Strings.delete(language), color = Color(0xFFEF4444)) },
                             leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) },
