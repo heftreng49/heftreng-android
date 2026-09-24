@@ -2049,12 +2049,16 @@ async function checkTranslateRateLimit(db, uid) {
 }
 
 exports.translatePostText = onCall(
+  // NOT: GEMINI_API_KEY secret'ı tanımlanmadığı için "secrets" listesinden
+  // çıkarıldı — bu referans deploy'u bloke ediyordu (secret bulunamıyor
+  // hatası). Çeviri özelliği zaten client tarafında kapalı
+  // (TRANSLATE_FEATURE_ENABLED = false), fonksiyon çağrılmıyor; secret
+  // eklenip özellik geri açılınca bu satır tekrar eklenmeli.
   {
     region: "europe-west1",
     cors: true,
     timeoutSeconds: 20,
     enforceAppCheck: false,
-    secrets: ["GEMINI_API_KEY"],
   },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
