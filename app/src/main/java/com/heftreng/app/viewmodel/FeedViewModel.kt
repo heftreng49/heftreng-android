@@ -48,6 +48,16 @@ class FeedViewModel @Inject constructor(
     }
 
     private val _posts    = MutableStateFlow<List<Post>>(emptyList())
+
+    // ── Feed scroll pozisyonu ─────────────────────────────────────────────
+    // Kullanıcı bir gönderiye yorum yapmak/detayına bakmak için başka bir
+    // ekrana gidip geri döndüğünde FeedScreen composable'ı yeniden
+    // yaratılıyor ve rememberLazyListState() sıfırdan başlıyor — bu da
+    // "her seferinde en başa atıyor" şikayetine yol açıyordu. Pozisyonu
+    // burada (ViewModel, ekran ömründen bağımsız) saklayıp composable
+    // her yaratıldığında bu değerlerle başlatıyoruz.
+    var lastScrollIndex : Int = 0
+    var lastScrollOffset: Int = 0
     val posts = _posts.asStateFlow()
 
     // Twitter tarzı "yeni gönderi" pill — server'dan cache'de olmayan gönderiler burada bekler

@@ -1043,17 +1043,143 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
+    // ── Arşivleme ─────────────────────────────────────────────────────────
+    // Kullanıcı isteği: "sildiğimiz paylaşımlara sonradan tekrar
+    // ulaşabilmemiz mümkün mü?" — kalıcı silme yerine gönderi kendi
+    // users/{uid}/archivedPosts alt koleksiyonuna taşınıyor (feed'den
+    // gerçekten kaldırılıyor ama veri kaybolmuyor). Mevcut feed sorgularının
+    // hiçbiri değişmiyor çünkü doküman feed koleksiyonundan gerçekten siliniyor.
     fun deleteOwnPost(postId: String) {
         if (myUid.isEmpty()) return
+        val removedPost = _posts.value.firstOrNull { it.id == postId }
         _posts.value = _posts.value.filter { it.id != postId }
         viewModelScope.launch {
             try {
-                // Güvenlik: post sahibi mi kontrol et
-                val postDoc = firestore.collection("feed").document(postId).get().await()
+                val postRef = firestore.collection("feed").document(postId)
+                val postDoc = postRef.get().await()
                 if (postDoc.getString("uid") != myUid) return@launch
-                firestore.collection("feed").document(postId).delete().await()
+
+                val data = postDoc.data?.toMutableMap() ?: run {
+                    // Doküman zaten okunamıyorsa arşivlemeden direkt sil.
+                    postRef.delete().await()
+                    return@launch
+                }
+                data["archivedAt"]       = com.google.firebase.Timestamp.now()
+                data["originalPostId"]   = postId
+
+                // Önce arşive yaz, yazma başarılı olduktan SONRA orijinali sil —
+                // ters sırada yapılırsa yazma başarısız olduğunda veri kaybolur.
+                firestore.collection("users").document(myUid)
+                    .collection("archivedPosts").document(postId)
+                    .set(data).await()
+                postRef.delete().await()
             }
-            catch (e: Exception) { android.util.Log.w("ProfileVM", e.message ?: ""); _error.value = e.message }
+            catch (e: Exception) {
+                android.util.Log.w("ProfileVM", "deleteOwnPost (arşivleme) hata: ${e.message}")
+                _error.value = e.message
+                // Arşivleme/silme başarısız oldu — gönderiyi listeye geri koy
+                // ki kullanıcı "silindi" sanıp kaybolduğunu düşünmesin.
+                removedPost?.let { p ->
+                    if (_posts.value.none { it.id == p.id }) {
+                        _posts.value = (_posts.value + p).sortedByDescending { it.ts }
+                    }
+                }
+            }
+        }
+    }
+
+    // Arşivlenmiş gönderileri listeler (Arşivim ekranı için).
+    private val _archivedPosts = MutableStateFlow<List<Post>>(emptyList())
+    val archivedPosts = _archivedPosts.asStateFlow()
+
+    private val _archivedLoading = MutableStateFlow(false)
+    val archivedLoading = _archivedLoading.asStateFlow()
+
+    fun loadArchivedPosts() {
+        if (myUid.isEmpty()) return
+        viewModelScope.launch {
+            _archivedLoading.value = true
+            try {
+                val snap = firestore.collection("users").document(myUid)
+                    .collection("archivedPosts")
+                    .orderBy("archivedAt", Query.Direction.DESCENDING)
+                    .get().await()
+                _archivedPosts.value = snap.documents.mapNotNull { it.toPostOrNull() }
+            } catch (e: Exception) {
+                android.util.Log.w("ProfileVM", "loadArchivedPosts hata: ${e.message}")
+            } finally {
+                _archivedLoading.value = false
+            }
+        }
+    }
+
+    // Arşivden geri yükler: feed'e geri kopyalar, arşivden kaldırır.
+    fun restoreArchivedPost(postId: String) {
+        if (myUid.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val archiveRef = firestore.collection("users").document(myUid)
+                    .collection("archivedPosts").document(postId)
+                val archiveDoc = archiveRef.get().await()
+                val data = archiveDoc.data?.toMutableMap() ?: return@launch
+                data.remove("archivedAt")
+                data.remove("originalPostId")
+
+                firestore.collection("feed").document(postId).set(data).await()
+                archiveRef.delete().await()
+
+                _archivedPosts.value = _archivedPosts.value.filter { it.id != postId }
+                // Geri yüklenen gönderi feed listesine de eklensin (en üste).
+                archiveDoc.toPostOrNull()?.let { restored ->
+                    _posts.value = (listOf(restored) + _posts.value)
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("ProfileVM", "restoreArchivedPost hata: ${e.message}")
+                _error.value = e.message
+            }
+        }
+    }
+
+    // Arşivden kalıcı olarak siler (kullanıcı "kalıcı sil" derse).
+    fun permanentlyDeleteArchivedPost(postId: String) {
+        if (myUid.isEmpty()) return
+        val removed = _archivedPosts.value.firstOrNull { it.id == postId }
+        _archivedPosts.value = _archivedPosts.value.filter { it.id != postId }
+        viewModelScope.launch {
+            try {
+                firestore.collection("users").document(myUid)
+                    .collection("archivedPosts").document(postId)
+                    .delete().await()
+            } catch (e: Exception) {
+                android.util.Log.w("ProfileVM", "permanentlyDeleteArchivedPost hata: ${e.message}")
+                _error.value = e.message
+                removed?.let { p ->
+                    if (_archivedPosts.value.none { it.id == p.id }) {
+                        _archivedPosts.value = _archivedPosts.value + p
+                    }
+                }
+            }
+        }
+    }
+
+    // DocumentSnapshot'tan Post'a dönüşüm — arşiv listesi için.
+    private fun com.google.firebase.firestore.DocumentSnapshot.toPostOrNull(): Post? {
+        val d = data ?: return null
+        return try {
+            Post(
+                id           = id,
+                uid          = d["uid"] as? String ?: "",
+                text         = d["text"] as? String ?: "",
+                title        = d["title"] as? String ?: "",
+                displayName  = d["displayName"] as? String ?: d["name"] as? String ?: "",
+                name         = d["name"] as? String ?: "",
+                photoURL     = d["photoURL"] as? String ?: "",
+                imageURL     = d["imageURL"] as? String ?: "",
+                ts           = d["ts"] as? com.google.firebase.Timestamp ?: com.google.firebase.Timestamp.now(),
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("ProfileVM", "toPostOrNull hata: ${e.message}")
+            null
         }
     }
 

@@ -48,6 +48,7 @@ import com.heftreng.app.ui.screens.blog.BlogScreen
 import com.heftreng.app.ui.screens.blog.BlogPostScreen
 import com.heftreng.app.ui.screens.yazar.YazarScreen
 import com.heftreng.app.ui.screens.feed.SavedPostsScreen
+import com.heftreng.app.ui.screens.feed.ArchivedPostsScreen
 import com.heftreng.app.viewmodel.BlogViewModel
 import com.heftreng.app.ui.screens.feed.FeedScreen
 import com.heftreng.app.ui.screens.cms.CmsPageScreen
@@ -130,6 +131,7 @@ sealed class Screen(val route: String) {
     object KurdiAdmin    : Screen("kurdi_admin")
     object AccountMerge  : Screen("account_merge")
     object SavedPosts    : Screen("saved_posts")
+    object ArchivedPosts : Screen("archived_posts")
     object BookChapter   : Screen("book_chapter/{bid}/{cid}") { fun go(b: String, c: String) = "book_chapter/$b/$c" }
 }
 
@@ -910,6 +912,9 @@ fun HeftrangNavHost(
                 composable(Screen.SavedPosts.route) {
                     SavedPostsScreen(navController = navController)
                 }
+                composable(Screen.ArchivedPosts.route) {
+                    ArchivedPostsScreen(navController = navController)
+                }
                 // book_chapter/{bid}/{cid}?type=book|serial
                 composable(
                     route = "book_chapter/{bid}/{cid}?type={type}",
@@ -1009,6 +1014,7 @@ fun DrawerContent(
                 if (appConfig.messagesEnabled)      Triple(Icons.Outlined.ChatBubbleOutline, msgLabel,                     Screen.Messages.route)      else null,
                 Triple(Icons.Outlined.Settings,     Strings.navSettings(language),           Screen.Settings.route),
                 Triple(Icons.Outlined.Bookmarks,    Strings.savedPosts(language),             Screen.SavedPosts.route),
+                Triple(Icons.Outlined.Archive,      Strings.archivedPosts(language),          Screen.ArchivedPosts.route),
                 if (isAdmin || staffPerms.isStaff()) Triple(Icons.Default.Dashboard, if (language == "ku") "CMS" else "CMS", Screen.Cms.route) else null,
             )
 

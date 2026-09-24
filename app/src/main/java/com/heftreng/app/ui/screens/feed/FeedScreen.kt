@@ -859,8 +859,24 @@ fun FeedScreen(
             }
         } else {
             Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
-            val feedListState = rememberLazyListState()
+            // DÜZELTME: Yorum ekranına gidip geri dönünce feed'in en başa
+            // atması sorunu — scroll pozisyonu artık vm'de (ekran ömründen
+            // bağımsız) saklanıyor, composable her yaratıldığında kaldığı
+            // yerden başlıyor.
+            val feedListState = rememberLazyListState(
+                initialFirstVisibleItemIndex      = vm.lastScrollIndex,
+                initialFirstVisibleItemScrollOffset = vm.lastScrollOffset,
+            )
             val feedScope = rememberCoroutineScope()
+
+            LaunchedEffect(feedListState) {
+                snapshotFlow { feedListState.firstVisibleItemIndex to feedListState.firstVisibleItemScrollOffset }
+                    .debounce(200L)
+                    .collect { (index, offset) ->
+                        vm.lastScrollIndex  = index
+                        vm.lastScrollOffset = offset
+                    }
+            }
 
             // Pill tıklanıp pending commit edilince otomatik olarak en başa scroll et
             LaunchedEffect(pendingNewPosts.size) {

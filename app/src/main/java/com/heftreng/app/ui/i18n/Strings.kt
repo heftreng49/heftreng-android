@@ -107,8 +107,23 @@ object Strings {
     fun noPost(l: String)          = t(l, "Henüz gönderi yok", "Hîn nivîs tune", "Hela parvekerdış çıniyo", "هێشتا هیچ بڵاوکراوەیەک نییە")
     fun deletePost(l: String)      = t(l, "Gönderiyi Sil", "Nivîsê jê bibe", "Parvekerdışî bısterıne", "بڵاوکراوەکە بسڕەوە")
     fun deletePostConfirm(l: String) = t(l,
-        "Bu gönderi kalıcı olarak silinecek. Emin misin?",
-        "Ev nivîs dê bê vegere were jêbirin. Tu piştrast î?", "Ev nivîs dê bê vegere were jêbirin. Tu piştrast î?", "Ev nivîs dê bê vegere were jêbirin. Tu piştrast î?")
+        "Bu gönderi akışından kaldırılacak ve Arşivim bölümüne taşınacak. İstediğin zaman geri getirebilirsin.",
+        "Ev nivîs dê ji rûpela sereke were rakirin û here beşa Arşîva Min. Tu dikarî dema xwestî wê vegerînî.",
+        "Ev nivîs dê ê rê feydeyê Arşîve Mı bêro guretış. Tı çı wexto bıwazî şayeno vırareyne.",
+        "ئەم بڵاوکراوەیە لە فیدەکە لادەبردرێت و دەگوازرێتەوە بۆ بەشی ئەرشیفەکەم. دەتوانیت لە هەر کاتێکدا بیگەڕێنیتەوە.")
+    fun archivedPosts(l: String)   = t(l, "Arşivim", "Arşîva Min", "Arşîve Mı", "ئەرشیفەکەم")
+    fun archivedPostsEmpty(l: String) = t(l,
+        "Arşivinde gönderi yok",
+        "Di arşîva te de nivîs tune",
+        "Der arşîve to de parvekerdış çıniyo",
+        "لە ئەرشیفەکەتدا هیچ بڵاوکراوەیەک نییە")
+    fun restorePost(l: String)     = t(l, "Geri Yükle", "Vegerîne", "Vırare", "گەڕاندنەوە")
+    fun deleteForever(l: String)   = t(l, "Kalıcı Olarak Sil", "Bi tevahî jê bibe", "Timami bısterıne", "بۆ هەمیشە بسڕەوە")
+    fun deleteForeverConfirm(l: String) = t(l,
+        "Bu gönderi kalıcı olarak silinecek, geri getirilemeyecek. Emin misin?",
+        "Ev nivîs dê bi tevahî were jêbirin, nayê vegerandin. Tu piştrast î?",
+        "Ev nivîs timami sterino, zaf vırnêbeno. Tı motmenî?",
+        "ئەم بڵاوکراوەیە بۆ هەمیشە دەسڕدرێتەوە، ناتوانرێت بگەڕێندرێتەوە. دڵنیایت؟")
     fun report(l: String)          = t(l, "Şikayet Et", "Rapor bike", "Şıkayet bıke", "سکاڵا بکە")
 
     // ── Profil ────────────────────────────────────────────────────────────────

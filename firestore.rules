@@ -141,6 +141,13 @@ service cloud.firestore {
         allow read:  if isOwner(uid) || isAdmin();
         allow write: if isOwner(uid);
       }
+      // Arşivlenmiş gönderiler — sadece sahibi görebilir/değiştirebilir.
+      // deleteOwnPost() gönderiyi buraya taşır (feed'den kaldırıp burada
+      // saklar), restoreArchivedPost() feed'e geri kopyalar.
+      match /archivedPosts/{postId} {
+        allow read:   if isOwner(uid) || isAdmin();
+        allow write:  if isOwner(uid) || isAdmin();
+      }
     }
 
     // ─── FEED ─────────────────────────────────────────────────
