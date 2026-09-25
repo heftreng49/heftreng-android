@@ -283,6 +283,10 @@ fun FeedScreen(
         vm.clearMentionSuggestions()
     }
     var showInlineQuote   by remember { mutableStateOf(false) }
+    val lastUsedQuoteBook by vm.lastUsedQuoteBook.collectAsState()
+    LaunchedEffect(showInlineQuote) {
+        if (showInlineQuote) vm.loadLastUsedQuoteBook()
+    }
     var inlineImageUri    by remember { mutableStateOf<Uri?>(null) }
     var inlineLinkPreview by remember { mutableStateOf<com.heftreng.app.util.LinkPreview?>(null) }
     var inlineLinkLoading by remember { mutableStateOf(false) }
@@ -728,6 +732,7 @@ fun FeedScreen(
             initialBook   = inlineQuote?.bookName ?: "",
             initialAuthor = inlineQuote?.authorName ?: "",
             language      = language,
+            lastUsedBook  = lastUsedQuoteBook,
             onDismiss     = { showInlineQuote = false },
             onConfirm     = { p ->
                 vm.createPost(

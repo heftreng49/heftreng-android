@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -210,6 +211,10 @@ fun QuoteDialog(
     onLookupCover   : (suspend (String) -> String)? = null,
     onSearchBooks   : (suspend (String) -> List<QuoteSuggestion>)? = null,
     onSearchAuthors : (suspend (String) -> List<QuoteSuggestion>)? = null,
+    // Kullanıcının en son eklediği alıntının kitap/yazar bilgisi — "Son
+    // kullanılan: X — seç" önerisi olarak gösterilir, alanları otomatik
+    // doldurmaz (kullanıcı yanlışlıkla eski kitaba alıntı eklemesin diye).
+    lastUsedBook    : QuoteSuggestion? = null,
 ) {
     var title    by remember { mutableStateOf(initialTitle) }
     var text     by remember { mutableStateOf(initialText) }
@@ -419,6 +424,30 @@ fun QuoteDialog(
                     modifier      = Modifier.fillMaxWidth(),
                     colors        = quoteTextFieldColors(),
                 )
+            }
+
+            // ── Son kullanılan kitap önerisi ─────────────────────────────
+            if (lastUsedBook != null && book.isBlank() && author.isBlank()) {
+                item {
+                    AssistChip(
+                        onClick = {
+                            book   = lastUsedBook.bookName
+                            author = lastUsedBook.authorName
+                        },
+                        label = {
+                            Text(
+                                (if (language == "ku") "Ya dawî: " else "Son kullanılan: ") +
+                                    lastUsedBook.bookName +
+                                    (if (lastUsedBook.authorName.isNotBlank()) " — ${lastUsedBook.authorName}" else ""),
+                                fontSize = 13.sp,
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Default.History, null, modifier = Modifier.size(16.dp))
+                        },
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                }
             }
 
             // ── Kitap adı + autocomplete ───────────────────────────────────

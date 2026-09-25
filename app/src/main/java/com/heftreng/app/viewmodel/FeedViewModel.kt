@@ -49,6 +49,44 @@ class FeedViewModel @Inject constructor(
 
     private val _posts    = MutableStateFlow<List<Post>>(emptyList())
 
+    // ── Alıntı ekleme: son kullanılan kitap önerisi ─────────────────────────
+    // Kullanıcı isteği: alıntı eklerken her seferinde kitap/yazar bilgisini
+    // yeniden yazmak zorunda kalmasın. Alanları otomatik doldurmak yerine
+    // (yanlışlıkla farklı bir kitaptan alıntıyı eski kitaba eklemesin diye)
+    // "Son kullanılan: X — seç" şeklinde tek tıkla doldurulabilir bir öneri
+    // sunuyoruz.
+    private val _lastUsedQuoteBook = MutableStateFlow<com.heftreng.app.ui.component.QuoteSuggestion?>(null)
+    val lastUsedQuoteBook = _lastUsedQuoteBook.asStateFlow()
+
+    fun loadLastUsedQuoteBook() {
+        val myUid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                val snap = firestore.collection("feed")
+                    .whereEqualTo("uid", myUid)
+                    .whereEqualTo("type", "library_quote")
+                    .orderBy("ts", Query.Direction.DESCENDING)
+                    .limit(1)
+                    .get().await()
+                val doc = snap.documents.firstOrNull() ?: run { _lastUsedQuoteBook.value = null; return@launch }
+                val bookName   = doc.getString("bookName")   ?: ""
+                val authorName = doc.getString("authorName") ?: ""
+                _lastUsedQuoteBook.value = if (bookName.isNotBlank()) {
+                    com.heftreng.app.ui.component.QuoteSuggestion(
+                        bookName   = bookName,
+                        authorName = authorName,
+                        coverImg   = doc.getString("coverImg") ?: "",
+                    )
+                } else null
+            } catch (e: Exception) {
+                // Composite index eksikse (uid+type+ts) burada sessizce
+                // başarısız olur — özellik olmadan da ekran çalışmaya devam eder.
+                android.util.Log.w("FeedVM", "loadLastUsedQuoteBook hata: ${e.message}")
+                _lastUsedQuoteBook.value = null
+            }
+        }
+    }
+
     // ── Feed scroll pozisyonu ─────────────────────────────────────────────
     // Kullanıcı bir gönderiye yorum yapmak/detayına bakmak için başka bir
     // ekrana gidip geri döndüğünde FeedScreen composable'ı yeniden
