@@ -235,6 +235,7 @@ fun FeedScreen(
     val likers           by socialVm.likers.collectAsState()
     val socialLoading    by socialVm.loading.collectAsState()
 
+    var showComposeDialog by remember { mutableStateOf(false) }
     val context          = LocalContext.current
     var inlineText       by remember { mutableStateOf("") }
     var inlineTitle      by remember { mutableStateOf("") }
@@ -300,7 +301,6 @@ fun FeedScreen(
     }
     // FAB menü state'leri
     var showFabMenu      by remember { mutableStateOf(false) }
-    var showComposeDialog by remember { mutableStateOf(false) }
     var sharedText       by remember { mutableStateOf(initialSharedText ?: "") }
     var sharedImageUri   by remember { mutableStateOf(initialSharedUri) }
 
