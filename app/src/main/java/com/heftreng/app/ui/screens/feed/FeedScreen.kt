@@ -1820,6 +1820,22 @@ fun PostCard(
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
+                    if (post.pinned) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(bottom = 2.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.PushPin, null,
+                                tint = Muted, modifier = Modifier.size(12.dp),
+                            )
+                            Text(
+                                if (ku) "Sabît" else "Sabitlenmiş",
+                                color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Medium,
+                            )
+                        }
+                    }
                     Text(post.displayName.ifBlank { Strings.anonymous(language) }, fontWeight = FontWeight.Bold, color = OnBackground, fontSize = 14.sp)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
