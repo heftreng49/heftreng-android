@@ -244,6 +244,7 @@ class AdsViewModel @Inject constructor(
         // yeni bir InterstitialAd.load() isteği atılıyordu — istek/gösterim oranını
         // bozan ana sebeplerden biri buydu.
         if (interstitialAd != null || interstitialLoading) return
+        interstitialUnitId = unitId
         interstitialLoading = true
         InterstitialAd.load(
             appContext, unitId, engine.adRequest(),
@@ -251,6 +252,21 @@ class AdsViewModel @Inject constructor(
                 override fun onAdFailedToLoad(adError: LoadAdError) {
                     interstitialAd = null
                     interstitialLoading = false
+                    // DÜZELTME: rewardedAd/adFreeHourAd'da olan 60sn retry
+                    // mekanizması burada eksikti — bir yükleme başarısız
+                    // olduğunda hiç kimse tekrar denemiyordu, sonraki
+                    // deneme ancak bir sonraki uygun ekran geçişinde ya da
+                    // uygulama arka plandan öne geldiğinde oluyordu. Geçici
+                    // ağ sorunlarında (no-fill, timeout) bu, saatlerce
+                    // "interstitial hiç gösterilmiyor" durumuna yol
+                    // açabiliyordu. Aynı 60sn tek seferlik retry deseni
+                    // burada da uygulanıyor.
+                    viewModelScope.launch {
+                        kotlinx.coroutines.delay(60_000L)
+                        if (interstitialAd == null && !interstitialLoading) {
+                            loadInterstitialAd(unitId)
+                        }
+                    }
                 }
                 override fun onAdLoaded(ad: InterstitialAd) {
                     interstitialAd = ad
@@ -380,7 +396,20 @@ class AdsViewModel @Inject constructor(
             return
         }
         val ad = interstitialAd
-        if (ad == null) { onAdDismissed(); return }
+        if (ad == null) {
+            onAdDismissed()
+            // İYİLEŞTİRME: reklam o an yüklenmemişse (henüz gelmemiş/başarısız
+            // olmuş) sadece bu gösterimi atlamak yeterli değil — bir sonraki
+            // yükleme denemesi normalde ancak uygulama arka plandan öne
+            // geldiğinde tetikleniyordu (onAppForeground). Bu da bir sonraki
+            // uygun ekran geçişine kadar (birkaç ekran) reklamın hâlâ hazır
+            // olmaması ve gösterim fırsatının kaçırılması riskini taşıyordu.
+            // Burada hemen yeniden yükleme tetikleyerek bu boşluğu kapatıyoruz.
+            if (!interstitialLoading && interstitialUnitId.isNotBlank()) {
+                loadInterstitialAd(interstitialUnitId)
+            }
+            return
+        }
         lastInterstitialShownAtMs = now
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdDismissedFullScreenContent() {
