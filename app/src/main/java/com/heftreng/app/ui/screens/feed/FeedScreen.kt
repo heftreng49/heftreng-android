@@ -368,7 +368,7 @@ fun FeedScreen(
                 // ── Gönderi Yaz ──────────────────────────────────────────
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape    = RoundedCornerShape(14.dp),
+                    shape    = MaterialTheme.shapes.medium,
                     color    = Background,
                     onClick  = { showFabMenu = false; showComposeDialog = true },
                 ) {
@@ -404,7 +404,7 @@ fun FeedScreen(
                 if (appConfig.feedAllowQuotes) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape    = RoundedCornerShape(14.dp),
+                        shape    = MaterialTheme.shapes.medium,
                         color    = Background,
                         onClick  = { showFabMenu = false; showInlineQuote = true },
                     ) {
@@ -1360,7 +1360,13 @@ private fun InlineComposeBox(
 ) {
     Surface(
         modifier       = Modifier.fillMaxWidth().padding(12.dp),
-        shape          = RoundedCornerShape(14.dp),
+        // DÜZELTME: Sabit RoundedCornerShape(14.dp) yerine temanın kendi
+        // "medium" shape token'ı kullanılıyor — ThemeShapes.kt'de her tema
+        // varyantı (Forest, Book, Sunset vb.) için zaten tanımlı ama hiç
+        // kullanılmayan bir sistemdi. Artık kullanıcı temasını değiştirdiğinde
+        // gönderi kartlarının köşe yuvarlaklığı da o temanın karakterine
+        // uyacak (Forest'ta daha organik/yumuşak, Monochrome'da keskin vb.).
+        shape          = MaterialTheme.shapes.medium,
         color          = HeftSurface,
         border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
         tonalElevation = 0.dp,
@@ -2236,7 +2242,9 @@ fun PostCard(
                     modifier           = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 300.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        // DÜZELTME: temanın "medium" shape token'ı kullanılıyor
+                        // (bkz. PostCard dış kabuğundaki aynı değişiklik).
+                        .clip(MaterialTheme.shapes.medium)
                         .clickable { showImg = true },
                     contentScale       = ContentScale.Crop,
                 )
