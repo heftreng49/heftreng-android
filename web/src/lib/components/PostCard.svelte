@@ -1,27 +1,50 @@
 <script lang="ts">
   // Android ConnectedPostCard / UnifiedCards karşılığı
-  // Props: post + currentUid, event dispatcher'lar
   import Avatar     from './Avatar.svelte';
   import LikeButton from './LikeButton.svelte';
-  import QuoteCard   from './QuoteCard.svelte';
+  import QuoteCard  from './QuoteCard.svelte';
+  import Modal      from './Modal.svelte';
   import { ago, shortNum } from '$lib/models/util';
   import type { Post } from '$lib/models/post';
+  import { repost, unrepost } from '$lib/services/repost.service';
+  import { reportPost, REPORT_REASONS, type ReportReason } from '$lib/services/report.service';
 
   interface Props {
-    post:       Post;
-    currentUid: string | null;
-    onLike?:    (post: Post) => void;
-    onSave?:    (post: Post) => void;
-    onComment?: (post: Post) => void;
-    onDelete?:  (post: Post) => void;
-    onEdit?:    (post: Post) => void;
+    post:          Post;
+    currentUid:    string | null;
+    currentName?:  string;
+    currentPhoto?: string;
+    currentUsername?: string;
+    onLike?:       (post: Post) => void;
+    onSave?:       (post: Post) => void;
+    onComment?:    (post: Post) => void;
+    onDelete?:     (post: Post) => void;
+    onEdit?:       (post: Post) => void;
+    onRepost?:     (post: Post, repostDocId: string) => void;
+    onUnrepost?:   (post: Post) => void;
   }
-  let { post, currentUid, onLike, onSave, onComment, onDelete, onEdit }: Props = $props();
+  let {
+    post, currentUid,
+    currentName    = '',
+    currentPhoto   = '',
+    currentUsername = '',
+    onLike, onSave, onComment, onDelete, onEdit, onRepost, onUnrepost,
+  }: Props = $props();
 
-  let menuOpen   = $state(false);
-  let expanded   = $state(false);
-  const isLong   = $derived((post.text?.length ?? 0) > 280);
-  const isOwner  = $derived(currentUid === post.uid);
+  let menuOpen      = $state(false);
+  let expanded      = $state(false);
+  let reposting     = $state(false);
+  // Şikayet modal state
+  let showReport    = $state(false);
+  let reportReason  = $state<ReportReason>('spam');
+  let reportNote    = $state('');
+  let reportSending = $state(false);
+  let reportDone    = $state(false);
+  let reportError   = $state('');
+
+  const isLong    = $derived((post.text?.length ?? 0) > 280);
+  const isOwner   = $derived(currentUid === post.uid);
+  const isReposted = $derived(post.isRepostedByMe ?? false);
 
   function repostLabel(type: string): string {
     const map: Record<string, string> = {
@@ -31,6 +54,34 @@
       kf_achievement: '🏆 Başarı',
     };
     return map[type] ?? type;
+  }
+
+  async function handleRepost() {
+    if (!currentUid || reposting) return;
+    menuOpen = false;
+    if (isReposted) {
+      const docId = post.myRepostId ?? `repost_${currentUid}_${post.id}`;
+      try { await unrepost(post.id, docId); onUnrepost?.(post); }
+      catch(e) { console.error(e); }
+      return;
+    }
+    reposting = true;
+    try {
+      const docId = await repost(post, currentUid, currentName, currentPhoto, currentUsername);
+      onRepost?.(post, docId);
+    } catch(e) { console.error(e); }
+    finally { reposting = false; }
+  }
+
+  async function submitReport() {
+    if (!currentUid) return;
+    reportSending = true; reportError = '';
+    try {
+      await reportPost(post.id, currentUid, reportReason, reportNote);
+      reportDone = true;
+      setTimeout(() => { showReport = false; reportDone = false; reportNote = ''; }, 1500);
+    } catch(e: any) { reportError = e.message ?? 'Hata oluştu'; }
+    finally { reportSending = false; }
   }
 </script>
 
@@ -43,15 +94,9 @@
 >
   <!-- BAŞLIK -->
   <div class="card-head">
-    <Avatar
-      src={post.photoURL}
-      name={post.displayName}
-      size={40}
-      href="/profile/{post.uid}"
-    />
+    <Avatar src={post.photoURL} name={post.displayName} size={40} href="/profile/{post.uid}" />
     <div class="meta">
-      <a href="/profile/{post.uid}" class="display-name"
-         onclick={(e) => e.stopPropagation()}>
+      <a href="/profile/{post.uid}" class="display-name" onclick={(e) => e.stopPropagation()}>
         {post.displayName || 'Anonim'}
       </a>
       <div class="meta-row">
@@ -63,28 +108,32 @@
     <!-- ⋮ Menü -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div class="menu-wrap" onclick={(e) => e.stopPropagation()}>
-      <button
-        class="menu-btn"
-        onclick={(e) => { e.stopPropagation(); menuOpen = !menuOpen; }}
-        aria-label="Seçenekler"
-      >
+      <button class="menu-btn" onclick={(e) => { e.stopPropagation(); menuOpen = !menuOpen; }} aria-label="Seçenekler">
         <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-          <circle cx="12" cy="5" r="1.8"/>
-          <circle cx="12" cy="12" r="1.8"/>
-          <circle cx="12" cy="19" r="1.8"/>
+          <circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/>
         </svg>
       </button>
       {#if menuOpen}
-        <div class="dropdown">
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div class="dropdown" onclick={(e) => e.stopPropagation()}>
           {#if isOwner}
-            <button class="dropdown-item" onclick={() => { menuOpen=false; onEdit?.(post); }}>
-              ✏️ Düzenle
-            </button>
-            <button class="dropdown-item danger" onclick={() => { menuOpen=false; onDelete?.(post); }}>
-              🗑️ Sil
-            </button>
+            <button class="dropdown-item" onclick={() => { menuOpen=false; onEdit?.(post); }}>✏️ Düzenle</button>
+            <button class="dropdown-item danger" onclick={() => { menuOpen=false; onDelete?.(post); }}>🗑️ Sil</button>
           {:else}
-            <button class="dropdown-item danger" onclick={() => menuOpen=false}>
+            <!-- Repost -->
+            {#if currentUid}
+              <button class="dropdown-item" class:reposted={isReposted} onclick={handleRepost} disabled={reposting}>
+                {#if reposting}
+                  ⏳ Yeniden paylaşılıyor…
+                {:else if isReposted}
+                  🔁 Yeniden paylaşımı geri al
+                {:else}
+                  🔁 Yeniden paylaş
+                {/if}
+              </button>
+            {/if}
+            <!-- Şikayet -->
+            <button class="dropdown-item danger" onclick={() => { menuOpen=false; showReport=true; }}>
               🚩 Şikayet Et
             </button>
           {/if}
@@ -93,10 +142,8 @@
             menuOpen=false;
             const url = window.location.origin + '/post/' + post.id;
             if (navigator.share) navigator.share({ title: post.displayName, url });
-            else { navigator.clipboard.writeText(url); }
-          }}>
-            🔗 Bağlantıyı Kopyala
-          </button>
+            else navigator.clipboard.writeText(url);
+          }}>🔗 Bağlantıyı Kopyala</button>
         </div>
       {/if}
     </div>
@@ -104,29 +151,20 @@
 
   <!-- İÇERİK -->
   <div class="card-body">
-
-    <!-- Alıntı kutusu — merkezi QuoteCard bileşeni (Android QuoteCompose.kt) -->
     {#if post.quoteText}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div onclick={(e) => e.stopPropagation()} style="margin-bottom:8px">
         <QuoteCard
-          quoteText={post.quoteText}
-          bookName={post.bookName ?? ''}
-          authorName={post.authorName ?? ''}
-          coverImg={post.coverImg ?? ''}
+          quoteText={post.quoteText} bookName={post.bookName ?? ''}
+          authorName={post.authorName ?? ''} coverImg={post.coverImg ?? ''}
           bookId={(post as any).libraryBookId ?? (post as any).bookId ?? ''}
           authorId={(post as any).authorId ?? ''}
         />
       </div>
     {/if}
 
-    {#if post.category}
-      <span class="category-chip">{post.category}</span>
-    {/if}
-    {#if post.title}
-      <h2 class="post-title">{post.title}</h2>
-    {/if}
+    {#if post.category}<span class="category-chip">{post.category}</span>{/if}
+    {#if post.title}<h2 class="post-title">{post.title}</h2>{/if}
     {#if post.text}
       <p class="post-text" class:clamped={isLong && !expanded}>{post.text}</p>
       {#if isLong}
@@ -135,7 +173,6 @@
         </button>
       {/if}
     {/if}
-
     {#if post.imageURL || post.imgUrl}
       <img src={post.imageURL || post.imgUrl} alt="gönderi görseli" class="post-img" />
     {/if}
@@ -143,12 +180,9 @@
     <!-- Repost embed -->
     {#if post.repostType && post.repostType !== 'kf_achievement'}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <div
-        class="repost-embed"
+      <div class="repost-embed"
         onclick={(e) => { e.stopPropagation(); window.location.href = '/post/' + post.repostId; }}
-        role="button"
-        tabindex="0"
-      >
+        role="button" tabindex="0">
         <div class="repost-label">{repostLabel(post.repostType)}</div>
         {#if post.repostAuthor}
           <div class="repost-author-row">
@@ -156,12 +190,8 @@
             <span class="repost-author-name">{post.repostAuthor}</span>
           </div>
         {/if}
-        {#if post.repostText}
-          <p class="repost-text">{post.repostText.slice(0, 200)}{post.repostText.length > 200 ? '…' : ''}</p>
-        {/if}
-        {#if post.repostTitle}
-          <p class="repost-title">{post.repostTitle}</p>
-        {/if}
+        {#if post.repostText}<p class="repost-text">{post.repostText.slice(0, 200)}{post.repostText.length > 200 ? '…' : ''}</p>{/if}
+        {#if post.repostTitle}<p class="repost-title">{post.repostTitle}</p>{/if}
       </div>
     {/if}
   </div>
@@ -169,11 +199,7 @@
   <!-- AKSİYON ÇUBUĞU -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="card-actions" onclick={(e) => e.stopPropagation()}>
-    <LikeButton
-      liked={post.isLikedByMe ?? false}
-      count={post.likesCount ?? 0}
-      onclick={() => onLike?.(post)}
-    />
+    <LikeButton liked={post.isLikedByMe ?? false} count={post.likesCount ?? 0} onclick={() => onLike?.(post)} />
 
     <button class="action-btn" onclick={() => onComment?.(post)} aria-label="Yorum yap">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
@@ -182,12 +208,29 @@
       <span>{shortNum(post.commentsCount ?? 0)}</span>
     </button>
 
-    <button
-      class="action-btn"
-      class:saved={post.isSavedByMe}
-      onclick={() => onSave?.(post)}
-      aria-label={post.isSavedByMe ? 'Kayıttan çıkar' : 'Kaydet'}
-    >
+    <!-- Repost butonu (aksiyon çubuğunda) -->
+    {#if currentUid && !isOwner}
+      <button
+        class="action-btn"
+        class:reposted={isReposted}
+        onclick={handleRepost}
+        disabled={reposting}
+        aria-label={isReposted ? 'Yeniden paylaşımı geri al' : 'Yeniden paylaş'}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <polyline points="17 1 21 5 17 9"/>
+          <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+          <polyline points="7 23 3 19 7 15"/>
+          <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+        </svg>
+        {#if (post.repostsCount ?? 0) > 0}
+          <span>{shortNum(post.repostsCount ?? 0)}</span>
+        {/if}
+      </button>
+    {/if}
+
+    <button class="action-btn" class:saved={post.isSavedByMe}
+      onclick={() => onSave?.(post)} aria-label={post.isSavedByMe ? 'Kayıttan çıkar' : 'Kaydet'}>
       <svg viewBox="0 0 24 24" fill={post.isSavedByMe ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" width="18" height="18">
         <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
       </svg>
@@ -207,15 +250,48 @@
   </div>
 </article>
 
+<!-- ── Şikayet Modal ──────────────────────────────────────────────────────── -->
+{#if showReport}
+  <Modal onClose={() => { showReport=false; reportDone=false; reportNote=''; reportError=''; }}>
+    <div class="report-modal">
+      <h3 class="report-title">🚩 Gönderiyi Şikayet Et</h3>
+      {#if reportDone}
+        <p class="report-success">✓ Şikayetin alındı. İnceleyeceğiz.</p>
+      {:else}
+        <p class="report-sub">Şikayet sebebini seç:</p>
+        <div class="report-reasons">
+          {#each REPORT_REASONS as r}
+            <button
+              class="reason-btn"
+              class:selected={reportReason === r.value}
+              onclick={() => reportReason = r.value}
+            >{r.label}</button>
+          {/each}
+        </div>
+        <textarea
+          class="report-note"
+          placeholder="Ek açıklama (opsiyonel)…"
+          bind:value={reportNote}
+          maxlength={500}
+          rows={3}
+        ></textarea>
+        {#if reportError}<p class="report-err">{reportError}</p>{/if}
+        <div class="report-actions">
+          <button class="report-cancel" onclick={() => showReport=false}>İptal</button>
+          <button class="report-submit" onclick={submitReport} disabled={reportSending}>
+            {reportSending ? 'Gönderiliyor…' : 'Şikayet Et'}
+          </button>
+        </div>
+      {/if}
+    </div>
+  </Modal>
+{/if}
+
 <style>
   .card {
-    background: var(--card);
-    border-radius: 14px;
-    padding: 14px;
-    margin-bottom: 10px;
-    cursor: pointer;
-    transition: box-shadow .15s;
-    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    background: var(--card); border-radius: 14px;
+    padding: 14px; margin-bottom: 10px; cursor: pointer;
+    transition: box-shadow .15s; box-shadow: 0 1px 4px rgba(0,0,0,.06);
   }
   .card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.1); }
 
@@ -223,57 +299,49 @@
   .meta { flex: 1; min-width: 0; }
   .display-name {
     font-weight: 700; font-size: 14px; color: var(--on-bg);
-    text-decoration: none; display: block;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-decoration: none; display: block; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
   }
   .display-name:hover { text-decoration: underline; }
   .meta-row { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); margin-top: 1px; }
-  .username { color: var(--muted); }
-  .dot { color: var(--muted); opacity: .5; }
+  .username, .dot { color: var(--muted); }
 
   .menu-wrap { position: relative; }
   .menu-btn {
-    background: none; border: none; cursor: pointer;
-    padding: 4px; border-radius: 6px; color: var(--muted);
-    display: flex; align-items: center;
+    background: none; border: none; cursor: pointer; padding: 4px;
+    border-radius: 6px; color: var(--muted); display: flex; align-items: center;
   }
   .menu-btn:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); }
   .dropdown {
     position: absolute; right: 0; top: 28px; z-index: 50;
     background: var(--surface); border: 1px solid var(--divider);
-    border-radius: 10px; padding: 6px 0; min-width: 180px;
+    border-radius: 10px; padding: 6px 0; min-width: 200px;
     box-shadow: 0 8px 24px rgba(0,0,0,.18);
   }
   .dropdown-item {
-    display: flex; align-items: center; gap: 8px;
-    width: 100%; text-align: left; background: none; border: none;
-    padding: 9px 14px; font-size: 13px; cursor: pointer; color: var(--on-bg);
-    font-family: inherit;
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    text-align: left; background: none; border: none; padding: 9px 14px;
+    font-size: 13px; cursor: pointer; color: var(--on-bg); font-family: inherit;
   }
   .dropdown-item:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
-  .dropdown-item.danger { color: var(--error); }
+  .dropdown-item.danger { color: var(--error, #ef4444); }
+  .dropdown-item.reposted { color: #22c55e; }
+  .dropdown-item:disabled { opacity: .5; cursor: default; }
   .dropdown-sep { border: none; border-top: 1px solid var(--divider); margin: 4px 0; }
 
   .card-body { margin-bottom: 10px; }
   .category-chip {
     display: inline-block; font-size: 11px; font-weight: 600;
     background: color-mix(in srgb, var(--primary) 12%, transparent);
-    color: var(--primary);
-    padding: 2px 8px; border-radius: 20px; margin-bottom: 6px;
+    color: var(--primary); padding: 2px 8px; border-radius: 20px; margin-bottom: 6px;
   }
   .post-title { font-size: 16px; font-weight: 700; margin: 0 0 6px; color: var(--on-bg); }
   .post-text { font-size: 14px; line-height: 1.6; margin: 0; white-space: pre-wrap; color: var(--on-surface); }
   .post-text.clamped { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
-  .read-more {
-    background: none; border: none; color: var(--primary); font-size: 13px;
-    cursor: pointer; padding: 0; margin-top: 4px; font-weight: 600; font-family: inherit;
-  }
+  .read-more { background: none; border: none; color: var(--primary); font-size: 13px; cursor: pointer; padding: 0; margin-top: 4px; font-weight: 600; font-family: inherit; }
   .post-img { width: 100%; border-radius: 10px; margin-top: 10px; object-fit: cover; max-height: 360px; }
 
-  .repost-embed {
-    border: 1px solid var(--divider); border-radius: 10px;
-    padding: 10px 12px; margin-top: 8px; cursor: pointer;
-  }
+  .repost-embed { border: 1px solid var(--divider); border-radius: 10px; padding: 10px 12px; margin-top: 8px; cursor: pointer; }
   .repost-embed:hover { background: color-mix(in srgb, var(--primary) 5%, transparent); }
   .repost-label { font-size: 11px; font-weight: 700; color: var(--primary); margin-bottom: 6px; }
   .repost-author-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
@@ -285,9 +353,42 @@
   .action-btn {
     display: inline-flex; align-items: center; gap: 4px;
     background: none; border: none; cursor: pointer;
-    color: var(--muted); font-size: 13px; padding: 4px 8px; border-radius: 6px;
-    transition: color .15s; font-family: inherit;
+    color: var(--muted); font-size: 13px; padding: 4px 8px;
+    border-radius: 6px; transition: color .15s; font-family: inherit;
   }
   .action-btn:hover { color: var(--primary); }
   .action-btn.saved { color: var(--primary); }
+  .action-btn.reposted { color: #22c55e; }
+  .action-btn:disabled { opacity: .5; cursor: default; }
+
+  /* Şikayet modal */
+  .report-modal { padding: 4px 0; min-width: 280px; max-width: 360px; }
+  .report-title { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+  .report-sub { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+  .report-reasons { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .reason-btn {
+    text-align: left; padding: 9px 12px; border-radius: 8px;
+    border: 1.5px solid var(--divider); background: none;
+    font-size: 13px; cursor: pointer; color: var(--on-bg); font-family: inherit;
+    transition: border-color .15s, background .15s;
+  }
+  .reason-btn:hover { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 6%, transparent); }
+  .reason-btn.selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--primary); font-weight: 600; }
+  .report-note {
+    width: 100%; border: 1.5px solid var(--divider); border-radius: 8px;
+    padding: 8px 10px; font-size: 13px; font-family: inherit; resize: none;
+    background: var(--surface-var); color: var(--on-bg); outline: none;
+    box-sizing: border-box; margin-bottom: 10px;
+  }
+  .report-note:focus { border-color: var(--primary); }
+  .report-err { color: var(--error, #ef4444); font-size: 12px; margin-bottom: 8px; }
+  .report-success { color: #22c55e; font-size: 14px; font-weight: 600; text-align: center; padding: 12px 0; }
+  .report-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .report-cancel { background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer; font-family: inherit; padding: 8px 12px; }
+  .report-submit {
+    padding: 8px 18px; background: var(--error, #ef4444); color: #fff;
+    border: none; border-radius: 8px; font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  .report-submit:disabled { opacity: .5; cursor: default; }
 </style>
