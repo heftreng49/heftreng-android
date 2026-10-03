@@ -2,7 +2,7 @@
   import { onMount }     from 'svelte';
   import { page }        from '$app/stores';
   import { currentUser } from '$lib/stores/auth';
-  import QuoteCard       from '$lib/components/QuoteCard.svelte';
+  import LibraryQuoteCard from '$lib/components/LibraryQuoteCard.svelte';
   import Avatar          from '$lib/components/Avatar.svelte';
   import Skeleton        from '$lib/components/Skeleton.svelte';
   import {
@@ -125,29 +125,11 @@
       {:else}
         <div class="quote-list">
           {#each quotes as q (q.id)}
-            <div class="quote-item">
-              <QuoteCard
-                quoteText={q.text}
-                bookName={q.bookTitle}
-                authorName={q.authorName}
-                coverImg={q.coverImg}
-              />
-              <div class="quote-meta">
-                <a href="/profile/{q.uid}" class="quote-user">
-                  <img src={q.userPhotoURL || '/placeholder.png'} alt={q.userDisplayName} class="mini-avatar" />
-                  <span>{q.userDisplayName}</span>
-                </a>
-                {#if q.bookId}
-                  <a href="/library/book/{q.bookId}" class="book-link">{q.bookTitle}</a>
-                {/if}
-                <button
-                  class="like-btn" class:liked={q.isLikedByMe}
-                  onclick={() => handleQuoteLike(q)}
-                >
-                  ♥ {q.likesCount > 0 ? q.likesCount : ''}
-                </button>
-              </div>
-            </div>
+            <LibraryQuoteCard
+              quote={q}
+              currentUid={$currentUser?.uid ?? null}
+              onLike={handleQuoteLike}
+            />
           {/each}
           {#if quotesHasMore}
             <button class="load-more" onclick={loadMoreQuotes} disabled={quotesLoadingMore}>
@@ -248,15 +230,7 @@
   .skel-card { display: flex; gap: 12px; padding: 12px; background: var(--card); border-radius: 12px; }
 
   /* Alıntılar */
-  .quote-list { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
-  .quote-item { background: var(--card); border-radius: 14px; overflow: hidden; }
-  .quote-meta { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
-                border-top: 1px solid var(--divider); }
-  .quote-user { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--on-surface); }
-  .book-link  { font-size: 12px; color: var(--primary); margin-left: auto; text-decoration: underline; }
-  .like-btn   { font-size: 13px; color: var(--muted); margin-left: auto; padding: 4px 8px; border-radius: 12px; }
-  .like-btn.liked { color: var(--error); }
-  .mini-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
+  .quote-list { display: flex; flex-direction: column; }
 
   /* İncelemeler */
   .review-list { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
