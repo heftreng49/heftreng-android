@@ -1,0 +1,55 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ── Yardımcı fonksiyonlar ─────────────────────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    function maxSize(mb) {
+      return request.resource.size < mb * 1024 * 1024;
+    }
+
+    // ── Profil fotoğrafı (Android path) ──────────────────────────────────
+    match /profile_photos/{uid}.jpg {
+      allow read:  if true;
+      allow write: if isOwner(uid) && isImage() && maxSize(8);
+    }
+
+    // ── Kapak fotoğrafı (Android path) ───────────────────────────────────
+    match /cover_photos/{uid}.jpg {
+      allow read:  if true;
+      allow write: if isOwner(uid) && isImage() && maxSize(10);
+    }
+
+    // ── Gönderi görselleri ────────────────────────────────────────────────
+    match /post_images/{uid}/{fileName} {
+      allow read:  if true;
+      allow write: if isOwner(uid) && isImage() && maxSize(10);
+    }
+
+    // ── Blog görselleri ───────────────────────────────────────────────────
+    match /blog_images/{uid}/{fileName} {
+      allow read:  if true;
+      allow write: if isOwner(uid) && isImage() && maxSize(10);
+    }
+
+    // ── Eski web path'leri — geçiş dönemi için okuma izni ────────────────
+    // (eski yüklenen fotoğraflar hâlâ bu path'lerde duruyor)
+    match /avatars/{uid}/{fileName} {
+      allow read:  if true;
+      allow write: if isOwner(uid) && isImage() && maxSize(8);
+    }
+    match /covers/{uid}/{fileName} {
+      allow read:  if true;
+      allow write: if isOwner(uid) && isImage() && maxSize(10);
+    }
+
+  }
+}
