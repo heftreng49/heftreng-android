@@ -233,7 +233,7 @@
     const map: Record<string, string> = {
       serial: "📖 Kitap", chapter: "📄 Bölüm",
       book_chapter: "📄 Kitap Bölümü", blog: "📝 Blog",
-      kf_lesson: "🇹🇷 Kurdî Ders", grammar: "📚 Dilbilgisi",
+      kf_lesson: "☀️ Kurdî Ders", grammar: "📚 Dilbilgisi",
       kf_achievement: "🏆 Başarı",
     };
     return map[type] ?? type;

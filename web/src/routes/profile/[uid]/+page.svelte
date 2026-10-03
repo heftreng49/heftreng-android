@@ -385,28 +385,21 @@
 
   async function uploadPhoto(e: Event, type: "avatar" | "cover") {
     if (!$currentUser) return;
-    const input = e.target as HTMLInputElement;
-    const file  = input.files?.[0];
+    const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
     if (type === "avatar") photoUploading = true;
     else coverUploading = true;
     try {
-      // uploadAvatar / uploadCoverPhoto artık Firestore + Auth + Supabase'i
-      // tek seferde güncelliyor — ayrıca updateProfile çağrısına gerek yok.
       const url = type === "avatar"
         ? await uploadAvatar(uid, file)
         : await uploadCoverPhoto(uid, file);
       const field = type === "avatar" ? "photoURL" : "coverPhoto";
+      await updateProfile(uid, { [field]: url });
       user = { ...user, [field]: url };
-      showToast(type === "avatar" ? "Profil fotoğrafı güncellendi ✓" : "Kapak fotoğrafı güncellendi ✓");
-    } catch(err: any) {
-      showToast(err?.message ?? "Yükleme başarısız oldu.");
-      console.error("uploadPhoto:", err);
-    } finally {
+    } catch(e) { console.error(e); }
+    finally {
       if (type === "avatar") photoUploading = false;
       else coverUploading = false;
-      // Input'u sıfırla — aynı dosyayı tekrar seçince onChange tekrar tetiklensin
-      input.value = '';
     }
   }
 
@@ -561,7 +554,7 @@
   function repostLabel(type: string) {
     if (type === "serial")    return "📖 Kitap";
     if (type === "blog")      return "📝 Blog";
-    if (type === "kf_lesson") return "🇹🇷 Kurdî";
+    if (type === "kf_lesson") return "☀️ Kurdî";
     return "📄 Bölüm";
   }
   function copyId(p: any) { menuOpenId = null; navigator.clipboard.writeText('#' + p.id); }
