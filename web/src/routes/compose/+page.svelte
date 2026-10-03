@@ -3,17 +3,16 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { supabase } from "$lib/supabase/config";
-  // ── Yeni store (lib/stores/auth) ──────────────────────────────────────────
-  import { currentUser, authLoading } from "$lib/stores/auth";
-  // ── Servis katmanı (doğrudan DB çağrısı yok) ─────────────────────────────
+  import { currentUser, authLoading, userProfile } from "$lib/stores/auth";
   import {
-    loadPost,
-    uploadImage,
-    createPost,
-    createQuote,
-    updatePost,
+    loadPost, uploadImage,
+    createPost, createQuote, updatePost,
   } from "$lib/services/compose.service";
-  import { draftSave, draftLoad, draftClear } from '$lib/utils/draft';
+  import {
+    searchMentionUsers, extractMentions,
+    getActiveMentionQuery,
+  } from "$lib/services/mention.service";
+  import { draftSave, draftLoad, draftClear } from "$lib/utils/draft";
 
   // ── Mod ──────────────────────────────────────────────────────
   let mode        = $state<"post" | "quote">("post");
@@ -24,13 +23,20 @@
   let error       = $state("");
 
   // ── Normal gönderi ───────────────────────────────────────────
-  let text      = $state("");
-  let title     = $state("");
-  let category  = $state("");
-  let imageFile = $state<File | null>(null);
+  let text         = $state("");
+  let title        = $state("");
+  let category     = $state("");
+  let imageFile    = $state<File | null>(null);
   let imagePreview = $state<string | null>(null);
+  let textAreaEl   = $state<HTMLTextAreaElement | null>(null);
 
-  // Android postTopics listesi (aynı sıra)
+  // Mention autocomplete
+  let mentionQuery   = $state<string | null>(null);
+  let mentionResults = $state<{ uid: string; name: string; username: string; photoURL: string }[]>([]);
+  let mentionLoading = $state(false);
+  let mentionTimer: ReturnType<typeof setTimeout>;
+  let resolvedMentionUids = $state<string[]>([]); // seçilen kullanıcıların UID'leri
+
   const topics: { key: string; label: string }[] = [
     { key: "genel",    label: "Genel"    },
     { key: "kitap",    label: "Kitap"    },
@@ -40,7 +46,7 @@
     { key: "siir",     label: "Şiir"     },
   ];
 
-  // ── Alıntı (QuoteDialog) ─────────────────────────────────────
+  // ── Alıntı ───────────────────────────────────────────────────
   let quoteText   = $state("");
   let quoteTitle  = $state("");
   let quoteBook   = $state("");
@@ -48,14 +54,12 @@
   let quoteCover  = $state("");
   let quoteBookId = $state("");
 
-  // Kitap autocomplete
   let bookQuery    = $state("");
   let bookResults  = $state<any[]>([]);
   let showBookDrop = $state(false);
   let bookLoading  = $state(false);
   let bookLinked   = $state(false);
 
-  // Yazar autocomplete
   let authorQuery    = $state("");
   let authorResults  = $state<any[]>([]);
   let showAuthorDrop = $state(false);
@@ -99,8 +103,54 @@
     finally { loadingPost = false; }
   }
 
+  // ── Mention ──────────────────────────────────────────────────
+  function onTextInput(e: Event) {
+    const el  = e.target as HTMLTextAreaElement;
+    text      = el.value;
+    const cur = el.selectionStart ?? text.length;
+    const q   = getActiveMentionQuery(text, cur);
+
+    draftSave({ text, title });
+
+    if (q === null || q.length === 0) {
+      mentionQuery   = null;
+      mentionResults = [];
+      return;
+    }
+    mentionQuery = q;
+    clearTimeout(mentionTimer);
+    mentionLoading = true;
+    mentionTimer = setTimeout(async () => {
+      mentionResults = await searchMentionUsers(q);
+      mentionLoading = false;
+    }, 200);
+  }
+
+  function insertMention(user: { uid: string; username: string; name: string; photoURL: string }) {
+    if (!textAreaEl) return;
+    const cur   = textAreaEl.selectionStart ?? text.length;
+    const before = text.slice(0, cur);
+    const after  = text.slice(cur);
+    // @ + query kısmını değiştir
+    const newBefore = before.replace(/@([a-z0-9_]*)$/i, `@${user.username} `);
+    text = newBefore + after;
+    // UID listesine ekle
+    if (!resolvedMentionUids.includes(user.uid)) {
+      resolvedMentionUids = [...resolvedMentionUids, user.uid];
+    }
+    mentionQuery   = null;
+    mentionResults = [];
+    // Cursor'ı ayarla
+    setTimeout(() => {
+      if (textAreaEl) {
+        textAreaEl.focus();
+        textAreaEl.selectionStart = textAreaEl.selectionEnd = newBefore.length;
+      }
+    }, 0);
+  }
+
   // ── Kitap arama ──────────────────────────────────────────────
-  let bookTimer: any;
+  let bookTimer: ReturnType<typeof setTimeout>;
   function onBookInput(e: Event) {
     const val = (e.target as HTMLInputElement).value;
     bookQuery = val; quoteBook = val;
@@ -137,7 +187,7 @@
   }
 
   // ── Yazar arama ──────────────────────────────────────────────
-  let authorTimer: any;
+  let authorTimer: ReturnType<typeof setTimeout>;
   function onAuthorInput(e: Event) {
     const val = (e.target as HTMLInputElement).value;
     authorQuery = val; quoteAuthor = val;
@@ -169,8 +219,7 @@
   }
 
   function selectAuthor(a: any) {
-    quoteAuthor = a.name;
-    authorQuery = a.name;
+    quoteAuthor = a.name; authorQuery = a.name;
     authorResults = []; showAuthorDrop = false;
   }
 
@@ -199,14 +248,17 @@
             authorName: quoteAuthor.trim(),
           });
         } else {
-          await updatePost(editPostId, { text: text.trim(), title: title.trim() });
+          await updatePost(editPostId, { text: text.trim(), title: title.trim(), category });
         }
       } else {
         if (mode === "quote") {
           await createQuote({
             uid:         $currentUser.uid,
-            displayName: $currentUser.displayName ?? "",
-            photoURL:    $currentUser.photoURL    ?? "",
+            displayName: $currentUser.displayName ?? $userProfile?.displayName ?? "",
+            username:    $userProfile?.username ?? "",
+            photoURL:    $currentUser.photoURL ?? $userProfile?.photoURL ?? "",
+            email:       $currentUser.email ?? "",
+            isPrivate:   $userProfile?.isPrivate ?? false,
             title:       quoteTitle.trim(),
             quoteText:   quoteText.trim(),
             bookName:    quoteBook.trim(),
@@ -218,24 +270,30 @@
           let imageUrl = "";
           if (imageFile) imageUrl = await uploadImage(imageFile, $currentUser.uid);
           draftClear();
-      await createPost({
+          await createPost({
             uid:         $currentUser.uid,
-            displayName: $currentUser.displayName ?? "",
-            photoURL:    $currentUser.photoURL    ?? "",
+            displayName: $currentUser.displayName ?? $userProfile?.displayName ?? "",
+            username:    $userProfile?.username ?? "",
+            photoURL:    $currentUser.photoURL ?? $userProfile?.photoURL ?? "",
+            email:       $currentUser.email ?? "",
+            isPrivate:   $userProfile?.isPrivate ?? false,
             title:       title.trim(),
             text:        text.trim(),
             category,
             imageUrl,
+            mentions:    resolvedMentionUids,
           });
         }
       }
       goto("/feed");
-    } catch(e: any) { error = "Hata oluştu, tekrar dene."; console.error(e); }
-    finally { submitting = false; }
+    } catch(e: any) {
+      error = "Hata oluştu, tekrar dene.";
+      console.error(e);
+    } finally { submitting = false; }
   }
 
-  let canPost  = $derived(text.trim().length > 0 || imageFile !== null);
-  let canQuote = $derived(quoteText.trim().length > 0 && quoteBook.trim().length > 0 && quoteAuthor.trim().length > 0);
+  let canPost   = $derived(text.trim().length > 0 || imageFile !== null);
+  let canQuote  = $derived(quoteText.trim().length > 0 && quoteBook.trim().length > 0 && quoteAuthor.trim().length > 0);
   let canSubmit = $derived(!submitting && (mode === "quote" ? canQuote : canPost));
 
   let bookNotFound   = $derived(bookQuery.length > 1 && !bookLoading && !bookLinked && bookResults.length === 0 && !showBookDrop);
@@ -246,7 +304,6 @@
 {#if mode === "post"}
 <main class="wrap post-wrap">
 
-  <!-- Üst bar (Android compose bar) -->
   <div class="post-topbar">
     <button class="topbar-close" onclick={() => goto("/feed")}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="22" height="22"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -268,10 +325,42 @@
   {#if loadingPost}
     <div class="loading"><div class="spinner"></div></div>
   {:else}
-    <!-- İçerik -->
     <div class="post-body">
       <input class="post-title" placeholder="Başlık (opsiyonel)" bind:value={title} maxlength={120}/>
-      <textarea class="post-text" placeholder="Ne düşünüyorsun?" bind:value={text} maxlength={1000} rows={7}></textarea>
+
+      <!-- Mention autocomplete overlay -->
+      <div class="mention-wrap">
+        <textarea
+          class="post-text"
+          placeholder="Ne düşünüyorsun? @ ile kullanıcı etiketle"
+          bind:this={textAreaEl}
+          value={text}
+          oninput={onTextInput}
+          maxlength={1000}
+          rows={7}
+        ></textarea>
+
+        {#if mentionQuery !== null && (mentionResults.length > 0 || mentionLoading)}
+          <div class="mention-dropdown">
+            {#if mentionLoading}
+              <div class="mention-loading"><div class="spinner small"></div></div>
+            {/if}
+            {#each mentionResults as u (u.uid)}
+              <button class="mention-row" onclick={() => insertMention(u)}>
+                {#if u.photoURL}
+                  <img src={u.photoURL} alt={u.name} class="mention-av"/>
+                {:else}
+                  <div class="mention-av mention-av-ph">{(u.name || "?")[0].toUpperCase()}</div>
+                {/if}
+                <div class="mention-info">
+                  <span class="mention-name">{u.name}</span>
+                  <span class="mention-user">@{u.username}</span>
+                </div>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
 
       {#if imagePreview}
         <div class="img-wrap">
@@ -281,7 +370,6 @@
       {/if}
     </div>
 
-    <!-- Kategoriler (yatay scroll) -->
     <div class="topics-row">
       {#each topics as t}
         <button
@@ -292,7 +380,6 @@
       {/each}
     </div>
 
-    <!-- Alt araç çubuğu -->
     <div class="post-toolbar">
       <button class="tool-btn" onclick={() => { mode = "quote"; }}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
@@ -308,11 +395,10 @@
   {/if}
 </main>
 
-<!-- ── Alıntı Ekranı (Android QuoteDialog — tam ekran) ─────── -->
+<!-- ── Alıntı Ekranı ─────────────────────────────────────── -->
 {:else}
 <main class="wrap quote-wrap">
 
-  <!-- Üst bar: geri ok + "Alıntı Ekle" + Paylaş -->
   <div class="quote-topbar">
     <button class="back-btn" onclick={() => { if (isEditMode) goto("/feed"); else mode = "post"; }}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="22" height="22"><polyline points="15 18 9 12 15 6"/></svg>
@@ -331,17 +417,10 @@
   {:else}
   <div class="quote-body">
 
-    <!-- Başlık -->
     <input class="q-title" placeholder="Başlık (opsiyonel)" bind:value={quoteTitle} maxlength={120}/>
 
-    <!-- Alıntı metni (OutlinedTextField) -->
     <div class="q-field">
-      <textarea
-        class="q-outlined"
-        placeholder="ALINTI METNİ *"
-        bind:value={quoteText}
-        rows={5}
-      ></textarea>
+      <textarea class="q-outlined" placeholder="ALINTI METNİ *" bind:value={quoteText} rows={5}></textarea>
     </div>
 
     <!-- Kitap adı -->
@@ -365,7 +444,6 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         {/if}
-
         {#if showBookDrop && bookResults.length > 0}
           <div class="q-dropdown">
             {#each bookResults as b (b.id)}
@@ -387,7 +465,6 @@
           </div>
         {/if}
       </div>
-
       {#if bookNotFound}
         <div class="q-hint">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
@@ -417,7 +494,6 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         {/if}
-
         {#if showAuthorDrop && authorResults.length > 0}
           <div class="q-dropdown">
             {#each authorResults as a (a.id)}
@@ -425,15 +501,12 @@
                 <div class="drop-thumb author-thumb">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
                 </div>
-                <div class="drop-info">
-                  <span class="drop-title">{a.name}</span>
-                </div>
+                <div class="drop-info"><span class="drop-title">{a.name}</span></div>
               </button>
             {/each}
           </div>
         {/if}
       </div>
-
       {#if authorNotFound}
         <div class="q-hint">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
@@ -442,7 +515,7 @@
       {/if}
     </div>
 
-    <!-- Önizleme (QuoteCard) -->
+    <!-- Önizleme -->
     {#if quoteText || quoteBook || quoteAuthor}
       <div class="q-preview-wrap">
         <p class="q-preview-label">Önizleme</p>
@@ -476,14 +549,12 @@
 {/if}
 
 <style>
-/* ── Genel ──────────────────────────────────────────────────── */
 .wrap { max-width: 600px; margin: 0 auto; background: var(--surface); min-height: 100dvh; }
 .loading { display: flex; justify-content: center; padding: 40px; }
 .error { color: #ef4444; font-size: 13px; padding: 0 16px; }
 
-/* ── Normal Gönderi ─────────────────────────────────────────── */
+/* Normal Gönderi */
 .post-wrap { display: flex; flex-direction: column; }
-
 .post-topbar {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; border-bottom: 1px solid var(--divider);
@@ -494,13 +565,8 @@
   border-radius: 50%; background: none; border: none; cursor: pointer; color: var(--on-bg);
 }
 .topbar-close:hover { background: var(--surface-var); }
-.topbar-av, .topbar-av-ph {
-  width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
-}
-.topbar-av-ph {
-  background: var(--primary); color: #fff;
-  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;
-}
+.topbar-av, .topbar-av-ph { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.topbar-av-ph { background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
 .topbar-spacer { flex: 1; }
 .share-pill {
   padding: 8px 22px; background: var(--primary); color: #fff;
@@ -516,21 +582,41 @@
   font-family: inherit; box-sizing: border-box;
 }
 .post-title::placeholder { color: var(--muted); font-weight: 400; }
+
+/* Mention */
+.mention-wrap { position: relative; }
 .post-text {
   width: 100%; border: none; background: transparent; color: var(--on-bg);
   font-size: 16px; line-height: 1.65; resize: none; outline: none; font-family: inherit;
+  box-sizing: border-box;
 }
 .post-text::placeholder { color: var(--muted); }
+.mention-dropdown {
+  position: absolute; top: 100%; left: 0; right: 0;
+  background: var(--surface); border: 1px solid var(--divider); border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14); z-index: 200;
+  overflow: hidden; max-height: 200px; overflow-y: auto;
+}
+.mention-loading { padding: 10px; display: flex; justify-content: center; }
+.mention-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: none; border: none; border-bottom: 1px solid var(--divider);
+  padding: 10px 14px; cursor: pointer; text-align: left; font-family: inherit;
+  transition: background 0.1s;
+}
+.mention-row:last-child { border-bottom: none; }
+.mention-row:hover { background: var(--surface-var); }
+.mention-av { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.mention-av-ph { background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+.mention-info { display: flex; flex-direction: column; min-width: 0; }
+.mention-name { font-size: 13px; font-weight: 600; color: var(--on-bg); }
+.mention-user { font-size: 12px; color: var(--muted); }
 
 .img-wrap { position: relative; }
 .img-prev { width: 100%; border-radius: 12px; max-height: 280px; object-fit: cover; display: block; }
 .img-rm { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.6); color: #fff; border: none; border-radius: 50%; width: 26px; height: 26px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
-/* Kategoriler yatay scroll */
-.topics-row {
-  display: flex; gap: 8px; overflow-x: auto; padding: 8px 16px;
-  border-top: 1px solid var(--divider); scrollbar-width: none;
-}
+.topics-row { display: flex; gap: 8px; overflow-x: auto; padding: 8px 16px; border-top: 1px solid var(--divider); scrollbar-width: none; }
 .topics-row::-webkit-scrollbar { display: none; }
 .topic-chip {
   flex-shrink: 0; padding: 6px 16px; border-radius: 20px; font-size: 14px;
@@ -540,147 +626,60 @@
 .topic-chip.selected { background: var(--primary); color: #fff; border-color: var(--primary); }
 .topic-chip:hover:not(.selected) { border-color: var(--primary); color: var(--primary); }
 
-/* Alt araç çubuğu */
-.post-toolbar {
-  display: flex; align-items: center; gap: 4px; padding: 8px 14px;
-  border-top: 1px solid var(--divider);
-}
-.tool-btn {
-  display: flex; align-items: center; justify-content: center;
-  width: 38px; height: 38px; border-radius: 50%; color: var(--muted);
-  background: none; border: none; cursor: pointer; transition: background 0.15s;
-}
+.post-toolbar { display: flex; align-items: center; gap: 4px; padding: 8px 14px; border-top: 1px solid var(--divider); }
+.tool-btn { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%; color: var(--muted); background: none; border: none; cursor: pointer; transition: background 0.15s; }
 .tool-btn:hover { background: var(--surface-var); color: var(--on-bg); }
 .char-count { margin-left: auto; font-size: 12px; color: var(--muted); }
 .char-count.warn { color: #ef4444; }
 
-/* ── Alıntı Ekranı ──────────────────────────────────────────── */
+/* Alıntı */
 .quote-wrap { display: flex; flex-direction: column; background: var(--bg); min-height: 100dvh; }
-
-.quote-topbar {
-  display: flex; align-items: center; padding: 10px 14px;
-  border-bottom: 1px solid var(--divider);
-  position: sticky; top: 0; background: var(--bg); z-index: 10; gap: 10px;
-}
-.back-btn {
-  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
-  background: none; border: none; cursor: pointer; color: var(--primary); border-radius: 50%; flex-shrink: 0;
-}
+.quote-topbar { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--divider); position: sticky; top: 0; background: var(--bg); z-index: 10; gap: 10px; }
+.back-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: none; border: none; cursor: pointer; color: var(--primary); border-radius: 50%; flex-shrink: 0; }
 .back-btn:hover { background: var(--surface-var); }
-.quote-topbar-title {
-  display: flex; align-items: center; gap: 8px; flex: 1;
-  font-size: 17px; font-weight: 700; color: var(--on-bg);
-}
-.share-text-btn {
-  font-size: 15px; font-weight: 600; color: var(--primary);
-  background: none; border: none; cursor: pointer; font-family: inherit; padding: 6px 4px;
-  white-space: nowrap;
-}
+.quote-topbar-title { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 17px; font-weight: 700; color: var(--on-bg); }
+.share-text-btn { font-size: 15px; font-weight: 600; color: var(--primary); background: none; border: none; cursor: pointer; font-family: inherit; padding: 6px 4px; white-space: nowrap; }
 .share-text-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
-/* Alıntı form body */
 .quote-body { display: flex; flex-direction: column; gap: 0; padding: 16px 0; }
-
-.q-title {
-  width: 100%; border: none; background: transparent; color: var(--on-bg);
-  font-size: 15px; font-weight: 500; padding: 4px 16px 16px; outline: none;
-  font-family: inherit; box-sizing: border-box;
-}
+.q-title { width: 100%; border: none; background: transparent; color: var(--on-bg); font-size: 15px; font-weight: 500; padding: 4px 16px 16px; outline: none; font-family: inherit; box-sizing: border-box; }
 .q-title::placeholder { color: var(--primary); font-weight: 400; font-size: 15px; opacity: 0.7; }
-
 .q-field { padding: 8px 16px; }
-
-/* OutlinedTextField — Android Material 3 karanlık stil */
-.q-outlined {
-  width: 100%; background: var(--surface-var); border: 1.5px solid var(--divider);
-  border-radius: 12px; padding: 16px; font-size: 15px; color: var(--on-bg);
-  outline: none; font-family: inherit; resize: none; line-height: 1.7; box-sizing: border-box;
-  transition: border-color 0.15s;
-}
+.q-outlined { width: 100%; background: var(--surface-var); border: 1.5px solid var(--divider); border-radius: 12px; padding: 16px; font-size: 15px; color: var(--on-bg); outline: none; font-family: inherit; resize: none; line-height: 1.7; box-sizing: border-box; transition: border-color 0.15s; }
 .q-outlined:focus { border-color: var(--primary); }
 .q-outlined::placeholder { color: var(--muted); font-size: 13px; letter-spacing: 0.04em; font-weight: 600; }
-
-.q-outlined-wrap {
-  position: relative; display: flex; align-items: center;
-  background: var(--surface-var); border: 1.5px solid var(--divider);
-  border-radius: 12px; transition: border-color 0.15s; min-height: 56px;
-}
+.q-outlined-wrap { position: relative; display: flex; align-items: center; background: var(--surface-var); border: 1.5px solid var(--divider); border-radius: 12px; transition: border-color 0.15s; min-height: 56px; }
 .q-outlined-wrap:focus-within { border-color: var(--primary); }
-.q-leading {
-  display: flex; align-items: center; justify-content: center;
-  width: 48px; height: 56px; color: var(--muted); flex-shrink: 0;
-}
-.q-outlined-input {
-  flex: 1; border: none; background: transparent; color: var(--on-bg);
-  font-size: 14px; outline: none; font-family: inherit; padding: 0 8px 0 0; height: 56px;
-}
+.q-leading { display: flex; align-items: center; justify-content: center; width: 48px; height: 56px; color: var(--muted); flex-shrink: 0; }
+.q-outlined-input { flex: 1; border: none; background: transparent; color: var(--on-bg); font-size: 14px; outline: none; font-family: inherit; padding: 0 8px 0 0; height: 56px; }
 .q-outlined-input::placeholder { color: var(--muted); font-size: 12px; letter-spacing: 0.06em; font-weight: 600; }
 .q-trailing { display: flex; align-items: center; padding-right: 10px; }
-.q-trailing-btn {
-  display: flex; align-items: center; justify-content: center; background: none; border: none;
-  color: var(--muted); cursor: pointer; padding: 8px; border-radius: 50%;
-}
+.q-trailing-btn { display: flex; align-items: center; justify-content: center; background: none; border: none; color: var(--muted); cursor: pointer; padding: 8px; border-radius: 50%; }
 .q-trailing-btn:hover { color: var(--on-bg); }
-
-/* Dropdown */
-.q-dropdown {
-  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-  background: var(--surface); border: 1px solid var(--divider); border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.14); z-index: 100;
-  overflow: hidden; max-height: 220px; overflow-y: auto;
-}
-.q-drop-row {
-  display: flex; align-items: center; gap: 10px; width: 100%;
-  background: none; border: none; border-bottom: 1px solid var(--divider);
-  padding: 10px 14px; cursor: pointer; text-align: left; font-family: inherit;
-  transition: background 0.1s;
-}
+.q-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--divider); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.14); z-index: 100; overflow: hidden; max-height: 220px; overflow-y: auto; }
+.q-drop-row { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: none; border-bottom: 1px solid var(--divider); padding: 10px 14px; cursor: pointer; text-align: left; font-family: inherit; transition: background 0.1s; }
 .q-drop-row:last-child { border-bottom: none; }
 .q-drop-row:hover { background: var(--surface-var); }
-.drop-thumb {
-  width: 28px; height: 42px; border-radius: 3px; object-fit: cover; flex-shrink: 0;
-  background: color-mix(in srgb, #F59E0B 12%, transparent);
-  display: flex; align-items: center; justify-content: center; overflow: hidden;
-}
+.drop-thumb { width: 28px; height: 42px; border-radius: 3px; object-fit: cover; flex-shrink: 0; background: color-mix(in srgb, #F59E0B 12%, transparent); display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .drop-thumb.no-img { color: #F59E0B; }
 .drop-thumb.author-thumb { border-radius: 50%; height: 28px; color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
 .drop-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .drop-title { font-size: 13px; font-weight: 600; color: var(--on-bg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .drop-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
 .drop-count-badge { font-size: 10px; color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); border-radius: 6px; padding: 2px 6px; white-space: nowrap; }
-
-/* Bulunamadı hint */
-.q-hint {
-  display: flex; align-items: center; gap: 6px; margin-top: 8px;
-  background: color-mix(in srgb, #F59E0B 10%, transparent);
-  border-radius: 8px; padding: 8px 10px; font-size: 12px; color: #F59E0B;
-}
+.q-hint { display: flex; align-items: center; gap: 6px; margin-top: 8px; background: color-mix(in srgb, #F59E0B 10%, transparent); border-radius: 8px; padding: 8px 10px; font-size: 12px; color: #F59E0B; }
 .q-hint svg { stroke: #F59E0B; flex-shrink: 0; }
-
-/* Önizleme (QuoteCard) */
 .q-preview-wrap { padding: 4px 16px 0; }
 .q-preview-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
-.quote-card {
-  position: relative; border-radius: 14px; padding: 14px 14px 14px 18px;
-  background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(155,114,245,0.06));
-  border: 1px solid color-mix(in srgb, #F59E0B 30%, transparent); overflow: hidden;
-}
-.quote-bg {
-  position: absolute; top: -14px; left: 4px; font-size: 72px; font-weight: 900;
-  color: rgba(245,158,11,0.12); line-height: 1; pointer-events: none; font-family: Georgia, serif;
-}
+.quote-card { position: relative; border-radius: 14px; padding: 14px 14px 14px 18px; background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(155,114,245,0.06)); border: 1px solid color-mix(in srgb, #F59E0B 30%, transparent); overflow: hidden; }
+.quote-bg { position: absolute; top: -14px; left: 4px; font-size: 72px; font-weight: 900; color: rgba(245,158,11,0.12); line-height: 1; pointer-events: none; font-family: Georgia, serif; }
 .qc-text { font-size: 14px; font-style: italic; color: var(--on-bg); line-height: 1.6; margin: 0 0 10px; }
 .qc-source { display: flex; align-items: center; gap: 8px; }
-.qc-cover {
-  width: 24px; height: 36px; border-radius: 3px; object-fit: cover; flex-shrink: 0;
-  background: color-mix(in srgb, #F59E0B 12%, transparent);
-  display: flex; align-items: center; justify-content: center;
-}
+.qc-cover { width: 24px; height: 36px; border-radius: 3px; object-fit: cover; flex-shrink: 0; background: color-mix(in srgb, #F59E0B 12%, transparent); display: flex; align-items: center; justify-content: center; }
 .qc-cover.no-img { color: #F59E0B; }
 .qc-book { display: block; font-size: 11px; font-weight: 700; color: #F59E0B; }
 .qc-author { display: block; font-size: 10px; color: var(--muted); margin-top: 1px; }
 
-/* Spinner */
 .spinner { width: 18px; height: 18px; border: 2px solid var(--divider); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.7s linear infinite; }
 .spinner.small { width: 14px; height: 14px; }
 @keyframes spin { to { transform: rotate(360deg); } }
