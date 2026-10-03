@@ -15,6 +15,7 @@
     type SuggestedUser,
   } from '$lib/services/social.service';
   import type { Post } from '$lib/models/post';
+  import { recordDailyActivityAndStreak } from '$lib/services/activity.service';
 
   // ── State ──────────────────────────────────────────────────────────────────
   let activeTab        = $state(0);   // 0=Herkes  1=Takip Edilenler
@@ -37,6 +38,7 @@
   // ── Init ───────────────────────────────────────────────────────────────────
   onMount(async () => {
     await load();
+    if ($currentUser) recordDailyActivityAndStreak($currentUser.uid);
     if ($currentUser) {
       // Önce followingUids yükle — suggestedUsers exclude listesi buna bağlı
       await loadFollowingUids();
@@ -130,6 +132,7 @@
       refreshing = true;
       pullDist = 0;
       await load();
+    if ($currentUser) recordDailyActivityAndStreak($currentUser.uid);
       await loadSuggestedUsers();
       refreshing = false;
     } else { pullDist = 0; }

@@ -13,6 +13,7 @@
     createQuote,
     updatePost,
   } from "$lib/services/compose.service";
+  import { draftSave, draftLoad, draftClear } from '$lib/utils/draft';
 
   // ── Mod ──────────────────────────────────────────────────────
   let mode        = $state<"post" | "quote">("post");
@@ -69,6 +70,7 @@
     const type   = $page.url.searchParams.get("type");
     if (editId) { editPostId = editId; isEditMode = true; loadExistingPost(editId); }
     if (type === "quote") mode = "quote";
+    if (!editId) { const d = draftLoad(); if (d) { text = d.text; title = d.title; } }
     return unsub;
   });
 
@@ -215,7 +217,8 @@
         } else {
           let imageUrl = "";
           if (imageFile) imageUrl = await uploadImage(imageFile, $currentUser.uid);
-          await createPost({
+          draftClear();
+      await createPost({
             uid:         $currentUser.uid,
             displayName: $currentUser.displayName ?? "",
             photoURL:    $currentUser.photoURL    ?? "",
