@@ -254,21 +254,23 @@ export async function syncUsernameToSupabase(uid: string, username: string, disp
 // 2. Supabase users tablosundaki photo_url güncellenmiyordu → upsert eklendi
 // 3. Boyut kontrolü yok → 8 MB limit
 // 4. Resim tipi kontrolü yok → yalnızca image/* kabul edilir
+// ── Profil fotoğrafı yükle ───────────────────────────────────────────────────
+// Android ile AYNI Storage path: profile_photos/{uid}.jpg
+// (web eskiden avatars/{uid}/profile.jpg yazıyordu — rules izin vermiyordu)
 export async function uploadAvatar(uid: string, file: File): Promise<string> {
   if (!file.type.startsWith('image/')) throw new Error('Yalnızca resim dosyası yükleyebilirsin.');
   if (file.size > 8 * 1024 * 1024)    throw new Error('Dosya 8 MB\'dan küçük olmalı.');
 
-  // Uzantıyı orijinal dosyadan al (jpg/png/webp)
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
-  const storageRef = ref(storage, `avatars/${uid}/profile.${ext}`);
+  // Android ile aynı path
+  const storageRef = ref(storage, `profile_photos/${uid}.jpg`);
   await uploadBytes(storageRef, file, { contentType: file.type });
   const url = await getDownloadURL(storageRef);
 
-  // 1. Firestore users dokümanını güncelle
+  // 1. Firestore — Android ile aynı alan adı
   await updateDoc(doc(db, 'users', uid), { photoURL: url });
   cacheDelete(`profile_${uid}`);
 
-  // 2. Firebase Auth profilini güncelle (feed kartlarında güncel fotoğraf çıksın)
+  // 2. Firebase Auth güncelle (feed kartlarında da güncel fotoğraf çıksın)
   try {
     const { getAuth, updateProfile: authUpdateProfile } = await import('firebase/auth');
     const authUser = getAuth().currentUser;
@@ -277,7 +279,7 @@ export async function uploadAvatar(uid: string, file: File): Promise<string> {
     }
   } catch (_) {}
 
-  // 3. Supabase users tablosunu güncelle
+  // 3. Supabase güncelle
   try {
     await supabase.from('users').upsert({ uid, photo_url: url }, { onConflict: 'uid' });
   } catch (_) {}
@@ -286,17 +288,22 @@ export async function uploadAvatar(uid: string, file: File): Promise<string> {
 }
 
 // ── Kapak fotoğrafı yükle ────────────────────────────────────────────────────
+// Android ile AYNI Storage path: cover_photos/{uid}.jpg
+// Android hem coverPhoto hem coverURL alanını yazıyor — ikisi de güncelleniyor
 export async function uploadCoverPhoto(uid: string, file: File): Promise<string> {
   if (!file.type.startsWith('image/')) throw new Error('Yalnızca resim dosyası yükleyebilirsin.');
   if (file.size > 10 * 1024 * 1024)   throw new Error('Dosya 10 MB\'dan küçük olmalı.');
 
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
-  const storageRef = ref(storage, `covers/${uid}/cover.${ext}`);
+  // Android ile aynı path
+  const storageRef = ref(storage, `cover_photos/${uid}.jpg`);
   await uploadBytes(storageRef, file, { contentType: file.type });
   const url = await getDownloadURL(storageRef);
 
-  // Firestore güncelle
-  await updateDoc(doc(db, 'users', uid), { coverPhoto: url });
+  // Firestore — Android ile aynı: hem coverPhoto hem coverURL
+  await updateDoc(doc(db, 'users', uid), {
+    coverPhoto: url,
+    coverURL:   url,
+  });
   cacheDelete(`profile_${uid}`);
 
   // Supabase güncelle
