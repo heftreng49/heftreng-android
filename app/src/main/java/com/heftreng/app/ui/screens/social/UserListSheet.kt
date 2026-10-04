@@ -5,6 +5,7 @@ package com.heftreng.app.ui.screens.social
 //  Tema (site): .follow-list, .follow-item, .fl-av, .fl-name
 // ═══════════════════════════════════════════════════════
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -119,10 +121,11 @@ fun FollowListSheet(
         HorizontalDivider(color = Divider)
 
         when {
-            loading -> Box(
-                Modifier.fillMaxWidth().height(200.dp),
-                contentAlignment = Alignment.Center,
-            ) { CircularProgressIndicator(color = Primary, modifier = Modifier.size(28.dp)) }
+            // Yükleniyor: CircularProgressIndicator yerine shimmer satırları
+            // → liste yüksekliği korunur, veri gelince scroll pozisyonu kaymaz
+            loading -> LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
+                items(8) { FollowShimmerRow() }
+            }
 
             entries.isEmpty() -> Box(
                 Modifier.fillMaxWidth().height(200.dp),
@@ -192,10 +195,9 @@ fun LikerListSheet(
         HorizontalDivider(color = Divider)
 
         when {
-            loading -> Box(
-                Modifier.fillMaxWidth().height(200.dp),
-                contentAlignment = Alignment.Center,
-            ) { CircularProgressIndicator(color = Amber, modifier = Modifier.size(28.dp)) }
+            loading -> LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
+                items(8) { FollowShimmerRow() }
+            }
 
             likers.isEmpty() -> Box(
                 Modifier.fillMaxWidth().height(200.dp),
@@ -295,6 +297,72 @@ fun LikeEntryRow(entry: LikeEntry, onClick: () -> Unit) {
             maxLines   = 1,
             overflow   = TextOverflow.Ellipsis,
         )
+    }
+}
+
+// ── Shimmer yardımcısı ────────────────────────────────────────────────────────
+@Composable
+fun shimmerBrush(): Brush {
+    val shimmerColors = listOf(
+        SurfaceVar.copy(alpha = 0.6f),
+        SurfaceVar.copy(alpha = 0.2f),
+        SurfaceVar.copy(alpha = 0.6f),
+    )
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val translateX by transition.animateFloat(
+        initialValue = -300f,
+        targetValue  = 1000f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "shimmerX",
+    )
+    return Brush.linearGradient(
+        colors = shimmerColors,
+        start  = Offset(translateX, 0f),
+        end    = Offset(translateX + 300f, 0f),
+    )
+}
+
+// ── Shimmer satır — CircularProgressIndicator'ın yerini alır ─────────────────
+// Gerçek satır yüksekliğiyle (62dp) aynı boyutu korur:
+// liste yüksekliği loading → loaded geçişinde değişmez → scroll kaymaz
+@Composable
+fun FollowShimmerRow() {
+    val brush = shimmerBrush()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Avatar placeholder
+        Box(
+            Modifier
+                .size(42.dp)
+                .clip(CircleShape)
+                .background(brush)
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // İsim satırı
+            Box(
+                Modifier
+                    .width(140.dp)
+                    .height(13.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(brush)
+            )
+            // Alt bilgi satırı
+            Box(
+                Modifier
+                    .width(90.dp)
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(brush)
+            )
+        }
     }
 }
 
