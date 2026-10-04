@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -53,6 +54,9 @@ fun FollowListSheet(
     onRemoveFollower : ((String) -> Unit)? = null,   // null → başkasının profili, butonu gösterme
 ) {
     var sort by remember { mutableStateOf(FollowSort.NEW) }
+    // listState when/else dışında tanımlanmalı — içeride olursa
+    // her recompose'da sıfırlanır ve scroll pozisyonu kaybolur.
+    val listState = rememberLazyListState()
 
     val sortedEntries = remember(entries, sort) {
         when (sort) {
@@ -130,7 +134,7 @@ fun FollowListSheet(
                 }
             }
 
-            else -> LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
+            else -> LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 32.dp)) {
                 items(sortedEntries, key = { it.uid }) { entry ->
                     FollowEntryRow(
                         entry    = entry,
