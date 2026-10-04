@@ -5,6 +5,7 @@ package com.heftreng.app.ui.screens.social
 //  Tema (site): .follow-list, .follow-item, .fl-av, .fl-name
 // ═══════════════════════════════════════════════════════
 
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -120,40 +121,43 @@ fun FollowListSheet(
 
         HorizontalDivider(color = Divider)
 
-        when {
-            // Yükleniyor: CircularProgressIndicator yerine shimmer satırları
-            // → liste yüksekliği korunur, veri gelince scroll pozisyonu kaymaz
-            loading -> LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
-                items(8) { FollowShimmerRow() }
-            }
-
-            entries.isEmpty() -> Box(
-                Modifier.fillMaxWidth().height(200.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Person, null, tint = Divider, modifier = Modifier.size(44.dp))
-                    Text("Henüz kimse yok", color = Muted, fontSize = 13.sp)
+        // Crossfade: loading→liste geçişini 300ms fade ile yumuşatır
+        Crossfade(
+            targetState  = when { loading -> "loading"; entries.isEmpty() -> "empty"; else -> "list" },
+            animationSpec = tween(durationMillis = 300),
+            label        = "followListState",
+        ) { state ->
+            when (state) {
+                "loading" -> LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
+                    items(8) { FollowShimmerRow() }
                 }
-            }
-
-            else -> LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 32.dp)) {
-                items(sortedEntries, key = { it.uid }) { entry ->
-                    FollowEntryRow(
-                        entry    = entry,
-                        onClick  = { onProfile(entry.uid) },
-                        onRemove = if (onRemoveFollower != null) {{ onRemoveFollower(entry.uid) }} else null,
-                    )
-                    HorizontalDivider(color = Divider, thickness = 0.5.dp, modifier = Modifier.padding(start = 64.dp))
+                "empty" -> Box(
+                    Modifier.fillMaxWidth().height(200.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.Person, null, tint = Divider, modifier = Modifier.size(44.dp))
+                        Text("Henüz kimse yok", color = Muted, fontSize = 13.sp)
+                    }
                 }
-                if (hasMore && onLoadMore != null) {
-                    item(key = "load_more") {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            TextButton(onClick = onLoadMore) {
-                                Text("Daha Fazla Yükle", color = Primary, fontSize = 13.sp)
+                else -> LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 32.dp)) {
+                    items(sortedEntries, key = { it.uid }) { entry ->
+                        FollowEntryRow(
+                            entry    = entry,
+                            onClick  = { onProfile(entry.uid) },
+                            onRemove = if (onRemoveFollower != null) {{ onRemoveFollower(entry.uid) }} else null,
+                        )
+                        HorizontalDivider(color = Divider, thickness = 0.5.dp, modifier = Modifier.padding(start = 64.dp))
+                    }
+                    if (hasMore && onLoadMore != null) {
+                        item(key = "load_more") {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                TextButton(onClick = onLoadMore) {
+                                    Text("Daha Fazla Yükle", color = Primary, fontSize = 13.sp)
+                                }
                             }
                         }
                     }
@@ -194,27 +198,29 @@ fun LikerListSheet(
         }
         HorizontalDivider(color = Divider)
 
-        when {
-            loading -> LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
-                items(8) { FollowShimmerRow() }
-            }
-
-            likers.isEmpty() -> Box(
-                Modifier.fillMaxWidth().height(200.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("❤️", fontSize = 32.sp)
-                    Text("Henüz beğeni yok", color = Muted, fontSize = 13.sp)
+        Crossfade(
+            targetState  = when { loading -> "loading"; likers.isEmpty() -> "empty"; else -> "list" },
+            animationSpec = tween(durationMillis = 300),
+            label        = "likerListState",
+        ) { state ->
+            when (state) {
+                "loading" -> LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
+                    items(8) { FollowShimmerRow() }
                 }
-            }
-
-            else -> LazyColumn(
-                contentPadding = PaddingValues(bottom = 32.dp),
-            ) {
-                items(likers, key = { it.uid }) { entry ->
-                    LikeEntryRow(entry = entry, onClick = { onProfile(entry.uid) })
-                    HorizontalDivider(color = Divider, thickness = 0.5.dp, modifier = Modifier.padding(start = 64.dp))
+                "empty" -> Box(
+                    Modifier.fillMaxWidth().height(200.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("❤️", fontSize = 32.sp)
+                        Text("Henüz beğeni yok", color = Muted, fontSize = 13.sp)
+                    }
+                }
+                else -> LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
+                    items(likers, key = { it.uid }) { entry ->
+                        LikeEntryRow(entry = entry, onClick = { onProfile(entry.uid) })
+                        HorizontalDivider(color = Divider, thickness = 0.5.dp, modifier = Modifier.padding(start = 64.dp))
+                    }
                 }
             }
         }
@@ -301,19 +307,20 @@ fun LikeEntryRow(entry: LikeEntry, onClick: () -> Unit) {
 }
 
 // ── Shimmer yardımcısı ────────────────────────────────────────────────────────
+// Base: koyu gri — parlak: açık gri. Tema ne olursa olsun görünür kontrast.
 @Composable
 fun shimmerBrush(): Brush {
-    val shimmerColors = listOf(
-        SurfaceVar.copy(alpha = 0.6f),
-        SurfaceVar.copy(alpha = 0.2f),
-        SurfaceVar.copy(alpha = 0.6f),
-    )
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val base   = if (isDark) Color(0xFF2A2A2A) else Color(0xFFE0E0E0)
+    val bright = if (isDark) Color(0xFF3D3D3D) else Color(0xFFF5F5F5)
+    val shimmerColors = listOf(base, bright, base)
+
     val transition = rememberInfiniteTransition(label = "shimmer")
     val translateX by transition.animateFloat(
-        initialValue = -300f,
-        targetValue  = 1000f,
+        initialValue  = -400f,
+        targetValue   = 1200f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 900, easing = LinearEasing),
+            animation  = tween(durationMillis = 1000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "shimmerX",
@@ -321,7 +328,7 @@ fun shimmerBrush(): Brush {
     return Brush.linearGradient(
         colors = shimmerColors,
         start  = Offset(translateX, 0f),
-        end    = Offset(translateX + 300f, 0f),
+        end    = Offset(translateX + 400f, 0f),
     )
 }
 
