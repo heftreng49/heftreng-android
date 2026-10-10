@@ -2311,78 +2311,66 @@ fun PostCard(
                 animationSpec = tween(180),
                 label         = "saveColor",
             )
-            // ── Beğeni pill ──────────────────────────────────────────────
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(99.dp))
-                    .background(
-                        if (post.isLikedByMe) Color(0xFFFF3A5C).copy(alpha = 0.12f)
-                        else SurfaceVar.copy(alpha = 0.6f)
-                    )
+            // ── Beğeni — Instagram tarzı: ikon üstte, sayı altında ───────
+            Column(
+                modifier              = Modifier
                     .clickable { onLike() }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalAlignment   = Alignment.CenterHorizontally,
+                verticalArrangement   = Arrangement.spacedBy(2.dp),
             ) {
                 Icon(
                     if (post.isLikedByMe) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = Strings.likeAction(language),
                     tint               = likeColor,
                     modifier           = Modifier
-                        .size(18.dp)
+                        .size(22.dp)
                         .graphicsLayer { scaleX = likeScale; scaleY = likeScale },
                 )
                 if (post.likesCount > 0) {
                     Text(
                         post.likesCount.toString(),
                         color      = if (post.isLikedByMe) Color(0xFFFF3A5C) else Muted,
-                        fontSize   = 12.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontSize   = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
                         modifier   = if (onShowLikers != null) Modifier.clickable { onShowLikers() } else Modifier,
                     )
                 }
             }
-            Spacer(Modifier.width(6.dp))
-            // ── Yorum pill ──────────────────────────────────────────────
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(99.dp))
-                    .background(SurfaceVar.copy(alpha = 0.6f))
+            Spacer(Modifier.width(4.dp))
+            // ── Yorum — ikon + sayı altında ──────────────────────────────
+            Column(
+                modifier              = Modifier
                     .clickable { onComment() }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalAlignment   = Alignment.CenterHorizontally,
+                verticalArrangement   = Arrangement.spacedBy(2.dp),
             ) {
-                Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Muted, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Muted, modifier = Modifier.size(22.dp))
                 if (post.commentsCount > 0) {
-                    Text(post.commentsCount.toString(), color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    Text(post.commentsCount.toString(), color = Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
-            Spacer(Modifier.width(6.dp))
-            // ── Repost pill ─────────────────────────────────────────────
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(99.dp))
-                    .background(
-                        if (post.isRepostedByMe) Amber.copy(alpha = 0.12f)
-                        else SurfaceVar.copy(alpha = 0.6f)
-                    )
+            Spacer(Modifier.width(4.dp))
+            // ── Repost — ikon + sayı altında ─────────────────────────────
+            Column(
+                modifier              = Modifier
                     .clickable { onShare() }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalAlignment   = Alignment.CenterHorizontally,
+                verticalArrangement   = Arrangement.spacedBy(2.dp),
             ) {
                 Icon(
                     Icons.Default.Repeat, null,
                     tint     = if (post.isRepostedByMe) Amber else Muted,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(22.dp),
                 )
                 if (post.repostsCount > 0) {
                     Text(
                         post.repostsCount.toString(),
                         color      = if (post.isRepostedByMe) Amber else Muted,
-                        fontSize   = 12.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontSize   = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
             }
