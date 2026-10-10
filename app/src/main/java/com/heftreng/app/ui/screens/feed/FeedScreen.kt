@@ -98,6 +98,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.shadow
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -1778,10 +1779,18 @@ fun PostCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 5.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .shadow(
+                elevation         = 6.dp,
+                shape             = RoundedCornerShape(20.dp),
+                ambientColor      = if (post.isLikedByMe)
+                    androidx.compose.ui.graphics.Color(0x1A6C8EFF)
+                else
+                    androidx.compose.ui.graphics.Color(0x14000000),
+                spotColor         = androidx.compose.ui.graphics.Color(0x1A6C8EFF),
+            )
+            .clip(RoundedCornerShape(20.dp))
             .background(HeftCard)
-            .border(0.7.dp, Divider, RoundedCornerShape(18.dp))
             .then(
                 if (onDoubleTap != null)
                     Modifier.combinedClickable(
@@ -1790,7 +1799,7 @@ fun PostCard(
                     )
                 else Modifier
             )
-            .padding(horizontal = 15.dp, vertical = 13.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
         // Header
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1800,12 +1809,19 @@ fun PostCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
-                        .background(brush = androidx.compose.ui.graphics.Brush.linearGradient(listOf(GradientStart, GradientEnd)))
-                        .padding(1.5.dp)
+                        .background(
+                            brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                listOf(
+                                    androidx.compose.ui.graphics.Color(0xFF6C8EFF),
+                                    androidx.compose.ui.graphics.Color(0xFF38BDF8),
+                                )
+                            )
+                        )
+                        .padding(2.dp)
                         .clip(CircleShape)
-                        .background(SurfaceVar),
+                        .background(HeftCard),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (post.photoURL.isNotBlank()) {
@@ -2269,8 +2285,12 @@ fun PostCard(
             }
         }
 
-        // Aksiyonlar
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        // ── Aksiyonlar Bar — modern pill buton stili ─────────────────────
+        Spacer(Modifier.height(4.dp))
+        Row(
+            modifier            = Modifier.fillMaxWidth(),
+            verticalAlignment   = Alignment.CenterVertically,
+        ) {
             val likeScale by animateFloatAsState(
                 targetValue   = if (post.isLikedByMe) 1.35f else 1f,
                 animationSpec = spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow),
@@ -2291,38 +2311,90 @@ fun PostCard(
                 animationSpec = tween(180),
                 label         = "saveColor",
             )
-            IconButton(onClick = onLike) {
+            // ── Beğeni pill ──────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(
+                        if (post.isLikedByMe) Color(0xFFFF3A5C).copy(alpha = 0.12f)
+                        else SurfaceVar.copy(alpha = 0.6f)
+                    )
+                    .clickable { onLike() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
                 Icon(
                     if (post.isLikedByMe) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = Strings.likeAction(language),
                     tint               = likeColor,
-                    modifier           = Modifier.size(22.dp).graphicsLayer { scaleX = likeScale; scaleY = likeScale },
+                    modifier           = Modifier
+                        .size(18.dp)
+                        .graphicsLayer { scaleX = likeScale; scaleY = likeScale },
                 )
+                if (post.likesCount > 0) {
+                    Text(
+                        post.likesCount.toString(),
+                        color      = if (post.isLikedByMe) Color(0xFFFF3A5C) else Muted,
+                        fontSize   = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier   = if (onShowLikers != null) Modifier.clickable { onShowLikers() } else Modifier,
+                    )
+                }
             }
-            if (post.likesCount > 0) {
-                Text(
-                    post.likesCount.toString(), color = Muted, fontSize = 13.sp,
-                    modifier = if (onShowLikers != null) Modifier.clickable { onShowLikers() } else Modifier,
-                )
+            Spacer(Modifier.width(6.dp))
+            // ── Yorum pill ──────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(SurfaceVar.copy(alpha = 0.6f))
+                    .clickable { onComment() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Muted, modifier = Modifier.size(18.dp))
+                if (post.commentsCount > 0) {
+                    Text(post.commentsCount.toString(), color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
             }
-            Spacer(Modifier.width(4.dp))
-            IconButton(onClick = onComment) {
-                Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Muted, modifier = Modifier.size(20.dp))
-            }
-            if (post.commentsCount > 0) Text(post.commentsCount.toString(), color = Muted, fontSize = 13.sp)
-            Spacer(Modifier.width(4.dp))
-            IconButton(onClick = onShare) {
-                Icon(Icons.Default.Repeat, null,
+            Spacer(Modifier.width(6.dp))
+            // ── Repost pill ─────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(
+                        if (post.isRepostedByMe) Amber.copy(alpha = 0.12f)
+                        else SurfaceVar.copy(alpha = 0.6f)
+                    )
+                    .clickable { onShare() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Icon(
+                    Icons.Default.Repeat, null,
                     tint     = if (post.isRepostedByMe) Amber else Muted,
-                    modifier = Modifier.size(20.dp))
+                    modifier = Modifier.size(18.dp),
+                )
+                if (post.repostsCount > 0) {
+                    Text(
+                        post.repostsCount.toString(),
+                        color      = if (post.isRepostedByMe) Amber else Muted,
+                        fontSize   = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
             }
-            if (post.repostsCount > 0) Text(post.repostsCount.toString(), color = Muted, fontSize = 13.sp)
-            Spacer(Modifier.width(4.dp))
-            // Dış paylaşım butonu
+            Spacer(Modifier.weight(1f))
+            // ── Paylaşım ikonu ──────────────────────────────────────────
             Box {
                 var shareMenuExpanded by remember { mutableStateOf(false) }
-                IconButton(onClick = { shareMenuExpanded = true }) {
-                    Icon(Icons.Default.IosShare, null, tint = Muted, modifier = Modifier.size(20.dp))
+                IconButton(
+                    onClick  = { shareMenuExpanded = true },
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(Icons.Default.IosShare, null, tint = Muted, modifier = Modifier.size(18.dp))
                 }
                 DropdownMenu(
                     expanded         = shareMenuExpanded,
@@ -2346,13 +2418,18 @@ fun PostCard(
                     )
                 }
             }
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = onSave) {
+            // ── Kaydet ikonu ────────────────────────────────────────────
+            IconButton(
+                onClick  = onSave,
+                modifier = Modifier.size(36.dp),
+            ) {
                 Icon(
                     if (post.isSavedByMe) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                     contentDescription = Strings.save(language),
                     tint               = saveColor,
-                    modifier           = Modifier.size(22.dp).graphicsLayer { scaleX = saveScale; scaleY = saveScale },
+                    modifier           = Modifier
+                        .size(20.dp)
+                        .graphicsLayer { scaleX = saveScale; scaleY = saveScale },
                 )
             }
         }

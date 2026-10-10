@@ -858,13 +858,11 @@ private fun ProfileHeader(
 ) {
     val ku = language == "ku"
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Kapak fotoğrafı
+        // ── Kapak fotoğrafı — daha yüksek, gradient overlay ile ──────────
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(100.dp)
-                .background(SurfaceVar)
-                .clip(androidx.compose.ui.graphics.RectangleShape)
+                .height(150.dp)
         ) {
             var showCover by remember { mutableStateOf(false) }
             if (user?.coverPhoto?.isNotEmpty() == true) {
@@ -874,32 +872,78 @@ private fun ProfileHeader(
                     contentScale       = ContentScale.Crop,
                     modifier           = Modifier
                         .fillMaxWidth()
-                        .height(130.dp)
+                        .height(160.dp)
                         .offset(y = (-scrollOffset * 0.25f).dp)
                         .clickable { showCover = true },
                 )
+                // Kapak altına doğru gradient geçiş — avatarın oturduğu kısmı doğallaştırır
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(70.dp)
+                        .align(Alignment.BottomStart)
+                        .background(
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    Background.copy(alpha = 0.7f),
+                                    Background,
+                                )
+                            )
+                        )
+                )
                 if (showCover) FullScreenImageViewer(url = user.coverPhoto) { showCover = false }
+            } else {
+                // Kapak yoksa — gradient arkaplan
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            androidx.compose.ui.graphics.Brush.linearGradient(
+                                listOf(
+                                    androidx.compose.ui.graphics.Color(0xFF6C8EFF).copy(alpha = 0.3f),
+                                    androidx.compose.ui.graphics.Color(0xFF38BDF8).copy(alpha = 0.15f),
+                                )
+                            )
+                        )
+                )
             }
         }
 
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            // Avatar satırı
+            // ── Avatar satırı ──────────────────────────────────────────────
             Row(
                 modifier          = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Bottom,
             ) {
                 val avatarUrl = user?.photoURL?.ifEmpty { null }
                 var showAvatar by remember { mutableStateOf(false) }
+                // Avatar — kapak üzerine overlap + beyaz halka + gradient halka
                 Box(
                     modifier = Modifier
-                        .size(76.dp)
-                        .offset(y = (-28).dp)
+                        .size(88.dp)
+                        .offset(y = (-36).dp)
+                        // Dış beyaz/koyu halka (tema arka planından)
+                        .shadow(
+                            elevation = 8.dp,
+                            shape     = CircleShape,
+                            clip      = false,
+                        )
+                        .clip(CircleShape)
+                        .background(Background)
+                        .padding(2.5.dp)
                         .clip(CircleShape)
                         .background(
                             androidx.compose.ui.graphics.Brush.linearGradient(
-                                listOf(Primary, PrimaryLight)
+                                listOf(
+                                    androidx.compose.ui.graphics.Color(0xFF6C8EFF),
+                                    androidx.compose.ui.graphics.Color(0xFF38BDF8),
+                                )
                             )
                         )
+                        .padding(2.dp)
+                        .clip(CircleShape)
+                        .background(SurfaceVar)
                         .then(if (avatarUrl != null) Modifier.clickable { showAvatar = true } else Modifier),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -908,45 +952,50 @@ private fun ProfileHeader(
                             model              = avatarUrl,
                             contentDescription = null,
                             contentScale       = ContentScale.Crop,
-                            modifier           = Modifier.fillMaxSize(),
+                            modifier           = Modifier.fillMaxSize().clip(CircleShape),
                         )
                     } else {
                         Text(
                             user?.displayName?.firstOrNull()?.uppercase() ?: "?",
                             color      = Color.White,
                             fontWeight = FontWeight.Bold,
-                            fontSize   = 26.sp,
+                            fontSize   = 30.sp,
                         )
                     }
                 }
                 if (showAvatar && avatarUrl != null)
                     FullScreenImageViewer(url = avatarUrl) { showAvatar = false }
                 Spacer(Modifier.weight(1f))
-                Spacer(Modifier.height(12.dp))
+                // Butonlar — avatar ile aynı hizada
+                Column(horizontalAlignment = Alignment.End) {
+                    Spacer(Modifier.height(8.dp))
                 if (isMe) {
                     OutlinedButton(
                         onClick = onEditProfile,
-                        shape   = RoundedCornerShape(10.dp),
+                        shape   = RoundedCornerShape(20.dp),
                         border  = androidx.compose.foundation.BorderStroke(1.dp, Divider),
                         colors  = ButtonDefaults.outlinedButtonColors(contentColor = OnBackground),
-                    ) { Text(Strings.edit(language), fontSize = 13.sp) }
+                        modifier = Modifier.height(36.dp),
+                    ) { Text(Strings.edit(language), fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
                 } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         // Mesaj butonu
-                        IconButton(
-                            onClick  = onMessage,
+                        Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(SurfaceVar),
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(SurfaceVar)
+                                .clickable { onMessage() },
+                            contentAlignment = Alignment.Center,
                         ) {
-                            Icon(Icons.Outlined.ChatBubbleOutline, null, tint = OnBackground)
+                            Icon(Icons.Outlined.ChatBubbleOutline, null, tint = OnBackground, modifier = Modifier.size(18.dp))
                         }
-                        // Takip butonu — 3 durum: takip ediliyor / istek bekliyor / takip et
+                        // Takip butonu — gradient veya outlined
                         val followBg by animateColorAsState(
                             targetValue   = when {
                                 isFollowing                      -> SurfaceVar
                                 followRequestStatus == "pending" -> SurfaceVar
-                                else                             -> Amber
+                                else                             -> androidx.compose.ui.graphics.Color(0xFF6C8EFF)
                             },
                             animationSpec = tween(220),
                             label         = "followBg",
@@ -958,16 +1007,18 @@ private fun ProfileHeader(
                         )
                         Button(
                             onClick  = onFollow,
-                            shape    = RoundedCornerShape(10.dp),
+                            shape    = RoundedCornerShape(20.dp),
                             colors   = ButtonDefaults.buttonColors(
                                 containerColor = followBg,
                                 contentColor   = when {
                                     isFollowing                      -> OnBackground
                                     followRequestStatus == "pending" -> OnBackground
-                                    else                             -> Color.Black
+                                    else                             -> Color.White
                                 },
                             ),
-                            modifier = Modifier.graphicsLayer { scaleX = followScale; scaleY = followScale },
+                            modifier = Modifier
+                                .height(36.dp)
+                                .graphicsLayer { scaleX = followScale; scaleY = followScale },
                         ) {
                             Text(
                                 when {
@@ -976,28 +1027,31 @@ private fun ProfileHeader(
                                     else                             -> Strings.follow(language)
                                 },
                                 fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
                             )
                         }
                     }
                 }
+                }
             }
 
-            // İsim & kullanıcı adı
+            // ── İsim & kullanıcı adı — avatar offset'i dengele ────────────
+            Spacer(Modifier.height((-24).dp)) // avatar yukarı offset'ini geri al
             Text(
                 user?.displayName ?: "",
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.ExtraBold,
                 color      = OnBackground,
-                fontSize   = 18.sp,
+                fontSize   = 20.sp,
             )
             if (user?.username?.isNotBlank() == true) {
-                Text("@${user.username}", color = Muted, fontSize = 13.sp)
+                Text("@${user.username}", color = Muted, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
             if (user?.bio?.isNotBlank() == true) {
-                Spacer(Modifier.height(6.dp))
-                Text(user.bio, color = OnSurface, fontSize = 14.sp, lineHeight = 20.sp)
+                Spacer(Modifier.height(8.dp))
+                Text(user.bio, color = OnSurface, fontSize = 14.sp, lineHeight = 21.sp)
             }
             if (user?.website?.isNotBlank() == true) {
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(4.dp))
                 val context = LocalContext.current
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -1006,29 +1060,29 @@ private fun ProfileHeader(
                     Icon(
                         Icons.Default.Link,
                         contentDescription = null,
-                        tint     = Amber,
-                        modifier = Modifier.size(13.dp),
+                        tint     = androidx.compose.ui.graphics.Color(0xFF6C8EFF),
+                        modifier = Modifier.size(14.dp),
                     )
-                    Spacer(Modifier.width(3.dp))
+                    Spacer(Modifier.width(4.dp))
                     Text(
                         user.website,
-                        color    = Amber,
-                        fontSize = 12.sp,
+                        color    = androidx.compose.ui.graphics.Color(0xFF6C8EFF),
+                        fontSize = 13.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
-            // İstatistikler
+            Spacer(Modifier.height(14.dp))
+            // ── İstatistikler — daha büyük rakamlar ──────────────────────
             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 StatItem(postsCount,     Strings.posts(language),      onClick = null)
                 StatItem(followersCount, Strings.followers(language),   onClick = onFollowers)
                 StatItem(followingCount, Strings.following(language),   onClick = onFollowing)
                 if ((user?.xp ?: 0) > 0) StatItem(user?.xp ?: 0, "XP", onClick = null)
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
             HorizontalDivider(color = Divider)
         }
     }

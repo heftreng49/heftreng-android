@@ -22,6 +22,8 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -425,11 +427,20 @@ fun HeftrangNavHost(
                 if (currentRoute == Screen.Feed.route) {
                     TopAppBar(
                         title = {
+                            // Gradient metin efekti — Primary→GradientEnd
+                            val gradBrush = Brush.horizontalGradient(
+                                listOf(
+                                    androidx.compose.ui.graphics.Color(0xFF6C8EFF),
+                                    androidx.compose.ui.graphics.Color(0xFF38BDF8),
+                                )
+                            )
                             Text(
                                 "Heftreng",
                                 fontWeight = FontWeight.ExtraBold,
-                                color      = Primary,
-                                fontSize   = 20.sp,
+                                fontSize   = 22.sp,
+                                style      = androidx.compose.ui.text.TextStyle(
+                                    brush = gradBrush,
+                                ),
                             )
                         },
                         navigationIcon = {
@@ -445,8 +456,10 @@ fun HeftrangNavHost(
                             // Bildirim butonu — badge ile
                             BadgedBox(
                                 badge = {
-                                    if (unreadNotif > 0) Badge {
-                                        Text(if (unreadNotif > 9) "9+" else unreadNotif.toString())
+                                    if (unreadNotif > 0) Badge(
+                                        containerColor = androidx.compose.ui.graphics.Color(0xFFFF3A5C)
+                                    ) {
+                                        Text(if (unreadNotif > 9) "9+" else unreadNotif.toString(), fontSize = 9.sp)
                                     }
                                 }
                             ) {
@@ -457,8 +470,10 @@ fun HeftrangNavHost(
                             // Mesaj butonu — badge ile
                             BadgedBox(
                                 badge = {
-                                    if (totalUnread > 0) Badge {
-                                        Text(if (totalUnread > 9) "9+" else totalUnread.toString())
+                                    if (totalUnread > 0) Badge(
+                                        containerColor = androidx.compose.ui.graphics.Color(0xFFFF3A5C)
+                                    ) {
+                                        Text(if (totalUnread > 9) "9+" else totalUnread.toString(), fontSize = 9.sp)
                                     }
                                 }
                             ) {
@@ -466,34 +481,58 @@ fun HeftrangNavHost(
                                     Icon(Icons.Outlined.ChatBubbleOutline, null, tint = OnBackground)
                                 }
                             }
-                            // Avatar
+                            // Avatar — gradient halka ile
                             IconButton(onClick = { navController.navigate("profile/me") }) {
-                                AsyncImage(
-                                    model              = currentUser?.photoUrl,
-                                    contentDescription = null,
-                                    modifier           = Modifier.size(32.dp).clip(CircleShape).background(SurfaceVar),
-                                    contentScale       = ContentScale.Crop,
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            Brush.linearGradient(
+                                                listOf(
+                                                    androidx.compose.ui.graphics.Color(0xFF6C8EFF),
+                                                    androidx.compose.ui.graphics.Color(0xFF38BDF8),
+                                                )
+                                            )
+                                        )
+                                        .padding(1.5.dp)
+                                        .clip(CircleShape)
+                                        .background(Background),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    AsyncImage(
+                                        model              = currentUser?.photoUrl,
+                                        contentDescription = null,
+                                        modifier           = Modifier.fillMaxSize().clip(CircleShape),
+                                        contentScale       = ContentScale.Crop,
+                                    )
+                                }
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
                     )
                 }
             },
-            // ── ALT BAR — temadaki gibi ──────────────────────────────────
+            // ── ALT BAR — floating pill tasarım ─────────────────────────
             bottomBar = {
                 if (showBottom) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Background)
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                    ) {
                     NavigationBar(
                         containerColor = HeftSurface,
                         tonalElevation = 0.dp,
-                        modifier = Modifier.drawBehind {
-                            drawLine(
-                                color = androidx.compose.ui.graphics.Color(0xFF23204A),
-                                start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                                end   = androidx.compose.ui.geometry.Offset(size.width, 0f),
-                                strokeWidth = 0.5.dp.toPx(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(
+                                elevation = 24.dp,
+                                shape     = RoundedCornerShape(28.dp),
+                                clip      = false,
                             )
-                        },
+                            .clip(RoundedCornerShape(28.dp)),
                     ) {
                         bottomNavItems.forEach { item ->
                             val selected = currentRoute == item.route ||
@@ -596,6 +635,7 @@ fun HeftrangNavHost(
                             )
                         }
                     }
+                    } // Box kapanışı
                 }
             },
         ) { innerPadding ->
