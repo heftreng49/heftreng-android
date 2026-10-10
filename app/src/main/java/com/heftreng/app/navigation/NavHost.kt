@@ -475,13 +475,15 @@ fun HeftrangNavHost(
                             IconButton(onClick = { navController.navigate(Screen.Search.route) }) {
                                 Icon(Icons.Outlined.Search, null, tint = OnBackground)
                             }
-                            // Bildirim butonu — badge ile
+                            // Bildirim butonu — soft badge
                             BadgedBox(
                                 badge = {
                                     if (unreadNotif > 0) Badge(
-                                        containerColor = androidx.compose.ui.graphics.Color(0xFFFF3A5C)
+                                        containerColor = androidx.compose.ui.graphics.Color(0xFFE0534A),
+                                        contentColor   = Color.White,
+                                        modifier       = Modifier.padding(0.dp),
                                     ) {
-                                        Text(if (unreadNotif > 9) "9+" else unreadNotif.toString(), fontSize = 9.sp)
+                                        Text(if (unreadNotif > 9) "9+" else unreadNotif.toString(), fontSize = 8.sp)
                                     }
                                 }
                             ) {
@@ -489,13 +491,15 @@ fun HeftrangNavHost(
                                     Icon(Icons.Outlined.NotificationsNone, null, tint = OnBackground)
                                 }
                             }
-                            // Mesaj butonu — badge ile
+                            // Mesaj butonu — soft badge
                             BadgedBox(
                                 badge = {
                                     if (totalUnread > 0) Badge(
-                                        containerColor = androidx.compose.ui.graphics.Color(0xFFFF3A5C)
+                                        containerColor = androidx.compose.ui.graphics.Color(0xFFE0534A),
+                                        contentColor   = Color.White,
+                                        modifier       = Modifier.padding(0.dp),
                                     ) {
-                                        Text(if (totalUnread > 9) "9+" else totalUnread.toString(), fontSize = 9.sp)
+                                        Text(if (totalUnread > 9) "9+" else totalUnread.toString(), fontSize = 8.sp)
                                     }
                                 }
                             ) {
@@ -578,11 +582,13 @@ fun HeftrangNavHost(
                                     if (msgBadge || notifBadge) {
                                         val cnt = if (msgBadge) totalUnread else unreadNotif
                                         BadgedBox(badge = {
-                                            Badge(containerColor = Error) {
+                                            Badge(
+                                                containerColor = androidx.compose.ui.graphics.Color(0xFFE0534A),
+                                                contentColor   = Color.White,
+                                            ) {
                                                 Text(
                                                     if (cnt > 9) "9+" else cnt.toString(),
-                                                    color    = Color.White,
-                                                    fontSize = 9.sp,
+                                                    fontSize = 8.sp,
                                                 )
                                             }
                                         }) {
