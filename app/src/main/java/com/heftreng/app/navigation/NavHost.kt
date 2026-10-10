@@ -22,6 +22,9 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.heftreng.app.R
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material3.*
@@ -427,21 +430,40 @@ fun HeftrangNavHost(
                 if (currentRoute == Screen.Feed.route) {
                     TopAppBar(
                         title = {
-                            // Gradient metin efekti — Primary→GradientEnd
                             val gradBrush = Brush.horizontalGradient(
                                 listOf(
                                     androidx.compose.ui.graphics.Color(0xFF6C8EFF),
                                     androidx.compose.ui.graphics.Color(0xFF38BDF8),
                                 )
                             )
-                            Text(
-                                "Heftreng",
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize   = 22.sp,
-                                style      = androidx.compose.ui.text.TextStyle(
-                                    brush = gradBrush,
-                                ),
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                // Küçük uygulama ikonu
+                                Image(
+                                    painter            = painterResource(R.drawable.ic_app_logo),
+                                    contentDescription = null,
+                                    modifier           = Modifier
+                                        .size(32.dp)
+                                        .clip(RoundedCornerShape(8.dp)),
+                                )
+                                Column(verticalArrangement = Arrangement.spacedBy((-3).dp)) {
+                                    Text(
+                                        "Heft Reng",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize   = 18.sp,
+                                        style      = androidx.compose.ui.text.TextStyle(brush = gradBrush),
+                                    )
+                                    Text(
+                                        "Kurdî",
+                                        fontSize   = 10.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color      = androidx.compose.ui.graphics.Color(0xFF38BDF8).copy(alpha = 0.7f),
+                                        letterSpacing = 1.sp,
+                                    )
+                                }
+                            }
                         },
                         navigationIcon = {
                             IconButton(onClick = { scope.launch { drawerState.open() } }) {
