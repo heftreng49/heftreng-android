@@ -24,6 +24,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -563,25 +565,42 @@ fun NotifItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (isUnread) iconColor.copy(alpha = 0.05f) else Background)
+            .padding(horizontal = 12.dp, vertical = 3.dp)
+            .shadow(
+                elevation    = if (isUnread) 6.dp else 3.dp,
+                shape        = RoundedCornerShape(16.dp),
+                clip         = false,
+                ambientColor = if (isUnread) iconColor.copy(alpha = 0.2f) else Color(0x0A000000),
+                spotColor    = if (isUnread) iconColor.copy(alpha = 0.15f) else Color(0x0A000000),
+            )
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (isUnread) iconColor.copy(alpha = 0.06f) else HeftCard)
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        // Avatar + tip ikonu
+        // Avatar + tip ikonu — gradient halka
         Box(modifier = Modifier.padding(top = 2.dp)) {
-            AsyncImage(
-                model              = notif.fromPhoto.ifEmpty { null },
-                contentDescription = notif.fromName,
-                modifier           = Modifier
-                    .size(46.dp)
-                    .clip(CircleShape)
-                    .background(SurfaceVar),
-                contentScale = ContentScale.Crop,
-            )
             Box(
                 modifier = Modifier
-                    .size(18.dp)
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(Color(0xFF6C8EFF), Color(0xFF38BDF8))))
+                    .padding(1.5.dp)
+                    .clip(CircleShape)
+                    .background(HeftCard),
+                contentAlignment = Alignment.Center,
+            ) {
+                AsyncImage(
+                    model              = notif.fromPhoto.ifEmpty { null },
+                    contentDescription = notif.fromName,
+                    modifier           = Modifier.fillMaxSize().clip(CircleShape),
+                    contentScale       = ContentScale.Crop,
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
                     .clip(CircleShape)
                     .background(iconColor)
                     .align(Alignment.BottomEnd),
@@ -591,7 +610,7 @@ fun NotifItem(
                     notifIcon(notif.type),
                     contentDescription = null,
                     tint     = Color.White,
-                    modifier = Modifier.size(10.dp),
+                    modifier = Modifier.size(11.dp),
                 )
             }
         }

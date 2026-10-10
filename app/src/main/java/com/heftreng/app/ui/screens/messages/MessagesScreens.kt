@@ -23,6 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -227,36 +228,42 @@ fun ConversationsScreen(
                 ) {
                     items(filtered, key = { it.id }) { conv ->
                         val unread = conv.unreadCount > 0
-                        // Tema: .msgp-conv-item, .msgp-conv-item.unread
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(
-                                    if (unread) Primary.copy(alpha = 0.08f) else Color.Transparent
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                                .shadow(
+                                    elevation    = if (unread) 6.dp else 3.dp,
+                                    shape        = RoundedCornerShape(18.dp),
+                                    clip         = false,
+                                    ambientColor = if (unread) Color(0x1A6C8EFF) else Color(0x0A000000),
+                                    spotColor    = if (unread) Color(0x1A6C8EFF) else Color(0x0A000000),
                                 )
-                                .then(
-                                    if (unread) Modifier.startBorder(Primary, 3.dp) else Modifier
-                                )
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(HeftCard)
                                 .combinedClickable(
                                     onClick      = { navController.navigate(Screen.MessageDetail.go(conv.id)) },
                                     onLongClick  = { convToDelete = conv.id },
                                 )
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            // Tema: .msgp-conv-av — gradient avatar
+                            // Gradient halka avatar
                             Box(
                                 modifier = Modifier
-                                    .size(46.dp)
+                                    .size(50.dp)
                                     .clip(CircleShape)
-                                    .background(Brush.linearGradient(listOf(Primary, Accent))),
+                                    .background(Brush.linearGradient(listOf(Color(0xFF6C8EFF), Color(0xFF38BDF8))))
+                                    .padding(2.dp)
+                                    .clip(CircleShape)
+                                    .background(HeftCard),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 val photo = conv.otherUser?.photoURL
                                 if (!photo.isNullOrBlank()) {
                                     AsyncImage(model = photo, contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                        modifier = Modifier.fillMaxSize().clip(CircleShape), contentScale = ContentScale.Crop)
                                 } else {
                                     Text(
                                         conv.otherUser?.displayName?.firstOrNull()?.uppercase() ?: "?",

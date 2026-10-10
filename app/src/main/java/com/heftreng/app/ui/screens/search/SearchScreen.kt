@@ -25,6 +25,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -269,23 +271,36 @@ private fun SearchResultRow(result: SearchResult, language: String = "tr", onCli
     Row(
         modifier          = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .shadow(elevation = 4.dp, shape = RoundedCornerShape(16.dp), clip = false,
+                    ambientColor = Color(0x0F000000), spotColor = Color(0x0F6C8EFF))
+            .clip(RoundedCornerShape(16.dp))
+            .background(HeftCard)
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 11.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Avatar / Kapak
+        val isCircle = result.type == "user" || result.type == "library_author"
+        val shape = if (isCircle) CircleShape else RoundedCornerShape(12.dp)
+        // Avatar / Kapak — gradient halka
         Box(
             modifier         = Modifier
-                .size(44.dp)
-                .clip(if (result.type == "user" || result.type == "library_author") CircleShape else RoundedCornerShape(10.dp))
-                .background(SurfaceVar),
+                .size(46.dp)
+                .shadow(elevation = 4.dp, shape = shape, clip = false)
+                .clip(shape)
+                .background(
+                    Brush.linearGradient(listOf(Color(0xFF6C8EFF), Color(0xFF38BDF8)))
+                )
+                .padding(1.5.dp)
+                .clip(shape)
+                .background(HeftCard),
             contentAlignment = Alignment.Center,
         ) {
             if (result.imageUrl.isNotBlank()) {
                 AsyncImage(
                     model              = result.imageUrl,
                     contentDescription = null,
-                    modifier           = Modifier.fillMaxSize(),
+                    modifier           = Modifier.fillMaxSize().clip(shape),
                     contentScale       = ContentScale.Crop,
                 )
             } else {
@@ -304,12 +319,12 @@ private fun SearchResultRow(result: SearchResult, language: String = "tr", onCli
             )
             if (result.subtitle.isNotBlank())
                 Text(result.subtitle, color = Muted, fontSize = 12.sp, maxLines = 1)
-            // extra bilgi (kitap puanı, alıntı sayısı vb.)
             if (result.extra.isNotBlank())
                 Text(result.extra, color = typeColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
         }
+        Spacer(Modifier.width(8.dp))
         Surface(
-            shape = RoundedCornerShape(6.dp),
+            shape = RoundedCornerShape(20.dp),
             color = typeColor.copy(alpha = 0.12f),
         ) {
             Text(
@@ -317,7 +332,7 @@ private fun SearchResultRow(result: SearchResult, language: String = "tr", onCli
                 color      = typeColor,
                 fontSize   = 10.sp,
                 fontWeight = FontWeight.Bold,
-                modifier   = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                modifier   = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
             )
         }
     }
@@ -328,16 +343,33 @@ private fun SuggestionRow(user: User, language: String = "tr", onClick: () -> Un
     Row(
         modifier          = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .shadow(elevation = 4.dp, shape = RoundedCornerShape(16.dp), clip = false,
+                    ambientColor = Color(0x0F6C8EFF), spotColor = Color(0x0F6C8EFF))
+            .clip(RoundedCornerShape(16.dp))
+            .background(HeftCard)
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AsyncImage(
-            model              = user.photoURL.ifEmpty { null },
-            contentDescription = null,
-            modifier           = Modifier.size(44.dp).clip(CircleShape).background(SurfaceVar),
-            contentScale       = ContentScale.Crop,
-        )
+        // Gradient halka avatar
+        Box(
+            modifier = Modifier
+                .size(46.dp)
+                .clip(CircleShape)
+                .background(Brush.linearGradient(listOf(Color(0xFF6C8EFF), Color(0xFF38BDF8))))
+                .padding(1.5.dp)
+                .clip(CircleShape)
+                .background(HeftCard),
+            contentAlignment = Alignment.Center,
+        ) {
+            AsyncImage(
+                model              = user.photoURL.ifEmpty { null },
+                contentDescription = null,
+                modifier           = Modifier.fillMaxSize().clip(CircleShape),
+                contentScale       = ContentScale.Crop,
+            )
+        }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(user.displayName.ifBlank { "Bênas" }, fontWeight = FontWeight.SemiBold, color = OnBackground, fontSize = 14.sp)
@@ -347,7 +379,10 @@ private fun SuggestionRow(user: User, language: String = "tr", onClick: () -> Un
         Button(
             onClick        = onFollow,
             shape          = RoundedCornerShape(20.dp),
-            colors         = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Color.White),
+            colors         = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF6C8EFF),
+                contentColor   = Color.White,
+            ),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
             modifier       = Modifier.height(34.dp),
         ) {

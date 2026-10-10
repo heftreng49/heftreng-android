@@ -7,7 +7,11 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.Image
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import coil.compose.AsyncImage
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -298,36 +302,46 @@ fun AuthScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            // Logo — kayıt modunda alan fazla olduğundan logo küçültülüp gereksiz
-            // boşluk azaltılıyor; giriş modunda normal boyutunda kalıyor.
-            val logoSize = if (isRegister) 48.dp else 72.dp
-            val logoFontSize = if (isRegister) 22.sp else 36.sp
+            // ── Logo — gerçek uygulama ikonu + marka adı ─────────────────
+            val logoSize = if (isRegister) 72.dp else 96.dp
             Box(
                 modifier = Modifier
                     .size(logoSize)
-                    .clip(RoundedCornerShape(if (isRegister) 14.dp else 20.dp))
-                    .background(
-                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                            listOf(Color(0xFF8B5CF6), Color(0xFFEC4899))
-                        )
-                    ),
+                    .shadow(
+                        elevation = 16.dp,
+                        shape     = RoundedCornerShape(if (isRegister) 18.dp else 24.dp),
+                        clip      = false,
+                        ambientColor = Color(0x336C8EFF),
+                        spotColor    = Color(0x336C8EFF),
+                    )
+                    .clip(RoundedCornerShape(if (isRegister) 18.dp else 24.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("H", fontSize = logoFontSize, fontWeight = FontWeight.Black, color = Color.White)
+                Image(
+                    painter            = painterResource(R.drawable.ic_app_logo),
+                    contentDescription = "Heftreng",
+                    modifier           = Modifier.fillMaxSize(),
+                )
             }
-            Spacer(Modifier.height(if (isRegister) 2.dp else 4.dp))
+            Spacer(Modifier.height(if (isRegister) 4.dp else 8.dp))
+            // "Heft Reng" — Kurdî başlık
             Text(
-                text          = "heftreng",
-                fontSize      = if (isRegister) 26.sp else 32.sp,
+                text          = "Heft Reng",
+                fontSize      = if (isRegister) 28.sp else 34.sp,
                 fontWeight    = FontWeight.Black,
-                color         = OnBackground,
-                letterSpacing = (-1.5).sp,
+                style         = androidx.compose.ui.text.TextStyle(
+                    brush = Brush.horizontalGradient(
+                        listOf(Color(0xFF6C8EFF), Color(0xFF38BDF8))
+                    )
+                ),
+                letterSpacing = (-1).sp,
             )
             Text(
-                text     = if (isRegister) Strings.register(language) else Strings.welcome(language),
-                fontSize = 14.sp,
+                text     = if (language == "ku") "Kurdî" else if (isRegister) Strings.register(language) else Strings.welcome(language),
+                fontSize = 13.sp,
                 color    = Muted,
-                letterSpacing = 0.2.sp,
+                letterSpacing = 0.3.sp,
+                fontWeight = FontWeight.Medium,
             )
 
             Spacer(Modifier.height(4.dp))
