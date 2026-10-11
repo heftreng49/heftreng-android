@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -222,7 +223,9 @@ fun LibraryScreen(
         }
     )
     LaunchedEffect(isRefreshing) { if (isRefreshing) isRefreshing = false }
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     Scaffold(
+        modifier        = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor  = Background,
         snackbarHost    = {
             SnackbarHost(snackbarHostState) { data ->
@@ -234,17 +237,47 @@ fun LibraryScreen(
             }
         },
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text       = Strings.discoverTitle(language),
-                        color      = OnBackground,
-                        fontWeight = FontWeight.Bold,
-                        fontSize   = 20.sp,
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
-            )
+            Column {
+                TopAppBar(
+                    scrollBehavior = scrollBehavior,
+                    title = {
+                        Text(
+                            text       = Strings.discoverTitle(language),
+                            color      = OnBackground,
+                            fontWeight = FontWeight.Bold,
+                            fontSize   = 20.sp,
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
+                )
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor   = Background,
+                    contentColor     = Primary,
+                    indicator        = { tabPositions ->
+                        TabRowDefaults.SecondaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                            color    = Primary,
+                        )
+                    },
+                ) {
+                    tabs.forEachIndexed { index, title ->
+                        Tab(
+                            selected = selectedTab == index,
+                            onClick  = { scope.launch { pagerState.animateScrollToPage(index) } },
+                            text     = {
+                                Text(
+                                    text       = title,
+                                    fontSize   = 13.sp,
+                                    maxLines   = 1,
+                                    color      = if (selectedTab == index) Primary else Muted,
+                                    fontWeight = if (selectedTab == index) FontWeight.SemiBold else FontWeight.Normal,
+                                )
+                            },
+                        )
+                    }
+                }
+            }
         },
         floatingActionButton = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.End) {
@@ -288,34 +321,6 @@ fun LibraryScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-
-            TabRow(
-                selectedTabIndex = selectedTab,
-                containerColor   = Background,
-                contentColor     = Primary,
-                indicator        = { tabPositions ->
-                    TabRowDefaults.SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                        color    = Primary,
-                    )
-                },
-            ) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick  = { scope.launch { pagerState.animateScrollToPage(index) } },
-                        text     = {
-                            Text(
-                                text       = title,
-                                fontSize   = 13.sp,
-                                maxLines   = 1,
-                                color      = if (selectedTab == index) Primary else Muted,
-                                fontWeight = if (selectedTab == index) FontWeight.SemiBold else FontWeight.Normal,
-                            )
-                        },
-                    )
-                }
-            }
 
             if (loading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
