@@ -2284,92 +2284,76 @@ fun PostCard(
             }
         }
 
-        // ── Aksiyonlar Bar — modern pill buton stili ─────────────────────
+        // ── Aksiyonlar Bar — Instagram tarzı ────────────────────────────
         Spacer(Modifier.height(4.dp))
+
+        val likeScale by animateFloatAsState(
+            targetValue   = if (post.isLikedByMe) 1.35f else 1f,
+            animationSpec = spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow),
+            label         = "likeScale",
+        )
+        val likeColor by animateColorAsState(
+            targetValue   = if (post.isLikedByMe) Color(0xFFFF3A5C) else Muted,
+            animationSpec = tween(180),
+            label         = "likeColor",
+        )
+        val saveScale by animateFloatAsState(
+            targetValue   = if (post.isSavedByMe) 1.25f else 1f,
+            animationSpec = spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMedium),
+            label         = "saveScale",
+        )
+        val saveColor by animateColorAsState(
+            targetValue   = if (post.isSavedByMe) Amber else Muted,
+            animationSpec = tween(180),
+            label         = "saveColor",
+        )
+
+        // İkon satırı — Instagram gibi tek satırda yan yana
         Row(
-            modifier            = Modifier.fillMaxWidth(),
-            verticalAlignment   = Alignment.CenterVertically,
+            modifier          = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            val likeScale by animateFloatAsState(
-                targetValue   = if (post.isLikedByMe) 1.35f else 1f,
-                animationSpec = spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow),
-                label         = "likeScale",
-            )
-            val likeColor by animateColorAsState(
-                targetValue   = if (post.isLikedByMe) Color(0xFFFF3A5C) else Muted,
-                animationSpec = tween(180),
-                label         = "likeColor",
-            )
-            val saveScale by animateFloatAsState(
-                targetValue   = if (post.isSavedByMe) 1.25f else 1f,
-                animationSpec = spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMedium),
-                label         = "saveScale",
-            )
-            val saveColor by animateColorAsState(
-                targetValue   = if (post.isSavedByMe) Amber else Muted,
-                animationSpec = tween(180),
-                label         = "saveColor",
-            )
-            // ── Beğeni — Instagram tarzı: ikon üstte, sayı altında ───────
-            Column(
-                modifier              = Modifier
-                    .clickable { onLike() }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalAlignment   = Alignment.CenterHorizontally,
-                verticalArrangement   = Arrangement.spacedBy(2.dp),
+            // Beğeni ikonu
+            IconButton(
+                onClick  = onLike,
+                modifier = Modifier.size(36.dp),
             ) {
                 Icon(
                     if (post.isLikedByMe) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = Strings.likeAction(language),
-                    tint               = likeColor,
-                    modifier           = Modifier
+                    tint     = likeColor,
+                    modifier = Modifier
                         .size(22.dp)
                         .graphicsLayer { scaleX = likeScale; scaleY = likeScale },
                 )
-                if (post.likesCount > 0) {
-                    Text(
-                        post.likesCount.toString(),
-                        color      = if (post.isLikedByMe) Color(0xFFFF3A5C) else Muted,
-                        fontSize   = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier   = if (onShowLikers != null) Modifier.clickable { onShowLikers() } else Modifier,
+            }
+            Spacer(Modifier.width(2.dp))
+            // Yorum ikonu
+            IconButton(
+                onClick  = onComment,
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Muted, modifier = Modifier.size(21.dp))
+            }
+            Spacer(Modifier.width(2.dp))
+            // Repost ikonu (sayı varsa yanında göster)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick  = onShare,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Repeat, null,
+                        tint     = if (post.isRepostedByMe) Amber else Muted,
+                        modifier = Modifier.size(21.dp),
                     )
                 }
-            }
-            Spacer(Modifier.width(4.dp))
-            // ── Yorum — ikon + sayı altında ──────────────────────────────
-            Column(
-                modifier              = Modifier
-                    .clickable { onComment() }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalAlignment   = Alignment.CenterHorizontally,
-                verticalArrangement   = Arrangement.spacedBy(2.dp),
-            ) {
-                Icon(Icons.Outlined.ChatBubbleOutline, null, tint = Muted, modifier = Modifier.size(22.dp))
-                if (post.commentsCount > 0) {
-                    Text(post.commentsCount.toString(), color = Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                }
-            }
-            Spacer(Modifier.width(4.dp))
-            // ── Repost — ikon + sayı altında ─────────────────────────────
-            Column(
-                modifier              = Modifier
-                    .clickable { onShare() }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalAlignment   = Alignment.CenterHorizontally,
-                verticalArrangement   = Arrangement.spacedBy(2.dp),
-            ) {
-                Icon(
-                    Icons.Default.Repeat, null,
-                    tint     = if (post.isRepostedByMe) Amber else Muted,
-                    modifier = Modifier.size(22.dp),
-                )
                 if (post.repostsCount > 0) {
                     Text(
                         post.repostsCount.toString(),
                         color      = if (post.isRepostedByMe) Amber else Muted,
-                        fontSize   = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize   = 12.sp,
+                        fontWeight = FontWeight.Medium,
                     )
                 }
             }
@@ -2420,6 +2404,45 @@ fun PostCard(
                 )
             }
         }
+
+        // ── Instagram tarzı: "X kişi beğendi" + yorum sayısı ─────────
+        if (post.likesCount > 0 || post.commentsCount > 0) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
+                // "X kişi beğendi" — tıklanabilir
+                if (post.likesCount > 0) {
+                    val likerText = if (post.likesCount == 1) {
+                        if (ku) "1 kes xweş dît" else "1 kişi beğendi"
+                    } else {
+                        if (ku) "${post.likesCount} kes xweş dîtin" else "${post.likesCount} kişi beğendi"
+                    }
+                    Text(
+                        likerText,
+                        color      = OnBackground,
+                        fontSize   = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier   = if (onShowLikers != null)
+                            Modifier.clickable { onShowLikers() }
+                        else Modifier,
+                    )
+                }
+                // "X yorum" — tıklanabilir
+                if (post.commentsCount > 0) {
+                    val commentText = if (ku) "${post.commentsCount} şîrove" else "${post.commentsCount} yorum"
+                    Text(
+                        commentText,
+                        color    = Muted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.clickable { onComment() },
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(2.dp))
     }
 
     // Paylaşım önizleme dialogu — hedef seçilince açılır, Coil yüklenince paylaş butonuna basılır
