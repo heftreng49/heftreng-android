@@ -901,7 +901,6 @@ fun FeedScreen(
 
             LaunchedEffect(feedListState) {
                 snapshotFlow { feedListState.firstVisibleItemIndex to feedListState.firstVisibleItemScrollOffset }
-                    .debounce(200L)
                     .collect { (index, offset) ->
                         vm.lastScrollIndex  = index
                         vm.lastScrollOffset = offset

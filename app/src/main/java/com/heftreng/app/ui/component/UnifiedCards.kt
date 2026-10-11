@@ -636,12 +636,15 @@ fun EmptyState(
 
 // ── Kapak resmi için güvenli ImageRequest ────────────────────────────────────
 // Bazı CDN'ler bot UA engelliyor; User-Agent header ile geçiyoruz.
+// allowHardware(false): Compose grafik katmanı bazen hardware bitmap
+// yüklemesini desteklemediği için kapaklar boş görünebiliyordu.
 @Composable
 private fun coverImageRequest(url: String): ImageRequest {
     val ctx = LocalContext.current
     return ImageRequest.Builder(ctx)
         .data(url)
-        .addHeader("User-Agent", "Mozilla/5.0")
+        .addHeader("User-Agent", "Mozilla/5.0 (Android)")
+        .allowHardware(false)
         .crossfade(true)
         .build()
 }
