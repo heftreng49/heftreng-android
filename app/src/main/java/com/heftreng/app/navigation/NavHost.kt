@@ -28,6 +28,7 @@ import com.heftreng.app.R
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material3.*
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -421,14 +422,17 @@ fun HeftrangNavHost(
             )
         }
     ) {
+        val topBarScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
         Scaffold(
             containerColor = Background,
             // ime insets iç ekranlar tarafından yönetiliyor — burada sadece sistem barları
             contentWindowInsets = WindowInsets(0,0,0,0),
+            modifier = Modifier.nestedScroll(topBarScrollBehavior.nestedScrollConnection),
             // ── ÜST BAR — sadece Feed ekranında NavHost yönetir ──
             topBar = {
                 if (currentRoute == Screen.Feed.route) {
                     TopAppBar(
+                        scrollBehavior = topBarScrollBehavior,
                         title = {
                             val gradBrush = Brush.horizontalGradient(
                                 listOf(
@@ -546,13 +550,14 @@ fun HeftrangNavHost(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(Background)
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
                     ) {
                     NavigationBar(
                         containerColor = HeftSurface,
                         tonalElevation = 0.dp,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .height(56.dp)
                             .shadow(
                                 elevation = 24.dp,
                                 shape     = RoundedCornerShape(28.dp),
@@ -645,14 +650,8 @@ fun HeftrangNavHost(
                                         Icon(if (selected) item.iconSel else item.icon, item.label)
                                     }
                                 },
-                                label = {
-                                    Text(
-                                        item.label,
-                                        fontSize      = 10.sp,
-                                        fontWeight    = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                        letterSpacing = 0.sp,
-                                    )
-                                },
+                                label = null,
+                                alwaysShowLabel = false,
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor   = Amber,
                                     selectedTextColor   = Amber,
