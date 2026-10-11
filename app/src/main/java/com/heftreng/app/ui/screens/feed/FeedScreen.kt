@@ -2415,13 +2415,8 @@ fun PostCard(
             ) {
                 // "X kişi beğendi" — tıklanabilir
                 if (post.likesCount > 0) {
-                    val likerText = if (post.likesCount == 1) {
-                        if (ku) "1 kes xweş dît" else "1 kişi beğendi"
-                    } else {
-                        if (ku) "${post.likesCount} kes xweş dîtin" else "${post.likesCount} kişi beğendi"
-                    }
                     Text(
-                        likerText,
+                        Strings.likesLabel(language, post.likesCount),
                         color      = OnBackground,
                         fontSize   = 13.sp,
                         fontWeight = FontWeight.SemiBold,

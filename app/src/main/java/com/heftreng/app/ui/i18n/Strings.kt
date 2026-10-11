@@ -539,6 +539,18 @@ object Strings {
 
     // ── PostDetail ────────────────────────────────────────────────────────────
     fun likesCount(l: String, n: Int)    = t(l, "$n beğeni",                  "$n xweşandin", "$n hesbiyayîş", "$n حەزلێکراو")
+
+    // "X kişi beğendi" — feed aksiyon barı altında gösterilen metin
+    fun likesLabel(l: String, n: Int): String {
+        val singular = n == 1
+        return t(
+            l,
+            if (singular) "1 kişi beğendi"         else "$n kişi beğendi",
+            if (singular) "1 kes eciband"           else "$n kes eciband",
+            if (singular) "1 kes ecizna"            else "$n kes ecizna",
+            if (singular) "1 کەس بەدڵبوو"          else "$n کەس بەدڵبوون",
+        )
+    }
     fun replyingTo(l: String, name: String) = t(l, "@$name yanıtlanıyor",     "@$name bersiv dide", "@$name re bersiv dano", "وەڵامی @$name دەداتەوە")
     fun replyHint(l: String, name: String)  = t(l, "@$name yanıtla...",       "@$name bersiv bide...", "@$name bersiv bide...", "وەڵامی @$name بدەرەوە...")
     fun replyAction(l: String)           = t(l, "Yanıtla",                    "Bersiv bide", "Bersiv bide", "وەڵام بدەرەوە")
