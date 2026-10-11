@@ -543,33 +543,21 @@ fun HeftrangNavHost(
                     )
                 }
             },
-            // ── ALT BAR — custom minimal tasarım ────────────────────────
+            // ── ALT BAR — tam yapışık, ince ─────────────────────────────
             bottomBar = {
                 if (showBottom) {
-                    // Dış kapsayıcı: arka plan gradient geçişi (içerik altına baskı yapmaz)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(Background.copy(alpha = 0f), Background)
-                                )
-                            )
-                            .navigationBarsPadding()
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                    Surface(
+                        modifier       = Modifier.fillMaxWidth(),
+                        color          = HeftSurface,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 8.dp,
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .shadow(
-                                    elevation       = 16.dp,
-                                    shape           = RoundedCornerShape(32.dp),
-                                    ambientColor    = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.12f),
-                                    spotColor       = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.12f),
-                                )
-                                .clip(RoundedCornerShape(32.dp))
-                                .background(HeftSurface)
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                .navigationBarsPadding()
+                                .height(52.dp)
+                                .padding(horizontal = 4.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment     = Alignment.CenterVertically,
                         ) {
@@ -612,9 +600,9 @@ fun HeftrangNavHost(
                                                 }
                                             }
                                         )
-                                        .padding(vertical = 4.dp),
+                                        .padding(vertical = 3.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                    verticalArrangement = Arrangement.spacedBy(1.dp),
                                 ) {
                                     // ── İkon alanı ──────────────────────────
                                     Box(contentAlignment = Alignment.Center) {
@@ -622,9 +610,9 @@ fun HeftrangNavHost(
                                         if (selected) {
                                             Box(
                                                 modifier = Modifier
-                                                    .width(40.dp)
-                                                    .height(28.dp)
-                                                    .clip(RoundedCornerShape(14.dp))
+                                                    .width(34.dp)
+                                                    .height(22.dp)
+                                                    .clip(RoundedCornerShape(11.dp))
                                                     .background(Amber.copy(alpha = 0.15f)),
                                             )
                                         }
@@ -634,23 +622,23 @@ fun HeftrangNavHost(
                                                     containerColor = androidx.compose.ui.graphics.Color(0xFFE0534A),
                                                     contentColor   = Color.White,
                                                 ) {
-                                                    Text(if (badgeCount > 9) "9+" else badgeCount.toString(), fontSize = 8.sp)
+                                                    Text(if (badgeCount > 9) "9+" else badgeCount.toString(), fontSize = 7.sp)
                                                 }
                                             }) {
                                                 Icon(
                                                     if (selected) item.iconSel else item.icon,
                                                     item.label,
                                                     tint     = if (selected) Amber else Muted,
-                                                    modifier = Modifier.size(22.dp),
+                                                    modifier = Modifier.size(20.dp),
                                                 )
                                             }
                                         } else if (isProfile) {
                                             Box(
                                                 modifier = Modifier
-                                                    .size(26.dp)
+                                                    .size(22.dp)
                                                     .clip(CircleShape)
                                                     .border(
-                                                        width = if (selected) 2.dp else 0.dp,
+                                                        width = if (selected) 1.5.dp else 0.dp,
                                                         color = if (selected) Amber else Color.Transparent,
                                                         shape = CircleShape,
                                                     ),
@@ -668,7 +656,7 @@ fun HeftrangNavHost(
                                                         if (selected) item.iconSel else item.icon,
                                                         item.label,
                                                         tint     = if (selected) Amber else Muted,
-                                                        modifier = Modifier.size(22.dp),
+                                                        modifier = Modifier.size(20.dp),
                                                     )
                                                 }
                                             }
@@ -677,14 +665,14 @@ fun HeftrangNavHost(
                                                 if (selected) item.iconSel else item.icon,
                                                 item.label,
                                                 tint     = if (selected) Amber else Muted,
-                                                modifier = Modifier.size(22.dp),
+                                                modifier = Modifier.size(20.dp),
                                             )
                                         }
                                     }
                                     // ── Label ───────────────────────────────
                                     Text(
                                         item.label,
-                                        fontSize   = 9.sp,
+                                        fontSize   = 8.5.sp,
                                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                                         color      = if (selected) Amber else Muted,
                                         letterSpacing = 0.sp,
