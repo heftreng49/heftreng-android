@@ -557,7 +557,7 @@ fun HeftrangNavHost(
                         tonalElevation = 0.dp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
+                            .height(60.dp)
                             .shadow(
                                 elevation = 24.dp,
                                 shape     = RoundedCornerShape(28.dp),
@@ -650,8 +650,14 @@ fun HeftrangNavHost(
                                         Icon(if (selected) item.iconSel else item.icon, item.label)
                                     }
                                 },
-                                label = null,
-                                alwaysShowLabel = false,
+                                label = {
+                                    Text(
+                                        item.label,
+                                        fontSize      = 9.sp,
+                                        fontWeight    = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                        letterSpacing = 0.sp,
+                                    )
+                                },
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor   = Amber,
                                     selectedTextColor   = Amber,
