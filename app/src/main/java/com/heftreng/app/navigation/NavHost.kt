@@ -543,132 +543,157 @@ fun HeftrangNavHost(
                     )
                 }
             },
-            // ── ALT BAR — floating pill tasarım ─────────────────────────
+            // ── ALT BAR — custom minimal tasarım ────────────────────────
             bottomBar = {
                 if (showBottom) {
+                    // Dış kapsayıcı: arka plan gradient geçişi (içerik altına baskı yapmaz)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Background)
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                    ) {
-                    NavigationBar(
-                        containerColor = HeftSurface,
-                        tonalElevation = 0.dp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(60.dp)
-                            .shadow(
-                                elevation = 24.dp,
-                                shape     = RoundedCornerShape(28.dp),
-                                clip      = false,
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Background.copy(alpha = 0f), Background)
+                                )
                             )
-                            .clip(RoundedCornerShape(28.dp)),
+                            .navigationBarsPadding()
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
                     ) {
-                        bottomNavItems.forEach { item ->
-                            val selected = currentRoute == item.route ||
-                                (item.route == "profile/me" && currentRoute?.startsWith("profile/") == true) ||
-                                (item.route == Screen.Kurdi.base() && currentRoute?.startsWith("kurdi") == true)
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick  = {
-                                    screenTracker.tryShowInterstitial()
-                                    navController.navigate(item.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState    = true
-                                    }
-                                },
-                                icon = {
-                                    val msgBadge   = item.route == Screen.Messages.route && totalUnread > 0
-                                    val notifBadge = item.route == Screen.Notifications.route && unreadNotif > 0
-                                    if (msgBadge || notifBadge) {
-                                        val cnt = if (msgBadge) totalUnread else unreadNotif
-                                        BadgedBox(badge = {
-                                            Badge(
-                                                containerColor = androidx.compose.ui.graphics.Color(0xFFE0534A),
-                                                contentColor   = Color.White,
-                                            ) {
-                                                Text(
-                                                    if (cnt > 9) "9+" else cnt.toString(),
-                                                    fontSize = 8.sp,
-                                                )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .shadow(
+                                    elevation       = 16.dp,
+                                    shape           = RoundedCornerShape(32.dp),
+                                    ambientColor    = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.12f),
+                                    spotColor       = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.12f),
+                                )
+                                .clip(RoundedCornerShape(32.dp))
+                                .background(HeftSurface)
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment     = Alignment.CenterVertically,
+                        ) {
+                            bottomNavItems.forEach { item ->
+                                val selected = currentRoute == item.route ||
+                                    (item.route == "profile/me" && currentRoute?.startsWith("profile/") == true) ||
+                                    (item.route == Screen.Kurdi.base() && currentRoute?.startsWith("kurdi") == true)
+
+                                val msgBadge   = item.route == Screen.Messages.route && totalUnread > 0
+                                val notifBadge = item.route == Screen.Notifications.route && unreadNotif > 0
+                                val badgeCount = when {
+                                    msgBadge   -> totalUnread
+                                    notifBadge -> unreadNotif
+                                    else       -> 0
+                                }
+                                val isProfile = item.route == "profile/me"
+                                val avatarUrl = if (isProfile) currentUser?.photoUrl?.toString() else null
+
+                                // Her ikon için tıklanabilir sütun
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(24.dp))
+                                        .then(
+                                            if (isProfile) Modifier.combinedClickable(
+                                                onClick     = {
+                                                    screenTracker.tryShowInterstitial()
+                                                    navController.navigate("profile/me") {
+                                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                                        launchSingleTop = true; restoreState = true
+                                                    }
+                                                },
+                                                onLongClick = { if (savedAccounts.size > 1) showAccountSwitch = true },
+                                            )
+                                            else Modifier.clickable {
+                                                screenTracker.tryShowInterstitial()
+                                                navController.navigate(item.route) {
+                                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                                    launchSingleTop = true; restoreState = true
+                                                }
                                             }
-                                        }) {
-                                            Icon(if (selected) item.iconSel else item.icon, item.label)
-                                        }
-                                    } else if (item.route == "profile/me") {
-                                        // ── Instagram gibi: profil ikonu = avatar, uzun bas = hesap değiştir
-                                        val avatarUrl = currentUser?.photoUrl?.toString()
-                                        Box(
-                                            modifier = Modifier
-                                                .size(28.dp)
-                                                .clip(CircleShape)
-                                                .background(if (selected) Amber.copy(alpha = 0.2f) else Muted.copy(alpha = 0.15f))
-                                                .combinedClickable(
-                                                    onClick     = {
-                                                        navController.navigate("profile/me") {
-                                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                                saveState = true
-                                                            }
-                                                            launchSingleTop = true
-                                                            restoreState    = true
-                                                        }
-                                                    },
-                                                    onLongClick = { if (savedAccounts.size > 1) showAccountSwitch = true },
-                                                ),
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            if (!avatarUrl.isNullOrBlank()) {
-                                                AsyncImage(
-                                                    model              = avatarUrl,
-                                                    contentDescription = null,
-                                                    modifier           = Modifier.fillMaxSize(),
-                                                    contentScale       = ContentScale.Crop,
-                                                )
-                                            } else {
-                                                Icon(
-                                                    if (selected) item.iconSel else item.icon,
-                                                    item.label,
-                                                    modifier = Modifier.size(20.dp),
-                                                )
-                                            }
-                                        }
-                                        // Halka: aktif göstergesi
+                                        )
+                                        .padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
+                                    // ── İkon alanı ──────────────────────────
+                                    Box(contentAlignment = Alignment.Center) {
+                                        // Seçili arka plan pill
                                         if (selected) {
                                             Box(
                                                 modifier = Modifier
-                                                    .padding(top = 2.dp)
-                                                    .size(4.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Amber),
+                                                    .width(40.dp)
+                                                    .height(28.dp)
+                                                    .clip(RoundedCornerShape(14.dp))
+                                                    .background(Amber.copy(alpha = 0.15f)),
                                             )
                                         }
-                                    } else {
-                                        Icon(if (selected) item.iconSel else item.icon, item.label)
+                                        if (badgeCount > 0) {
+                                            BadgedBox(badge = {
+                                                Badge(
+                                                    containerColor = androidx.compose.ui.graphics.Color(0xFFE0534A),
+                                                    contentColor   = Color.White,
+                                                ) {
+                                                    Text(if (badgeCount > 9) "9+" else badgeCount.toString(), fontSize = 8.sp)
+                                                }
+                                            }) {
+                                                Icon(
+                                                    if (selected) item.iconSel else item.icon,
+                                                    item.label,
+                                                    tint     = if (selected) Amber else Muted,
+                                                    modifier = Modifier.size(22.dp),
+                                                )
+                                            }
+                                        } else if (isProfile) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(26.dp)
+                                                    .clip(CircleShape)
+                                                    .border(
+                                                        width = if (selected) 2.dp else 0.dp,
+                                                        color = if (selected) Amber else Color.Transparent,
+                                                        shape = CircleShape,
+                                                    ),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                if (!avatarUrl.isNullOrBlank()) {
+                                                    AsyncImage(
+                                                        model              = avatarUrl,
+                                                        contentDescription = null,
+                                                        modifier           = Modifier.fillMaxSize().clip(CircleShape),
+                                                        contentScale       = ContentScale.Crop,
+                                                    )
+                                                } else {
+                                                    Icon(
+                                                        if (selected) item.iconSel else item.icon,
+                                                        item.label,
+                                                        tint     = if (selected) Amber else Muted,
+                                                        modifier = Modifier.size(22.dp),
+                                                    )
+                                                }
+                                            }
+                                        } else {
+                                            Icon(
+                                                if (selected) item.iconSel else item.icon,
+                                                item.label,
+                                                tint     = if (selected) Amber else Muted,
+                                                modifier = Modifier.size(22.dp),
+                                            )
+                                        }
                                     }
-                                },
-                                label = {
+                                    // ── Label ───────────────────────────────
                                     Text(
                                         item.label,
-                                        fontSize      = 9.sp,
-                                        fontWeight    = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize   = 9.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                        color      = if (selected) Amber else Muted,
                                         letterSpacing = 0.sp,
+                                        maxLines   = 1,
                                     )
-                                },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor   = Amber,
-                                    selectedTextColor   = Amber,
-                                    unselectedIconColor = Muted,
-                                    unselectedTextColor = Muted,
-                                    indicatorColor      = Amber.copy(alpha = 0.18f),
-                                ),
-                            )
+                                }
+                            }
                         }
                     }
-                    } // Box kapanışı
                 }
             },
         ) { innerPadding ->
