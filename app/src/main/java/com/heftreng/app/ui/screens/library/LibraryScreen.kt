@@ -84,6 +84,7 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -491,6 +492,18 @@ private fun LibraryQuotesTab(
                 adsVm.warmVisiblePositions(adPlan, firstVisibleIndex = firstVisible)
             }
     }
+    // Scroll sonuna yaklaşınca otomatik yükle (feed gibi)
+    LaunchedEffect(quotesListState, hasMore) {
+        snapshotFlow {
+            val layoutInfo = quotesListState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisible >= totalItems - 4
+        }.distinctUntilChanged().collect { nearEnd ->
+            if (nearEnd && hasMore && !loadingMore) onLoadMore()
+        }
+    }
+
     LazyColumn(state = quotesListState, contentPadding = PaddingValues(vertical = 0.dp)) {
         if (isOffline) {
             item(key = "offline_banner") {
@@ -527,28 +540,20 @@ private fun LibraryQuotesTab(
                 AdSlotView(placement = placement, adsVm = adsVm, modifier = Modifier.padding(vertical = 4.dp))
             }
         }
-        // "Daha Fazla Göster" butonu — sadece daha fazla alıntı varsa göster
-        if (hasMore) {
-            item(key = "load_more_quotes") {
+        // Otomatik yükleme — scroll sonuna gelince tetiklenir, sadece spinner göster
+        if (loadingMore) {
+            item(key = "load_more_spinner") {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (loadingMore) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(28.dp),
-                            strokeWidth = 2.5.dp,
-                        )
-                    } else {
-                        OutlinedButton(onClick = onLoadMore) {
-                            Text(
-                                if (language == "ku") "Bêtir Nîşan Bide"
-                                else "Daha Fazla Göster"
-                            )
-                        }
-                    }
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        strokeWidth = 2.5.dp,
+                        color = Primary,
+                    )
                 }
             }
         }

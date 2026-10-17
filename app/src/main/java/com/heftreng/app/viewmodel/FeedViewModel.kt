@@ -147,7 +147,7 @@ class FeedViewModel @Inject constructor(
     val libraryQuotesOffline = _libraryQuotesOffline.asStateFlow()
 
     // Kütüphane alıntıları sayfalama
-    private val LIBRARY_PAGE_SIZE = 20
+    private val LIBRARY_PAGE_SIZE = 50
     private val _libraryHasMore = MutableStateFlow(false)
     val libraryHasMore = _libraryHasMore.asStateFlow()
     private val _libraryLoadingMore = MutableStateFlow(false)
