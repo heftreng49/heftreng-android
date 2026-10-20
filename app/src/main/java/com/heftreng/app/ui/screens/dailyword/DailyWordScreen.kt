@@ -4,13 +4,16 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.net.Uri
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Typeface
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
@@ -22,17 +25,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import com.heftreng.app.R
 import com.heftreng.app.ui.theme.HeftBg
 import com.heftreng.app.ui.theme.Primary
 import com.heftreng.app.viewmodel.DailyWordViewModel
@@ -42,19 +47,17 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DailyWordScreen(
     navController: NavController,
     language     : String = "tr",
     vm           : DailyWordViewModel = hiltViewModel(),
 ) {
-    val words by vm.words.collectAsState()
+    val words   by vm.words.collectAsState()
     val loading by vm.loading.collectAsState()
-    val scope = rememberCoroutineScope()
+    val scope   = rememberCoroutineScope()
     val context = LocalContext.current
-
-    val pagerState = rememberPagerState(pageCount = { if (words.isEmpty()) 1 else words.size })
 
     Scaffold(
         topBar = {
@@ -72,8 +75,8 @@ fun DailyWordScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor    = HeftBg,
-                    titleContentColor = Color.White,
+                    containerColor             = HeftBg,
+                    titleContentColor          = Color.White,
                     navigationIconContentColor = Color.White,
                 ),
             )
@@ -81,94 +84,48 @@ fun DailyWordScreen(
         containerColor = HeftBg,
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentAlignment = Alignment.Center,
+            modifier          = Modifier.fillMaxSize().padding(padding),
+            contentAlignment  = Alignment.Center,
         ) {
             when {
-                loading -> CircularProgressIndicator(color = Primary)
-                words.isEmpty() -> {
-                    Text(
-                        if (language == "ku") "Îro peyv nehat zêdekirin"
-                        else "Bugün henüz kelime eklenmedi",
-                        color    = Color.White.copy(alpha = 0.5f),
-                        fontSize = 15.sp,
-                    )
-                }
+                loading      -> CircularProgressIndicator(color = Primary)
+                words.isEmpty() -> Text(
+                    if (language == "ku") "Îro peyv nehat zêdekirin"
+                    else "Bugün henüz kelime eklenmedi",
+                    color    = Color.White.copy(alpha = 0.5f),
+                    fontSize = 15.sp,
+                )
                 else -> {
                     Column(
-                        modifier            = Modifier.fillMaxSize(),
+                        modifier            = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        // Sayfa göstergesi
-                        if (words.size > 1) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                "${pagerState.currentPage + 1} / ${words.size}",
-                                color    = Color.White.copy(alpha = 0.5f),
-                                fontSize = 12.sp,
-                            )
-                        }
+                        Spacer(Modifier.height(16.dp))
 
-                        // Kelime kartları — yatay kaydırma
-                        HorizontalPager(
-                            state    = pagerState,
+                        // ── Kelime listesi kartı ──────────────────────────────
+                        WordListCard(
+                            words    = words,
                             modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth(),
-                        ) { page ->
-                            val word = words[page]
-                            WordCard(
-                                word      = word.word,
-                                meaningTr = word.meaningTr,
-                                meaningKu = word.meaningKu,
-                                exampleKu = word.exampleKu,
-                                pageIndex = page,
-                                total     = words.size,
-                            )
-                        }
-
-                        // Nokta göstergesi
-                        if (words.size > 1) {
-                            Spacer(Modifier.height(12.dp))
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment     = Alignment.CenterVertically,
-                            ) {
-                                repeat(words.size) { i ->
-                                    Box(
-                                        modifier = Modifier
-                                            .size(if (i == pagerState.currentPage) 8.dp else 6.dp)
-                                            .clip(CircleShape)
-                                            .background(
-                                                if (i == pagerState.currentPage) Primary
-                                                else Color.White.copy(alpha = 0.25f)
-                                            )
-                                    )
-                                }
-                            }
-                        }
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp),
+                        )
 
                         Spacer(Modifier.height(20.dp))
 
-                        // Paylaş butonu
+                        // ── Paylaş butonu ─────────────────────────────────────
                         Button(
                             onClick = {
                                 scope.launch {
-                                    shareWordCard(
-                                        context   = context,
-                                        word      = words[pagerState.currentPage],
-                                        pageIndex = pagerState.currentPage,
-                                        total     = words.size,
-                                    )
+                                    shareWordListCard(context = context, words = words)
                                 }
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 24.dp)
-                                .height(50.dp),
-                            shape  = RoundedCornerShape(14.dp),
+                                .padding(horizontal = 20.dp)
+                                .height(52.dp),
+                            shape  = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Primary,
                                 contentColor   = Color.White,
@@ -178,13 +135,140 @@ fun DailyWordScreen(
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 if (language == "ku") "Parve Bike" else "Paylaş",
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.Bold,
                                 fontSize   = 15.sp,
                             )
                         }
 
-                        Spacer(Modifier.height(24.dp))
+                        Spacer(Modifier.height(28.dp))
                     }
+                }
+            }
+        }
+    }
+}
+
+// ── Kelime listesi kartı (ekranda gösterilen) ─────────────────────────────────
+@Composable
+fun WordListCard(
+    words    : List<DailyWordViewModel.WordItem>,
+    modifier : Modifier = Modifier,
+) {
+    // Uygulama renkleriyle uyumlu koyu kart
+    Card(
+        modifier = modifier,
+        shape    = RoundedCornerShape(20.dp),
+        colors   = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border   = androidx.compose.foundation.BorderStroke(
+            1.dp, Color(0xFF8B5CF6).copy(alpha = 0.35f)
+        ),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        listOf(Color(0xFF1A1630), Color(0xFF0F0C1E))
+                    )
+                )
+        ) {
+            // Arka plan glow efekti
+            Box(
+                modifier = Modifier
+                    .size(180.dp)
+                    .offset(x = 120.dp, y = (-40).dp)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(
+                                Color(0xFF8B5CF6).copy(alpha = 0.15f),
+                                Color.Transparent,
+                            )
+                        ),
+                        RoundedCornerShape(50)
+                    )
+            )
+
+            Column(modifier = Modifier.fillMaxWidth()) {
+
+                // ── Başlık satırı ─────────────────────────────────
+                Row(
+                    modifier          = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Uygulama ikonu
+                    Image(
+                        painter  = painterResource(R.drawable.ic_app_logo),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(7.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Peyvên Rojê · Heftreng",
+                        color      = Primary,
+                        fontSize   = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        java.text.SimpleDateFormat("d MMM", java.util.Locale("tr"))
+                            .format(java.util.Date()),
+                        color    = Color.White.copy(alpha = 0.28f),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+
+                HorizontalDivider(color = Color(0xFF8B5CF6).copy(alpha = 0.18f))
+
+                // ── Kelime satırları ──────────────────────────────
+                words.forEachIndexed { i, item ->
+                    WordRow(
+                        item     = item,
+                        index    = i,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (i < words.lastIndex) {
+                        HorizontalDivider(
+                            modifier  = Modifier.padding(horizontal = 18.dp),
+                            color     = Color(0xFF8B5CF6).copy(alpha = 0.12f),
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = Color(0xFF8B5CF6).copy(alpha = 0.18f))
+
+                // ── Footer ────────────────────────────────────────
+                Row(
+                    modifier          = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Image(
+                        painter  = painterResource(R.drawable.ic_app_logo),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    // Google Play renk ikonu (basit üçgen)
+                    PlayStoreIcon(size = 16.dp)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Heft Reng Kurdî",
+                        color      = Color.White.copy(alpha = 0.45f),
+                        fontSize   = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.2.sp,
+                    )
                 }
             }
         }
@@ -192,212 +276,283 @@ fun DailyWordScreen(
 }
 
 @Composable
-private fun WordCard(
-    word      : String,
-    meaningTr : String,
-    meaningKu : String,
-    exampleKu : String,
-    pageIndex : Int,
-    total     : Int,
-    modifier  : Modifier = Modifier,
+private fun WordRow(
+    item     : DailyWordViewModel.WordItem,
+    index    : Int,
+    modifier : Modifier = Modifier,
 ) {
-    // Her kart için farklı gradient tonu
-    val gradients = listOf(
-        listOf(Color(0xFF6C3FF5), Color(0xFF3B82F6)),
-        listOf(Color(0xFF0EA5E9), Color(0xFF6C3FF5)),
-        listOf(Color(0xFF8B5CF6), Color(0xFF06B6D4)),
-        listOf(Color(0xFF7C3AED), Color(0xFF4F46E5)),
-        listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)),
-    )
-    val gradient = gradients[pageIndex % gradients.size]
+    val bgAlpha = if (index % 2 == 1) 0.03f else 0f
 
-    Box(
+    Row(
         modifier          = modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        contentAlignment  = Alignment.Center,
+            .background(Color(0xFF8B5CF6).copy(alpha = bgAlpha))
+            .padding(horizontal = 18.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape    = RoundedCornerShape(24.dp),
-            colors   = CardDefaults.cardColors(containerColor = Color.Transparent),
+        // Emoji / numaralı kutu
+        Box(
+            modifier         = Modifier
+                .size(width = 52.dp, height = 46.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF8B5CF6).copy(alpha = 0.15f))
+                .then(
+                    Modifier.padding(1.dp)
+                ),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.linearGradient(gradient)
-                    )
-                    .padding(28.dp),
-            ) {
-                Column(
-                    modifier            = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    // Üst etiket
-                    Surface(
-                        color = Color.White.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(20.dp),
-                    ) {
-                        Text(
-                            "Heftreng · Peyvên Rojê",
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                            color    = Color.White.copy(alpha = 0.8f),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
+            Text(
+                wordEmoji(index),
+                fontSize = 22.sp,
+            )
+        }
 
-                    Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.width(14.dp))
 
-                    // Ana kelime
-                    Text(
-                        word,
-                        color      = Color.White,
-                        fontSize   = 38.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        textAlign  = TextAlign.Center,
-                        lineHeight = 44.sp,
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    // Türkçe anlam
-                    if (meaningTr.isNotBlank()) {
-                        Text(
-                            meaningTr,
-                            color      = Color.White.copy(alpha = 0.9f),
-                            fontSize   = 18.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign  = TextAlign.Center,
-                        )
-                    }
-
-                    // Kürtçe anlam
-                    if (meaningKu.isNotBlank()) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            meaningKu,
-                            color    = Color.White.copy(alpha = 0.7f),
-                            fontSize = 15.sp,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-
-                    // Örnek cümle
-                    if (exampleKu.isNotBlank()) {
-                        Spacer(Modifier.height(20.dp))
-                        HorizontalDivider(color = Color.White.copy(alpha = 0.2f))
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            "“$exampleKu”",
-                            color      = Color.White.copy(alpha = 0.85f),
-                            fontSize   = 14.sp,
-                            fontStyle  = FontStyle.Italic,
-                            textAlign  = TextAlign.Center,
-                            lineHeight = 21.sp,
-                        )
-                    }
-
-                    // Sayfa göstergesi (birden fazla kelimeyse)
-                    if (total > 1) {
-                        Spacer(Modifier.height(20.dp))
-                        Text(
-                            "${pageIndex + 1} / $total",
-                            color    = Color.White.copy(alpha = 0.5f),
-                            fontSize = 11.sp,
-                        )
-                    }
-                }
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    item.word,
+                    color      = Color.White,
+                    fontSize   = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontStyle  = FontStyle.Normal,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "—",
+                    color    = Primary,
+                    fontSize = 16.sp,
+                )
             }
+            Text(
+                item.meaningTr,
+                color      = Color.White.copy(alpha = 0.55f),
+                fontSize   = 13.sp,
+                fontWeight = FontWeight.Medium,
+            )
         }
     }
 }
 
-private suspend fun shareWordCard(
-    context   : Context,
-    word      : com.heftreng.app.viewmodel.DailyWordViewModel.WordItem,
-    pageIndex : Int,
-    total     : Int,
+@Composable
+private fun PlayStoreIcon(size: androidx.compose.ui.unit.Dp) {
+    Canvas(modifier = Modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        // Kırmızı üçgen
+        val redPath = android.graphics.Path().apply {
+            moveTo(0f, 0f); lineTo(w * 0.56f, h * 0.5f); lineTo(0f, h)
+        }
+        drawContext.canvas.nativeCanvas.apply {
+            val p = Paint(Paint.ANTI_ALIAS_FLAG)
+            p.color = 0xFFEA4335.toInt(); drawPath(redPath, p)
+            // Sarı
+            val yPath = android.graphics.Path().apply {
+                moveTo(0f, 0f); lineTo(w * 0.56f, h * 0.5f); lineTo(w * 0.8f, h * 0.3f)
+            }
+            p.color = 0xFFFBBC04.toInt(); drawPath(yPath, p)
+            // Yeşil
+            val gPath = android.graphics.Path().apply {
+                moveTo(0f, h); lineTo(w * 0.56f, h * 0.5f); lineTo(w * 0.8f, h * 0.7f)
+            }
+            p.color = 0xFF34A853.toInt(); drawPath(gPath, p)
+            // Mavi
+            val bPath = android.graphics.Path().apply {
+                moveTo(w * 0.8f, h * 0.3f); lineTo(w * 0.56f, h * 0.5f)
+                lineTo(w * 0.8f, h * 0.7f); lineTo(w, h * 0.6f); lineTo(w, h * 0.4f)
+            }
+            p.color = 0xFF4285F4.toInt(); drawPath(bPath, p)
+        }
+    }
+}
+
+private fun wordEmoji(index: Int): String = when (index % 5) {
+    0 -> "🌩️"
+    1 -> "☀️"
+    2 -> "🕊️"
+    3 -> "🌿"
+    else -> "⛰️"
+}
+
+// ── Bitmap oluştur + paylaş ───────────────────────────────────────────────────
+private suspend fun shareWordListCard(
+    context : Context,
+    words   : List<DailyWordViewModel.WordItem>,
 ) {
-    withContext(Dispatchers.Main) {
+    withContext(Dispatchers.IO) {
         try {
-            // Bitmap oluştur
             val width  = 1080
-            val height = 1080
+            // Her kelime için ~140px + header 110 + footer 90
+            val rowH   = 140
+            val height = 110 + words.size * rowH + 20 + 90
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
 
-            // Gradient arka plan
-            val gradients = listOf(
-                intArrayOf(0xFF6C3FF5.toInt(), 0xFF3B82F6.toInt()),
-                intArrayOf(0xFF0EA5E9.toInt(), 0xFF6C3FF5.toInt()),
-                intArrayOf(0xFF8B5CF6.toInt(), 0xFF06B6D4.toInt()),
-                intArrayOf(0xFF7C3AED.toInt(), 0xFF4F46E5.toInt()),
-                intArrayOf(0xFF3B82F6.toInt(), 0xFF8B5CF6.toInt()),
-            )
-            val (c1, c2) = gradients[pageIndex % gradients.size]
-
-            val bgPaint = android.graphics.Paint()
-            val shader = android.graphics.LinearGradient(
-                0f, 0f, width.toFloat(), height.toFloat(),
-                c1, c2,
+            // ── Arka plan gradient ────────────────────────────────────
+            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+            val bgShader = android.graphics.LinearGradient(
+                0f, 0f, 0f, height.toFloat(),
+                intArrayOf(0xFF1A1630.toInt(), 0xFF0F0C1E.toInt()),
+                null,
                 android.graphics.Shader.TileMode.CLAMP,
             )
-            bgPaint.shader = shader
-            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
+            bgPaint.shader = bgShader
+            val bgRect = RectF(0f, 0f, width.toFloat(), height.toFloat())
+            canvas.drawRoundRect(bgRect, 48f, 48f, bgPaint)
 
-            // Metin çiz
-            val textPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                color    = android.graphics.Color.WHITE
-                typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
+            // ── Kenarlık ──────────────────────────────────────────────
+            val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                color = 0x558B5CF6.toInt()
+                strokeWidth = 3f
+            }
+            canvas.drawRoundRect(bgRect, 48f, 48f, borderPaint)
+
+            // ── Uygulama ikonu (drawable) ──────────────────────────────
+            val appIconBmp = try {
+                val drawable = androidx.core.content.res.ResourcesCompat.getDrawable(
+                    context.resources, R.drawable.ic_app_logo, null
+                )
+                val bmp = Bitmap.createBitmap(80, 80, Bitmap.Config.ARGB_8888)
+                val c   = Canvas(bmp)
+                drawable?.setBounds(0, 0, 80, 80)
+                drawable?.draw(c)
+                bmp
+            } catch (e: Exception) { null }
+
+            // ── Header ────────────────────────────────────────────────
+            val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color    = 0xFF8B5CF6.toInt()
+                typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                textSize = 38f
+                textAlign = Paint.Align.LEFT
             }
 
-            // Kelime
-            textPaint.textSize = 96f
-            textPaint.textAlign = android.graphics.Paint.Align.CENTER
-            canvas.drawText(word.word, width / 2f, height / 2f - 80f, textPaint)
+            var y = 60f
+            if (appIconBmp != null) {
+                val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+                val iconRect  = RectF(48f, y, 48f + 72f, y + 72f)
+                // Yuvarlak kırpma
+                val clipPath  = android.graphics.Path()
+                clipPath.addRoundRect(iconRect, 18f, 18f, android.graphics.Path.Direction.CW)
+                canvas.save(); canvas.clipPath(clipPath)
+                canvas.drawBitmap(appIconBmp, null, iconRect, iconPaint)
+                canvas.restore()
+            }
+            canvas.drawText("Peyvên Rojê · Heftreng", 140f, y + 48f, tp)
 
-            // TR anlam
-            textPaint.textSize = 48f
-            textPaint.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL)
-            textPaint.alpha = 230
-            canvas.drawText(word.meaningTr, width / 2f, height / 2f + 10f, textPaint)
+            // Tarih
+            val dateTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color     = 0x55F0EEFA.toInt()
+                typeface  = Typeface.create("sans-serif", Typeface.NORMAL)
+                textSize  = 32f
+                textAlign = Paint.Align.RIGHT
+            }
+            val dateStr = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale("tr")).format(java.util.Date())
+            canvas.drawText(dateStr, width - 48f, y + 48f, dateTp)
 
-            // Örnek cümle
-            if (word.exampleKu.isNotBlank()) {
-                textPaint.textSize = 36f
-                textPaint.alpha = 180
-                textPaint.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.ITALIC)
-                val example = if (word.exampleKu.length > 50) word.exampleKu.take(50) + "…" else word.exampleKu
-                canvas.drawText("“$example”", width / 2f, height / 2f + 100f, textPaint)
+            y += 100f
+
+            // Header divider
+            val divPaint = Paint().apply { color = 0x308B5CF6.toInt(); strokeWidth = 2f }
+            canvas.drawLine(0f, y, width.toFloat(), y, divPaint)
+            y += 2f
+
+            // ── Kelime satırları ──────────────────────────────────────
+            words.forEachIndexed { i, item ->
+                if (i % 2 == 1) {
+                    val rowPaint = Paint().apply { color = 0x0A8B5CF6.toInt() }
+                    canvas.drawRect(0f, y, width.toFloat(), y + rowH, rowPaint)
+                }
+
+                // Emoji kutu arka planı
+                val boxPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x268B5CF6.toInt() }
+                val boxRect  = RectF(40f, y + 20f, 40f + 120f, y + 20f + 100f)
+                canvas.drawRoundRect(boxRect, 20f, 20f, boxPaint)
+
+                // Emoji (metin olarak çiz)
+                val emojiTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    textSize  = 54f
+                    textAlign = Paint.Align.CENTER
+                }
+                canvas.drawText(wordEmoji(i), 100f, y + 84f, emojiTp)
+
+                // Kelime (Kürtçe)
+                val wordTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color     = 0xFFF0EEFA.toInt()
+                    typeface  = Typeface.create("sans-serif", Typeface.BOLD)
+                    textSize  = 60f
+                    textAlign = Paint.Align.LEFT
+                }
+                canvas.drawText(item.word, 186f, y + 70f, wordTp)
+
+                // Ayraç çizgi
+                val dashTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color     = 0xFF8B5CF6.toInt()
+                    typeface  = Typeface.create("sans-serif", Typeface.NORMAL)
+                    textSize  = 48f
+                    textAlign = Paint.Align.LEFT
+                }
+                val wordW = wordTp.measureText(item.word)
+                canvas.drawText("—", 186f + wordW + 16f, y + 68f, dashTp)
+
+                // Türkçe anlam
+                val trTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color     = 0x99F0EEFA.toInt()
+                    typeface  = Typeface.create("sans-serif", Typeface.NORMAL)
+                    textSize  = 40f
+                    textAlign = Paint.Align.LEFT
+                }
+                canvas.drawText(item.meaningTr, 186f, y + 118f, trTp)
+
+                y += rowH.toFloat()
+
+                if (i < words.lastIndex) {
+                    val rowDivPaint = Paint().apply { color = 0x208B5CF6.toInt(); strokeWidth = 1.5f }
+                    canvas.drawLine(48f, y, width - 48f, y, rowDivPaint)
+                }
             }
 
-            // Heftreng etiketi
-            textPaint.textSize = 30f
-            textPaint.alpha = 140
-            textPaint.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL)
-            canvas.drawText("Heftreng · Peyvên Rojê", width / 2f, height - 60f, textPaint)
+            y += 20f
 
-            // Dosyaya kaydet
-            val file = File(context.cacheDir, "heftreng_word_${System.currentTimeMillis()}.png")
+            // Footer divider
+            canvas.drawLine(0f, y, width.toFloat(), y, divPaint)
+            y += 2f
+
+            // Footer — ikon + "Heft Reng Kurdî"
+            if (appIconBmp != null) {
+                val fIconRect = RectF((width / 2f) - 160f, y + 22f, (width / 2f) - 88f, y + 94f)
+                val fClip     = android.graphics.Path()
+                fClip.addRoundRect(fIconRect, 12f, 12f, android.graphics.Path.Direction.CW)
+                canvas.save(); canvas.clipPath(fClip)
+                canvas.drawBitmap(appIconBmp, null, fIconRect, Paint(Paint.ANTI_ALIAS_FLAG))
+                canvas.restore()
+            }
+            val footerTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color     = 0x77F0EEFA.toInt()
+                typeface  = Typeface.create("sans-serif", Typeface.BOLD)
+                textSize  = 36f
+                textAlign = Paint.Align.LEFT
+            }
+            canvas.drawText("Heft Reng Kurdî", (width / 2f) - 68f, y + 66f, footerTp)
+
+            // ── Dosyaya kaydet & paylaş ───────────────────────────────
+            val file = File(context.cacheDir, "heftreng_words_${System.currentTimeMillis()}.png")
             FileOutputStream(file).use { out ->
                 bitmap.compress(Bitmap.CompressFormat.PNG, 95, out)
             }
-
             val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.provider",
-                file,
+                context, "${context.packageName}.provider", file
             )
-
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type      = "image/png"
+                type = "image/png"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_TEXT, "${word.word} — ${word.meaningTr}\n\nheftreng.com")
+                putExtra(Intent.EXTRA_TEXT, "Heftreng · Peyvên Rojê\nheftreng.com")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            context.startActivity(Intent.createChooser(shareIntent, "Paylaş"))
+            withContext(Dispatchers.Main) {
+                context.startActivity(Intent.createChooser(shareIntent, "Paylaş"))
+            }
         } catch (e: Exception) {
             android.util.Log.e("DailyWordScreen", "share error: ${e.message}")
         }
