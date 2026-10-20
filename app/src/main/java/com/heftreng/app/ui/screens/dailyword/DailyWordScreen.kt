@@ -3,8 +3,6 @@ package com.heftreng.app.ui.screens.dailyword
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
@@ -38,7 +36,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.heftreng.app.R
-import com.heftreng.app.ui.theme.HeftBg
+import com.heftreng.app.ui.theme.Background
 import com.heftreng.app.ui.theme.Primary
 import com.heftreng.app.viewmodel.DailyWordViewModel
 import kotlinx.coroutines.Dispatchers
@@ -75,13 +73,13 @@ fun DailyWordScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor             = HeftBg,
+                    containerColor             = Background,
                     titleContentColor          = Color.White,
                     navigationIconContentColor = Color.White,
                 ),
             )
         },
-        containerColor = HeftBg,
+        containerColor = Background,
     ) { padding ->
         Box(
             modifier          = Modifier.fillMaxSize().padding(padding),
@@ -335,34 +333,41 @@ private fun WordRow(
 }
 
 @Composable
+@Composable
 private fun PlayStoreIcon(size: androidx.compose.ui.unit.Dp) {
     Canvas(modifier = Modifier.size(size)) {
         val w = this.size.width
         val h = this.size.height
-        // Kırmızı üçgen
-        val redPath = android.graphics.Path().apply {
-            moveTo(0f, 0f); lineTo(w * 0.56f, h * 0.5f); lineTo(0f, h)
-        }
-        drawContext.canvas.nativeCanvas.apply {
-            val p = Paint(Paint.ANTI_ALIAS_FLAG)
-            p.color = 0xFFEA4335.toInt(); drawPath(redPath, p)
-            // Sarı
-            val yPath = android.graphics.Path().apply {
-                moveTo(0f, 0f); lineTo(w * 0.56f, h * 0.5f); lineTo(w * 0.8f, h * 0.3f)
-            }
-            p.color = 0xFFFBBC04.toInt(); drawPath(yPath, p)
-            // Yeşil
-            val gPath = android.graphics.Path().apply {
-                moveTo(0f, h); lineTo(w * 0.56f, h * 0.5f); lineTo(w * 0.8f, h * 0.7f)
-            }
-            p.color = 0xFF34A853.toInt(); drawPath(gPath, p)
-            // Mavi
-            val bPath = android.graphics.Path().apply {
+
+        // Kırmızı
+        drawPath(
+            path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(0f, 0f); lineTo(w * 0.56f, h * 0.5f); lineTo(0f, h); close()
+            },
+            color = Color(0xFFEA4335),
+        )
+        // Sarı
+        drawPath(
+            path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(0f, 0f); lineTo(w * 0.56f, h * 0.5f); lineTo(w * 0.8f, h * 0.3f); close()
+            },
+            color = Color(0xFFFBBC04),
+        )
+        // Yeşil
+        drawPath(
+            path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(0f, h); lineTo(w * 0.56f, h * 0.5f); lineTo(w * 0.8f, h * 0.7f); close()
+            },
+            color = Color(0xFF34A853),
+        )
+        // Mavi
+        drawPath(
+            path = androidx.compose.ui.graphics.Path().apply {
                 moveTo(w * 0.8f, h * 0.3f); lineTo(w * 0.56f, h * 0.5f)
-                lineTo(w * 0.8f, h * 0.7f); lineTo(w, h * 0.6f); lineTo(w, h * 0.4f)
-            }
-            p.color = 0xFF4285F4.toInt(); drawPath(bPath, p)
-        }
+                lineTo(w * 0.8f, h * 0.7f); lineTo(w, h * 0.6f); lineTo(w, h * 0.4f); close()
+            },
+            color = Color(0xFF4285F4),
+        )
     }
 }
 
