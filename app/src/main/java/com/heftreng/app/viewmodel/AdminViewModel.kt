@@ -236,12 +236,21 @@ class AdminViewModel @Inject constructor(
         val book    : String = "",
         val feedPostId: String = "",
     )
-    data class DailyWordContent(
+    data class WordEntry(
         val word     : String = "",
         val meaningTr: String = "",
         val meaningKu: String = "",
         val exampleKu: String = "",
     )
+    data class DailyWordContent(
+        val words: List<WordEntry> = listOf(WordEntry()),
+    ) {
+        // Geriye dönük uyumluluk — tekil kelime alanlarına erişim
+        val word      get() = words.firstOrNull()?.word      ?: ""
+        val meaningTr get() = words.firstOrNull()?.meaningTr ?: ""
+        val meaningKu get() = words.firstOrNull()?.meaningKu ?: ""
+        val exampleKu get() = words.firstOrNull()?.exampleKu ?: ""
+    }
 
     private val _dailyQuote = MutableStateFlow(DailyQuoteContent())
     val dailyQuote = _dailyQuote.asStateFlow()
@@ -277,12 +286,30 @@ class AdminViewModel @Inject constructor(
             try {
                 val wDoc = firestore.collection("daily_word").document(date).get().await()
                 if (wDoc.exists()) {
-                    _dailyWord.value = DailyWordContent(
-                        word      = wDoc.getString("word") ?: "",
-                        meaningTr = wDoc.getString("meaning_tr") ?: "",
-                        meaningKu = wDoc.getString("meaning_ku") ?: "",
-                        exampleKu = wDoc.getString("example_ku") ?: "",
-                    )
+                    @Suppress("UNCHECKED_CAST")
+                    val wordsRaw = wDoc.get("words") as? List<Map<String, String>>
+                    if (wordsRaw != null && wordsRaw.isNotEmpty()) {
+                        _dailyWord.value = DailyWordContent(
+                            words = wordsRaw.map { m ->
+                                WordEntry(
+                                    word      = m["word"]       ?: "",
+                                    meaningTr = m["meaning_tr"] ?: "",
+                                    meaningKu = m["meaning_ku"] ?: "",
+                                    exampleKu = m["example_ku"] ?: "",
+                                )
+                            }
+                        )
+                    } else {
+                        // Eski tek-kelime formatı — geriye dönük uyumluluk
+                        _dailyWord.value = DailyWordContent(
+                            words = listOf(WordEntry(
+                                word      = wDoc.getString("word")       ?: "",
+                                meaningTr = wDoc.getString("meaning_tr") ?: "",
+                                meaningKu = wDoc.getString("meaning_ku") ?: "",
+                                exampleKu = wDoc.getString("example_ku") ?: "",
+                            ))
+                        )
+                    }
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -313,16 +340,21 @@ class AdminViewModel @Inject constructor(
         if (_perms.value?.can("notif") != true && _perms.value?.can("push") != true) return
         viewModelScope.launch {
             try {
+                val wordsList = content.words.map { w ->
+                    mapOf(
+                        "word"       to w.word,
+                        "meaning_tr" to w.meaningTr,
+                        "meaning_ku" to w.meaningKu,
+                        "example_ku" to w.exampleKu,
+                    )
+                }
                 firestore.collection("daily_word").document(date).set(mapOf(
-                    "word"       to content.word,
-                    "meaning_tr" to content.meaningTr,
-                    "meaning_ku" to content.meaningKu,
-                    "example_ku" to content.exampleKu,
+                    "words"      to wordsList,
                     "updatedBy"  to (auth.currentUser?.email ?: "admin"),
                     "updatedAt"  to FieldValue.serverTimestamp(),
                 )).await()
                 _dailyWord.value = content
-                _dailyResult.value = "✓ Günün Kelimesi kaydedildi"
+                _dailyResult.value = "✓ Günün Kelimesi kaydedildi (${content.words.size} kelime)"
             } catch (e: Exception) { _dailyResult.value = "✗ Hata: ${e.message}" }
         }
     }
@@ -385,23 +417,20 @@ class AdminViewModel @Inject constructor(
     /** Günün Kelimesi'ni kaydet + herkese push gönder ("Tetikle") */
     fun saveDailyWordAndNotify(content: DailyWordContent, date: String = todayKey()) {
         saveDailyWord(content, date)
-        // Title: sadece kelime — kısa tut, Android ~50 karakter sınırı var
-        val title = "📝 ${content.word}"
-        // Body: TR anlam önce, sonra KU anlam, örnek ayrı satırda
+        val wordCount = content.words.size
+        val first = content.words.firstOrNull() ?: return
+        val title = if (wordCount > 1) "📝 ${first.word} +${wordCount - 1} kelime" else "📝 ${first.word}"
         val body = buildString {
-            // Türkçe anlam — kullanıcının hemen anlayacağı kısım
-            if (content.meaningTr.isNotBlank()) append(content.meaningTr)
-            // Kürtçe anlam
-            if (content.meaningKu.isNotBlank()) {
+            if (first.meaningTr.isNotBlank()) append(first.meaningTr)
+            if (first.meaningKu.isNotBlank()) {
                 if (isNotEmpty()) append(" • ")
-                append(content.meaningKu)
+                append(first.meaningKu)
             }
-            // Örnek cümle — yeni satırda
-            if (content.exampleKu.isNotBlank()) {
+            if (first.exampleKu.isNotBlank()) {
                 if (isNotEmpty()) append("\n")
-                append("\u201C${content.exampleKu}\u201D")
+                append("\u201C${first.exampleKu}\u201D")
             }
-        }.ifBlank { content.meaningTr.ifBlank { content.word } }
+        }.ifBlank { first.word }
         sendPush(
             title = title,
             body  = body,

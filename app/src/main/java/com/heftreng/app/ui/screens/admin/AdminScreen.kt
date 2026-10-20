@@ -118,10 +118,12 @@ fun AdminScreen(
     var dqAuthor by remember(dailyQuote) { mutableStateOf(dailyQuote.author) }
     var dqBook   by remember(dailyQuote) { mutableStateOf(dailyQuote.book) }
     var dqFeedPostId by remember(dailyQuote) { mutableStateOf(dailyQuote.feedPostId) }
-    var dwWord      by remember(dailyWord) { mutableStateOf(dailyWord.word) }
-    var dwMeaningTr by remember(dailyWord) { mutableStateOf(dailyWord.meaningTr) }
-    var dwMeaningKu by remember(dailyWord) { mutableStateOf(dailyWord.meaningKu) }
-    var dwExampleKu by remember(dailyWord) { mutableStateOf(dailyWord.exampleKu) }
+    var dwWords by remember(dailyWord) {
+        mutableStateOf(
+            if (dailyWord.words.isNotEmpty()) dailyWord.words
+            else listOf(AdminViewModel.WordEntry())
+        )
+    }
     var dailyExpanded by remember { mutableStateOf(false) }
 
     // Düzenle tab state
@@ -699,44 +701,108 @@ fun AdminScreen(
                                         Text("Günün Kelimesi", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                                     }
                                     Spacer(Modifier.height(8.dp))
-                                    adminTextField(dwWord, { dwWord = it }, "Kelime (Kurdî) *", modifier = Modifier.fillMaxWidth())
-                                    Spacer(Modifier.height(8.dp))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        adminTextField(dwMeaningTr, { dwMeaningTr = it }, "Anlam (TR) *",  modifier = Modifier.weight(1f))
-                                        adminTextField(dwMeaningKu, { dwMeaningKu = it }, "Anlam (KU)",   modifier = Modifier.weight(1f))
-                                    }
-                                    Spacer(Modifier.height(8.dp))
-                                    adminTextField(
-                                        dwExampleKu, { dwExampleKu = it },
-                                        "Örnek cümle (Kurdî)",
-                                        minLines = 2,
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-
-                                    // ── Önizleme ───────────────────────────────
-                                    if (dwWord.isNotBlank() && dwMeaningTr.isNotBlank()) {
-                                        Spacer(Modifier.height(12.dp))
-                                        Text("Önizleme:", color = Muted, fontSize = 11.sp)
-                                        Spacer(Modifier.height(4.dp))
-                                        Surface(
-                                            color    = Color.White.copy(alpha = 0.07f),
-                                            shape    = RoundedCornerShape(10.dp),
+                                    // ── Kelime listesi (3-5 kelime) ────────────────────────
+                                    dwWords.forEachIndexed { idx, entry ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
                                             modifier = Modifier.fillMaxWidth(),
                                         ) {
-                                            Column(Modifier.padding(12.dp)) {
-                                                Text(
-                                                    "$dwWord — $dwMeaningTr",
-                                                    color      = Color.White,
-                                                    fontSize   = 15.sp,
-                                                    fontWeight = FontWeight.Bold,
+                                            Text(
+                                                "${idx + 1}.",
+                                                color = Muted,
+                                                fontSize = 12.sp,
+                                                modifier = Modifier.width(20.dp),
+                                            )
+                                            Spacer(Modifier.width(4.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                adminTextField(
+                                                    entry.word,
+                                                    { v -> dwWords = dwWords.toMutableList().also { it[idx] = entry.copy(word = v) } },
+                                                    "Kelime (Kurdî) *",
+                                                    modifier = Modifier.fillMaxWidth(),
                                                 )
-                                                if (dwMeaningKu.isNotBlank()) {
-                                                    Spacer(Modifier.height(4.dp))
-                                                    Text("Kurdî: $dwMeaningKu", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                                                Spacer(Modifier.height(4.dp))
+                                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    adminTextField(
+                                                        entry.meaningTr,
+                                                        { v -> dwWords = dwWords.toMutableList().also { it[idx] = entry.copy(meaningTr = v) } },
+                                                        "Anlam (TR) *",
+                                                        modifier = Modifier.weight(1f),
+                                                    )
+                                                    adminTextField(
+                                                        entry.meaningKu,
+                                                        { v -> dwWords = dwWords.toMutableList().also { it[idx] = entry.copy(meaningKu = v) } },
+                                                        "Anlam (KU)",
+                                                        modifier = Modifier.weight(1f),
+                                                    )
                                                 }
-                                                if (dwExampleKu.isNotBlank()) {
-                                                    Spacer(Modifier.height(4.dp))
-                                                    Text("\u201C$dwExampleKu\u201D", color = Primary.copy(alpha = 0.9f), fontSize = 13.sp, lineHeight = 19.sp)
+                                                Spacer(Modifier.height(4.dp))
+                                                adminTextField(
+                                                    entry.exampleKu,
+                                                    { v -> dwWords = dwWords.toMutableList().also { it[idx] = entry.copy(exampleKu = v) } },
+                                                    "Örnek cümle (Kurdî)",
+                                                    minLines = 2,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                )
+                                            }
+                                            if (dwWords.size > 1) {
+                                                IconButton(onClick = { dwWords = dwWords.toMutableList().also { it.removeAt(idx) } }) {
+                                                    Icon(Icons.Default.Remove, null, tint = Color.Red.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
+                                                }
+                                            }
+                                        }
+                                        if (idx < dwWords.lastIndex) {
+                                            Spacer(Modifier.height(10.dp))
+                                            Divider(color = Color.White.copy(alpha = 0.08f))
+                                            Spacer(Modifier.height(10.dp))
+                                        }
+                                    }
+
+                                    // + Kelime Ekle butonu (max 5)
+                                    if (dwWords.size < 5) {
+                                        Spacer(Modifier.height(8.dp))
+                                        OutlinedButton(
+                                            onClick = { dwWords = dwWords + AdminViewModel.WordEntry() },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(8.dp),
+                                        ) {
+                                            Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("Kelime Ekle (${dwWords.size}/5)", fontSize = 12.sp)
+                                        }
+                                    }
+
+                                    // ── Önizleme ───────────────────────────────
+                                    val firstEntry = dwWords.firstOrNull()
+                                    if (firstEntry != null && firstEntry.word.isNotBlank() && firstEntry.meaningTr.isNotBlank()) {
+                                        Spacer(Modifier.height(12.dp))
+                                        Text("Önizleme (${dwWords.size} kelime):", color = Muted, fontSize = 11.sp)
+                                        Spacer(Modifier.height(4.dp))
+                                        dwWords.take(3).forEach { w ->
+                                            if (w.word.isBlank()) return@forEach
+                                            Surface(
+                                                color    = Color.White.copy(alpha = 0.07f),
+                                                shape    = RoundedCornerShape(10.dp),
+                                                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                                            ) {
+                                                Column(Modifier.padding(10.dp)) {
+                                                    Text(
+                                                        "${w.word} — ${w.meaningTr}",
+                                                        color      = Color.White,
+                                                        fontSize   = 14.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                    )
+                                                    if (w.meaningKu.isNotBlank()) {
+                                                        Text("Kurdî: ${w.meaningKu}", color = Color.White.copy(alpha = 0.65f), fontSize = 12.sp)
+                                                    }
+                                                    if (w.exampleKu.isNotBlank()) {
+                                                        Text(
+                                                            "“${w.exampleKu}”",
+                                                            color = Primary.copy(alpha = 0.9f),
+                                                            fontSize = 12.sp,
+                                                            lineHeight = 17.sp,
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -745,8 +811,8 @@ fun AdminScreen(
                                     Spacer(Modifier.height(10.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         OutlinedButton(
-                                            onClick  = { vm.saveDailyWord(AdminViewModel.DailyWordContent(dwWord, dwMeaningTr, dwMeaningKu, dwExampleKu)) },
-                                            enabled  = dwWord.isNotBlank() && dwMeaningTr.isNotBlank(),
+                                            onClick  = { vm.saveDailyWord(AdminViewModel.DailyWordContent(dwWords)) },
+                                            enabled  = dwWords.any { it.word.isNotBlank() && it.meaningTr.isNotBlank() },
                                             modifier = Modifier.weight(1f),
                                             shape    = RoundedCornerShape(10.dp),
                                         ) {
@@ -755,8 +821,8 @@ fun AdminScreen(
                                             Text("Kaydet", fontSize = 13.sp)
                                         }
                                         Button(
-                                            onClick  = { vm.saveDailyWordAndNotify(AdminViewModel.DailyWordContent(dwWord, dwMeaningTr, dwMeaningKu, dwExampleKu)) },
-                                            enabled  = dwWord.isNotBlank() && dwMeaningTr.isNotBlank(),
+                                            onClick  = { vm.saveDailyWordAndNotify(AdminViewModel.DailyWordContent(dwWords)) },
+                                            enabled  = dwWords.any { it.word.isNotBlank() && it.meaningTr.isNotBlank() },
                                             modifier = Modifier.weight(1f),
                                             shape    = RoundedCornerShape(10.dp),
                                             colors   = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Color.White),
