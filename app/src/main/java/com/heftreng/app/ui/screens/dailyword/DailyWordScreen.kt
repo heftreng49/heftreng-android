@@ -3,6 +3,8 @@ package com.heftreng.app.ui.screens.dailyword
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas as AndroidCanvas
+import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
@@ -333,7 +335,6 @@ private fun WordRow(
 }
 
 @Composable
-@Composable
 private fun PlayStoreIcon(size: androidx.compose.ui.unit.Dp) {
     Canvas(modifier = Modifier.size(size)) {
         val w = this.size.width
@@ -391,7 +392,7 @@ private suspend fun shareWordListCard(
             val rowH   = 140
             val height = 110 + words.size * rowH + 20 + 90
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bitmap)
+            val canvas = AndroidCanvas(bitmap)
 
             // ── Arka plan gradient ────────────────────────────────────
             val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -419,7 +420,7 @@ private suspend fun shareWordListCard(
                     context.resources, R.drawable.ic_app_logo, null
                 )
                 val bmp = Bitmap.createBitmap(80, 80, Bitmap.Config.ARGB_8888)
-                val c   = Canvas(bmp)
+                val c   = AndroidCanvas(bmp)
                 drawable?.setBounds(0, 0, 80, 80)
                 drawable?.draw(c)
                 bmp
