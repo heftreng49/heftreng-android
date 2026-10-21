@@ -3,7 +3,6 @@ package com.heftreng.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,18 +51,22 @@ class DailyWordViewModel @Inject constructor(
                 // 1. İstenen tarihi dene
                 var doc = firestore.collection("daily_word").document(dateToTry).get().await()
 
-                // 2. Bulunamazsa — en son mevcut dokümanı getir (updatedAt desc)
+                // 2. Bulunamazsa — koleksiyondaki tüm dokümanları getir,
+                //    ID (yyyy-MM-dd) sıralamasıyla en büyüğü = en yeni tarih
                 if (!doc.exists()) {
-                    val latest = firestore.collection("daily_word")
-                        .orderBy("updatedAt", Query.Direction.DESCENDING)
-                        .limit(1)
+                    val all = firestore.collection("daily_word")
                         .get()
                         .await()
-                    doc = latest.documents.firstOrNull() ?: run {
+                    // Doküman ID'leri tarih formatında (yyyy-MM-dd) — string sort yeterli
+                    val latest = all.documents
+                        .filter { it.id.matches(Regex("""\d{4}-\d{2}-\d{2}""")) }
+                        .maxByOrNull { it.id }
+                    doc = latest ?: run {
                         _words.value = emptyList()
                         _loading.value = false
                         return@launch
                     }
+                    android.util.Log.d("DailyWordVM", "Bugün yok, fallback: ${doc.id}")
                 }
 
                 _displayDate.value = doc.id  // doküman ID = tarih (yyyy-MM-dd)
