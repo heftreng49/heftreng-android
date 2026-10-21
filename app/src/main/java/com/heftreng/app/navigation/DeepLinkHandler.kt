@@ -40,13 +40,14 @@ object DeepLinkHandler {
         val segments = uri.pathSegments  // ["post", "abc123"]
         if (segments.isEmpty()) return null
         return when (segments[0]) {
-            "post"    -> if (segments.size >= 2) "post/${segments[1]}"    else null
-            "profile" -> if (segments.size >= 2) "profile/${segments[1]}" else null
-            "library" -> resolveLibrary(segments)
-            "blog"    -> if (segments.size >= 2) "blog/${segments[1]}"    else "blog"
-            "feed"    -> "feed"
-            "kurdi"   -> resolveKurdi(segments)
-            else      -> null
+            "post"       -> if (segments.size >= 2) "post/${segments[1]}"    else null
+            "profile"    -> if (segments.size >= 2) "profile/${segments[1]}" else null
+            "library"    -> resolveLibrary(segments)
+            "blog"       -> if (segments.size >= 2) "blog/${segments[1]}"    else "blog"
+            "feed"       -> "feed"
+            "kurdi"      -> resolveKurdi(segments)
+            "daily-word" -> "daily_word"
+            else         -> null
         }
     }
 
