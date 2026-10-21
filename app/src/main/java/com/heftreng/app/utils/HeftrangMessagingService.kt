@@ -91,6 +91,10 @@ class HeftrangMessagingService : FirebaseMessagingService() {
         val fromUid = data["fromUid"] ?: ""
         val convId  = data["convId"]  ?: ""
         val targetUid = data["targetUid"] ?: ""
+        // Bildirime ait tarih — daily_word ekranı bu tarihin kelimelerini yükler.
+        // Cloud Function her zaman dolduruyor; olmadığında bugünkü tarih fallback.
+        val date = data["date"]?.takeIf { it.matches(Regex("""\d{4}-\d{2}-\d{2}""")) }
+            ?: java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
 
         // Çoklu hesap: bu bildirim şu an cihazda aktif olan hesaba ait değilse
         // hiç gösterme — aksi halde "Yanıtla" aksiyonu yanlış hesaptan mesaj
@@ -122,7 +126,8 @@ class HeftrangMessagingService : FirebaseMessagingService() {
                     else putExtra("navigate_to", "notifications")
                 }
                 "daily_word" -> {
-                    putExtra("navigate_to", "daily_word")
+                    // Tarihi route'a parametre olarak ekle → o günün kelimeleri açılır
+                    putExtra("navigate_to", "daily_word/$date")
                 }
                 else -> putExtra("navigate_to", "notifications")
             }

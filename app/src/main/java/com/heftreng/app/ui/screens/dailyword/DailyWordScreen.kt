@@ -46,14 +46,20 @@ import java.io.FileOutputStream
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DailyWordScreen(
-    navController: NavController,
-    language     : String = "tr",
-    vm           : DailyWordViewModel = hiltViewModel(),
+    navController : NavController,
+    language      : String = "tr",
+    requestedDate : String? = null,          // bildirimden gelen yyyy-MM-dd, null = bugün
+    vm            : DailyWordViewModel = hiltViewModel(),
 ) {
     val words   by vm.words.collectAsState()
     val loading by vm.loading.collectAsState()
     val scope   = rememberCoroutineScope()
     val context = LocalContext.current
+
+    // Bildirim tarihiyle açıldıysa o tarihi yükle (ilk kompozisyonda bir kez)
+    LaunchedEffect(requestedDate) {
+        vm.loadWords(requestedDate)
+    }
 
     Scaffold(
         topBar = {

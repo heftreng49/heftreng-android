@@ -917,6 +917,25 @@ fun HeftrangNavHost(
                 composable(Screen.ArchivedPosts.route) {
                     ArchivedPostsScreen(navController = navController)
                 }
+                // daily_word/{date} — date opsiyonel; yoksa bugünün kelimeleri yüklenir
+                composable(
+                    route = "daily_word/{date}",
+                    arguments = listOf(
+                        androidx.navigation.navArgument("date") {
+                            type         = androidx.navigation.NavType.StringType
+                            defaultValue = ""
+                            nullable     = false
+                        }
+                    )
+                ) { backStack ->
+                    val date = backStack.arguments?.getString("date")?.takeIf { it.isNotBlank() }
+                    DailyWordScreen(
+                        navController   = navController,
+                        language        = language,
+                        requestedDate   = date,
+                    )
+                }
+                // Eski route (bildirim yokken direkt açma) — geriye dönük uyumluluk
                 composable(Screen.DailyWord.route) {
                     DailyWordScreen(navController = navController, language = language)
                 }

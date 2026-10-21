@@ -71,6 +71,9 @@ exports.onNewNotif = onDocumentCreated(
     const fromUid  = data.fromUid || "";
     const convId   = data.convId  || "";
     const imageUrl = data.imageUrl || "";
+    // daily_word bildirimlerinde hangi günün kelimeleri olduğunu taşı.
+    // Admin bildirimi yazarken date alanı varsa kullan; yoksa bugünün tarihini koy.
+    const date = data.date || new Date().toISOString().slice(0, 10); // "yyyy-MM-dd"
 
     let url = data.url || "https://heft-reng.blogspot.com/";
     if (!data.url) {
@@ -99,7 +102,7 @@ exports.onNewNotif = onDocumentCreated(
     const msg = {
       token: fcmToken,
       android: { priority: "high" },
-      data: { type, postId, fromUid, convId, url, title, body, channelId, imageUrl },
+      data: { type, postId, fromUid, convId, url, title, body, channelId, imageUrl, date },
     };
     const STALE = [
       "messaging/registration-token-not-registered",
