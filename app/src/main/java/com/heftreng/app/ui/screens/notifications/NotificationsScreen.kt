@@ -24,8 +24,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -397,8 +395,12 @@ private fun handleNotifClick(
             }
             // url varsa ve harici linkse açma — sadece in-app navigasyon
         }
-        "daily_quote", "daily_word" -> {
-            // Orijinal alıntı/kelime paylaşımına git — postId varsa
+        "daily_word" -> {
+            // Günlük kelime bildiriminde direkt DailyWord ekranına git
+            navController.navigate(Screen.DailyWord.route)
+        }
+        "daily_quote" -> {
+            // Alıntı paylaşımına git — postId varsa
             val pid = notif.postId
             when {
                 !pid.isNullOrBlank() -> navController.navigate(Screen.PostDetail.go(pid))
@@ -407,7 +409,6 @@ private fun handleNotifClick(
                         Regex("""post/([\w-]+)""").find(notif.url)?.groupValues?.get(1)
                         ?: Regex("""[?&]postId=([\w-]+)""").find(notif.url)?.groupValues?.get(1)
                     if (!fromUrl.isNullOrBlank()) navController.navigate(Screen.PostDetail.go(fromUrl))
-                    // postId/url yoksa zaten bildirim ekranındayız, ek navigasyon gerekmiyor
                 }
             }
         }
@@ -565,42 +566,25 @@ fun NotifItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 3.dp)
-            .shadow(
-                elevation    = if (isUnread) 6.dp else 3.dp,
-                shape        = RoundedCornerShape(16.dp),
-                clip         = false,
-                ambientColor = if (isUnread) iconColor.copy(alpha = 0.2f) else Color(0x0A000000),
-                spotColor    = if (isUnread) iconColor.copy(alpha = 0.15f) else Color(0x0A000000),
-            )
-            .clip(RoundedCornerShape(16.dp))
-            .background(if (isUnread) iconColor.copy(alpha = 0.06f) else HeftCard)
+            .background(if (isUnread) iconColor.copy(alpha = 0.05f) else Background)
             .clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        // Avatar + tip ikonu — gradient halka
+        // Avatar + tip ikonu
         Box(modifier = Modifier.padding(top = 2.dp)) {
+            AsyncImage(
+                model              = notif.fromPhoto.ifEmpty { null },
+                contentDescription = notif.fromName,
+                modifier           = Modifier
+                    .size(46.dp)
+                    .clip(CircleShape)
+                    .background(SurfaceVar),
+                contentScale = ContentScale.Crop,
+            )
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(Color(0xFF6C8EFF), Color(0xFF38BDF8))))
-                    .padding(1.5.dp)
-                    .clip(CircleShape)
-                    .background(HeftCard),
-                contentAlignment = Alignment.Center,
-            ) {
-                AsyncImage(
-                    model              = notif.fromPhoto.ifEmpty { null },
-                    contentDescription = notif.fromName,
-                    modifier           = Modifier.fillMaxSize().clip(CircleShape),
-                    contentScale       = ContentScale.Crop,
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(20.dp)
+                    .size(18.dp)
                     .clip(CircleShape)
                     .background(iconColor)
                     .align(Alignment.BottomEnd),
@@ -610,7 +594,7 @@ fun NotifItem(
                     notifIcon(notif.type),
                     contentDescription = null,
                     tint     = Color.White,
-                    modifier = Modifier.size(11.dp),
+                    modifier = Modifier.size(10.dp),
                 )
             }
         }

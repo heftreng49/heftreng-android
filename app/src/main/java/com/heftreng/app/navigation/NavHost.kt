@@ -49,7 +49,6 @@ import com.heftreng.app.ui.screens.blog.BlogPostScreen
 import com.heftreng.app.ui.screens.yazar.YazarScreen
 import com.heftreng.app.ui.screens.feed.SavedPostsScreen
 import com.heftreng.app.ui.screens.feed.ArchivedPostsScreen
-import com.heftreng.app.ui.screens.dailyword.DailyWordScreen
 import com.heftreng.app.viewmodel.BlogViewModel
 import com.heftreng.app.ui.screens.feed.FeedScreen
 import com.heftreng.app.ui.screens.cms.CmsPageScreen
@@ -58,6 +57,7 @@ import com.heftreng.app.ui.screens.kurdi.KurdiAdminScreen
 import com.heftreng.app.ui.screens.messages.ConversationsScreen
 import com.heftreng.app.ui.screens.messages.MessageDetailScreen
 import com.heftreng.app.ui.screens.notifications.NotificationsScreen
+import com.heftreng.app.ui.screens.dailyword.DailyWordScreen
 import com.heftreng.app.ui.screens.post.SinglePostScreen
 import com.heftreng.app.ui.screens.profile.EditProfileScreen
 import com.heftreng.app.ui.screens.profile.ProfileScreen
@@ -133,8 +133,8 @@ sealed class Screen(val route: String) {
     object AccountMerge  : Screen("account_merge")
     object SavedPosts    : Screen("saved_posts")
     object ArchivedPosts : Screen("archived_posts")
-    object DailyWord     : Screen("daily_word")
     object BookChapter   : Screen("book_chapter/{bid}/{cid}") { fun go(b: String, c: String) = "book_chapter/$b/$c" }
+    object DailyWord     : Screen("daily_word")
 }
 
 // ── Alt bar ───────────────────────────────────────────────────────────────────
