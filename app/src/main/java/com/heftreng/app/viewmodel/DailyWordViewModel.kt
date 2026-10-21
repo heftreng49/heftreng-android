@@ -2,7 +2,9 @@ package com.heftreng.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,10 +53,16 @@ class DailyWordViewModel @Inject constructor(
                 // 1. İstenen tarihi dene
                 var doc = firestore.collection("daily_word").document(dateToTry).get().await()
 
-                // 2. Bulunamazsa — koleksiyondaki tüm dokümanları getir,
-                //    ID (yyyy-MM-dd) sıralamasıyla en büyüğü = en yeni tarih
+                // 2. Bulunamazsa — en yeni dokümanı getir. Doküman ID'leri tarih
+                //    (yyyy-MM-dd) olduğundan ID'ye göre azalan sıralama = en yeni.
+                //    Önceden TÜM koleksiyon okunuyordu (her gün büyüyen, her açılışta
+                //    N okuma); artık en fazla 7 doküman okunuyor. 7: ID'si tarih
+                //    formatında olmayan yanlışlıkla eklenmiş dokümanlar varsa
+                //    aşağıdaki regex filtresi sonrası hâlâ geçerli biri kalsın diye.
                 if (!doc.exists()) {
                     val all = firestore.collection("daily_word")
+                        .orderBy(FieldPath.documentId(), Query.Direction.DESCENDING)
+                        .limit(7)
                         .get()
                         .await()
                     // Doküman ID'leri tarih formatında (yyyy-MM-dd) — string sort yeterli

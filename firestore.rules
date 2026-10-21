@@ -528,6 +528,22 @@ service cloud.firestore {
     // user_ad_frequency — AdFrequencyManager.increment() analitik amaçlı yazar.
     // Tek kural yukarıda tanımlı (moderatör okuma izniyle). Buradan kaldırıldı.
 
+    // ─── GÜNÜN ALINTISI / GÜNÜN KELİMESİ ─────────────────────
+    // Doküman ID = tarih (yyyy-MM-dd). Herkese açık editoryal içerik:
+    // DailyWordViewModel / bildirim ekranları okur → read: true.
+    // Yazma: AdminViewModel.saveDailyQuote/saveDailyWord ile aynı koşul
+    // (editor rolü veya "notif"/"push" izni; admin zaten isEditor() içinde).
+    // Kural olmayınca koleksiyon varsayılan olarak reddedildiği için
+    // okuma boş dönüyor, ekran "bugün kelime eklenmedi" gösteriyordu.
+    match /daily_quote/{date} {
+      allow read:  if true;
+      allow write: if isEditor() || hasPermission("notif") || hasPermission("push");
+    }
+    match /daily_word/{date} {
+      allow read:  if true;
+      allow write: if isEditor() || hasPermission("notif") || hasPermission("push");
+    }
+
     // ─── APP CONFIG ───────────────────────────────────────────
     match /appConfig/{docId} {
       allow read:  if true;
