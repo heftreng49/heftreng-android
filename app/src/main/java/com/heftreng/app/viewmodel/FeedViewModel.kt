@@ -2117,16 +2117,8 @@ class FeedViewModel @Inject constructor(
             ensureMyProfileCached()
             val fromName  = _cachedMyName.ifBlank { auth.currentUser?.displayName ?: "Kullanıcı" }
             val fromPhoto = _cachedMyPhoto
-            // title içindeki isim boşsa _cachedMyName ile yeniden oluştur
-            val resolvedTitle = if (title.startsWith(" ")) {
-                when (type) {
-                    "like"             -> "$fromName gönderini beğendi"
-                    "cmt", "comment"   -> "$fromName gönderine yorum yaptı"
-                    "repost"           -> "$fromName gönderini paylaştı"
-                    "follow"           -> "$fromName sizi takip etmeye başladı"
-                    else                -> title.trim()
-                }
-            } else title
+            // title boş geçilir — Cloud Function i18n ile hedef kullanıcının diline göre üretir
+            val resolvedTitle = title.trim()
             val ico = when (type) { "like" -> "favorite"; "cmt" -> "chat_bubble"; "follow" -> "person_add"; "repost" -> "repeat"; else -> "notifications" }
             // Tek yazma — onNewNotif Cloud Function trigger'ı bu eklemeyi yakalayıp
             // otomatik FCM push gönderir. Burada manuel sendPush ÇAĞIRMA — çift

@@ -62,7 +62,8 @@ const NOTIF_I18N = {
     daily_word_title  : "📝 Günün Kelimeleri",
     daily_word_body   : "Bugünkü Kürtçe kelimeler eklendi — hepsini öğren!",
     daily_quote_title : "📖 Günün Alıntısı",
-    follow_sub        : (n) => `${n} seni takip etmeye başladı`,
+    follow_sub             : (n) => `${n} seni takip etmeye başladı`,
+    follow_request_sub     : (n) => `${n} seni takip etmek istiyor`,
     like_sub          : (n) => `${n} gönderini beğendi`,
     repost_sub        : (n) => `${n} gönderini yeniden paylaştı`,
     comment_sub       : (n) => `${n} gönderine yorum yaptı`,
@@ -73,7 +74,8 @@ const NOTIF_I18N = {
     daily_word_title  : "📝 Peyvên Rojê",
     daily_word_body   : "Peyvên Kurdî yên îro hatin zêdekirin — hemiyan fêr bibe!",
     daily_quote_title : "📖 Gotina Rojê",
-    follow_sub        : (n) => `${n} dest bi şopandina te kir`,
+    follow_sub             : (n) => `${n} dest bi şopandina te kir`,
+    follow_request_sub     : (n) => `${n} dixwaze te bişopîne`,
     like_sub          : (n) => `${n} posta te ya xweş dît`,
     repost_sub        : (n) => `${n} posta te ji nû ve parve kir`,
     comment_sub       : (n) => `${n} şîroveyek li posta te kir`,
@@ -84,7 +86,8 @@ const NOTIF_I18N = {
     daily_word_title  : "📝 Vateyê Roci",
     daily_word_body   : "Vateyê Kurdkî yê inroci amê — heme fêr bê!",
     daily_quote_title : "📖 Qalê Roci",
-    follow_sub        : (n) => `${n} şıma şıpnena`,
+    follow_sub             : (n) => `${n} şıma şıpnena`,
+    follow_request_sub     : (n) => `${n} şıma şıpnayiş wazena`,
     like_sub          : (n) => `${n} poştê şıma pesnen`,
     repost_sub        : (n) => `${n} poştê şıma dıbare pêş kerd`,
     comment_sub       : (n) => `${n} şıroveyêka poştê şıma kerd`,
@@ -95,7 +98,8 @@ const NOTIF_I18N = {
     daily_word_title  : "📝 وشەکانی ئەمڕۆ",
     daily_word_body   : "وشەکانی کوردیی ئەمڕۆ زیادکران — هەموویان فێربە!",
     daily_quote_title : "📖 قسەی ئەمڕۆ",
-    follow_sub        : (n) => `${n} دەستی بەشوێنکەوتنت کرد`,
+    follow_sub             : (n) => `${n} دەستی بەشوێنکەوتنت کرد`,
+    follow_request_sub     : (n) => `${n} دەیەوێت شوێنت بکەوێت`,
     like_sub          : (n) => `${n} پۆستەکەت خۆشی`,
     repost_sub        : (n) => `${n} پۆستەکەت دووبارە بەشاری کرد`,
     comment_sub       : (n) => `${n} لە پۆستەکەت کۆمێنتی کرد`,
@@ -166,6 +170,10 @@ exports.onNewNotif = onDocumentCreated(
       case "follow":
         title = i18n.app_name;
         body  = i18n.follow_sub(fromName);
+        break;
+      case "follow_request":
+        title = i18n.app_name;
+        body  = i18n.follow_request_sub(fromName);
         break;
       case "like":
         title = i18n.app_name;
@@ -278,6 +286,10 @@ exports.sendPush = onCall(
       case "follow":
         title = i18n2.app_name;
         body  = i18n2.follow_sub(fromName);
+        break;
+      case "follow_request":
+        title = i18n2.app_name;
+        body  = i18n2.follow_request_sub(fromName);
         break;
       case "like":
         title = i18n2.app_name;
