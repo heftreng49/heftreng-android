@@ -56,6 +56,58 @@ function deriveName(authUser) {
       || "Kullanıcı";
 }
 
+// ─── Bildirim metinleri — TR / KU / ZZA / CKB ───────────────────────────────
+const NOTIF_I18N = {
+  tr: {
+    daily_word_title  : "📝 Günün Kelimeleri",
+    daily_word_body   : "Bugünkü Kürtçe kelimeler eklendi — hepsini öğren!",
+    daily_quote_title : "📖 Günün Alıntısı",
+    follow_sub        : (n) => `${n} seni takip etmeye başladı`,
+    like_sub          : (n) => `${n} gönderini beğendi`,
+    repost_sub        : (n) => `${n} gönderini yeniden paylaştı`,
+    comment_sub       : (n) => `${n} gönderine yorum yaptı`,
+    mention_sub       : (n) => `${n} senden bahsetti`,
+    app_name          : "Heftreng",
+  },
+  ku: {
+    daily_word_title  : "📝 Peyvên Rojê",
+    daily_word_body   : "Peyvên Kurdî yên îro hatin zêdekirin — hemiyan fêr bibe!",
+    daily_quote_title : "📖 Gotina Rojê",
+    follow_sub        : (n) => `${n} dest bi şopandina te kir`,
+    like_sub          : (n) => `${n} posta te ya xweş dît`,
+    repost_sub        : (n) => `${n} posta te ji nû ve parve kir`,
+    comment_sub       : (n) => `${n} şîroveyek li posta te kir`,
+    mention_sub       : (n) => `${n} behsa te kir`,
+    app_name          : "Heftreng",
+  },
+  zza: {
+    daily_word_title  : "📝 Vateyê Roci",
+    daily_word_body   : "Vateyê Kurdkî yê inroci amê — heme fêr bê!",
+    daily_quote_title : "📖 Qalê Roci",
+    follow_sub        : (n) => `${n} şıma şıpnena`,
+    like_sub          : (n) => `${n} poştê şıma pesnen`,
+    repost_sub        : (n) => `${n} poştê şıma dıbare pêş kerd`,
+    comment_sub       : (n) => `${n} şıroveyêka poştê şıma kerd`,
+    mention_sub       : (n) => `${n} bê şıma qesey kerd`,
+    app_name          : "Heftreng",
+  },
+  ckb: {
+    daily_word_title  : "📝 وشەکانی ئەمڕۆ",
+    daily_word_body   : "وشەکانی کوردیی ئەمڕۆ زیادکران — هەموویان فێربە!",
+    daily_quote_title : "📖 قسەی ئەمڕۆ",
+    follow_sub        : (n) => `${n} دەستی بەشوێنکەوتنت کرد`,
+    like_sub          : (n) => `${n} پۆستەکەت خۆشی`,
+    repost_sub        : (n) => `${n} پۆستەکەت دووبارە بەشاری کرد`,
+    comment_sub       : (n) => `${n} لە پۆستەکەت کۆمێنتی کرد`,
+    mention_sub       : (n) => `${n} باسی تۆی کرد`,
+    app_name          : "Heftreng",
+  },
+};
+
+function getI18n(lang) {
+  return NOTIF_I18N[lang] || NOTIF_I18N["ku"] || NOTIF_I18N["tr"];
+}
+
 // ─── onNewNotif — Firestore Trigger (v2) ────────────────────────────────────
 exports.onNewNotif = onDocumentCreated(
   { document: "userNotifs/{uid}/msgs/{msgId}", region: "europe-west1" },
@@ -65,15 +117,11 @@ exports.onNewNotif = onDocumentCreated(
     if (!data) { console.warn("[HF Trigger] Belge boş — uid:", uid); return; }
 
     const type     = data.type    || "default";
-    const title    = data.title   || "Heftreng";
-    const body     = data.sub     || data.message || "";
     const postId   = data.feedId  || data.postId  || "";
     const fromUid  = data.fromUid || "";
     const convId   = data.convId  || "";
     const imageUrl = data.imageUrl || "";
-    // daily_word bildirimlerinde hangi günün kelimeleri olduğunu taşı.
-    // Admin bildirimi yazarken date alanı varsa kullan; yoksa bugünün tarihini koy.
-    const date = data.date || new Date().toISOString().slice(0, 10); // "yyyy-MM-dd"
+    const date     = data.date || new Date().toISOString().slice(0, 10);
 
     let url = data.url || "https://heft-reng.blogspot.com/";
     if (!data.url) {
@@ -83,14 +131,64 @@ exports.onNewNotif = onDocumentCreated(
 
     const db = getFirestore();
     let fcmToken = null;
+    let userLang = "tr";
     try {
       const doc = await db.collection("users").doc(uid).get();
       if (!doc.exists) { console.log("[HF Trigger] Kullanıcı yok — uid:", uid); return; }
-      fcmToken = doc.data()?.fcmToken || null;
+      const ud = doc.data() || {};
+      fcmToken = ud.fcmToken || null;
+      userLang = ud.language || ud.lang || "tr";
     } catch (e) { console.error("[HF Trigger] Firestore hatası:", e.message); return; }
 
     if (!fcmToken || fcmToken.startsWith("https://")) {
       console.log("[HF Trigger] FCM token yok — uid:", uid); return;
+    }
+
+    // ── Dile göre title / body üret ──────────────────────────────────────────
+    // Firestore belgesinde admin özel metin yazmışsa onu kullan,
+    // yoksa i18n'den otomatik üret.
+    const i18n     = getI18n(userLang);
+    const fromName = data.fromName || "Heftreng";
+
+    let title = data.title || "";
+    let body  = data.sub   || data.message || "";
+
+    if (!title || !body) {
+      switch (type) {
+        case "daily_word":
+          title = title || i18n.daily_word_title;
+          body  = body  || i18n.daily_word_body;
+          break;
+        case "daily_quote":
+          title = title || i18n.daily_quote_title;
+          break;
+        case "follow":
+          title = title || i18n.app_name;
+          body  = body  || i18n.follow_sub(fromName);
+          break;
+        case "like":
+          title = title || i18n.app_name;
+          body  = body  || i18n.like_sub(fromName);
+          break;
+        case "repost":
+          title = title || i18n.app_name;
+          body  = body  || i18n.repost_sub(fromName);
+          break;
+        case "cmt": case "comment":
+          title = title || i18n.app_name;
+          body  = body  || i18n.comment_sub(fromName);
+          break;
+        case "mention":
+          title = title || i18n.app_name;
+          body  = body  || i18n.mention_sub(fromName);
+          break;
+        case "message":
+          title = title || fromName;
+          break;
+        default:
+          title = title || i18n.app_name;
+          break;
+      }
     }
 
     const channelId =
@@ -111,7 +209,7 @@ exports.onNewNotif = onDocumentCreated(
     ];
     try {
       const result = await getMessaging().send(msg);
-      console.log("[HF Trigger] ✓ FCM →", uid, result);
+      console.log("[HF Trigger] ✓ FCM →", uid, result, `[lang:${userLang}]`);
     } catch (err) {
       console.error("[HF Trigger] FCM hatası:", err.code, "→ uid:", uid);
       if (STALE.includes(err.code))
