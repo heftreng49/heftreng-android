@@ -117,28 +117,34 @@ fun notifIconColor(type: String): Color = when (type) {
     else                      -> Color(0xFFF59E0B)
 }
 
-fun notifDefaultMessage(type: String, ku: Boolean = false): String {
-    val l = if (ku) "ku" else "tr"
+fun notifDefaultMessage(type: String, language: String = "tr"): String {
+    // notif.message Firestore'dan dil bağımsız (genellikle Türkçe) geliyor.
+    // UI her zaman bu fonksiyonu kullanarak seçili dilde metin üretir.
+    val l = language
     return when (type) {
         "like"                    -> Strings.notifLike(l)
         "cmt", "comment"          -> Strings.notifComment(l)
         "mention"                 -> Strings.notifMention(l)
         "follow"                  -> Strings.notifFollow(l)
         "follow_request"          -> Strings.notifFollowRequest(l)
-        "follow_request_accepted" -> if (ku) "Daxwaza şopînê qebûl kir" else "Takip isteğini kabul etti"
+        "follow_request_accepted" -> notifT(l, "Takip isteğini kabul etti", "Daxwaza şopînê qebûl kir", "Daxwaza şopîn qebul kerd", "داواکاری شوێنکەوتنت قبووڵ کرد")
         "repost"                  -> Strings.notifRepost(l)
-        "bm", "bookmark"          -> if (ku) "Nivîsa te tomar kir" else "Gönderini kaydetti"
-        "verified"                -> if (ku) "Hesabê te hate verastkirin ✓" else "Hesabın doğrulandı ✓"
-        "moderation"              -> if (ku) "Nîşedariyek li ser naveroka te" else "İçeriğin hakkında bildirim"
+        "bm", "bookmark"          -> notifT(l, "Gönderini kaydetti", "Nivîsa te tomar kir", "Nıvısaya to tomar kerd", "پۆستەکەت تۆمار کرد")
+        "verified"                -> notifT(l, "Hesabın doğrulandı ✓", "Hesabê te hate verastkirin ✓", "Hesabê xo tesdiq kerd ✓", "ئەکاونتەکەت پشکنرایەوە ✓")
+        "moderation"              -> notifT(l, "İçeriğin hakkında bildirim", "Nîşedariyek li ser naveroka te", "Nıvısaya to babetê agahî", "ئاگادارکردنەوەیەک دەربارەی ناوەرۆکەکەت")
         "serial", "chapter",
-        "book_chapter"            -> if (ku) "Beşek nû hate weşandin" else "Yeni bölüm yayınlandı"
-        "library_quote"           -> if (ku) "Jêgirtek nû hat zêdekirin" else "Yeni alıntı eklendi"
-        "library_review"          -> if (ku) "Nêrînek nû hat nivîsîn" else "Yeni inceleme yazıldı"
-        "sys", "default"          -> if (ku) "Agahdarî" else "Duyuru"
-        "message"                 -> if (ku) "Peyamek nû" else "Yeni mesaj"
+        "book_chapter"            -> notifT(l, "Yeni bölüm yayınlandı", "Beşek nû hate weşandin", "Beşê newe weşanîyayo", "بەشێکی نوێ بڵاوکرایەوە")
+        "library_quote"           -> notifT(l, "Yeni alıntı eklendi", "Jêgirtek nû hat zêdekirin", "Jêgirte newe zêde biya", "کوتێکی نوێ زیادکرا")
+        "library_review"          -> notifT(l, "Yeni inceleme yazıldı", "Nêrînek nû hat nivîsîn", "Nêrînê newe nusîyayo", "پێداچوونەوەیەکی نوێ نووسرا")
+        "sys", "default"          -> notifT(l, "Duyuru", "Agahdarî", "Xeber", "ئاگادارکردنەوە")
+        "message"                 -> notifT(l, "Yeni mesaj", "Peyamek nû", "Peyamê newe", "پەیامێکی نوێ")
+        "appeal_result"           -> notifT(l, "İtiraz sonucu", "Encama neyarê", "Netîcey xûyakerdiş", "ئەنجامی پێداچوونەوە")
         else                      -> Strings.notifNew(l)
     }
 }
+
+private fun notifT(l: String, tr: String, ku: String, zza: String, ckb: String) =
+    when (l) { "ku" -> ku; "zza" -> zza; "ckb" -> ckb; else -> tr }
 
 // ── Ana Ekran ──────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
@@ -479,12 +485,8 @@ fun DailyNotifCard(
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        notif.message.ifBlank {
-                            if (isQuote)
-                                if (ku) "Jêgirta Rojê" else "Günün Alıntısı"
-                            else
-                                if (ku) "Peyvа Rojê" else "Günün Kelimesi"
-                        },
+                        if (isQuote) notifT(language, "Günün Alıntısı", "Jêgirta Rojê", "Jêgirta Rocî", "کوتی ڕۆژ")
+                        else         notifT(language, "Günün Kelimesi", "Peyvа Rojê", "Peyva Rocî", "وشەی ڕۆژ"),
                         fontWeight = FontWeight.Bold,
                         color      = accentColor,
                         fontSize   = 13.sp,
@@ -558,7 +560,8 @@ fun NotifItem(
 
     val ku = language == "ku"
     val iconColor  = notifIconColor(notif.type)
-    val mainText   = notif.message.ifBlank { notifDefaultMessage(notif.type, ku) }
+    // notif.message Firestore'dan dil bağımsız gelir — her zaman seçili dilde üret
+    val mainText   = notifDefaultMessage(notif.type, language)
     val subText    = notif.sub.ifBlank { null }
     val timeText   = relativeTime(notif.ts, language)
     val isUnread   = !notif.read
