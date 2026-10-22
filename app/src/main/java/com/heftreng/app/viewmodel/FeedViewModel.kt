@@ -970,7 +970,7 @@ class FeedViewModel @Inject constructor(
                                 "photo_url" to myPhoto,
                             )
                         )
-                        if (post.uid != uid) sendNotif(post.uid, "like", "$myName gönderini beğendi", post.text.take(60), post.id)
+                        if (post.uid != uid) sendNotif(post.uid, "like", "", post.text.take(60), post.id)
                     }
                 } else {
                     // uid + post_id ile sil — id UUID olsa da çalışır
@@ -1144,11 +1144,11 @@ class FeedViewModel @Inject constructor(
                 _posts.value = _posts.value.map {
                     if (it.id == post.id) it.copy(commentsCount = it.commentsCount + 1) else it
                 }
-                if (post.uid != uid) sendNotif(post.uid, "cmt", "$myName gönderine yorum yaptı", text.take(60), post.id)
+                if (post.uid != uid) sendNotif(post.uid, "cmt", "", text.take(60), post.id)
                 // Mention bildirimi — gönderi sahibine zaten "cmt" bildirimi gitti, tekrar mention göndermeyelim
                 mentions.distinct().forEach { mentionedUid ->
                     if (mentionedUid != uid && mentionedUid != post.uid) {
-                        sendNotif(mentionedUid, "mention", "$myName seni bir yorumda etiketledi", text.take(60), post.id)
+                        sendNotif(mentionedUid, "mention", "", text.take(60), post.id)
                     }
                 }
                 loadComments(post.id)
@@ -1287,7 +1287,7 @@ class FeedViewModel @Inject constructor(
                 _posts.value = _posts.value.map {
                     if (it.id == post.id) it.copy(myRepostId = repostDocId) else it
                 }
-                if (post.uid != uid) sendNotif(post.uid, "repost", "$myName gönderini paylaştı", previewText.take(60), post.id)
+                if (post.uid != uid) sendNotif(post.uid, "repost", "", previewText.take(60), post.id)
             } catch (e: Exception) {
                 android.util.Log.e("HeftrengRepost", "repost() hata: ${e.javaClass.simpleName}: ${e.message}", e)
                 _repostError.value = "${e.javaClass.simpleName}: ${e.message}"
@@ -1440,7 +1440,7 @@ class FeedViewModel @Inject constructor(
                 // Mention edilen kullanıcılara bildirim gönder (yorumlardaki mention mantığıyla aynı desen)
                 mentions.distinct().forEach { mentionedUid ->
                     if (mentionedUid.isNotBlank() && mentionedUid != uid) {
-                        sendNotif(mentionedUid, "mention", "$myName seni bir gönderide etiketledi", text.take(60), feedRef.id)
+                        sendNotif(mentionedUid, "mention", "", text.take(60), feedRef.id)
                     }
                 }
 
@@ -1803,7 +1803,7 @@ class FeedViewModel @Inject constructor(
                             "targetUid" to targetUid,
                             "ts"        to com.google.firebase.Timestamp.now(),
                         )).await()
-                    sendNotif(targetUid, "follow_request", "$myName seni takip etmek istiyor", "", "")
+                    sendNotif(targetUid, "follow_request", "", "", "")
                 } else {
                     supabase.postgrest["follows"].upsert(
                         FollowRow(
@@ -1820,7 +1820,7 @@ class FeedViewModel @Inject constructor(
                         .update("followingCount", com.google.firebase.firestore.FieldValue.increment(1))
                     firestore.collection("users").document(targetUid)
                         .update("followersCount", com.google.firebase.firestore.FieldValue.increment(1))
-                    sendNotif(targetUid, "follow", "$myName sizi takip etmeye başladı", "", "")
+                    sendNotif(targetUid, "follow", "", "", "")
                 }
                 // Cache'i geçersiz kıl — bir sonraki loadSuggestedUsers güncel listeyi çeker
                 suggestionsLoaded = false
@@ -1958,7 +1958,7 @@ class FeedViewModel @Inject constructor(
                     "ts"     to Timestamp.now(),
                 )).await()
                 if (bookAuthorUid.isNotBlank() && bookAuthorUid != uid) {
-                    sendNotif(bookAuthorUid, "repost", "$myName kitap bölümünü paylaştı", chapterTitle, chapterId)
+                    sendNotif(bookAuthorUid, "repost", "", chapterTitle, chapterId)
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
