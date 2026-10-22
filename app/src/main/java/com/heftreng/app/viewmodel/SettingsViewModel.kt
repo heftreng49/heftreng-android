@@ -262,6 +262,16 @@ class SettingsViewModel @Inject constructor(
     fun setLanguage(lang: String) {
         _language.value = lang
         prefs.edit().putString("hf_lang", lang).apply()
+        // Firestore'daki language alanını güncelle — Cloud Functions
+        // push bildirimi metnini buradan okuyor. Güncellenmezse bildirimler
+        // her zaman "tr" (default) diliyle gelir.
+        val uid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                firestore.collection("users").document(uid)
+                    .update("language", lang).await()
+            } catch (_: Exception) {}
+        }
     }
 
     fun togglePush() {
