@@ -145,50 +145,64 @@ exports.onNewNotif = onDocumentCreated(
     }
 
     // ── Dile göre title / body üret ──────────────────────────────────────────
-    // Firestore belgesinde admin özel metin yazmışsa onu kullan,
-    // yoksa i18n'den otomatik üret.
+    // Sosyal bildirimler (follow/like/comment/repost/mention) için DAIMA
+    // hedef kullanıcının diline göre metin üret — Firestore'daki title/sub
+    // gönderen kullanıcının diline göre yazılmış olabilir.
+    // daily_word / daily_quote / admin / broadcast bildirimlerde admin özel
+    // metin yazmışsa onu kullan, yoksa i18n'den üret.
+    const SOCIAL_TYPES = new Set(["follow", "like", "repost", "cmt", "comment", "mention", "message"]);
+
     const i18n     = getI18n(userLang);
     const fromName = data.fromName || "Heftreng";
 
-    let title = data.title || "";
-    let body  = data.sub   || data.message || "";
+    // Firestore'daki ham metin (fallback / admin metni olarak kullanılabilir)
+    const rawTitle = data.title || "";
+    const rawBody  = data.sub   || data.message || "";
 
-    if (!title || !body) {
-      switch (type) {
-        case "daily_word":
-          title = title || i18n.daily_word_title;
-          body  = body  || i18n.daily_word_body;
-          break;
-        case "daily_quote":
-          title = title || i18n.daily_quote_title;
-          break;
-        case "follow":
-          title = title || i18n.app_name;
-          body  = body  || i18n.follow_sub(fromName);
-          break;
-        case "like":
-          title = title || i18n.app_name;
-          body  = body  || i18n.like_sub(fromName);
-          break;
-        case "repost":
-          title = title || i18n.app_name;
-          body  = body  || i18n.repost_sub(fromName);
-          break;
-        case "cmt": case "comment":
-          title = title || i18n.app_name;
-          body  = body  || i18n.comment_sub(fromName);
-          break;
-        case "mention":
-          title = title || i18n.app_name;
-          body  = body  || i18n.mention_sub(fromName);
-          break;
-        case "message":
-          title = title || fromName;
-          break;
-        default:
-          title = title || i18n.app_name;
-          break;
-      }
+    let title, body;
+
+    switch (type) {
+      // ── Sosyal bildirimler — her zaman i18n ──────────────────────────────
+      case "follow":
+        title = i18n.app_name;
+        body  = i18n.follow_sub(fromName);
+        break;
+      case "like":
+        title = i18n.app_name;
+        body  = i18n.like_sub(fromName);
+        break;
+      case "repost":
+        title = i18n.app_name;
+        body  = i18n.repost_sub(fromName);
+        break;
+      case "cmt": case "comment":
+        title = i18n.app_name;
+        body  = i18n.comment_sub(fromName);
+        break;
+      case "mention":
+        title = i18n.app_name;
+        body  = i18n.mention_sub(fromName);
+        break;
+      case "message":
+        // Mesaj içeriği kişisel — title gönderenin adı, body mesaj metni
+        title = fromName;
+        body  = rawBody;
+        break;
+
+      // ── Sistem/admin bildirimleri — admin metni varsa kullan ─────────────
+      case "daily_word":
+        title = rawTitle || i18n.daily_word_title;
+        body  = rawBody  || i18n.daily_word_body;
+        break;
+      case "daily_quote":
+        title = rawTitle || i18n.daily_quote_title;
+        body  = rawBody;
+        break;
+      default:
+        // Broadcast/admin gibi özel tipler — admin ne yazdıysa o gelir
+        title = rawTitle || i18n.app_name;
+        body  = rawBody;
+        break;
     }
 
     const channelId =
@@ -232,8 +246,9 @@ exports.sendPush = onCall(
         || token.firebase?.sign_in_provider === "apple.com";
     if (!isVerified) throw new HttpsError("permission-denied", "Email doğrulanmamış.");
 
-    const { targetUid, title = "Heftreng", body = "", type = "default",
+    const { targetUid, type = "default",
             postId = "", fromUid = "", convId = "",
+            fromName: callerFromName = "",
             url = "https://heft-reng.blogspot.com/" } = request.data || {};
 
     if (!targetUid) return { success: false, reason: "no_target" };
@@ -252,6 +267,42 @@ exports.sendPush = onCall(
     const fcmToken = userData.fcmToken || null;
     if (!fcmToken) return { success: false, reason: "no_fcm_token" };
     if (fcmToken.startsWith("https://")) return { success: false, reason: "web_sub_not_supported" };
+
+    // ── Hedef kullanıcının diline göre metin üret ─────────────────────────────
+    const targetLang = userData.language || userData.lang || "tr";
+    const i18n2      = getI18n(targetLang);
+    const fromName   = callerFromName || "Heftreng";
+
+    let title, body;
+    switch (type) {
+      case "follow":
+        title = i18n2.app_name;
+        body  = i18n2.follow_sub(fromName);
+        break;
+      case "like":
+        title = i18n2.app_name;
+        body  = i18n2.like_sub(fromName);
+        break;
+      case "repost":
+        title = i18n2.app_name;
+        body  = i18n2.repost_sub(fromName);
+        break;
+      case "cmt": case "comment":
+        title = i18n2.app_name;
+        body  = i18n2.comment_sub(fromName);
+        break;
+      case "mention":
+        title = i18n2.app_name;
+        body  = i18n2.mention_sub(fromName);
+        break;
+      case "message":
+        title = fromName;
+        body  = request.data?.body || "";
+        break;
+      default:
+        title = request.data?.title || i18n2.app_name;
+        body  = request.data?.body  || "";
+    }
 
     const channelId =
       type === "message"                   ? "heftreng_messages" :
