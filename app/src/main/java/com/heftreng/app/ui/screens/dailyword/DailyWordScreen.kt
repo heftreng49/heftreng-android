@@ -25,10 +25,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -196,7 +193,7 @@ fun WordListCard(
 
             HorizontalDivider(color = primaryColor.copy(alpha = 0.15f))
 
-            // ── Kelime kartları ───────────────────────────────
+            // ── Kelime satırları ──────────────────────────────
             Column(
                 modifier            = Modifier
                     .fillMaxWidth()
@@ -204,13 +201,11 @@ fun WordListCard(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 words.forEachIndexed { i, item ->
-                    WordRow(
-                        item     = item,
-                        index    = i,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    WordRow(item = item, index = i, modifier = Modifier.fillMaxWidth())
                 }
             }
+
+            HorizontalDivider(color = primaryColor.copy(alpha = 0.15f))
 
             // ── Footer ────────────────────────────────────────
             Row(
@@ -233,68 +228,48 @@ fun WordListCard(
 }
 
 @Composable
-// Kart başına arka plan rengi — her kart farklı pastel tonda
-private val CARD_COLORS = listOf(
-    Color(0xFFF0FAF0), // yeşilimsi
-    Color(0xFFFFF8F0), // turuncumsu
-    Color(0xFFF3F0FA), // morumsu
-    Color(0xFFEFF6FF), // mavimsi
-    Color(0xFFFFF0F0), // kırmızımsı
-)
-private val CARD_ACCENT = listOf(
-    Color(0xFF2E7D32),
-    Color(0xFFE65100),
-    Color(0xFF4527A0),
-    Color(0xFF1565C0),
-    Color(0xFFC62828),
-)
-
-@Composable
 private fun WordRow(
     item     : DailyWordViewModel.WordItem,
     index    : Int,
     modifier : Modifier = Modifier,
 ) {
-    val accent = CARD_ACCENT[index % CARD_ACCENT.size]
-    val bg     = CARD_COLORS[index % CARD_COLORS.size]
+    // Renkler fonksiyon içinde — top-level val'da @Composable kullanılamaz
+    val cardBg = listOf(
+        Color(0xFFF0FAF0), Color(0xFFFFF8F0), Color(0xFFF3F0FA),
+        Color(0xFFEFF6FF), Color(0xFFFFF0F0),
+    )[index % 5]
+    val accent = listOf(
+        Color(0xFF2E7D32), Color(0xFFE65100), Color(0xFF4527A0),
+        Color(0xFF1565C0), Color(0xFFC62828),
+    )[index % 5]
 
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .shadow(2.dp, RoundedCornerShape(16.dp)),
-        shape  = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = bg),
+        modifier = modifier.fillMaxWidth(),
+        shape    = RoundedCornerShape(16.dp),
+        colors   = CardDefaults.cardColors(containerColor = cardBg),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Row(
             modifier          = Modifier.padding(14.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            // ── Sol: numara + emoji ──────────────────────────────────────
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                // Numara kutusu
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .background(accent, RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        "${index + 1}",
-                        color      = Color.White,
-                        fontSize   = 15.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                    )
-                }
-                // Emoji (varsa)
-                if (item.emoji.isNotBlank()) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(item.emoji, fontSize = 18.sp)
-                }
+            // Numara kutusu
+            Box(
+                modifier         = Modifier
+                    .size(36.dp)
+                    .background(accent, RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "${index + 1}",
+                    color      = Color.White,
+                    fontSize   = 15.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                )
             }
 
             Spacer(Modifier.width(12.dp))
 
-            // ── Orta: kelime + anlam + örnek ────────────────────────────
             Column(modifier = Modifier.weight(1f)) {
                 // Kelime + Türkçe anlam
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -313,44 +288,44 @@ private fun WordRow(
                         fontSize   = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines   = 1,
-                        overflow   = TextOverflow.Ellipsis,
+                        overflow   = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
                 }
 
-                // Kürtçe anlam (varsa)
+                // Kürtçe anlam
                 if (item.meaningKu.isNotBlank()) {
                     Spacer(Modifier.height(3.dp))
                     Text(
                         item.meaningKu,
-                        color    = Color(0xFF1A1A2E).copy(alpha = 0.65f),
+                        color    = Color(0xFF1A1A2E).copy(alpha = 0.6f),
                         fontSize = 12.sp,
                     )
                 }
 
-                // Kürtçe örnek cümle
+                // Örnek cümle
                 if (item.exampleKu.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.Top) {
-                        Text("💬 ", fontSize = 11.sp)
-                        Column {
-                            Text(
-                                item.exampleKu,
-                                color      = Color(0xFF1A1A2E).copy(alpha = 0.8f),
-                                fontSize   = 12.sp,
-                                fontStyle  = FontStyle.Italic,
-                                fontWeight = FontWeight.Medium,
-                            )
-                            // Türkçe çeviri cümlesi
-                            if (item.exampleTr.isNotBlank()) {
-                                Text(
-                                    "(${item.exampleTr})",
-                                    color    = Color(0xFF1A1A2E).copy(alpha = 0.45f),
-                                    fontSize = 11.sp,
-                                )
-                            }
-                        }
+                    Text(
+                        "💬 ${item.exampleKu}",
+                        color      = Color(0xFF1A1A2E).copy(alpha = 0.8f),
+                        fontSize   = 12.sp,
+                        fontStyle  = FontStyle.Italic,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    if (item.exampleTr.isNotBlank()) {
+                        Text(
+                            "(${item.exampleTr})",
+                            color    = Color(0xFF1A1A2E).copy(alpha = 0.45f),
+                            fontSize = 11.sp,
+                        )
                     }
                 }
+            }
+
+            // Emoji (varsa)
+            if (item.emoji.isNotBlank()) {
+                Spacer(Modifier.width(8.dp))
+                Text(item.emoji, fontSize = 24.sp)
             }
         }
     }
