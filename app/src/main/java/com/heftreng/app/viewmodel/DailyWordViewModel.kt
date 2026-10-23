@@ -21,12 +21,12 @@ class DailyWordViewModel @Inject constructor(
 ) : ViewModel() {
 
     data class WordItem(
-        val word       : String = "",
-        val meaningTr  : String = "",
-        val meaningKu  : String = "",
-        val exampleKu  : String = "",
-        val exampleTr  : String = "",   // Türkçe çeviri cümlesi
-        val emoji      : String = "",   // Kelimeyi temsil eden emoji (opsiyonel)
+        val word      : String = "",
+        val meaningTr : String = "",
+        val meaningKu : String = "",
+        val exampleKu : String = "",
+        val exampleTr : String = "",
+        val emoji     : String = "",
     )
 
     private val _words   = MutableStateFlow<List<WordItem>>(emptyList())
@@ -34,6 +34,11 @@ class DailyWordViewModel @Inject constructor(
 
     private val _loading = MutableStateFlow(true)
     val loading = _loading.asStateFlow()
+
+    // true = Firestore'da hiç belge yok (admin henüz eklemedi)
+    // false = yükleniyor / yüklendi / ağ hatası (kelimeler gösterilmeye devam)
+    private val _notFound = MutableStateFlow(false)
+    val notFound = _notFound.asStateFlow()
 
     // Gösterilen tarih (UI'da paylaş kartında kullanılır)
     private val _displayDate = MutableStateFlow("")
@@ -67,11 +72,12 @@ class DailyWordViewModel @Inject constructor(
                         .limit(7)
                         .get()
                         .await()
-                    // Doküman ID'leri tarih formatında (yyyy-MM-dd) — string sort yeterli
                     val latest = all.documents
                         .filter { it.id.matches(Regex("""\d{4}-\d{2}-\d{2}""")) }
                         .maxByOrNull { it.id }
                     doc = latest ?: run {
+                        // Firestore'da gerçekten hiç belge yok
+                        _notFound.value = true
                         _words.value = emptyList()
                         _loading.value = false
                         return@launch
@@ -97,18 +103,20 @@ class DailyWordViewModel @Inject constructor(
                 } else {
                     // Eski tek-kelime formatı — geriye dönük uyumluluk
                     val single = WordItem(
-                        word      = doc.getString("word")        ?: "",
-                        meaningTr = doc.getString("meaning_tr")  ?: "",
-                        meaningKu = doc.getString("meaning_ku")  ?: "",
-                        exampleKu = doc.getString("example_ku")  ?: "",
-                        exampleTr = doc.getString("example_tr")  ?: "",
-                        emoji     = doc.getString("emoji")       ?: "",
+                        word      = doc.getString("word")       ?: "",
+                        meaningTr = doc.getString("meaning_tr") ?: "",
+                        meaningKu = doc.getString("meaning_ku") ?: "",
+                        exampleKu = doc.getString("example_ku") ?: "",
+                        exampleTr = doc.getString("example_tr") ?: "",
+                        emoji     = doc.getString("emoji")      ?: "",
                     )
                     _words.value = if (single.word.isNotBlank()) listOf(single) else emptyList()
                 }
             } catch (e: Exception) {
                 android.util.Log.w("DailyWordVM", "loadWords: ${e.message}")
-                _words.value = emptyList()
+                // Ağ hatasında mevcut kelimeleri koru — ekranı boşaltma.
+                // Eğer daha önce yüklenmiş kelimeler varsa onlar görünmeye devam eder.
+                // _notFound false kalır → "kelime eklenmedi" mesajı çıkmaz.
             } finally {
                 _loading.value = false
             }

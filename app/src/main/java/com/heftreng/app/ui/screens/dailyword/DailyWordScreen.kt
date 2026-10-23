@@ -52,9 +52,10 @@ fun DailyWordScreen(
     vm            : DailyWordViewModel = hiltViewModel(),
 ) {
     val words   by vm.words.collectAsState()
-    val loading by vm.loading.collectAsState()
-    val scope   = rememberCoroutineScope()
-    val context = LocalContext.current
+    val loading  by vm.loading.collectAsState()
+    val notFound by vm.notFound.collectAsState()
+    val scope    = rememberCoroutineScope()
+    val context  = LocalContext.current
 
     // Bildirim tarihiyle açıldıysa o tarihi yükle (ilk kompozisyonda bir kez)
     LaunchedEffect(requestedDate) {
@@ -91,7 +92,7 @@ fun DailyWordScreen(
         ) {
             when {
                 loading      -> CircularProgressIndicator(color = Primary)
-                words.isEmpty() -> Text(
+                notFound     -> Text(
                     if (language == "ku") "Îro peyv nehat zêdekirin"
                     else "Bugün henüz kelime eklenmedi",
                     color    = OnBackground.copy(alpha = 0.5f),
