@@ -339,9 +339,21 @@ private suspend fun shareWordListCard(
 ) {
     withContext(Dispatchers.IO) {
         try {
-            val width = 1080
-            val pad   = 48f   // kenar boşluğu
-            val r     = 48f   // köşe yuvarlama
+            val width  = 1080
+            val pad    = 48f
+            val cardPad = 36f   // kart iç boşluk
+            val cardGap = 20f   // kartlar arası boşluk
+            val cardR   = 32f   // kart köşe yuvarlama
+
+            // ── Renk paleti — uygulama içi kartlarla aynı ────────────
+            val cardBgColors = intArrayOf(
+                0xFFF0FAF0.toInt(), 0xFFFFF8F0.toInt(), 0xFFF3F0FA.toInt(),
+                0xFFEFF6FF.toInt(), 0xFFFFF0F0.toInt(),
+            )
+            val accentColors = intArrayOf(
+                0xFF2E7D32.toInt(), 0xFFE65100.toInt(), 0xFF4527A0.toInt(),
+                0xFF1565C0.toInt(), 0xFFC62828.toInt(),
+            )
 
             // ── Paint nesneleri ───────────────────────────────────────
             val headerTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -351,78 +363,89 @@ private suspend fun shareWordListCard(
                 textAlign = Paint.Align.LEFT
             }
             val dateTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color     = 0x66F0EEFA.toInt()
+                color     = 0x99333355.toInt()
                 typeface  = Typeface.create("sans-serif", Typeface.NORMAL)
                 textSize  = 32f
                 textAlign = Paint.Align.RIGHT
             }
             val numTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color     = 0xFF8B5CF6.toInt()
+                color     = 0xFFFFFFFF.toInt()
                 typeface  = Typeface.create("sans-serif", Typeface.BOLD)
-                textSize  = 44f
+                textSize  = 38f
                 textAlign = Paint.Align.CENTER
             }
             val wordTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color     = 0xFFF0EEFA.toInt()
+                color     = 0xFF1A1A2E.toInt()
                 typeface  = Typeface.create("sans-serif", Typeface.BOLD)
-                textSize  = 58f
+                textSize  = 54f
                 textAlign = Paint.Align.LEFT
             }
             val dashTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color     = 0xFF8B5CF6.toInt()
+                // renk satır bazında ayarlanacak
                 typeface  = Typeface.create("sans-serif", Typeface.NORMAL)
-                textSize  = 46f
+                textSize  = 40f
                 textAlign = Paint.Align.LEFT
             }
             val trTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color     = 0xCCF0EEFA.toInt()
+                // renk satır bazında ayarlanacak
                 typeface  = Typeface.create("sans-serif", Typeface.BOLD)
-                textSize  = 44f
+                textSize  = 40f
+                textAlign = Paint.Align.LEFT
+            }
+            val meaningKuTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color     = (0xFF1A1A2E.toInt() and 0x00FFFFFF) or (0x99 shl 24)
+                typeface  = Typeface.create("sans-serif", Typeface.NORMAL)
+                textSize  = 34f
                 textAlign = Paint.Align.LEFT
             }
             val exTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color     = 0x88F0EEFA.toInt()
+                color     = (0xFF1A1A2E.toInt() and 0x00FFFFFF) or (0xCC shl 24)
                 typeface  = Typeface.create("sans-serif", Typeface.ITALIC)
-                textSize  = 36f
+                textSize  = 34f
                 textAlign = Paint.Align.LEFT
             }
-            val divPaint = Paint().apply { color = 0x308B5CF6.toInt(); strokeWidth = 2f }
+            val exTrTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color     = (0xFF1A1A2E.toInt() and 0x00FFFFFF) or (0x73 shl 24)
+                typeface  = Typeface.create("sans-serif", Typeface.NORMAL)
+                textSize  = 30f
+                textAlign = Paint.Align.LEFT
+            }
             val footerTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color     = 0x88F0EEFA.toInt()
+                color     = 0x88404060.toInt()
                 typeface  = Typeface.create("sans-serif", Typeface.BOLD)
                 textSize  = 34f
                 textAlign = Paint.Align.CENTER
             }
 
-            // ── Her kelimenin satır yüksekliğini hesapla ─────────────
-            // Kelime + anlam satırı: 80px, örnek cümle varsa +60px, padding 50px
-            val rowHeights = words.map { item ->
-                if (item.exampleKu.isNotBlank()) 190f else 130f
+            // ── Her kartın yüksekliğini hesapla ──────────────────────
+            val boxSize = 76f   // numara kutusu
+            val lineH1  = 64f   // kelime satırı yüksekliği
+            val lineH2  = 44f   // meaningKu satırı
+            val lineH3  = 44f   // exampleKu satırı
+            val lineH4  = 38f   // exampleTr satırı
+
+            data class RowLayout(val h: Float)
+            val rowLayouts = words.map { item ->
+                var h = cardPad + lineH1
+                if (item.meaningKu.isNotBlank()) h += lineH2 + 6f
+                if (item.exampleKu.isNotBlank()) {
+                    h += lineH3 + 12f
+                    if (item.exampleTr.isNotBlank()) h += lineH4 + 4f
+                }
+                h += cardPad
+                RowLayout(h)
             }
-            val headerH = 120f
-            val footerH = 100f
-            val totalH  = (headerH + rowHeights.sum() + footerH + pad).toInt()
+
+            val headerH = 130f
+            val footerH = 110f
+            val totalH  = (headerH + rowLayouts.sumOf { it.h.toDouble() } +
+                           cardGap * words.size + footerH + pad * 2).toInt()
 
             val bitmap = Bitmap.createBitmap(width, totalH, Bitmap.Config.ARGB_8888)
             val canvas = AndroidCanvas(bitmap)
 
-            // ── Arka plan gradient ────────────────────────────────────
-            val bgShader = android.graphics.LinearGradient(
-                0f, 0f, 0f, totalH.toFloat(),
-                intArrayOf(0xFF1E1535.toInt(), 0xFF0D0A1A.toInt()),
-                null, android.graphics.Shader.TileMode.CLAMP,
-            )
-            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = bgShader }
-            val bgRect  = RectF(0f, 0f, width.toFloat(), totalH.toFloat())
-            canvas.drawRoundRect(bgRect, r, r, bgPaint)
-
-            // ── İnce kenarlık ─────────────────────────────────────────
-            val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.STROKE
-                color = 0x448B5CF6.toInt()
-                strokeWidth = 3f
-            }
-            canvas.drawRoundRect(bgRect, r, r, borderPaint)
+            // ── Dış arka plan — açık gri ──────────────────────────────
+            canvas.drawColor(0xFFF8F7FC.toInt())
 
             // ── Uygulama ikonu ────────────────────────────────────────
             val appIconBmp: Bitmap? = try {
@@ -434,92 +457,143 @@ private suspend fun shareWordListCard(
 
             // ── Header ────────────────────────────────────────────────
             var y = pad
+            val iconSize = 72f
+            val iconTop  = y + (headerH - iconSize) / 2f
             if (appIconBmp != null) {
-                val iconRect = RectF(pad, y + 8f, pad + 72f, y + 80f)
+                val iconRect = RectF(pad, iconTop, pad + iconSize, iconTop + iconSize)
                 val clip = android.graphics.Path().also {
                     it.addRoundRect(iconRect, 18f, 18f, android.graphics.Path.Direction.CW)
                 }
                 canvas.save(); canvas.clipPath(clip)
                 canvas.drawBitmap(appIconBmp, null, iconRect, Paint(Paint.ANTI_ALIAS_FLAG))
                 canvas.restore()
-                canvas.drawText("Peyvên Rojê · Heftreng", pad + 88f, y + 60f, headerTp)
+                val textLeft = pad + iconSize + 16f
+                val fm = headerTp.fontMetrics
+                val textY = iconTop + iconSize / 2f - (fm.ascent + fm.descent) / 2f
+                canvas.drawText("Peyvên Rojê · Heftreng", textLeft, textY, headerTp)
             } else {
-                canvas.drawText("Peyvên Rojê · Heftreng", pad, y + 60f, headerTp)
+                canvas.drawText("Peyvên Rojê · Heftreng", pad, y + 80f, headerTp)
             }
             val dateStr = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale("tr")).format(java.util.Date())
-            canvas.drawText(dateStr, width - pad, y + 60f, dateTp)
+            val dfm = dateTp.fontMetrics
+            val dateY = iconTop + iconSize / 2f - (dfm.ascent + dfm.descent) / 2f
+            canvas.drawText(dateStr, width - pad, dateY, dateTp)
             y += headerH
 
-            canvas.drawLine(0f, y, width.toFloat(), y, divPaint)
-            y += 2f
-
-            // ── Kelime satırları ──────────────────────────────────────
+            // ── Kelime kartları ───────────────────────────────────────
             words.forEachIndexed { i, item ->
-                val rowH = rowHeights[i]
+                val layout  = rowLayouts[i]
+                val accent  = accentColors[i % accentColors.size]
+                val cardBg  = cardBgColors[i % cardBgColors.size]
+                val cardTop = y + cardGap / 2f
+                val cardBot = cardTop + layout.h
 
-                // Alternatif satır tonu
-                if (i % 2 == 1) {
-                    canvas.drawRect(0f, y, width.toFloat(), y + rowH,
-                        Paint().apply { color = 0x0C8B5CF6.toInt() })
+                // Kart gölgesi (hafif)
+                val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = 0x18000000.toInt()
                 }
+                canvas.drawRoundRect(RectF(pad + 4f, cardTop + 6f, width - pad + 4f, cardBot + 6f), cardR, cardR, shadowPaint)
+
+                // Kart arka planı
+                canvas.drawRoundRect(RectF(pad, cardTop, width - pad, cardBot), cardR, cardR,
+                    Paint(Paint.ANTI_ALIAS_FLAG).apply { color = cardBg })
 
                 // Numara kutusu
-                val bx = pad; val by = y + (rowH - 90f) / 2f
-                canvas.drawRoundRect(RectF(bx, by, bx + 90f, by + 90f), 18f, 18f,
-                    Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x228B5CF6.toInt() })
-                // numara dikey ortalama için font metrics kullan
-                val numFm = numTp.fontMetrics
-                val numCy = by + 90f / 2f - (numFm.ascent + numFm.descent) / 2f
-                canvas.drawText("${i + 1}", bx + 45f, numCy, numTp)
+                val bx    = pad + cardPad
+                val bSize = boxSize
+                val by    = cardTop + cardPad
+                canvas.drawRoundRect(RectF(bx, by, bx + bSize, by + bSize), 16f, 16f,
+                    Paint(Paint.ANTI_ALIAS_FLAG).apply { color = accent })
+                val nfm = numTp.fontMetrics
+                val ncy = by + bSize / 2f - (nfm.ascent + nfm.descent) / 2f
+                canvas.drawText("${i + 1}", bx + bSize / 2f, ncy, numTp)
 
-                // Kelime — anlam yan yana
-                val textX = pad + 110f
+                // İçerik başlangıcı
+                val textX = bx + bSize + 24f
+                var cy    = by
+
+                // Kelime + — + anlam
+                dashTp.color  = accent
+                trTp.color    = accent
+                val wfm = wordTp.fontMetrics
+                val wy  = cy + lineH1 / 2f - (wfm.ascent + wfm.descent) / 2f
                 val wordW = wordTp.measureText(item.word)
                 val dashW = dashTp.measureText(" — ")
+                val maxTrW = width - pad - textX - wordW - dashW - pad
+                val trText = run {
+                    var t = item.meaningTr
+                    while (t.isNotEmpty() && trTp.measureText(t) > maxTrW) t = t.dropLast(1)
+                    if (t.length < item.meaningTr.length) "$t…" else t
+                }
+                canvas.drawText(item.word, textX, wy, wordTp)
+                canvas.drawText(" — ", textX + wordW, wy, dashTp)
+                canvas.drawText(trText, textX + wordW + dashW, wy, trTp)
 
-                // Satır 1: kelime + " — " + anlam
-                val lineY = y + rowH * 0.42f
-                canvas.drawText(item.word, textX, lineY, wordTp)
-                canvas.drawText(" — ", textX + wordW, lineY, dashTp)
-                canvas.drawText(item.meaningTr, textX + wordW + dashW, lineY, trTp)
+                // Emoji (varsa) — sağ üst
+                if (item.emoji.isNotBlank()) {
+                    val emojiTp = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 52f }
+                    canvas.drawText(item.emoji, width - pad - cardPad - 60f, wy, emojiTp)
+                }
 
-                // Satır 2: örnek cümle (varsa)
+                cy += lineH1
+
+                // Kürtçe anlam
+                if (item.meaningKu.isNotBlank()) {
+                    cy += 6f
+                    canvas.drawText(item.meaningKu, textX, cy + lineH2 * 0.75f, meaningKuTp)
+                    cy += lineH2
+                }
+
+                // Örnek cümle
                 if (item.exampleKu.isNotBlank()) {
-                    val exY = lineY + 58f
-                    // Uzun cümleleri kırp (bitmap genişliğini aşmasın)
-                    val maxW = width - textX - pad
-                    val exText = if (exTp.measureText(item.exampleKu) > maxW) {
+                    cy += 12f
+                    val maxW  = width - pad - textX - cardPad
+                    val exRaw = "💬 ${item.exampleKu}"
+                    val exText = if (exTp.measureText(exRaw) > maxW) {
                         var t = item.exampleKu
-                        while (t.isNotEmpty() && exTp.measureText("$t…") > maxW)
-                            t = t.dropLast(1)
-                        "$t…"
-                    } else item.exampleKu
-                    canvas.drawText(exText, textX, exY, exTp)
+                        while (t.isNotEmpty() && exTp.measureText("💬 $t…") > maxW) t = t.dropLast(1)
+                        "💬 $t…"
+                    } else exRaw
+                    canvas.drawText(exText, textX, cy + lineH3 * 0.75f, exTp)
+                    cy += lineH3
+
+                    if (item.exampleTr.isNotBlank()) {
+                        cy += 4f
+                        val trRaw = "(${item.exampleTr})"
+                        val trEx = if (exTrTp.measureText(trRaw) > maxW) {
+                            var t = item.exampleTr
+                            while (t.isNotEmpty() && exTrTp.measureText("($t…)") > maxW) t = t.dropLast(1)
+                            "($t…)"
+                        } else trRaw
+                        canvas.drawText(trEx, textX, cy + lineH4 * 0.75f, exTrTp)
+                        cy += lineH4
+                    }
                 }
 
-                y += rowH
-                if (i < words.lastIndex) {
-                    canvas.drawLine(pad + 100f, y, width - pad, y,
-                        Paint().apply { color = 0x188B5CF6.toInt(); strokeWidth = 1.5f })
-                }
+                y += layout.h + cardGap
             }
 
-            y += 16f
-            canvas.drawLine(0f, y, width.toFloat(), y, divPaint)
-            y += 2f
+            y += cardGap / 2f + 8f
 
             // ── Footer — ikon + metin ─────────────────────────────────
+            val footerCy = y + footerH / 2f
             if (appIconBmp != null) {
-                val fRect = RectF(width / 2f - 140f, y + 14f, width / 2f - 68f, y + 86f)
+                val fiSize = 52f
+                val fiLeft = width / 2f - fiSize / 2f - footerTp.measureText("Heft Reng Kurdî") / 2f - 12f
+                val fiRect = RectF(fiLeft, footerCy - fiSize / 2f, fiLeft + fiSize, footerCy + fiSize / 2f)
                 val fClip = android.graphics.Path().also {
-                    it.addRoundRect(fRect, 14f, 14f, android.graphics.Path.Direction.CW)
+                    it.addRoundRect(fiRect, 12f, 12f, android.graphics.Path.Direction.CW)
                 }
                 canvas.save(); canvas.clipPath(fClip)
-                canvas.drawBitmap(appIconBmp, null, fRect, Paint(Paint.ANTI_ALIAS_FLAG))
+                canvas.drawBitmap(appIconBmp, null, fiRect, Paint(Paint.ANTI_ALIAS_FLAG))
                 canvas.restore()
-                canvas.drawText("Heft Reng Kurdî", width / 2f + 10f, y + 62f, footerTp)
+                val ffm = footerTp.fontMetrics
+                canvas.drawText("Heft Reng Kurdî",
+                    fiLeft + fiSize + 12f + footerTp.measureText("Heft Reng Kurdî") / 2f,
+                    footerCy - (ffm.ascent + ffm.descent) / 2f, footerTp)
             } else {
-                canvas.drawText("Heft Reng Kurdî", width / 2f, y + 62f, footerTp)
+                val ffm = footerTp.fontMetrics
+                canvas.drawText("Heft Reng Kurdî", width / 2f, footerCy - (ffm.ascent + ffm.descent) / 2f, footerTp)
             }
 
             // ── Dosyaya kaydet & paylaş ───────────────────────────────
