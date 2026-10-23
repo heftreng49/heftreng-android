@@ -470,9 +470,9 @@ private suspend fun shareWordListCard(
                 val textLeft = pad + iconSize + 16f
                 val fm = headerTp.fontMetrics
                 val textY = iconTop + iconSize / 2f - (fm.ascent + fm.descent) / 2f
-                canvas.drawText("Peyvên Rojê · Heftreng", textLeft, textY, headerTp)
+                canvas.drawText("Peyvên Rojê", textLeft, textY, headerTp)
             } else {
-                canvas.drawText("Peyvên Rojê · Heftreng", pad, y + 80f, headerTp)
+                canvas.drawText("Peyvên Rojê", pad, y + 80f, headerTp)
             }
             val dateStr = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale("tr")).format(java.util.Date())
             val dfm = dateTp.fontMetrics
@@ -575,25 +575,51 @@ private suspend fun shareWordListCard(
 
             y += cardGap / 2f + 8f
 
-            // ── Footer — ikon + metin ─────────────────────────────────
+            // ── Footer — [AppIcon] Heft Reng Kurdî [PlayStore icon] ───
             val footerCy = y + footerH / 2f
+            val fiSize   = 52f
+            val label    = "Heft Reng Kurdî"
+            val labelW   = footerTp.measureText(label)
+            val gap      = 16f
+            // Play Store ikonu (vector drawable)
+            val psIconBmp: Bitmap? = try {
+                val d = androidx.core.content.res.ResourcesCompat.getDrawable(
+                    context.resources, com.heftreng.app.R.drawable.ic_google, null)
+                val b = Bitmap.createBitmap(fiSize.toInt(), fiSize.toInt(), Bitmap.Config.ARGB_8888)
+                d?.setBounds(0, 0, fiSize.toInt(), fiSize.toInt()); d?.draw(AndroidCanvas(b)); b
+            } catch (_: Exception) { null }
+            // Toplam genişlik: appIcon + gap + label + gap + psIcon
+            val totalW = fiSize + gap + labelW + gap + fiSize
+            val startX = (width - totalW) / 2f
+            val ffm    = footerTp.fontMetrics
+            val textCy = footerCy - (ffm.ascent + ffm.descent) / 2f
+            // App ikonu
             if (appIconBmp != null) {
-                val fiSize = 52f
-                val fiLeft = width / 2f - fiSize / 2f - footerTp.measureText("Heft Reng Kurdî") / 2f - 12f
-                val fiRect = RectF(fiLeft, footerCy - fiSize / 2f, fiLeft + fiSize, footerCy + fiSize / 2f)
+                val fiRect = RectF(startX, footerCy - fiSize / 2f, startX + fiSize, footerCy + fiSize / 2f)
                 val fClip = android.graphics.Path().also {
                     it.addRoundRect(fiRect, 12f, 12f, android.graphics.Path.Direction.CW)
                 }
                 canvas.save(); canvas.clipPath(fClip)
                 canvas.drawBitmap(appIconBmp, null, fiRect, Paint(Paint.ANTI_ALIAS_FLAG))
                 canvas.restore()
-                val ffm = footerTp.fontMetrics
-                canvas.drawText("Heft Reng Kurdî",
-                    fiLeft + fiSize + 12f + footerTp.measureText("Heft Reng Kurdî") / 2f,
-                    footerCy - (ffm.ascent + ffm.descent) / 2f, footerTp)
+            }
+            // Uygulama adı
+            footerTp.textAlign = Paint.Align.LEFT
+            canvas.drawText(label, startX + fiSize + gap, textCy, footerTp)
+            // Play Store ikonu
+            val psLeft = startX + fiSize + gap + labelW + gap
+            if (psIconBmp != null) {
+                val psRect = RectF(psLeft, footerCy - fiSize / 2f, psLeft + fiSize, footerCy + fiSize / 2f)
+                canvas.drawBitmap(psIconBmp, null, psRect, Paint(Paint.ANTI_ALIAS_FLAG))
             } else {
-                val ffm = footerTp.fontMetrics
-                canvas.drawText("Heft Reng Kurdî", width / 2f, footerCy - (ffm.ascent + ffm.descent) / 2f, footerTp)
+                // Fallback: "▶ Play" yazısı
+                val gpTp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color    = 0xFF01875F.toInt()
+                    typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                    textSize = 28f
+                    textAlign = Paint.Align.LEFT
+                }
+                canvas.drawText("▶ Play", psLeft, textCy, gpTp)
             }
 
             // ── Dosyaya kaydet & paylaş ───────────────────────────────
