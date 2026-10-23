@@ -744,6 +744,21 @@ fun AdminScreen(
                                                     minLines = 2,
                                                     modifier = Modifier.fillMaxWidth(),
                                                 )
+                                                Spacer(Modifier.height(4.dp))
+                                                adminTextField(
+                                                    entry.exampleTr,
+                                                    { v -> dwWords = dwWords.toMutableList().also { it[idx] = entry.copy(exampleTr = v) } },
+                                                    "Örnek cümle Türkçe çeviri",
+                                                    minLines = 2,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                )
+                                                Spacer(Modifier.height(4.dp))
+                                                adminTextField(
+                                                    entry.emoji,
+                                                    { v -> dwWords = dwWords.toMutableList().also { it[idx] = entry.copy(emoji = v) } },
+                                                    "Emoji (opsiyonel, ör: 🌿)",
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                )
                                             }
                                             if (dwWords.size > 1) {
                                                 IconButton(onClick = { dwWords = dwWords.toMutableList().also { it.removeAt(idx) } }) {
@@ -772,36 +787,70 @@ fun AdminScreen(
                                         }
                                     }
 
-                                    // ── Önizleme ───────────────────────────────
-                                    val firstEntry = dwWords.firstOrNull()
-                                    if (firstEntry != null && firstEntry.word.isNotBlank() && firstEntry.meaningTr.isNotBlank()) {
-                                        Spacer(Modifier.height(12.dp))
-                                        Text("Önizleme (${dwWords.size} kelime):", color = Muted, fontSize = 11.sp)
-                                        Spacer(Modifier.height(4.dp))
-                                        dwWords.take(3).forEach { w ->
-                                            if (w.word.isBlank()) return@forEach
-                                            Surface(
-                                                color    = Color.White.copy(alpha = 0.07f),
-                                                shape    = RoundedCornerShape(10.dp),
-                                                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                                            ) {
-                                                Column(Modifier.padding(10.dp)) {
-                                                    Text(
-                                                        "${w.word} — ${w.meaningTr}",
-                                                        color      = Color.White,
-                                                        fontSize   = 14.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                    )
-                                                    if (w.meaningKu.isNotBlank()) {
-                                                        Text("Kurdî: ${w.meaningKu}", color = Color.White.copy(alpha = 0.65f), fontSize = 12.sp)
-                                                    }
-                                                    if (w.exampleKu.isNotBlank()) {
-                                                        Text(
-                                                            "“${w.exampleKu}”",
-                                                            color = Primary.copy(alpha = 0.9f),
-                                                            fontSize = 12.sp,
-                                                            lineHeight = 17.sp,
-                                                        )
+                                    // ── Önizleme — gerçek kart tasarımı ────────
+                                    val previewWords = dwWords.filter { it.word.isNotBlank() && it.meaningTr.isNotBlank() }
+                                    if (previewWords.isNotEmpty()) {
+                                        Spacer(Modifier.height(14.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Visibility, null, tint = Primary, modifier = Modifier.size(14.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("Önizleme", color = Primary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        }
+                                        Spacer(Modifier.height(6.dp))
+                                        val cardBgList = listOf(
+                                            Color(0xFFF0FAF0), Color(0xFFFFF8F0), Color(0xFFF3F0FA),
+                                            Color(0xFFEFF6FF), Color(0xFFFFF0F0),
+                                        )
+                                        val accentList = listOf(
+                                            Color(0xFF2E7D32), Color(0xFFE65100), Color(0xFF4527A0),
+                                            Color(0xFF1565C0), Color(0xFFC62828),
+                                        )
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            previewWords.forEachIndexed { i, w ->
+                                                val bg     = cardBgList[i % cardBgList.size]
+                                                val accent = accentList[i % accentList.size]
+                                                Card(
+                                                    modifier  = Modifier.fillMaxWidth(),
+                                                    shape     = RoundedCornerShape(14.dp),
+                                                    colors    = CardDefaults.cardColors(containerColor = bg),
+                                                    elevation = CardDefaults.cardElevation(2.dp),
+                                                ) {
+                                                    Row(
+                                                        modifier          = Modifier.padding(12.dp),
+                                                        verticalAlignment = Alignment.Top,
+                                                    ) {
+                                                        Box(
+                                                            modifier         = Modifier
+                                                                .size(32.dp)
+                                                                .background(accent, RoundedCornerShape(8.dp)),
+                                                            contentAlignment = Alignment.Center,
+                                                        ) {
+                                                            Text("${i + 1}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+                                                        }
+                                                        Spacer(Modifier.width(10.dp))
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                Text(w.word, color = Color(0xFF1A1A2E), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                                                                Spacer(Modifier.width(6.dp))
+                                                                Text("—", color = accent, fontSize = 12.sp)
+                                                                Spacer(Modifier.width(6.dp))
+                                                                Text(w.meaningTr, color = accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                                            }
+                                                            if (w.meaningKu.isNotBlank()) {
+                                                                Text(w.meaningKu, color = Color(0xFF1A1A2E).copy(alpha = 0.6f), fontSize = 11.sp)
+                                                            }
+                                                            if (w.exampleKu.isNotBlank()) {
+                                                                Spacer(Modifier.height(5.dp))
+                                                                Text("💬 ${w.exampleKu}", color = Color(0xFF1A1A2E).copy(alpha = 0.8f), fontSize = 11.sp, fontStyle = FontStyle.Italic)
+                                                                if (w.exampleTr.isNotBlank()) {
+                                                                    Text("(${w.exampleTr})", color = Color(0xFF1A1A2E).copy(alpha = 0.45f), fontSize = 10.sp)
+                                                                }
+                                                            }
+                                                        }
+                                                        if (w.emoji.isNotBlank()) {
+                                                            Spacer(Modifier.width(6.dp))
+                                                            Text(w.emoji, fontSize = 20.sp)
+                                                        }
                                                     }
                                                 }
                                             }

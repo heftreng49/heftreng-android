@@ -237,19 +237,22 @@ class AdminViewModel @Inject constructor(
         val feedPostId: String = "",
     )
     data class WordEntry(
-        val word     : String = "",
-        val meaningTr: String = "",
-        val meaningKu: String = "",
-        val exampleKu: String = "",
+        val word      : String = "",
+        val meaningTr : String = "",
+        val meaningKu : String = "",
+        val exampleKu : String = "",
+        val exampleTr : String = "",
+        val emoji     : String = "",
     )
     data class DailyWordContent(
         val words: List<WordEntry> = listOf(WordEntry()),
     ) {
-        // Geriye dönük uyumluluk — tekil kelime alanlarına erişim
         val word      get() = words.firstOrNull()?.word      ?: ""
         val meaningTr get() = words.firstOrNull()?.meaningTr ?: ""
         val meaningKu get() = words.firstOrNull()?.meaningKu ?: ""
         val exampleKu get() = words.firstOrNull()?.exampleKu ?: ""
+        val exampleTr get() = words.firstOrNull()?.exampleTr ?: ""
+        val emoji     get() = words.firstOrNull()?.emoji     ?: ""
     }
 
     private val _dailyQuote = MutableStateFlow(DailyQuoteContent())
@@ -346,6 +349,8 @@ class AdminViewModel @Inject constructor(
                         "meaning_tr" to w.meaningTr,
                         "meaning_ku" to w.meaningKu,
                         "example_ku" to w.exampleKu,
+                        "example_tr" to w.exampleTr,
+                        "emoji"      to w.emoji,
                     )
                 }
                 firestore.collection("daily_word").document(date).set(mapOf(
