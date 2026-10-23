@@ -21,10 +21,12 @@ class DailyWordViewModel @Inject constructor(
 ) : ViewModel() {
 
     data class WordItem(
-        val word      : String = "",
-        val meaningTr : String = "",
-        val meaningKu : String = "",
-        val exampleKu : String = "",
+        val word       : String = "",
+        val meaningTr  : String = "",
+        val meaningKu  : String = "",
+        val exampleKu  : String = "",
+        val exampleTr  : String = "",   // Türkçe çeviri cümlesi
+        val emoji      : String = "",   // Kelimeyi temsil eden emoji (opsiyonel)
     )
 
     private val _words   = MutableStateFlow<List<WordItem>>(emptyList())
@@ -84,19 +86,23 @@ class DailyWordViewModel @Inject constructor(
                 if (wordsRaw != null && wordsRaw.isNotEmpty()) {
                     _words.value = wordsRaw.map { m ->
                         WordItem(
-                            word      = m["word"]       ?: "",
-                            meaningTr = m["meaning_tr"] ?: "",
-                            meaningKu = m["meaning_ku"] ?: "",
-                            exampleKu = m["example_ku"] ?: "",
+                            word      = m["word"]        ?: "",
+                            meaningTr = m["meaning_tr"]  ?: "",
+                            meaningKu = m["meaning_ku"]  ?: "",
+                            exampleKu = m["example_ku"]  ?: "",
+                            exampleTr = m["example_tr"]  ?: "",
+                            emoji     = m["emoji"]       ?: "",
                         )
                     }
                 } else {
                     // Eski tek-kelime formatı — geriye dönük uyumluluk
                     val single = WordItem(
-                        word      = doc.getString("word")       ?: "",
-                        meaningTr = doc.getString("meaning_tr") ?: "",
-                        meaningKu = doc.getString("meaning_ku") ?: "",
-                        exampleKu = doc.getString("example_ku") ?: "",
+                        word      = doc.getString("word")        ?: "",
+                        meaningTr = doc.getString("meaning_tr")  ?: "",
+                        meaningKu = doc.getString("meaning_ku")  ?: "",
+                        exampleKu = doc.getString("example_ku")  ?: "",
+                        exampleTr = doc.getString("example_tr")  ?: "",
+                        emoji     = doc.getString("emoji")       ?: "",
                     )
                     _words.value = if (single.word.isNotBlank()) listOf(single) else emptyList()
                 }

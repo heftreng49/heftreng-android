@@ -25,7 +25,10 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -193,22 +196,21 @@ fun WordListCard(
 
             HorizontalDivider(color = primaryColor.copy(alpha = 0.15f))
 
-            // ── Kelime satırları ──────────────────────────────
-            words.forEachIndexed { i, item ->
-                WordRow(
-                    item     = item,
-                    index    = i,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (i < words.lastIndex) {
-                    HorizontalDivider(
-                        modifier  = Modifier.padding(horizontal = 18.dp),
-                        color     = primaryColor.copy(alpha = 0.08f),
+            // ── Kelime kartları ───────────────────────────────
+            Column(
+                modifier            = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                words.forEachIndexed { i, item ->
+                    WordRow(
+                        item     = item,
+                        index    = i,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
-
-            HorizontalDivider(color = primaryColor.copy(alpha = 0.15f))
 
             // ── Footer ────────────────────────────────────────
             Row(
@@ -231,70 +233,124 @@ fun WordListCard(
 }
 
 @Composable
+// Kart başına arka plan rengi — her kart farklı pastel tonda
+private val CARD_COLORS = listOf(
+    Color(0xFFF0FAF0), // yeşilimsi
+    Color(0xFFFFF8F0), // turuncumsu
+    Color(0xFFF3F0FA), // morumsu
+    Color(0xFFEFF6FF), // mavimsi
+    Color(0xFFFFF0F0), // kırmızımsı
+)
+private val CARD_ACCENT = listOf(
+    Color(0xFF2E7D32),
+    Color(0xFFE65100),
+    Color(0xFF4527A0),
+    Color(0xFF1565C0),
+    Color(0xFFC62828),
+)
+
+@Composable
 private fun WordRow(
     item     : DailyWordViewModel.WordItem,
     index    : Int,
     modifier : Modifier = Modifier,
 ) {
-    val primaryColor   = Primary
-    val onSurfaceColor = OnSurface
-    val bgAlpha        = if (index % 2 == 1) 0.04f else 0f
+    val accent = CARD_ACCENT[index % CARD_ACCENT.size]
+    val bg     = CARD_COLORS[index % CARD_COLORS.size]
 
-    Row(
-        modifier          = modifier
-            .background(primaryColor.copy(alpha = bgAlpha))
-            .padding(horizontal = 18.dp, vertical = 13.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(2.dp, RoundedCornerShape(16.dp)),
+        shape  = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = bg),
     ) {
-        // Numara kutusu (emoji yerine)
-        Box(
-            modifier         = Modifier
-                .size(width = 40.dp, height = 40.dp)
-                .background(primaryColor.copy(alpha = 0.12f), RoundedCornerShape(10.dp)),
-            contentAlignment = Alignment.Center,
+        Row(
+            modifier          = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.Top,
         ) {
-            Text(
-                "${index + 1}",
-                color      = primaryColor,
-                fontSize   = 15.sp,
-                fontWeight = FontWeight.ExtraBold,
-            )
-        }
-
-        Spacer(Modifier.width(14.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    item.word,
-                    color      = onSurfaceColor,
-                    fontSize   = 20.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontStyle  = FontStyle.Normal,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "—",
-                    color    = primaryColor,
-                    fontSize = 15.sp,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    item.meaningTr,
-                    color      = onSurfaceColor.copy(alpha = 0.75f),
-                    fontSize   = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
+            // ── Sol: numara + emoji ──────────────────────────────────────
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // Numara kutusu
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(accent, RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "${index + 1}",
+                        color      = Color.White,
+                        fontSize   = 15.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
+                }
+                // Emoji (varsa)
+                if (item.emoji.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(item.emoji, fontSize = 18.sp)
+                }
             }
-            if (item.exampleKu.isNotBlank()) {
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    item.exampleKu,
-                    color      = onSurfaceColor.copy(alpha = 0.45f),
-                    fontSize   = 12.sp,
-                    fontWeight = FontWeight.Normal,
-                    fontStyle  = FontStyle.Italic,
-                )
+
+            Spacer(Modifier.width(12.dp))
+
+            // ── Orta: kelime + anlam + örnek ────────────────────────────
+            Column(modifier = Modifier.weight(1f)) {
+                // Kelime + Türkçe anlam
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        item.word,
+                        color      = Color(0xFF1A1A2E),
+                        fontSize   = 22.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("—", color = accent, fontSize = 14.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        item.meaningTr,
+                        color      = accent,
+                        fontSize   = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines   = 1,
+                        overflow   = TextOverflow.Ellipsis,
+                    )
+                }
+
+                // Kürtçe anlam (varsa)
+                if (item.meaningKu.isNotBlank()) {
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        item.meaningKu,
+                        color    = Color(0xFF1A1A2E).copy(alpha = 0.65f),
+                        fontSize = 12.sp,
+                    )
+                }
+
+                // Kürtçe örnek cümle
+                if (item.exampleKu.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.Top) {
+                        Text("💬 ", fontSize = 11.sp)
+                        Column {
+                            Text(
+                                item.exampleKu,
+                                color      = Color(0xFF1A1A2E).copy(alpha = 0.8f),
+                                fontSize   = 12.sp,
+                                fontStyle  = FontStyle.Italic,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            // Türkçe çeviri cümlesi
+                            if (item.exampleTr.isNotBlank()) {
+                                Text(
+                                    "(${item.exampleTr})",
+                                    color    = Color(0xFF1A1A2E).copy(alpha = 0.45f),
+                                    fontSize = 11.sp,
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
