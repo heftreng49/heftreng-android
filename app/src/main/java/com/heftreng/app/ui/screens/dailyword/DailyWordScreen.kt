@@ -584,7 +584,7 @@ private suspend fun shareWordListCard(
             // Play Store ikonu (vector drawable)
             val psIconBmp: Bitmap? = try {
                 val d = androidx.core.content.res.ResourcesCompat.getDrawable(
-                    context.resources, com.heftreng.app.R.drawable.ic_google, null)
+                    context.resources, com.heftreng.app.R.drawable.ic_google_play, null)
                 val b = Bitmap.createBitmap(fiSize.toInt(), fiSize.toInt(), Bitmap.Config.ARGB_8888)
                 d?.setBounds(0, 0, fiSize.toInt(), fiSize.toInt()); d?.draw(AndroidCanvas(b)); b
             } catch (_: Exception) { null }

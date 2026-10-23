@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Google Play Store icon — resmi renk paleti
+  Kaynak: Material Design / Google brand guidelines
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Mavi (sol-üst) -->
+    <path
+        android:fillColor="#00B2FF"
+        android:pathData="M1.22,0.36C0.85,0.7 0.62,1.24 0.62,1.95v20.1c0,0.71 0.23,1.25 0.6,1.59l0.08,0.08 11.26-11.26v-0.27L1.3,0.28L1.22,0.36z" />
+
+    <!-- Sarı (sağ-üst) -->
+    <path
+        android:fillColor="#FFD900"
+        android:pathData="M16.12,16.07l-3.75-3.75v-0.27l3.75-3.76 0.08,0.05 4.45,2.53c1.27,0.72 1.27,1.9 0,2.62l-4.45,2.53-0.08,0.05z" />
+
+    <!-- Kırmızı (sol-alt) -->
+    <path
+        android:fillColor="#FF3A44"
+        android:pathData="M16.2,16.02L12.37,12.19 1.22,23.34c0.42,0.44 1.1,0.5 1.87,0.06L16.2,16.02" />
+
+    <!-- Yeşil (sol-üst) -->
+    <path
+        android:fillColor="#00F076"
+        android:pathData="M16.2,7.98L3.09,0.6C2.32,0.16 1.64,0.22 1.22,0.66L12.37,11.81 16.2,7.98z" />
+
+</vector>
