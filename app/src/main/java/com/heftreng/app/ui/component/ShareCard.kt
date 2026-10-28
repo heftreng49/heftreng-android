@@ -34,6 +34,9 @@ import com.heftreng.app.data.model.Post
 import com.heftreng.app.ui.theme.*
 import com.heftreng.app.utils.ShareTarget
 import com.heftreng.app.utils.shareBitmap
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
+import com.heftreng.app.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -346,7 +349,7 @@ fun ShareCardContent(post: Post, shareLanguage: String = "tr") {
             Spacer(Modifier.height(10.dp))
         }
 
-        // Branding — Play Store ikonu + "Heft Reng"
+        // Branding — uygulama ikonu + "Heft Reng Kurdî" + Play Store ikonu (ortalanmış)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -355,17 +358,26 @@ fun ShareCardContent(post: Post, shareLanguage: String = "tr") {
                 .padding(horizontal = 12.dp, vertical = 7.dp),
         ) {
             Row(
-                modifier          = Modifier.align(Alignment.CenterEnd),
-                verticalAlignment = Alignment.CenterVertically,
+                modifier              = Modifier.align(Alignment.Center),
+                verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                PlayStoreIcon(size = 14.dp)
+                // Uygulama ikonu
+                Image(
+                    painter            = painterResource(id = R.mipmap.ic_launcher),
+                    contentDescription = null,
+                    modifier           = Modifier
+                        .size(18.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                )
                 Text(
                     "Heft Reng Kurdî",
                     color      = Amber,
                     fontSize   = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
+                // Play Store ikonu
+                PlayStoreIcon(size = 14.dp)
             }
         }
     }
