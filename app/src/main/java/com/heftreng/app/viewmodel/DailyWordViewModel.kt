@@ -72,8 +72,10 @@ class DailyWordViewModel @Inject constructor(
                 // 1. İstenen tarihi dene
                 var doc = firestore.collection("daily_word").document(dateToTry).get().await()
 
-                // 2. Bulunamazsa — en yeni dokümanı getir
-                if (!doc.exists()) {
+                // 2. Bulunamazsa VEYA words alanı boşsa — en yeni dokümanı getir
+                // (Firestore offline cache bugün için boş belge döndürebilir)
+                val wordsCheck = doc.get("words") as? List<*>
+                if (!doc.exists() || wordsCheck.isNullOrEmpty()) {
                     val all = firestore.collection("daily_word")
                         .orderBy(FieldPath.documentId(), Query.Direction.DESCENDING)
                         .limit(7)
