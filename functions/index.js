@@ -2304,27 +2304,18 @@ exports.onDailyWordPublished = onDocumentWritten(
     const words = data.words;
     if (!Array.isArray(words) || words.length === 0) return null;
 
-    // Admin bilgilerini al — ilk admin dokümanından
-    let adminUid  = "";
-    let adminName = "Heftreng";
+    // Sabit sistem hesabı — uygulamanın resmi kimliğiyle paylaşım
+    const adminUid   = "system";
+    const adminName  = "Heft Reng Kurdî";
+    const adminUser  = "heftreng";
+    // appConfig/systemUser dokümanında photoURL varsa onu kullan, yoksa sabit CDN URL
     let adminPhoto = "";
-    let adminUser  = "heftreng";
     try {
-      const admSnap = await db.collection("admins").limit(1).get();
-      if (!admSnap.empty) {
-        const admDoc  = admSnap.docs[0];
-        adminUid      = admDoc.id;
-        const userDoc = await db.collection("users").doc(adminUid).get();
-        if (userDoc.exists) {
-          const u   = userDoc.data();
-          adminName  = u.displayName || u.name || "Heftreng";
-          adminPhoto = u.photoURL    || "";
-          adminUser  = u.username    || "heftreng";
-        }
+      const cfgDoc = await db.collection("appConfig").doc("systemUser").get();
+      if (cfgDoc.exists && cfgDoc.data().photoURL) {
+        adminPhoto = cfgDoc.data().photoURL;
       }
-    } catch (e) {
-      console.warn("[onDailyWordPublished] Admin bilgisi alınamadı:", e.message);
-    }
+    } catch (_) {}
 
     // Aynı tarih için zaten post var mı kontrol et (idempotency)
     const existing = await db.collection("feed")
