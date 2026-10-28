@@ -1,15 +1,20 @@
 package com.heftreng.app.viewmodel
 
+import android.content.Context
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import org.json.JSONArray
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -17,6 +22,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class DailyWordViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val firestore: FirebaseFirestore,
 ) : ViewModel() {
 
@@ -29,6 +35,9 @@ class DailyWordViewModel @Inject constructor(
         val emoji     : String = "",
     )
 
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences("hf_daily_word_cache", Context.MODE_PRIVATE)
+
     private val _words   = MutableStateFlow<List<WordItem>>(emptyList())
     val words = _words.asStateFlow()
 
@@ -36,7 +45,6 @@ class DailyWordViewModel @Inject constructor(
     val loading = _loading.asStateFlow()
 
     // true = Firestore'da hiç belge yok (admin henüz eklemedi)
-    // false = yükleniyor / yüklendi / ağ hatası (kelimeler gösterilmeye devam)
     private val _notFound = MutableStateFlow(false)
     val notFound = _notFound.asStateFlow()
 
@@ -44,11 +52,15 @@ class DailyWordViewModel @Inject constructor(
     private val _displayDate = MutableStateFlow("")
     val displayDate = _displayDate.asStateFlow()
 
-    init { loadWords() }
+    init {
+        // Uygulama açılışında önce cache'den göster — ağ gecikmesinde boş ekran olmaz
+        loadFromCache()
+        loadWords()
+    }
 
     /**
      * Önce bugünün dokümanını dene; yoksa koleksiyondaki en son dokümanı getir.
-     * Bu sayede admin kelimeyi dün kaydettiyse ekran boş görünmez.
+     * Başarılı sonucu cache'e yaz — sonraki açılışlarda anında gösterilir.
      */
     fun loadWords(requestedDate: String? = null) {
         viewModelScope.launch {
@@ -60,12 +72,7 @@ class DailyWordViewModel @Inject constructor(
                 // 1. İstenen tarihi dene
                 var doc = firestore.collection("daily_word").document(dateToTry).get().await()
 
-                // 2. Bulunamazsa — en yeni dokümanı getir. Doküman ID'leri tarih
-                //    (yyyy-MM-dd) olduğundan ID'ye göre azalan sıralama = en yeni.
-                //    Önceden TÜM koleksiyon okunuyordu (her gün büyüyen, her açılışta
-                //    N okuma); artık en fazla 7 doküman okunuyor. 7: ID'si tarih
-                //    formatında olmayan yanlışlıkla eklenmiş dokümanlar varsa
-                //    aşağıdaki regex filtresi sonrası hâlâ geçerli biri kalsın diye.
+                // 2. Bulunamazsa — en yeni dokümanı getir
                 if (!doc.exists()) {
                     val all = firestore.collection("daily_word")
                         .orderBy(FieldPath.documentId(), Query.Direction.DESCENDING)
@@ -76,21 +83,20 @@ class DailyWordViewModel @Inject constructor(
                         .filter { it.id.matches(Regex("""\d{4}-\d{2}-\d{2}""")) }
                         .maxByOrNull { it.id }
                     doc = latest ?: run {
-                        // Firestore'da gerçekten hiç belge yok
-                        _notFound.value = true
-                        _words.value = emptyList()
+                        // Firestore'da gerçekten hiç belge yok — cache varsa koru
+                        if (_words.value.isEmpty()) _notFound.value = true
                         _loading.value = false
                         return@launch
                     }
                     android.util.Log.d("DailyWordVM", "Bugün yok, fallback: ${doc.id}")
                 }
 
-                _displayDate.value = doc.id  // doküman ID = tarih (yyyy-MM-dd)
+                _displayDate.value = doc.id
 
                 @Suppress("UNCHECKED_CAST")
                 val wordsRaw = doc.get("words") as? List<Map<String, String>>
-                if (wordsRaw != null && wordsRaw.isNotEmpty()) {
-                    _words.value = wordsRaw.map { m ->
+                val items: List<WordItem> = if (wordsRaw != null && wordsRaw.isNotEmpty()) {
+                    wordsRaw.map { m ->
                         WordItem(
                             word      = m["word"]        ?: "",
                             meaningTr = m["meaning_tr"]  ?: "",
@@ -101,7 +107,7 @@ class DailyWordViewModel @Inject constructor(
                         )
                     }
                 } else {
-                    // Eski tek-kelime formatı — geriye dönük uyumluluk
+                    // Eski tek-kelime formatı
                     val single = WordItem(
                         word      = doc.getString("word")       ?: "",
                         meaningTr = doc.getString("meaning_tr") ?: "",
@@ -110,17 +116,71 @@ class DailyWordViewModel @Inject constructor(
                         exampleTr = doc.getString("example_tr") ?: "",
                         emoji     = doc.getString("emoji")      ?: "",
                     )
-                    _words.value = if (single.word.isNotBlank()) listOf(single) else emptyList()
+                    if (single.word.isNotBlank()) listOf(single) else emptyList()
                 }
+
+                if (items.isNotEmpty()) {
+                    _words.value = items
+                    _notFound.value = false
+                    // Cache'e yaz — tarih + kelimeler birlikte
+                    saveToCache(doc.id, items)
+                }
+
             } catch (e: Exception) {
                 android.util.Log.w("DailyWordVM", "loadWords: ${e.message}")
-                // Ağ hatasında mevcut kelimeleri koru — ekranı boşaltma.
-                // Eğer daha önce yüklenmiş kelimeler varsa onlar görünmeye devam eder.
-                // _notFound false kalır → "kelime eklenmedi" mesajı çıkmaz.
+                // Ağ hatasında cache'den yüklenenler zaten gösteriliyor — state'i bozma
             } finally {
                 _loading.value = false
             }
         }
+    }
+
+    // ── Cache yardımcıları ────────────────────────────────────────────────────
+
+    /** SharedPreferences'taki son başarılı listeyi state'e yükler. */
+    private fun loadFromCache() {
+        val date  = prefs.getString("date", null)  ?: return
+        val json  = prefs.getString("words", null) ?: return
+        try {
+            val arr   = JSONArray(json)
+            val items = (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                WordItem(
+                    word      = o.optString("word"),
+                    meaningTr = o.optString("meaningTr"),
+                    meaningKu = o.optString("meaningKu"),
+                    exampleKu = o.optString("exampleKu"),
+                    exampleTr = o.optString("exampleTr"),
+                    emoji     = o.optString("emoji"),
+                )
+            }
+            if (items.isNotEmpty()) {
+                _words.value    = items
+                _displayDate.value = date
+                android.util.Log.d("DailyWordVM", "Cache'den yüklendi: $date (${items.size} kelime)")
+            }
+        } catch (_: Exception) {}
+    }
+
+    /** Başarılı Firestore sonucunu SharedPreferences'a yazar. */
+    private fun saveToCache(date: String, items: List<WordItem>) {
+        try {
+            val arr = JSONArray()
+            items.forEach { w ->
+                arr.put(JSONObject().apply {
+                    put("word",      w.word)
+                    put("meaningTr", w.meaningTr)
+                    put("meaningKu", w.meaningKu)
+                    put("exampleKu", w.exampleKu)
+                    put("exampleTr", w.exampleTr)
+                    put("emoji",     w.emoji)
+                })
+            }
+            prefs.edit()
+                .putString("date",  date)
+                .putString("words", arr.toString())
+                .apply()
+        } catch (_: Exception) {}
     }
 
     // Eski çağrılarla uyumluluk için alias

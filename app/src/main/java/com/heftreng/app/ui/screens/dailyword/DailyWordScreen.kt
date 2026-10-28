@@ -57,9 +57,26 @@ fun DailyWordScreen(
     val scope    = rememberCoroutineScope()
     val context  = LocalContext.current
 
-    // Bildirim tarihiyle açıldıysa o tarihi yükle (ilk kompozisyonda bir kez)
+    // İlk yükleme
     LaunchedEffect(requestedDate) {
         vm.loadWords(requestedDate)
+    }
+
+    // Ekran her öne geldiğinde (gün geçişi dahil) yeniden yükle
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    androidx.compose.runtime.DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && requestedDate == null) {
+                val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                    .format(java.util.Date())
+                // displayDate bugünden farklıysa (yeni gün) yeniden yükle
+                if (vm.displayDate.value != today) {
+                    vm.loadWords(null)
+                }
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
     }
 
     Scaffold(
