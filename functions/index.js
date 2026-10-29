@@ -4,7 +4,7 @@
  */
 
 const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
-const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const functions                         = require("firebase-functions");
 const { initializeApp }                 = require("firebase-admin/app");
 const { getFirestore }                  = require("firebase-admin/firestore");
@@ -2282,93 +2282,4 @@ exports.translatePostText = onCall(
       throw new HttpsError("internal", `Çeviri sırasında hata oluştu: ${e.message}`);
     }
   },
-);
-
-// ─── Günlük kelimeler feed'e otomatik paylaşım ───────────────────────────────
-// daily_word/{date} belgesi oluşturulduğunda veya güncellendiğinde
-// feed koleksiyonuna "daily_word" tipinde bir post yazar.
-// Aynı tarih için birden fazla post açılmaması için date bazlı idempotency kontrolü yapılır.
-exports.onDailyWordPublished = onDocumentWritten(
-  { document: "daily_word/{date}", region: "europe-west1" },
-  async (event) => {
-    const db   = getFirestore();
-    const date = event.params.date;
-
-    // Silme olayını yoksay
-    const snap = event.data.after;
-    if (!snap || !snap.exists) return null;
-
-    const data = snap.data();
-
-    // words alanı boşsa yoksay
-    const words = data.words;
-    if (!Array.isArray(words) || words.length === 0) return null;
-
-    // Sabit sistem hesabı — uygulamanın resmi kimliğiyle paylaşım
-    const adminUid   = "system";
-    const adminName  = "Heft Reng Kurdî";
-    const adminUser  = "heftreng";
-    // appConfig/systemUser dokümanında photoURL varsa onu kullan, yoksa sabit CDN URL
-    let adminPhoto = "";
-    try {
-      const cfgDoc = await db.collection("appConfig").doc("systemUser").get();
-      if (cfgDoc.exists && cfgDoc.data().photoURL) {
-        adminPhoto = cfgDoc.data().photoURL;
-      }
-    } catch (_) {}
-
-    // Aynı tarih için zaten post var mı kontrol et (idempotency)
-    const existing = await db.collection("feed")
-      .where("type", "==", "daily_word")
-      .where("dailyWordDate", "==", date)
-      .limit(1)
-      .get();
-
-    if (!existing.empty) {
-      console.log(`[onDailyWordPublished] ${date} için zaten post var, atlandı.`);
-      return null;
-    }
-
-    // Post metnini oluştur — ilk 3 kelimenin Kürtçe karşılığını özet olarak ekle
-    const preview = words.slice(0, 3)
-      .map((w, i) => `${i + 1}. ${w.word || ""} — ${w.meaning_tr || ""}`)
-      .join("\n");
-
-    const text = `📚 Peyvên Rojê / Günün Kelimeleri\n\n${preview}${words.length > 3 ? `\n+${words.length - 3} kelime daha` : ""}`;
-
-    await db.collection("feed").add({
-      uid          : adminUid,
-      name         : adminName,
-      displayName  : adminName,
-      username     : adminUser,
-      photoURL     : adminPhoto,
-      text         : text,
-      title        : "",
-      category     : "",
-      imgUrl       : "",
-      imageURL     : "",
-      quoteText    : "",
-      authorName   : "",
-      bookName     : "",
-      coverImg     : "",
-      type         : "daily_word",
-      dailyWordDate: date,           // idempotency için
-      visibility   : "public",
-      mentions     : [],
-      linkUrl      : "",
-      linkTitle    : "",
-      linkDesc     : "",
-      linkImage    : "",
-      linkType     : "",
-      ytVid        : "",
-      likes        : 0,
-      saves        : 0,
-      cmtCount     : 0,
-      reposts      : 0,
-      ts           : require("firebase-admin/firestore").FieldValue.serverTimestamp(),
-    });
-
-    console.log(`[onDailyWordPublished] ${date} için feed postu oluşturuldu.`);
-    return null;
-  }
 );
