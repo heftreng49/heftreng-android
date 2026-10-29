@@ -145,6 +145,13 @@ private val bottomNavRoutes = setOf(
     Screen.Kurdi.route, Screen.Kurdi.base(), "profile/me",
 )
 
+// Context zincirinden MainActivity'yi bulur (ContextWrapper'a sarılı olsa bile)
+private tailrec fun android.content.Context.findMainActivity(): com.heftreng.app.MainActivity? = when (this) {
+    is com.heftreng.app.MainActivity -> this
+    is android.content.ContextWrapper -> baseContext.findMainActivity()
+    else -> null
+}
+
 // ── NavHost ───────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -154,6 +161,7 @@ fun HeftrangNavHost(
     onCompleteUpdate : () -> Unit = {},
 ) {
     val navController  = rememberNavController()
+    val mainActivity   = LocalContext.current.findMainActivity()
     val authVm         : AuthViewModel          = hiltViewModel()
     val settingsVm     : SettingsViewModel      = hiltViewModel()
     val adminVm        : AdminViewModel          = hiltViewModel()
@@ -373,6 +381,19 @@ fun HeftrangNavHost(
 
     val navBackStack  by navController.currentBackStackEntryAsState()
     val currentRoute  = navBackStack?.destination?.route
+
+    // Dışarıdan paylaşım gelince (uygulama başka ekrandayken) Feed'e dön;
+    // FeedScreen paylaşılan içeriği compose dialog'una aktarır.
+    val sharePending = mainActivity?.pendingSharedText != null ||
+                       mainActivity?.pendingSharedImageUri != null
+    LaunchedEffect(sharePending, currentRoute) {
+        if (sharePending && currentRoute != null && currentRoute != Screen.Feed.route) {
+            navController.navigate(Screen.Feed.route) {
+                popUpTo(Screen.Feed.route) { inclusive = false }
+                launchSingleTop = true
+            }
+        }
+    }
     val showBottom    = currentRoute in bottomNavRoutes
 
     // ── Ekran izleme: route değişince ScreenTracker'a bildir ──────────────
@@ -679,14 +700,17 @@ fun HeftrangNavHost(
                     popExitTransition   = { fadeOut(tween(140)) },
                 ) {
                     run {
-                        val activity = navController.context as? com.heftreng.app.MainActivity
                         FeedScreen(
                             navController     = navController,
                             adsVm             = adsVm,
                             language          = language,
                             appConfig         = appConfig,
-                            initialSharedText = activity?.pendingSharedText?.also { activity.pendingSharedText = null },
-                            initialSharedUri  = activity?.pendingSharedImageUri?.also { activity.pendingSharedImageUri = null },
+                            initialSharedText = mainActivity?.pendingSharedText,
+                            initialSharedUri  = mainActivity?.pendingSharedImageUri,
+                            onSharedConsumed  = {
+                                mainActivity?.pendingSharedText = null
+                                mainActivity?.pendingSharedImageUri = null
+                            },
                         )
                     }
                 }

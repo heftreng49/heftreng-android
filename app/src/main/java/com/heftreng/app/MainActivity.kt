@@ -13,6 +13,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import androidx.core.content.ContextCompat
@@ -41,8 +43,10 @@ class MainActivity : ComponentActivity() {
 
     // Bildirimden gelen deep link hedefi
     private var pendingNavTarget: String? = null
-    var pendingSharedText: String? = null
-    var pendingSharedImageUri: android.net.Uri? = null
+    // Compose-gözlemlenebilir: uygulama açıkken (onNewIntent) gelen paylaşımı
+    // NavHost/FeedScreen anında görebilsin diye mutableStateOf.
+    var pendingSharedText: String? by mutableStateOf<String?>(null)
+    var pendingSharedImageUri: android.net.Uri? by mutableStateOf<android.net.Uri?>(null)
 
     // SettingsViewModel — darkMode tercihi için
     private val settingsVm: SettingsViewModel by viewModels()
@@ -174,7 +178,11 @@ class MainActivity : ComponentActivity() {
         // (bildirim extra'sı yoksa URL'ye bak — ikisi aynı anda gelmez)
         if (pendingNavTarget == null) {
             pendingNavTarget = DeepLinkHandler.resolve(intent)
-                ?: handleShareIntent(intent)
+        }
+        // Paylaşım intent'i (soğuk başlangıç). Ekran döndürme/yeniden oluşturmada
+        // aynı intent tekrar işlenmesin diye savedInstanceState kontrolü.
+        if (pendingNavTarget == null && savedInstanceState == null) {
+            handleShareIntent(intent)
         }
 
         // ÇÖZÜLDÜ (Play Console crash raporu — Redmi Note 8/MIUI'de HER
@@ -317,41 +325,41 @@ class MainActivity : ComponentActivity() {
 
     /**
      * ACTION_SEND / ACTION_SEND_MULTIPLE intent'lerini işler.
-     * Metin veya URL paylaşımında CreatePost ekranına yönlendirir,
-     * paylaşılan içeriği "shared_text" extra olarak iletir.
+     * Paylaşılan metin/görseli Compose-gözlemlenebilir state'e yazar; FeedScreen
+     * bunu compose dialog'una aktarır. İşlenecek içerik varsa true döner.
      */
-    private fun handleShareIntent(intent: android.content.Intent?): String? {
-        intent ?: return null
-        val action = intent.action ?: return null
+    private fun handleShareIntent(intent: android.content.Intent?): Boolean {
+        intent ?: return false
+        val action   = intent.action ?: return false
+        val mimeType = intent.type   ?: return false
 
         return when (action) {
-            android.content.Intent.ACTION_SEND -> {
-                val mimeType = intent.type ?: return null
-                when {
-                    mimeType == "text/plain" -> {
-                        val sharedText = intent.getStringExtra(android.content.Intent.EXTRA_TEXT) ?: return null
-                        // CreatePost ekranına yönlendir, paylaşılan metni extra olarak ilet
-                        pendingSharedText = sharedText
-                        "create_post"
-                    }
-                    mimeType.startsWith("image/") -> {
-                        val uri = intent.getParcelableExtra<android.net.Uri>(android.content.Intent.EXTRA_STREAM)
-                        if (uri != null) {
-                            pendingSharedImageUri = uri
-                            "create_post"
-                        } else null
-                    }
-                    else -> null
+            android.content.Intent.ACTION_SEND -> when {
+                mimeType == "text/plain" -> {
+                    val text = intent.getStringExtra(android.content.Intent.EXTRA_TEXT)
+                        ?.takeIf { it.isNotBlank() } ?: return false
+                    pendingSharedText = text
+                    true
                 }
+                mimeType.startsWith("image/") -> {
+                    val uri = intent.getParcelableExtra<android.net.Uri>(android.content.Intent.EXTRA_STREAM)
+                        ?: return false
+                    pendingSharedImageUri = uri
+                    // Bazı uygulamalar görselle birlikte açıklama metni de yollar
+                    intent.getStringExtra(android.content.Intent.EXTRA_TEXT)
+                        ?.takeIf { it.isNotBlank() }?.let { pendingSharedText = it }
+                    true
+                }
+                else -> false
             }
             android.content.Intent.ACTION_SEND_MULTIPLE -> {
                 val uris = intent.getParcelableArrayListExtra<android.net.Uri>(android.content.Intent.EXTRA_STREAM)
                 if (!uris.isNullOrEmpty()) {
                     pendingSharedImageUri = uris.first()
-                    "create_post"
-                } else null
+                    true
+                } else false
             }
-            else -> null
+            else -> false
         }
     }
 
@@ -387,10 +395,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         // Paylaşım intent'i (uygulama açıkken)
-        handleShareIntent(intent)?.let { route ->
-            pendingNavTarget = route
-            return
-        }
+        if (handleShareIntent(intent)) return
         // Uygulama açıkken tıklanan App Link / Deep Link
         DeepLinkHandler.resolve(intent)?.let { route ->
             pendingNavTarget = route

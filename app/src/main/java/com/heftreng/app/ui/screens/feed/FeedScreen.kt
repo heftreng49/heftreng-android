@@ -108,6 +108,7 @@ fun FeedScreen(
     appConfig        : AppConfig = AppConfig(),
     initialSharedText: String? = null,
     initialSharedUri : android.net.Uri? = null,
+    onSharedConsumed : () -> Unit = {},
     vm               : FeedViewModel  = hiltViewModel(),
     socialVm         : SocialViewModel = hiltViewModel(),
     adsVm            : AdsViewModel    = hiltViewModel(),
@@ -306,13 +307,19 @@ fun FeedScreen(
     }
     // FAB menü state'leri
     var showFabMenu      by remember { mutableStateOf(false) }
-    var sharedText       by remember { mutableStateOf(initialSharedText ?: "") }
-    var sharedImageUri   by remember { mutableStateOf(initialSharedUri) }
 
-    // Paylaşım intent'i ile açıldıysa compose dialog'u otomatik aç
+    // Başka uygulamadan paylaşım geldiyse içeriği compose dialog'unun gerçek
+    // alanlarına (inlineText / inlineImageUri) aktar ve dialog'u aç.
     LaunchedEffect(initialSharedText, initialSharedUri) {
         if (!initialSharedText.isNullOrBlank() || initialSharedUri != null) {
+            if (!initialSharedText.isNullOrBlank()) {
+                inlineText = if (inlineText.isBlank()) initialSharedText
+                             else inlineText + "\n" + initialSharedText
+            }
+            if (initialSharedUri != null) inlineImageUri = initialSharedUri
+            draftRestoredChecked = true   // eski taslak paylaşılan içeriğin üstüne yazılmasın
             showComposeDialog = true
+            onSharedConsumed()            // aynı paylaşım tekrar işlenmesin
         }
     }
     val uploading        by vm.uploading.collectAsState()
