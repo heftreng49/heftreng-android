@@ -17,9 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -381,49 +379,13 @@ fun ShareCardContent(post: Post, shareLanguage: String = "tr") {
     }
 }
 
-// ── Play Store ikonu — resmi 4 renkli üçgen (Google Play logosu) ──────────────
+// ── Play Store ikonu — projedeki resmi vector drawable (ic_google_play.xml) ───
+// Önceden Canvas ile elle çiziliyordu; şekil/oran bozuktu. Artık drawable kullanılıyor.
 @Composable
 fun PlayStoreIcon(size: androidx.compose.ui.unit.Dp = 16.dp) {
-    androidx.compose.foundation.Canvas(modifier = Modifier.size(size)) {
-        val w = this.size.width
-        val h = this.size.height
-
-        // Google Play'in resmi üçgen logosu:
-        // Sol kenar yuvarlak gibi görünür — 4 segment:
-        //   mavi   (sol üst köşe → merkez → sol alt)
-        //   yeşil  (sol alt  → merkez → sağ)
-        //   sarı   (sol üst  → sağ    → merkez)
-        //   kırmızı(merkez   → sağ    → sol alt)
-        // Koordinatlar 24×24 viewport'a göre ölçeklenmiş:
-        //   sol üst  = (1, 0)
-        //   sol alt  = (1, 24)
-        //   sağ uç   = (23, 12)
-        //   merkez   = (1, 12)
-
-        val lx  = w *  1f / 24f   // sol kenar x
-        val top = h *  0f / 24f
-        val bot = h * 24f / 24f
-        val mid = h * 12f / 24f
-        val rx  = w * 23f / 24f   // sağ uç x
-
-        // Yeşil — alt segment (sol-alt → sağ uç → merkez sol)
-        drawPath(path = Path().apply {
-            moveTo(lx, bot); lineTo(rx, mid); lineTo(lx, mid); close()
-        }, color = Color(0xFF00F076))
-
-        // Mavi — üst segment (sol-üst → merkez sol → sağ uç)
-        drawPath(path = Path().apply {
-            moveTo(lx, top); lineTo(lx, mid); lineTo(rx, mid); close()
-        }, color = Color(0xFF00B2FF))
-
-        // Sarı — üst-sağ (sol-üst → sağ uç → x orta, y üst-çeyrek)
-        drawPath(path = Path().apply {
-            moveTo(lx, top); lineTo(rx, mid); lineTo(w * 12f / 24f, h * 6f / 24f); close()
-        }, color = Color(0xFFFFD900))
-
-        // Kırmızı — alt-sağ (sol-alt → x orta, y alt-çeyrek → sağ uç)
-        drawPath(path = Path().apply {
-            moveTo(lx, bot); lineTo(w * 12f / 24f, h * 18f / 24f); lineTo(rx, mid); close()
-        }, color = Color(0xFFFF3A44))
-    }
+    Image(
+        painter            = painterResource(id = R.drawable.ic_google_play),
+        contentDescription = null,
+        modifier           = Modifier.size(size),
+    )
 }
