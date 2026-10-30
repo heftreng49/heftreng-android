@@ -36,6 +36,7 @@ import com.heftreng.app.utils.ShareTarget
 import com.heftreng.app.utils.shareBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.Image
+import androidx.compose.material3.HorizontalDivider
 import com.heftreng.app.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -349,99 +350,80 @@ fun ShareCardContent(post: Post, shareLanguage: String = "tr") {
             Spacer(Modifier.height(10.dp))
         }
 
-        // Branding — uygulama ikonu + "Heft Reng Kurdî" + Play Store ikonu (ortalanmış)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .background(brandingBg)
-                .padding(horizontal = 12.dp, vertical = 7.dp),
+        // Branding footer — uygulama ikonu + "Heft Reng Kurdî" + Play Store ikonu
+        Spacer(Modifier.height(4.dp))
+        HorizontalDivider(color = colors.muted.copy(alpha = 0.15f), thickness = 0.5.dp)
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier              = Modifier.fillMaxWidth(),
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
         ) {
-            Row(
-                modifier              = Modifier.align(Alignment.Center),
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                // Uygulama ikonu
-                Image(
-                    painter            = painterResource(id = R.mipmap.ic_launcher),
-                    contentDescription = null,
-                    modifier           = Modifier
-                        .size(18.dp)
-                        .clip(RoundedCornerShape(4.dp)),
-                )
-                Text(
-                    "Heft Reng Kurdî",
-                    color      = Amber,
-                    fontSize   = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                // Play Store ikonu
-                PlayStoreIcon(size = 14.dp)
-            }
+            // Uygulama ikonu
+            Image(
+                painter            = painterResource(id = R.mipmap.ic_launcher),
+                contentDescription = null,
+                modifier           = Modifier
+                    .size(22.dp)
+                    .clip(RoundedCornerShape(5.dp)),
+            )
+            Spacer(Modifier.width(7.dp))
+            Text(
+                "Heft Reng Kurdî",
+                color      = Amber,
+                fontSize   = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.width(7.dp))
+            // Play Store ikonu
+            PlayStoreIcon(size = 18.dp)
         }
     }
 }
 
-// ── Play Store ikonu (SVG path, bağımlılık yok) ───────────────────────────────
+// ── Play Store ikonu — resmi 4 renkli üçgen (Google Play logosu) ──────────────
 @Composable
 fun PlayStoreIcon(size: androidx.compose.ui.unit.Dp = 16.dp) {
-    androidx.compose.foundation.Canvas(
-        modifier = Modifier.size(size),
-    ) {
+    androidx.compose.foundation.Canvas(modifier = Modifier.size(size)) {
         val w = this.size.width
         val h = this.size.height
 
-        // Play Store'un 4 renkli ok/ok ikonunu basit olarak çiz
-        // Sol üst — yeşil
-        drawPath(
-            path = Path().apply {
-                moveTo(0f, 0f)
-                lineTo(w * 0.5f, h * 0.5f)
-                lineTo(0f, h * 0.55f)
-                close()
-            },
-            color = Color(0xFF00C853),
-        )
-        // Sağ üst — sarı/turuncu
-        drawPath(
-            path = Path().apply {
-                moveTo(0f, 0f)
-                lineTo(w * 0.5f, h * 0.5f)
-                lineTo(w * 0.85f, h * 0.3f)
-                close()
-            },
-            color = Color(0xFFFFD600),
-        )
-        // Sol alt — mavi
-        drawPath(
-            path = Path().apply {
-                moveTo(0f, h * 0.55f)
-                lineTo(w * 0.5f, h * 0.5f)
-                lineTo(0f, h)
-                close()
-            },
-            color = Color(0xFF2979FF),
-        )
-        // Sağ alt — kırmızı
-        drawPath(
-            path = Path().apply {
-                moveTo(w * 0.5f, h * 0.5f)
-                lineTo(w * 0.85f, h * 0.3f)
-                lineTo(w * 0.85f, h * 0.7f)
-                close()
-            },
-            color = Color(0xFFFF3D00),
-        )
-        // Tam sağ uç
-        drawPath(
-            path = Path().apply {
-                moveTo(w * 0.5f, h * 0.5f)
-                lineTo(w * 0.85f, h * 0.7f)
-                lineTo(0f, h)
-                close()
-            },
-            color = Color(0xFFFF3D00).copy(alpha = 0.7f),
-        )
+        // Google Play'in resmi üçgen logosu:
+        // Sol kenar yuvarlak gibi görünür — 4 segment:
+        //   mavi   (sol üst köşe → merkez → sol alt)
+        //   yeşil  (sol alt  → merkez → sağ)
+        //   sarı   (sol üst  → sağ    → merkez)
+        //   kırmızı(merkez   → sağ    → sol alt)
+        // Koordinatlar 24×24 viewport'a göre ölçeklenmiş:
+        //   sol üst  = (1, 0)
+        //   sol alt  = (1, 24)
+        //   sağ uç   = (23, 12)
+        //   merkez   = (1, 12)
+
+        val lx  = w *  1f / 24f   // sol kenar x
+        val top = h *  0f / 24f
+        val bot = h * 24f / 24f
+        val mid = h * 12f / 24f
+        val rx  = w * 23f / 24f   // sağ uç x
+
+        // Yeşil — alt segment (sol-alt → sağ uç → merkez sol)
+        drawPath(path = Path().apply {
+            moveTo(lx, bot); lineTo(rx, mid); lineTo(lx, mid); close()
+        }, color = Color(0xFF00F076))
+
+        // Mavi — üst segment (sol-üst → merkez sol → sağ uç)
+        drawPath(path = Path().apply {
+            moveTo(lx, top); lineTo(lx, mid); lineTo(rx, mid); close()
+        }, color = Color(0xFF00B2FF))
+
+        // Sarı — üst-sağ (sol-üst → sağ uç → x orta, y üst-çeyrek)
+        drawPath(path = Path().apply {
+            moveTo(lx, top); lineTo(rx, mid); lineTo(w * 12f / 24f, h * 6f / 24f); close()
+        }, color = Color(0xFFFFD900))
+
+        // Kırmızı — alt-sağ (sol-alt → x orta, y alt-çeyrek → sağ uç)
+        drawPath(path = Path().apply {
+            moveTo(lx, bot); lineTo(w * 12f / 24f, h * 18f / 24f); lineTo(rx, mid); close()
+        }, color = Color(0xFFFF3A44))
     }
 }
