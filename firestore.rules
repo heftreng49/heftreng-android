@@ -117,6 +117,20 @@ service cloud.firestore {
       allow delete: if isAdmin() && request.auth.uid != uid;
     }
 
+    // ─── USER_PRIVATE ─────────────────────────────────────────
+    // users/{uid} herkese açık okunduğu için e-posta gibi gizli alanlar BURADA tutulur.
+    // Okuma: sahibi, admin ve "users" iznine sahip yetkililer.
+    // Yazma: sahibi — yalnızca kendi Auth e-postasıyla birebir eşleşen değer yazabilir.
+    // (Cloud Functions admin SDK ile kuralları zaten aşar.)
+    match /user_private/{uid} {
+      allow read:   if isOwner(uid) || isAdmin() || hasPermission('users');
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['email', 'emailLower'])
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.emailLower == request.auth.token.email.lower();
+      allow delete: if isOwner(uid) || isAdmin();
+    }
+
     // ─── USERS ────────────────────────────────────────────────
     // FATURA OPTİMİZASYONU: read: true — profil görüntülemede notBanned get() YOK
     match /users/{uid} {
@@ -412,10 +426,14 @@ service cloud.firestore {
     match /conversations/{convId} {
       allow read:   if isAuth() && request.auth.uid in resource.data.participants;
       allow create: if isAuth() && request.auth.uid in request.resource.data.participants;
+      // Güncelleme: konuşmanın mevcut katılımcısı VEYA konuşma ID'sinin ("uidA__uidB") bir tarafı.
+      // İkinci yol, konuşmayı silmiş (participants'tan çıkmış) kullanıcının aynı kişiye tekrar
+      // yazabilmesi için gerekli. Geri katılırken participants yalnızca ID'deki iki uid olabilir.
       allow update: if isAuth() && (
           request.auth.uid in resource.data.participants
-          || (request.auth.uid in resource.data.participants
-              && !(request.auth.uid in request.resource.data.participants))
+          || (request.auth.uid in convId.split('__')
+              && request.resource.data.participants.hasOnly(convId.split('__'))
+              && request.auth.uid in request.resource.data.participants)
       );
       allow delete: if isAdmin();
 

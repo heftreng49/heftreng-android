@@ -390,7 +390,7 @@ fun QuoteDialog(
         ) {
 
             // ── Başlık alanı ──────────────────────────────────────────────
-            item {
+            item(key = "title") {
                 androidx.compose.foundation.text.BasicTextField(
                     value           = title,
                     onValueChange   = { if (it.length <= 120) title = it },
@@ -415,7 +415,7 @@ fun QuoteDialog(
             }
 
             // ── Alıntı metni ──────────────────────────────────────────────
-            item {
+            item(key = "text") {
                 OutlinedTextField(
                     value         = text,
                     onValueChange = { text = it },
@@ -428,7 +428,7 @@ fun QuoteDialog(
 
             // ── Son kullanılan kitap önerisi ─────────────────────────────
             if (lastUsedBook != null && book.isBlank() && author.isBlank()) {
-                item {
+                item(key = "lastUsed") {
                     AssistChip(
                         onClick = {
                             book   = lastUsedBook.bookName
@@ -451,7 +451,7 @@ fun QuoteDialog(
             }
 
             // ── Kitap adı + autocomplete ───────────────────────────────────
-            item {
+            item(key = "book") {
                 Box {
                     OutlinedTextField(
                         value         = book,
@@ -521,7 +521,7 @@ fun QuoteDialog(
             if (book.isNotBlank() && !showBookDrop &&
                 bookSuggestions.none { it.bookName.equals(book.trim(), ignoreCase = true) }
             ) {
-                item {
+                item(key = "bookHint") {
                     Row(
                         verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -543,7 +543,7 @@ fun QuoteDialog(
             }
 
             // ── Yazar + autocomplete ───────────────────────────────────────
-            item {
+            item(key = "author") {
                 Box {
                     OutlinedTextField(
                         value         = author,
@@ -614,7 +614,7 @@ fun QuoteDialog(
             if (author.isNotBlank() && !showAuthorDrop &&
                 authorSuggestions.none { it.authorName.equals(author.trim(), ignoreCase = true) }
             ) {
-                item {
+                item(key = "authorHint") {
                     Row(
                         verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -637,7 +637,7 @@ fun QuoteDialog(
 
             // ── Önizleme ──────────────────────────────────────────────────
             if (text.isNotBlank() || book.isNotBlank() || author.isNotBlank()) {
-                item {
+                item(key = "preview") {
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     Spacer(Modifier.height(4.dp))
                     Text(Strings.quotePreview(language), color = Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)

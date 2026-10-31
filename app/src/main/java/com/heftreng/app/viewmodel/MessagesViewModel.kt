@@ -661,6 +661,34 @@ class MessagesViewModel @Inject constructor(
         )
     }
 
+    // ── Konuşmadan çıkmış kullanıcıyı geri ekle (self-heal) ───────────────────
+    // deleteConversation() kullanıcıyı participants'tan çıkarır; sonradan aynı kişiye yazınca
+    // conversations/msgs kuralları PERMISSION_DENIED dönüyordu. Konuşma ID'si "uidA__uidB"
+    // biçiminde olduğundan kullanıcı kendini geri ekleyebilir (firestore.rules buna izin verir).
+    private suspend fun rejoinConversation(convId: String, otherUid: String) {
+        val pa = minOf(uid, otherUid)
+        val pb = maxOf(uid, otherUid)
+        firestore.collection("conversations").document(convId).set(
+            mapOf(
+                "participants"   to listOf(pa, pb),
+                "deletedBy_$uid" to FieldValue.delete(),
+            ),
+            SetOptions.merge()
+        ).await()
+    }
+
+    /** Mesajı ekler; PERMISSION_DENIED gelirse (konuşmadan çıkılmış olabilir) geri katılıp bir kez daha dener. */
+    private suspend fun addMessageHealing(convId: String, toUid: String, msgData: Map<String, Any>) {
+        val col = firestore.collection("convMessages").document(convId).collection("msgs")
+        try {
+            col.add(msgData).await()
+        } catch (e: com.google.firebase.firestore.FirebaseFirestoreException) {
+            if (e.code != com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED) throw e
+            rejoinConversation(convId, toUid)
+            col.add(msgData).await()
+        }
+    }
+
     // ── Gönderim hatası: teşhis + kullanıcıya görünür geri bildirim ──
     // ÖNCEDEN: sendMessage() içindeki catch bloğu sadece e.printStackTrace()
     // yapıyordu — hata olduğunda kullanıcı hiçbir şey görmüyordu, mesaj
@@ -701,8 +729,7 @@ class MessagesViewModel @Inject constructor(
                 if (mentions.isNotEmpty()) {
                     msgData["mentions"] = mentions
                 }
-                firestore.collection("convMessages").document(convId)
-                    .collection("msgs").add(msgData).await()
+                addMessageHealing(convId, toUid, msgData)
 
                 val convUpd = mutableMapOf<String, Any>(
                     "last_msg"      to (text.ifBlank { "📷 Görsel" }),
@@ -809,8 +836,7 @@ class MessagesViewModel @Inject constructor(
                     "deleted"   to false,
                     "edited"    to false
                 )
-                firestore.collection("convMessages").document(convId)
-                    .collection("msgs").add(msgData).await()
+                addMessageHealing(convId, toUid, msgData)
                 val convUpd = mutableMapOf<String, Any>(
                     "last_msg"      to "🎤 Sesli mesaj",
                     "updated_at"    to com.google.firebase.firestore.FieldValue.serverTimestamp(),
@@ -995,18 +1021,28 @@ class MessagesViewModel @Inject constructor(
                 val pa     = minOf(myUid, otherUid)
                 val pb     = maxOf(myUid, otherUid)
                 val convId = "${pa}__${pb}"
+                val convRef = firestore.collection("conversations").document(convId)
 
-                firestore.collection("conversations").document(convId)
-                    .set(
+                // Zaten üyeysek HİÇBİR ŞEY yazma. Eskiden her açılışta unread/last_msg/updated_at
+                // sıfırlanıyor, karşı tarafın okunmamış sayacı ve önizlemesi siliniyordu.
+                val alreadyMember = _conversations.value.any { it.id == convId } || try {
+                    val snap = convRef.get().await()
+                    snap.exists() && (snap.get("participants") as? List<*>)?.contains(myUid) == true
+                } catch (_: Exception) { false }  // yok ya da okuma izni yok (konuşmayı silmiş) → aşağıda (yeniden) oluştur
+
+                if (!alreadyMember) {
+                    convRef.set(
                         mapOf(
-                            "participants" to listOf(pa, pb),
-                            "updated_at"   to FieldValue.serverTimestamp(),
-                            "unread_$pa"   to 0,
-                            "unread_$pb"   to 0,
-                            "last_msg"     to "",
+                            "participants"   to listOf(pa, pb),
+                            "updated_at"     to FieldValue.serverTimestamp(),
+                            "unread_$pa"     to 0,
+                            "unread_$pb"     to 0,
+                            "last_msg"       to "",
+                            "deletedBy_$myUid" to FieldValue.delete(),
                         ),
                         com.google.firebase.firestore.SetOptions.merge()
                     ).await()
+                }
 
                 onReady(convId)
             } catch (e: Exception) {
