@@ -211,15 +211,38 @@ class HeftrangMessagingService : FirebaseMessagingService() {
                     )
             }
             "daily_word" -> {
-                // Önce text stilini kur — bitmap yüklenince güncellenir
+                // Paylaş butonu — DailyWordScreen'i açar, kullanıcı oradan paylaşır
+                val shareIntent = Intent(this, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    putExtra("navigate_to", "daily_word/$date")
+                    putExtra("daily_word_share", true)
+                }
+                val sharePi = PendingIntent.getActivity(
+                    this,
+                    (System.currentTimeMillis() + 1).toInt(),
+                    shareIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+
+                // Başlangıçta temiz başlık + summary
                 notificationBuilder
                     .setColor(0xFF0EA5E9.toInt())
+                    .setContentTitle("📝 Peyvên Rojê · Heft Reng Kurdî")
+                    .setContentText(body.ifBlank { "Günün kelimeleri hazır, incele!" })
                     .setStyle(
                         NotificationCompat.BigTextStyle()
-                            .bigText(body)
-                            .setSummaryText("📝 Günün Kelimesi")
+                            .bigText(body.ifBlank { "Günün kelimeleri hazır, incele!" })
+                            .setSummaryText("Heft Reng Kurdî")
                     )
-                // Arka planda Firestore'dan kelimeleri çek → bitmap oluştur → bildirimi güncelle
+                    .addAction(
+                        NotificationCompat.Action.Builder(
+                            R.drawable.ic_notif,
+                            "Paylaş",
+                            sharePi,
+                        ).build()
+                    )
+
+                // Arka planda bitmap oluştur → bildirimi BigPicture ile güncelle
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val wordsBitmap = fetchDailyWordBitmap(applicationContext, date)
@@ -229,8 +252,8 @@ class HeftrangMessagingService : FirebaseMessagingService() {
                                     NotificationCompat.BigPictureStyle()
                                         .bigPicture(wordsBitmap)
                                         .bigLargeIcon(null as Bitmap?)
-                                        .setBigContentTitle(title)
-                                        .setSummaryText("📝 Günün Kelimesi · Heft Reng Kurdî")
+                                        .setBigContentTitle("📝 Peyvên Rojê · Heft Reng Kurdî")
+                                        .setSummaryText("Heft Reng Kurdî")
                                 )
                                 .setLargeIcon(wordsBitmap)
                             val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
