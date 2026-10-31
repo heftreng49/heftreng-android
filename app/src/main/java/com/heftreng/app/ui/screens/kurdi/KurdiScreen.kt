@@ -945,22 +945,22 @@ private fun BuildGameScreen(
     vm      : KurdiViewModel,
     onBack  : () -> Unit,
 ) {
-    val ku        = language == "ku"
-    val exercises by vm.buildGameExercises.collectAsState()
-    val loading   by vm.buildGameLoading.collectAsState()
+    val ku                          = language == "ku"
+    val exercises: List<KfExercise> by vm.buildGameExercises.collectAsState()
+    val loading  : Boolean          by vm.buildGameLoading.collectAsState()
 
     LaunchedEffect(Unit) { vm.loadBuildGame() }
 
     // Oyun durumu
-    var currentIdx   by remember { mutableStateOf(0) }
+    var currentIdx    by remember { mutableStateOf(0) }
     var selectedWords by remember { mutableStateOf<List<String>>(emptyList()) }
     var shuffledWords by remember { mutableStateOf<List<String>>(emptyList()) }
-    var answered     by remember { mutableStateOf(false) }
-    var isCorrect    by remember { mutableStateOf(false) }
-    var score        by remember { mutableStateOf(0) }
-    var finished     by remember { mutableStateOf(false) }
+    var answered      by remember { mutableStateOf(false) }
+    var isCorrect     by remember { mutableStateOf(false) }
+    var score         by remember { mutableStateOf(0) }
+    var finished      by remember { mutableStateOf(false) }
 
-    val exercise = exercises.getOrNull(currentIdx)
+    val exercise: KfExercise? = exercises.getOrNull(currentIdx)
 
     // Her yeni soru gelince kelimeleri karıştır
     LaunchedEffect(currentIdx, exercises.size) {
@@ -1022,9 +1022,9 @@ private fun BuildGameScreen(
                     onClick  = onBack,
                     shape    = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
-                    colors   = OutlinedButtonDefaults.colors(contentColor = Color.White),
+                    border   = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
                 ) {
-                    Text(if (ku) "Vegere" else "Geri Dön")
+                    Text(if (ku) "Vegere" else "Geri Dön", color = Color.White)
                 }
             }
         }
@@ -1043,6 +1043,7 @@ private fun BuildGameScreen(
     }
 
     // ── Ana oyun ekranı ──
+    val ex = exercise ?: return   // null guard — smart cast için
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1077,8 +1078,10 @@ private fun BuildGameScreen(
         }
 
         // İlerleme çubuğu
+        val progressFraction = if (exercises.isEmpty()) 0f
+            else (currentIdx.toFloat() / exercises.size.toFloat()).coerceIn(0f, 1f)
         LinearProgressIndicator(
-            progress    = { (currentIdx.toFloat() / exercises.size.toFloat()).coerceIn(0f, 1f) },
+            progress    = { progressFraction },
             modifier    = Modifier.fillMaxWidth().height(4.dp),
             color       = Amber,
             trackColor  = Color(0xFF2D1A6B),
@@ -1099,7 +1102,7 @@ private fun BuildGameScreen(
             )
 
             // Türkçe ipucu (varsa)
-            if (exercise.tr.isNotBlank()) {
+            if (ex.tr.isNotBlank()) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = Color(0xFF1E1040),
@@ -1111,7 +1114,7 @@ private fun BuildGameScreen(
                     ) {
                         Text("🇹🇷", fontSize = 16.sp)
                         Text(
-                            exercise.tr,
+                            ex.tr,
                             color    = Color(0xFFD0C0F0),
                             fontSize = 14.sp,
                         )
@@ -1182,7 +1185,7 @@ private fun BuildGameScreen(
                                 if (isCorrect)
                                     (if (ku) "Rast!" else "Doğru!")
                                 else
-                                    (if (ku) "Bersiva rast: ${exercise.question}" else "Doğru cevap: ${exercise.question}"),
+                                    (if (ku) "Bersiva rast: ${ex.question}" else "Doğru cevap: ${ex.question}"),
                                 color      = if (isCorrect) Color(0xFF00C853) else Color(0xFFFF6B6B),
                                 fontSize   = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -1233,7 +1236,7 @@ private fun BuildGameScreen(
                     onClick  = {
                         if (selectedWords.isEmpty()) return@Button
                         val userAnswer = selectedWords.joinToString(" ")
-                        val correct    = exercise.question.trim()
+                        val correct    = ex.question.trim()
                         isCorrect      = userAnswer.equals(correct, ignoreCase = true)
                         if (isCorrect) score++
                         answered       = true
