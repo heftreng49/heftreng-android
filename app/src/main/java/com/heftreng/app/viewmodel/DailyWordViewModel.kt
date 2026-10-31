@@ -37,6 +37,10 @@ class DailyWordViewModel @Inject constructor(
     private val _displayDate = MutableStateFlow("")
     val displayDate = _displayDate.asStateFlow()
 
+    // Kelime bulunamadı durumu
+    private val _notFound = MutableStateFlow(false)
+    val notFound = _notFound.asStateFlow()
+
     init { loadWords() }
 
     /**
@@ -46,6 +50,7 @@ class DailyWordViewModel @Inject constructor(
     fun loadWords(requestedDate: String? = null) {
         viewModelScope.launch {
             _loading.value = true
+            _notFound.value = false
             try {
                 val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                 val dateToTry = requestedDate ?: today
@@ -64,7 +69,8 @@ class DailyWordViewModel @Inject constructor(
                         .filter { it.id.matches(Regex("""\d{4}-\d{2}-\d{2}""")) }
                         .maxByOrNull { it.id }
                     doc = latest ?: run {
-                        _words.value = emptyList()
+                        _words.value   = emptyList()
+                        _notFound.value = true
                         _loading.value = false
                         return@launch
                     }
@@ -76,6 +82,7 @@ class DailyWordViewModel @Inject constructor(
                 @Suppress("UNCHECKED_CAST")
                 val wordsRaw = doc.get("words") as? List<Map<String, String>>
                 if (wordsRaw != null && wordsRaw.isNotEmpty()) {
+                    _notFound.value = false
                     _words.value = wordsRaw.map { m ->
                         WordItem(
                             word      = m["word"]       ?: "",
@@ -96,11 +103,14 @@ class DailyWordViewModel @Inject constructor(
                         exampleTr = doc.getString("example_tr") ?: "",
                         emoji     = doc.getString("emoji")      ?: "",
                     )
-                    _words.value = if (single.word.isNotBlank()) listOf(single) else emptyList()
+                    val singleList = if (single.word.isNotBlank()) listOf(single) else emptyList()
+                    _words.value    = singleList
+                    _notFound.value = singleList.isEmpty()
                 }
             } catch (e: Exception) {
                 android.util.Log.w("DailyWordVM", "loadWords: ${e.message}")
-                _words.value = emptyList()
+                _words.value    = emptyList()
+                _notFound.value = true
             } finally {
                 _loading.value = false
             }
