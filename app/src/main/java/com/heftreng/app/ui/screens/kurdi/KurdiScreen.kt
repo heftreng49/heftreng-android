@@ -71,6 +71,8 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
+import com.heftreng.app.R
 
 // -- Ana ekran ----------------------------------------------------------------
 @OptIn(ExperimentalMaterial3Api::class)
@@ -265,6 +267,7 @@ fun KurdiScreen(
         // add(Strings.kurdiDict(language))  // Ferheng — geçici olarak gizlendi
         add(Strings.kurdiGrammar(language))
         add(Strings.kurdiLeaderboard(language))
+        add(Strings.kurdiGames(language))
     }
 
     // ── Deep-link: feed'den gelen "dersi aç" isteği — dersler yüklenince tetiklenir ──
@@ -593,6 +596,8 @@ fun KurdiScreen(
                     navController = navController,
                 )
             }
+
+            3 -> GamesTab(language = language)
         }
     }
 
@@ -704,6 +709,214 @@ private fun PodiumBlock(
                 fontWeight = FontWeight.Black,
                 fontSize   = 16.sp,
             )
+        }
+    }
+}
+
+// ── Kürtçe Oyunlar Sekmesi ────────────────────────────────────────────────────
+@Composable
+private fun GamesTab(language: String) {
+    val ku = language == "ku"
+
+    data class GameItem(
+        val emoji    : String,
+        val title    : String,
+        val subtitle : String,
+        val available: Boolean = true,
+    )
+
+    data class GameCategory(
+        val icon  : String,
+        val title : String,
+        val games : List<GameItem>,
+    )
+
+    val categories = listOf(
+        GameCategory(
+            icon  = "📝",
+            title = if (ku) "Peyv" else "Kelime",
+            games = listOf(
+                GameItem("🔤", if (ku) "Peyvê Texmîn Bike" else "Kelimeyi Tahmin Et",
+                    if (ku) "Tîpan bixîne û peyva veşartî bibîne" else "Harfleri doldur, gizli kelimeyi bul"),
+                GameItem("🎯", if (ku) "Peyva Winda" else "Kayıp Kelime",
+                    if (ku) "Peyva winda di hevokê de bibîne" else "Cümlede eksik kelimeyi bul"),
+            ),
+        ),
+        GameCategory(
+            icon  = "📚",
+            title = if (ku) "Rêziman" else "Dilbilgisi",
+            games = listOf(
+                GameItem("🏗️", if (ku) "Hevokê Ava Bike" else "Cümle Kur",
+                    if (ku) "Peyvan rêz bike û hevoka rast ava bike" else "Kelimeleri sırala, doğru cümleyi oluştur"),
+                GameItem("📖", if (ku) "Rêzimana Kurdî" else "Kürtçe Dilbilgisi",
+                    if (ku) "Pirsên rêzimanê bersiv bide" else "Dilbilgisi sorularını yanıtla"),
+                GameItem("⏱️", if (ku) "Lêker û Dem" else "Fiil & Zaman",
+                    if (ku) "Lêkerên demê bi rêkûpêk bixebitîne" else "Fiilleri doğru zamana çevir"),
+            ),
+        ),
+        GameCategory(
+            icon  = "🌍",
+            title = if (ku) "Çand û Zanyarî" else "Kültür & Bilgi",
+            games = listOf(
+                GameItem("🚫", if (ku) "Nebêje!" else "Söyleme!",
+                    if (ku) "Peyvên qedexe nebêje, hevalên xwe bixapîne" else "Yasak kelimeleri söyleme, arkadaşlarını aldatmaya çalış"),
+                GameItem("🧩", if (ku) "Mamik" else "Bulmaca",
+                    if (ku) "Mamikên kurdî çareser bike" else "Kürtçe bulmacaları çöz"),
+            ),
+        ),
+    )
+
+    androidx.compose.foundation.lazy.LazyColumn(
+        modifier            = Modifier.fillMaxSize(),
+        contentPadding      = PaddingValues(bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
+    ) {
+        // Başlık banner
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFF1A0A3D), Color(0xFF0F0520)),
+                        ),
+                    )
+                    .padding(horizontal = 20.dp, vertical = 20.dp),
+            ) {
+                Column {
+                    Text(
+                        if (ku) "🎮 Lîstikên Kurdî" else "🎮 Kürtçe Oyunlar",
+                        color      = Color.White,
+                        fontSize   = 22.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        if (ku) "Kurdî bi dilxweşî fêr bibe!" else "Eğlenerek Kürtçe öğren!",
+                        color    = Color.White.copy(alpha = 0.7f),
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+        }
+
+        // Kategoriler
+        categories.forEach { category ->
+            item {
+                Spacer(Modifier.height(20.dp))
+                Row(
+                    modifier          = Modifier.padding(horizontal = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(category.icon, fontSize = 18.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        category.title,
+                        color      = Color.White,
+                        fontSize   = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+
+            items(category.games) { game ->
+                GameCard(
+                    emoji     = game.emoji,
+                    title     = game.title,
+                    subtitle  = game.subtitle,
+                    available = game.available,
+                    language  = language,
+                )
+            }
+        }
+
+        // Alt boşluk
+        item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+@Composable
+private fun GameCard(
+    emoji    : String,
+    title    : String,
+    subtitle : String,
+    available: Boolean,
+    language : String,
+) {
+    val ku = language == "ku"
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 5.dp),
+        shape  = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1040)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Row(
+            modifier          = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Emoji/ikon kutusu
+            Box(
+                modifier         = Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF2D1A6B)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(emoji, fontSize = 26.sp)
+            }
+            Spacer(Modifier.width(14.dp))
+            // Başlık + açıklama
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    color      = Color.White,
+                    fontSize   = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    subtitle,
+                    color    = Color(0xFFB0A0D0),
+                    fontSize = 12.sp,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            // BILÎZE / Yakında butonu
+            if (available) {
+                Button(
+                    onClick  = { /* TODO: oyunu aç */ },
+                    shape    = RoundedCornerShape(10.dp),
+                    colors   = ButtonDefaults.buttonColors(
+                        containerColor = Amber,
+                        contentColor   = Color.Black,
+                    ),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        if (ku) "BILÎZE" else "OYNA",
+                        fontSize   = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
+                }
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF2D1A6B),
+                ) {
+                    Text(
+                        if (ku) "Zû tê" else "Yakında",
+                        modifier   = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        color      = Color(0xFF8B75C0),
+                        fontSize   = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
         }
     }
 }

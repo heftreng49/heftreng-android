@@ -153,6 +153,7 @@ object Strings {
     fun kurdiDict(l: String)       = t(l, "Sözlük", "Ferheng", "Ferheng", "فەرهەنگ")
     fun kurdiGrammar(l: String)    = t(l, "Dilbilgisi", "Rêziman", "Rêziman", "ڕێزمان")
     fun kurdiLeaderboard(l: String)= t(l, "Sıralama", "Rêzkirin", "Rêzebendî", "ڕیزبەندی")
+    fun kurdiGames(l: String)      = t(l, "Oyunlar", "Lîstik", "Listik", "یاری")
     fun leaderboardTitle(l: String)= t(l, "XP Sıralaması", "Rêzkirin a XP", "Rêzebendîya XP", "ڕیزبەندی XP")
     fun leaderboardEmpty(l: String)= t(l, "Henüz sıralama yok", "Hêj rêzkirin tune", "Hela rêzebendî çıniya", "هێشتا ڕیزبەندی نییە")
     fun leaderboardYou(l: String)  = t(l, "Sen", "Tu", "Tı", "تۆ")
