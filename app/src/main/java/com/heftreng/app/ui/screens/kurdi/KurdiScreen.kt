@@ -597,7 +597,7 @@ fun KurdiScreen(
                 )
             }
 
-            3 -> GamesTab(language = language)
+            3 -> GamesTab(language = language, vm = vm)
         }
     }
 
@@ -715,14 +715,21 @@ private fun PodiumBlock(
 
 // ── Kürtçe Oyunlar Sekmesi ────────────────────────────────────────────────────
 @Composable
-private fun GamesTab(language: String) {
+private fun GamesTab(language: String, vm: KurdiViewModel) {
     val ku = language == "ku"
+    var showBuildGame by remember { mutableStateOf(false) }
+
+    if (showBuildGame) {
+        BuildGameScreen(language = language, vm = vm, onBack = { showBuildGame = false })
+        return
+    }
 
     data class GameItem(
         val emoji    : String,
         val title    : String,
         val subtitle : String,
         val available: Boolean = true,
+        val onPlay   : (() -> Unit)? = null,
     )
 
     data class GameCategory(
@@ -737,9 +744,11 @@ private fun GamesTab(language: String) {
             title = if (ku) "Peyv" else "Kelime",
             games = listOf(
                 GameItem("🔤", if (ku) "Peyvê Texmîn Bike" else "Kelimeyi Tahmin Et",
-                    if (ku) "Tîpan bixîne û peyva veşartî bibîne" else "Harfleri doldur, gizli kelimeyi bul"),
+                    if (ku) "Tîpan bixîne û peyva veşartî bibîne" else "Harfleri doldur, gizli kelimeyi bul",
+                    available = false),
                 GameItem("🎯", if (ku) "Peyva Winda" else "Kayıp Kelime",
-                    if (ku) "Peyva winda di hevokê de bibîne" else "Cümlede eksik kelimeyi bul"),
+                    if (ku) "Peyva winda di hevokê de bibîne" else "Cümlede eksik kelimeyi bul",
+                    available = false),
             ),
         ),
         GameCategory(
@@ -747,11 +756,15 @@ private fun GamesTab(language: String) {
             title = if (ku) "Rêziman" else "Dilbilgisi",
             games = listOf(
                 GameItem("🏗️", if (ku) "Hevokê Ava Bike" else "Cümle Kur",
-                    if (ku) "Peyvan rêz bike û hevoka rast ava bike" else "Kelimeleri sırala, doğru cümleyi oluştur"),
+                    if (ku) "Peyvan rêz bike û hevoka rast ava bike" else "Kelimeleri sırala, doğru cümleyi oluştur",
+                    available = true,
+                    onPlay   = { showBuildGame = true }),
                 GameItem("📖", if (ku) "Rêzimana Kurdî" else "Kürtçe Dilbilgisi",
-                    if (ku) "Pirsên rêzimanê bersiv bide" else "Dilbilgisi sorularını yanıtla"),
+                    if (ku) "Pirsên rêzimanê bersiv bide" else "Dilbilgisi sorularını yanıtla",
+                    available = false),
                 GameItem("⏱️", if (ku) "Lêker û Dem" else "Fiil & Zaman",
-                    if (ku) "Lêkerên demê bi rêkûpêk bixebitîne" else "Fiilleri doğru zamana çevir"),
+                    if (ku) "Lêkerên demê bi rêkûpêk bixebitîne" else "Fiilleri doğru zamana çevir",
+                    available = false),
             ),
         ),
         GameCategory(
@@ -759,9 +772,11 @@ private fun GamesTab(language: String) {
             title = if (ku) "Çand û Zanyarî" else "Kültür & Bilgi",
             games = listOf(
                 GameItem("🚫", if (ku) "Nebêje!" else "Söyleme!",
-                    if (ku) "Peyvên qedexe nebêje, hevalên xwe bixapîne" else "Yasak kelimeleri söyleme, arkadaşlarını aldatmaya çalış"),
+                    if (ku) "Peyvên qedexe nebêje, hevalên xwe bixapîne" else "Yasak kelimeleri söyleme, arkadaşlarını aldatmaya çalış",
+                    available = false),
                 GameItem("🧩", if (ku) "Mamik" else "Bulmaca",
-                    if (ku) "Mamikên kurdî çareser bike" else "Kürtçe bulmacaları çöz"),
+                    if (ku) "Mamikên kurdî çareser bike" else "Kürtçe bulmacaları çöz",
+                    available = false),
             ),
         ),
     )
@@ -827,6 +842,7 @@ private fun GamesTab(language: String) {
                     subtitle  = game.subtitle,
                     available = game.available,
                     language  = language,
+                    onPlay    = game.onPlay,
                 )
             }
         }
@@ -843,6 +859,7 @@ private fun GameCard(
     subtitle : String,
     available: Boolean,
     language : String,
+    onPlay   : (() -> Unit)? = null,
 ) {
     val ku = language == "ku"
     Card(
@@ -889,7 +906,7 @@ private fun GameCard(
             // BILÎZE / Yakında butonu
             if (available) {
                 Button(
-                    onClick  = { /* TODO: oyunu aç */ },
+                    onClick  = { onPlay?.invoke() },
                     shape    = RoundedCornerShape(10.dp),
                     colors   = ButtonDefaults.buttonColors(
                         containerColor = Amber,
@@ -914,6 +931,347 @@ private fun GameCard(
                         color      = Color(0xFF8B75C0),
                         fontSize   = 11.sp,
                         fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ── Hevokê Ava Bike — Cümle Kurma Oyunu ──────────────────────────────────────
+@Composable
+private fun BuildGameScreen(
+    language: String,
+    vm      : KurdiViewModel,
+    onBack  : () -> Unit,
+) {
+    val ku        = language == "ku"
+    val exercises by vm.buildGameExercises.collectAsState()
+    val loading   by vm.buildGameLoading.collectAsState()
+
+    LaunchedEffect(Unit) { vm.loadBuildGame() }
+
+    // Oyun durumu
+    var currentIdx   by remember { mutableStateOf(0) }
+    var selectedWords by remember { mutableStateOf<List<String>>(emptyList()) }
+    var shuffledWords by remember { mutableStateOf<List<String>>(emptyList()) }
+    var answered     by remember { mutableStateOf(false) }
+    var isCorrect    by remember { mutableStateOf(false) }
+    var score        by remember { mutableStateOf(0) }
+    var finished     by remember { mutableStateOf(false) }
+
+    val exercise = exercises.getOrNull(currentIdx)
+
+    // Her yeni soru gelince kelimeleri karıştır
+    LaunchedEffect(currentIdx, exercises.size) {
+        exercise?.let {
+            shuffledWords = it.words.shuffled()
+            selectedWords = emptyList()
+            answered      = false
+            isCorrect     = false
+        }
+    }
+
+    // ── Yükleniyor ──
+    if (loading) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Amber)
+        }
+        return
+    }
+
+    // ── Bitti ekranı ──
+    if (finished || (exercises.isNotEmpty() && currentIdx >= exercises.size)) {
+        Box(
+            modifier         = Modifier.fillMaxSize().background(Color(0xFF0F0520)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier            = Modifier.padding(32.dp),
+            ) {
+                Text("🎉", fontSize = 64.sp)
+                Text(
+                    if (ku) "Lîstik qediya!" else "Oyun bitti!",
+                    color      = Color.White,
+                    fontSize   = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                )
+                Text(
+                    if (ku) "Encam: $score / ${exercises.size}" else "Sonuç: $score / ${exercises.size}",
+                    color    = Amber,
+                    fontSize = 18.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        currentIdx    = 0
+                        score         = 0
+                        finished      = false
+                        selectedWords = emptyList()
+                        answered      = false
+                    },
+                    shape  = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (ku) "Dîsa Bilîze" else "Tekrar Oyna", fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick  = onBack,
+                    shape    = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors   = OutlinedButtonDefaults.colors(contentColor = Color.White),
+                ) {
+                    Text(if (ku) "Vegere" else "Geri Dön")
+                }
+            }
+        }
+        return
+    }
+
+    // ── Egzersiz yok ──
+    if (exercise == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                if (ku) "Pirsên lîstikê nehatin barkirin." else "Oyun soruları yüklenemedi.",
+                color = Color(0xFFB0A0D0),
+            )
+        }
+        return
+    }
+
+    // ── Ana oyun ekranı ──
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0F0520))
+            .navigationBarsPadding(),
+    ) {
+        // Üst bar
+        Row(
+            modifier          = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF1A0A3D))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, null, tint = Color.White)
+            }
+            Text(
+                if (ku) "Hevokê Ava Bike" else "Cümle Kur",
+                color      = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize   = 16.sp,
+                modifier   = Modifier.weight(1f),
+            )
+            // Skor
+            Text(
+                "$score / ${exercises.size}",
+                color    = Amber,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+
+        // İlerleme çubuğu
+        LinearProgressIndicator(
+            progress    = { (currentIdx.toFloat() / exercises.size.toFloat()).coerceIn(0f, 1f) },
+            modifier    = Modifier.fillMaxWidth().height(4.dp),
+            color       = Amber,
+            trackColor  = Color(0xFF2D1A6B),
+        )
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            // Soru numarası
+            Text(
+                "${currentIdx + 1} / ${exercises.size}",
+                color    = Color(0xFF8B75C0),
+                fontSize = 13.sp,
+            )
+
+            // Türkçe ipucu (varsa)
+            if (exercise.tr.isNotBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF1E1040),
+                ) {
+                    Row(
+                        modifier          = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("🇹🇷", fontSize = 16.sp)
+                        Text(
+                            exercise.tr,
+                            color    = Color(0xFFD0C0F0),
+                            fontSize = 14.sp,
+                        )
+                    }
+                }
+            }
+
+            // Seçilen kelimeler — oluşturulan cümle
+            Surface(
+                shape    = RoundedCornerShape(14.dp),
+                color    = when {
+                    !answered          -> Color(0xFF1E1040)
+                    isCorrect          -> Color(0xFF0D3320)
+                    else               -> Color(0xFF3D1010)
+                },
+                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 64.dp),
+                border   = androidx.compose.foundation.BorderStroke(
+                    1.5.dp,
+                    when {
+                        !answered -> Color(0xFF4A2A8A)
+                        isCorrect -> Color(0xFF00C853)
+                        else      -> Color(0xFFD32F2F)
+                    },
+                ),
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    if (selectedWords.isEmpty()) {
+                        Text(
+                            if (ku) "Peyvan ji jêr hilbijêre..." else "Aşağıdan kelimeleri seç...",
+                            color    = Color(0xFF6B5B9B),
+                            fontSize = 14.sp,
+                        )
+                    } else {
+                        androidx.compose.foundation.layout.FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement   = Arrangement.spacedBy(6.dp),
+                        ) {
+                            selectedWords.forEachIndexed { idx, word ->
+                                Surface(
+                                    onClick  = {
+                                        if (!answered) {
+                                            selectedWords = selectedWords.toMutableList().also { it.removeAt(idx) }
+                                        }
+                                    },
+                                    shape    = RoundedCornerShape(8.dp),
+                                    color    = Color(0xFF3D2A7A),
+                                ) {
+                                    Text(
+                                        word,
+                                        modifier   = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        color      = Color.White,
+                                        fontSize   = 15.sp,
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    // Doğru/yanlış geri bildirimi
+                    if (answered) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            verticalAlignment      = Alignment.CenterVertically,
+                            horizontalArrangement  = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(if (isCorrect) "✅" else "❌", fontSize = 16.sp)
+                            Text(
+                                if (isCorrect)
+                                    (if (ku) "Rast!" else "Doğru!")
+                                else
+                                    (if (ku) "Bersiva rast: ${exercise.question}" else "Doğru cevap: ${exercise.question}"),
+                                color      = if (isCorrect) Color(0xFF00C853) else Color(0xFFFF6B6B),
+                                fontSize   = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Kelime havuzu — karıştırılmış kelimeler
+            val remaining = shuffledWords.filter { it !in selectedWords }
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement   = Arrangement.spacedBy(8.dp),
+            ) {
+                remaining.forEach { word ->
+                    Surface(
+                        onClick  = {
+                            if (!answered) {
+                                selectedWords = selectedWords + word
+                            }
+                        },
+                        shape    = RoundedCornerShape(10.dp),
+                        color    = Color(0xFF2D1A6B),
+                        enabled  = !answered,
+                    ) {
+                        Text(
+                            word,
+                            modifier   = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            color      = if (answered) Color(0xFF6B5B9B) else Color.White,
+                            fontSize   = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
+            }
+        }
+
+        // Alt buton
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF1A0A3D))
+                .padding(16.dp),
+        ) {
+            if (!answered) {
+                Button(
+                    onClick  = {
+                        if (selectedWords.isEmpty()) return@Button
+                        val userAnswer = selectedWords.joinToString(" ")
+                        val correct    = exercise.question.trim()
+                        isCorrect      = userAnswer.equals(correct, ignoreCase = true)
+                        if (isCorrect) score++
+                        answered       = true
+                    },
+                    enabled  = selectedWords.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = RoundedCornerShape(14.dp),
+                    colors   = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                ) {
+                    Text(
+                        if (ku) "Bişîne" else "Kontrol Et",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize   = 15.sp,
+                    )
+                }
+            } else {
+                Button(
+                    onClick  = {
+                        if (currentIdx + 1 >= exercises.size) {
+                            finished = true
+                        } else {
+                            currentIdx++
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = RoundedCornerShape(14.dp),
+                    colors   = ButtonDefaults.buttonColors(
+                        containerColor = if (isCorrect) Color(0xFF00A044) else Color(0xFF8B1A1A),
+                        contentColor   = Color.White,
+                    ),
+                ) {
+                    Text(
+                        if (currentIdx + 1 >= exercises.size)
+                            (if (ku) "Encamê Nîşan Bide" else "Sonucu Gör")
+                        else
+                            (if (ku) "Pêşve" else "Sonraki"),
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize   = 15.sp,
                     )
                 }
             }
