@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.util.Patterns
 import androidx.core.app.NotificationCompat
@@ -16,6 +17,11 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.heftreng.app.MainActivity
 import com.heftreng.app.R
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 
 class HeftrangMessagingService : FirebaseMessagingService() {
 
@@ -205,6 +211,7 @@ class HeftrangMessagingService : FirebaseMessagingService() {
                     )
             }
             "daily_word" -> {
+                // Önce text stilini kur — bitmap yüklenince güncellenir
                 notificationBuilder
                     .setColor(0xFF0EA5E9.toInt())
                     .setStyle(
@@ -212,6 +219,27 @@ class HeftrangMessagingService : FirebaseMessagingService() {
                             .bigText(body)
                             .setSummaryText("📝 Günün Kelimesi")
                     )
+                // Arka planda Firestore'dan kelimeleri çek → bitmap oluştur → bildirimi güncelle
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val wordsBitmap = fetchDailyWordBitmap(applicationContext, date)
+                        if (wordsBitmap != null) {
+                            notificationBuilder
+                                .setStyle(
+                                    NotificationCompat.BigPictureStyle()
+                                        .bigPicture(wordsBitmap)
+                                        .bigLargeIcon(null as Bitmap?)
+                                        .setBigContentTitle(title)
+                                        .setSummaryText("📝 Günün Kelimesi · Heft Reng Kurdî")
+                                )
+                                .setLargeIcon(wordsBitmap)
+                            val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                            mgr.notify(notifId, notificationBuilder.build())
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("HeftrangMsg", "daily_word bitmap error: ${e.message}")
+                    }
+                }
             }
             "message" -> {
                 // Aynı konuşma gruplanır, sadece ilk bildirimde ses
@@ -283,6 +311,41 @@ class HeftrangMessagingService : FirebaseMessagingService() {
             notifViewModelRef?.get()?.onPushReceived()
         }
     }
+
+    // ── Günlük kelime bitmap'i Firestore'dan çek ─────────────────────────────
+    @Suppress("UNCHECKED_CAST")
+    private suspend fun fetchDailyWordBitmap(ctx: Context, date: String): Bitmap? =
+        withContext(Dispatchers.IO) {
+            try {
+                val db = FirebaseFirestore.getInstance()
+                // 1. Verilen tarihi dene
+                var doc = db.collection("daily_word").document(date).get().await()
+                // 2. Bulunamazsa en son dokümanı getir
+                if (!doc.exists()) {
+                    val all = db.collection("daily_word").get().await()
+                    doc = all.documents
+                        .filter { it.id.matches(Regex("""\d{4}-\d{2}-\d{2}""")) }
+                        .maxByOrNull { it.id } ?: return@withContext null
+                }
+                val wordsRaw = doc.get("words") as? List<Map<String, String>>
+                    ?: return@withContext null
+                val words = wordsRaw.map { m ->
+                    DailyWordCardBitmap.WordItem(
+                        word      = m["word"]       ?: "",
+                        meaningTr = m["meaning_tr"] ?: "",
+                        meaningKu = m["meaning_ku"] ?: "",
+                        exampleKu = m["example_ku"] ?: "",
+                        exampleTr = m["example_tr"] ?: "",
+                        emoji     = m["emoji"]      ?: "",
+                    )
+                }.filter { it.word.isNotBlank() }
+                if (words.isEmpty()) return@withContext null
+                DailyWordCardBitmap.build(ctx, words, notifMode = true)
+            } catch (e: Exception) {
+                android.util.Log.w("HeftrangMsg", "fetchDailyWordBitmap: ${e.message}")
+                null
+            }
+        }
 
     // ── Bildirim kanallarını oluştur ──────────────────────────────────────────
     private fun ensureChannels() {
