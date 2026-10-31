@@ -1331,6 +1331,45 @@ class KurdiViewModel @Inject constructor(
         }
     }
 
+
+    // ── Hevokê Ava Bike oyunu ─────────────────────────────────────────────────
+    private val _buildGameExercises = MutableStateFlow<List<KfExercise>>(emptyList())
+    val buildGameExercises          = _buildGameExercises.asStateFlow()
+    private val _buildGameLoading   = MutableStateFlow(false)
+    val buildGameLoading            = _buildGameLoading.asStateFlow()
+
+    fun loadBuildGame() {
+        if (_buildGameLoading.value) return
+        viewModelScope.launch {
+            _buildGameLoading.value = true
+            try {
+                val snap = firestore.collection("kf_exercises")
+                    .whereEqualTo("type", "build")
+                    .limit(100)
+                    .get()
+                    .await()
+                val list = snap.documents.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    val words = (d["words"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+                    if (words.size < 2) return@mapNotNull null
+                    KfExercise(
+                        id       = doc.id,
+                        type     = "build",
+                        question = (d["question"] as? String)?.takeIf { it.isNotBlank() }
+                                   ?: d["ku"] as? String ?: "",
+                        words    = words,
+                        tr       = d["tr"] as? String ?: "",
+                    )
+                }.shuffled()
+                _buildGameExercises.value = list
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _buildGameLoading.value = false
+            }
+        }
+    }
+
     // ── Eski uyumluluk ────────────────────────────────────────────────────────
     fun startLesson(lesson: com.heftreng.app.data.model.KurdiLesson) = openLesson(lesson.id)
 
