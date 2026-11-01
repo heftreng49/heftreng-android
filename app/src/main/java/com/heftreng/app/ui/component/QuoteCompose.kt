@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.ui.unit.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,14 +17,13 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.unit.offset
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.heftreng.app.ui.theme.*
@@ -390,7 +388,7 @@ fun QuoteDialog(
         ) {
 
             // ── Başlık alanı ──────────────────────────────────────────────
-            item(key = "title") {
+            item {
                 androidx.compose.foundation.text.BasicTextField(
                     value           = title,
                     onValueChange   = { if (it.length <= 120) title = it },
@@ -415,7 +413,7 @@ fun QuoteDialog(
             }
 
             // ── Alıntı metni ──────────────────────────────────────────────
-            item(key = "text") {
+            item {
                 OutlinedTextField(
                     value         = text,
                     onValueChange = { text = it },
@@ -428,7 +426,7 @@ fun QuoteDialog(
 
             // ── Son kullanılan kitap önerisi ─────────────────────────────
             if (lastUsedBook != null && book.isBlank() && author.isBlank()) {
-                item(key = "lastUsed") {
+                item {
                     AssistChip(
                         onClick = {
                             book   = lastUsedBook.bookName
@@ -451,8 +449,8 @@ fun QuoteDialog(
             }
 
             // ── Kitap adı + autocomplete ───────────────────────────────────
-            item(key = "book") {
-                Box {
+            item {
+                Box(modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value         = book,
                         onValueChange = {
@@ -474,42 +472,48 @@ fun QuoteDialog(
                         }} else null,
                     )
                     if (showBookDrop) {
-                        Surface(
-                            modifier       = Modifier.fillMaxWidth(),
-                            shape          = RoundedCornerShape(10.dp),
-                            color          = HeftSurface,
-                            border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
-                            tonalElevation = 4.dp,
-                        ) {
-                            LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                                val filtered = bookSuggestions.filter {
-                                    it.bookName.contains(book, ignoreCase = true)
-                                }
-                                items(filtered) { s ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                book           = s.bookName
-                                                if (s.authorName.isNotBlank()) author = s.authorName
-                                                coverImg       = s.coverImg
-                                                showBookDrop   = false
-                                                showAuthorDrop = false
+                        val filtered = bookSuggestions.filter {
+                            it.bookName.contains(book, ignoreCase = true)
+                        }
+                        if (filtered.isNotEmpty()) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 58.dp)   // TextField yüksekliğinin hemen altı
+                                    .zIndex(10f),           // diğer item'ların üzerinde render et
+                                shape          = RoundedCornerShape(10.dp),
+                                color          = HeftSurface,
+                                border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
+                                tonalElevation = 8.dp,
+                                shadowElevation = 8.dp,
+                            ) {
+                                LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                                    items(filtered) { s ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    book           = s.bookName
+                                                    if (s.authorName.isNotBlank()) author = s.authorName
+                                                    coverImg       = s.coverImg
+                                                    showBookDrop   = false
+                                                    showAuthorDrop = false
+                                                }
+                                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                            verticalAlignment     = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Icon(Icons.Default.AutoStories, null, tint = Amber, modifier = Modifier.size(14.dp))
+                                            Column {
+                                                Text(s.bookName, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                                if (s.authorName.isNotBlank())
+                                                    Text(s.authorName, color = Muted, fontSize = 11.sp)
                                             }
-                                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                                        verticalAlignment     = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    ) {
-                                        Icon(Icons.Default.AutoStories, null, tint = Amber, modifier = Modifier.size(14.dp))
-                                        Column {
-                                            Text(s.bookName, color = OnBackground, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                                            if (s.authorName.isNotBlank())
-                                                Text(s.authorName, color = Muted, fontSize = 11.sp)
+                                            Spacer(Modifier.weight(1f))
+                                            Text(Strings.quoteCountSuffix(language, s.count), color = Muted, fontSize = 10.sp)
                                         }
-                                        Spacer(Modifier.weight(1f))
-                                        Text(Strings.quoteCountSuffix(language, s.count), color = Muted, fontSize = 10.sp)
+                                        HorizontalDivider(color = Divider, thickness = 0.5.dp)
                                     }
-                                    HorizontalDivider(color = Divider, thickness = 0.5.dp)
                                 }
                             }
                         }
@@ -521,7 +525,7 @@ fun QuoteDialog(
             if (book.isNotBlank() && !showBookDrop &&
                 bookSuggestions.none { it.bookName.equals(book.trim(), ignoreCase = true) }
             ) {
-                item(key = "bookHint") {
+                item {
                     Row(
                         verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -543,8 +547,8 @@ fun QuoteDialog(
             }
 
             // ── Yazar + autocomplete ───────────────────────────────────────
-            item(key = "author") {
-                Box {
+            item {
+                Box(modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value         = author,
                         onValueChange = {
@@ -571,11 +575,15 @@ fun QuoteDialog(
                         }.take(8)
                         if (filtered.isNotEmpty()) {
                             Surface(
-                                modifier       = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 58.dp)   // TextField yüksekliğinin hemen altı
+                                    .zIndex(10f),           // diğer item'ların üzerinde render et
                                 shape          = RoundedCornerShape(10.dp),
                                 color          = HeftSurface,
                                 border         = androidx.compose.foundation.BorderStroke(1.dp, Divider),
-                                tonalElevation = 4.dp,
+                                tonalElevation = 8.dp,
+                                shadowElevation = 8.dp,
                             ) {
                                 LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
                                     items(filtered) { s ->
@@ -614,7 +622,7 @@ fun QuoteDialog(
             if (author.isNotBlank() && !showAuthorDrop &&
                 authorSuggestions.none { it.authorName.equals(author.trim(), ignoreCase = true) }
             ) {
-                item(key = "authorHint") {
+                item {
                     Row(
                         verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -637,7 +645,7 @@ fun QuoteDialog(
 
             // ── Önizleme ──────────────────────────────────────────────────
             if (text.isNotBlank() || book.isNotBlank() || author.isNotBlank()) {
-                item(key = "preview") {
+                item {
                     HorizontalDivider(color = Divider, thickness = 0.5.dp)
                     Spacer(Modifier.height(4.dp))
                     Text(Strings.quotePreview(language), color = Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
